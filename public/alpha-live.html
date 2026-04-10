@@ -165,13 +165,13 @@
 <body>
 
 <div id="nav-root"></div>
-<script src="/nav.js?v=10"></script>
+<script src="/nav.js?v=11"></script>
 
 <section class="hero">
   <div class="container">
     <div class="hero-eyebrow">⚡ Alpha Terminal</div>
     <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
-    <p class="hero-sub">Live edges from the unified alpha engine — whale clusters, momentum, book depth, expiry decay — ranked by Edge Score and enriched with Alpha Score.</p>
+    <p class="hero-sub">Live edges scored from whale clusters, momentum, book depth, and expiry decay. Not financial advice — all markets can resolve to zero.</p>
     <div class="hero-stats">
       <div class="hero-stat"><div class="n" id="s-count">—</div><div class="l">Live Edges</div></div>
       <div class="hero-stat"><div class="n" id="s-top">—</div><div class="l">Top Score</div></div>
@@ -200,7 +200,7 @@
   </div>
 
   <div class="footnote">
-    Powered by <em>buildAlphaList()</em> — whale positions, CLOB depth, momentum, expiry decay. Auto-refresh 90s.
+    Scored from whale positions, CLOB depth, momentum, and expiry decay. Auto-refresh 90s. Not financial advice.
   </div>
 </div>
 
@@ -249,6 +249,16 @@ function badges(m){
   if(m.category&&m.category!=='other')
     out.push(['cat',m.category]);
   return out;
+}
+
+function renderSparkline(hist){
+  if(!hist||hist.length<3) return '';
+  var w=48,h=20,max=Math.max(...hist),min=Math.min(...hist);
+  var range=max-min||1;
+  var pts=hist.map(function(v,i){return (i/(hist.length-1)*w).toFixed(1)+','+(h-((v-min)/range)*h).toFixed(1)}).join(' ');
+  var lastY=(h-((hist[hist.length-1]-min)/range)*h).toFixed(1);
+  var trend=hist[hist.length-1]>=hist[0]?'#00e68a':'#ff4d6a';
+  return '<svg viewBox="0 0 '+w+' '+h+'" style="width:48px;height:20px;flex-shrink:0;margin-left:4px;opacity:.7"><polyline points="'+pts+'" fill="none" stroke="'+trend+'" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="'+w+'" cy="'+lastY+'" r="1.5" fill="'+trend+'"/></svg>';
 }
 
 function bdRow(label,val,max,cls){
@@ -318,7 +328,7 @@ function render(data){
       '<span class="arrow">→</span>'+
       '<span class="win">Win '+win+'¢</span>'+
       '<span class="arrow">→</span>'+
-      '<span class="roi">'+roi+'% ROI</span>'+
+      '<span class="roi">'+roi+'% max ROI</span>'+
     '</div>';
 
     // Build link with alpha-prefill params so market.html opens the trade widget
@@ -336,9 +346,10 @@ function render(data){
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
           '<div class="edge-score">'+
-            '<div class="n '+scoreClass+'">'+m.edge_score+'</div>'+
+            '<div class="n '+scoreClass+'">'+(m.edge_score>75?'🔥 ':'')+m.edge_score+'</div>'+
             '<div class="l">Edge</div>'+
           '</div>'+
+          renderSparkline(m.edge_history)+
           alphaBadge+
         '</div>'+
         '<div class="badges">'+
@@ -357,9 +368,10 @@ function render(data){
         bdRow('Momentum',ec.momentum||0,15,'momentum')+
         bdRow('Expiry',ec.expiry||0,8,'expiry')+
         bdRow('Diverge',ec.divergence||0,10,'divergence')+
+        (ec.binance_divergence?bdRow('Binance',ec.binance_divergence,15,'momentum'):'')+
       '</div>'+
       '<div class="trade-cta '+(t.side==='YES'?'yes':'no')+'">'+
-        '<span class="roi-hero">+'+roi+'% ROI</span>'+
+        '<span class="roi-hero">+'+roi+'% max ROI</span>'+
         '<span class="side-tag">'+t.side+'</span>'+
         '<span class="entry-detail">'+entry+'¢ → '+win+'¢</span>'+
       '</div>'+

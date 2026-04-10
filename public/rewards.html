@@ -167,7 +167,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 </head>
 <body>
 <div id="nav-root"></div>
-<script src="/nav.js?v=10"></script>
+<script src="/nav.js?v=11"></script>
 
 <!-- HERO -->
 <div class="rw-hero">
@@ -410,6 +410,56 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 
+<!-- WEEKLY QUESTS -->
+<div class="rw-section" id="questsSection" style="display:none">
+  <div class="rw-section-title">Weekly Quests</div>
+  <div class="rw-section-sub">Complete challenges to earn bonus FLEX Points. Resets every Monday.</div>
+  <div id="questsList" style="display:grid;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden"></div>
+</div>
+
+<!-- LOGIN STREAK -->
+<div class="rw-section" id="streakSection" style="display:none">
+  <div class="rw-section-title">Daily Login Streak</div>
+  <div class="rw-section-sub">Log in daily to build your streak multiplier. Higher streaks = more FP per trade.</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px">
+    <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
+      <div style="text-align:center">
+        <div id="streakNum" style="font-family:var(--mono);font-size:42px;font-weight:900;color:var(--gold)">0</div>
+        <div style="font-family:var(--sans);font-size:11px;color:var(--dim)">day streak</div>
+      </div>
+      <div style="text-align:center">
+        <div id="streakMult" style="font-family:var(--mono);font-size:42px;font-weight:900;color:var(--green)">1x</div>
+        <div style="font-family:var(--sans);font-size:11px;color:var(--dim)">multiplier</div>
+      </div>
+    </div>
+    <div id="streakMilestones" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<!-- FLYWHEEL EXPLAINER -->
+<div class="rw-section">
+  <div class="rw-section-title">The HYPERFLEX Flywheel</div>
+  <div class="rw-section-sub">Every action feeds the next. Trade more, earn more, unlock more.</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px">
+    <div style="background:var(--card);padding:20px;text-align:center">
+      <div style="font-size:24px;margin-bottom:8px">&#x1F4B0;</div>
+      <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Volume Loop</div>
+      <div style="font-family:var(--sans);font-size:11px;color:var(--dim);line-height:1.5">Trade &rarr; earn FP &rarr; tier up &rarr; higher multiplier &rarr; more FP per trade</div>
+    </div>
+    <div style="background:var(--card);padding:20px;text-align:center">
+      <div style="font-size:24px;margin-bottom:8px">&#x1F517;</div>
+      <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Referral Loop</div>
+      <div style="font-family:var(--sans);font-size:11px;color:var(--dim);line-height:1.5">Refer traders &rarr; earn 10% of their FP &rarr; 2-level chain &rarr; passive income</div>
+    </div>
+    <div style="background:var(--card);padding:20px;text-align:center">
+      <div style="font-size:24px;margin-bottom:8px">&#x1F525;</div>
+      <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Engagement Loop</div>
+      <div style="font-family:var(--sans);font-size:11px;color:var(--dim);line-height:1.5">Daily logins &rarr; streak multiplier &rarr; quests &rarr; bonus FP &rarr; spend on alpha</div>
+    </div>
+  </div>
+  <div style="text-align:center;font-family:var(--sans);font-size:12px;color:var(--dim)">FLEX Points can be spent on premium Crystal Ball AI analyses and whale deep dives</div>
+</div>
+
 <!-- FOOTER CTA -->
 <div class="rw-footer-cta">
   <h2>Start earning on every trade</h2>
@@ -557,10 +607,81 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 
   function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
+  // ── QUESTS ──
+  function loadQuests() {
+    if (!isLoggedIn || !token) return;
+    fetch('/api/quests', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || !d.quests) return;
+        document.getElementById('questsSection').style.display = '';
+        document.getElementById('questsList').innerHTML = d.quests.map(function(q) {
+          var barColor = q.completed ? 'var(--green)' : 'var(--gold)';
+          var claimBtn = '';
+          if (q.completed && !q.claimed) {
+            claimBtn = '<button onclick="claimQuest(\'' + q.id + '\',this)" style="background:var(--gold);color:#000;border:none;font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;white-space:nowrap">Claim +' + q.reward_fp + ' FP</button>';
+          } else if (q.claimed) {
+            claimBtn = '<span style="font-family:var(--mono);font-size:11px;color:var(--green);font-weight:700">&#x2713; Claimed</span>';
+          } else {
+            claimBtn = '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + q.reward_fp + ' FP</span>';
+          }
+          return '<div style="background:var(--card);padding:16px 20px;display:flex;align-items:center;gap:14px">' +
+            '<div style="font-size:20px;flex-shrink:0">' + q.icon + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;margin-bottom:2px">' + esc(q.name) + '</div>' +
+              '<div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:6px">' + esc(q.description) + '</div>' +
+              '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:' + q.pct + '%;height:100%;background:' + barColor + ';border-radius:2px;transition:width .3s"></div></div>' +
+              '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">' + q.progress + '/' + q.target + '</div>' +
+            '</div>' +
+            '<div>' + claimBtn + '</div>' +
+          '</div>';
+        }).join('');
+      }).catch(function() {});
+  }
+
+  window.claimQuest = function(questId, btn) {
+    btn.disabled = true; btn.textContent = '...';
+    fetch('/api/quests/' + questId + '/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.success) {
+        btn.outerHTML = '<span style="font-family:var(--mono);font-size:11px;color:var(--green);font-weight:700">&#x2713; +' + d.points_earned + ' FP</span>';
+      } else {
+        btn.textContent = d.error || 'Error'; btn.disabled = false;
+      }
+    }).catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
+  };
+
+  // ── LOGIN STREAK ──
+  function loadStreak() {
+    if (!isLoggedIn || !token) return;
+    fetch('/api/login-streak', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d) return;
+        document.getElementById('streakSection').style.display = '';
+        document.getElementById('streakNum').textContent = d.streak || 0;
+        document.getElementById('streakMult').textContent = (d.multiplier || 1) + 'x';
+        var ms = d.milestones || [];
+        document.getElementById('streakMilestones').innerHTML = ms.map(function(m) {
+          var bg = m.reached ? 'rgba(0,230,138,0.1)' : 'transparent';
+          var border = m.reached ? 'rgba(0,230,138,0.2)' : 'var(--border)';
+          var color = m.reached ? 'var(--green)' : 'var(--dim)';
+          return '<div style="padding:8px 14px;border-radius:8px;border:1px solid ' + border + ';background:' + bg + ';text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:14px;font-weight:800;color:' + color + '">' + m.mult + '</div>' +
+            '<div style="font-family:var(--sans);font-size:10px;color:var(--dim)">' + m.days + 'd' + (m.reached ? ' ✓' : '') + '</div>' +
+          '</div>';
+        }).join('');
+      }).catch(function() {});
+  }
+
   loadTiers();
   loadLeaderboard();
   loadMyStats();
   loadReferral();
+  loadQuests();
+  loadStreak();
 
   // Track clicks to Polymarket from this page
   document.addEventListener('click', function(e) {

@@ -281,7 +281,7 @@ section { position: relative; z-index: 1; }
   white-space: nowrap;
 }
 .ticker-item .num { color: var(--gold); font-weight: 700; }
-.ticker-sep { color: var(--gold); opacity: 0.4; font-size: 8px; }
+.ticker-sep { color: var(--gold); opacity: 0.4; font-size: 11px; }
 @keyframes ticker {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -508,13 +508,82 @@ section { position: relative; z-index: 1; }
 .pv-val.gold { color: var(--gold); }
 .pv-badge {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
   letter-spacing: 0.06em;
 }
 .pv-badge.live { background: rgba(45,155,95,0.12); color: var(--green); }
+
+/* ── TERMINAL PREVIEW CARDS ── */
+.tv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+.tv-row:hover { border-color: var(--gold); }
+.tv-q {
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.tv-score {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+}
+.tv-score.fire { color: var(--accent-amber); }
+.tv-whale {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  flex-shrink: 0;
+  margin-left: 8px;
+  min-width: 50px;
+  text-align: right;
+}
+.tv-stat {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.tv-stat-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.tv-stat-val {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+@media (max-width: 640px) {
+  .tv-q { font-size: 11px; }
+  .tv-stat-val { font-size: 15px; }
+  .tv-stat { padding: 10px 8px; }
+}
 
 /* ── PRICING (removed — platform is 100% free) ── */
 
@@ -593,7 +662,6 @@ footer {
   .product-block.reverse .product-copy { order: 1; }
   .product-block.reverse .product-visual { order: 2; }
   .product-section { padding-left: 20px; padding-right: 20px; }
-  #hedge-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
 }
 @media (max-width: 640px) {
@@ -673,7 +741,7 @@ footer {
 <!-- NAV -->
 <div id="nav-root"></div>
 <script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
-<script src="/nav.js?v=5"></script>
+<script src="/nav.js?v=11"></script>
 
 <!-- HERO -->
 <section class="hero">
@@ -688,11 +756,23 @@ footer {
 <!-- INTELLIGENCE BRIEFING -->
 <div id="intel-briefing" style="max-width:720px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:16px">
 
+  <!-- PANEL 0: TOP EDGES (unified buildAlphaList output) -->
+  <div id="te-panel" style="display:none">
+    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:livePulse 2s infinite"></span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em">⚡ Top Edges · Live</span>
+        <span style="margin-left:auto"><a href="/alpha-live" style="font-family:var(--sans);font-size:11px;color:var(--dim);text-decoration:none">All edges →</a></span>
+      </div>
+      <div id="te-cards" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
   <!-- PANEL 1: RIGHT NOW -->
   <div id="rn-panel" style="display:none">
     <div style="background:#1a1916;border-left:3px solid var(--gold);border-radius:10px;padding:20px 24px;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;width:100px;height:100px;background:radial-gradient(circle at top right,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
-      <button id="homePushBtn" onclick="toggleHomePush()" style="position:absolute;top:14px;right:16px;z-index:2;background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:14px;cursor:pointer;transition:all .15s" title="Get push alerts for whale moves">&#x1F514;</button>
+      <button id="homePushBtn" onclick="toggleHomePush()" style="position:absolute;top:14px;right:16px;z-index:2;background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--sans);font-size:11px;padding:4px 10px;border-radius:14px;cursor:pointer;transition:all .15s" title="Get push alerts for whale moves">&#x1F514;</button>
       <div id="rn-top" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:11px;padding-right:50px"></div>
       <div id="rn-question" style="font-family:var(--sans);font-size:18px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"></div>
       <div id="rn-bottom" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
@@ -723,17 +803,15 @@ footer {
 
 <style>
 @keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,0.4)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
-.ib-trade-btn{color:var(--gold);font-family:var(--mono);font-size:10px;font-weight:700;text-decoration:none;padding:5px 12px;border:1px solid rgba(201,146,13,0.3);border-radius:6px;white-space:nowrap;transition:background .15s}
+.ib-trade-btn{color:var(--gold);font-family:var(--mono);font-size:11px;font-weight:700;text-decoration:none;padding:5px 12px;border:1px solid rgba(201,146,13,0.3);border-radius:6px;white-space:nowrap;transition:background .15s}
 .ib-trade-btn:hover{background:rgba(201,146,13,0.12)}
 .lh-row{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .lh-row:last-child{border-bottom:none}
 .lh-time{color:var(--muted);min-width:36px;flex-shrink:0}
 .lh-trader{color:var(--gold-lt);flex-shrink:0}
 .lh-market{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wl-card{flex:1;min-width:180px;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:14px 16px;transition:border-color .15s,transform .15s;display:block}
-.wl-card:hover{border-color:rgba(201,146,13,0.4);transform:translateY(-2px)}
-.lh-row:hover{background:rgba(255,255,255,0.02)}
-.wl-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.wl-card{flex:1;min-width:180px;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.wl-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
 .wl-badge-strong{background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
 .wl-badge-moderate{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
 .wl-badge-emerging{background:rgba(120,120,112,0.12);color:var(--dim);border:1px solid rgba(120,120,112,0.3)}
@@ -796,7 +874,56 @@ footer {
   }
   var catEmoji={sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'};
   var catColors={sports:'#22c55e',crypto:'#f59e0b',politics:'#3b82f6',entertainment:'#a855f7',tech:'#06b6d4',other:'#888'};
-  function catBadge(q){var c=detectCat(q);var e=catEmoji[c]||'';var col=catColors[c]||'#888';return'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:'+col+'18;color:'+col+';border:1px solid '+col+'33;font-family:var(--mono);white-space:nowrap">'+e+' '+c.toUpperCase()+'</span>';}
+  function catBadge(q){var c=detectCat(q);var e=catEmoji[c]||'';var col=catColors[c]||'#888';return'<span style="font-size:11px;padding:1px 6px;border-radius:3px;background:'+col+'18;color:'+col+';border:1px solid '+col+'33;font-family:var(--mono);white-space:nowrap">'+e+' '+c.toUpperCase()+'</span>';}
+
+  // PANEL 0: TOP EDGES — unified buildAlphaList()
+  function loadTopEdges(){
+    fetch('/api/alpha/top?n=3').then(function(r){return r.ok?r.json():null}).catch(function(){return null}).then(function(d){
+      var panel=document.getElementById('te-panel');
+      if(!panel)return;
+      var mkts=(d&&d.markets)||[];
+      if(!mkts.length){panel.style.display='none';return}
+      panel.style.display='block';
+      document.getElementById('te-cards').innerHTML=mkts.map(function(m){
+        var score=m.edge_score||0;
+        var ec=m.edge_components||{};
+        var t=m.trade||{};
+        var side=(t.side||'YES').toUpperCase();
+        var sc=side==='YES'?'#22c55e':'#ef4444';
+        var entry=t.entry_cost!=null?t.entry_cost+'¢':'';
+        var roi=t.roi_pct!=null?'+'+t.roi_pct+'%':'';
+        // Compose badge strip — only show signals that actually fired
+        var sigs=[];
+        if((ec.whale||0)>=14)sigs.push('🐋 '+(m.whale_count||0)+' whales');
+        if(m.depth_ratio!=null){var imb=Math.max(m.depth_ratio,1/m.depth_ratio);if(imb>=1.5)sigs.push('📊 '+(m.depth_side==='bid'?'Bid':'Ask')+' '+imb.toFixed(1)+'x');}
+        if((ec.decay||0)>0)sigs.push('⏱ Decay '+(m.days_until_expiry===0?'today':m.days_until_expiry+'d'));
+        if(m.is_new)sigs.push('🆕 NEW');
+        if((ec.momentum||0)>=8){var pc=m.price_change_24h||0;sigs.push((pc>0?'📈 +':'📉 ')+pc+'%')}
+        var sigStr=sigs.length?sigs.join(' · '):'';
+        // Alpha-prefill: side + Kelly-sized position → market.html auto-populates the trade widget
+        var url='/alpha-live';
+        if(m.slug){
+          var _pp=[];
+          if(m.market_id) _pp.push('outcome='+encodeURIComponent(m.market_id));
+          _pp.push('from=alpha');
+          if(t.side) _pp.push('side='+t.side.toLowerCase());
+          if(t.recommended_size_usd) _pp.push('size='+t.recommended_size_usd);
+          url='/market/'+m.slug+'?'+_pp.join('&');
+        }
+        var rgn=regionFlag(m.question||'');
+        return'<a href="'+url+'" style="display:block;text-decoration:none;color:inherit;padding:12px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">'+
+            '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--gold-bright);min-width:32px">'+(score>75?'🔥 ':'')+score+'</span>'+
+            '<span style="font-family:var(--mono);font-size:11px;color:#9a9590;text-transform:uppercase;letter-spacing:.08em">EDGE</span>'+
+            catBadge(m.question||'')+
+            '<span style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:'+sc+'18;color:'+sc+';border:1px solid '+sc+'33">'+side+' '+entry+' · '+roi+'</span>'+
+          '</div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:'+(sigStr?'6px':'0')+'">'+(rgn?rgn+' ':'')+escH(truncate(m.question||'',80))+'</div>'+
+          (sigStr?'<div style="font-family:var(--sans);font-size:11px;color:var(--dim)">'+sigStr+'</div>':'')+
+        '</a>';
+      }).join('');
+    }).catch(function(){});
+  }
 
   // PANEL 1: RIGHT NOW
   function loadRightNow(){
@@ -826,7 +953,7 @@ footer {
       document.getElementById('rn-top').innerHTML=
         '<span style="color:var(--gold);font-weight:700;letter-spacing:.08em">\u26A1 RIGHT NOW</span>'+
         '<span style="color:var(--dim)">|</span>'+
-        '<span style="background:'+bc+';color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px">'+bt+'</span>'+
+        '<span style="background:'+bc+';color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px">'+bt+'</span>'+
         '<span style="color:var(--dim)">|</span>'+
         '<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>'+
         '<span style="color:var(--dim)">|</span>'+
@@ -836,15 +963,15 @@ footer {
         '<span style="color:var(--dim)">|</span>'+
         '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+urgC+'">'+urgI+' '+urg.toFixed(1)+'</span>';
       var rnF=regionFlag(sig.market||'');
-      var rnUrl=sig.url||'';
-      var rnLink=typeof hfxMarketUrl==='function'?hfxMarketUrl(rnUrl):'#';
-      document.getElementById('rn-question').innerHTML='<a href="'+rnLink+'" style="color:inherit;text-decoration:none">'+(rnF?rnF+' ':'')+escH(sig.market||'')+'</a>';
+      document.getElementById('rn-question').innerHTML=(rnF?rnF+' ':'')+escH(sig.market||'');
       var bh='';
       if(sig.end_date){var diff=new Date(sig.end_date).getTime()-Date.now();if(diff>0){var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);bh+='<span style="color:'+(diff<3600000?'var(--red)':'var(--dim)')+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';}}
       var yp=sig.yes_pct||Math.round((sig.price||0.5)*100);
       bh+='<span>'+yp+'% '+side+'</span>';
-      if(rnLink&&rnLink!=='#'){
-        bh+='<a href="'+rnLink+'" class="ib-trade-btn" style="margin-left:auto">Trade \u2192</a>';
+      if(sig.url&&sig.url!=='https://polymarket.com'){
+        var wPct=sig.yes_pct||Math.round((sig.price||0.5)*100);
+        var mPct=wPct; // market price = whale consensus for now
+        bh+='<a href="#" onclick="event.preventDefault();openKelly(\''+escH(sig.market||'').replace(/'/g,"\\'")+'\',\''+side+'\','+mPct+','+wPct+',\''+sig.url+'\','+sig.whale_count+','+(sig.capital||0)+')" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
       }
       document.getElementById('rn-bottom').innerHTML=bh;
       // Load sharpness indicator
@@ -882,18 +1009,17 @@ footer {
         if(!name||/^0x/.test(name))name=name?(name.slice(0,6)+'...'):'\uD83D\uDC0B';
         var side=(w.side||'YES').toUpperCase();
         var sc=side==='YES'||side==='UP'?'#22c55e':'#ef4444';
-        var rawUrl=w.market_url||w.url||'';
-        var internalUrl=typeof hfxMarketUrl==='function'?hfxMarketUrl(rawUrl):rawUrl;
+        var url=w.market_url||w.url||'';
         var mkt=w.market||w.position||'';
-        return'<a href="'+internalUrl+'" style="text-decoration:none;color:inherit" class="lh-row">'+
+        return'<div class="lh-row">'+
           '<span class="lh-time">'+timeAgo(w.fetched_at)+'</span>'+
           '<span class="lh-trader">'+escH(name)+'</span>'+
           '<span style="color:var(--muted)">'+fmtCap(w.size||0)+'</span>'+
           catBadge(mkt)+
           '<span class="lh-market">'+regionFlag(mkt)+(regionFlag(mkt)?' ':'')+escH(truncate(mkt,33))+'</span>'+
-          '<span style="color:'+sc+';font-weight:700;font-size:10px">'+side+'</span>'+
-          '<span class="ib-trade-btn">Trade \u2192</span>'+
-          '</a>';
+          '<span style="color:'+sc+';font-weight:700;font-size:11px">'+side+'</span>'+
+          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">View \u2192</a>':'')+
+          '</div>';
       }).join('');
     }).catch(function(){});
   }
@@ -911,10 +1037,9 @@ footer {
         var bc=str==='STRONG'?'wl-badge-strong':str==='MODERATE'?'wl-badge-moderate':'wl-badge-emerging';
         var cs=(p.consensus_side||'YES').toUpperCase();
         var sc=cs==='YES'||cs==='UP'?'#22c55e':'#ef4444';
-        var rawUrl=p.url||'';
-        var mktLink=p.slug?'/market/'+p.slug:(typeof hfxMarketUrl==='function'?hfxMarketUrl(rawUrl):rawUrl);
+        var url=p.url||'';
         var pmkt=p.market||'';
-        return'<a href="'+mktLink+'" style="text-decoration:none;color:inherit" class="wl-card">'+
+        return'<div class="wl-card">'+
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span class="wl-badge '+bc+'">'+str+'</span>'+catBadge(pmkt)+'</div>'+
           '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;min-height:36px">'+regionFlag(pmkt)+(regionFlag(pmkt)?' ':'')+escH(truncate(pmkt,33))+'</div>'+
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">'+
@@ -924,15 +1049,17 @@ footer {
             '<span style="color:var(--border)">\u00B7</span>'+
             '<span>'+fmtCap(p.total_capital||0)+'</span>'+
           '</div>'+
-          '<span class="ib-trade-btn">Trade \u2192</span>'+
-          '</a>';
+          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">Trade \u2192</a>':'')+
+          '</div>';
       }).join('');
     }).catch(function(){});
   }
 
+  try{loadTopEdges()}catch(e){console.warn('[home] topEdges:',e.message)}
   try{loadRightNow()}catch(e){console.warn('[home] rightNow:',e.message)}
   try{loadLastHour()}catch(e){console.warn('[home] lastHour:',e.message)}
   try{loadWatchlist()}catch(e){console.warn('[home] watchlist:',e.message)}
+  setInterval(loadTopEdges,90000);
   setInterval(loadRightNow,60000);
   setInterval(loadLastHour,90000);
 })();
@@ -962,7 +1089,7 @@ async function toggleHomePush(){
 <div id="kellyOverlay" onclick="if(event.target===this)closeKelly()" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px">
   <div style="background:#1a1916;border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;padding:28px 24px;position:relative">
     <button onclick="closeKelly()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer">&times;</button>
-    <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Position Size Calculator</div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Position Size Calculator</div>
     <div id="kellyQuestion" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px;line-height:1.4"></div>
     <div id="kellyEdge" style="font-family:var(--mono);font-size:12px;margin-bottom:16px;padding:10px 14px;border-radius:8px"></div>
     <div style="margin-bottom:16px">
@@ -1054,15 +1181,92 @@ function logTradeIntent() {
     <div class="ticker-item"><span class="num" id="tk-volume">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-traders">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-markets">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item">Elite whale accuracy: <span class="num" id="tk-accuracy" style="color:#22c55e">--</span> <span class="ticker-sep">&#10022;</span></div>
+    <div class="ticker-item">&#129011;&#129504; Elite Whale Accuracy: <span class="num" id="tk-accuracy" style="color:#22c55e">Tracking...</span> <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-volume2">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-traders2">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-markets2">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item">Elite whale accuracy: <span class="num" id="tk-accuracy2" style="color:#22c55e">--</span> <span class="ticker-sep">&#10022;</span></div>
+    <div class="ticker-item">&#129011;&#129504; Elite Whale Accuracy: <span class="num" id="tk-accuracy2" style="color:#22c55e">Tracking...</span> <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
   </div>
 </div>
+
+<!-- TERMINAL SHOWCASE -->
+<section class="product-section" style="padding-top:60px;padding-bottom:20px">
+
+  <!-- Alpha Terminal -->
+  <div class="product-block">
+    <div class="product-copy">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
+      <h3>Alpha Terminal</h3>
+      <p>Real-time edge scores powered by whale flow, orderbook depth, momentum, and time-decay signals. Every market ranked by actionable alpha — not vanity stats.</p>
+      <a href="/alpha-live" class="btn-primary">Open Alpha Terminal &rarr;</a>
+    </div>
+    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
+      <div style="width:100%;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px">ALPHA TERMINAL</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
+        </div>
+        <div class="tv-row" id="tv-alpha-1">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div class="tv-row" id="tv-alpha-2">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div class="tv-row" id="tv-alpha-3">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div style="text-align:center;padding-top:12px">
+          <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">View all edges &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Terminal -->
+  <div class="product-block reverse">
+    <div class="product-copy">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
+      <h3>Data Terminal</h3>
+      <p>Whale capital flow, sentiment trends, market movers, Fear &amp; Greed, and category breakdowns — the Bloomberg terminal for prediction markets.</p>
+      <a href="/data" class="btn-primary">Open Data Terminal &rarr;</a>
+    </div>
+    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
+      <div style="width:100%;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-purple);letter-spacing:1px">DATA TERMINAL</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="tv-stat">
+            <div class="tv-stat-label">Whale Capital</div>
+            <div class="tv-stat-val" id="tv-data-cap">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Markets Tracked</div>
+            <div class="tv-stat-val" id="tv-data-mkts">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Fear &amp; Greed</div>
+            <div class="tv-stat-val" id="tv-data-fg">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Volatility</div>
+            <div class="tv-stat-val" id="tv-data-vol">--</div>
+          </div>
+        </div>
+        <div style="text-align:center;padding-top:4px">
+          <a href="/data" style="font-family:var(--mono);font-size:10px;color:var(--accent-purple);text-decoration:none">Open full terminal &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
 
 <!-- LIVE DATA CARDS -->
 <section class="live-cards">
@@ -1091,21 +1295,6 @@ function logTradeIntent() {
       <div class="live-card-detail" id="expiring-detail"></div>
       <a href="/crystal-ball" class="live-card-link">See expiring markets &rarr;</a>
     </div>
-  </div>
-</section>
-
-<!-- HEDGE PAIRS — live correlated trades -->
-<section style="padding:60px 40px 40px;max-width:1100px;margin:0 auto" id="hedge-section">
-  <div style="text-align:center;margin-bottom:32px">
-    <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px">Live hedge opportunities</div>
-    <h2 style="font-family:var(--sans);font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--text);margin:0 0 8px">Net-profitable hedges. One click.</h2>
-    <p style="font-family:var(--mono);font-size:12px;color:var(--dim);max-width:540px;margin:0 auto;line-height:1.7">Correlated markets where total cost &lt; $1. If either leg wins, you profit. If both win, you profit more. Only showing pairs with guaranteed positive math.</p>
-  </div>
-  <div id="hedgePairsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
-    <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Loading hedge pairs...</div>
-  </div>
-  <div style="text-align:center;margin-top:24px">
-    <a href="/signals" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#a855f7;text-decoration:none;transition:color .15s" onmouseover="this.style.color='#c084fc'" onmouseout="this.style.color='#a855f7'">See all signals &rarr;</a>
   </div>
 </section>
 
@@ -1229,7 +1418,7 @@ function logTradeIntent() {
 <!-- PRICING — 100% FREE -->
 <section class="pricing-section" id="pricing" style="text-align:center;padding:60px 20px">
   <h2 style="font-family:var(--sans);font-size:32px;color:#e8e4d9;margin-bottom:12px">100% Free. No Limits.</h2>
-  <p style="font-family:var(--mono);font-size:14px;color:#7a7870;max-width:500px;margin:0 auto">Every feature. Every signal. Every tool. Completely free — no credit card, no catch.</p>
+  <p style="font-family:var(--sans);font-size:14px;color:#9a9590;max-width:500px;margin:0 auto">Every feature. Every signal. Every tool. Completely free — no credit card, no catch.</p>
 </section>
 
 <!-- CREATOR CTA -->
@@ -1238,28 +1427,28 @@ function logTradeIntent() {
     <div style="text-align:center;margin-bottom:56px">
       <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:#c9920d;letter-spacing:3px;text-transform:uppercase;margin-bottom:16px">For Creators</div>
       <h2 style="font-family:var(--sans);font-size:clamp(28px,4vw,48px);font-weight:800;color:#e8e4d9;margin:0 0 16px">Turn your audience into predictors</h2>
-      <p style="font-family:var(--mono);font-size:13px;color:#7a7870;max-width:540px;margin:0 auto;line-height:1.8">Launch a branded prediction market community in 5 minutes. Your audience competes, you grow. No code, no crypto.</p>
+      <p style="font-family:var(--sans);font-size:13px;color:#9a9590;max-width:540px;margin:0 auto;line-height:1.8">Launch a branded prediction market community in 5 minutes. Your audience competes, you grow. No code, no crypto.</p>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;margin-bottom:48px">
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🏛️</div>
         <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Branded Community</div>
-        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Your name, your colors, your URL. Members predict on your content — sports picks, market calls, episode outcomes. A leaderboard keeps them coming back.</div>
+        <div style="font-family:var(--sans);font-size:12px;color:#9a9590;line-height:1.7">Your name, your colors, your URL. Members predict on your content — sports picks, market calls, episode outcomes. A leaderboard keeps them coming back.</div>
       </div>
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🤖</div>
         <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">AI Market Generation</div>
-        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Paste a YouTube URL and our AI generates 6 ready-to-publish prediction markets about your video. From hours of work to 30 seconds.</div>
+        <div style="font-family:var(--sans);font-size:12px;color:#9a9590;line-height:1.7">Paste a YouTube URL and our AI generates 6 ready-to-publish prediction markets about your video. From hours of work to 30 seconds.</div>
       </div>
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🏆</div>
         <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Seasons &amp; Leaderboards</div>
-        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Run prediction seasons with prizes. Members earn points, climb rankings, and share their wins — driving traffic back to you every week.</div>
+        <div style="font-family:var(--sans);font-size:12px;color:#9a9590;line-height:1.7">Run prediction seasons with prizes. Members earn points, climb rankings, and share their wins — driving traffic back to you every week.</div>
       </div>
     </div>
     <div style="text-align:center">
       <a href="/creator/login#signup" style="display:inline-block;font-family:var(--mono);font-size:13px;font-weight:700;color:#141412;background:#c9920d;text-decoration:none;padding:14px 32px;border-radius:8px;transition:background .15s" onmouseover="this.style.background='#e0b340'" onmouseout="this.style.background='#c9920d'">Launch your community free &rarr;</a>
-      <div style="font-family:var(--mono);font-size:11px;color:#555;margin-top:12px">Free forever &middot; No credit card &middot; Live in 5 minutes</div>
+      <div style="font-family:var(--sans);font-size:11px;color:#8a8580;margin-top:12px">Free forever &middot; No credit card &middot; Live in 5 minutes</div>
     </div>
   </div>
 </section>
@@ -1398,83 +1587,6 @@ function escH(s) { const d = document.createElement('div'); d.textContent = s; r
   }
 })();
 
-// ── Hedge Pairs ──
-(async function loadHedgePairs() {
-  const grid = document.getElementById('hedgePairsGrid');
-  if (!grid) return;
-  try {
-    const r = await fetch('/api/hedge-pairs');
-    const data = await r.json();
-    const pairs = data.pairs || [];
-    if (!pairs.length) {
-      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Scanning for correlated markets...</div>';
-      return;
-    }
-    grid.innerHTML = pairs.slice(0, 3).map(function(h) {
-      const sA = (h.market_a.side || 'YES').toUpperCase();
-      const sB = (h.market_b.side || 'YES').toUpperCase();
-      const colA = sA === 'YES' ? '#00e68a' : '#ff4d6a';
-      const colB = sB === 'YES' ? '#00e68a' : '#ff4d6a';
-      const slugA = h.market_a.slug || '';
-      const slugB = h.market_b.slug || '';
-      const linkA = slugA ? '/market/' + slugA : '/signals';
-      const linkB = slugB ? '/market/' + slugB : '/signals';
-      const hedgeUrl = slugA && slugB
-        ? '/market/' + slugA + '?side=' + sA + '&hedge=' + encodeURIComponent(slugB) + '&hedgeSide=' + sB + '&from=hedge'
-        : '/signals';
-      const totalCost = h.total_cost || ((h.market_a.entry_cost || 0) + (h.market_b.entry_cost || 0));
-      const profit = h.profit_if_one_wins || (100 - totalCost);
-      const roi = h.roi_pct || (totalCost > 0 ? Math.round((profit / totalCost) * 100) : 0);
-      const profitBoth = h.profit_if_both_win || (200 - totalCost);
-      const wA = h.market_a.whale_count || 0;
-      const wB = h.market_b.whale_count || 0;
-      return '<div style="background:#0c0c0b;border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:18px;position:relative;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(168,85,247,0.5)\'" onmouseleave="this.style.borderColor=\'rgba(168,85,247,0.2)\'">' +
-        '<a href="' + hedgeUrl + '" style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(168,85,247,0.2);color:#a855f7;text-decoration:none;font-weight:700;cursor:pointer;border:1px solid rgba(168,85,247,0.3);transition:all .15s" onmouseenter="this.style.background=\'rgba(168,85,247,0.4)\'" onmouseleave="this.style.background=\'rgba(168,85,247,0.2)\'">\u26A1 BUY HEDGE</a>' +
-        '<a href="' + linkA + '" style="display:block;text-decoration:none;color:inherit;padding-right:110px;margin-bottom:6px">' +
-          '<div style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);line-height:1.35;transition:color .15s" onmouseenter="this.style.color=\'#a855f7\'" onmouseleave="this.style.color=\'var(--text)\'">' + escH(h.market_a.question.substring(0, 60)) + '</div>' +
-        '</a>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">' +
-          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + colA + '">' + sA + ' ' + h.market_a.entry_cost + '\u00A2</span>' +
-          (wA >= 3 ? '<span style="font-family:var(--mono);font-size:11px;color:#a855f7">\uD83D\uDC33 ' + wA + '</span>' : '') +
-        '</div>' +
-        '<div style="text-align:center;font-family:var(--sans);font-size:11px;color:var(--dim);margin:6px 0;letter-spacing:1px">\u27F7 hedged against \u27F7</div>' +
-        '<a href="' + linkB + '" style="display:block;text-decoration:none;color:inherit;margin-bottom:6px">' +
-          '<div style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);line-height:1.35;transition:color .15s" onmouseenter="this.style.color=\'#a855f7\'" onmouseleave="this.style.color=\'var(--text)\'">' + escH(h.market_b.question.substring(0, 60)) + '</div>' +
-        '</a>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
-          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + colB + '">' + sB + ' ' + h.market_b.entry_cost + '\u00A2</span>' +
-          (wB >= 3 ? '<span style="font-family:var(--mono);font-size:11px;color:#a855f7">\uD83D\uDC33 ' + wB + '</span>' : '') +
-        '</div>' +
-        // Profit math strip
-        '<div style="display:flex;gap:0;border-radius:6px;overflow:hidden;border:1px solid #1a1917;margin-bottom:10px;font-family:var(--mono);font-size:11px">' +
-          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.04);text-align:center">' +
-            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">COST</div>' +
-            '<div style="font-weight:700;color:var(--text)">' + totalCost + '\u00A2</div>' +
-          '</div>' +
-          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.06);text-align:center;border-left:1px solid #1a1917;border-right:1px solid #1a1917">' +
-            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">IF 1 WINS</div>' +
-            '<div style="font-weight:700;color:#00e68a">+' + profit + '\u00A2</div>' +
-          '</div>' +
-          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.08);text-align:center">' +
-            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">IF BOTH WIN</div>' +
-            '<div style="font-weight:700;color:#00e68a">+' + profitBoth + '\u00A2</div>' +
-          '</div>' +
-        '</div>' +
-        // Plain-English explanation
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:8px">' +
-          'Buy both for ' + totalCost + '\u00A2. If either wins \u2192 you get $1 back \u2192 <span style="color:#00e68a;font-weight:700">+' + profit + '\u00A2 profit</span>. If both win \u2192 <span style="color:#00e68a;font-weight:700">+' + profitBoth + '\u00A2</span>.' +
-        '</div>' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1917;padding-top:8px">' +
-          '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.4">' + escH(h.correlation_reason) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a;white-space:nowrap;margin-left:8px">+' + roi + '% ROI</span>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-  } catch(e) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Hedge pairs loading...</div>';
-  }
-})();
-
 // ── Email subscribe ──
 async function handleSubscribe(e) {
   e.preventDefault();
@@ -1509,6 +1621,60 @@ async function handleSubscribe(e) {
   }
   return false;
 }
+
+// ── Terminal preview cards — live data ──
+(async function loadTerminalPreviews() {
+  try {
+    var [alphaRes, intRes, flowRes] = await Promise.allSettled([
+      fetch('/api/alpha/top?n=3').then(function(r){return r.ok?r.json():null}),
+      fetch('/api/market-intelligence').then(function(r){return r.ok?r.json():null}),
+      fetch('/api/whale-flow').then(function(r){return r.ok?r.json():null})
+    ]);
+    // Alpha Terminal preview
+    var alpha = alphaRes.status === 'fulfilled' ? alphaRes.value : null;
+    if (alpha && alpha.markets && alpha.markets.length) {
+      alpha.markets.slice(0, 3).forEach(function(m, i) {
+        var el = document.getElementById('tv-alpha-' + (i + 1));
+        if (!el) return;
+        var score = m.edge_score || 0;
+        var fire = score > 75;
+        el.querySelector('.tv-q').textContent = (m.question || '').substring(0, 50);
+        el.querySelector('.tv-score').innerHTML = (fire ? '\uD83D\uDD25 ' : '') + score;
+        el.querySelector('.tv-score').className = 'tv-score' + (fire ? ' fire' : '');
+      });
+    }
+    // Data Terminal preview — whale capital from flow, fear & greed from intel
+    var intel = intRes.status === 'fulfilled' ? intRes.value : null;
+    var flow = flowRes.status === 'fulfilled' ? flowRes.value : null;
+    var capEl = document.getElementById('tv-data-cap');
+    var mktsEl = document.getElementById('tv-data-mkts');
+    var fgEl = document.getElementById('tv-data-fg');
+    var volEl = document.getElementById('tv-data-vol');
+    if (flow && flow.total_capital && capEl) {
+      var wc = flow.total_capital;
+      capEl.textContent = wc >= 1000000 ? '$' + (wc / 1000000).toFixed(1) + 'M' : '$' + Math.round(wc / 1000) + 'K';
+      capEl.style.color = 'var(--gold)';
+    }
+    if (alpha && alpha.total && mktsEl) {
+      mktsEl.textContent = alpha.total;
+    }
+    if (intel && intel.fear_greed && fgEl) {
+      fgEl.textContent = intel.fear_greed.score;
+      var fgc = intel.fear_greed.score >= 60 ? 'var(--green)' : intel.fear_greed.score <= 40 ? 'var(--red)' : 'var(--accent-amber)';
+      fgEl.style.color = fgc;
+    }
+    if (intel && intel.whale_flow && intel.whale_flow.yes_pct != null && volEl) {
+      var sentiment = intel.whale_flow.yes_pct;
+      volEl.textContent = sentiment + '% YES';
+      volEl.style.color = sentiment >= 60 ? 'var(--green)' : sentiment <= 40 ? 'var(--red)' : 'var(--accent-amber)';
+    }
+    // Relabel volatility → whale sentiment if we have the data
+    if (intel && intel.whale_flow && volEl) {
+      var label = volEl.closest('.tv-stat');
+      if (label) { var lbl = label.querySelector('.tv-stat-label'); if (lbl) lbl.textContent = 'Whale Sentiment'; }
+    }
+  } catch(e) {}
+})();
 </script>
 
 </body>

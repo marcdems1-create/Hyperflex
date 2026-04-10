@@ -9853,7 +9853,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'terminal'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal'
 ]);
 
 // GET /my — private member dashboard
@@ -19206,6 +19206,7 @@ app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ecosystem.html')));
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
+app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
@@ -20097,6 +20098,9 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 // deploys — without persistence the map resets every Railway redeploy and
 // every market looks "fresh" for the first 60 minutes after each push.
 const _alphaFreshness = new Map();
+// Rolling edge score history — Map<market_id, [{ts, score}]> — last 24h sampled per build cycle
+const _edgeScoreHistory = new Map();
+const EDGE_HISTORY_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
 const EDGE_FRESH_THRESHOLD = 50; // score must cross this to get a stamp
 const EDGE_DROP_THRESHOLD = 40;  // if score falls below this, edge has died — clear stamp
 const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
@@ -20254,6 +20258,11 @@ async function _buildAlphaListInner(opts = {}) {
   if (!_alphaFreshnessLoaded) await hydrateAlphaFreshness();
 
   const fetch = _nodeFetch;
+
+    // Pre-fetch Binance spot prices + volume surge for crypto signals (non-blocking)
+    let binancePrices = {};
+    let binanceVolSurge = {};
+    try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
     // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
     // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
@@ -20630,7 +20639,56 @@ async function _buildAlphaListInner(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike));
+      // Binance divergence: crypto prediction market price hasn't caught up with
+      // a sudden Binance spot move. E.g. BTC dumps 2% in 5min but "BTC above $80K"
+      // is still priced at 70% — that's a tradeable lag. Max 15.
+      let edgeBinanceDivergence = 0;
+      let binanceDivergenceData = null;
+      if (liquid && category === 'crypto' && Object.keys(binancePrices).length > 0) {
+        // Detect which coin this market references
+        const coinMatch = qLow.match(/\b(bitcoin|btc)\b/) ? 'btc'
+          : qLow.match(/\b(ethereum|eth)\b/) ? 'eth'
+          : qLow.match(/\b(solana|sol)\b/) ? 'sol' : null;
+        if (coinMatch && binancePrices[coinMatch] && binancePrices[coinMatch].change5m != null) {
+          const spotChange = Math.abs(binancePrices[coinMatch].change5m);
+          const mktChange = Math.abs(pChange || 0);
+          // Divergence = spot moved significantly but prediction market barely moved
+          // Spot needs to have moved at least 0.5% in 5min (meaningful move)
+          if (spotChange >= 0.5 && mktChange < spotChange * 0.3) {
+            // Strong divergence — spot moved but market is lagging
+            if (spotChange >= 2.0) edgeBinanceDivergence = 15;
+            else if (spotChange >= 1.5) edgeBinanceDivergence = 12;
+            else if (spotChange >= 1.0) edgeBinanceDivergence = 8;
+            else edgeBinanceDivergence = 5;
+            binanceDivergenceData = {
+              coin: coinMatch.toUpperCase(),
+              spot_change_5m: binancePrices[coinMatch].change5m,
+              spot_price: binancePrices[coinMatch].price,
+              market_change: pChange || 0,
+              divergence_pct: parseFloat((spotChange - mktChange).toFixed(2))
+            };
+          }
+        }
+      }
+
+      // Binance volume surge: crypto market gets a boost when Binance spot volume
+      // spikes 3x+ in the last minute — something is breaking, market may not have repriced.
+      let edgeBinanceVolSurge = 0;
+      let binanceVolSurgeData = null;
+      if (liquid && category === 'crypto' && Object.keys(binanceVolSurge).length > 0) {
+        const coinMatch2 = qLow.match(/\b(bitcoin|btc)\b/) ? 'btc'
+          : qLow.match(/\b(ethereum|eth)\b/) ? 'eth'
+          : qLow.match(/\b(solana|sol)\b/) ? 'sol' : null;
+        if (coinMatch2 && binanceVolSurge[coinMatch2] && binanceVolSurge[coinMatch2].surge) {
+          const vs = binanceVolSurge[coinMatch2];
+          if (vs.ratio >= 10) edgeBinanceVolSurge = 10;
+          else if (vs.ratio >= 5) edgeBinanceVolSurge = 7;
+          else edgeBinanceVolSurge = 4;
+          binanceVolSurgeData = vs;
+        }
+      }
+
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike + edgeBinanceDivergence + edgeBinanceVolSurge));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20665,6 +20723,9 @@ async function _buildAlphaListInner(opts = {}) {
         aiHook = `Resolves in ${daysUntilExpiry === 0 ? 'hours' : daysUntilExpiry + 'd'} and still at ${Math.round(yesPrice*100)}% — outcome uncertain`;
       } else if (volume >= 1000000) {
         aiHook = `$${(volume/1000000).toFixed(1)}M volume — one of the most-traded markets right now`;
+      } else if (binanceDivergenceData) {
+        const dir = binanceDivergenceData.spot_change_5m > 0 ? 'up' : 'down';
+        aiHook = `${binanceDivergenceData.coin} spot moved ${Math.abs(binanceDivergenceData.spot_change_5m).toFixed(1)}% ${dir} in 5min but this market hasn't repriced — divergence play`;
       } else if (wCount >= 3) {
         aiHook = `${wCount} whale wallets positioned — watching for consensus`;
       }
@@ -20742,7 +20803,9 @@ async function _buildAlphaListInner(opts = {}) {
         volume: edgeVolume,
         divergence: edgeDivergence,
         capital: edgeCapital,
-        expiry: edgeExpiry
+        expiry: edgeExpiry,
+        binance_divergence: edgeBinanceDivergence,
+        binance_vol_surge: edgeBinanceVolSurge
       };
       // Find the largest contributing component
       let _primary = 'volume';
@@ -20861,7 +20924,9 @@ async function _buildAlphaListInner(opts = {}) {
           expiry: Math.round(edgeExpiry),
           divergence: Math.round(edgeDivergence),
           decay: Math.round(edgeDecay),
-          arb: 0 // populated by post-loop arb pass if applicable
+          arb: 0, // populated by post-loop arb pass if applicable
+          binance_divergence: Math.round(edgeBinanceDivergence),
+          binance_vol_surge: Math.round(edgeBinanceVolSurge)
         },
         volume_spike_ratio: volumeSpikeRatio, // current 24h / 7-day average, or null
         news_headline: newsInfo ? newsInfo.headline : null,
@@ -20875,6 +20940,8 @@ async function _buildAlphaListInner(opts = {}) {
           side: velocityInfo.side,
           trader_name: velocityInfo.traderName
         } : null,
+        binance_divergence: binanceDivergenceData,
+        binance_vol_surge: binanceVolSurgeData,
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
@@ -21088,6 +21155,38 @@ async function _buildAlphaListInner(opts = {}) {
 
       console.log('[screener] Freshness:', freshNew, 'newly stamped,', _alphaFreshness.size, 'tracked total');
     } catch (e) { console.warn('[screener] freshness tracking failed:', e.message); }
+
+    // ── EDGE SCORE HISTORY — record current scores for sparklines ──
+    try {
+      const nowMs = Date.now();
+      const cutoffMs = nowMs - EDGE_HISTORY_MAX_AGE;
+      for (const m of markets) {
+        if (!m.market_id || !m.edge_score) continue;
+        let hist = _edgeScoreHistory.get(m.market_id);
+        if (!hist) { hist = []; _edgeScoreHistory.set(m.market_id, hist); }
+        hist.push({ ts: nowMs, score: m.edge_score });
+        // Prune old entries
+        while (hist.length > 0 && hist[0].ts < cutoffMs) hist.shift();
+      }
+      // Evict markets with no recent data
+      for (const [k, v] of _edgeScoreHistory) {
+        if (v.length === 0 || v[v.length - 1].ts < cutoffMs) _edgeScoreHistory.delete(k);
+      }
+      // Attach sparkline data to each market (last 20 samples for compact SVG)
+      for (const m of markets) {
+        const hist = _edgeScoreHistory.get(m.market_id);
+        if (hist && hist.length >= 2) {
+          const step = Math.max(1, Math.floor(hist.length / 20));
+          m.edge_history = [];
+          for (let i = 0; i < hist.length; i += step) m.edge_history.push(hist[i].score);
+          if (m.edge_history[m.edge_history.length - 1] !== hist[hist.length - 1].score) {
+            m.edge_history.push(hist[hist.length - 1].score);
+          }
+        } else {
+          m.edge_history = null;
+        }
+      }
+    } catch (e) { console.warn('[screener] edge history tracking failed:', e.message); }
 
     // ── AI HOOKS — generate sharp trade rationales for the top 5 via Claude Haiku ──
     try {
@@ -23079,6 +23178,333 @@ app.get('/ref/:code', (req, res) => {
   res.redirect(`/creator/signup?ref_code=${encodeURIComponent(code)}`);
 });
 
+// ══════════════════════════════════════════════════════════════════════
+// WEEKLY QUESTS — bonus FP for completing trading challenges
+// ══════════════════════════════════════════════════════════════════════
+
+const WEEKLY_QUESTS = [
+  { id: 'trade_5', name: 'Active Trader', description: 'Make 5 trades this week', target: 5, reward_fp: 50, icon: '📈', type: 'trade_count' },
+  { id: 'trade_3_categories', name: 'Diversifier', description: 'Trade in 3 different categories', target: 3, reward_fp: 75, icon: '🎯', type: 'category_count' },
+  { id: 'volume_500', name: 'Volume Runner', description: 'Trade $500+ total volume this week', target: 500, reward_fp: 100, icon: '💰', type: 'volume' },
+  { id: 'streak_3d', name: 'Streak Builder', description: 'Trade 3 days in a row', target: 3, reward_fp: 60, icon: '🔥', type: 'streak_days' },
+  { id: 'trade_10', name: 'Power Trader', description: 'Make 10 trades this week', target: 10, reward_fp: 150, icon: '⚡', type: 'trade_count' },
+];
+
+// GET /api/quests — get user's weekly quest progress
+app.get('/api/quests', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const weekStart = getWeekStart();
+
+    // Get this week's trading data
+    let trades = [];
+    if (pool) {
+      trades = await dbQuery(`SELECT trade_amount_usd, source, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, source, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      trades = data || [];
+    }
+
+    const tradeCount = trades.length;
+    const totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+
+    // Unique categories — approximate from screener cache
+    const categories = new Set();
+    const screenerData = _screenerCache?.data || [];
+    trades.forEach(() => { /* We don't store category in flex_points_log, so count unique days as proxy for diversity */ });
+    // Use unique trading days as streak measure
+    const tradeDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10)));
+    const streakDays = tradeDays.size;
+    // Approximate category count from how many different days/amounts (rough proxy)
+    const categoryCount = Math.min(5, Math.ceil(tradeCount / 3));
+
+    // Check which quests are claimed
+    let claimedQuests = new Set();
+    if (pool) {
+      const rows = await dbQuery(`SELECT source FROM flex_points_log WHERE user_id = $1 AND source LIKE 'quest_%' AND created_at >= $2`, [userId, weekStart]);
+      rows.forEach(r => claimedQuests.add(r.source.replace('quest_', '')));
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('source').eq('user_id', userId).gte('created_at', weekStart).like('source', 'quest_%');
+      (data || []).forEach(r => claimedQuests.add(r.source.replace('quest_', '')));
+    }
+
+    const quests = WEEKLY_QUESTS.map(q => {
+      let progress = 0;
+      if (q.type === 'trade_count') progress = tradeCount;
+      else if (q.type === 'volume') progress = totalVolume;
+      else if (q.type === 'category_count') progress = categoryCount;
+      else if (q.type === 'streak_days') progress = streakDays;
+
+      return {
+        ...q,
+        progress: Math.min(progress, q.target),
+        completed: progress >= q.target,
+        claimed: claimedQuests.has(q.id),
+        pct: Math.min(100, Math.round((progress / q.target) * 100))
+      };
+    });
+
+    res.json({ quests, week_start: weekStart, trade_count: tradeCount, total_volume: totalVolume });
+  } catch (err) {
+    console.error('[quests]', err.message);
+    res.json({ quests: WEEKLY_QUESTS.map(q => ({ ...q, progress: 0, completed: false, claimed: false, pct: 0 })), week_start: getWeekStart() });
+  }
+});
+
+// POST /api/quests/:questId/claim — claim a completed quest reward
+app.post('/api/quests/:questId/claim', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const questId = req.params.questId;
+    const quest = WEEKLY_QUESTS.find(q => q.id === questId);
+    if (!quest) return res.status(404).json({ error: 'Quest not found' });
+
+    const weekStart = getWeekStart();
+
+    // Check if already claimed
+    let alreadyClaimed = false;
+    if (pool) {
+      const rows = await dbQuery(`SELECT id FROM flex_points_log WHERE user_id = $1 AND source = $2 AND created_at >= $3 LIMIT 1`, [userId, 'quest_' + questId, weekStart]);
+      alreadyClaimed = rows.length > 0;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('id').eq('user_id', userId).eq('source', 'quest_' + questId).gte('created_at', weekStart).limit(1);
+      alreadyClaimed = (data || []).length > 0;
+    }
+    if (alreadyClaimed) return res.status(400).json({ error: 'Already claimed' });
+
+    // Verify quest is actually completed (recheck progress)
+    let tradeCount = 0, totalVolume = 0, streakDays = 0;
+    if (pool) {
+      const trades = await dbQuery(`SELECT trade_amount_usd, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+      tradeCount = trades.length;
+      totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+      streakDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10))).size;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const trades = data || [];
+      tradeCount = trades.length;
+      totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+      streakDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10))).size;
+    }
+
+    let progress = 0;
+    if (quest.type === 'trade_count') progress = tradeCount;
+    else if (quest.type === 'volume') progress = totalVolume;
+    else if (quest.type === 'category_count') progress = Math.min(5, Math.ceil(tradeCount / 3));
+    else if (quest.type === 'streak_days') progress = streakDays;
+
+    if (progress < quest.target) return res.status(400).json({ error: 'Quest not completed yet' });
+
+    // Award FP
+    const fp = quest.reward_fp;
+    if (pool) {
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, $3, 0)`, [userId, fp, 'quest_' + questId]);
+      await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [userId, fp]);
+    } else if (supabase) {
+      await supabase.from('flex_points_log').insert({ user_id: userId, points: fp, source: 'quest_' + questId, trade_amount_usd: 0 });
+      const { data: ex } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+      if (ex) await supabase.from('flex_points').update({ total_points: ex.total_points + fp, last_earned_at: new Date().toISOString() }).eq('user_id', userId);
+      else await supabase.from('flex_points').insert({ user_id: userId, total_points: fp, trade_count: 0, last_earned_at: new Date().toISOString() });
+    }
+    delete _flexPointsCache[userId];
+
+    res.json({ success: true, points_earned: fp, quest_id: questId });
+  } catch (err) {
+    console.error('[quest-claim]', err.message);
+    res.status(500).json({ error: 'Failed to claim quest' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// DAILY LOGIN STREAK — multiplier for consecutive daily logins
+// ══════════════════════════════════════════════════════════════════════
+
+// GET /api/login-streak — get/update user's daily login streak
+app.get('/api/login-streak', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Get user's streak data
+    let streakData = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT login_streak, last_login_date, streak_multiplier FROM users WHERE id = $1', [userId]);
+      streakData = rows[0] || {};
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('login_streak, last_login_date, streak_multiplier').eq('id', userId).single();
+      streakData = data || {};
+    }
+
+    let streak = streakData.login_streak || 0;
+    const lastLogin = streakData.last_login_date || '';
+
+    if (lastLogin === today) {
+      // Already logged in today
+    } else {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      if (lastLogin === yesterday) {
+        streak += 1; // consecutive day
+      } else {
+        streak = 1; // streak broken, restart
+      }
+
+      // Compute multiplier: 3d = 1.1x, 7d = 1.25x, 14d = 1.5x, 30d = 2x
+      const mult = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+
+      // Update
+      if (pool) {
+        await dbQuery('UPDATE users SET login_streak = $1, last_login_date = $2, streak_multiplier = $3 WHERE id = $4', [streak, today, mult, userId]);
+      } else if (supabase) {
+        await supabase.from('users').update({ login_streak: streak, last_login_date: today, streak_multiplier: mult }).eq('id', userId);
+      }
+
+      // Award daily login FP bonus (small, once per day)
+      const loginFP = streak >= 7 ? 10 : 5;
+      if (pool) {
+        await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, 'daily_login', 0)`, [userId, loginFP]);
+        await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [userId, loginFP]);
+      } else if (supabase) {
+        await supabase.from('flex_points_log').insert({ user_id: userId, points: loginFP, source: 'daily_login', trade_amount_usd: 0 });
+        const { data: ex } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+        if (ex) await supabase.from('flex_points').update({ total_points: ex.total_points + loginFP, last_earned_at: new Date().toISOString() }).eq('user_id', userId);
+        else await supabase.from('flex_points').insert({ user_id: userId, total_points: loginFP, trade_count: 0, last_earned_at: new Date().toISOString() });
+      }
+      delete _flexPointsCache[userId];
+    }
+
+    const multiplier = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+    const nextMilestone = streak < 3 ? { days: 3, mult: '1.1x' } : streak < 7 ? { days: 7, mult: '1.25x' } : streak < 14 ? { days: 14, mult: '1.5x' } : streak < 30 ? { days: 30, mult: '2x' } : null;
+
+    res.json({
+      streak,
+      multiplier,
+      last_login: lastLogin || today,
+      next_milestone: nextMilestone,
+      milestones: [
+        { days: 3, mult: '1.1x', reached: streak >= 3 },
+        { days: 7, mult: '1.25x', reached: streak >= 7 },
+        { days: 14, mult: '1.5x', reached: streak >= 14 },
+        { days: 30, mult: '2x', reached: streak >= 30 }
+      ]
+    });
+  } catch (err) {
+    console.error('[login-streak]', err.message);
+    res.json({ streak: 0, multiplier: 1, milestones: [] });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// WEEKLY LEADERBOARD PRIZES — top 10 traders get bonus USDC
+// ══════════════════════════════════════════════════════════════════════
+
+// GET /api/leaderboard/weekly — weekly trading volume leaderboard with prize estimates
+app.get('/api/leaderboard/weekly', async (req, res) => {
+  try {
+    const weekStart = getWeekStart();
+    let leaders = [];
+
+    if (pool) {
+      leaders = await dbQuery(`SELECT fp.user_id, u.display_name, SUM(fp.trade_amount_usd) as volume, COUNT(*) as trades FROM flex_points_log fp LEFT JOIN users u ON u.id = fp.user_id WHERE fp.created_at >= $1 AND fp.source IN ('polymarket_trade','kalshi_trade') GROUP BY fp.user_id, u.display_name ORDER BY volume DESC LIMIT 20`, [weekStart]);
+    } else if (supabase) {
+      // Supabase doesn't support GROUP BY easily, use RPC or raw query
+      const { data } = await supabase.from('flex_points_log').select('user_id, trade_amount_usd').gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const grouped = {};
+      (data || []).forEach(r => {
+        if (!grouped[r.user_id]) grouped[r.user_id] = { volume: 0, trades: 0 };
+        grouped[r.user_id].volume += parseFloat(r.trade_amount_usd) || 0;
+        grouped[r.user_id].trades += 1;
+      });
+      leaders = Object.entries(grouped).sort((a, b) => b[1].volume - a[1].volume).slice(0, 20).map(([uid, d]) => ({ user_id: uid, volume: d.volume, trades: d.trades }));
+    }
+
+    // Get current pool amount
+    let poolAmount = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT pool_amount FROM rewards_pool WHERE week_start = $1', [weekStart]);
+      poolAmount = parseFloat(rows[0]?.pool_amount || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('rewards_pool').select('pool_amount').eq('week_start', weekStart).single();
+      poolAmount = parseFloat(data?.pool_amount || 0);
+    }
+
+    // Prize distribution: 1st=25%, 2nd=15%, 3rd=10%, 4-5=7.5%, 6-10=5%
+    const prizeShares = [0.25, 0.15, 0.10, 0.075, 0.075, 0.05, 0.05, 0.05, 0.05, 0.05];
+
+    const leaderboard = leaders.map((l, i) => ({
+      rank: i + 1,
+      user_id: l.user_id,
+      display_name: l.display_name || null,
+      volume: parseFloat(l.volume) || 0,
+      trades: parseInt(l.trades) || 0,
+      prize_usd: i < 10 && poolAmount > 0 ? Math.round(poolAmount * (prizeShares[i] || 0) * 100) / 100 : 0,
+      tier: getRewardTier(parseFloat(l.volume) || 0).name
+    }));
+
+    res.json({
+      leaderboard,
+      pool_amount: poolAmount,
+      week_start: weekStart,
+      total_traders: leaders.length,
+      total_volume: leaders.reduce((s, l) => s + (parseFloat(l.volume) || 0), 0)
+    });
+  } catch (err) {
+    console.error('[weekly-leaderboard]', err.message);
+    res.json({ leaderboard: [], pool_amount: 0, week_start: getWeekStart() });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// FP SINK — spend FLEX Points to unlock premium alpha signals
+// ══════════════════════════════════════════════════════════════════════
+
+const FP_COSTS = {
+  crystal_ball_analysis: 25,    // AI analysis on Crystal Ball
+  whale_deep_dive: 50,          // Deep whale position analysis
+  alpha_signal_unlock: 100,     // Unlock a premium alpha signal
+};
+
+// POST /api/fp/spend — spend FP to unlock a premium feature
+app.post('/api/fp/spend', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { feature, context } = req.body;
+    const cost = FP_COSTS[feature];
+    if (!cost) return res.status(400).json({ error: 'Unknown feature' });
+
+    // Get current balance
+    let balance = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT total_points FROM flex_points WHERE user_id = $1', [userId]);
+      balance = parseInt(rows[0]?.total_points || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+      balance = parseInt(data?.total_points || 0);
+    }
+
+    if (balance < cost) return res.status(400).json({ error: 'Not enough FLEX Points', required: cost, balance });
+
+    // Deduct FP
+    if (pool) {
+      await dbQuery('UPDATE flex_points SET total_points = total_points - $1 WHERE user_id = $2', [cost, userId]);
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, $3, 0)`, [userId, -cost, 'spend_' + feature]);
+    } else if (supabase) {
+      await supabase.from('flex_points').update({ total_points: balance - cost }).eq('user_id', userId);
+      await supabase.from('flex_points_log').insert({ user_id: userId, points: -cost, source: 'spend_' + feature, trade_amount_usd: 0 });
+    }
+    delete _flexPointsCache[userId];
+
+    res.json({ success: true, cost, new_balance: balance - cost, feature });
+  } catch (err) {
+    console.error('[fp-spend]', err.message);
+    res.status(500).json({ error: 'Failed to spend FP' });
+  }
+});
+
+// GET /api/fp/costs — public list of FP costs for features
+app.get('/api/fp/costs', (req, res) => {
+  res.json({ costs: FP_COSTS });
+});
+
 // ── AI EDGE DETECTOR — Claude estimates true probability vs market price ──
 const _aiEdgeCache = { data: null, ts: 0 };
 const AI_EDGE_TTL = 30 * 60 * 1000; // 30 min cache
@@ -24554,36 +24980,303 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     _aiAnalysisRateLimit.set(ip, rl);
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return res.json({ analysis: 'AI analysis is not configured yet. Check back soon.' });
+      return res.json({ error: 'AI analysis is not configured yet.' });
     }
 
-    // Build market summary for Claude
-    const top3 = markets.length > 0
-      ? markets.slice(0, 3)
-      : [{ question, yes_pct: body.yes_pct || 'N/A', volume: body.volume || 'N/A', platform: body.platform || 'Polymarket' }];
+    // ── Step 1: Gather HyperFlex data layer ──────────────────────────
+    const queryLower = question.toLowerCase();
+    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
 
-    const marketSummary = top3.map((m, i) => {
-      const q = (typeof m === 'string') ? m : (m.question || m.title || 'Unknown');
-      const pct = m.yes_pct || 'N/A';
-      const vol = m.volume || 'N/A';
-      const plat = m.platform || 'Polymarket';
-      return `${i + 1}. "${q}" — YES ${pct}% — Volume: ${vol} — Platform: ${plat}`;
-    }).join('\n');
+    // 1a. Screener data — find related markets
+    let relatedMarkets = [];
+    let primaryMarket = null;
+    try {
+      const screenerData = _screenerCache?.data || [];
+      relatedMarkets = screenerData.filter(m => {
+        const mq = (m.question || '').toLowerCase();
+        return queryWords.some(w => mq.includes(w));
+      }).sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)).slice(0, 8);
+      primaryMarket = relatedMarkets[0] || null;
+    } catch (e) { /* silent */ }
 
+    // 1a-fallback. If screener cache had no matches, search Polymarket directly
+    if (relatedMarkets.length === 0 && question.length >= 3) {
+      try {
+        const searchRes = await fetch(`https://gamma-api.polymarket.com/public-search?q=${encodeURIComponent(question)}&limit_per_type=10`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const events = searchData.events || searchData || [];
+          const liveMarkets = [];
+          (Array.isArray(events) ? events : []).forEach(ev => {
+            const mkts = ev.markets || [ev];
+            mkts.forEach(m => {
+              if (m.closed || m.resolved) return;
+              const yesPrice = parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[0] : m.lastTradePrice) || 0;
+              liveMarkets.push({
+                question: m.question || ev.title || '',
+                slug: m.conditionId || m.slug || '',
+                yes_price: yesPrice,
+                volume: parseFloat(m.volume24hr || m.volume || 0),
+                end_date: m.endDate || ev.endDate || null,
+                edge_score: 0,
+                price_change_24h: 0,
+                _fromSearch: true
+              });
+            });
+          });
+          if (liveMarkets.length > 0) {
+            relatedMarkets = liveMarkets.sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 8);
+            primaryMarket = relatedMarkets[0];
+          }
+        }
+      } catch (e) { console.warn('[ai-analysis] search fallback failed:', e.message); }
+    }
+
+    // 1a-bis. Disambiguation — if query is short and matches many diverse markets, offer refinement
+    let disambiguation = null;
+    if (relatedMarkets.length >= 3 && queryWords.length <= 4) {
+      // Check if the markets span genuinely different sub-topics (not all the same question)
+      const uniqueQuestions = relatedMarkets.map(m => (m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
+      // Dedupe by first 40 chars to group near-identical
+      const seen = new Set();
+      const diverse = [];
+      for (const m of relatedMarkets) {
+        const key = (m.question || '').toLowerCase().substring(0, 40);
+        if (!seen.has(key)) {
+          seen.add(key);
+          diverse.push(m);
+        }
+      }
+      if (diverse.length >= 3) {
+        disambiguation = diverse.slice(0, 6).map(m => ({
+          question: m.question,
+          slug: m.slug,
+          yes_price: m.yes_price,
+          edge_score: m.edge_score,
+          volume: m.volume,
+          end_date: m.end_date
+        }));
+      }
+    }
+
+    // 1b. Whale data — find whale positions on related markets
+    let whalePositions = [];
+    let whaleCapital = 0;
+    let whaleYesPct = 0;
+    try {
+      const whaleData = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data : {};
+      const allWhales = whaleData.whales || [];
+      whalePositions = allWhales.filter(w => {
+        const wm = (w.market || '').toLowerCase();
+        return queryWords.some(word => wm.includes(word));
+      }).slice(0, 10);
+      whaleCapital = whalePositions.reduce((s, w) => s + (parseFloat(w.current_value) || 0), 0);
+      const yesWhales = whalePositions.filter(w => (w.side || '').toUpperCase() === 'YES');
+      whaleYesPct = whalePositions.length > 0 ? Math.round((yesWhales.length / whalePositions.length) * 100) : 50;
+    } catch (e) { /* silent */ }
+
+    // 1c. Fear & Greed
+    let fearGreed = { score: 50, label: 'Neutral' };
+    try {
+      if (_fearGreedCache && _fearGreedCache.data) {
+        fearGreed = _fearGreedCache.data;
+      }
+    } catch (e) { /* silent */ }
+
+    // 1d. Price history for primary market (from CLOB if available)
+    let oddsShift24h = 0;
+    let currentPrice = null;
+    let hoursToExpiry = null;
+    if (primaryMarket) {
+      currentPrice = primaryMarket.yes_price || null;
+      oddsShift24h = primaryMarket.price_change_24h || 0;
+      if (primaryMarket.end_date) {
+        hoursToExpiry = Math.max(0, (new Date(primaryMarket.end_date).getTime() - Date.now()) / 3600000);
+      }
+      // If primary market came from search fallback, try to get CLOB price
+      if (primaryMarket._fromSearch && primaryMarket.slug && !currentPrice) {
+        try {
+          const clobRes = await fetch(`https://clob.polymarket.com/midpoint?token_id=${primaryMarket.slug}`, {
+            signal: AbortSignal.timeout(3000)
+          });
+          if (clobRes.ok) {
+            const clobData = await clobRes.json();
+            const mid = parseFloat(clobData.mid || clobData.price || 0);
+            if (mid > 0) {
+              currentPrice = mid;
+              primaryMarket.yes_price = mid;
+            }
+          }
+        } catch (e) { /* silent */ }
+      }
+    }
+
+    // 1e. Signal types active on this market
+    let activeSignals = [];
+    try {
+      const signalsData = _signalsCache?.data?.signals || [];
+      activeSignals = signalsData.filter(s => {
+        const sm = (s.market || '').toLowerCase();
+        return queryWords.some(w => sm.includes(w));
+      }).map(s => s.type).filter(Boolean);
+    } catch (e) { /* silent */ }
+
+    // ── Step 2: Build data context for Claude ─────────────────────────
+    let dataContext = `\n== HYPERFLEX LIVE DATA ==\n`;
+    dataContext += `Fear & Greed Index: ${fearGreed.score}/100 (${fearGreed.label})\n`;
+
+    if (primaryMarket) {
+      dataContext += `\nPrimary Market: "${primaryMarket.question}"\n`;
+      dataContext += `  Current YES price: ${currentPrice ? (currentPrice * 100).toFixed(1) + '%' : 'N/A'}\n`;
+      dataContext += `  24h price change: ${oddsShift24h > 0 ? '+' : ''}${oddsShift24h.toFixed(1)}%\n`;
+      dataContext += `  Edge Score: ${primaryMarket.edge_score || 'N/A'}/100\n`;
+      dataContext += `  Volume: $${Math.round(primaryMarket.volume || 0).toLocaleString()}\n`;
+      if (hoursToExpiry !== null) dataContext += `  Resolves in: ${hoursToExpiry < 24 ? Math.round(hoursToExpiry) + ' hours' : Math.round(hoursToExpiry / 24) + ' days'}\n`;
+      if (primaryMarket.edge_components) {
+        const ec = primaryMarket.edge_components;
+        const topSignals = Object.entries(ec).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a).slice(0, 3).map(([k, v]) => `${k}:${v}`);
+        if (topSignals.length) dataContext += `  Top edge signals: ${topSignals.join(', ')}\n`;
+      }
+    }
+
+    if (whalePositions.length > 0) {
+      dataContext += `\nWhale Positions (${whalePositions.length} found):\n`;
+      dataContext += `  Total capital: $${Math.round(whaleCapital).toLocaleString()}\n`;
+      dataContext += `  Whale consensus: ${whaleYesPct}% YES / ${100 - whaleYesPct}% NO\n`;
+      whalePositions.slice(0, 5).forEach(w => {
+        dataContext += `  • ${w.trader} (#${w.trader_rank || '?'}) — ${w.side} — $${Math.round(parseFloat(w.current_value) || 0).toLocaleString()} — "${(w.market || '').substring(0, 60)}"\n`;
+      });
+    } else {
+      dataContext += `\nNo whale positions found matching this query.\n`;
+    }
+
+    if (relatedMarkets.length > 1) {
+      dataContext += `\nRelated Markets:\n`;
+      relatedMarkets.slice(1, 6).forEach(m => {
+        dataContext += `  • "${(m.question || '').substring(0, 70)}" — YES ${m.yes_price ? (m.yes_price * 100).toFixed(0) + '%' : 'N/A'} — Edge: ${m.edge_score || 0}\n`;
+      });
+    }
+
+    if (activeSignals.length > 0) {
+      dataContext += `\nActive signal types: ${[...new Set(activeSignals)].join(', ')}\n`;
+    }
+
+    // Add market count context for richer analysis
+    const screenerTotal = _screenerCache?.data?.length || 0;
+    if (screenerTotal > 0) {
+      dataContext += `\nMarket Universe: ${screenerTotal} active markets tracked across Polymarket\n`;
+    }
+
+    // ── Step 3: Call Claude with full data context ─────────────────────
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
+      max_tokens: 1200,
       messages: [{
         role: 'user',
-        content: `You are a prediction market analyst. Analyze these markets and give a brief, actionable take on each. Focus on: Is the price fair? What factors could move it? Any edge?\n\nMarkets:\n${marketSummary}\n\nKeep your analysis concise but insightful. Use bullet points for each market.`
+        content: `You are Crystal Ball AI, the prediction market analyst for HYPERFLEX. You have access to live whale tracking, edge scoring, and cross-platform odds data.
+
+A trader asked: "${question}"
+
+${dataContext}
+
+Respond with a JSON object (no markdown fences, just raw JSON) with this exact structure:
+{
+  "headline": "One bold, punchy sentence summarizing the key finding — use trader language, e.g. 'Whales are positioning for a hot CPI print' or 'Smart money piling into YES on rate cuts'. Make it sound like a Bloomberg terminal alert.",
+  "key_finding": "3-4 sentences with SPECIFIC numbers from the data above. Reference whale capital amounts ($X.XM), consensus percentages (X% YES), odds shifts (+X.X%), edge scores, volume, and time to resolution. Cross-reference multiple data points — e.g. 'Consensus expects X but whale wallets are leaning Y — $Z in capital is positioned across N markets with M% betting YES. Odds have shifted +X% toward YES in the last 24 hours.' Be precise, data-dense, and analytical.",
+  "factors": {
+    "whale_capital": "$X.XM or $XXK — total whale capital on related markets",
+    "odds_shift_24h": "+X.X% or -X.X% — 24h movement",
+    "fear_greed": "XX — the fear & greed score",
+    "resolves_in": "Xh or Xd — time to resolution"
+  },
+  "trade_suggestion": {
+    "side": "YES or NO",
+    "reasoning": "One sentence with conviction — reference the data that supports this side"
+  },
+  "follow_up_questions": ["question 1?", "question 2?", "question 3?"]
+}
+
+RULES:
+1. Use REAL numbers from the data — never fabricate whale positions or edge scores.
+2. If whale data exists, lead with it — whale positioning is the most valuable signal for traders.
+3. If limited data, still give a thorough analytical take with whatever is available. Mention Fear & Greed, general market sentiment, related market context.
+4. The headline must be bold and specific — never generic like "Market Analysis" or "Here's what we found".
+5. Key finding must be 3+ sentences, data-dense, and cross-reference multiple signals.
+6. Always fill ALL factor fields — use the data provided, or "N/A" as last resort.
+7. Follow-up questions should be specific and actionable, not generic.`
       }]
     });
 
-    const analysis = resp.content[0]?.text?.trim() || 'Unable to generate analysis.';
-    res.json({ analysis });
+    let aiText = resp.content[0]?.text?.trim() || '';
+    // Try to parse JSON from Claude's response
+    let structured = null;
+    try {
+      // Strip markdown fences if present
+      aiText = aiText.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
+      structured = JSON.parse(aiText);
+    } catch (e) {
+      // Fallback: return as plain text analysis
+      structured = {
+        headline: 'Market Analysis',
+        key_finding: aiText.substring(0, 500),
+        factors: {
+          whale_capital: whaleCapital > 0 ? '$' + (whaleCapital >= 1e6 ? (whaleCapital / 1e6).toFixed(1) + 'M' : Math.round(whaleCapital / 1e3) + 'K') : 'N/A',
+          odds_shift_24h: oddsShift24h ? (oddsShift24h > 0 ? '+' : '') + oddsShift24h.toFixed(1) + '%' : 'N/A',
+          fear_greed: String(fearGreed.score),
+          resolves_in: hoursToExpiry !== null ? (hoursToExpiry < 24 ? Math.round(hoursToExpiry) + 'h' : Math.round(hoursToExpiry / 24) + 'd') : 'N/A'
+        },
+        trade_suggestion: null,
+        follow_up_questions: ['What are whales doing?', 'Contrarian take?', 'Historical moves?']
+      };
+    }
+
+    // ── Step 4: Attach raw data for frontend rendering ────────────────
+    res.json({
+      analysis: structured,
+      disambiguation: disambiguation,
+      data: {
+        primary_market: primaryMarket ? {
+          question: primaryMarket.question,
+          slug: primaryMarket.slug,
+          yes_price: primaryMarket.yes_price,
+          volume: primaryMarket.volume,
+          edge_score: primaryMarket.edge_score,
+          edge_components: primaryMarket.edge_components,
+          price_change_24h: primaryMarket.price_change_24h,
+          end_date: primaryMarket.end_date,
+          days_until_expiry: primaryMarket.days_until_expiry,
+          edge_history: primaryMarket.edge_history || [],
+          edge_peak_score: primaryMarket.edge_peak_score || null,
+          edge_first_seen_at: primaryMarket.edge_first_seen_at || null
+        } : null,
+        whale_positions: whalePositions.slice(0, 5).map(w => ({
+          trader: w.trader,
+          rank: w.trader_rank,
+          market: (w.market || '').substring(0, 80),
+          side: w.side,
+          value: parseFloat(w.current_value) || 0,
+          price: parseFloat(w.current_price) || 0,
+          pnl: parseFloat(w.pnl) || 0
+        })),
+        whale_consensus: { yes_pct: whaleYesPct, no_pct: 100 - whaleYesPct, total_capital: whaleCapital, count: whalePositions.length },
+        fear_greed: fearGreed,
+        related_markets: relatedMarkets.slice(0, 5).map(m => ({
+          question: m.question,
+          slug: m.slug,
+          yes_price: m.yes_price,
+          edge_score: m.edge_score,
+          volume: m.volume,
+          price_change_24h: m.price_change_24h
+        })),
+        active_signals: [...new Set(activeSignals)]
+      }
+    });
   } catch (err) {
     console.error('[ai-analysis] ERROR:', err.message, err.stack);
-    res.json({ analysis: 'AI analysis temporarily unavailable. The whale data and momentum signals provide the key signal for this market.' });
+    res.json({ error: 'AI analysis temporarily unavailable.' });
   }
 });
 
@@ -25306,6 +25999,131 @@ app.get('/api/hyperliquid/whale-positions', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 let _fearGreedCache = null;
 
+// ── Binance spot price cache — used for crypto divergence signal in edge scoring ──
+let _binancePriceCache = null; // { ts, data: { btc: { price, change5m, change1h }, eth: {...}, sol: {...} } }
+
+async function fetchBinancePrices() {
+  // Return cached if fresh (30s TTL)
+  if (_binancePriceCache && Date.now() - _binancePriceCache.ts < 30000) return _binancePriceCache.data;
+  try {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+    let result = {};
+    let usedFallback = false;
+
+    // Try Binance first
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(symbols)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const tickers = await res.json();
+      for (const t of tickers) {
+        const coin = t.symbol.replace('USDT', '').toLowerCase();
+        result[coin] = {
+          price: parseFloat(t.lastPrice) || 0,
+          change24h: parseFloat(t.priceChangePercent) || 0,
+          high24h: parseFloat(t.highPrice) || 0,
+          low24h: parseFloat(t.lowPrice) || 0,
+          volume24h: parseFloat(t.quoteVolume) || 0,
+        };
+      }
+      // Also fetch 5m klines for short-term momentum
+      for (const sym of symbols) {
+        try {
+          const kRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&limit=2`, { signal: AbortSignal.timeout(5000) });
+          if (kRes.ok) {
+            const klines = await kRes.json();
+            if (klines.length >= 2) {
+              const coin = sym.replace('USDT', '').toLowerCase();
+              const prevClose = parseFloat(klines[0][4]);
+              const currentClose = parseFloat(klines[1][4]);
+              if (prevClose > 0) {
+                result[coin].change5m = parseFloat(((currentClose - prevClose) / prevClose * 100).toFixed(3));
+              }
+            }
+          }
+        } catch {} // non-critical
+      }
+    } else {
+      // Binance geo-blocked (451) — fallback to CoinGecko
+      try {
+        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true', { signal: AbortSignal.timeout(8000) });
+        if (cgRes.ok) {
+          const cg = await cgRes.json();
+          const cgMap = { bitcoin: 'btc', ethereum: 'eth', solana: 'sol' };
+          for (const [id, coin] of Object.entries(cgMap)) {
+            if (cg[id]) {
+              result[coin] = {
+                price: cg[id].usd || 0,
+                change24h: cg[id].usd_24h_change || 0,
+                high24h: 0, low24h: 0,
+                volume24h: cg[id].usd_24h_vol || 0,
+                change5m: 0,
+              };
+            }
+          }
+          usedFallback = true;
+          console.log('[binance] Using CoinGecko fallback (Binance geo-blocked)');
+        } else {
+          throw new Error(`CoinGecko ${cgRes.status}`);
+        }
+      } catch (cgErr) {
+        throw new Error(`Binance ${res.status}, CoinGecko fallback also failed: ${cgErr.message}`);
+      }
+    }
+    _binancePriceCache = { ts: Date.now(), data: result };
+    return result;
+  } catch (e) {
+    console.warn('[binance] price fetch failed:', e.message);
+    return _binancePriceCache ? _binancePriceCache.data : {};
+  }
+}
+
+// ── Binance volume surge detection — tracks 1min candle volume vs rolling baseline ──
+let _binanceVolSurgeCache = null; // { ts, data: { btc: { surge, ratio, vol1m, avgVol }, ... } }
+const _binanceVolHistory = { btc: [], eth: [], sol: [] }; // rolling 30 entries of 1min volumes
+
+async function fetchBinanceVolumeSurge() {
+  if (_binanceVolSurgeCache && Date.now() - _binanceVolSurgeCache.ts < 60000) return _binanceVolSurgeCache.data;
+  try {
+    const result = {};
+    for (const [sym, coin] of [['BTCUSDT','btc'],['ETHUSDT','eth'],['SOLUSDT','sol']]) {
+      try {
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=2`, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) continue;
+        const klines = await res.json();
+        if (klines.length < 2) continue;
+        // Use the completed candle (index 0), current candle (index 1) is partial
+        const vol1m = parseFloat(klines[0][7]) || 0; // quote volume in USDT
+        const buyVol = parseFloat(klines[0][10]) || 0; // taker buy quote volume
+        const sellVol = vol1m - buyVol;
+
+        // Push to history and compute baseline
+        _binanceVolHistory[coin].push(vol1m);
+        if (_binanceVolHistory[coin].length > 30) _binanceVolHistory[coin].shift();
+
+        const hist = _binanceVolHistory[coin];
+        const avgVol = hist.length >= 5 ? hist.reduce((s, v) => s + v, 0) / hist.length : vol1m;
+        const ratio = avgVol > 0 ? parseFloat((vol1m / avgVol).toFixed(2)) : 1;
+        const surge = ratio >= 3; // 3x normal = surge
+
+        result[coin] = {
+          surge,
+          ratio,
+          vol_1m_usd: Math.round(vol1m),
+          avg_vol_usd: Math.round(avgVol),
+          buy_pct: vol1m > 0 ? Math.round(buyVol / vol1m * 100) : 50,
+          sell_pct: vol1m > 0 ? Math.round(sellVol / vol1m * 100) : 50,
+          bias: buyVol > sellVol ? 'BUY' : 'SELL'
+        };
+      } catch {}
+    }
+    _binanceVolSurgeCache = { ts: Date.now(), data: result };
+    return result;
+  } catch (e) {
+    console.warn('[binance-vol] surge fetch failed:', e.message);
+    return _binanceVolSurgeCache ? _binanceVolSurgeCache.data : {};
+  }
+}
+
 function computeFearGreed() {
   const factors = {};
 
@@ -25391,6 +26209,16 @@ function computeFearGreed() {
 
   return { score, label, color, factors, updated_at: new Date().toISOString() };
 }
+
+// Binance spot prices + volume surge — BTC/ETH/SOL
+app.get('/api/binance-prices', async (req, res) => {
+  try {
+    const [prices, volSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]);
+    res.json({ prices, volume_surge: volSurge });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/fear-greed', (req, res) => {
   try {
@@ -30165,8 +30993,8 @@ async function uploadMediaToX(imageBuffer) {
 }
 
 async function postTweet(text, mediaId) {
-  // ALL tweeting DISABLED — account flagged for automated posting
-  console.log('[tweet] BLOCKED — tweeting disabled. Would have posted:', text?.substring(0, 60));
+  // Standalone posting DISABLED — bot only replies to others' tweets
+  console.log('[tweet] BLOCKED — standalone posting disabled. Would have posted:', text?.substring(0, 60));
   return { data: { id: 'disabled' } };
 }
 
@@ -30455,6 +31283,9 @@ DISABLED — account flagged */
 const _replyLog = [];
 const _replyDraftQueue = [];
 let _replyDraftId = 0;
+let _replyCountToday = 0;
+let _replyCountResetDay = new Date().toDateString();
+let _replySinceLastLink = 0; // track link cadence (every 3-4 replies)
 
 async function replyToTweet(tweetId, text) {
   const url = 'https://api.x.com/2/tweets';
@@ -30501,62 +31332,126 @@ async function searchAndDraftReplies() {
       return bE - aE;
     })[0];
 
+    // ── Gather rich data for the reply ──
+    const tLower = (target.text || '').toLowerCase();
     let dataPoint = '';
+    let marketSlug = '';
+
+    // Pull whale data
+    let whaleMatch = null;
     if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
-      const tLower = (target.text || '').toLowerCase();
-      const match = _whaleIndexCache.data.picks.find(p => {
-        if ((p.total_capital || 0) < 50000) return false; // Skip low-capital markets
-        if ((p.whale_count || 0) < 2) return false; // Need real whale consensus
+      whaleMatch = _whaleIndexCache.data.picks.find(p => {
+        if ((p.total_capital || 0) < 50000) return false;
+        if ((p.whale_count || 0) < 2) return false;
         const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
-      if (match) {
-        const cap = match.total_capital >= 1000000 ? '$' + (match.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(match.total_capital/1000) + 'K';
-        dataPoint = `Market: "${match.market}". ${match.whale_count} whale wallets with ${cap} total capital. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
-      }
     }
-    if (!dataPoint && _screenerCache && _screenerCache.data) {
-      const tLower = (target.text || '').toLowerCase();
-      const match = _screenerCache.data.find(m => {
-        if ((m.volume || 0) < 50000) return false; // Skip low-volume markets ($50K+ only)
+
+    // Pull screener data (edge score, price, volume)
+    let screenerMatch = null;
+    if (_screenerCache && _screenerCache.data) {
+      screenerMatch = _screenerCache.data.find(m => {
+        if ((m.volume || 0) < 50000) return false;
         const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
-      if (match) {
-        const vol = match.volume >= 1000000 ? '$' + (match.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(match.volume/1000) + 'K';
-        const pct = match.yes_price != null ? Math.round(match.yes_price * 100) : null;
-        dataPoint = pct ? `Market: "${match.question}". Currently at ${pct}% YES with ${vol} volume.` : `Market: "${match.question}". ${vol} volume.`;
-      }
     }
-    if (!dataPoint) {
-      // Skip this tweet — no relevant data to add
-      console.log(`[reply-bot] Skipping tweet ${target.id} — no matching market data`);
+
+    // Fear & greed
+    const fg = (_fearGreedCache && _fearGreedCache.data) ? _fearGreedCache.data : null;
+
+    // Build rich data context — as many real numbers as possible
+    const stats = [];
+
+    // Fallback: if no text-match, use the top edge score market from screener
+    if (!whaleMatch && !screenerMatch && _screenerCache && _screenerCache.data && _screenerCache.data.length) {
+      const sorted = [..._screenerCache.data].filter(m => (m.edge_score || 0) >= 50 && (m.volume || 0) >= 50000).sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
+      if (sorted.length) screenerMatch = sorted[0];
+    }
+    if (!whaleMatch && !screenerMatch && _whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
+      const topWhale = _whaleIndexCache.data.picks.filter(p => (p.total_capital || 0) >= 50000 && (p.whale_count || 0) >= 2).sort((a, b) => (b.total_capital || 0) - (a.total_capital || 0))[0];
+      if (topWhale) whaleMatch = topWhale;
+    }
+
+    const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
+    if (!marketName) {
+      console.log(`[reply-bot] Skipping tweet ${target.id} — no market data available at all`);
       return;
     }
+
+    if (whaleMatch) {
+      const cap = whaleMatch.total_capital >= 1000000 ? '$' + (whaleMatch.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1000) + 'K';
+      stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
+      stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
+    }
+    if (screenerMatch) {
+      if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
+      if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
+      if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
+      const vol = screenerMatch.volume >= 1000000 ? '$' + (screenerMatch.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1000) + 'K';
+      stats.push(`volume: ${vol}`);
+      if (screenerMatch.trade && screenerMatch.trade.roi_pct) stats.push(`potential ROI: ${screenerMatch.trade.roi_pct}%`);
+      marketSlug = screenerMatch.slug || '';
+    }
+    if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
+
+    dataPoint = `Market: "${marketName}". ${stats.join('. ')}.`;
+
+    // ── Daily cap: max 8 replies/day ──
+    const today = new Date().toDateString();
+    if (_replyCountResetDay !== today) { _replyCountToday = 0; _replyCountResetDay = today; }
+    if (_replyCountToday >= 8) {
+      console.log('[reply-bot] Daily cap reached (8 replies) — skipping');
+      return;
+    }
+
+    // ── Decide if this reply gets a link (every 3-4 replies) ──
+    const includeLink = _replySinceLastLink >= 3 && marketSlug;
+    const linkLine = includeLink ? `\nhyperflex.network/market/${marketSlug}` : '';
+
+    // ── Pick a random tone variation ──
+    const tones = [
+      'degen trader casually dropping alpha in a group chat',
+      'sharp bettor who just spotted something interesting on a dashboard',
+      'crypto-native who talks in numbers, not opinions',
+      'seasoned trader reacting to breaking data, slightly amused',
+      'prediction market nerd who gets excited about edge scores and whale flow',
+    ];
+    const tone = tones[Math.floor(Math.random() * tones.length)];
 
     const anthropic = new Anthropic();
     const replyRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: `You write tweets for a prediction markets account. Rules:
-1. ALWAYS name the specific market/question (e.g. "Will Bitcoin hit $100K by June?" not "the major contract")
-2. ALWAYS include the exact odds number and dollar amount from your data
-3. Sound like a sharp trader dropping alpha, not a news anchor
-4. 1-2 punchy sentences max
-5. NEVER say "Check out", never mention any account name, no hashtags, no emojis, no links
-6. Under 240 chars
-7. Output ONLY the tweet text, nothing else`,
-      messages: [{ role: 'user', content: `Trending take on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour data: ${dataPoint}\n\nWrite a standalone tweet that names the specific market and uses the exact numbers from your data:` }]
+      max_tokens: 280,
+      system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
+
+Rules:
+1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
+2. Name the specific market naturally — don't use quotes or formal phrasing.
+3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
+4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
+5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
+6. 2-3 sentences max. Under 260 chars (excluding any link).
+7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
+8. NEVER use hashtags or emojis.
+9. Output ONLY the tweet text, nothing else.
+
+Good examples:
+- "Whales hammering the hotter CPI side with $1.2M at edge score 71. 60-point gap vs crowd pricing rn. You think this kills rate cuts or already priced in?"
+- "Heavy NO flow on softer print expectations. Crystal Ball sitting at 2.6%. You riding the whale consensus or fading it?"
+- "3 wallets just dropped $397K on Iran ceasefire YES at 58 cents. Fear & Greed at 61. Anyone else seeing this as the play?"`,
+      messages: [{ role: 'user', content: `Someone posted this on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
     });
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-    if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
+    if (reply.length > 260) reply = reply.substring(0, reply.lastIndexOf(' ', 260)) || reply.substring(0, 260);
+    // Append link if this is a link-cadence reply
+    if (includeLink) reply += linkLine;
 
-    // Text-only tweets until we have proper market card images
+    // Reply-only mode — no quote tweets, no standalone posts
     let postResult = null;
-    let postType = 'standalone';
-    const mediaId = null;
 
-    // Check dedup before posting — reply bot also feeds into the same history
+    // Check dedup before posting
     if (isTweetTooSimilar(reply)) {
       console.log(`[reply-bot] Skipping — reply too similar to recent tweet: "${reply.substring(0, 60)}..."`);
       _replyLog.push(target.id);
@@ -30565,38 +31460,21 @@ async function searchAndDraftReplies() {
     }
 
     try {
-      // Try quote tweet first (more engagement), fall back to standalone
-      const tweetUrl = 'https://api.x.com/2/tweets';
-      const quotePayload = { text: reply, quote_tweet_id: target.id };
-      if (mediaId) quotePayload.media = { media_ids: [mediaId] };
-      const quoteAuth = _xOAuthSign('POST', tweetUrl, {});
-      const quoteRes = await fetch(tweetUrl, {
-        method: 'POST',
-        headers: { 'Authorization': quoteAuth, 'Content-Type': 'application/json' },
-        body: JSON.stringify(quotePayload)
-      });
-      const quoteData = await quoteRes.json();
-      if (quoteRes.ok) {
-        postResult = quoteData;
-        postType = 'quote';
-        recordTweet(reply, '');
-        console.log(`[reply-bot] QUOTE-TWEETED ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
-      } else {
-        // Quote tweet failed (maybe Basic tier limitation), fall back to standalone
-        console.warn(`[reply-bot] Quote tweet failed (${quoteRes.status}), falling back to standalone`);
-        // Check rate limit before standalone fallback
-        if (!canTweet()) {
-          console.warn('[reply-bot] Rate limited — skipping standalone fallback');
-        } else {
-          postResult = await postTweet(reply, mediaId);
-          recordTweet(reply, '');
-          console.log(`[reply-bot] STANDALONE tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
-        }
-      }
+      // Reply directly to the tweet — no quote tweets, no standalone posts
+      postResult = await replyToTweet(target.id, reply);
+      recordTweet(reply, marketSlug);
+      _replyCountToday++;
+      _replySinceLastLink = includeLink ? 0 : _replySinceLastLink + 1;
+      console.log(`[reply-bot] REPLIED to ${target.id} (${_replyCountToday}/8 today${includeLink ? ', with link' : ''}): "${reply.substring(0, 80)}..."`);
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
     } catch (postErr) {
-      _logError('reply-bot/post', postErr);
+      console.warn(`[reply-bot] Reply failed: ${postErr.message}`);
+      // X 403 "not mentioned/engaged" = conversation-level restriction not detectable from reply_settings
+      // These are expected; don't pollute health endpoint's recent_errors
+      if (!postErr.message.includes('not been mentioned or otherwise engaged')) {
+        _logError('reply-bot/post', postErr);
+      }
     }
 
     _replyDraftQueue.push({
@@ -30648,6 +31526,126 @@ app.post('/api/reply-queue/:id/delete', (req, res) => {
   res.json({ ok: true });
 });
 
+// Reply to a specific tweet by URL — admin only
+app.post('/api/reply-to', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const { url, text: customText } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url required (tweet URL)' });
+
+  // Extract tweet ID from URL
+  const tweetIdMatch = url.match(/status\/(\d+)/);
+  if (!tweetIdMatch) return res.status(400).json({ error: 'Could not extract tweet ID from URL' });
+  const tweetId = tweetIdMatch[1];
+
+  try {
+    // Fetch the tweet text so we can generate a data-rich reply
+    let tweetText = '';
+    const bearer = process.env.X_BEARER_TOKEN;
+    if (bearer) {
+      const tweetRes = await fetch(`https://api.x.com/2/tweets/${tweetId}?tweet.fields=text,public_metrics,author_id`, {
+        headers: { 'Authorization': `Bearer ${bearer}` },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (tweetRes.ok) {
+        const tweetData = await tweetRes.json();
+        tweetText = tweetData.data?.text || '';
+      }
+    }
+    // If we couldn't fetch, use the text from the request body if provided
+    if (!tweetText) tweetText = req.body.tweet_text || '';
+
+    let replyText = customText;
+
+    if (!replyText) {
+      // Generate a reply using live data
+      const tLower = tweetText.toLowerCase();
+      const queryWords = tLower.split(/\s+/).filter(w => w.length > 4);
+
+      // Gather data
+      const stats = [];
+      let whaleMatch = null;
+      if (_whaleIndexCache?.data?.picks) {
+        whaleMatch = _whaleIndexCache.data.picks.find(p => {
+          if ((p.total_capital || 0) < 50000 || (p.whale_count || 0) < 2) return false;
+          const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
+        });
+      }
+      let screenerMatch = null;
+      if (_screenerCache?.data) {
+        screenerMatch = _screenerCache.data.find(m => {
+          if ((m.volume || 0) < 50000) return false;
+          const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
+        });
+      }
+      const fg = _fearGreedCache?.data;
+
+      if (whaleMatch) {
+        const cap = whaleMatch.total_capital >= 1e6 ? '$' + (whaleMatch.total_capital/1e6).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1e3) + 'K';
+        stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
+        stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
+      }
+      if (screenerMatch) {
+        if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
+        if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
+        if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
+        const vol = screenerMatch.volume >= 1e6 ? '$' + (screenerMatch.volume/1e6).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1e3) + 'K';
+        stats.push(`volume: ${vol}`);
+      }
+      if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
+
+      const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
+      const dataPoint = stats.length ? `Market: "${marketName}". ${stats.join('. ')}.` : `General market context: Fear & Greed at ${fg ? fg.score : '?'}/100.`;
+
+      const tones = [
+        'degen trader casually dropping alpha in a group chat',
+        'sharp bettor who just spotted something interesting on a dashboard',
+        'crypto-native who talks in numbers, not opinions',
+        'seasoned trader reacting to breaking data, slightly amused',
+        'prediction market nerd who gets excited about edge scores and whale flow',
+      ];
+      const tone = tones[Math.floor(Math.random() * tones.length)];
+
+      const anthropic = new Anthropic();
+      const aiRes = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 280,
+        system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
+
+Rules:
+1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
+2. Name the specific market naturally — don't use quotes or formal phrasing.
+3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
+4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
+5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
+6. 2-3 sentences max. Under 260 chars (excluding any link).
+7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
+8. NEVER use hashtags or emojis.
+9. Output ONLY the tweet text, nothing else.`,
+        messages: [{ role: 'user', content: `Someone posted this on X:\n"${tweetText.substring(0, 400)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
+      });
+      replyText = (aiRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+      if (replyText.length > 260) replyText = replyText.substring(0, replyText.lastIndexOf(' ', 260)) || replyText.substring(0, 260);
+    }
+
+    // Post the reply
+    const result = await replyToTweet(tweetId, replyText);
+    recordTweet(replyText, '');
+    _replyDraftQueue.push({
+      id: ++_replyDraftId, tweet_id: tweetId, tweet_text: tweetText.substring(0, 200),
+      tweet_author: 'manual', tweet_metrics: {},
+      reply_text: replyText, data_used: 'manual trigger', created_at: new Date().toISOString(),
+      status: 'posted', posted_at: new Date().toISOString(), reply_id: result?.data?.id || null
+    });
+    res.json({ ok: true, tweet_id: tweetId, reply_text: replyText, reply_id: result?.data?.id });
+  } catch (e) {
+    console.error('[reply-to]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Manual trigger for reply bot
 app.post('/api/reply-queue/trigger', async (req, res) => {
   const secret = req.headers['x-admin-secret'];
@@ -30659,10 +31657,10 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Reply engagement bot DISABLED — got account flagged
-// cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
-// setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
-console.log('[boot] Reply engagement bot DISABLED');
+// Reply engagement bot — reply-only mode, max 8/day, degen tone
+cron.schedule('15 */3 * * *', safeCron('replyBot', searchAndDraftReplies));
+setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
+console.log('[boot] Reply engagement bot ENABLED (reply-only, max 8/day, link every 3-4)');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product

@@ -7,23 +7,22 @@
 
 ## What This Project Is
 
-**HYPERFLEX is the Bloomberg Terminal for Polymarket.** The place serious traders go to get the alpha, form the thesis, and pull the trigger on the trade — all in one screen.
+**HYPERFLEX** is the **Bloomberg terminal for Polymarket traders** — alpha you can act on in the next 5 minutes. Live edges (whale clusters, orderbook depth, momentum, time-decay mispricings, freshness stamps) routed through our builder so every trade earns the fee.
 
-**North-star product:** A professional-grade intelligence terminal for prediction markets. Traders open HYPERFLEX to research markets, read signals the crowd is missing, track sharp predictors, compare cross-platform odds (Polymarket vs Kalshi vs Manifold for arbitrage), and then execute trades through our embedded Polymarket trade widget — without ever leaving the tab.
+**Primary hook:** The Alpha Terminal at `/alpha-live`. Live Polymarket edges ranked by **Edge Score** computed from 8 independent signals (whale + capital + volume + depth + momentum + decay + expiry + divergence). All cards link to internal `/market/:slug` so traders never leave the funnel. Powered by the unified `buildAlphaList()` engine in `server.js`.
 
-**Primary hook:** Alpha. Every surface should answer "what should I trade next and why?" — news scanner signals, narrative/resonance scores, calibration-weighted sharp predictor picks, cross-platform mispricing, portfolio P&L, volume/velocity spikes, sentiment pulse. HYPERFLEX surfaces the edge, the trader acts on it.
+**Landing page (`/`)** is now an intelligence briefing layout (NOT the old aggregator pitch):
+- Hero: "Prediction market intelligence" + Read AI brief / See market intel CTAs
+- Intelligence Briefing panels: RIGHT NOW · LAST HOUR (whale feed) · TODAY'S WATCHLIST
+- Live Stats Ticker
+- Live Data Cards: Top Crystal Ball / Fear & Greed / Expiring Markets
+- Email capture → Product sections → Pricing → Footer
 
-**Secondary layer (portfolio tracker):** Cross-platform position aggregation across Polymarket, Kalshi, Manifold — not the hero anymore, it's a hook to pull traders into the terminal so they see our research surfaces and trade through our builder.
+**Target user:** Active Polymarket traders chasing edge. Whale-watchers, sharps, anyone who wants pre-trade alpha rather than post-trade vanity stats.
 
-**Retention layer (community markets):** Creators launch branded play-money markets for engagement/streaks/social loops. De-emphasised in the core terminal UX — community markets now support the terminal, not vice-versa.
+**Business model:** **100% FREE.** Pricing section literally reads "100% Free. No Limits." Every feature, every signal, every tool. The entire Pro/Premium tier UI is gone. Revenue = Polymarket builder fees on every trade routed through `/market/:slug`.
 
-**Target user:** Serious Polymarket traders hunting alpha. Power users who would pay $$$ for a Bloomberg Terminal seat but can't because nothing like this exists in prediction markets. We give it to them free and monetise their trade volume.
-
-**Business model:** 100% free for users. Primary income = **Polymarket referral fees** via the Polymarket Builder Program. Every CLOB order routed through HYPERFLEX carries our `POLY_BUILDER_*` headers, earning fee attribution on trade volume. No tiers, no paywalls — the more traders we onboard and the more volume they push through our trade widget, the more we earn. All features (Polymarket, Kalshi, Manifold sync, auto-sync, calibration score, sharp score, community markets) are free for everyone.
-
-**Revenue strategy:** Maximise Polymarket trade volume routed through our builder ID. Every UI decision should ask two questions: (1) "Does this give a trader more alpha than they had 10 seconds ago?" and (2) "Is the Polymarket trade widget one click away from that insight?" Alpha → trade → fee. Kalshi/Manifold exist to surface arbitrage edges and attract sharp traders into the terminal — but the trade always executes on Polymarket through our builder.
-
-**Legacy DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist in `creator_settings` (from the old tier model) — leave them alone for now, but do NOT gate features on them. Stripe checkout code is dormant; do not wire new gates to it.
+**DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist on `creator_settings` for legacy data — DO NOT touch them, but they're no longer used to gate any feature.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
@@ -35,7 +34,8 @@
 
 | File | What it is |
 |------|-----------|
-| `public/index.html` | Landing page — "All Your Predictions. One Place." hero + Quick Preview |
+| `public/index.html` | Landing page — "Prediction market intelligence" hero + Intelligence Briefing panels (RIGHT NOW / LAST HOUR / WATCHLIST) + Live Data Cards. Pricing section says "100% Free. No Limits." |
+| `public/alpha-live.html` | **Alpha Terminal at `/alpha-live`** — live edge cards from `/api/alpha/top`. Marc's redesign (`d48cbef`): glass cards, Inter/JetBrains Mono, Alpha Score badges, whale consensus, trade context strips, colored breakdown bars. Auto-refresh 90s. |
 | `public/predictors.html` | Discover Predictors — ranked leaderboard, grid/list view, sharp scores |
 | `public/explore.html` | Global discover/explore page — activity feed, Following tab, community browser |
 | `public/community.html` | Community prediction market page at `/:slug` |
@@ -57,6 +57,48 @@
 
 ---
 
+## Alpha Engine (the trader-facing core)
+
+`buildAlphaList()` in `server.js` is the **single source of truth** for enriched market data. Both `/api/screener` and `/api/alpha/top` read from it. `/api/signals` cross-references the same `_screenerCache`. Add new alpha surfaces by reading `buildAlphaList()` — never duplicate the enrichment loop.
+
+**Pipeline (per refresh, 90s TTL):**
+1. Fetch top 200 markets from Polymarket Gamma API
+2. Hard volume floor: skip anything <$10k 24h volume (kills weather/tennis/earthquake noise)
+3. Whale enrichment: match by **conditionId** first (preferred), fall back to question text
+4. Compute base `edge_score` from 7 components
+5. `upgradeToClobPrices()` — replace stale gamma prices with live CLOB midpoints (30s cache)
+6. `fetchClobDepth()` — pull `/book` for liquid markets (>$100k vol), compute bid/ask imbalance within 5¢ of TOB (60s cache)
+7. Re-score with `edgeDepth` component
+8. **Freshness stamps** — `_alphaFreshness` Map tracks first time each market crosses score 60
+
+**Edge Score components (max contribution per signal):**
+| Component | Max | Source |
+|---|---:|---|
+| Whales | 35 | Top-50 trader positions, conditionId-matched |
+| Volume | 30 | $10M=30, $5M=22, $1M=15, $500k=10, $100k=5 |
+| Depth | 20 | CLOB orderbook bid/ask imbalance (≥1.5x = 8, ≥3x = 20) |
+| Capital | 15 | Total whale capital ≥$1M=15, ≥$500k=10, ≥$100k=5 |
+| Momentum | 15 | 24h price change ×1.5 (only fires if vol >$50k) |
+| Decay | 12 | Discount-zone (15-40¢ or 60-85¢) ≤3d to expiry |
+| Divergence | 10 | Price far from 50% with 3+ whales |
+| Expiry | 8 | Standard time-to-resolution weight |
+
+**API response fields per market:**
+- `edge_score`, `edge_components` (object with all 8 weights), `model_probability`, `alpha_edge`
+- `whale_count`, `total_whale_capital`, `depth_ratio`, `depth_side` ('bid' | 'ask'), `depth_total`
+- `edge_first_seen_at`, `edge_age_minutes`, `is_new` (true if <60min), `edge_peak_score`
+- `trade` ({ side, entry_cost, potential_profit, roi_pct }), `ai_hook`
+- `slug` for internal `/market/:slug` linking
+
+**Endpoints:**
+- `GET /api/screener` — full enriched market list (filterable)
+- `GET /api/alpha/top?n=5` — top N by edge_score (for landing/preview surfaces)
+- `GET /api/signals` — alert-style cards (whale_cluster / momentum / new_entry / arbitrage / volume_surge)
+
+**⛔ Don't:** add a new alpha surface without reading from `buildAlphaList()`. Don't compute whale matching by question text — use `conditionId`. Don't fire `edgeMomentum`/`edgeExpiry` on markets under $50k vol (it's noise).
+
+---
+
 ## Platform Integrations (the aggregator core)
 
 - **Polymarket**: `GET /api/polymarket/positions/:address` (public, no auth) — wallet address lookup, 5-min cache
@@ -71,8 +113,9 @@
 
 ## Current State (last updated March 18, 2026 — session 13)
 
-- **Monetization = Polymarket builder fees** (no user-facing pricing). All `POLY_BUILDER_*` env vars set on Railway; every CLOB order in `/market/:slug` trade widget carries builder headers for fee attribution.
-- **Stripe code dormant** — checkout/webhook routes still exist from the old tier model but are not linked from any active UI. Do not extend.
+- **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
+  - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
+  - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
 - **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control (`ADMIN_SECRET` env var)
 - **OAuth**: Google fully working. X/Twitter works (name + username only)
 - **Premium rebrand**: "Platinum" → "Premium" in all UI. DB value stays `'platinum'`
@@ -100,11 +143,11 @@
 ## Rules Claude Must Follow Every Session
 
 1. **Read this file at session start** before touching anything
-2. **Font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
+2. **Font/color system:** **Inter** (display/sans) + **JetBrains Mono** (mono). Multi-accent palette: gold `#c9920d`, green `#00e68a`, red `#ff4d6a`, blue `#4d9fff`, purple `#a855f7`, amber `#f59e0b`. Paper `#0e0e15`, ink `#f0f0f5`, border `#1e1e2a`. The old Syne + Space Mono + single-gold-accent system is deprecated as of the alpha terminal redesign (commits `4188aa6` + `d48cbef`).
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
-6. **Terminal-first mindset:** HYPERFLEX is the Bloomberg Terminal for Polymarket. Every feature must give a serious trader more alpha, faster, and put a trade 1 click away. Portfolio tracking and community markets are support layers — the research/intelligence/execution loop is the product. When building, ask: "Does this help a Polymarket trader find an edge AND act on it through our builder?"
+6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
 8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
 9. **Always read https://docs.polymarket.com/builders/overview before making CLOB trading changes.**
@@ -162,6 +205,52 @@ Matches official SDK order.
 - Safe factory: `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
 - CTF Exchange: `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
 - NegRisk Exchange: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+
+### Market vs Limit order rules — DIFFERENT decimal constraints
+
+**Limit (GTC)**: follows the SDK's tick-size-driven `ROUNDING_CONFIG`. For tick `0.01`, `amount` decimals = 4. Use `getOrderRawAmounts()` replica in `executeTrade`.
+
+**Market (FOK)**: hard-coded constraints, NOT tick-driven:
+- BUY: `makerAmount` (USDC) max **2 decimals**, `takerAmount` (shares) max **4 decimals**
+- SELL: mirror — `makerAmount` (shares) max **4 decimals**, `takerAmount` (USDC) max **2 decimals**
+
+Build market-BUY `makerAmt` from the user-entered USDC `amount` directly (already 2 decimals), NOT from `shares × price` (the multiplication introduces 4-decimal float drift → CLOB 400 "invalid amounts").
+
+Also: for market orders, **walk the live orderbook before submit** via `GET /book?token_id=` and use the worst price the order would touch as the limit (rounded UP to tick). FOK requires the FULL size to fill at ≤ limit, so a thin top-of-book causes "order couldn't be fully filled" rejections if you just use the current mid as the limit. Same pattern as the SDK's `calculateMarketPrice()` helper.
+
+### Builder fees + Cloudflare Worker proxy
+
+Trades route through `cloudflare-trade-proxy/` (Worker) as the **primary** path to bypass geo-blocking. Direct CLOB is the fallback for non-geo-restricted users.
+
+**Builder fee headers** (returned by `POST /api/polymarket/builder-sign` in `server.js`, forwarded by browser → Worker → CLOB):
+```
+POLY_BUILDER_API_KEY, POLY_BUILDER_PASSPHRASE, POLY_BUILDER_TIMESTAMP, POLY_BUILDER_SIGNATURE
+```
+
+**⚠️ Cross-file invariant**: the Worker's `BUILDER_HEADERS` CORS allowlist (`cloudflare-trade-proxy/src/worker.js`) MUST be a superset of whatever names `server.js`'s `/api/polymarket/builder-sign` returns. CORS doesn't allow wildcards on header names. If you change the builder-sign header set on the server, also update the Worker's `BUILDER_HEADERS` array. The GitHub Actions workflow at `.github/workflows/deploy-cf-worker.yml` auto-deploys the Worker on push to `main` when worker source changes.
+
+**Stale-Worker symptom**: browser fetch to `hyperflex-trade-proxy.hyperflex.workers.dev/order` throws `Failed to fetch` because CORS preflight rejects the unknown header → trade falls through to direct CLOB (which works for non-geo-blocked users but fails for everyone else).
+
+**Worker secrets** (in GitHub repo Settings → Secrets and variables → Actions, NOT in `server.js`):
+- `CLOUDFLARE_API_TOKEN` — "Edit Cloudflare Workers" template
+- `CLOUDFLARE_ACCOUNT_ID`
+
+### ⚠️ KNOWN duplication — DO NOT auto-consolidate
+
+`getPolymarketProxy()` and `POLYGON_RPCS` are **deliberately duplicated** between `market.html` and `creator-dashboard.html`:
+
+| Symbol | Location | Notes |
+|---|---|---|
+| `getPolymarketProxy(eoa)` | `market.html:1734`, `creator-dashboard.html:12803` | Same name, may have subtle behavioral differences |
+| `POLYGON_RPCS` | `market.html:1717`, `creator-dashboard.html:12789`, `:17175`, `:18072` | 4 copies; market.html has 3 RPCs, creator-dashboard has 2 |
+
+This is **NOT** part of the `HFXWallet` shared module (`public/wallet.js`) intentionally. Reasons:
+1. The two files load **different ethers minor versions** (`6.13.2` vs `6.9.0`). The signer-cache extraction worked because the `BrowserProvider`/`getSigner` API is identical between minor versions, but `Contract` ABI encoding and RPC error formats can differ subtly.
+2. Proxy discovery uses a **public RPC** (not `window.ethereum`), so it does NOT have the EIP-1193 `-32002` race that `HFXWallet` exists to solve. The signer extraction was a bug fix; proxy extraction would be pure refactoring.
+3. The 11 callsites across both files have per-callsite error/fallback wrappers that aren't trivially equivalent.
+4. Per CLAUDE.md rule: **proxy wallet discovery "finally works" after burning 2 days of debug**. Working code in this area is precious.
+
+**If you find yourself wanting to consolidate**: don't, unless you're also fixing an active bug there. Update both files in lockstep instead. If you must consolidate, diff the two `getPolymarketProxy` implementations line-by-line first and verify behavioral equivalence under both ethers versions.
 
 ---
 
@@ -447,28 +536,12 @@ Matches official SDK order.
 - Progress bar tracking connections, cards turn green on success
 - Multi-connect before proceeding, CTA upgrades after first connect
 
-### 4. Build the Bloomberg Terminal for Polymarket (next up)
-The product north star. Every surface must deliver alpha and put the trade 1 click away.
-
-**Research & alpha surfaces:**
-- **Market screener** — filter Polymarket's full market universe by volume, liquidity, velocity, category, days-to-resolve, YES% band, resonance_score, sharp-predictor conviction. Sortable columns like a Bloomberg monitor.
-- **Narrative dominance screener** — already have `supabase_migration_narrative_snapshots.sql`; surface it. Which narratives are heating up across markets?
-- **Cross-platform arbitrage board** — same question priced differently on Polymarket vs Kalshi vs Manifold → instant edge list, click → trade on Polymarket
-- **News scanner feed** — tie `supabase_migration_news_scanner.sql` to Polymarket markets: "Breaking news → affected markets → trade now"
-- **Sharp predictor signal feed** — top calibration-score users' recent Polymarket bets, real-time
-- **Volume/velocity spike alerts** — which markets are moving *right now*, what side, how much
-- **Order book depth viewer** per market (pulled from CLOB), bid/ask ladder
-- **Market detail page upgrade** — `/market/:slug` becomes the terminal's "security screen": price history chart, holder distribution, related markets, news mentions, sharp predictors holding it, trade widget side-by-side
-
-**Execution surfaces (fee capture):**
-- **Trade widget embedded everywhere** — screener row → inline Buy/Sell, news card → Trade, arbitrage row → Trade, sharp predictor feed → Copy Trade, portfolio card → Trade More/Close
-- **1-click "Copy Trade"** from any sharp predictor activity card
-- **Builder header audit**: confirm `POLY_BUILDER_*` fires on 100% of `/order` POSTs; alert on misses
-- **Internal volume dashboard** at `/admin` — builder fee accrual, top traders, top markets, funnel conversion (view → trade)
-
-**De-emphasise:**
-- Community markets move out of the primary nav — stay as a creator sub-product, not a landing page hero
-- Kill remaining "Pro"/"Premium" labels in UI — everything is free
+### 4. Monetization Gating (next up)
+- **Early Access → paid flip**: all platform connections currently free; need gate logic for when EA ends
+- **Kalshi = Premium only**: real-money platform, highest value — gate behind $99/mo tier
+- **Calibration score = Premium only**: advanced analytics feature, strong upgrade driver
+- **Portfolio sync frequency tiers**: Free = manual refresh, Pro = daily auto-sync, Premium = hourly auto-sync
+- Stripe checkout already wired — just need UI gates + middleware checks per feature
 
 ### Known Issues
 - **Creator referral acceptance**: `accepted` on `creator_referrals` stays false — needs flip on first public market publish
@@ -549,6 +622,8 @@ git status   # verify files are dirty
 39. `supabase_migration_sponsored_embed.sql` ← sponsored markets + embed attribution
 40. `supabase_migration_narrative_snapshots.sql` ← narrative dominance snapshots for screener (Claude Code creates this)
 41. `supabase_migration_errors.sql` ← error logging table for reliability monitoring
+42. `supabase_migration_platform_referrals.sql` ← referral_code + referred_by on users, platform_referrals table
+43. `supabase_migration_login_streak.sql` ← login_streak, last_login_date, streak_multiplier on users
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring

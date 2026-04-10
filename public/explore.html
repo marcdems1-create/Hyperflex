@@ -234,6 +234,7 @@ nav {
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 28px;
+  align-items: start;
   position: relative;
   z-index: 1;
 }
@@ -250,6 +251,10 @@ nav {
   .creator-cta-strip { padding: 14px 16px; flex-direction: column; align-items: flex-start; gap: 12px; }
   .cta-btn { width: 100%; text-align: center; }
   #hubSignalCards, #hubScreenerCards { grid-template-columns: 1fr 1fr !important; }
+  .intel-grid-top, .intel-grid-bottom { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 480px) {
+  .intel-grid-top, .intel-grid-bottom { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 600px) {
   #hubSignalCards, #hubScreenerCards { grid-template-columns: 1fr !important; }
@@ -947,7 +952,7 @@ nav {
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
-<script src="/nav.js?v=10"></script>
+<script src="/nav.js?v=11"></script>
 
 <!-- Member Auth Modal -->
 <div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
@@ -1002,44 +1007,75 @@ nav {
 <div class="hero">
   <div class="live-badge">Live Intelligence Feed</div>
   <h1>Where smart money<br><span>is moving right now</span></h1>
-  <p>AI-powered edge detection across Polymarket, Kalshi, and sportsbooks.</p>
+  <p>Signal-based edge detection across Polymarket, Kalshi, and sportsbooks.</p>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
-      <div class="stat-pill-label">Markets tracked</div>
+      <div class="stat-pill-label">Markets Tracked</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statWhaleCapital">—</div>
+      <div class="stat-pill-label">Whale Capital</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statLiveMarkets">—</div>
-      <div class="stat-pill-label">Whale positions</div>
+      <div class="stat-pill-label">Whale Positions</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statAvgEdge">—</div>
+      <div class="stat-pill-label">Avg Edge Score</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statTopROI">—</div>
+      <div class="stat-pill-label">Top Max ROI</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statCommunities">—</div>
-      <div class="stat-pill-label">AI Edge signals</div>
+      <div class="stat-pill-label">Live Signals</div>
     </div>
   </div>
 </div>
 
 <!-- INTELLIGENCE CARDS -->
 <div style="max-width:1200px;margin:0 auto 24px;padding:0 40px">
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+  <div class="intel-grid-top" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
+      <div style="font-size:22px;margin-bottom:8px">🎯</div>
+      <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Edge scores, whale flow, depth signals — ranked by alpha</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="alphaCardPreview">Top edge: loading...</div>
+    </a>
+    <a href="/terminal" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
+      <div style="font-size:22px;margin-bottom:8px">📊</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-purple);margin-bottom:4px;letter-spacing:-0.3px">Data Terminal</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale capital, sentiment, movers, Fear &amp; Greed</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="dataCardPreview">Loading stats...</div>
+    </a>
+    <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:22px;margin-bottom:8px">🔮</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Crystal Ball</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Market analysis with trade context and potential ROI</div>
+    </a>
+  </div>
+  <div class="intel-grid-bottom" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">📡</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Signals</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale moves, momentum, edge scores — live feed</div>
     </a>
-    <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">🔮</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Crystal Ball</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">AI predictions with trade context and ROI</div>
-    </a>
-    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">⚡</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Spread Scanner</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Live orderbook arb detection on crypto windows</div>
     </a>
-    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">🐋</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Market Intel</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">$20M+ tracked across 50 whale wallets</div>
@@ -1128,84 +1164,18 @@ nav {
 })();
 </script>
 
-<!-- ═══ INTELLIGENCE HUB — FULL WIDTH ═══ -->
-<div style="max-width:1200px;margin:0 auto;padding:0 40px 24px">
-
-  <!-- TOP SIGNALS -->
-  <div style="margin-bottom:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
-        <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Live</span>
-      </div>
-      <a href="/signals" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">View all →</a>
-    </div>
-    <div id="hubSignalCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading signals...</div>
-    </div>
-  </div>
-
-  <!-- SCREENER PICKS -->
-  <div style="margin-bottom:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:15px">📊</span>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
-      </div>
-      <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">Full screener →</a>
-    </div>
-    <div id="hubScreenerCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading screener...</div>
-    </div>
-  </div>
-
-  <!-- CRYSTAL BALL + AI EDGE — 2 col -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:15px">🔮</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball</span>
-        </div>
-        <a href="/crystal-ball" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
-      </div>
-      <div id="hubCrystalCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading predictions...</div>
-      </div>
-    </div>
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:15px">🧠</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
-        </div>
-        <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
-      </div>
-      <div id="aiEdgeCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading AI edge...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- CTA -->
-  <div class="creator-cta-strip" id="creatorCta" style="margin-bottom:28px">
-    <div class="cta-text">
-      <strong>Trade directly from Hyperflex</strong> — Connect your wallet and execute trades without leaving the site.
-    </div>
-    <a href="/creator/signup" class="cta-btn">Get started free →</a>
-  </div>
-</div>
-
 <!-- REWARDS CTA BANNER -->
 <div style="max-width:1200px;margin:0 auto;padding:0 40px">
-  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:12px;background:linear-gradient(90deg,rgba(0,230,138,0.06),rgba(77,159,255,0.04));border:1px solid rgba(0,230,138,0.15);border-radius:10px;text-decoration:none;transition:all 0.2s;backdrop-filter:blur(8px)" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(0,230,138,0.15)';this.style.transform='none'">
+  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:16px;background:linear-gradient(90deg,rgba(0,230,138,0.06),rgba(77,159,255,0.04));border:1px solid rgba(0,230,138,0.15);border-radius:10px;text-decoration:none;transition:all 0.2s;backdrop-filter:blur(8px)" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(0,230,138,0.15)';this.style.transform='none'">
     <span style="font-size:18px">&#x1F4B0;</span>
     <span style="font-family:var(--sans);font-size:12px;font-weight:700;color:#00e68a;letter-spacing:-0.2px">Earn USDC on every trade</span>
     <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Trade through HYPERFLEX and get rewarded weekly</span>
     <span style="margin-left:auto;font-family:var(--sans);font-size:11px;font-weight:600;color:#4d9fff;white-space:nowrap">Learn more &rarr;</span>
   </a>
 </div>
+
+<!-- Hidden containers for JS compatibility -->
+<div style="display:none"><div id="hubSignalCards"></div><div id="hubScreenerCards"></div><div id="hubCrystalCards"></div><div id="aiEdgeCards"></div></div>
 
 <!-- ═══ COMMUNITY ACTIVITY — 2-COL LAYOUT ═══ -->
 <!-- Search hidden until community features re-enabled -->
@@ -1218,23 +1188,29 @@ nav {
 <div class="explore-layout">
   <div class="main-col">
 
+    <!-- TOP EDGES — live alpha feed -->
+    <div id="explore-top-edges" class="sidebar-card" style="margin-bottom:16px;border-top:2px solid var(--gold)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase">Top Edges Right Now</span>
+          <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
+        </div>
+        <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Open Terminal &rarr;</a>
+      </div>
+      <div id="exploreEdgeList" style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;color:var(--muted);padding:8px 0">Loading edges...</div>
+      </div>
+    </div>
+
     <!-- Quick nav links -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <a href="/odds" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Odds</a>
+      <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
+      <a href="/terminal" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
+      <a href="/crystal-ball" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Crystal Ball</a>
       <a href="/whales" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(168,85,247,0.4)';this.style.color='#a855f7'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Whales</a>
       <a href="/signals" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.color='#00e68a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Signals</a>
       <a href="/screener" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Screener</a>
-      <a href="/brief" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(245,158,11,0.4)';this.style.color='#f59e0b'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">AI Brief</a>
       <a href="/predictors" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Leaderboard</a>
-    </div>
-
-    <!-- SMART MONEY DIVERGENCE -->
-    <div id="smart-money-section" style="display:none;margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px">
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
-        <span style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">⚡ Edge Score</span>
-        <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">where smart money disagrees with the market</span>
-      </div>
-      <div id="smart-money-list" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
     <!-- DAILY BRIEFING -->
@@ -1257,15 +1233,6 @@ nav {
       </div>
     </div>
 
-    <!-- SMART MONEY DIVERGENCE -->
-    <div id="smartMoneySection" style="display:none;margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:var(--mono);display:flex;align-items:center;gap:8px">
-        <span>\u26A1</span> Edge Score
-      </div>
-      <div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-bottom:12px">Markets where smart money disagrees most with the market price</div>
-      <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-
     <!-- TOP PREDICTORS -->
     <div id="tab-predictors" style="margin-top:8px">
       <div id="followingFeed" style="display:none;margin-bottom:28px"></div>
@@ -1283,6 +1250,44 @@ nav {
   </div>
 
   <div class="sidebar">
+    <!-- FEAR & GREED GAUGE -->
+    <div class="sidebar-card" id="fgGaugeCard" style="border-top:2px solid var(--accent-amber)">
+      <div class="sidebar-title">FEAR &amp; GREED INDEX</div>
+      <div style="text-align:center;padding:12px 0">
+        <div id="fgScore" style="font-family:var(--mono);font-size:48px;font-weight:900;color:var(--accent-amber);line-height:1">--</div>
+        <div id="fgLabel" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px">Loading...</div>
+        <div style="margin:12px auto 0;width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden;position:relative">
+          <div id="fgBar" style="height:100%;width:50%;border-radius:3px;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e);transition:width .6s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--muted)">
+          <span>Extreme Fear</span><span>Extreme Greed</span>
+        </div>
+      </div>
+      <div id="fgComponents" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
+      <a href="/terminal" class="sidebar-footer-link">Full terminal &#8594;</a>
+    </div>
+
+    <!-- HOW EDGE SCORES WORK -->
+    <div class="sidebar-card" style="border-top:2px solid var(--border)">
+      <div class="sidebar-title">HOW EDGE SCORES WORK</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+        Edge Score is a <strong style="color:var(--text)">weighted formula</strong>, not AI. It combines 8 on-chain and orderbook signals:
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Whale Positions</span><span style="color:var(--accent-purple)">35 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Volume</span><span style="color:var(--accent-blue)">30 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">CLOB Depth</span><span style="color:var(--accent-green)">20 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Whale Capital</span><span style="color:var(--accent-purple)">15 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Momentum</span><span style="color:var(--accent-amber)">15 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Expiry Decay</span><span style="color:var(--muted)">12 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Divergence</span><span style="color:var(--muted)">10 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Expiry</span><span style="color:var(--muted)">8 pts max</span></div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:8px">
+        High scores mean multiple signals align. This is <strong style="color:var(--text)">not financial advice</strong> — all markets can resolve to zero. Max ROI assumes full resolution at $1.
+      </div>
+    </div>
+
     <!-- HOT STREAKS -->
     <div class="sidebar-card" id="hotStreaksCard">
       <div class="sidebar-title">&#x1F525; HOT STREAKS</div>
@@ -1489,7 +1494,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s' + (stale ? ';opacity:.55' : '') + '" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.market || '') + '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
@@ -1538,7 +1543,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (score > 75 ? '🔥 ' : '') + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(m.question || '') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted)">' +
@@ -1579,7 +1584,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(168,85,247,.1);color:#a855f7">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
         '</div>' +
         (q ? '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(q.substring(0, 80)) + '</div>' : '') +
         (p.action ? '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
@@ -2406,19 +2411,40 @@ function renderAnnouncements(announcements, communities) {
 }
 
 function renderStatsTicker(stats) {
-  // Load intelligence stats instead of community stats
-  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
+  var fmt = function(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString(); };
+  var fmtNum = function(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString(); };
   Promise.all([
-    fetch('/api/whale-watch').then(r => r.ok ? r.json() : {}).catch(() => ({})),
-    fetch('/api/signals').then(r => r.ok ? r.json() : {}).catch(() => ({}))
-  ]).then(([whaleData, signalData]) => {
-    const whales = whaleData.whales || [];
-    const signals = signalData.signals || signalData || [];
-    const markets = new Set(whales.map(w => w.market)).size;
-    document.getElementById('statTotalTrades').textContent = fmt(markets || 240);
-    document.getElementById('statLiveMarkets').textContent = fmt(whales.length || 395);
-    document.getElementById('statCommunities').textContent = fmt(Array.isArray(signals) ? signals.length : 10);
-  }).catch(() => {
+    fetch('/api/whale-watch').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; }),
+    fetch('/api/alpha/top?n=20').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; }),
+    fetch('/api/signals').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; })
+  ]).then(function(results) {
+    var whaleData = results[0]; var alphaData = results[1]; var signalData = results[2];
+    var whales = whaleData.whales || [];
+    var signals = signalData.signals || signalData || [];
+    var markets = alphaData.markets || [];
+    var uniqueMarkets = new Set(whales.map(function(w) { return w.market; })).size;
+    // Total whale capital
+    var totalCapital = 0;
+    whales.forEach(function(w) { totalCapital += Math.abs(parseFloat(w.size) || 0); });
+    // Avg edge score from top markets
+    var avgEdge = 0;
+    if (markets.length) {
+      var sum = 0; markets.forEach(function(m) { sum += (m.edge_score || 0); });
+      avgEdge = Math.round(sum / markets.length);
+    }
+    // Top ROI from signals
+    var topROI = 0;
+    markets.forEach(function(m) { if (m.trade && m.trade.roi_pct && m.trade.roi_pct > topROI) topROI = Math.round(m.trade.roi_pct); });
+    document.getElementById('statTotalTrades').textContent = fmtNum(uniqueMarkets || 240);
+    var capEl = document.getElementById('statWhaleCapital');
+    if (capEl) capEl.textContent = totalCapital > 0 ? fmt(totalCapital) : '$20M+';
+    document.getElementById('statLiveMarkets').textContent = fmtNum(whales.length || 395);
+    var edgeEl = document.getElementById('statAvgEdge');
+    if (edgeEl) edgeEl.textContent = avgEdge > 0 ? avgEdge + '/100' : '—';
+    var roiEl = document.getElementById('statTopROI');
+    if (roiEl) roiEl.textContent = topROI > 0 ? topROI + '%' : '—';
+    document.getElementById('statCommunities').textContent = fmtNum(Array.isArray(signals) ? signals.length : 10);
+  }).catch(function() {
     document.getElementById('statTotalTrades').textContent = '240';
     document.getElementById('statLiveMarkets').textContent = '395';
     document.getElementById('statCommunities').textContent = '10';
@@ -3068,5 +3094,103 @@ async function handleExploreCopyCta() {
     </label>
   </div>
 </div>
+<script>
+// Fear & Greed gauge
+(async function(){
+  try {
+    var r = await fetch('/api/market-intelligence');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (d && d.fear_greed) {
+      var fg = d.fear_greed;
+      var score = fg.score || 50;
+      var label = fg.label || 'Neutral';
+      var color = score >= 70 ? 'var(--accent-green)' : score >= 55 ? 'var(--accent-amber)' : score <= 30 ? 'var(--accent-red)' : 'var(--accent-amber)';
+      var el = document.getElementById('fgScore');
+      if (el) { el.textContent = score; el.style.color = color; }
+      var lbl = document.getElementById('fgLabel');
+      if (lbl) { lbl.textContent = label; lbl.style.color = color; }
+      var bar = document.getElementById('fgBar');
+      if (bar) bar.style.width = score + '%';
+      // Components
+      var comp = document.getElementById('fgComponents');
+      if (comp && fg.components) {
+        var c = fg.components;
+        var items = [];
+        if (c.whale_sentiment != null) items.push('<span>Whale Sentiment: <strong style="color:var(--text)">' + c.whale_sentiment + '</strong></span>');
+        if (c.momentum != null) items.push('<span>Momentum: <strong style="color:var(--text)">' + c.momentum + '</strong></span>');
+        if (c.volume != null) items.push('<span>Volume: <strong style="color:var(--text)">' + c.volume + '</strong></span>');
+        if (items.length) comp.innerHTML = items.join('<span style="color:var(--border)"> · </span>');
+      }
+    }
+  } catch(e) {}
+})();
+
+// Top Edges live feed
+(async function(){
+  try {
+    var r = await fetch('/api/alpha/top?n=10');
+    if (!r.ok) return;
+    var d = await r.json();
+    var mkts = d.markets || [];
+    if (!mkts.length) return;
+    var el = document.getElementById('exploreEdgeList');
+    if (!el) return;
+    el.innerHTML = mkts.map(function(m) {
+      var s = m.edge_score || 0;
+      var fire = s > 75;
+      var q = (m.question || '').substring(0, 55);
+      var price = m.yes_price != null ? Math.round(m.yes_price * 100) : '--';
+      var wh = m.whale_count || 0;
+      var chg = m.price_change_24h || 0;
+      var chgColor = chg >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+      var chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(1) + '%';
+      var roi = m.trade && m.trade.roi_pct ? m.trade.roi_pct : 0;
+      var side = m.trade && m.trade.side ? m.trade.side : '';
+      var slug = m.slug || '';
+      var link = slug ? '/market/' + slug : '#';
+      return '<a href="' + link + '" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:inherit;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+        + '<div style="font-family:var(--mono);font-size:16px;font-weight:800;min-width:36px;text-align:center;color:' + (fire ? 'var(--accent-amber)' : 'var(--gold)') + '">' + (fire ? '\uD83D\uDD25' : '') + s + '</div>'
+        + '<div style="flex:1;min-width:0;overflow:hidden">'
+        + '<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>'
+        + '<div style="display:flex;gap:10px;margin-top:3px;font-family:var(--mono);font-size:10px;color:var(--muted)">'
+        + '<span>' + price + '\u00A2</span>'
+        + (wh ? '<span>' + wh + ' whale' + (wh > 1 ? 's' : '') + '</span>' : '')
+        + '<span style="color:' + chgColor + '">' + chgStr + '</span>'
+        + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% max ROI</span>' : '')
+        + '</div></div>'
+        + '<div style="text-align:right;flex-shrink:0">'
+        + (side ? '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + (side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)') + ';margin-bottom:2px">' + side + '</div>' : '')
+        + '<div style="font-family:var(--mono);font-size:9px;color:var(--gold)">Trade \u2192</div>'
+        + '</div></a>';
+    }).join('');
+  } catch(e) { console.warn('Top edges error:', e); }
+})();
+
+// Terminal card live previews
+(async function(){
+  try {
+    var [aR,iR]=await Promise.allSettled([
+      fetch('/api/alpha/top?n=1').then(function(r){return r.ok?r.json():null}),
+      fetch('/api/market-intelligence').then(function(r){return r.ok?r.json():null})
+    ]);
+    var a=aR.status==='fulfilled'?aR.value:null;
+    if(a&&a.markets&&a.markets[0]){
+      var m=a.markets[0];var s=m.edge_score||0;
+      var el=document.getElementById('alphaCardPreview');
+      if(el) el.innerHTML=(s>75?'\uD83D\uDD25 ':'')+' Top edge: <span style="color:var(--gold);font-weight:700">'+s+'</span> — '+(m.question||'').substring(0,30);
+    }
+    var i=iR.status==='fulfilled'?iR.value:null;
+    if(i){
+      var el2=document.getElementById('dataCardPreview');
+      if(el2&&i.fear_greed){
+        var fg=i.fear_greed;
+        var fgc=fg.score>=60?'var(--accent-green)':fg.score<=40?'var(--accent-red)':'var(--accent-amber)';
+        el2.innerHTML='F&G: <span style="color:'+fgc+';font-weight:700">'+fg.score+'</span> '+fg.label;
+      }
+    }
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
