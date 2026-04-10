@@ -25590,37 +25590,67 @@ async function fetchBinancePrices() {
   if (_binancePriceCache && Date.now() - _binancePriceCache.ts < 30000) return _binancePriceCache.data;
   try {
     const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+    let result = {};
+    let usedFallback = false;
+
+    // Try Binance first
     const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(symbols)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`Binance ${res.status}`);
-    const tickers = await res.json();
-    const result = {};
-    for (const t of tickers) {
-      const coin = t.symbol.replace('USDT', '').toLowerCase();
-      result[coin] = {
-        price: parseFloat(t.lastPrice) || 0,
-        change24h: parseFloat(t.priceChangePercent) || 0,
-        high24h: parseFloat(t.highPrice) || 0,
-        low24h: parseFloat(t.lowPrice) || 0,
-        volume24h: parseFloat(t.quoteVolume) || 0,
-      };
-    }
-    // Also fetch 5m klines for short-term momentum
-    for (const sym of symbols) {
-      try {
-        const kRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&limit=2`, { signal: AbortSignal.timeout(5000) });
-        if (kRes.ok) {
-          const klines = await kRes.json();
-          if (klines.length >= 2) {
-            const coin = sym.replace('USDT', '').toLowerCase();
-            const prevClose = parseFloat(klines[0][4]);
-            const currentClose = parseFloat(klines[1][4]);
-            if (prevClose > 0) {
-              result[coin].change5m = parseFloat(((currentClose - prevClose) / prevClose * 100).toFixed(3));
+    if (res.ok) {
+      const tickers = await res.json();
+      for (const t of tickers) {
+        const coin = t.symbol.replace('USDT', '').toLowerCase();
+        result[coin] = {
+          price: parseFloat(t.lastPrice) || 0,
+          change24h: parseFloat(t.priceChangePercent) || 0,
+          high24h: parseFloat(t.highPrice) || 0,
+          low24h: parseFloat(t.lowPrice) || 0,
+          volume24h: parseFloat(t.quoteVolume) || 0,
+        };
+      }
+      // Also fetch 5m klines for short-term momentum
+      for (const sym of symbols) {
+        try {
+          const kRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&limit=2`, { signal: AbortSignal.timeout(5000) });
+          if (kRes.ok) {
+            const klines = await kRes.json();
+            if (klines.length >= 2) {
+              const coin = sym.replace('USDT', '').toLowerCase();
+              const prevClose = parseFloat(klines[0][4]);
+              const currentClose = parseFloat(klines[1][4]);
+              if (prevClose > 0) {
+                result[coin].change5m = parseFloat(((currentClose - prevClose) / prevClose * 100).toFixed(3));
+              }
             }
           }
+        } catch {} // non-critical
+      }
+    } else {
+      // Binance geo-blocked (451) — fallback to CoinGecko
+      try {
+        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true', { signal: AbortSignal.timeout(8000) });
+        if (cgRes.ok) {
+          const cg = await cgRes.json();
+          const cgMap = { bitcoin: 'btc', ethereum: 'eth', solana: 'sol' };
+          for (const [id, coin] of Object.entries(cgMap)) {
+            if (cg[id]) {
+              result[coin] = {
+                price: cg[id].usd || 0,
+                change24h: cg[id].usd_24h_change || 0,
+                high24h: 0, low24h: 0,
+                volume24h: cg[id].usd_24h_vol || 0,
+                change5m: 0,
+              };
+            }
+          }
+          usedFallback = true;
+          console.log('[binance] Using CoinGecko fallback (Binance geo-blocked)');
+        } else {
+          throw new Error(`CoinGecko ${cgRes.status}`);
         }
-      } catch {} // non-critical
+      } catch (cgErr) {
+        throw new Error(`Binance ${res.status}, CoinGecko fallback also failed: ${cgErr.message}`);
+      }
     }
     _binancePriceCache = { ts: Date.now(), data: result };
     return result;
@@ -30911,9 +30941,20 @@ async function searchAndDraftReplies() {
 
     // Build rich data context — as many real numbers as possible
     const stats = [];
+
+    // Fallback: if no text-match, use the top edge score market from screener
+    if (!whaleMatch && !screenerMatch && _screenerCache && _screenerCache.data && _screenerCache.data.length) {
+      const sorted = [..._screenerCache.data].filter(m => (m.edge_score || 0) >= 50 && (m.volume || 0) >= 50000).sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
+      if (sorted.length) screenerMatch = sorted[0];
+    }
+    if (!whaleMatch && !screenerMatch && _whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
+      const topWhale = _whaleIndexCache.data.picks.filter(p => (p.total_capital || 0) >= 50000 && (p.whale_count || 0) >= 2).sort((a, b) => (b.total_capital || 0) - (a.total_capital || 0))[0];
+      if (topWhale) whaleMatch = topWhale;
+    }
+
     const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
     if (!marketName) {
-      console.log(`[reply-bot] Skipping tweet ${target.id} — no matching market data`);
+      console.log(`[reply-bot] Skipping tweet ${target.id} — no market data available at all`);
       return;
     }
 
