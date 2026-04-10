@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<script src="/wallet.js?v=1"></script>
 <style>
 :root{--bg:#0a0a09;--card:#131311;--border:#222220;--text:#e8e4d9;--soft:#b0ab9f;--dim:#5a5752;--muted:#7b8070;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--sans:'Syne',sans-serif;--body:'Inter',sans-serif;--mono:'Space Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -19,7 +20,7 @@ a{color:var(--gold);text-decoration:none}
 .mkt-sidebar{position:sticky;top:80px;height:fit-content}
 
 /* Back button */
-.mkt-back{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:16px;cursor:pointer;transition:color .15s}
+.mkt-back{display:inline-flex;align-items:center;gap:6px;font-family:var(--body);font-size:12px;color:var(--dim);margin-bottom:16px;cursor:pointer;transition:color .15s}
 .mkt-back:hover{color:var(--text)}
 
 /* Title section */
@@ -29,7 +30,7 @@ a{color:var(--gold);text-decoration:none}
 /* Stats bar */
 .mkt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
 .mkt-stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.mkt-stat-label{font-family:var(--body);font-size:10px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.mkt-stat-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
 .mkt-stat-val{font-family:var(--body);font-size:18px;font-weight:600}
 
 /* Chart */
@@ -37,7 +38,7 @@ a{color:var(--gold);text-decoration:none}
 .mkt-chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .mkt-chart-title{font-family:var(--body);font-size:13px;font-weight:600;color:var(--soft)}
 .mkt-chart-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden}
-.mkt-chart-tab{padding:6px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s}
+.mkt-chart-tab{padding:6px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--soft);background:transparent;border:none;cursor:pointer;transition:all .15s}
 .mkt-chart-tab.active{background:var(--gold);color:#141412}
 .mkt-chart-tab:hover:not(.active){color:var(--text)}
 canvas{display:block;width:100%!important}
@@ -52,7 +53,7 @@ canvas{display:block;width:100%!important}
 .mkt-outcomes{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-outcomes h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .mkt-outcomes-table{width:100%;border-collapse:collapse}
-.mkt-outcomes-table thead th{font-family:var(--body);font-size:11px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.mkt-outcomes-table thead th{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
 .mkt-outcomes-table thead th:not(:first-child){text-align:center}
 .mkt-outcomes-table tbody tr{cursor:pointer;transition:background .15s cubic-bezier(.4,0,.2,1);border-bottom:1px solid var(--border)}
 .mkt-outcomes-table tbody tr:last-child{border-bottom:none}
@@ -75,14 +76,14 @@ canvas{display:block;width:100%!important}
 .mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-holders h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .holders-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.holders-col-header{font-family:var(--body);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.holders-col-header{font-family:var(--body);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .holders-col-header.yes{color:var(--green)}
 .holders-col-header.no{color:var(--red)}
 .holder-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(34,34,32,.5);transition:background .1s}
 .holder-row:last-child{border-bottom:none}
 .holder-row a{font-family:var(--body);font-size:12px;font-weight:500;color:var(--soft);transition:color .12s}
 .holder-row a:hover{color:var(--text)}
-.holder-shares{font-family:var(--body);font-size:12px;font-weight:500;color:var(--dim)}
+.holder-shares{font-family:var(--body);font-size:12px;font-weight:500;color:var(--soft)}
 
 /* Orderbook */
 .mkt-comments{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
@@ -96,8 +97,8 @@ canvas{display:block;width:100%!important}
 .comment-body{flex:1;min-width:0}
 .comment-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .comment-name{font-family:var(--body);font-size:13px;font-weight:600;color:var(--text)}
-.comment-badge{font-family:var(--body);font-size:10px;font-weight:600;padding:1px 6px;border-radius:7px;background:rgba(6,182,212,.12);color:#06b6d4;border:none}
-.comment-time{font-family:var(--body);font-size:11px;font-weight:400;color:var(--dim)}
+.comment-badge{font-family:var(--body);font-size:11px;font-weight:600;padding:1px 6px;border-radius:7px;background:rgba(6,182,212,.12);color:#06b6d4;border:none}
+.comment-time{font-family:var(--body);font-size:11px;font-weight:400;color:var(--soft)}
 .comment-text{font-family:var(--body);font-size:14px;line-height:1.6;color:rgba(221,216,204,.85)}
 .comment-input-row{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .comment-input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-size:14px;color:var(--text);font-family:var(--body);resize:none;outline:none;transition:border-color .15s}
@@ -111,25 +112,25 @@ canvas{display:block;width:100%!important}
 .dist-chart-wrap canvas{width:100%;height:100%}
 .dist-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
 .dist-center-pct{font-family:var(--body);font-size:28px;font-weight:600}
-.dist-center-label{font-family:var(--body);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.dist-center-label{font-family:var(--sans);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:var(--soft)}
 .dist-legend{display:flex;flex-direction:column;gap:10px;flex:1}
 .dist-legend-item{display:flex;align-items:center;gap:8px;font-family:var(--body);font-size:13px;font-weight:500}
 .dist-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .mkt-orderbook{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-orderbook-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mkt-orderbook-header h3{font-family:var(--body);font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
-.ob-timestamp{font-family:var(--body);font-size:10px;font-weight:400;color:var(--dim)}
+.ob-timestamp{font-family:var(--body);font-size:11px;font-weight:400;color:var(--soft)}
 .ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.ob-col-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.ob-col-label{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .ob-col-label.bids{color:var(--green)}
 .ob-col-label.asks{color:var(--red)}
-.ob-col-head{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;padding:3px 0 6px;border-bottom:1px solid var(--border)}
+.ob-col-head{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;padding:3px 0 6px;border-bottom:1px solid var(--border)}
 .ob-col-head span:not(:first-child){text-align:right}
 .mkt-ob-row{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:11px;padding:3px 0}
 .mkt-ob-row span:not(:first-child){text-align:right}
 .mkt-ob-bid{color:var(--green)}
 .mkt-ob-ask{color:var(--red)}
-.mkt-ob-size{color:var(--dim)}
+.mkt-ob-size{color:var(--soft)}
 .mkt-ob-total{color:var(--soft)}
 
 /* TRADE WIDGET (sidebar) */
@@ -147,7 +148,7 @@ canvas{display:block;width:100%!important}
 .trade-side.no{background:rgba(239,68,68,.12);color:#cb3131;border-color:transparent}
 .trade-side.no.active{background:#dc2626;color:#fff;border-color:#dc2626}
 .trade-field{margin-bottom:14px}
-.trade-field-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;justify-content:space-between}
+.trade-field-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;justify-content:space-between}
 .trade-input{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--body);font-size:16px;font-weight:600;text-align:center}
 .trade-input:focus{outline:none;border-color:var(--gold)}
 .trade-quick-btns{display:flex;gap:6px;margin-bottom:14px;justify-content:center}
@@ -161,7 +162,7 @@ canvas{display:block;width:100%!important}
 .trade-cta.buy-yes{background:#359a5e;color:#fff}
 .trade-cta.buy-no{background:#dc2626;color:#fff}
 .trade-cta:hover{opacity:.92;transform:scale(1.005)}
-.trade-disclaimer{font-family:var(--body);font-size:10px;color:var(--dim);text-align:center;margin-top:10px}
+.trade-disclaimer{font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;margin-top:10px}
 .setup-step{display:flex;align-items:center;gap:8px;padding:5px 0;font-family:var(--body);font-size:12px;color:var(--soft)}
 .setup-step.done .setup-icon{color:var(--green)}
 .setup-step.active .setup-icon{color:var(--gold);animation:pulse 1.5s ease-in-out infinite}
@@ -182,10 +183,6 @@ canvas{display:block;width:100%!important}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* Technical Analysis Controls */
-.ta-controls{background:rgba(255,255,255,.02);border-top:1px solid var(--border);border-radius:0}
-.ta-btn{padding:5px 12px;font-family:var(--body);font-size:10px;font-weight:600;color:var(--dim);background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);text-transform:uppercase;letter-spacing:.04em}
-.ta-btn.active{background:var(--gold);color:#141412;border-color:var(--gold)}
-.ta-btn:hover:not(.active){color:var(--text);border-color:var(--soft)}
 
 /* Mobile */
 @media(max-width:900px){
@@ -194,8 +191,8 @@ canvas{display:block;width:100%!important}
   .mkt-stats{grid-template-columns:repeat(2,1fr)}
   .holders-grid{grid-template-columns:1fr}
   .ob-grid{grid-template-columns:1fr}
-  .outcome-btn{font-size:10px;padding:5px 8px;min-width:68px;min-height:44px}
-  .mkt-outcomes-table thead th{font-size:8px;padding:0 6px 8px}
+  .outcome-btn{font-size:11px;padding:5px 8px;min-width:68px;min-height:44px}
+  .mkt-outcomes-table thead th{font-size:11px;padding:0 6px 8px}
   .mkt-outcomes-table tbody td{padding:8px 6px}
 }
 </style>
@@ -205,7 +202,7 @@ canvas{display:block;width:100%!important}
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==='undefined')window.polyRef=function(u){return u};</script>
-<script src="/nav.js?v=5"></script>
+<script src="/nav.js?v=10"></script>
 
 <div id="marketContent" style="display:none">
   <div class="mkt-layout">
@@ -213,6 +210,13 @@ canvas{display:block;width:100%!important}
     <div class="mkt-main">
       <div class="mkt-back" onclick="history.back()">← Back</div>
       <h1 class="mkt-title" id="mktTitle">Loading...</h1>
+
+      <div id="marketActions" style="display:flex;align-items:center;gap:8px;margin:8px 0 12px;flex-wrap:wrap">
+        <button id="alertBellBtn" onclick="openAlertModal()" style="display:none;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:600;transition:all .15s;min-height:40px" onmouseover="this.style.borderColor='#f59e0b';this.style.background='rgba(245,158,11,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,0.03)'">
+          🔔 <span id="alertBellLabel">Set Alert</span>
+        </button>
+        <div id="activeAlertsBadge" style="display:none;font-family:var(--sans);font-size:11px;color:#f59e0b;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2)"></div>
+      </div>
 
       <!-- Stats -->
       <div class="mkt-stats">
@@ -248,18 +252,7 @@ canvas{display:block;width:100%!important}
             <button class="mkt-chart-tab active" data-interval="all">ALL</button>
           </div>
         </div>
-        <!-- Technical Analysis Indicator Toggles -->
-        <div class="ta-controls" style="display:flex;gap:6px;padding:4px 12px;flex-wrap:wrap">
-          <button class="ta-btn active" data-ta="none" onclick="toggleTA(this)">Price</button>
-          <button class="ta-btn" data-ta="sma" onclick="toggleTA(this)">SMA</button>
-          <button class="ta-btn" data-ta="ema" onclick="toggleTA(this)">EMA</button>
-          <button class="ta-btn" data-ta="bb" onclick="toggleTA(this)">Bollinger</button>
-          <button class="ta-btn" data-ta="rsi" onclick="toggleTA(this)">RSI</button>
-          <button class="ta-btn" data-ta="vwap" onclick="toggleTA(this)">VWAP</button>
-          <button class="ta-btn" data-ta="sr" onclick="toggleTA(this)">S/R</button>
-        </div>
         <div id="priceChart" style="height:260px;width:100%"></div>
-        <div id="rsiChart" style="height:0;overflow:hidden;transition:height .3s"></div>
       </div>
 
       <!-- Description -->
@@ -271,36 +264,37 @@ canvas{display:block;width:100%!important}
 
       <!-- Outcomes -->
       <div class="mkt-outcomes" id="mktOutcomesSection">
-        <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400"></span></h3>
+        <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:11px;color:var(--soft);font-weight:400"></span></h3>
         <div id="mktOutcomes">Loading...</div>
       </div>
 
       <!-- AI Intelligence Panel -->
       <div class="mkt-intel" id="mktIntelSection" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px">
-        <h3 style="font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px">AI Market Intelligence</h3>
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">AI Market Intelligence</h3>
+        <div id="intelOutcomeLabel" style="font-family:var(--body);font-size:12px;color:var(--soft);margin-bottom:14px;display:none"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px" id="intelGrid">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Market Price</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px"><span id="intelMktLabel">YES Market Price</span></div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelMktPrice">—</div>
           </div>
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Model Price</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px"><span id="intelModelLabel">YES Model Price</span></div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)" id="intelModelPrice">—</div>
           </div>
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Alpha Edge</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Alpha Edge</div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelAlphaEdge">—</div>
           </div>
         </div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.6" id="intelExplain"></div>
+        <div style="font-family:var(--body);font-size:11px;color:var(--soft);line-height:1.6" id="intelExplain"></div>
       </div>
 
       <!-- Whale Flow Timeline -->
       <div class="mkt-whale-flow" id="mktWhaleFlowSection" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px">
         <h3 style="font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">Whale Flow</h3>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="whaleFlowSummary">Loading...</span>
-          <span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700" id="whaleFlowSentiment"></span>
+          <span style="font-family:var(--body);font-size:11px;color:var(--soft)" id="whaleFlowSummary">Loading...</span>
+          <span style="font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:4px;font-weight:700" id="whaleFlowSentiment"></span>
         </div>
         <div id="whaleFlowList"></div>
       </div>
@@ -311,11 +305,11 @@ canvas{display:block;width:100%!important}
         <div class="holders-grid">
           <div>
             <div class="holders-col-header yes">YES Holders</div>
-            <div id="holdersYes"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+            <div id="holdersYes"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
           </div>
           <div>
             <div class="holders-col-header no">NO Holders</div>
-            <div id="holdersNo"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+            <div id="holdersNo"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
           </div>
         </div>
       </div>
@@ -337,13 +331,13 @@ canvas{display:block;width:100%!important}
 
       <!-- Comments -->
       <div class="mkt-comments" id="mktCommentsSection">
-        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--dim)" id="commentCount"></span></h3>
+        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
         <div class="comments-tabs">
           <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
           <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
         </div>
         <div class="comment-list" id="commentList">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>
         </div>
         <div class="comment-input-row">
           <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
@@ -384,9 +378,9 @@ canvas{display:block;width:100%!important}
           <button class="trade-tab active" onclick="setTradeMode('buy')">Buy</button>
           <button class="trade-tab" onclick="setTradeMode('sell')">Sell</button>
           <div style="margin-left:auto;display:flex;align-items:center">
-            <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--soft)">
+            <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--body);font-size:11px;color:var(--soft)">
+              <option value="market" selected>Market</option>
               <option value="limit">Limit</option>
-              <option value="market">Market</option>
             </select>
           </div>
         </div>
@@ -420,11 +414,11 @@ canvas{display:block;width:100%!important}
         </div>
 
         <div class="trade-field">
-          <div class="trade-field-label"><span>Amount (USD)</span></div>
-          <input type="number" class="trade-input" id="tradeAmount" value="10" min="1" step="1" oninput="updateTradeCalc()"/>
+          <div class="trade-field-label"><span id="tradeAmountLabel">Amount (USD)</span><a id="tradeMaxBtn" href="#" onclick="event.preventDefault();setMaxShares()" style="display:none;color:var(--green);font-size:12px;font-weight:700;text-decoration:none">Max</a></div>
+          <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="updateTradeCalc()"/>
         </div>
 
-        <div class="trade-quick-btns">
+        <div class="trade-quick-btns" id="tradeQuickBtns">
           <button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>
           <button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>
           <button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>
@@ -439,34 +433,29 @@ canvas{display:block;width:100%!important}
 
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
+        <div id="flexPointsBar" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--body);font-size:11px">
+          <span style="color:#a855f7;font-weight:700">⚡ FLEX Points</span>
+          <span id="flexPointsBadge" style="color:var(--text);font-weight:800">—</span>
+        </div>
         <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
 
-        <!-- Trading Setup Checklist (shown after wallet connect) -->
-        <div id="tradingSetup" style="display:none;margin-top:12px;padding:12px 14px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:8px">
-          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:8px">TRADING SETUP</div>
-          <div id="setupStep1" class="setup-step">
-            <span class="setup-icon" id="setupIcon1">○</span>
-            <span class="setup-label">Deploy Proxy Wallet</span>
-            <span class="setup-action-btn" id="setupBtn1" style="display:none;font-size:10px;color:var(--dim);cursor:default">Activate on polymarket.com</span>
-          </div>
-          <div id="setupStep2" class="setup-step">
-            <span class="setup-icon" id="setupIcon2">○</span>
-            <span class="setup-label">Enable Trading (CLOB Auth)</span>
-            <button class="setup-action-btn" id="setupBtn2" onclick="enableTrading()" style="display:none">Connect</button>
-          </div>
-          <div id="setupStep3" class="setup-step">
-            <span class="setup-icon" id="setupIcon3">○</span>
-            <span class="setup-label">Approve USDC Spending</span>
-            <button class="setup-action-btn" id="setupBtn3" onclick="approveTokens()" style="display:none">Approve</button>
-          </div>
-          <div id="setupProxyBalance" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(201,146,13,0.1);font-family:var(--mono);font-size:11px;color:var(--soft)">
-            Proxy Balance: <span id="setupBalanceVal" style="color:var(--gold)">—</span>
-          </div>
-        </div>
+        <!-- Trading setup runs silently in background — no checklist UI -->
+        <div id="tradingSetup" style="display:none"></div>
+        <div id="setupStep1" style="display:none"></div>
+        <div id="setupStep2" style="display:none"></div>
+        <div id="setupStep3" style="display:none"></div>
+        <div id="setupIcon1" style="display:none"></div>
+        <div id="setupIcon2" style="display:none"></div>
+        <div id="setupIcon3" style="display:none"></div>
+        <div id="setupBtn1" style="display:none"></div>
+        <div id="setupBtn2" style="display:none"></div>
+        <div id="setupBtn3" style="display:none"></div>
+        <div id="setupProxyBalance" style="display:none"></div>
+        <div id="setupBalanceVal" style="display:none"></div>
 
         <!-- Your Position (shown after trade or if holding) -->
         <div id="tradePosition" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px">
-          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:6px">YOUR POSITION</div>
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--soft);margin-bottom:6px">YOUR POSITION</div>
           <div id="positionDetails" style="font-family:var(--mono);font-size:12px;color:var(--text)"></div>
         </div>
       </div>
@@ -481,7 +470,7 @@ canvas{display:block;width:100%!important}
 <!-- Loading state -->
 <div class="mkt-loading" id="mktLoading">
   <div class="spinner"></div>
-  <div style="font-family:var(--mono);font-size:12px;color:var(--dim)">Loading market data...</div>
+  <div style="font-family:var(--body);font-size:12px;color:var(--soft)">Loading market data...</div>
 </div>
 
 <script>
@@ -508,7 +497,7 @@ var slug = window.location.pathname.split('/market/')[1] || '';
 if (slug.endsWith('/')) slug = slug.slice(0, -1);
 
 async function loadMarket() {
-  if (!slug) { document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">No market slug provided</div>'; return; }
+  if (!slug) { document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--body);font-size:13px">No market slug provided</div>'; return; }
 
   try {
     var res = await fetch('/api/market/' + encodeURIComponent(slug));
@@ -525,14 +514,65 @@ async function loadMarket() {
     }
 
     renderMarket();
+
+    // Auto-select outcome from ?outcome= param (conditionId, slug, tokenId, or index)
+    var outcomeParam = new URLSearchParams(window.location.search).get('outcome');
+    if (outcomeParam && _sortedEventMarkets && _sortedEventMarkets.length > 1) {
+      var foundIdx = -1;
+      // Try matching by conditionId or slug first
+      for (var oi = 0; oi < _sortedEventMarkets.length; oi++) {
+        if (_sortedEventMarkets[oi].conditionId === outcomeParam || _sortedEventMarkets[oi].slug === outcomeParam) {
+          foundIdx = oi; break;
+        }
+      }
+      // Try matching by token ID (clobTokenIds)
+      if (foundIdx < 0) {
+        for (var oi = 0; oi < _sortedEventMarkets.length; oi++) {
+          var emTids = _sortedEventMarkets[oi].clobTokenIds;
+          if (typeof emTids === 'string') { try { emTids = JSON.parse(emTids); } catch(e) { emTids = []; } }
+          if (emTids && emTids.length) {
+            for (var ti = 0; ti < emTids.length; ti++) {
+              if (emTids[ti] === outcomeParam || (emTids[ti] && emTids[ti].toLowerCase() === outcomeParam.toLowerCase())) {
+                foundIdx = oi; break;
+              }
+            }
+            if (foundIdx >= 0) break;
+          }
+        }
+      }
+      // Fall back to numeric index
+      if (foundIdx < 0 && !isNaN(parseInt(outcomeParam))) {
+        foundIdx = parseInt(outcomeParam);
+      }
+      if (foundIdx >= 0 && foundIdx < _sortedEventMarkets.length) {
+        switchOutcome(foundIdx);
+      }
+    }
+
     document.getElementById('mktLoading').style.display = 'none';
     document.getElementById('marketContent').style.display = 'block';
     document.title = (_market._displayTitle || _market.question || 'Market') + ' | HYPERFLEX';
     loadTopHolders(_market);
-    loadMarketIntel(slug);
+    loadMarketIntel();
     loadWhaleFlow(slug);
+    // Load FLEX points if logged in
+    try {
+      var hfToken = localStorage.getItem('hf_token');
+      if (hfToken) {
+        fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + hfToken } })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(fp) {
+            if (fp && fp.total_points != null) {
+              var bar = document.getElementById('flexPointsBar');
+              var badge = document.getElementById('flexPointsBadge');
+              if (bar) bar.style.display = 'flex';
+              if (badge) badge.textContent = fp.total_points.toLocaleString() + ' FP · ' + fp.tier.toUpperCase();
+            }
+          }).catch(function() {});
+      }
+    } catch (e2) { /* silent */ }
   } catch (e) {
-    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
+    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--body);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
   }
 }
 
@@ -555,9 +595,18 @@ function renderMarket() {
   document.getElementById('mkt24hVol').textContent = fmtCap(m.volume24hr || 0);
   document.getElementById('mktLiquidity').textContent = fmtCap(m.liquidityNum || m.liquidity || 0);
 
-  // Expiry
+  // Expiry — check closed/resolved FIRST, then fall back to end date countdown
+  // Also detect resolved by exact terminal price (100¢ or 0¢ = market settled)
+  var priceAtTerminal = (yesPrice >= 0.99 || yesPrice <= 0.01);
+  var isClosed = m.closed === true || m.active === false || m.resolved === true || priceAtTerminal;
   var endDate = m.endDate || m.end_date_iso;
-  if (endDate) {
+  if (isClosed) {
+    document.getElementById('mktExpiry').textContent = 'Resolved';
+    document.getElementById('mktExpiry').style.color = '#a78bfa';
+    // Hide trade widget for resolved markets
+    var tradeWidget = document.querySelector('.trade-widget');
+    if (tradeWidget) tradeWidget.style.display = 'none';
+  } else if (endDate) {
     var diff = new Date(endDate) - new Date();
     if (diff > 0) {
       var days = Math.floor(diff / 86400000);
@@ -597,18 +646,14 @@ function renderMarket() {
   renderOutcomes(m);
   // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
   updateOutcomeLabels();
-  // Multi-outcome chart: fetch history for top outcomes and draw colored lines
+  // Multi-outcome chart: fetch history for top outcomes and draw colored lines (like Polymarket)
   if (_eventMarkets && _eventMarkets.length > 1) {
     document.getElementById('chartOutcome').textContent = 'All Outcomes';
-    var tids = m.clobTokenIds || '[]';
-    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
-    // Sort event markets by YES price descending, take top 6 for chart
     var sorted = _eventMarkets.slice().map(function(em, i) {
       var ep = em.outcomePrices || '[]';
       if (typeof ep === 'string') { try { ep = JSON.parse(ep); } catch(e) { ep = []; } }
       var yp = ep[0] ? parseFloat(ep[0]) : 0;
       var label = em.groupItemTitle || em.question || '';
-      // Extract short label like "$580-$590"
       var rm = label.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
       if (rm) label = rm[1];
       else { var tm = label.match(/Will (?:the )?(.+?) win/i); if (tm) label = tm[1]; }
@@ -624,15 +669,17 @@ function renderMarket() {
           .then(function(d) { return { label: x.label, history: d.history || [] }; })
           .catch(function() { return { label: x.label, history: [] }; });
       })).then(function(multiData) {
-        drawChart(null, multiData);
+        // Only draw multi-chart if user hasn't already switched to a specific outcome
+        if (_activeOutcomeIndex === 0) drawChart(null, multiData);
       });
     } else {
-      drawChart(_priceHistory); setTimeout(applyTA, 150);
+      drawChart(_priceHistory);
     }
   } else {
-    drawChart(_priceHistory); setTimeout(applyTA, 150);
+    drawChart(_priceHistory);
   }
   renderOrderbook();
+  setTimeout(updateAlertBell, 300);
 }
 
 // ── Outcomes Table ────────────────────────────────────────────────────────────
@@ -720,7 +767,11 @@ function renderOutcomes(m) {
         // Mark this position's asset as claimed so it won't match another row
         if (matchedPos._matchedAsset) _claimedPositionAssets[matchedPos._matchedAsset] = true;
         var avgC = (matchedPos.avgPrice * 100).toFixed(1);
-        posBadge = '<div class="position-badge position-badge-yes" title="Your position">' +
+        var posSide = (matchedPos.side || 'Yes').toUpperCase();
+        var posSideColor = posSide === 'YES' ? '#00e68a' : '#ff4d6a';
+        var posBadgeClass = posSide === 'YES' ? 'position-badge-yes' : 'position-badge-no';
+        posBadge = '<div class="position-badge ' + posBadgeClass + '" title="Your ' + posSide + ' position">' +
+          '<span style="color:' + posSideColor + ';font-weight:700">' + posSide + '</span> ' +
           '<span class="pos-shares">' + matchedPos.size.toFixed(1) + ' shares</span> ' +
           '<span class="pos-sep">\u00b7</span> ' +
           '<span class="pos-price">' + avgC + '\u00a2</span>' +
@@ -795,11 +846,13 @@ function switchOutcome(index) {
     if (tokenId) {
       fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
         .then(function(r) { return r.json(); })
-        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
         .catch(function() {});
     }
     updateSidebarPosition();
     updateOutcomeLabels();
+    // Refresh AI Intel for the newly selected outcome
+    if (typeof loadMarketIntel === 'function') loadMarketIntel();
     return;
   }
 
@@ -829,7 +882,7 @@ function switchOutcome(index) {
   if (tokenId) {
     fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
       .then(function(r) { return r.json(); })
-      .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+      .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
       .catch(function() {});
   }
 
@@ -839,34 +892,98 @@ function switchOutcome(index) {
 }
 
 // ── AI Market Intelligence ───────────────────────────────────────────────────
-async function loadMarketIntel(marketSlug) {
-  try {
-    // Fetch screener data to find this market's model probability
-    var r = await fetch('/api/screener?limit=200');
-    if (!r.ok) return;
-    var markets = await r.json();
-    if (!Array.isArray(markets)) return;
+// Cache the screener payload across outcome switches so we don't refetch.
+var _intelScreenerCache = null;
+var _intelScreenerCacheTs = 0;
 
-    // Find this market by slug match
-    var slugLower = marketSlug.toLowerCase().replace(/-/g, ' ');
+async function loadMarketIntel() {
+  try {
+    // Resolve the active outcome (multi-outcome events) or fall back to the single market
+    var activeMkt = null;
+    if (_sortedEventMarkets && _sortedEventMarkets.length > 0 && _sortedEventMarkets[_activeOutcomeIndex]) {
+      activeMkt = _sortedEventMarkets[_activeOutcomeIndex];
+    } else if (_market) {
+      activeMkt = _market;
+    }
+    if (!activeMkt) return;
+
+    var activeConditionId = (activeMkt.conditionId || activeMkt.condition_id || '').toLowerCase();
+    var activeQuestion = activeMkt.question || activeMkt.groupItemTitle || '';
+
+    // Pull the local YES price from the active outcome — always available,
+    // doesn't depend on the screener. The screener is only consulted for the
+    // model probability and whale stats, which may not be present for low-
+    // volume outcomes (anything outside the screener's top 200 by volume).
+    var localYes = null;
+    try {
+      var prices = activeMkt.outcomePrices || activeMkt.outcome_prices;
+      if (typeof prices === 'string') prices = JSON.parse(prices);
+      if (Array.isArray(prices) && prices[0] != null) localYes = parseFloat(prices[0]);
+      if (localYes == null && activeMkt.yes_price != null) localYes = parseFloat(activeMkt.yes_price);
+    } catch (e) { /* fall through */ }
+
+    // Fetch + cache screener data (90s TTL — matches server-side cache)
+    if (!_intelScreenerCache || (Date.now() - _intelScreenerCacheTs > 90 * 1000)) {
+      var r = await fetch('/api/screener?limit=200');
+      if (r.ok) {
+        var data = await r.json();
+        if (Array.isArray(data)) {
+          _intelScreenerCache = data;
+          _intelScreenerCacheTs = Date.now();
+        }
+      }
+    }
+    var markets = _intelScreenerCache || [];
+
+    // Match by conditionId first (unique per outcome). Fall back to question text.
     var match = null;
-    for (var i = 0; i < markets.length; i++) {
-      var m = markets[i];
-      var mSlug = (m.slug || '').toLowerCase().replace(/-/g, ' ');
-      var mQ = (m.question || '').toLowerCase();
-      if (mSlug === slugLower || mQ.includes(slugLower.substring(0, 20))) { match = m; break; }
+    if (activeConditionId) {
+      for (var i = 0; i < markets.length; i++) {
+        var mid = (markets[i].market_id || markets[i].conditionId || '').toLowerCase();
+        if (mid === activeConditionId) { match = markets[i]; break; }
+      }
+    }
+    if (!match && activeQuestion) {
+      var qLower = activeQuestion.toLowerCase();
+      for (var j = 0; j < markets.length; j++) {
+        if ((markets[j].question || '').toLowerCase() === qLower) { match = markets[j]; break; }
+      }
     }
 
-    if (!match || match.model_probability == null || match.yes_price == null) return;
-
     var section = document.getElementById('mktIntelSection');
+    var outcomeLabel = document.getElementById('intelOutcomeLabel');
+
+    // Show the outcome label whenever this is a multi-outcome event so the
+    // user knows WHICH outcome the panel refers to.
+    if (_sortedEventMarkets && _sortedEventMarkets.length > 1 && activeQuestion) {
+      outcomeLabel.textContent = activeQuestion;
+      outcomeLabel.style.display = '';
+    } else {
+      outcomeLabel.style.display = 'none';
+    }
+
     section.style.display = '';
 
-    var mktPct = Math.round(match.yes_price * 100);
-    var modelPct = Math.round(match.model_probability * 100);
-    var edge = match.alpha_edge || (modelPct - mktPct);
+    // Always show the YES market price from the local outcome data
+    var mktPct = localYes != null ? Math.round(localYes * 100) : null;
+    document.getElementById('intelMktPrice').textContent = mktPct != null ? mktPct + '%' : '—';
 
-    document.getElementById('intelMktPrice').textContent = mktPct + '%';
+    // Model + edge come from the screener — only show them if we have a match
+    if (!match || match.model_probability == null) {
+      document.getElementById('intelModelPrice').textContent = '—';
+      var edgeEl0 = document.getElementById('intelAlphaEdge');
+      edgeEl0.textContent = '—';
+      edgeEl0.style.color = 'var(--soft)';
+      document.getElementById('intelExplain').textContent = mktPct != null
+        ? 'Model signal not available for this outcome (low volume) · current YES is ' + mktPct + '%'
+        : 'Insufficient signal data for this outcome';
+      return;
+    }
+
+    var modelPct = Math.round(match.model_probability * 100);
+    // Edge = model - actual local price (use local price, not the screener's possibly-stale yes_price)
+    var edge = mktPct != null ? (modelPct - mktPct) : (match.alpha_edge != null ? match.alpha_edge : 0);
+
     document.getElementById('intelModelPrice').textContent = modelPct + '%';
 
     var edgeEl = document.getElementById('intelAlphaEdge');
@@ -883,10 +1000,10 @@ async function loadMarketIntel(marketSlug) {
 
     if (Math.abs(edge) >= 3) {
       var dir = edge > 0 ? 'underpriced' : 'overpriced';
-      parts.unshift('Model suggests this market is ' + dir + ' by ' + Math.abs(edge) + ' points');
+      parts.unshift('Model suggests YES is ' + dir + ' by ' + Math.abs(edge) + ' points');
     }
 
-    document.getElementById('intelExplain').textContent = parts.length > 0 ? parts.join(' · ') : 'Insufficient signal data for this market';
+    document.getElementById('intelExplain').textContent = parts.length > 0 ? parts.join(' · ') : 'Insufficient signal data for this outcome';
   } catch(e) { console.warn('[intel]', e.message); }
 }
 
@@ -925,10 +1042,46 @@ async function loadWhaleFlow(marketSlug) {
       // Show which outcome the whale is positioned on
       var outcomeLabel = '';
       if (f.outcome && _eventMarkets && _eventMarkets.length > 1) {
-        // Multi-outcome event: extract short outcome from title
-        var shortOutcome = f.outcome;
-        if (shortOutcome.length > 20) shortOutcome = shortOutcome.substring(0, 18) + '..';
-        outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
+        // Multi-outcome event: prefer the canonical groupItemTitle from
+        // the loaded event markets (e.g. "April 15"). f.outcome is the
+        // full question ("Iran x Israel/US conflict ends by April 15?")
+        // — naively truncating it gives "Iran x Israel/US c.." which is
+        // useless. Match the whale's question against our loaded outcomes
+        // and use that outcome's groupItemTitle.
+        var shortOutcome = '';
+        var fLower = (f.outcome || '').toLowerCase();
+        for (var emi = 0; emi < _eventMarkets.length; emi++) {
+          var emQ = (_eventMarkets[emi].question || '').toLowerCase();
+          if (emQ && (emQ === fLower || fLower.indexOf(emQ) !== -1 || emQ.indexOf(fLower) !== -1)) {
+            shortOutcome = _eventMarkets[emi].groupItemTitle || '';
+            break;
+          }
+        }
+        // Fallback: strip the common prefix shared by all loaded outcomes
+        if (!shortOutcome) {
+          var commonPrefix = '';
+          if (_eventMarkets[0] && _eventMarkets[0].question) {
+            commonPrefix = _eventMarkets[0].question;
+            for (var emj = 1; emj < _eventMarkets.length; emj++) {
+              var qj = _eventMarkets[emj].question || '';
+              var maxLen = Math.min(commonPrefix.length, qj.length);
+              var matchedLen = 0;
+              for (var ci = 0; ci < maxLen; ci++) {
+                if (commonPrefix[ci] === qj[ci]) matchedLen++;
+                else break;
+              }
+              commonPrefix = commonPrefix.substring(0, matchedLen);
+            }
+          }
+          if (commonPrefix && commonPrefix.length > 5 && f.outcome.indexOf(commonPrefix) === 0) {
+            shortOutcome = f.outcome.substring(commonPrefix.length).replace(/^[\s?,.]+/, '').trim();
+          }
+        }
+        // Last resort: truncate (better than nothing)
+        if (!shortOutcome) {
+          shortOutcome = f.outcome.length > 20 ? f.outcome.substring(0, 18) + '..' : f.outcome;
+        }
+        outcomeLabel = '<span style="font-family:var(--body);font-size:11px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
       } else if (_market) {
         // Binary market with custom outcome names: YES→outcome[0], NO→outcome[1]
         var binaryOutcomes = _market.outcomes;
@@ -936,16 +1089,16 @@ async function loadWhaleFlow(marketSlug) {
         if (binaryOutcomes && Array.isArray(binaryOutcomes) && binaryOutcomes.length === 2 &&
             binaryOutcomes[0].toLowerCase() !== 'yes') {
           var whaleOutcome = f.side === 'YES' ? binaryOutcomes[0] : binaryOutcomes[1];
-          outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(whaleOutcome) + '</span>';
+          outcomeLabel = '<span style="font-family:var(--body);font-size:11px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(whaleOutcome) + '</span>';
         }
       }
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);min-width:80px">' + escH(f.wallet) + '</span>' +
-        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + ';min-width:32px">' + f.side + '</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--soft);min-width:80px">' + escH(f.wallet) + '</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + sideColor + ';min-width:32px">' + f.side + '</span>' +
         outcomeLabel +
         '<span style="font-family:var(--mono);font-size:12px;font-weight:700;flex:1">' + sizeStr + '</span>' +
-        (f.entry_price ? '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">@ ' + Math.round(f.entry_price * 100) + '¢</span>' : '') +
-        (pnlStr ? '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + (f.pnl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + pnlStr + '</span>' : '') +
+        (f.entry_price ? '<span style="font-family:var(--mono);font-size:11px;color:var(--soft)">@ ' + Math.round(f.entry_price * 100) + '¢</span>' : '') +
+        (pnlStr ? '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (f.pnl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + pnlStr + '</span>' : '') +
         '</div>';
     });
     document.getElementById('whaleFlowList').innerHTML = html;
@@ -975,7 +1128,7 @@ async function loadTopHolders(m) {
     });
 
     function renderHolderList(list, limit) {
-      if (!list.length) return '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No data</div>';
+      if (!list.length) return '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No data</div>';
       return list.slice(0, limit).map(function(h) {
         var display = h.name ? escH(h.name) : truncAddr(h.address);
         var link = h.address ? polyRef('https://polymarket.com/profile/' + encodeURIComponent(h.address)) : '#';
@@ -1014,11 +1167,11 @@ function drawChart(history, multiData) {
   // Destroy previous chart instance
   if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; _multiSeries = []; }
 
-  // Multi-outcome mode
+  // Multi-outcome mode — colored lines for each outcome (like Polymarket)
   if (multiData && multiData.length > 0) {
     var hasAny = multiData.some(function(d) { return d.history && d.history.length >= 2; });
     if (!hasAny) {
-      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
+      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
       return;
     }
     container.innerHTML = '';
@@ -1058,7 +1211,7 @@ function drawChart(history, multiData) {
   legendEl.innerHTML = '';
 
   if (!history || history.length < 2) {
-    container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
+    container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
     return;
   }
 
@@ -1069,9 +1222,9 @@ function drawChart(history, multiData) {
   _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
 
   var isUp = history[history.length - 1].p >= history[0].p;
-  var lineColor = isUp ? '#22c55e' : '#ef4444';
-  var areaTop   = isUp ? 'rgba(34,197,94,0.2)'  : 'rgba(239,68,68,0.2)';
-  var areaBot   = isUp ? 'rgba(34,197,94,0.0)'  : 'rgba(239,68,68,0.0)';
+  var lineColor = isUp ? '#00e68a' : '#ff4d6a';
+  var areaTop   = isUp ? 'rgba(0,230,138,0.2)'  : 'rgba(255,77,106,0.2)';
+  var areaBot   = isUp ? 'rgba(0,230,138,0.0)'  : 'rgba(255,77,106,0.0)';
 
   _lwSeries = _lwChart.addAreaSeries({
     lineColor: lineColor,
@@ -1114,262 +1267,6 @@ function _chartOpts(w) {
   };
 }
 
-// ── Technical Analysis Engine ─────────────────────────────────────────────────
-var _activeTA = new Set();       // active indicator names
-var _taSeries = [];              // extra lightweight-charts series for indicators
-var _rsiChart = null;            // separate chart for RSI
-var _rsiSeries = null;
-
-function toggleTA(btn) {
-  var ta = btn.getAttribute('data-ta');
-  if (ta === 'none') {
-    // Clear all indicators
-    _activeTA.clear();
-    document.querySelectorAll('.ta-btn').forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-  } else {
-    // Remove 'Price' active state
-    document.querySelector('.ta-btn[data-ta="none"]').classList.remove('active');
-    if (_activeTA.has(ta)) { _activeTA.delete(ta); btn.classList.remove('active'); }
-    else { _activeTA.add(ta); btn.classList.add('active'); }
-    // If nothing active, re-activate Price
-    if (_activeTA.size === 0) document.querySelector('.ta-btn[data-ta="none"]').classList.add('active');
-  }
-  applyTA();
-}
-
-function applyTA() {
-  // Remove old indicator series
-  _taSeries.forEach(function(s) { try { _lwChart.removeSeries(s); } catch(e){} });
-  _taSeries = [];
-  // Remove RSI sub-chart
-  var rsiContainer = document.getElementById('rsiChart');
-  if (_rsiChart) { _rsiChart.remove(); _rsiChart = null; _rsiSeries = null; }
-  rsiContainer.style.height = '0';
-
-  if (!_lwChart || !_priceHistory || _priceHistory.length < 5) return;
-
-  // Build sorted deduped data
-  var seen = {};
-  var data = [];
-  _priceHistory.forEach(function(h) {
-    var t = Math.floor(h.t);
-    if (!seen[t]) { seen[t] = true; data.push({ time: t, value: h.p }); }
-  });
-  data.sort(function(a, b) { return a.time - b.time; });
-  var values = data.map(function(d) { return d.value; });
-
-  // SMA (7, 20, 50)
-  if (_activeTA.has('sma')) {
-    [{ n: 7, color: '#f59e0b' }, { n: 20, color: '#3b82f6' }, { n: 50, color: '#a855f7' }].forEach(function(cfg) {
-      var sma = computeSMA(values, cfg.n);
-      var sd = [];
-      for (var i = cfg.n - 1; i < data.length; i++) {
-        if (sma[i] != null) sd.push({ time: data[i].time, value: sma[i] });
-      }
-      if (sd.length < 2) return;
-      var s = _lwChart.addLineSeries({ color: cfg.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd);
-      _taSeries.push(s);
-    });
-  }
-
-  // EMA (9, 21)
-  if (_activeTA.has('ema')) {
-    [{ n: 9, color: '#06b6d4' }, { n: 21, color: '#ec4899' }].forEach(function(cfg) {
-      var ema = computeEMA(values, cfg.n);
-      var sd = [];
-      for (var i = 0; i < data.length; i++) {
-        if (ema[i] != null) sd.push({ time: data[i].time, value: ema[i] });
-      }
-      if (sd.length < 2) return;
-      var s = _lwChart.addLineSeries({ color: cfg.color, lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd);
-      _taSeries.push(s);
-    });
-  }
-
-  // Bollinger Bands (20, 2σ)
-  if (_activeTA.has('bb')) {
-    var bb = computeBollinger(values, 20, 2);
-    var upper = [], lower = [], mid = [];
-    for (var i = 0; i < data.length; i++) {
-      if (bb.upper[i] != null) {
-        upper.push({ time: data[i].time, value: bb.upper[i] });
-        lower.push({ time: data[i].time, value: bb.lower[i] });
-        mid.push({ time: data[i].time, value: bb.mid[i] });
-      }
-    }
-    if (upper.length > 2) {
-      var sU = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sU.setData(upper); _taSeries.push(sU);
-      var sL = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sL.setData(lower); _taSeries.push(sL);
-      var sM = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.3)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sM.setData(mid); _taSeries.push(sM);
-    }
-  }
-
-  // VWAP (volume-weighted average price — approximated since we only have price, uses equal weight)
-  if (_activeTA.has('vwap')) {
-    var vwap = computeVWAP(values);
-    var sd = [];
-    for (var i = 0; i < data.length; i++) {
-      if (vwap[i] != null) sd.push({ time: data[i].time, value: vwap[i] });
-    }
-    if (sd.length > 2) {
-      var s = _lwChart.addLineSeries({ color: '#84cc16', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd); _taSeries.push(s);
-    }
-  }
-
-  // Support / Resistance levels
-  if (_activeTA.has('sr')) {
-    var levels = computeSR(values);
-    levels.forEach(function(lv) {
-      var s = _lwChart.addLineSeries({ color: lv.type === 'support' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: true,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData([{ time: data[0].time, value: lv.price }, { time: data[data.length-1].time, value: lv.price }]);
-      _taSeries.push(s);
-    });
-  }
-
-  // RSI (14-period) — drawn in separate sub-chart
-  if (_activeTA.has('rsi')) {
-    rsiContainer.style.height = '100px';
-    var rsiVals = computeRSI(values, 14);
-    var rsiData = [];
-    for (var i = 0; i < data.length; i++) {
-      if (rsiVals[i] != null) rsiData.push({ time: data[i].time, value: rsiVals[i] });
-    }
-    if (rsiData.length > 2) {
-      requestAnimationFrame(function() {
-        var _w = rsiContainer.parentElement.offsetWidth - 40 || 700;
-        _rsiChart = LightweightCharts.createChart(rsiContainer, {
-          width: _w, height: 100,
-          layout: { background: { color: '#131311' }, textColor: '#8a8780', fontFamily: "'Space Mono', monospace", fontSize: 10 },
-          grid: { vertLines: { color: 'rgba(255,255,255,.02)' }, horzLines: { color: 'rgba(255,255,255,.04)' } },
-          rightPriceScale: { borderColor: '#222220', scaleMargins: { top: 0.05, bottom: 0.05 } },
-          timeScale: { visible: false }, handleScroll: true, handleScale: true, crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
-        });
-        _rsiSeries = _rsiChart.addLineSeries({ color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true,
-          priceFormat: { type: 'price', precision: 0, minMove: 1 } });
-        _rsiSeries.setData(rsiData);
-        // Overbought/oversold lines
-        var ob70 = _rsiChart.addLineSeries({ color: 'rgba(239,68,68,.3)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
-        ob70.setData([{ time: rsiData[0].time, value: 70 }, { time: rsiData[rsiData.length-1].time, value: 70 }]);
-        var os30 = _rsiChart.addLineSeries({ color: 'rgba(34,197,94,.3)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
-        os30.setData([{ time: rsiData[0].time, value: 30 }, { time: rsiData[rsiData.length-1].time, value: 30 }]);
-        _rsiChart.timeScale().fitContent();
-        window.addEventListener('resize', function() { if (_rsiChart) _rsiChart.applyOptions({ width: rsiContainer.parentElement.offsetWidth - 40 }); });
-      });
-    }
-  }
-}
-
-// ── TA Computation Functions ─────────────────────────────────────────────────
-function computeSMA(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  for (var i = n - 1; i < arr.length; i++) {
-    var sum = 0;
-    for (var j = i - n + 1; j <= i; j++) sum += arr[j];
-    result[i] = sum / n;
-  }
-  return result;
-}
-
-function computeEMA(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  var k = 2 / (n + 1);
-  // Seed with SMA
-  var sum = 0;
-  for (var i = 0; i < n && i < arr.length; i++) sum += arr[i];
-  if (arr.length < n) return result;
-  result[n - 1] = sum / n;
-  for (var i = n; i < arr.length; i++) {
-    result[i] = arr[i] * k + result[i - 1] * (1 - k);
-  }
-  return result;
-}
-
-function computeBollinger(arr, n, mult) {
-  var sma = computeSMA(arr, n);
-  var upper = new Array(arr.length).fill(null);
-  var lower = new Array(arr.length).fill(null);
-  for (var i = n - 1; i < arr.length; i++) {
-    if (sma[i] == null) continue;
-    var sumSq = 0;
-    for (var j = i - n + 1; j <= i; j++) sumSq += Math.pow(arr[j] - sma[i], 2);
-    var std = Math.sqrt(sumSq / n);
-    upper[i] = sma[i] + mult * std;
-    lower[i] = sma[i] - mult * std;
-  }
-  return { upper: upper, lower: lower, mid: sma };
-}
-
-function computeRSI(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  if (arr.length < n + 1) return result;
-  var gains = 0, losses = 0;
-  for (var i = 1; i <= n; i++) {
-    var d = arr[i] - arr[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  var avgGain = gains / n;
-  var avgLoss = losses / n;
-  result[n] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  for (var i = n + 1; i < arr.length; i++) {
-    var d = arr[i] - arr[i - 1];
-    avgGain = (avgGain * (n - 1) + (d > 0 ? d : 0)) / n;
-    avgLoss = (avgLoss * (n - 1) + (d < 0 ? -d : 0)) / n;
-    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  }
-  return result;
-}
-
-function computeVWAP(arr) {
-  // Cumulative average (true VWAP needs volume per candle — approximate with equal weight)
-  var result = new Array(arr.length).fill(null);
-  var cumSum = 0;
-  for (var i = 0; i < arr.length; i++) {
-    cumSum += arr[i];
-    result[i] = cumSum / (i + 1);
-  }
-  return result;
-}
-
-function computeSR(arr) {
-  // Find local min/max as support/resistance
-  var levels = [];
-  if (arr.length < 10) return levels;
-  var window = Math.max(5, Math.floor(arr.length / 20));
-  var candidates = [];
-  for (var i = window; i < arr.length - window; i++) {
-    var isMax = true, isMin = true;
-    for (var j = i - window; j <= i + window; j++) {
-      if (j === i) continue;
-      if (arr[j] >= arr[i]) isMax = false;
-      if (arr[j] <= arr[i]) isMin = false;
-    }
-    if (isMax) candidates.push({ price: arr[i], type: 'resistance' });
-    if (isMin) candidates.push({ price: arr[i], type: 'support' });
-  }
-  // Cluster nearby levels (within 2%)
-  candidates.sort(function(a, b) { return a.price - b.price; });
-  for (var i = 0; i < candidates.length; i++) {
-    if (levels.length > 0 && Math.abs(candidates[i].price - levels[levels.length - 1].price) / candidates[i].price < 0.02) continue;
-    levels.push(candidates[i]);
-    if (levels.length >= 6) break;
-  }
-  return levels;
-}
-
 // Chart tab switching
 document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
   tab.addEventListener('click', function() {
@@ -1382,7 +1279,7 @@ document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
     if (tokenId) {
       fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
         .then(function(r) { return r.json(); })
-        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 100); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
         .catch(function() {});
     }
   });
@@ -1410,11 +1307,11 @@ function renderOrderbook() {
 
   document.getElementById('obBids').innerHTML = bids.length > 0
     ? bids.map(function(b) { return buildRow(b, 'mkt-ob-bid'); }).join('')
-    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No bids</div>';
+    : '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No bids</div>';
 
   document.getElementById('obAsks').innerHTML = asks.length > 0
     ? asks.map(function(a) { return buildRow(a, 'mkt-ob-ask'); }).join('')
-    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No asks</div>';
+    : '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No asks</div>';
 }
 
 // ── Trade widget ──────────────────────────────────────────────────────────────
@@ -1495,7 +1392,33 @@ function getActiveOutcomePrices() {
 function setTradeMode(mode) {
   _tradeMode = mode;
   document.querySelectorAll('.trade-tab').forEach(function(t) { t.classList.remove('active'); });
-  event.target.classList.add('active');
+  if (event && event.target) event.target.classList.add('active');
+
+  var label = document.getElementById('tradeAmountLabel');
+  var maxBtn = document.getElementById('tradeMaxBtn');
+  var quickBtns = document.getElementById('tradeQuickBtns');
+  var input = document.getElementById('tradeAmount');
+
+  if (mode === 'sell') {
+    if (label) label.textContent = 'Amount (USD)';
+    if (maxBtn) maxBtn.style.display = 'inline';
+    if (quickBtns) quickBtns.innerHTML =
+      '<button class="trade-quick-btn" onclick="setAmount(10)">+$10</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>';
+    if (input) { input.value = '0'; input.step = '1'; }
+  } else {
+    if (label) label.textContent = 'Amount (USD)';
+    if (maxBtn) maxBtn.style.display = 'none';
+    if (quickBtns) quickBtns.innerHTML =
+      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(500)">+$500</button>';
+    if (input) { input.value = '10'; input.step = '1'; }
+  }
+  updateTradeCalc();
   updateCtaButton();
 }
 
@@ -1532,16 +1455,67 @@ function setAmount(a) {
   updateTradeCalc();
 }
 
+function adjustSharesBy(delta) {
+  var input = document.getElementById('tradeAmount');
+  if (!input) return;
+  var cur = parseFloat(input.value) || 0;
+  input.value = Math.max(0, (cur + delta)).toFixed(1);
+  updateTradeCalc();
+}
+
+async function setMaxShares() {
+  var input = document.getElementById('tradeAmount');
+  if (!input || !_market) return;
+
+  // If positions haven't loaded yet, try fetching them now
+  if (!_userPositions || !Object.keys(_userPositions).length) {
+    console.log('[max] No positions cached, fetching...');
+    await fetchUserPositions();
+  }
+
+  var maxShares = 0;
+  // _userPositions is { tokenId: { size, avgPrice, side, conditionId } }
+  if (_userPositions && typeof _userPositions === 'object') {
+    var keys = Object.keys(_userPositions);
+    console.log('[max] Checking', keys.length, 'positions for side', _tradeSide);
+    for (var i = 0; i < keys.length; i++) {
+      var pos = _userPositions[keys[i]];
+      if (pos && pos.size > 0) {
+        var posSide = (pos.side || pos.outcome || '').toUpperCase();
+        console.log('[max] Position:', posSide, 'size:', pos.size);
+        if (posSide === _tradeSide.toUpperCase()) {
+          maxShares += pos.size; // sum all positions on this side
+        }
+      }
+    }
+  }
+
+  console.log('[max] Total shares for', _tradeSide, ':', maxShares);
+
+  // Convert shares to USD value at current limit price
+  var price = parseFloat(document.getElementById('tradePrice').value) || 50;
+  var priceFrac = price / 100;
+  var maxUsd = maxShares * priceFrac;
+  input.value = maxUsd > 0 ? Math.floor(maxUsd) : '0';
+  updateTradeCalc();
+}
+
 function updateTradeCalc() {
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var amount = parseFloat(document.getElementById('tradeAmount').value) || 0;
   var priceFrac = price / 100;
   var shares = priceFrac > 0 ? amount / priceFrac : 0;
-  var payout = shares; // Each share pays $1 if it wins
 
   document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
   document.getElementById('summaryShares').textContent = shares.toFixed(2);
-  document.getElementById('summaryPayout').textContent = '$' + payout.toFixed(2);
+
+  if (_tradeMode === 'sell') {
+    // Sell: you get USD = shares × price
+    document.getElementById('summaryPayout').textContent = '$' + amount.toFixed(2);
+  } else {
+    // Buy: potential payout = shares (each pays $1 if wins)
+    document.getElementById('summaryPayout').textContent = '$' + shares.toFixed(2);
+  }
 }
 
 // ── Fetch USDC balance from Polygon ──────────────────────────────────────────
@@ -1573,24 +1547,43 @@ async function fetchTradeBalance() {
     console.log('[balance debug] Missing proxy address');
     return;
   }
+
+  // Method 1: On-chain RPC balance read
+  var balance = null;
   try {
-    // Use public RPC for read-only balance call — no MetaMask needed
     var provider = await getPublicProvider();
     var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     var abi = ['function balanceOf(address) view returns (uint256)'];
     var contract = new ethers.Contract(usdcAddress, abi, provider);
     var raw = await contract.balanceOf(proxyAddress);
-    var balance = parseFloat(ethers.formatUnits(raw, 6));
-    console.log('[balance debug] Raw balance:', raw.toString());
-    console.log('[balance debug] Formatted balance:', balance);
+    balance = parseFloat(ethers.formatUnits(raw, 6));
+    console.log('[balance debug] RPC balance:', balance);
+  } catch (e) {
+    console.log('[balance] RPC failed:', e.code || e.message);
+  }
 
+  // Method 2: Fallback — Polymarket profile API (works when RPC is rate-limited on mobile)
+  if (balance === null) {
+    try {
+      var profRes = await fetch('https://data-api.polymarket.com/profile?address=' + proxyAddress);
+      if (profRes.ok) {
+        var profData = await profRes.json();
+        if (profData && profData.collateralBalance != null) {
+          balance = parseFloat(profData.collateralBalance) / 1e6;
+          console.log('[balance debug] API fallback balance:', balance);
+        }
+      }
+    } catch (e2) {
+      console.log('[balance] API fallback failed:', e2.message);
+    }
+  }
+
+  if (balance !== null) {
     var el = document.getElementById('tradeBalance');
     if (el) {
-      el.textContent = 'Balance: $' + balance.toFixed(2);
+      el.textContent = 'Balance $' + balance.toFixed(2);
       console.log('[balance debug] Updated UI with:', balance.toFixed(2));
     }
-  } catch (e) {
-    console.log('[balance] skipped:', e.code || e.message);
   }
 }
 
@@ -1696,10 +1689,11 @@ function updateSidebarPosition() {
     return;
   }
 
-  // Use outcome name instead of YES/NO for multi-outcome events
-  var label = outcomeName || (pos.side || 'Yes').toUpperCase();
+  // Show direction (YES/NO) + outcome name for multi-outcome events
+  var posSide = (pos.side || 'Yes').toUpperCase();
+  var label = outcomeName || posSide;
   if (label.length > 15) label = label.substring(0, 13) + '..';
-  var sideColor = 'var(--green)';
+  var sideColor = posSide === 'NO' ? 'var(--red)' : 'var(--green)';
   var avgCents = (pos.avgPrice * 100).toFixed(1);
   var cost = (pos.size * pos.avgPrice).toFixed(2);
   var currentVal = (pos.size * pos.currentPrice).toFixed(2);
@@ -1709,7 +1703,7 @@ function updateSidebarPosition() {
 
   details.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-      '<span style="font-weight:700;color:' + sideColor + '">' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
+      '<span style="font-weight:700;color:' + sideColor + '"><span style="font-size:11px;padding:2px 5px;border-radius:3px;background:' + (posSide === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(0,230,138,0.12)') + ';margin-right:4px">' + posSide + '</span>' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
       '<span style="color:var(--dim)">avg ' + avgCents + '\u00a2</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:11px">' +
@@ -1719,8 +1713,8 @@ function updateSidebarPosition() {
     '</div>';
 
   posEl.style.display = 'block';
-  posEl.style.borderColor = 'rgba(34,197,94,0.25)';
-  posEl.style.background = 'rgba(34,197,94,0.06)';
+  posEl.style.borderColor = 'rgba(0,230,138,0.25)';
+  posEl.style.background = 'rgba(0,230,138,0.06)';
 }
 
 // Helper: find a user position matching a specific outcome row
@@ -2055,6 +2049,9 @@ async function checkTradingSetup() {
   }
 }
 
+// Wallet caching + EIP-1193 -32002 detection live in /wallet.js (HFXWallet)
+// so market.html and creator-dashboard.html share a single signer instance.
+
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
   if (!window.ethereum) {
@@ -2086,6 +2083,7 @@ async function enableTrading() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var address = await signer.getAddress();
+    HFXWallet.adoptSigner(provider, signer, address);
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
@@ -2291,10 +2289,10 @@ function tradeDebug(label, data) {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'tradeDebugPanel';
-    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:10px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
+    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:11px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
     var close = document.createElement('button');
     close.textContent = '✕ Close Debug';
-    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px';
+    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px';
     close.onclick = function() { panel.style.display = 'none'; };
     panel.appendChild(close);
     document.body.appendChild(panel);
@@ -2302,7 +2300,7 @@ function tradeDebug(label, data) {
   panel.style.display = 'block';
   // Show last 15 entries
   var txt = _tradeDebugLog.slice(-15).join('\n');
-  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
+  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
 }
 
 function updateTradingUI() {
@@ -2313,7 +2311,7 @@ function updateTradingUI() {
     var hasKeys = isTradingEnabled();
 
     if (hasKeys && proxyValid) {
-      disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
+      disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:11px;color:var(--soft)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
       disclaimer.style.color = 'var(--green)';
     } else if (hasKeys && !proxyValid) {
       disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Resolve proxy</a>';
@@ -2365,6 +2363,7 @@ async function runFullSetup() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var eoaAddress = await signer.getAddress();
+    HFXWallet.adoptSigner(provider, signer, eoaAddress);
     localStorage.setItem('poly_eoa_address', eoaAddress);
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
@@ -2652,9 +2651,10 @@ async function executeTrade() {
     var shares = amount / clobPrice;
 
     showTradeStatus('Connecting to MetaMask...', 'info');
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    var signer = await provider.getSigner();
-    var signerAddress = await signer.getAddress();
+    var walletCtx = await HFXWallet.getSigner();
+    var provider = walletCtx.provider;
+    var signer = walletCtx.signer;
+    var signerAddress = walletCtx.address;
 
     if (eoaAddress && signerAddress.toLowerCase() !== eoaAddress.toLowerCase()) {
       // Wallet changed (common on mobile MetaMask) — clear stale keys and adopt new wallet
@@ -2754,19 +2754,93 @@ async function executeTrade() {
       return result;
     }
 
-    // SDK's getOrderRawAmounts() — exact replica
+    // SDK's getOrderRawAmounts() — exact replica for LIMIT orders.
+    // Market (FOK) orders have different CLOB constraints — see the isMarketOrder branch.
+    var isMarketOrder = document.getElementById('tradeOrderType').value === 'market';
+
+    // For MARKET orders: walk the live orderbook to find the actual fill price.
+    // The user-entered limit (or "Mkt" preset) is just current mid — it doesn't
+    // reflect orderbook depth. FOK requires the FULL size to fill at ≤ limit, so
+    // a thin top-of-book causes "order couldn't be fully filled" rejections. The
+    // SDK's calculateMarketPrice walks the book and returns the worst price the
+    // order would touch to fully fill. We use that as the limit so FOK succeeds.
+    if (isMarketOrder) {
+      try {
+        showTradeStatus('Checking orderbook depth...', 'info');
+        var bookRes = await fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(tokenId));
+        if (bookRes.ok) {
+          var bookData = await bookRes.json();
+          var levels;
+          if (clobSide === 'BUY') {
+            levels = (bookData.asks || []).slice().sort(function(a, b) { return parseFloat(a.price) - parseFloat(b.price); });
+          } else {
+            levels = (bookData.bids || []).slice().sort(function(a, b) { return parseFloat(b.price) - parseFloat(a.price); });
+          }
+          var fillPrice = null;
+          if (clobSide === 'BUY') {
+            // Walk asks: spend `amount` USDC, find worst price touched
+            var spent = 0;
+            for (var li = 0; li < levels.length; li++) {
+              var lvlPrice = parseFloat(levels[li].price);
+              var lvlSize = parseFloat(levels[li].size);
+              var costAtLevel = lvlPrice * lvlSize;
+              if (spent + costAtLevel >= amount) { fillPrice = lvlPrice; break; }
+              spent += costAtLevel;
+            }
+          } else {
+            // Walk bids: sell `shares`, find worst price touched
+            var sharesRemaining = shares;
+            for (var lj = 0; lj < levels.length; lj++) {
+              var bidPrice = parseFloat(levels[lj].price);
+              var bidSize = parseFloat(levels[lj].size);
+              if (sharesRemaining <= bidSize) { fillPrice = bidPrice; break; }
+              sharesRemaining -= bidSize;
+            }
+          }
+          if (fillPrice == null) {
+            showTradeStatus('Not enough orderbook depth to fully fill this size — try a smaller amount or use a Limit order', 'error');
+            cta.disabled = false; updateCtaButton();
+            return;
+          }
+          // Round UP to tick — paying slightly more than the walk price ensures FOK fills
+          var bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize;
+          if (bumped <= 0) bumped = tickSize;
+          if (bumped >= 1) bumped = 1 - tickSize;
+          var newClobPrice = parseFloat(bumped.toFixed(roundConfig.price));
+          if (newClobPrice !== clobPrice) {
+            console.log('[trade] Market price walk: user entered ' + (clobPrice * 100).toFixed(1) + '¢, book needs ' + (newClobPrice * 100).toFixed(1) + '¢ for full fill');
+            clobPrice = newClobPrice;
+            shares = amount / clobPrice;
+          }
+        } else {
+          console.warn('[trade] /book fetch returned ' + bookRes.status + ', falling back to user-entered limit price');
+        }
+      } catch (bookErr) {
+        console.warn('[trade] /book walk failed:', bookErr.message, '— falling back to user-entered limit price');
+      }
+    }
+
     var rawPrice = roundNormal(clobPrice, roundConfig.price);
     var rawMakerAmt, rawTakerAmt, sideInt;
 
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: taker = shares (rounded down), maker = taker × price
-      rawTakerAmt = roundDown(shares, roundConfig.size);
-      rawMakerAmt = rawTakerAmt * rawPrice;
-      if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
-        rawMakerAmt = roundUp(rawMakerAmt, roundConfig.amount + 4);
+      if (isMarketOrder) {
+        // Market BUY (FOK): CLOB requires makerAmount (USDC) ≤ 2 decimals,
+        // takerAmount (shares) ≤ 4 decimals — different from limit-order tick config.
+        // Using user-entered USDC directly avoids the shares→maker float drift
+        // (e.g. 65.22 × 0.23 = 15.0006, rejected as 4-decimal maker).
+        rawMakerAmt = roundDown(amount, 2);
+        rawTakerAmt = roundDown(amount / rawPrice, 4);
+      } else {
+        // Limit BUY: taker = shares (rounded down), maker = taker × price
+        rawTakerAmt = roundDown(shares, roundConfig.size);
+        rawMakerAmt = rawTakerAmt * rawPrice;
         if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
-          rawMakerAmt = roundDown(rawMakerAmt, roundConfig.amount);
+          rawMakerAmt = roundUp(rawMakerAmt, roundConfig.amount + 4);
+          if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
+            rawMakerAmt = roundDown(rawMakerAmt, roundConfig.amount);
+          }
         }
       }
     } else {
@@ -2876,7 +2950,7 @@ async function executeTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: 'GTC',
+      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC',
       deferExec: false
     });
     tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
@@ -2898,7 +2972,7 @@ async function executeTrade() {
           var retryBody = JSON.stringify({
             order: JSON.parse(requestBody).order,
             owner: apiKey,
-            orderType: 'GTC'
+            orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
           });
           data = await submitClobOrder(retryBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
           if (data._expired || data._error) {
@@ -2929,12 +3003,82 @@ async function executeTrade() {
     // Show position in trade panel
     showTradePosition(sideLabel, shares, price, amount, payout);
 
-    // Refresh balance + positions after trade
+    // Immediately inject local position so sidebar shows it without waiting for Polymarket API
+    try {
+      var localTokenId = tokenId.toLowerCase();
+      var localOutcomeMarket = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) ? _sortedEventMarkets[_activeOutcomeIndex] : _market;
+      var existingPos = _userPositions[localTokenId];
+      if (existingPos) {
+        // Add to existing position
+        var oldSize = existingPos.size;
+        var oldAvg = existingPos.avgPrice;
+        existingPos.size = oldSize + shares;
+        existingPos.avgPrice = ((oldAvg * oldSize) + (price / 100 * shares)) / (oldSize + shares);
+        existingPos.currentPrice = price / 100;
+      } else {
+        _userPositions[localTokenId] = {
+          size: shares,
+          avgPrice: price / 100,
+          side: sideLabel,
+          currentPrice: price / 100,
+          cashPnl: 0,
+          percentPnl: 0,
+          conditionId: (localOutcomeMarket.conditionId || '').toLowerCase(),
+          title: localOutcomeMarket.groupItemTitle || localOutcomeMarket.question || ''
+        };
+      }
+      // Re-render outcome badges + sidebar position immediately
+      if (_market) renderOutcomes(_market);
+      updateSidebarPosition();
+      console.log('[trade] Local position injected for', sideLabel, shares.toFixed(1), 'shares @', price + '¢');
+    } catch (posErr) {
+      console.log('[trade] Could not inject local position:', posErr.message);
+    }
+
+    // Award FLEX points — 1 per $1 traded
+    try {
+      var hfToken = localStorage.getItem('hf_token');
+      if (hfToken) {
+        fetch('/api/flex-points/earn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + hfToken },
+          body: JSON.stringify({ amount_usd: amount, source: 'polymarket_trade' })
+        }).then(function(r) { return r.ok ? r.json() : null; }).then(function(fp) {
+          if (fp && fp.points_earned > 0) {
+            var flexEl = document.getElementById('flexPointsBadge');
+            if (flexEl) flexEl.textContent = fp.total_points.toLocaleString() + ' FP';
+            showTradeStatus('\u2705 Order placed! +' + fp.points_earned + ' FLEX points earned', 'success');
+          }
+        }).catch(function() {});
+      }
+    } catch (e) { /* silent */ }
+
+    // Hedge chain: if this was leg 1 of a hedge pair, navigate to leg 2
+    try {
+      var hp = new URLSearchParams(window.location.search);
+      var hedgeSlug = hp.get('hedge');
+      var hedgeSide = hp.get('hedgeSide') || 'YES';
+      if (hedgeSlug) {
+        var hedgeBanner = document.createElement('div');
+        hedgeBanner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:12px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 20px rgba(168,85,247,0.4);display:flex;align-items:center;gap:10px;cursor:pointer';
+        hedgeBanner.innerHTML = '✅ Leg 1 complete — <span style="text-decoration:underline">Opening Leg 2 →</span>';
+        document.body.appendChild(hedgeBanner);
+        var leg2Url = '/market/' + hedgeSlug + '?side=' + hedgeSide + '&from=hedge';
+        hedgeBanner.onclick = function() { window.location.href = leg2Url; };
+        setTimeout(function() { window.location.href = leg2Url; }, 2500);
+      }
+    } catch (hedgeErr) { /* silent */ }
+
+    // Refresh balance + positions after trade (will update with real data from Polymarket API)
     setTimeout(fetchTradeBalance, 2000);
-    setTimeout(fetchUserPositions, 3000);
+    setTimeout(fetchUserPositions, 5000);
   } catch (err) {
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
+    } else if (HFXWallet.is32002Error(err)) {
+      HFXWallet.invalidate();
+      showTradeStatus('A wallet request is already pending. Open your MetaMask app, approve or dismiss the previous request, then tap Buy again.', 'error');
+      console.warn('[trade] -32002 detected, signer cache cleared');
     } else {
       showTradeStatus('Trade error: ' + err.message, 'error');
       console.error('[trade] Error:', err);
@@ -2994,34 +3138,32 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacHasPad: hmacSig.includes('='), hmacLen: hmacSig.length });
 
-  // PRIMARY: Submit directly from browser to Polymarket CLOB (bypasses Railway geo-blocking).
-  // Get builder attribution headers from our server first, then submit directly.
+  // Get builder attribution headers from our server (for fee attribution)
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  var builderHeaders = {};
   try {
-    tradeDebug('browser-direct order', 'fetching builder headers...');
-    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-
-    // Step 1: Get builder attribution headers from server
-    var builderHeaders = {};
-    try {
-      var bsHeaders = { 'Content-Type': 'application/json' };
-      if (token) bsHeaders['Authorization'] = 'Bearer ' + token;
-      var bsRes = await fetch('/api/polymarket/builder-sign', {
-        method: 'POST',
-        headers: bsHeaders,
-        body: JSON.stringify({ method: 'POST', path: '/order', body: requestBody })
-      });
-      if (bsRes.ok) {
-        builderHeaders = await bsRes.json();
-        tradeDebug('builder-sign OK', Object.keys(builderHeaders).join(','));
-      } else {
-        tradeDebug('builder-sign FAIL', bsRes.status + ' — submitting without builder attribution');
-      }
-    } catch (bsErr) {
-      tradeDebug('builder-sign ERROR', bsErr.message + ' — submitting without builder attribution');
+    var bsHeaders = { 'Content-Type': 'application/json' };
+    if (token) bsHeaders['Authorization'] = 'Bearer ' + token;
+    var bsRes = await fetch('/api/polymarket/builder-sign', {
+      method: 'POST',
+      headers: bsHeaders,
+      body: JSON.stringify({ method: 'POST', path: '/order', body: requestBody })
+    });
+    if (bsRes.ok) {
+      builderHeaders = await bsRes.json();
+      tradeDebug('builder-sign OK', Object.keys(builderHeaders).join(','));
+    } else {
+      tradeDebug('builder-sign FAIL', bsRes.status + ' — submitting without builder attribution');
     }
+  } catch (bsErr) {
+    tradeDebug('builder-sign ERROR', bsErr.message + ' — submitting without builder attribution');
+  }
 
-    // Step 2: Submit order directly to Polymarket CLOB from browser
-    var directHeaders = {
+  // PRIMARY: Cloudflare Worker edge proxy — runs at 300+ CF locations, never geo-blocked.
+  // This is the primary path because browser-direct gets geo-blocked for many users.
+  var CF_PROXY = 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order';
+  try {
+    var cfHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'POLY_ADDRESS': eoaAddress,
@@ -3032,10 +3174,67 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     };
     // Merge builder headers for fee attribution
     for (var bk in builderHeaders) {
-      if (builderHeaders.hasOwnProperty(bk)) directHeaders[bk] = builderHeaders[bk];
+      if (builderHeaders.hasOwnProperty(bk)) cfHeaders[bk] = builderHeaders[bk];
     }
 
-    tradeDebug('submitting directly to CLOB', 'https://clob.polymarket.com/order');
+    tradeDebug('submitting via CF edge proxy (primary)', CF_PROXY);
+    var cfRes = await fetch(CF_PROXY, {
+      method: 'POST',
+      headers: cfHeaders,
+      body: requestBody
+    });
+
+    var cfText = await cfRes.text().catch(function() { return ''; });
+    var cfData;
+    try { cfData = JSON.parse(cfText); } catch (e) { cfData = { _raw: cfText }; }
+    tradeDebug('CF proxy ' + cfRes.status, cfText.substring(0, 500));
+    console.log('[trade] CF proxy response ' + cfRes.status + ':', cfText);
+
+    if (cfRes.ok) return cfData;
+
+    // Handle 401 — expired keys
+    if (cfRes.status === 401) {
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      updateTradingUI();
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (cfData.error || cfData.message || 'Unauthorized') };
+    }
+
+    var cfErrMsg = cfData.error || cfData.message || JSON.stringify(cfData);
+    tradeDebug('CF proxy failed', cfRes.status + ': ' + cfErrMsg);
+
+    // If CF proxy returned a CLOB error (not network), return it directly
+    if (cfRes.status >= 400 && cfRes.status < 500) {
+      return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
+    }
+
+  } catch (cfErr) {
+    // CORS or network error on CF proxy — fall back to browser-direct
+    tradeDebug('CF proxy THREW', cfErr.message + ' — trying browser-direct fallback');
+  }
+
+  // FALLBACK: Submit directly from browser to Polymarket CLOB
+  // (only works for non-geo-restricted users — most users should be served by CF proxy above)
+  try {
+    var directHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'POLY_ADDRESS': eoaAddress,
+      'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase,
+      'POLY_TIMESTAMP': ts,
+      'POLY_SIGNATURE': hmacSig
+    };
+    for (var bk2 in builderHeaders) {
+      if (builderHeaders.hasOwnProperty(bk2)) directHeaders[bk2] = builderHeaders[bk2];
+    }
+
+    tradeDebug('submitting directly to CLOB (fallback)', 'https://clob.polymarket.com/order');
     var directRes = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
       headers: directHeaders,
@@ -3046,11 +3245,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var directData;
     try { directData = JSON.parse(directText); } catch (e) { directData = { _raw: directText }; }
     tradeDebug('direct ' + directRes.status, directText.substring(0, 500));
-    console.log('[trade] CLOB response ' + directRes.status + ':', directText);
 
     if (directRes.ok) return directData;
 
-    // Handle 401 — expired keys
     if (directRes.status === 401) {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
@@ -3064,60 +3261,10 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     }
 
     var directErrMsg = directData.error || directData.message || JSON.stringify(directData);
-    tradeDebug('direct order failed', directRes.status + ': ' + directErrMsg);
-
-    // If browser-direct failed for non-auth reasons, DON'T fall through to server proxy
-    // (server proxy will also get geo-blocked from Railway's IP)
     return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
-
   } catch (directErr) {
-    // CORS or network error on browser-direct — fall back to server proxy as last resort
-    tradeDebug('direct THREW (CORS?)', directErr.message + ' — falling back to server proxy');
-  }
-
-  // FALLBACK: Server proxy (only if browser-direct threw — e.g. CORS blocked)
-  try {
-    tradeDebug('submitting via server proxy', '/api/polymarket/clob-order');
-    var token2 = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    var proxyHeaders = { 'Content-Type': 'application/json' };
-    if (token2) proxyHeaders['Authorization'] = 'Bearer ' + token2;
-
-    var proxyRes = await fetch('/api/polymarket/clob-order', {
-      method: 'POST',
-      headers: proxyHeaders,
-      body: JSON.stringify({
-        signed_body: requestBody,
-        api_key: apiKey,
-        api_secret: apiSecret,
-        api_passphrase: apiPassphrase,
-        eoa_address: eoaAddress
-      })
-    });
-
-    var proxyData = await proxyRes.json().catch(function() { return {}; });
-    tradeDebug('proxy ' + proxyRes.status, JSON.stringify(proxyData).substring(0, 300));
-
-    if (proxyRes.ok) return proxyData;
-
-    var proxyErrMsg = proxyData.error || proxyData.message || JSON.stringify(proxyData);
-    var clobDetail = proxyData.detail ? JSON.stringify(proxyData.detail).substring(0, 200) : '';
-
-    if (proxyRes.status === 401 || (proxyRes.status === 502 && clobDetail.includes('401'))) {
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB 401: ' + (clobDetail || proxyErrMsg) };
-    }
-
-    return { _error: true, _errorMsg: 'CLOB ' + proxyRes.status + ': ' + proxyErrMsg + (clobDetail ? ' | ' + clobDetail : '') };
-  } catch (proxyErr) {
-    tradeDebug('proxy THREW', proxyErr.message);
-    return { _error: true, _errorMsg: 'Network error: ' + proxyErr.message };
+    tradeDebug('direct THREW', directErr.message);
+    return { _error: true, _errorMsg: 'Could not reach Polymarket — please try again' };
   }
 }
 
@@ -3256,6 +3403,49 @@ function updateActiveTradePrice() {
   updateCurrentPriceBtn();
 }
 
+// Alpha-terminal prefill — when arriving from /alpha-live or the landing
+// Trade widget prefill — accepts ?from=alpha/trader/terminal&side=YES&size=35.
+// Alpha cards (TOP EDGES), Copy Trade buttons on sharp profiles, and Terminal
+// panel cards all pass the same query params so the trade widget lands
+// pre-populated. User goes straight to "review and sign" instead of
+// hunting for the form.
+function applyAlphaPrefill() {
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var from = p.get('from');
+    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge') return;
+    var side = (p.get('side') || '').toLowerCase();
+    var size = parseFloat(p.get('size') || '');
+    if (side === 'yes' || side === 'no') {
+      setTradeSide(side);
+    }
+    if (size > 0) {
+      var input = document.getElementById('tradeAmount');
+      if (input) {
+        input.value = Math.round(size);
+        updateTradeCalc();
+      }
+    }
+    var widget = document.querySelector('.trade-widget');
+    if (widget) widget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Subtle confirmation banner — copy varies by source
+    var hint = document.createElement('div');
+    var banner = '⚡ Prefilled from Alpha Terminal — review and sign';
+    if (from === 'trader')   banner = '🎯 Copying trade — review and sign';
+    if (from === 'terminal') banner = '🖥 Prefilled from Terminal — review and sign';
+    var hedgeSlug = p.get('hedge');
+    if (from === 'hedge' && hedgeSlug) banner = '🔗 Hedge Leg 1 of 2 — buy this side, then we\'ll open leg 2';
+    if (from === 'hedge' && !hedgeSlug) banner = '🔗 Hedge Leg 2 of 2 — complete your hedge';
+    hint.textContent = banner;
+    hint.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:8px 16px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;font-size:12px;z-index:1000;box-shadow:0 4px 16px rgba(0,230,138,0.3);animation:fadeOut 4s forwards';
+    var style = document.createElement('style');
+    style.textContent = '@keyframes fadeOut{0%,70%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-10px)}}';
+    document.head.appendChild(style);
+    document.body.appendChild(hint);
+    setTimeout(function() { hint.remove(); }, 4200);
+  } catch (e) { /* silent */ }
+}
+
 // Init
 loadMarket().then(function() {
   updateCurrentPriceBtn();
@@ -3266,6 +3456,8 @@ loadMarket().then(function() {
   setTimeout(fetchLivePrices, 1000);
   // Poll every 10 seconds
   _livePriceInterval = setInterval(fetchLivePrices, 10000);
+  // Alpha-terminal prefill runs after market is loaded + rendered
+  setTimeout(applyAlphaPrefill, 400);
 });
 updateTradingUI();
 // Run trading setup check on page load (non-blocking)
@@ -3281,6 +3473,7 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (cachedEoa && cachedEoa !== currentEoa) {
         console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
+        HFXWallet.invalidate();
         // Clear stale data — both key naming conventions
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
@@ -3434,7 +3627,7 @@ function renderComments() {
   }
 
   if (!sorted.length) {
-    list.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>';
+    list.innerHTML = '<div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>';
     return;
   }
 
@@ -3481,6 +3674,11 @@ async function loadMarketComments(slug) {
   } catch (e) { /* silent */ }
 }
 
+// Pending comment that survives the auth modal flow — set when an anonymous
+// user tries to post and we open the signup/login modal instead.
+var _pendingCommentBody = null;
+var _commentAuthMode = 'signup'; // 'signup' | 'login'
+
 async function postMarketComment() {
   var input = document.getElementById('commentInput');
   var body = (input.value || '').trim();
@@ -3489,10 +3687,16 @@ async function postMarketComment() {
 
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
   if (!token) {
-    alert('Sign in to comment');
+    // Stash the body and prompt for account creation instead of an alert
+    _pendingCommentBody = body;
+    openCommentAuthModal();
     return;
   }
 
+  await sendComment(body, token, input);
+}
+
+async function sendComment(body, token, input) {
   var slug = window.location.pathname.split('/market/')[1];
   if (!slug) return;
 
@@ -3506,13 +3710,142 @@ async function postMarketComment() {
       var newComment = await r.json();
       _marketComments.unshift(newComment);
       renderComments();
-      input.value = '';
+      if (input) input.value = '';
     } else {
       var err = await r.json().catch(function() { return {}; });
       alert(err.error || 'Could not post comment');
     }
   } catch (e) {
     alert('Error posting comment');
+  }
+}
+
+function openCommentAuthModal() {
+  _commentAuthMode = 'signup';
+  applyCommentAuthMode();
+  var modal = document.getElementById('commentAuthModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    var emailInput = document.getElementById('commentAuthEmail');
+    if (emailInput) setTimeout(function() { emailInput.focus(); }, 50);
+  }
+}
+
+function closeCommentAuthModal() {
+  var modal = document.getElementById('commentAuthModal');
+  if (modal) modal.style.display = 'none';
+  // Clear sensitive fields
+  var pw = document.getElementById('commentAuthPassword');
+  if (pw) pw.value = '';
+  var err = document.getElementById('commentAuthError');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+}
+
+function toggleCommentAuthMode() {
+  _commentAuthMode = (_commentAuthMode === 'signup') ? 'login' : 'signup';
+  applyCommentAuthMode();
+}
+
+function applyCommentAuthMode() {
+  var title = document.getElementById('commentAuthTitle');
+  var sub = document.getElementById('commentAuthSub');
+  var submit = document.getElementById('commentAuthSubmit');
+  var toggleText = document.getElementById('commentAuthToggleText');
+  var toggleLink = document.getElementById('commentAuthToggleLink');
+  if (_commentAuthMode === 'signup') {
+    if (title) title.textContent = '💬 Create account to comment';
+    if (sub) sub.textContent = 'Free, 30 seconds. Then your comment posts.';
+    if (submit) submit.textContent = 'Create account & post comment';
+    if (toggleText) toggleText.textContent = 'Already have an account?';
+    if (toggleLink) toggleLink.textContent = 'Sign in →';
+  } else {
+    if (title) title.textContent = '🔑 Sign in to comment';
+    if (sub) sub.textContent = 'Welcome back. Then your comment posts.';
+    if (submit) submit.textContent = 'Sign in & post comment';
+    if (toggleText) toggleText.textContent = 'New here?';
+    if (toggleLink) toggleLink.textContent = 'Create account →';
+  }
+}
+
+async function submitCommentAuth() {
+  var emailEl = document.getElementById('commentAuthEmail');
+  var pwEl = document.getElementById('commentAuthPassword');
+  var errEl = document.getElementById('commentAuthError');
+  var submitBtn = document.getElementById('commentAuthSubmit');
+  var email = (emailEl.value || '').trim().toLowerCase();
+  var password = pwEl.value || '';
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+
+  if (!email || email.indexOf('@') === -1) {
+    errEl.textContent = 'Enter a valid email';
+    errEl.style.display = '';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters';
+    errEl.style.display = '';
+    return;
+  }
+
+  var origText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = _commentAuthMode === 'signup' ? 'Creating account...' : 'Signing in...';
+
+  try {
+    if (_commentAuthMode === 'signup') {
+      // Create the account
+      var rReg = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: password, display_name: email.split('@')[0] })
+      });
+      if (!rReg.ok) {
+        var regErr = await rReg.json().catch(function() { return {}; });
+        // If the email is already taken, suggest sign-in instead
+        var msg = regErr.error || 'Could not create account';
+        if (/exists|duplicate|already/i.test(msg)) {
+          errEl.textContent = 'That email already exists — try signing in instead';
+        } else {
+          errEl.textContent = msg;
+        }
+        errEl.style.display = '';
+        return;
+      }
+    }
+    // Both signup and login flows now log in to get a token
+    var rLogin = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password })
+    });
+    if (!rLogin.ok) {
+      var loginErr = await rLogin.json().catch(function() { return {}; });
+      errEl.textContent = loginErr.error || 'Sign-in failed';
+      errEl.style.display = '';
+      return;
+    }
+    var loginData = await rLogin.json();
+    if (!loginData.token) {
+      errEl.textContent = 'No token returned';
+      errEl.style.display = '';
+      return;
+    }
+    localStorage.setItem('hf_token', loginData.token);
+
+    // Account created/signed in — close the modal and post the pending comment
+    closeCommentAuthModal();
+    if (_pendingCommentBody) {
+      var input = document.getElementById('commentInput');
+      await sendComment(_pendingCommentBody, loginData.token, input);
+      _pendingCommentBody = null;
+    }
+  } catch (e) {
+    errEl.textContent = e.message || 'Network error';
+    errEl.style.display = '';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = origText;
   }
 }
 
@@ -3524,6 +3857,326 @@ loadMarket = async function() {
   if (slug) loadMarketComments(slug);
   return result;
 };
+</script>
+
+<!-- Comment Signup / Login Modal -->
+<div id="commentAuthModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px">
+  <div style="width:100%;max-width:380px;background:#0c0c0b;border:1px solid #1a1917;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text)" id="commentAuthTitle">💬 Create account to comment</div>
+      <button onclick="closeCommentAuthModal()" style="background:none;border:none;color:var(--soft);font-size:20px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div style="padding:8px 20px 0;font-family:var(--sans);font-size:12px;color:var(--soft);line-height:1.4" id="commentAuthSub">Free, 30 seconds. Then your comment posts.</div>
+    <div style="padding:16px 20px 20px">
+      <input id="commentAuthEmail" type="email" placeholder="Email" autocomplete="email" style="width:100%;padding:11px 12px;border-radius:8px;border:1px solid #1a1917;background:#0a0a09;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none"/>
+      <input id="commentAuthPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password" style="width:100%;padding:11px 12px;border-radius:8px;border:1px solid #1a1917;background:#0a0a09;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:14px;outline:none"/>
+      <div id="commentAuthError" style="display:none;font-family:var(--sans);font-size:12px;color:#ff6b6b;margin-bottom:10px"></div>
+      <button id="commentAuthSubmit" onclick="submitCommentAuth()" style="width:100%;padding:12px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:44px">Create account &amp; post comment</button>
+      <div style="text-align:center;margin-top:12px;font-family:var(--sans);font-size:12px;color:var(--soft)">
+        <span id="commentAuthToggleText">Already have an account?</span>
+        <a href="#" onclick="event.preventDefault();toggleCommentAuthMode()" id="commentAuthToggleLink" style="color:var(--gold);text-decoration:none;margin-left:4px">Sign in &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Price Alert Modal -->
+<div id="alertModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px">
+  <div style="width:100%;max-width:400px;background:#0c0c0b;border:1px solid #1a1917;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text)">🔔 Set Price Alert</div>
+      <button onclick="closeAlertModal()" style="background:none;border:none;color:var(--soft);font-size:20px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div id="alertModalQuestion" style="padding:8px 20px 0;font-family:var(--sans);font-size:12px;color:var(--soft);line-height:1.4;max-height:40px;overflow:hidden;text-overflow:ellipsis"></div>
+    <div style="padding:16px 20px 20px">
+      <!-- Side toggle -->
+      <div style="margin-bottom:14px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Side</div>
+        <div style="display:flex;gap:8px">
+          <button id="alertSideYes" onclick="setAlertSide('yes')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #00e68a;background:rgba(0,230,138,0.1);color:#00e68a;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">YES</button>
+          <button id="alertSideNo" onclick="setAlertSide('no')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #1a1917;background:transparent;color:var(--soft);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">NO</button>
+        </div>
+      </div>
+      <!-- Direction -->
+      <div style="margin-bottom:14px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Alert when price goes</div>
+        <div style="display:flex;gap:8px">
+          <button id="alertDirBelow" onclick="setAlertDir('below')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #f59e0b;background:rgba(245,158,11,0.1);color:#f59e0b;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">📉 Below</button>
+          <button id="alertDirAbove" onclick="setAlertDir('above')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #1a1917;background:transparent;color:var(--soft);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">📈 Above</button>
+        </div>
+      </div>
+      <!-- Threshold -->
+      <div style="margin-bottom:16px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Price threshold</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input id="alertThreshold" type="range" min="1" max="99" value="50" oninput="updateAlertPreview()" style="flex:1;accent-color:#f59e0b;height:6px">
+          <div id="alertThresholdDisplay" style="font-family:var(--sans);font-size:20px;font-weight:800;color:var(--text);min-width:50px;text-align:right">50¢</div>
+        </div>
+        <div id="alertCurrentPrice" style="font-family:var(--sans);font-size:11px;color:var(--soft);margin-top:4px"></div>
+      </div>
+      <!-- Preview -->
+      <div id="alertPreview" style="padding:12px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);margin-bottom:16px;font-family:var(--sans);font-size:12px;color:#f59e0b;line-height:1.5;text-align:center"></div>
+      <!-- Submit -->
+      <button id="alertSubmitBtn" onclick="submitAlert()" style="width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0c0c0b;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:48px;transition:all .15s" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
+        🔔 Create Alert
+      </button>
+      <!-- Existing alerts for this market -->
+      <div id="alertExistingList" style="margin-top:16px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Price Alerts ──
+var _alertSide = 'yes';
+var _alertDir = 'below';
+
+function openAlertModal() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) {
+    alert('Sign in to set price alerts');
+    return;
+  }
+  var modal = document.getElementById('alertModal');
+  modal.style.display = 'flex';
+  document.getElementById('alertModalQuestion').textContent = _market ? (_market._displayTitle || _market.question || '') : '';
+
+  // Set current price display
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = Math.round(parseFloat(prices[0]) * 100);
+  document.getElementById('alertCurrentPrice').textContent = 'Current YES price: ' + cp + '\u00a2';
+
+  // Default threshold: 5 below current for 'below', 5 above for 'above'
+  var defaultVal = _alertDir === 'below' ? Math.max(1, cp - 5) : Math.min(99, cp + 5);
+  document.getElementById('alertThreshold').value = defaultVal;
+
+  setAlertSide('yes');
+  setAlertDir('below');
+  updateAlertPreview();
+  loadMarketAlerts();
+}
+
+function closeAlertModal() {
+  document.getElementById('alertModal').style.display = 'none';
+}
+
+// Close on backdrop click
+document.getElementById('alertModal').addEventListener('click', function(e) {
+  if (e.target === this) closeAlertModal();
+});
+
+function setAlertSide(side) {
+  _alertSide = side;
+  var yesBtn = document.getElementById('alertSideYes');
+  var noBtn = document.getElementById('alertSideNo');
+  if (side === 'yes') {
+    yesBtn.style.border = '2px solid #00e68a';
+    yesBtn.style.background = 'rgba(0,230,138,0.1)';
+    yesBtn.style.color = '#00e68a';
+    noBtn.style.border = '2px solid #1a1917';
+    noBtn.style.background = 'transparent';
+    noBtn.style.color = 'var(--soft)';
+  } else {
+    noBtn.style.border = '2px solid #ff6b6b';
+    noBtn.style.background = 'rgba(255,107,107,0.1)';
+    noBtn.style.color = '#ff6b6b';
+    yesBtn.style.border = '2px solid #1a1917';
+    yesBtn.style.background = 'transparent';
+    yesBtn.style.color = 'var(--soft)';
+  }
+  updateAlertPreview();
+}
+
+function setAlertDir(dir) {
+  _alertDir = dir;
+  var belowBtn = document.getElementById('alertDirBelow');
+  var aboveBtn = document.getElementById('alertDirAbove');
+  if (dir === 'below') {
+    belowBtn.style.border = '2px solid #f59e0b';
+    belowBtn.style.background = 'rgba(245,158,11,0.1)';
+    belowBtn.style.color = '#f59e0b';
+    aboveBtn.style.border = '2px solid #1a1917';
+    aboveBtn.style.background = 'transparent';
+    aboveBtn.style.color = 'var(--soft)';
+  } else {
+    aboveBtn.style.border = '2px solid #f59e0b';
+    aboveBtn.style.background = 'rgba(245,158,11,0.1)';
+    aboveBtn.style.color = '#f59e0b';
+    belowBtn.style.border = '2px solid #1a1917';
+    belowBtn.style.background = 'transparent';
+    belowBtn.style.color = 'var(--soft)';
+  }
+  // Adjust default threshold based on direction
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = _alertSide === 'no' ? Math.round((1 - parseFloat(prices[0])) * 100) : Math.round(parseFloat(prices[0]) * 100);
+  var slider = document.getElementById('alertThreshold');
+  if (dir === 'below') {
+    slider.value = Math.max(1, cp - 5);
+  } else {
+    slider.value = Math.min(99, cp + 5);
+  }
+  updateAlertPreview();
+}
+
+function updateAlertPreview() {
+  var val = document.getElementById('alertThreshold').value;
+  document.getElementById('alertThresholdDisplay').textContent = val + '\u00a2';
+  var sideLabel = _alertSide.toUpperCase();
+  var dirLabel = _alertDir === 'below' ? 'drops to or below' : 'rises to or above';
+  var emoji = _alertDir === 'below' ? '📉' : '📈';
+  document.getElementById('alertPreview').innerHTML = emoji + ' Alert when <b>' + sideLabel + '</b> ' + dirLabel + ' <b>' + val + '\u00a2</b>';
+
+  // Update current price for selected side
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = _alertSide === 'no' ? Math.round((1 - parseFloat(prices[0])) * 100) : Math.round(parseFloat(prices[0]) * 100);
+  document.getElementById('alertCurrentPrice').textContent = 'Current ' + sideLabel + ' price: ' + cp + '\u00a2';
+}
+
+function submitAlert() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  var threshold = parseInt(document.getElementById('alertThreshold').value) / 100;
+  var conditionId = _market.conditionId || _market.market_id || '';
+  var slug = '';
+  try { slug = window.location.pathname.split('/market/')[1] || ''; } catch(e) {}
+
+  var btn = document.getElementById('alertSubmitBtn');
+  btn.textContent = 'Creating...';
+  btn.disabled = true;
+
+  fetch('/api/price-alerts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({
+      condition_id: conditionId,
+      slug: slug,
+      question: _market._displayTitle || _market.question || '',
+      direction: _alertDir,
+      threshold: threshold,
+      side: _alertSide
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.textContent = '🔔 Create Alert';
+    btn.disabled = false;
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+    // Show success
+    btn.textContent = '✓ Alert Created!';
+    btn.style.background = 'linear-gradient(135deg,#00e68a,#00b36b)';
+    setTimeout(function() {
+      btn.textContent = '🔔 Create Alert';
+      btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
+    }, 2000);
+    loadMarketAlerts();
+    updateAlertBell();
+  })
+  .catch(function() {
+    btn.textContent = '🔔 Create Alert';
+    btn.disabled = false;
+  });
+}
+
+function loadMarketAlerts() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token || !_market) return;
+  var conditionId = _market.conditionId || _market.market_id || '';
+  fetch('/api/price-alerts/market/' + encodeURIComponent(conditionId), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var list = document.getElementById('alertExistingList');
+    if (!data.alerts || !data.alerts.length) {
+      list.innerHTML = '';
+      return;
+    }
+    var activeAlerts = data.alerts.filter(function(a) { return !a.triggered; });
+    var triggeredAlerts = data.alerts.filter(function(a) { return a.triggered; });
+
+    var html = '';
+    if (activeAlerts.length) {
+      html += '<div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Active Alerts</div>';
+      activeAlerts.forEach(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        var priceCents = Math.round(parseFloat(a.threshold) * 100);
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.12);border-radius:6px;margin-bottom:6px">' +
+          '<span style="font-family:var(--sans);font-size:12px;color:var(--text)">' + emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + priceCents + '\u00a2</span>' +
+          '<button onclick="deleteAlert(\'' + a.id + '\')" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:4px 8px" title="Delete">\u2715</button>' +
+        '</div>';
+      });
+    }
+    if (triggeredAlerts.length) {
+      html += '<div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-top:10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Triggered</div>';
+      triggeredAlerts.slice(0, 3).forEach(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        var priceCents = Math.round(parseFloat(a.threshold) * 100);
+        var triggeredCents = a.triggered_price ? Math.round(parseFloat(a.triggered_price) * 100) + '\u00a2' : '';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid #1a1917;border-radius:6px;margin-bottom:6px;opacity:0.6">' +
+          '<span style="font-family:var(--sans);font-size:12px;color:var(--soft)">' + emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + priceCents + '\u00a2' + (triggeredCents ? ' \u2192 hit ' + triggeredCents : '') + '</span>' +
+          '<button onclick="deleteAlert(\'' + a.id + '\')" style="background:none;border:none;color:var(--soft);cursor:pointer;font-size:12px;padding:4px 8px" title="Remove">\u2715</button>' +
+        '</div>';
+      });
+    }
+    list.innerHTML = html;
+  })
+  .catch(function() {});
+}
+
+function deleteAlert(id) {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  fetch('/api/price-alerts/' + id, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function() {
+    loadMarketAlerts();
+    updateAlertBell();
+  })
+  .catch(function() {});
+}
+
+function updateAlertBell() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  var bellBtn = document.getElementById('alertBellBtn');
+  var badge = document.getElementById('activeAlertsBadge');
+  if (!token || !_market) {
+    if (bellBtn) bellBtn.style.display = 'none';
+    return;
+  }
+  if (bellBtn) bellBtn.style.display = 'inline-flex';
+
+  var conditionId = _market.conditionId || _market.market_id || '';
+  fetch('/api/price-alerts/market/' + encodeURIComponent(conditionId), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var active = (data.alerts || []).filter(function(a) { return !a.triggered; });
+    if (active.length) {
+      document.getElementById('alertBellLabel').textContent = active.length + ' Alert' + (active.length > 1 ? 's' : '');
+      bellBtn.style.borderColor = '#f59e0b';
+      bellBtn.style.background = 'rgba(245,158,11,0.08)';
+      badge.style.display = 'inline-block';
+      // Show summary
+      var summaries = active.map(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        return emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + Math.round(parseFloat(a.threshold) * 100) + '\u00a2';
+      });
+      badge.textContent = summaries.join(' \u00b7 ');
+    } else {
+      document.getElementById('alertBellLabel').textContent = 'Set Alert';
+      bellBtn.style.borderColor = 'var(--border)';
+      bellBtn.style.background = 'rgba(255,255,255,0.03)';
+      badge.style.display = 'none';
+    }
+  })
+  .catch(function() {});
+}
 </script>
 </body>
 </html>

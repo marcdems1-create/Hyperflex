@@ -19391,17 +19391,28 @@ app.get('/api/whale-index', async (req, res) => {
       const consensusCapital = Math.round(maxCap);
       const oppositionCapital = Math.round(totalCapital - maxCap);
 
-      // Enrich with slug from screener cache for proper market links
+      // Enrich with slug + LIVE market price from screener cache
+      // (whale-derived avgPrice is stale; screener cache is 90s TTL CLOB midpoint)
       let pickSlug = '';
       let pickUrl = data.url;
+      let livePrice = null;
       if (_screenerCache && _screenerCache.data) {
         const mktLower = market.toLowerCase().trim();
         const scMatch = _screenerCache.data.find(s => (s.question || '').toLowerCase().trim() === mktLower);
         if (scMatch) {
           if (scMatch.slug) pickSlug = scMatch.slug;
           if (scMatch.url && scMatch.url !== 'https://polymarket.com') pickUrl = scMatch.url;
+          if (scMatch.yes_price != null && scMatch.yes_price > 0 && scMatch.yes_price < 1) {
+            livePrice = scMatch.yes_price;
+          }
         }
       }
+      // Prefer live screener price; fall back to whale-derived avg
+      const finalPrice = livePrice != null ? livePrice : avgPrice;
+      // Entry price for the consensus side (what you'd pay to take that side)
+      const sideEntry = consensusSide === 'YES'
+        ? finalPrice
+        : parseFloat((1 - finalPrice).toFixed(4));
 
       picks.push({
         market,
@@ -19409,8 +19420,9 @@ app.get('/api/whale-index', async (req, res) => {
         total_capital: Math.round(totalCapital),
         consensus_side: consensusSide,
         consensus_pct: consensusPct,
-        current_price: avgPrice,
-        yes_price: avgPrice,
+        current_price: finalPrice,
+        yes_price: finalPrice, // live YES price, not whale-derived
+        side_entry: sideEntry, // what you'd pay for the consensus side
         url: pickUrl,
         slug: pickSlug,
         strength,
@@ -25371,39 +25383,44 @@ app.get('/api/signals', async (req, res) => {
           if (whaleCount >= 3) {
             const consensus = m.consensus_pct || m.consensus || 0;
             const consensusSide = m.consensus_side || (consensus > 50 ? 'YES' : 'NO');
-            // Cross-reference screener cache for end_date and yes_pct
+            // Cross-reference screener cache for end_date, live yes_price, and slug
             let endDate = null;
-            let yesPct = consensus;
+            let livePrice = null; // real market YES price (0-1), from screener cache
+            let pickSlug = null;
             if (_screenerCache && _screenerCache.data) {
-              const mktQ = (m.market || m.question || '').toLowerCase();
-              const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase() === mktQ);
+              const mktQ = (m.market || m.question || '').toLowerCase().trim();
+              const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase().trim() === mktQ);
               if (match) {
                 endDate = match.end_date || null;
-                if (match.yes_price != null) yesPct = Math.round(match.yes_price * 100);
+                if (match.yes_price != null && match.yes_price > 0 && match.yes_price < 1) {
+                  livePrice = match.yes_price;
+                }
+                if (match.slug) pickSlug = match.slug;
               }
             }
+            // Skip if we can't find a live market price — the signal is stale/closed
+            if (livePrice == null) continue;
+            const yesPct = Math.round(livePrice * 100);
             // Skip resolved markets (price at 0% or 100%)
             if (yesPct >= 99 || yesPct <= 1) continue;
             // Skip expired/closed markets
             if (endDate && new Date(endDate) < new Date()) continue;
-            // Skip markets not found in screener (likely closed/delisted)
-            if (_screenerCache && _screenerCache.data && _screenerCache.data.length > 10) {
-              const mktQ2 = (m.market || m.question || '').toLowerCase();
-              const inScreener = _screenerCache.data.some(sm => (sm.question || '').toLowerCase() === mktQ2);
-              if (!inScreener) continue; // not in active markets = closed
-            }
+            // Entry price for the consensus side: YES price if YES, (1 - YES) if NO
+            const sidePrice = consensusSide === 'YES' ? livePrice : parseFloat((1 - livePrice).toFixed(4));
             signals.push({
               type: 'whale_cluster',
               badge: 'Whale Cluster',
               market: m.market || m.question || 'Unknown',
-              action: `BUY ${consensusSide} at ${consensus}%`,
+              action: `BUY ${consensusSide} at ${Math.round(sidePrice * 100)}\u00A2`,
               side: consensusSide,
-              price: consensus / 100,
+              price: sidePrice, // <-- actual market price for the consensus side, not whale consensus %
               confidence: whaleCount >= 10 ? 'HIGH' : whaleCount >= 7 ? 'MEDIUM' : 'LOW',
               whale_count: whaleCount,
               capital: m.total_capital || m.capital || 0,
               yes_pct: yesPct,
+              consensus_pct: consensus, // keep whale consensus separately for display
               end_date: endDate,
+              slug: pickSlug,
               detected_at: now,
               url: m.url || 'https://polymarket.com'
             });
