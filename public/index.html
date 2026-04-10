@@ -1191,6 +1191,83 @@ function logTradeIntent() {
   </div>
 </div>
 
+<!-- TERMINAL SHOWCASE -->
+<section class="product-section" style="padding-top:60px;padding-bottom:20px">
+
+  <!-- Alpha Terminal -->
+  <div class="product-block">
+    <div class="product-copy">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
+      <h3>Alpha Terminal</h3>
+      <p>Real-time edge scores powered by whale flow, orderbook depth, momentum, and time-decay signals. Every market ranked by actionable alpha — not vanity stats.</p>
+      <a href="/alpha-live" class="btn-primary">Open Alpha Terminal &rarr;</a>
+    </div>
+    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
+      <div style="width:100%;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px">ALPHA TERMINAL</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
+        </div>
+        <div class="tv-row" id="tv-alpha-1">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div class="tv-row" id="tv-alpha-2">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div class="tv-row" id="tv-alpha-3">
+          <div class="tv-q">Loading...</div>
+          <div class="tv-score">--</div>
+        </div>
+        <div style="text-align:center;padding-top:12px">
+          <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">View all edges &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Terminal -->
+  <div class="product-block reverse">
+    <div class="product-copy">
+      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
+      <h3>Data Terminal</h3>
+      <p>Whale capital flow, sentiment trends, market movers, Fear &amp; Greed, and category breakdowns — the Bloomberg terminal for prediction markets.</p>
+      <a href="/data" class="btn-primary">Open Data Terminal &rarr;</a>
+    </div>
+    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
+      <div style="width:100%;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-purple);letter-spacing:1px">DATA TERMINAL</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="tv-stat">
+            <div class="tv-stat-label">Whale Capital</div>
+            <div class="tv-stat-val" id="tv-data-cap">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Markets Tracked</div>
+            <div class="tv-stat-val" id="tv-data-mkts">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Fear &amp; Greed</div>
+            <div class="tv-stat-val" id="tv-data-fg">--</div>
+          </div>
+          <div class="tv-stat">
+            <div class="tv-stat-label">Volatility</div>
+            <div class="tv-stat-val" id="tv-data-vol">--</div>
+          </div>
+        </div>
+        <div style="text-align:center;padding-top:4px">
+          <a href="/data" style="font-family:var(--mono);font-size:10px;color:var(--accent-purple);text-decoration:none">Open full terminal &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
 <!-- LIVE DATA CARDS -->
 <section class="live-cards">
   <div class="live-cards-header">
@@ -1232,83 +1309,6 @@ function logTradeIntent() {
     </form>
     <div class="email-note" id="sub-note">Free during beta</div>
   </div>
-</section>
-
-<!-- TERMINAL SHOWCASE -->
-<section class="product-section">
-
-  <!-- Alpha Terminal -->
-  <div class="product-block">
-    <div class="product-copy">
-      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
-      <h3>Alpha Terminal</h3>
-      <p>Real-time edge scores powered by whale flow, orderbook depth, momentum, and time-decay signals. Every market ranked by actionable alpha — not vanity stats.</p>
-      <a href="/alpha-live" class="btn-primary">Open Alpha Terminal &rarr;</a>
-    </div>
-    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
-      <div style="width:100%;padding:20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px">ALPHA TERMINAL</span>
-          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
-        </div>
-        <div class="tv-row" id="tv-alpha-1">
-          <div class="tv-q">Loading...</div>
-          <div class="tv-score">--</div>
-        </div>
-        <div class="tv-row" id="tv-alpha-2">
-          <div class="tv-q">Loading...</div>
-          <div class="tv-score">--</div>
-        </div>
-        <div class="tv-row" id="tv-alpha-3">
-          <div class="tv-q">Loading...</div>
-          <div class="tv-score">--</div>
-        </div>
-        <div style="text-align:center;padding-top:12px">
-          <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">View all edges &rarr;</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Data Terminal -->
-  <div class="product-block reverse">
-    <div class="product-copy">
-      <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">&#9679; Live</div>
-      <h3>Data Terminal</h3>
-      <p>Whale capital flow, sentiment trends, market movers, Fear & Greed, and category breakdowns — the Bloomberg terminal for prediction markets.</p>
-      <a href="/data" class="btn-primary">Open Data Terminal &rarr;</a>
-    </div>
-    <div class="product-visual" style="padding:0;overflow:hidden;background:var(--ink)">
-      <div style="width:100%;padding:20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-purple);letter-spacing:1px">DATA TERMINAL</span>
-          <span style="font-family:var(--mono);font-size:9px;color:var(--green)">&#9679; LIVE</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-          <div class="tv-stat">
-            <div class="tv-stat-label">Whale Capital</div>
-            <div class="tv-stat-val" id="tv-data-cap">--</div>
-          </div>
-          <div class="tv-stat">
-            <div class="tv-stat-label">Markets Tracked</div>
-            <div class="tv-stat-val" id="tv-data-mkts">--</div>
-          </div>
-          <div class="tv-stat">
-            <div class="tv-stat-label">Fear & Greed</div>
-            <div class="tv-stat-val" id="tv-data-fg">--</div>
-          </div>
-          <div class="tv-stat">
-            <div class="tv-stat-label">Volatility</div>
-            <div class="tv-stat-val" id="tv-data-vol">--</div>
-          </div>
-        </div>
-        <div style="text-align:center;padding-top:4px">
-          <a href="/data" style="font-family:var(--mono);font-size:10px;color:var(--accent-purple);text-decoration:none">Open full terminal &rarr;</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
 </section>
 
 <!-- PRODUCT SECTIONS -->
