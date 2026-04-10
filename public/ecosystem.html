@@ -412,11 +412,10 @@ function renderTrending(markets) {
   var grid = document.getElementById('trendingGrid');
   if (!markets.length) { grid.innerHTML = '<div class="eco-empty">No trending markets right now</div>'; return; }
   grid.innerHTML = markets.slice(0, 5).map(function(m, i) {
-    var url = 'https://polymarket.com/event/' + (m.slug || m.condition_id || '');
-    if (typeof polyRef === 'function') url = polyRef(url);
+    var url = m.slug ? '/market/' + m.slug : '/screener';
     var yPct = m.yes_price != null ? Math.round(m.yes_price * 100) : '--';
     var nPct = m.yes_price != null ? Math.round((1 - m.yes_price) * 100) : '--';
-    return '<div class="trend-card">' +
+    return '<a href="' + url + '" style="text-decoration:none;color:inherit;display:block" class="trend-card">' +
       '<div class="trend-top"><span class="trend-rank">' + (i + 1) + '</span>' +
       '<div><div class="trend-q">' + esc(m.question || m.title || 'Untitled') + '</div></div></div>' +
       '<div class="trend-meta">' +
@@ -428,8 +427,8 @@ function renderTrending(markets) {
         '<div class="trend-yes">YES ' + yPct + '%</div>' +
         '<div class="trend-no">NO ' + nPct + '%</div>' +
       '</div>' +
-      '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="trend-link">Trade on Polymarket &rarr;</a>' +
-    '</div>';
+      '<span class="trend-link" style="color:var(--gold);font-family:var(--mono);font-size:11px;font-weight:700">Trade &rarr;</span>' +
+    '</a>';
   }).join('');
 }
 
@@ -493,8 +492,7 @@ function renderRewards() {
   var items = _rewardsCat === 'all' ? _rewardsData : _rewardsData.filter(function(r){ return r.category === _rewardsCat; });
   if (!items.length) { grid.innerHTML = '<div class="eco-empty">No LP rewards found' + (_rewardsCat !== 'all' ? ' for this category' : '') + '</div>'; return; }
   grid.innerHTML = items.map(function(r) {
-    var url = 'https://polymarket.com/event/' + (r.slug || r.condition_id || '');
-    if (typeof polyRef === 'function') url = polyRef(url);
+    var url = r.slug ? '/market/' + r.slug : '/screener';
     var endStr = r.end_date ? new Date(r.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '--';
     return '<div class="reward-card">' +
       '<div class="reward-q">' + esc(r.question || r.title || 'Untitled Market') + '</div>' +
@@ -506,7 +504,7 @@ function renderRewards() {
       '<div class="reward-detail"><span>Max Spread</span><span class="val">' + (r.max_spread != null ? (r.max_spread * 100).toFixed(1) + '%' : '--') + '</span></div>' +
       '<div class="reward-detail"><span>End Date</span><span class="val">' + endStr + '</span></div>' +
       (r.category ? '<div class="reward-detail"><span>Category</span><span class="val">' + esc(r.category) + '</span></div>' : '') +
-      '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="reward-cta">Trade on Polymarket &rarr;</a>' +
+      '<a href="' + esc(url) + '" class="reward-cta">Trade &rarr;</a>' +
     '</div>';
   }).join('');
 }

@@ -1990,9 +1990,10 @@ function activityCard(a) {
     const pm = platformMeta[platform] || platformMeta.polymarket;
     const yesPct = a.yes_pct;
     const noPct = yesPct != null ? 100 - yesPct : null;
-    const dest = a.url || '/odds';
+    const _rawDest = a.url || '/odds';
+    const dest = (platform !== 'kalshi' && typeof hfxMarketUrl === 'function' && _rawDest.includes('polymarket.com')) ? hfxMarketUrl(_rawDest) : _rawDest;
     const fmtDate = a.end_date ? new Date(a.end_date).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
-    return `<div class="activity-card" style="cursor:pointer;border-left:3px solid ${pm.color}" onclick="window.open('${dest}','_blank')">
+    return `<div class="activity-card" style="cursor:pointer;border-left:3px solid ${pm.color}" onclick="${dest.startsWith('/') ? `window.location.href='${dest}'` : `window.open('${dest}','_blank')`}">
       <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center">📈</div>
       <div class="ac-body">
         <div class="ac-header">

@@ -326,9 +326,8 @@ function renderSignals() {
     var typeEmojis = {whale_cluster:'\uD83D\uDC33',momentum:'\u26A1',new_entry:'\u2728',arbitrage:'\uD83D\uDD04',volume_surge:'\uD83D\uDCC8'};
     var plain = translateSide(s.market, s.side);
     var flag = regionFlag(s.market);
-    var url = s.url && s.url.startsWith('https://polymarket.com') ? (typeof polyRef==='function'?polyRef(s.url):s.url) : (typeof polyRef==='function'?polyRef('https://polymarket.com'):'https://polymarket.com');
-    var internalUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '#';
-    if (internalUrl === '#') internalUrl = '/signals'; // fallback to signals page if no slug
+    // Route to internal /market/:slug — never link directly to polymarket.com
+    var internalUrl = s.slug ? '/market/' + s.slug : (typeof hfxMarketUrl === 'function' && s.url ? hfxMarketUrl(s.url) : '/signals');
 
     // Gradient top border color per type
     var gradientMap = {whale_cluster:'linear-gradient(90deg,var(--accent-purple),var(--accent-blue))',momentum:'linear-gradient(90deg,var(--accent-blue),var(--accent-green))',arbitrage:'linear-gradient(90deg,var(--accent-amber),var(--accent-red))',volume_surge:'linear-gradient(90deg,var(--accent-red),var(--accent-amber))',new_entry:'linear-gradient(90deg,var(--gold),var(--accent-amber))'};

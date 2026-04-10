@@ -5126,7 +5126,7 @@ body.nav-open .sidebar-backdrop {
             <div id="portfolioMain">
             <!-- No real positions message -->
             <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6">
-              <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. Visit <a href="https://polymarket.com" target="_blank" style="color:#a78bfa" onmouseover="if(typeof polyRef==='function')this.href=polyRef('https://polymarket.com')">polymarket.com</a> to open new positions.
+              <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. <a href="/screener" style="color:#a78bfa">Browse markets to trade →</a>
             </div>
             <!-- Two-card Polymarket-style portfolio summary -->
             <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
@@ -5305,7 +5305,7 @@ body.nav-open .sidebar-backdrop {
 
                 <!-- Manual paste (fallback) -->
                 <input type="text" id="poly-wallet-input" placeholder="0x... your Polymarket deposit address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Your Polymarket deposit address is different from your MetaMask address. Find it at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa" onmouseover="if(typeof polyRef==='function')this.href=polyRef('https://polymarket.com')">polymarket.com</a> → Profile → Deposit Address.</div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Your Polymarket deposit address is different from your MetaMask address. Find it at <a href="javascript:void(0)" onclick="window.open(polyRef('https://polymarket.com/portfolio'),'_blank')" style="color:#a78bfa;cursor:pointer">polymarket.com</a> → Profile → Deposit Address.</div>
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:10px 14px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);border-radius:10px">
                   <span style="font-size:16px">🎁</span>
                   <span style="font-family:var(--mono);font-size:11px;color:var(--gold)">Add your email → get <strong>30 days Premium free</strong></span>
@@ -14265,7 +14265,7 @@ async function loadPolymarketPositions(forceRefresh) {
       el.innerHTML = `<div style="padding:20px;text-align:center">
         <div style="font-size:13px;color:var(--muted);margin-bottom:12px">No open positions found for this wallet.</div>
         <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Connected: <span style="font-family:var(--mono);color:#a78bfa">${_polyWalletAddress.slice(0,8)}…${_polyWalletAddress.slice(-6)}</span></div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:12px">Wrong wallet? Your Polymarket deposit address is different from your MetaMask wallet. Find it on <a href="'+(typeof polyRef==='function'?polyRef('https://polymarket.com'):'https://polymarket.com')+'" target="_blank" style="color:#a78bfa">polymarket.com</a> → Profile → Deposit Address.</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:12px">Wrong wallet? Your Polymarket deposit address is different from your MetaMask wallet. Find it on <a href="javascript:void(0)" onclick="window.open(polyRef(\'https://polymarket.com/portfolio\'),\'_blank\')" style="color:#a78bfa;cursor:pointer">polymarket.com</a> → Profile → Deposit Address.</div>
         <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:12px;color:var(--dim);cursor:pointer;font-family:var(--mono)">Disconnect &amp; try a different address</button>
       </div>`;
       return;
@@ -17183,7 +17183,7 @@ async function connectBrowserWallet() {
             '<div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Connect Polymarket</div>' +
             '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px">' +
               'Your MetaMask address differs from your Polymarket deposit address.<br>' +
-              'Find it at <a href="'+(typeof polyRef==='function'?polyRef('https://polymarket.com/portfolio'):'https://polymarket.com/portfolio')+'" target="_blank" style="color:var(--gold)">polymarket.com/portfolio</a> → click your address at top right → copy.' +
+              'Find it at <a href="javascript:void(0)" onclick="window.open(polyRef(\'https://polymarket.com/portfolio\'),\'_blank\')" style="color:var(--gold);cursor:pointer">polymarket.com/portfolio</a> → click your address at top right → copy.' +
             '</div>' +
             '<div style="display:flex;gap:8px;max-width:400px;margin:0 auto">' +
               '<input id="proxyAddrInput" type="text" placeholder="0x..." style="flex:1;padding:12px;background:#0f0e0c;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px">' +
@@ -17252,7 +17252,7 @@ function showInlinePolyConnect() {
       '<div style="font-family:var(--sans);font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px">Connect Polymarket</div>' +
       '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px">' +
         'Enter your Polymarket deposit address to sync positions and P&L.<br>' +
-        'Find it on <a href="'+(typeof polyRef==='function'?polyRef('https://polymarket.com/portfolio'):'https://polymarket.com/portfolio')+'" target="_blank" style="color:var(--gold)">polymarket.com/portfolio</a> → click your address at top right.' +
+        'Find it on <a href="javascript:void(0)" onclick="window.open(polyRef(\'https://polymarket.com/portfolio\'),\'_blank\')" style="color:var(--gold);cursor:pointer">polymarket.com/portfolio</a> → click your address at top right.' +
       '</div>' +
       '<div style="display:flex;gap:8px;max-width:420px;margin:0 auto">' +
         '<input id="proxyAddrInput" type="text" placeholder="0x..." style="flex:1;padding:12px 14px;background:#0f0e0c;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px" onkeydown="if(event.key===\'Enter\')saveProxyAddr()">' +
@@ -17593,8 +17593,7 @@ function openTradeModal(posDataJson, mode, options) {
   // Only block if explicitly resolved (classifyPosition), NOT just high price
   if (pos._isResolved) {
     showToast('This market has resolved. Claim your winnings on Polymarket.', 'info');
-    const claimUrl = typeof polyRef === 'function' ? polyRef('https://polymarket.com/portfolio') : 'https://polymarket.com/portfolio';
-    window.open(claimUrl, '_blank');
+    window.open(polyRef('https://polymarket.com/portfolio'), '_blank');
     return;
   }
 
