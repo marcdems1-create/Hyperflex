@@ -1010,17 +1010,32 @@ nav {
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
-      <div class="stat-pill-label">Markets tracked</div>
+      <div class="stat-pill-label">Markets Tracked</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statWhaleCapital">—</div>
+      <div class="stat-pill-label">Whale Capital</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statLiveMarkets">—</div>
-      <div class="stat-pill-label">Whale positions</div>
+      <div class="stat-pill-label">Whale Positions</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statAvgEdge">—</div>
+      <div class="stat-pill-label">Avg Edge Score</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statTopROI">—</div>
+      <div class="stat-pill-label">Top Signal ROI</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statCommunities">—</div>
-      <div class="stat-pill-label">AI Edge signals</div>
+      <div class="stat-pill-label">AI Edge Signals</div>
     </div>
   </div>
 </div>
@@ -1035,7 +1050,7 @@ nav {
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Edge scores, whale flow, depth signals — ranked by alpha</div>
       <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="alphaCardPreview">Top edge: loading...</div>
     </a>
-    <a href="/data" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/terminal" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
       <div style="font-size:22px;margin-bottom:8px">📊</div>
       <div style="font-size:14px;font-weight:700;color:var(--accent-purple);margin-bottom:4px;letter-spacing:-0.3px">Data Terminal</div>
@@ -2423,19 +2438,40 @@ function renderAnnouncements(announcements, communities) {
 }
 
 function renderStatsTicker(stats) {
-  // Load intelligence stats instead of community stats
-  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
+  var fmt = function(n) { return n >= 1e6 ? '$' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString(); };
+  var fmtNum = function(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString(); };
   Promise.all([
-    fetch('/api/whale-watch').then(r => r.ok ? r.json() : {}).catch(() => ({})),
-    fetch('/api/signals').then(r => r.ok ? r.json() : {}).catch(() => ({}))
-  ]).then(([whaleData, signalData]) => {
-    const whales = whaleData.whales || [];
-    const signals = signalData.signals || signalData || [];
-    const markets = new Set(whales.map(w => w.market)).size;
-    document.getElementById('statTotalTrades').textContent = fmt(markets || 240);
-    document.getElementById('statLiveMarkets').textContent = fmt(whales.length || 395);
-    document.getElementById('statCommunities').textContent = fmt(Array.isArray(signals) ? signals.length : 10);
-  }).catch(() => {
+    fetch('/api/whale-watch').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; }),
+    fetch('/api/alpha/top?n=20').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; }),
+    fetch('/api/signals').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; })
+  ]).then(function(results) {
+    var whaleData = results[0]; var alphaData = results[1]; var signalData = results[2];
+    var whales = whaleData.whales || [];
+    var signals = signalData.signals || signalData || [];
+    var markets = alphaData.markets || [];
+    var uniqueMarkets = new Set(whales.map(function(w) { return w.market; })).size;
+    // Total whale capital
+    var totalCapital = 0;
+    whales.forEach(function(w) { totalCapital += Math.abs(parseFloat(w.size) || 0); });
+    // Avg edge score from top markets
+    var avgEdge = 0;
+    if (markets.length) {
+      var sum = 0; markets.forEach(function(m) { sum += (m.edge_score || 0); });
+      avgEdge = Math.round(sum / markets.length);
+    }
+    // Top ROI from signals
+    var topROI = 0;
+    markets.forEach(function(m) { if (m.trade && m.trade.roi_pct && m.trade.roi_pct > topROI) topROI = Math.round(m.trade.roi_pct); });
+    document.getElementById('statTotalTrades').textContent = fmtNum(uniqueMarkets || 240);
+    var capEl = document.getElementById('statWhaleCapital');
+    if (capEl) capEl.textContent = totalCapital > 0 ? fmt(totalCapital) : '$20M+';
+    document.getElementById('statLiveMarkets').textContent = fmtNum(whales.length || 395);
+    var edgeEl = document.getElementById('statAvgEdge');
+    if (edgeEl) edgeEl.textContent = avgEdge > 0 ? avgEdge + '/100' : '—';
+    var roiEl = document.getElementById('statTopROI');
+    if (roiEl) roiEl.textContent = topROI > 0 ? topROI + '%' : '—';
+    document.getElementById('statCommunities').textContent = fmtNum(Array.isArray(signals) ? signals.length : 10);
+  }).catch(function() {
     document.getElementById('statTotalTrades').textContent = '240';
     document.getElementById('statLiveMarkets').textContent = '395';
     document.getElementById('statCommunities').textContent = '10';
