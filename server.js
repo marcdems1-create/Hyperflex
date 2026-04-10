@@ -21436,6 +21436,291 @@ app.get('/api/terminal/data', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// STOP-LOSS / TAKE-PROFIT — conditional order engine
+// ════════════════════════════════════════════════════════════
+//
+// Server monitors live WebSocket ticks. When price crosses a user's
+// trigger, the order status flips to "triggered" and the client is
+// notified via SSE to auto-execute the sell (requires MetaMask sig).
+// If the client isn't connected, a push notification fires.
+// ════════════════════════════════════════════════════════════
+
+// In-memory cache of active stop orders for O(1) tick matching
+// Map<tokenId, [ { id, user_id, trigger_price, trigger_direction, order_type, shares, side, market_slug, market_title, entry_price } ]>
+const _activeStops = new Map();
+let _stopsLoaded = false;
+
+// SSE clients watching for stop triggers: Map<userId, Set<res>>
+const _stopClients = new Map();
+
+async function loadActiveStops() {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery(`SELECT id, user_id, token_id, condition_id, market_slug, market_title, side, shares, entry_price, order_type, trigger_price, trigger_direction FROM stop_orders WHERE status = 'active'`, []);
+    } else {
+      const { data } = await supabase.from('stop_orders').select('*').eq('status', 'active');
+      rows = data || [];
+    }
+    _activeStops.clear();
+    for (const r of rows) {
+      const tid = r.token_id;
+      if (!_activeStops.has(tid)) _activeStops.set(tid, []);
+      _activeStops.get(tid).push({
+        id: r.id, user_id: r.user_id, trigger_price: parseFloat(r.trigger_price),
+        trigger_direction: r.trigger_direction, order_type: r.order_type,
+        shares: parseFloat(r.shares), side: r.side, market_slug: r.market_slug,
+        market_title: r.market_title, entry_price: parseFloat(r.entry_price || 0)
+      });
+    }
+    _stopsLoaded = true;
+    const total = [..._activeStops.values()].reduce((s, a) => s + a.length, 0);
+    console.log(`[stop-orders] Loaded ${total} active stops across ${_activeStops.size} tokens`);
+  } catch (e) {
+    console.error('[stop-orders] Failed to load:', e.message);
+  }
+}
+
+// Check a price tick against active stop orders for that token
+async function checkStopTriggers(tick) {
+  if (!_stopsLoaded || !tick.asset) return;
+  const orders = _activeStops.get(tick.asset);
+  if (!orders || !orders.length) return;
+
+  const price = tick.price;
+  const triggered = [];
+
+  for (let i = orders.length - 1; i >= 0; i--) {
+    const o = orders[i];
+    let fire = false;
+    if (o.trigger_direction === 'below' && price <= o.trigger_price) fire = true;
+    if (o.trigger_direction === 'above' && price >= o.trigger_price) fire = true;
+    if (!fire) continue;
+
+    triggered.push(o);
+    orders.splice(i, 1); // remove from in-memory cache
+  }
+  if (!orders.length) _activeStops.delete(tick.asset);
+
+  for (const o of triggered) {
+    console.log(`[stop-orders] TRIGGERED: ${o.order_type} ${o.id} — ${o.side} "${(o.market_title || '').slice(0, 40)}" at ${price} (trigger: ${o.trigger_price})`);
+
+    // Update DB
+    try {
+      if (pool) {
+        await dbQuery(`UPDATE stop_orders SET status = 'triggered', triggered_at = NOW(), updated_at = NOW() WHERE id = $1`, [o.id]);
+      } else {
+        await supabase.from('stop_orders').update({ status: 'triggered', triggered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', o.id);
+      }
+    } catch (e) { console.error('[stop-orders] DB update failed:', e.message); }
+
+    // Notify connected SSE clients for this user
+    const clients = _stopClients.get(o.user_id);
+    let clientNotified = false;
+    if (clients && clients.size > 0) {
+      const payload = {
+        stop_id: o.id, order_type: o.order_type, side: o.side,
+        shares: o.shares, trigger_price: o.trigger_price, fill_price: price,
+        market_slug: o.market_slug, market_title: o.market_title,
+        token_id: tick.asset, entry_price: o.entry_price
+      };
+      for (const clientRes of clients) {
+        try {
+          clientRes.write('event: stop_triggered\n');
+          clientRes.write('data: ' + JSON.stringify(payload) + '\n\n');
+          clientNotified = true;
+        } catch (e) { clients.delete(clientRes); }
+      }
+    }
+
+    // If no browser tab is listening, send push notification
+    if (!clientNotified) {
+      const priceCents = Math.round(price * 100);
+      const triggerCents = Math.round(o.trigger_price * 100);
+      const typeLabel = o.order_type === 'take_profit' ? 'Take-profit' : 'Stop-loss';
+      const title = `${typeLabel} triggered at ${priceCents}¢`;
+      const body = `Your ${o.side} position on "${(o.market_title || '').slice(0, 50)}" hit ${triggerCents}¢. Open HYPERFLEX to execute the sell — your wallet signature is needed.`;
+      try { pushNotification(o.user_id, 'stop_triggered', title, body, null, o.market_slug ? 'market:' + o.market_slug : null); } catch (e) {}
+    }
+  }
+}
+
+// Hook into live stream — every trade tick checks stop orders
+// (called once after liveStream.start() in the boot sequence)
+function initStopOrderMonitor() {
+  liveStream.onTrade(checkStopTriggers);
+  console.log('[stop-orders] Monitor attached to live-stream');
+}
+
+// ── SSE endpoint for stop-order clients ──
+app.get('/api/stops/stream', (req, res) => {
+  // EventSource can't set headers — accept token as query param
+  let userId = getUserIdFromReq(req);
+  if (!userId && req.query.token) {
+    try { const p = jwt.verify(req.query.token, JWT_SECRET); userId = p.id || null; } catch {}
+  }
+  if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+
+  if (!_stopClients.has(userId)) _stopClients.set(userId, new Set());
+  _stopClients.get(userId).add(res);
+
+  // Send any pending triggered stops immediately (in case they triggered while tab was closed)
+  (async () => {
+    try {
+      let pending;
+      if (pool) {
+        pending = await dbQuery(`SELECT id, token_id, order_type, side, shares, trigger_price, market_slug, market_title, entry_price, triggered_at FROM stop_orders WHERE user_id = $1 AND status = 'triggered'`, [userId]);
+      } else {
+        const { data } = await supabase.from('stop_orders').select('*').eq('user_id', userId).eq('status', 'triggered');
+        pending = data || [];
+      }
+      for (const p of pending) {
+        try {
+          res.write('event: stop_triggered\n');
+          res.write('data: ' + JSON.stringify({
+            stop_id: p.id, order_type: p.order_type, side: p.side,
+            shares: parseFloat(p.shares), trigger_price: parseFloat(p.trigger_price),
+            market_slug: p.market_slug, market_title: p.market_title,
+            token_id: p.token_id, entry_price: parseFloat(p.entry_price || 0)
+          }) + '\n\n');
+        } catch (e) {}
+      }
+    } catch (e) {}
+  })();
+
+  // Heartbeat every 20s
+  const hb = setInterval(() => {
+    try { res.write('event: heartbeat\ndata: {}\n\n'); } catch (e) { clearInterval(hb); }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    const set = _stopClients.get(userId);
+    if (set) { set.delete(res); if (!set.size) _stopClients.delete(userId); }
+  });
+});
+
+// ── CRUD endpoints ──
+
+// POST /api/stops — create a stop-loss or take-profit order
+app.post('/api/stops', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+    const { token_id, condition_id, market_slug, market_title, side, shares, entry_price, order_type, trigger_price } = req.body;
+    if (!token_id || !trigger_price || !shares) return res.status(400).json({ error: 'token_id, trigger_price, and shares are required' });
+
+    const tp = parseFloat(trigger_price);
+    if (tp <= 0 || tp >= 1) return res.status(400).json({ error: 'trigger_price must be between 0 and 1' });
+
+    const ot = order_type === 'take_profit' ? 'take_profit' : 'stop_loss';
+    const dir = ot === 'take_profit' ? 'above' : 'below';
+
+    const row = {
+      user_id: userId, token_id, condition_id: condition_id || null,
+      market_slug: market_slug || null, market_title: market_title || null,
+      side: (side || 'YES').toUpperCase(), shares: parseFloat(shares),
+      entry_price: parseFloat(entry_price || 0), order_type: ot,
+      trigger_price: tp, trigger_direction: dir, status: 'active'
+    };
+
+    let newId;
+    if (pool) {
+      const result = await dbQuery(
+        `INSERT INTO stop_orders (user_id, token_id, condition_id, market_slug, market_title, side, shares, entry_price, order_type, trigger_price, trigger_direction, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [row.user_id, row.token_id, row.condition_id, row.market_slug, row.market_title, row.side, row.shares, row.entry_price, row.order_type, row.trigger_price, row.trigger_direction, row.status]
+      );
+      newId = result[0]?.id;
+    } else {
+      const { data, error } = await supabase.from('stop_orders').insert([row]).select('id');
+      if (error) throw error;
+      newId = data?.[0]?.id;
+    }
+
+    // Add to in-memory cache
+    if (!_activeStops.has(token_id)) _activeStops.set(token_id, []);
+    _activeStops.get(token_id).push({ id: newId, ...row });
+
+    console.log(`[stop-orders] Created ${ot} for user ${userId.slice(0,8)}: ${side} at ${tp} on ${(market_title || '').slice(0,30)}`);
+    res.json({ id: newId, status: 'active', order_type: ot, trigger_price: tp });
+  } catch (err) {
+    console.error('[stop-orders] Create error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stops — list user's stop orders
+app.get('/api/stops', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+    let rows;
+    if (pool) {
+      rows = await dbQuery(`SELECT * FROM stop_orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`, [userId]);
+    } else {
+      const { data } = await supabase.from('stop_orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
+      rows = data || [];
+    }
+    res.json({ orders: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/stops/:id — cancel a stop order
+app.delete('/api/stops/:id', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+    const { id } = req.params;
+    if (pool) {
+      await dbQuery(`UPDATE stop_orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND user_id = $2 AND status = 'active'`, [id, userId]);
+    } else {
+      await supabase.from('stop_orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).eq('status', 'active');
+    }
+
+    // Remove from in-memory cache
+    for (const [tid, orders] of _activeStops) {
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx !== -1) { orders.splice(idx, 1); if (!orders.length) _activeStops.delete(tid); break; }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stops/:id/executed — client confirms the sell was placed on CLOB
+app.post('/api/stops/:id/executed', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+    const { id } = req.params;
+    const { execution_price } = req.body;
+    if (pool) {
+      await dbQuery(`UPDATE stop_orders SET status = 'executed', executed_at = NOW(), execution_price = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [execution_price || 0, id, userId]);
+    } else {
+      await supabase.from('stop_orders').update({ status: 'executed', executed_at: new Date().toISOString(), execution_price: execution_price || 0, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/terminal/stream — Server-Sent Events live price ticks
 //
 // Subscribes to the Polymarket real-time trade stream server-side and pushes
@@ -34954,6 +35239,8 @@ app.listen(PORT, () => {
     try {
       liveStream.start();
       console.log('[boot] ✓ live-stream connecting to Polymarket WS');
+      // Attach stop-order monitor to live stream ticks
+      loadActiveStops().then(() => initStopOrderMonitor()).catch(e => console.warn('[boot] stop-order init failed:', e.message));
     } catch (e) {
       console.warn('[boot] ✗ live-stream start failed:', e.message);
     }

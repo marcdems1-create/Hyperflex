@@ -458,6 +458,38 @@ canvas{display:block;width:100%!important}
           <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--soft);margin-bottom:6px">YOUR POSITION</div>
           <div id="positionDetails" style="font-family:var(--mono);font-size:12px;color:var(--text)"></div>
         </div>
+
+        <!-- Stop-Loss / Take-Profit Panel -->
+        <div id="stopOrderPanel" style="display:none;margin-top:10px;padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.15);border-radius:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:#a855f7">RISK MANAGEMENT</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--soft)" id="stopStatusBadge"></div>
+          </div>
+          <!-- Active stops list -->
+          <div id="activeStopsList" style="margin-bottom:10px"></div>
+          <!-- Create new stop -->
+          <div id="stopCreateForm">
+            <div style="display:flex;gap:6px;margin-bottom:8px">
+              <button id="stopTypeBtn" onclick="toggleStopType()" style="flex:1;padding:7px;font-family:var(--mono);font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid rgba(255,77,106,0.3);background:rgba(255,77,106,0.08);color:#ff4d6a;transition:all .15s">Stop-Loss</button>
+              <button id="tpTypeBtn" onclick="toggleStopType()" style="flex:1;padding:7px;font-family:var(--mono);font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--soft);transition:all .15s">Take-Profit</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="flex:1">
+                <label style="font-family:var(--mono);font-size:10px;color:var(--soft);display:block;margin-bottom:4px" id="stopPriceLabel">Sell if price drops to</label>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <input type="number" id="stopTriggerPrice" placeholder="35" min="1" max="99" step="1" style="width:70px;background:var(--cream);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;text-align:center" oninput="updateStopPreview()"/>
+                  <span style="font-family:var(--mono);font-size:12px;color:var(--soft)">¢</span>
+                </div>
+              </div>
+              <div style="flex:1">
+                <label style="font-family:var(--mono);font-size:10px;color:var(--soft);display:block;margin-bottom:4px">Shares to sell</label>
+                <input type="text" id="stopShares" placeholder="All" style="width:100%;background:var(--cream);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;box-sizing:border-box" />
+              </div>
+            </div>
+            <div id="stopPreview" style="margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.5"></div>
+            <button onclick="createStopOrder()" id="stopSubmitBtn" style="width:100%;margin-top:10px;padding:10px;font-family:var(--mono);font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;border:1px solid rgba(168,85,247,0.3);background:rgba(168,85,247,0.1);color:#a855f7;transition:all .15s">Set Stop-Loss</button>
+          </div>
+        </div>
       </div>
 
       <div class="mkt-poly-link">
@@ -3446,12 +3478,355 @@ function applyAlphaPrefill() {
   } catch (e) { /* silent */ }
 }
 
+// ════════════════════════════════════════════════════════════
+// STOP-LOSS / TAKE-PROFIT — client-side UI + auto-execution
+// ════════════════════════════════════════════════════════════
+var _stopType = 'stop_loss'; // or 'take_profit'
+var _activeStops = [];
+var _stopSSE = null;
+
+function toggleStopType() {
+  _stopType = _stopType === 'stop_loss' ? 'take_profit' : 'stop_loss';
+  var slBtn = document.getElementById('stopTypeBtn');
+  var tpBtn = document.getElementById('tpTypeBtn');
+  var label = document.getElementById('stopPriceLabel');
+  var submit = document.getElementById('stopSubmitBtn');
+  if (_stopType === 'stop_loss') {
+    slBtn.style.background = 'rgba(255,77,106,0.08)'; slBtn.style.borderColor = 'rgba(255,77,106,0.3)'; slBtn.style.color = '#ff4d6a';
+    tpBtn.style.background = 'transparent'; tpBtn.style.borderColor = 'var(--border)'; tpBtn.style.color = 'var(--soft)';
+    label.textContent = 'Sell if price drops to';
+    submit.textContent = 'Set Stop-Loss'; submit.style.color = '#ff4d6a'; submit.style.borderColor = 'rgba(255,77,106,0.3)'; submit.style.background = 'rgba(255,77,106,0.1)';
+  } else {
+    tpBtn.style.background = 'rgba(0,230,138,0.08)'; tpBtn.style.borderColor = 'rgba(0,230,138,0.3)'; tpBtn.style.color = '#00e68a';
+    slBtn.style.background = 'transparent'; slBtn.style.borderColor = 'var(--border)'; slBtn.style.color = 'var(--soft)';
+    label.textContent = 'Sell if price rises to';
+    submit.textContent = 'Set Take-Profit'; submit.style.color = '#00e68a'; submit.style.borderColor = 'rgba(0,230,138,0.3)'; submit.style.background = 'rgba(0,230,138,0.1)';
+  }
+  updateStopPreview();
+}
+
+function updateStopPreview() {
+  var el = document.getElementById('stopPreview');
+  if (!el) return;
+  var triggerCents = parseInt(document.getElementById('stopTriggerPrice').value) || 0;
+  if (triggerCents <= 0 || triggerCents >= 100) { el.textContent = ''; return; }
+  // Find user's position for current outcome
+  var pos = getCurrentPosition();
+  if (!pos) { el.textContent = 'Open a position first to set stops.'; return; }
+  var entryCents = Math.round(pos.avgPrice * 100);
+  var shares = parseFloat(document.getElementById('stopShares').value) || pos.size;
+  var cost = shares * pos.avgPrice;
+  var returnAtTrigger = shares * (triggerCents / 100);
+  var pnl = returnAtTrigger - cost;
+  var pnlPct = cost > 0 ? Math.round((pnl / cost) * 100) : 0;
+  var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+  el.innerHTML = 'Entry: <strong>' + entryCents + '¢</strong> · Trigger: <strong>' + triggerCents + '¢</strong> · ' +
+    shares.toFixed(1) + ' shares → <span style="color:' + pnlColor + ';font-weight:700">' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + ' (' + (pnl >= 0 ? '+' : '') + pnlPct + '%)</span>';
+}
+
+function getCurrentPosition() {
+  if (!_userPositions || !Object.keys(_userPositions).length) return null;
+  // Find position matching current outcome's token ID
+  var tids = [];
+  if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
+    tids = _sortedEventMarkets[_activeOutcomeIndex].clobTokenIds || '[]';
+  } else if (_market) {
+    tids = _market.clobTokenIds || '[]';
+  }
+  if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+  for (var i = 0; i < tids.length; i++) {
+    var pos = _userPositions[tids[i].toLowerCase()];
+    if (pos && pos.size > 0) return { ...pos, tokenId: tids[i] };
+  }
+  return null;
+}
+
+function showStopPanel() {
+  var panel = document.getElementById('stopOrderPanel');
+  if (!panel) return;
+  var pos = getCurrentPosition();
+  if (!pos) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  // Pre-fill shares with full position
+  var sharesInput = document.getElementById('stopShares');
+  if (sharesInput && !sharesInput.value) sharesInput.placeholder = pos.size.toFixed(1) + ' (all)';
+  loadUserStops();
+  updateStopPreview();
+}
+
+async function createStopOrder() {
+  var btn = document.getElementById('stopSubmitBtn');
+  var pos = getCurrentPosition();
+  if (!pos) { alert('No position found. Trade first.'); return; }
+  var triggerCents = parseInt(document.getElementById('stopTriggerPrice').value);
+  if (!triggerCents || triggerCents <= 0 || triggerCents >= 100) { alert('Enter a trigger price (1-99¢)'); return; }
+  var shares = parseFloat(document.getElementById('stopShares').value) || pos.size;
+  var token = localStorage.getItem('hf_token');
+  if (!token) { alert('Please sign in to set stop orders.'); return; }
+
+  btn.disabled = true; btn.textContent = 'Setting...';
+  try {
+    var slug = _market ? (_market.slug || _market.event_slug || '') : '';
+    var title = _market ? (_market.question || _market.title || '') : '';
+    var r = await fetch('/api/stops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        token_id: pos.tokenId,
+        condition_id: pos.conditionId || '',
+        market_slug: slug,
+        market_title: title,
+        side: pos.side || 'YES',
+        shares: shares,
+        entry_price: pos.avgPrice,
+        order_type: _stopType,
+        trigger_price: triggerCents / 100
+      })
+    });
+    var d = await r.json();
+    if (r.ok) {
+      showTradeStatus((_stopType === 'take_profit' ? 'Take-profit' : 'Stop-loss') + ' set at ' + triggerCents + '¢', 'success');
+      document.getElementById('stopTriggerPrice').value = '';
+      loadUserStops();
+      connectStopSSE();
+    } else {
+      showTradeStatus(d.error || 'Failed to set stop order', 'error');
+    }
+  } catch (e) {
+    showTradeStatus('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = _stopType === 'take_profit' ? 'Set Take-Profit' : 'Set Stop-Loss';
+  }
+}
+
+async function loadUserStops() {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    var r = await fetch('/api/stops', { headers: { 'Authorization': 'Bearer ' + token } });
+    var d = await r.json();
+    _activeStops = (d.orders || []).filter(function(o) { return o.status === 'active' || o.status === 'triggered'; });
+    renderActiveStops();
+  } catch (e) {}
+}
+
+function renderActiveStops() {
+  var el = document.getElementById('activeStopsList');
+  if (!el) return;
+  var relevant = _activeStops.filter(function(o) {
+    // Show stops for this market
+    var slug = _market ? (_market.slug || '') : '';
+    return o.market_slug === slug || !slug;
+  });
+  if (!relevant.length) { el.innerHTML = ''; return; }
+  el.innerHTML = relevant.map(function(o) {
+    var isSL = o.order_type === 'stop_loss';
+    var color = isSL ? '#ff4d6a' : '#00e68a';
+    var icon = isSL ? '🛑' : '🎯';
+    var trigCents = Math.round(parseFloat(o.trigger_price) * 100);
+    var statusBadge = o.status === 'triggered'
+      ? '<span style="padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.15);color:#f59e0b;font-size:10px;font-weight:700">TRIGGERED — EXECUTE</span>'
+      : '<span style="padding:2px 6px;border-radius:4px;background:rgba(168,85,247,0.1);color:#a855f7;font-size:10px;font-weight:700">ACTIVE</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid ' + color + '22;border-radius:6px;margin-bottom:6px">' +
+      '<span style="font-size:14px">' + icon + '</span>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--text)">' + (isSL ? 'Stop-Loss' : 'Take-Profit') + ' at <strong style="color:' + color + '">' + trigCents + '¢</strong></div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--soft)">' + parseFloat(o.shares).toFixed(1) + ' shares · ' + o.side + '</div>' +
+      '</div>' +
+      statusBadge +
+      (o.status === 'active' ? '<button onclick="cancelStop(\'' + o.id + '\')" style="background:none;border:none;color:var(--soft);cursor:pointer;font-size:14px;padding:4px" title="Cancel">✕</button>' : '') +
+    '</div>';
+  }).join('');
+}
+
+async function cancelStop(id) {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    await fetch('/api/stops/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+    showTradeStatus('Stop order cancelled', 'info');
+    loadUserStops();
+  } catch (e) {}
+}
+
+// SSE connection for real-time stop triggers
+function connectStopSSE() {
+  if (_stopSSE) return; // already connected
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    _stopSSE = new EventSource('/api/stops/stream?token=' + encodeURIComponent(token));
+    _stopSSE.addEventListener('stop_triggered', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        console.log('[stop-orders] TRIGGERED:', data);
+        handleStopTrigger(data);
+      } catch (err) { console.warn('[stop-orders] SSE parse error:', err.message); }
+    });
+    _stopSSE.onerror = function() {
+      // Reconnect after 10s
+      if (_stopSSE) { _stopSSE.close(); _stopSSE = null; }
+      setTimeout(connectStopSSE, 10000);
+    };
+  } catch (e) { console.warn('[stop-orders] SSE connect failed:', e.message); }
+}
+
+async function handleStopTrigger(data) {
+  var typeLabel = data.order_type === 'take_profit' ? 'Take-profit' : 'Stop-loss';
+  var trigCents = Math.round(data.trigger_price * 100);
+  var fillCents = Math.round((data.fill_price || data.trigger_price) * 100);
+
+  // Show urgent banner
+  var banner = document.createElement('div');
+  banner.id = 'stopTriggerBanner';
+  banner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#ff4d6a,#f59e0b);color:#fff;padding:14px 24px;border-radius:12px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 24px rgba(255,77,106,0.4);display:flex;align-items:center;gap:12px;max-width:90vw';
+  banner.innerHTML = '<span>🛑 ' + typeLabel + ' triggered at ' + fillCents + '¢</span><button onclick="executeStopSell(\'' + data.stop_id + '\',\'' + data.token_id + '\',' + data.shares + ',' + data.trigger_price + ')" style="background:#fff;color:#ff4d6a;border:none;padding:8px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Execute Sell →</button><button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;padding:4px">✕</button>';
+  document.body.appendChild(banner);
+
+  // Auto-execute if we can
+  try {
+    await executeStopSell(data.stop_id, data.token_id, data.shares, data.trigger_price);
+  } catch (e) {
+    console.warn('[stop-orders] Auto-execute failed, waiting for user action:', e.message);
+  }
+
+  loadUserStops(); // refresh the panel
+}
+
+async function executeStopSell(stopId, tokenId, shares, triggerPrice) {
+  // This is a SELL order to close the position
+  showTradeStatus('Executing stop order — selling ' + shares.toFixed(1) + ' shares...', 'info');
+
+  try {
+    var apiKey = localStorage.getItem('poly_api_key');
+    var apiSecret = localStorage.getItem('poly_api_secret');
+    var apiPassphrase = localStorage.getItem('poly_api_passphrase');
+    var proxyAddress = localStorage.getItem('hf_poly_wallet');
+    var eoaAddress = localStorage.getItem('poly_eoa_address');
+
+    if (!apiKey || !apiSecret || !proxyAddress || !window.ethereum) {
+      showTradeStatus('Wallet not connected. Connect MetaMask to execute stop order.', 'error');
+      return;
+    }
+
+    // Fetch tick size + neg risk
+    var tickSize = 0.01;
+    var isNegRisk = false;
+    var feeRateBps = '0';
+    try {
+      var [tickRes, negRes, feeRes] = await Promise.all([
+        fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null}),
+        fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null}),
+        fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null})
+      ]);
+      if (tickRes && tickRes.minimum_tick_size) tickSize = parseFloat(tickRes.minimum_tick_size);
+      if (negRes && negRes.neg_risk !== undefined) isNegRisk = !!negRes.neg_risk;
+      if (feeRes && feeRes.base_fee !== undefined) feeRateBps = String(feeRes.base_fee);
+    } catch (e) {}
+
+    // Build a SELL LIMIT order at trigger price (GTC)
+    var rawPrice = Math.round(triggerPrice / tickSize) * tickSize;
+    var price = parseFloat(rawPrice.toFixed(2));
+    var rawMakerAmt = parseFloat((shares * price).toFixed(4));
+    var rawTakerAmt = parseFloat(shares.toFixed(4));
+
+    var salt = Math.floor(Math.random() * 9007199254740991);
+    var exchange = isNegRisk ? '0xC5d563A36AE78145C45a50134d48A1215220f80a' : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
+
+    var signer = await HFXWallet.getSigner();
+    var order = await signer.signTypedData(
+      { name: 'ClobExchange', version: '1', chainId: 137, verifyingContract: exchange },
+      { Order: [
+        {name:'salt',type:'uint256'},{name:'maker',type:'address'},{name:'signer',type:'address'},
+        {name:'taker',type:'address'},{name:'tokenId',type:'uint256'},{name:'makerAmount',type:'uint256'},
+        {name:'takerAmount',type:'uint256'},{name:'expiration',type:'uint256'},{name:'nonce',type:'uint256'},
+        {name:'feeRateBps',type:'uint256'},{name:'side',type:'uint8'},{name:'signatureType',type:'uint8'}
+      ]},
+      {
+        salt: salt, maker: proxyAddress, signer: eoaAddress, taker: '0x0000000000000000000000000000000000000000',
+        tokenId: tokenId, makerAmount: String(Math.round(rawMakerAmt * 1e6)),
+        takerAmount: String(Math.round(rawTakerAmt * 1e6)), expiration: '0', nonce: '0',
+        feeRateBps: feeRateBps || '0', side: 1, signatureType: 2
+      }
+    );
+
+    // Get builder fee headers
+    var builderHeaders = {};
+    try {
+      var bRes = await fetch('/api/polymarket/builder-sign', { method: 'POST' });
+      if (bRes.ok) builderHeaders = await bRes.json();
+    } catch (e) {}
+
+    // Submit to CLOB
+    var body = JSON.stringify({
+      order: {
+        salt: salt, maker: proxyAddress, signer: eoaAddress, taker: '0x0000000000000000000000000000000000000000',
+        tokenId: tokenId, makerAmount: String(Math.round(rawMakerAmt * 1e6)),
+        takerAmount: String(Math.round(rawTakerAmt * 1e6)), expiration: '0', nonce: '0',
+        feeRateBps: feeRateBps || '0', side: 'SELL', signatureType: 2, signature: order
+      },
+      orderType: 'GTC', deferExec: false
+    });
+
+    var ts = Math.floor(Date.now() / 1000).toString();
+    var hmacMsg = ts + 'POST' + '/order' + body;
+    var keyBytes = Uint8Array.from(atob(apiSecret.replace(/-/g,'+').replace(/_/g,'/')), function(c){return c.charCodeAt(0)});
+    var cryptoKey = await crypto.subtle.importKey('raw', keyBytes, {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+    var sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(hmacMsg));
+    var b64Sig = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+
+    var headers = {
+      'Content-Type': 'application/json',
+      'POLY_ADDRESS': proxyAddress, 'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase, 'POLY_TIMESTAMP': ts, 'POLY_SIGNATURE': b64Sig
+    };
+    Object.assign(headers, builderHeaders);
+
+    var clobRes = await fetch('https://clob.polymarket.com/order', { method: 'POST', headers: headers, body: body });
+    var clobData = await clobRes.json();
+
+    if (clobRes.ok && !clobData.error) {
+      showTradeStatus('🛑 Stop order executed! Sold ' + shares.toFixed(1) + ' shares at ~' + Math.round(price * 100) + '¢', 'success');
+      // Report execution to server
+      var hfToken = localStorage.getItem('hf_token');
+      fetch('/api/stops/' + stopId + '/executed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + hfToken },
+        body: JSON.stringify({ execution_price: price })
+      }).catch(function(){});
+      // Remove banner
+      var b = document.getElementById('stopTriggerBanner');
+      if (b) b.remove();
+      // Refresh
+      setTimeout(fetchTradeBalance, 2000);
+      setTimeout(fetchUserPositions, 3000);
+      loadUserStops();
+    } else {
+      showTradeStatus('Stop sell failed: ' + (clobData.error || clobData.message || 'CLOB rejected'), 'error');
+    }
+  } catch (e) {
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showTradeStatus('Stop sell cancelled — signature rejected', 'error');
+    } else {
+      showTradeStatus('Stop sell error: ' + e.message, 'error');
+    }
+  }
+}
+
 // Init
 loadMarket().then(function() {
   updateCurrentPriceBtn();
   fetchTradeBalance();
   // Fetch user positions (non-blocking) — shows badges on outcomes + sidebar
-  setTimeout(fetchUserPositions, 300);
+  setTimeout(function() {
+    fetchUserPositions().then(function() {
+      // Show stop-loss panel if user has a position
+      setTimeout(showStopPanel, 200);
+      // Connect SSE for real-time stop triggers
+      setTimeout(connectStopSSE, 500);
+    });
+  }, 300);
   // First live price fetch 1s after load (backend already fetches CLOB, but this catches any delta)
   setTimeout(fetchLivePrices, 1000);
   // Poll every 10 seconds
