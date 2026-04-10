@@ -30625,6 +30625,9 @@ DISABLED — account flagged */
 const _replyLog = [];
 const _replyDraftQueue = [];
 let _replyDraftId = 0;
+let _replyCountToday = 0;
+let _replyCountResetDay = new Date().toDateString();
+let _replySinceLastLink = 0; // track link cadence (every 3-4 replies)
 
 async function replyToTweet(tweetId, text) {
   const url = 'https://api.x.com/2/tweets';
@@ -30671,55 +30674,110 @@ async function searchAndDraftReplies() {
       return bE - aE;
     })[0];
 
+    // ── Gather rich data for the reply ──
+    const tLower = (target.text || '').toLowerCase();
     let dataPoint = '';
+    let marketSlug = '';
+
+    // Pull whale data
+    let whaleMatch = null;
     if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
-      const tLower = (target.text || '').toLowerCase();
-      const match = _whaleIndexCache.data.picks.find(p => {
-        if ((p.total_capital || 0) < 50000) return false; // Skip low-capital markets
-        if ((p.whale_count || 0) < 2) return false; // Need real whale consensus
+      whaleMatch = _whaleIndexCache.data.picks.find(p => {
+        if ((p.total_capital || 0) < 50000) return false;
+        if ((p.whale_count || 0) < 2) return false;
         const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
-      if (match) {
-        const cap = match.total_capital >= 1000000 ? '$' + (match.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(match.total_capital/1000) + 'K';
-        dataPoint = `Market: "${match.market}". ${match.whale_count} whale wallets with ${cap} total capital. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
-      }
     }
-    if (!dataPoint && _screenerCache && _screenerCache.data) {
-      const tLower = (target.text || '').toLowerCase();
-      const match = _screenerCache.data.find(m => {
-        if ((m.volume || 0) < 50000) return false; // Skip low-volume markets ($50K+ only)
+
+    // Pull screener data (edge score, price, volume)
+    let screenerMatch = null;
+    if (_screenerCache && _screenerCache.data) {
+      screenerMatch = _screenerCache.data.find(m => {
+        if ((m.volume || 0) < 50000) return false;
         const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
-      if (match) {
-        const vol = match.volume >= 1000000 ? '$' + (match.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(match.volume/1000) + 'K';
-        const pct = match.yes_price != null ? Math.round(match.yes_price * 100) : null;
-        dataPoint = pct ? `Market: "${match.question}". Currently at ${pct}% YES with ${vol} volume.` : `Market: "${match.question}". ${vol} volume.`;
-      }
     }
-    if (!dataPoint) {
-      // Skip this tweet — no relevant data to add
+
+    // Fear & greed
+    const fg = (_fearGreedCache && _fearGreedCache.data) ? _fearGreedCache.data : null;
+
+    // Build rich data context — as many real numbers as possible
+    const stats = [];
+    const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
+    if (!marketName) {
       console.log(`[reply-bot] Skipping tweet ${target.id} — no matching market data`);
       return;
     }
 
+    if (whaleMatch) {
+      const cap = whaleMatch.total_capital >= 1000000 ? '$' + (whaleMatch.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1000) + 'K';
+      stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
+      stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
+    }
+    if (screenerMatch) {
+      if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
+      if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
+      if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
+      const vol = screenerMatch.volume >= 1000000 ? '$' + (screenerMatch.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1000) + 'K';
+      stats.push(`volume: ${vol}`);
+      if (screenerMatch.trade && screenerMatch.trade.roi_pct) stats.push(`potential ROI: ${screenerMatch.trade.roi_pct}%`);
+      marketSlug = screenerMatch.slug || '';
+    }
+    if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
+
+    dataPoint = `Market: "${marketName}". ${stats.join('. ')}.`;
+
+    // ── Daily cap: max 8 replies/day ──
+    const today = new Date().toDateString();
+    if (_replyCountResetDay !== today) { _replyCountToday = 0; _replyCountResetDay = today; }
+    if (_replyCountToday >= 8) {
+      console.log('[reply-bot] Daily cap reached (8 replies) — skipping');
+      return;
+    }
+
+    // ── Decide if this reply gets a link (every 3-4 replies) ──
+    const includeLink = _replySinceLastLink >= 3 && marketSlug;
+    const linkLine = includeLink ? `\nhyperflex.network/market/${marketSlug}` : '';
+
+    // ── Pick a random tone variation ──
+    const tones = [
+      'degen trader casually dropping alpha in a group chat',
+      'sharp bettor who just spotted something interesting on a dashboard',
+      'crypto-native who talks in numbers, not opinions',
+      'seasoned trader reacting to breaking data, slightly amused',
+      'prediction market nerd who gets excited about edge scores and whale flow',
+    ];
+    const tone = tones[Math.floor(Math.random() * tones.length)];
+
     const anthropic = new Anthropic();
     const replyRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: `You write tweets for a prediction markets account. Rules:
-1. ALWAYS name the specific market/question (e.g. "Will Bitcoin hit $100K by June?" not "the major contract")
-2. ALWAYS include the exact odds number and dollar amount from your data
-3. Sound like a sharp trader dropping alpha, not a news anchor
-4. 1-2 punchy sentences max
-5. NEVER say "Check out", never mention any account name, no hashtags, no emojis, no links
-6. Under 240 chars
-7. Output ONLY the tweet text, nothing else`,
-      messages: [{ role: 'user', content: `Trending take on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour data: ${dataPoint}\n\nWrite a standalone tweet that names the specific market and uses the exact numbers from your data:` }]
+      max_tokens: 280,
+      system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
+
+Rules:
+1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
+2. Name the specific market naturally — don't use quotes or formal phrasing.
+3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
+4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
+5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
+6. 2-3 sentences max. Under 260 chars (excluding any link).
+7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
+8. NEVER use hashtags or emojis.
+9. Output ONLY the tweet text, nothing else.
+
+Good examples:
+- "Whales hammering the hotter CPI side with $1.2M at edge score 71. 60-point gap vs crowd pricing rn. You think this kills rate cuts or already priced in?"
+- "Heavy NO flow on softer print expectations. Crystal Ball sitting at 2.6%. You riding the whale consensus or fading it?"
+- "3 wallets just dropped $397K on Iran ceasefire YES at 58 cents. Fear & Greed at 61. Anyone else seeing this as the play?"`,
+      messages: [{ role: 'user', content: `Someone posted this on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
     });
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-    if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
+    if (reply.length > 260) reply = reply.substring(0, reply.lastIndexOf(' ', 260)) || reply.substring(0, 260);
+    // Append link if this is a link-cadence reply
+    if (includeLink) reply += linkLine;
 
     // Reply-only mode — no quote tweets, no standalone posts
     let postResult = null;
@@ -30735,8 +30793,10 @@ async function searchAndDraftReplies() {
     try {
       // Reply directly to the tweet — no quote tweets, no standalone posts
       postResult = await replyToTweet(target.id, reply);
-      recordTweet(reply, '');
-      console.log(`[reply-bot] REPLIED to ${target.id}: "${reply.substring(0, 60)}..."`);
+      recordTweet(reply, marketSlug);
+      _replyCountToday++;
+      _replySinceLastLink = includeLink ? 0 : _replySinceLastLink + 1;
+      console.log(`[reply-bot] REPLIED to ${target.id} (${_replyCountToday}/8 today${includeLink ? ', with link' : ''}): "${reply.substring(0, 80)}..."`);
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
     } catch (postErr) {
@@ -30804,10 +30864,10 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Reply engagement bot — reply-only mode (no standalone posting)
-cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
+// Reply engagement bot — reply-only mode, max 8/day, degen tone
+cron.schedule('15 */3 * * *', safeCron('replyBot', searchAndDraftReplies));
 setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
-console.log('[boot] Reply engagement bot ENABLED (reply-only mode)');
+console.log('[boot] Reply engagement bot ENABLED (reply-only, max 8/day, link every 3-4)');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
