@@ -30853,6 +30853,126 @@ app.post('/api/reply-queue/:id/delete', (req, res) => {
   res.json({ ok: true });
 });
 
+// Reply to a specific tweet by URL — admin only
+app.post('/api/reply-to', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const { url, text: customText } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url required (tweet URL)' });
+
+  // Extract tweet ID from URL
+  const tweetIdMatch = url.match(/status\/(\d+)/);
+  if (!tweetIdMatch) return res.status(400).json({ error: 'Could not extract tweet ID from URL' });
+  const tweetId = tweetIdMatch[1];
+
+  try {
+    // Fetch the tweet text so we can generate a data-rich reply
+    let tweetText = '';
+    const bearer = process.env.X_BEARER_TOKEN;
+    if (bearer) {
+      const tweetRes = await fetch(`https://api.x.com/2/tweets/${tweetId}?tweet.fields=text,public_metrics,author_id`, {
+        headers: { 'Authorization': `Bearer ${bearer}` },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (tweetRes.ok) {
+        const tweetData = await tweetRes.json();
+        tweetText = tweetData.data?.text || '';
+      }
+    }
+    // If we couldn't fetch, use the text from the request body if provided
+    if (!tweetText) tweetText = req.body.tweet_text || '';
+
+    let replyText = customText;
+
+    if (!replyText) {
+      // Generate a reply using live data
+      const tLower = tweetText.toLowerCase();
+      const queryWords = tLower.split(/\s+/).filter(w => w.length > 4);
+
+      // Gather data
+      const stats = [];
+      let whaleMatch = null;
+      if (_whaleIndexCache?.data?.picks) {
+        whaleMatch = _whaleIndexCache.data.picks.find(p => {
+          if ((p.total_capital || 0) < 50000 || (p.whale_count || 0) < 2) return false;
+          const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
+        });
+      }
+      let screenerMatch = null;
+      if (_screenerCache?.data) {
+        screenerMatch = _screenerCache.data.find(m => {
+          if ((m.volume || 0) < 50000) return false;
+          const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
+        });
+      }
+      const fg = _fearGreedCache?.data;
+
+      if (whaleMatch) {
+        const cap = whaleMatch.total_capital >= 1e6 ? '$' + (whaleMatch.total_capital/1e6).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1e3) + 'K';
+        stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
+        stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
+      }
+      if (screenerMatch) {
+        if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
+        if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
+        if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
+        const vol = screenerMatch.volume >= 1e6 ? '$' + (screenerMatch.volume/1e6).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1e3) + 'K';
+        stats.push(`volume: ${vol}`);
+      }
+      if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
+
+      const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
+      const dataPoint = stats.length ? `Market: "${marketName}". ${stats.join('. ')}.` : `General market context: Fear & Greed at ${fg ? fg.score : '?'}/100.`;
+
+      const tones = [
+        'degen trader casually dropping alpha in a group chat',
+        'sharp bettor who just spotted something interesting on a dashboard',
+        'crypto-native who talks in numbers, not opinions',
+        'seasoned trader reacting to breaking data, slightly amused',
+        'prediction market nerd who gets excited about edge scores and whale flow',
+      ];
+      const tone = tones[Math.floor(Math.random() * tones.length)];
+
+      const anthropic = new Anthropic();
+      const aiRes = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 280,
+        system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
+
+Rules:
+1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
+2. Name the specific market naturally — don't use quotes or formal phrasing.
+3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
+4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
+5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
+6. 2-3 sentences max. Under 260 chars (excluding any link).
+7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
+8. NEVER use hashtags or emojis.
+9. Output ONLY the tweet text, nothing else.`,
+        messages: [{ role: 'user', content: `Someone posted this on X:\n"${tweetText.substring(0, 400)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
+      });
+      replyText = (aiRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+      if (replyText.length > 260) replyText = replyText.substring(0, replyText.lastIndexOf(' ', 260)) || replyText.substring(0, 260);
+    }
+
+    // Post the reply
+    const result = await replyToTweet(tweetId, replyText);
+    recordTweet(replyText, '');
+    _replyDraftQueue.push({
+      id: ++_replyDraftId, tweet_id: tweetId, tweet_text: tweetText.substring(0, 200),
+      tweet_author: 'manual', tweet_metrics: {},
+      reply_text: replyText, data_used: 'manual trigger', created_at: new Date().toISOString(),
+      status: 'posted', posted_at: new Date().toISOString(), reply_id: result?.data?.id || null
+    });
+    res.json({ ok: true, tweet_id: tweetId, reply_text: replyText, reply_id: result?.data?.id });
+  } catch (e) {
+    console.error('[reply-to]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Manual trigger for reply bot
 app.post('/api/reply-queue/trigger', async (req, res) => {
   const secret = req.headers['x-admin-secret'];
