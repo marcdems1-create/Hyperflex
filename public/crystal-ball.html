@@ -123,6 +123,15 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .ai-disambig-opt-odds{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-green);flex-shrink:0}
 .ai-disambig-opt-edge{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--accent-gold);background:rgba(201,146,13,0.1);padding:2px 6px;border-radius:4px;flex-shrink:0}
 
+/* REPLAY */
+.ai-replay{background:var(--card);border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:16px 20px;margin-top:16px}
+.ai-replay-title{font-family:var(--sans);font-size:13px;font-weight:700;color:#a855f7;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.ai-replay-sub{font-family:var(--sans);font-size:11px;color:var(--soft);margin-bottom:12px}
+.ai-replay-chart{width:100%;height:120px;border-radius:8px;overflow:hidden}
+.ai-replay-stats{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+.ai-replay-stat{font-family:var(--mono);font-size:12px;color:var(--soft)}
+.ai-replay-stat strong{color:var(--ink);font-weight:700}
+
 /* AI LOADING */
 .ai-loading{padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px}
 .ai-loading-text{font-family:var(--sans);font-size:13px;color:var(--soft);margin-top:12px}
@@ -532,6 +541,11 @@ function renderAIResult(d, query) {
     var tradeSide = (a.trade_suggestion && a.trade_suggestion.side) || 'YES';
     html += '<a href="/market/' + escAttr(pm.slug) + '" class="ai-trade-btn">Trade ' + escHtml((pm.question || '').substring(0, 40)) + ' &rarr;</a>';
   }
+  // Replay button — shows edge score evolution
+  if (pm.edge_history && pm.edge_history.length >= 3) {
+    html += '<button class="ai-chip" onclick="showReplay()" style="border-color:rgba(168,85,247,0.3);color:#a855f7">&#x23F0; Replay Edge</button>';
+    window._replayData = { history: pm.edge_history, score: pm.edge_score, question: pm.question, peak: pm.edge_peak_score || pm.edge_score, firstSeen: pm.edge_first_seen_at };
+  }
   var followUps = a.follow_up_questions || ['What are whales doing?', 'Contrarian take?', 'Historical moves?'];
   followUps.forEach(function(fq) {
     html += '<button class="ai-chip" onclick="runAI(\'' + escAttr(fq) + '\')">' + escHtml(fq) + '</button>';
@@ -561,6 +575,73 @@ function renderDisambiguation(options, originalQuery) {
   html += '</div></div>';
   // Prepend above the existing result
   el.innerHTML = html + el.innerHTML;
+}
+
+function showReplay() {
+  var rd = window._replayData;
+  if (!rd || !rd.history || rd.history.length < 3) return;
+  var el = document.getElementById('aiResult');
+  var existing = document.getElementById('aiReplaySection');
+  if (existing) { existing.remove(); return; } // toggle off
+
+  var h = rd.history;
+  var max = Math.max.apply(null, h);
+  var min = Math.min.apply(null, h);
+  var range = max - min || 1;
+  var w = 500, ht = 100, pad = 2;
+
+  // Build SVG path
+  var pts = h.map(function(v, i) {
+    var x = pad + (i / (h.length - 1)) * (w - pad * 2);
+    var y = pad + (1 - (v - min) / range) * (ht - pad * 2);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  var polyline = pts.join(' ');
+
+  // Gradient fill
+  var fillPts = pts.join(' ') + ' ' + (w - pad) + ',' + (ht - pad) + ' ' + pad + ',' + (ht - pad);
+
+  var trend = h[h.length - 1] >= h[0] ? '#00e68a' : '#ff4d6a';
+  var trendLabel = h[h.length - 1] >= h[0] ? 'Trending Up' : 'Trending Down';
+  var delta = h[h.length - 1] - h[0];
+  var deltaStr = (delta >= 0 ? '+' : '') + delta;
+
+  // Time labels
+  var samples = h.length;
+  var hoursSpan = Math.round(samples * 1.5 / 60); // ~90s per sample
+  if (hoursSpan < 1) hoursSpan = 1;
+
+  var html = '<div class="ai-replay" id="aiReplaySection">';
+  html += '<div class="ai-replay-title">&#x23F0; Edge Score Timeline — Last ' + hoursSpan + 'h</div>';
+  html += '<div class="ai-replay-sub">' + escHtml((rd.question || '').substring(0, 60)) + '</div>';
+  html += '<div class="ai-replay-chart">';
+  html += '<svg viewBox="0 0 ' + w + ' ' + ht + '" style="width:100%;height:120px" preserveAspectRatio="none">';
+  html += '<defs><linearGradient id="replayGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + trend + '" stop-opacity="0.3"/><stop offset="100%" stop-color="' + trend + '" stop-opacity="0"/></linearGradient></defs>';
+  html += '<polygon points="' + fillPts + '" fill="url(#replayGrad)"/>';
+  html += '<polyline points="' + polyline + '" fill="none" stroke="' + trend + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+  // Dot on current value
+  var lastX = (pad + (1) * (w - pad * 2)).toFixed(1);
+  var lastY = (pad + (1 - (h[h.length - 1] - min) / range) * (ht - pad * 2)).toFixed(1);
+  html += '<circle cx="' + lastX + '" cy="' + lastY + '" r="4" fill="' + trend + '" stroke="#0e0e15" stroke-width="2"/>';
+  // Score labels
+  html += '<text x="4" y="14" fill="#8888a0" font-size="10" font-family="JetBrains Mono,monospace">' + max + '</text>';
+  html += '<text x="4" y="' + (ht - 4) + '" fill="#8888a0" font-size="10" font-family="JetBrains Mono,monospace">' + min + '</text>';
+  html += '</svg>';
+  html += '</div>';
+  html += '<div class="ai-replay-stats">';
+  html += '<div class="ai-replay-stat">Current: <strong>' + rd.score + '</strong></div>';
+  html += '<div class="ai-replay-stat">Peak: <strong>' + rd.peak + '</strong></div>';
+  html += '<div class="ai-replay-stat">Change: <strong style="color:' + trend + '">' + deltaStr + '</strong></div>';
+  html += '<div class="ai-replay-stat">Trend: <strong style="color:' + trend + '">' + trendLabel + '</strong></div>';
+  if (rd.firstSeen) {
+    var ago = Math.round((Date.now() - new Date(rd.firstSeen).getTime()) / 60000);
+    var agoStr = ago < 60 ? ago + 'm ago' : Math.round(ago / 60) + 'h ago';
+    html += '<div class="ai-replay-stat">First detected: <strong>' + agoStr + '</strong></div>';
+  }
+  html += '</div></div>';
+
+  el.insertAdjacentHTML('beforeend', html);
+  document.getElementById('aiReplaySection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderSidebar(d) {

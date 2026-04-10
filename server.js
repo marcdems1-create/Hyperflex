@@ -24830,7 +24830,10 @@ IMPORTANT: Use REAL numbers from the data. If no data was found, say so honestly
           edge_components: primaryMarket.edge_components,
           price_change_24h: primaryMarket.price_change_24h,
           end_date: primaryMarket.end_date,
-          days_until_expiry: primaryMarket.days_until_expiry
+          days_until_expiry: primaryMarket.days_until_expiry,
+          edge_history: primaryMarket.edge_history || [],
+          edge_peak_score: primaryMarket.edge_peak_score || null,
+          edge_first_seen_at: primaryMarket.edge_first_seen_at || null
         } : null,
         whale_positions: whalePositions.slice(0, 5).map(w => ({
           trader: w.trader,
