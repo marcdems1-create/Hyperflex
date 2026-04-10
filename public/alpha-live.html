@@ -336,7 +336,7 @@ function render(data){
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
           '<div class="edge-score">'+
-            '<div class="n '+scoreClass+'">'+m.edge_score+'</div>'+
+            '<div class="n '+scoreClass+'">'+(m.edge_score>75?'🔥 ':'')+m.edge_score+'</div>'+
             '<div class="l">Edge</div>'+
           '</div>'+
           alphaBadge+

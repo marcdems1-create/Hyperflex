@@ -1489,7 +1489,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s' + (stale ? ';opacity:.55' : '') + '" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.market || '') + '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
@@ -1538,7 +1538,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (score > 75 ? '🔥 ' : '') + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(m.question || '') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted)">' +
@@ -1579,7 +1579,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(168,85,247,.1);color:#a855f7">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
         '</div>' +
         (q ? '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(q.substring(0, 80)) + '</div>' : '') +
         (p.action ? '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
