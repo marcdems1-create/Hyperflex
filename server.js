@@ -30335,8 +30335,8 @@ async function uploadMediaToX(imageBuffer) {
 }
 
 async function postTweet(text, mediaId) {
-  // ALL tweeting DISABLED — account flagged for automated posting
-  console.log('[tweet] BLOCKED — tweeting disabled. Would have posted:', text?.substring(0, 60));
+  // Standalone posting DISABLED — bot only replies to others' tweets
+  console.log('[tweet] BLOCKED — standalone posting disabled. Would have posted:', text?.substring(0, 60));
   return { data: { id: 'disabled' } };
 }
 
@@ -30721,12 +30721,10 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Text-only tweets until we have proper market card images
+    // Reply-only mode — no quote tweets, no standalone posts
     let postResult = null;
-    let postType = 'standalone';
-    const mediaId = null;
 
-    // Check dedup before posting — reply bot also feeds into the same history
+    // Check dedup before posting
     if (isTweetTooSimilar(reply)) {
       console.log(`[reply-bot] Skipping — reply too similar to recent tweet: "${reply.substring(0, 60)}..."`);
       _replyLog.push(target.id);
@@ -30735,37 +30733,14 @@ async function searchAndDraftReplies() {
     }
 
     try {
-      // Try quote tweet first (more engagement), fall back to standalone
-      const tweetUrl = 'https://api.x.com/2/tweets';
-      const quotePayload = { text: reply, quote_tweet_id: target.id };
-      if (mediaId) quotePayload.media = { media_ids: [mediaId] };
-      const quoteAuth = _xOAuthSign('POST', tweetUrl, {});
-      const quoteRes = await fetch(tweetUrl, {
-        method: 'POST',
-        headers: { 'Authorization': quoteAuth, 'Content-Type': 'application/json' },
-        body: JSON.stringify(quotePayload)
-      });
-      const quoteData = await quoteRes.json();
-      if (quoteRes.ok) {
-        postResult = quoteData;
-        postType = 'quote';
-        recordTweet(reply, '');
-        console.log(`[reply-bot] QUOTE-TWEETED ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
-      } else {
-        // Quote tweet failed (maybe Basic tier limitation), fall back to standalone
-        console.warn(`[reply-bot] Quote tweet failed (${quoteRes.status}), falling back to standalone`);
-        // Check rate limit before standalone fallback
-        if (!canTweet()) {
-          console.warn('[reply-bot] Rate limited — skipping standalone fallback');
-        } else {
-          postResult = await postTweet(reply, mediaId);
-          recordTweet(reply, '');
-          console.log(`[reply-bot] STANDALONE tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
-        }
-      }
+      // Reply directly to the tweet — no quote tweets, no standalone posts
+      postResult = await replyToTweet(target.id, reply);
+      recordTweet(reply, '');
+      console.log(`[reply-bot] REPLIED to ${target.id}: "${reply.substring(0, 60)}..."`);
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
     } catch (postErr) {
+      console.warn(`[reply-bot] Reply failed: ${postErr.message}`);
       _logError('reply-bot/post', postErr);
     }
 
@@ -30829,10 +30804,10 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Reply engagement bot DISABLED — got account flagged
-// cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
-// setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
-console.log('[boot] Reply engagement bot DISABLED');
+// Reply engagement bot — reply-only mode (no standalone posting)
+cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
+setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
+console.log('[boot] Reply engagement bot ENABLED (reply-only mode)');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
