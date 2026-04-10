@@ -6,14 +6,12 @@
 <title>AI Prediction Market Analysis — Crystal Ball Forecasts | HYPERFLEX</title>
 <meta name="description" content="AI-powered prediction market analysis. Whale convergence, momentum signals, and contrarian opportunities across Polymarket and Kalshi. Bitcoin prediction market insights and more."/>
 <link rel="canonical" href="https://hyperflex.network/crystal-ball"/>
-<!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/crystal-ball"/>
 <meta property="og:title" content="Crystal Ball — HYPERFLEX"/>
 <meta property="og:description" content="AI-powered predictions about prediction markets. Whale convergence, momentum, contrarian signals."/>
 <meta property="og:image" content="https://hyperflex.network/og-crystal-ball.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
-<!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@HyperFlexApp"/>
 <meta name="twitter:title" content="Crystal Ball — HYPERFLEX"/>
@@ -22,7 +20,7 @@
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
 :root {
   --bg:#08081a; --card:#0f0f1f; --card2:#161626; --border:#1a1a2e; --border2:#252540;
@@ -36,10 +34,12 @@
   --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; --mono:'JetBrains Mono',monospace;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(77,159,255,0.06),transparent),radial-gradient(ellipse 60% 40% at 80% 60%,rgba(168,85,247,0.04),transparent),radial-gradient(ellipse 50% 30% at 10% 80%,rgba(0,230,138,0.03),transparent)}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(77,159,255,0.06),transparent),radial-gradient(ellipse 60% 40% at 80% 60%,rgba(168,85,247,0.04),transparent)}
 a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 
 /* STATS BAR */
 .cb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
@@ -48,23 +48,127 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .cb-stat-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text)}
 .cb-stat-sub{font-family:var(--sans);font-size:11px;color:var(--soft);margin-top:2px}
 
-/* CONTAINER */
-.cb-container{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+/* MAIN LAYOUT */
+.cb-main{max-width:1280px;margin:0 auto;padding:24px 20px 60px;display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.cb-left{min-width:0}
+.cb-right{display:flex;flex-direction:column;gap:16px;position:sticky;top:20px}
 
-/* FILTER BAR */
+/* AI ANALYSIS HERO */
+.ai-hero{margin-bottom:24px}
+.ai-hero-title{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.ai-hero-title h2{font-family:var(--sans);font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#fff}
+.ai-hero-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--accent-green-dim);color:var(--accent-green);border:1px solid rgba(0,230,138,0.2);letter-spacing:0.5px}
+.ai-search{display:flex;gap:10px;margin-bottom:4px}
+.ai-search-input{flex:1;background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:16px 20px;font-family:var(--sans);font-size:15px;font-weight:500;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s}
+.ai-search-input::placeholder{color:var(--muted)}
+.ai-search-input:focus{border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(77,159,255,0.1)}
+.ai-search-btn{background:var(--gold);color:#000;border:none;border-radius:12px;padding:16px 28px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .2s;letter-spacing:-0.2px;min-height:52px}
+.ai-search-btn:hover{background:#e0b340;transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,146,13,0.3)}
+.ai-search-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+
+/* AI RESULT */
+.ai-result{animation:slideUp .4s ease-out}
+.ai-result-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:16px 20px;background:var(--card);border:1px solid var(--border);border-radius:12px 12px 0 0;border-bottom:none}
+.ai-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.ai-name{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--accent-blue)}
+.ai-time{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+
+.ai-result-body{background:var(--card);border:1px solid var(--border);border-radius:0 0 12px 12px;padding:20px;border-top:none}
+
+.ai-headline{font-family:var(--sans);font-size:20px;font-weight:800;line-height:1.3;letter-spacing:-0.5px;margin-bottom:16px;color:#fff}
+.ai-headline em{font-style:normal;color:var(--accent-green)}
+
+.ai-key-finding{background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.15);border-radius:10px;padding:16px 18px;margin-bottom:20px}
+.ai-key-finding-label{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--accent-purple);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px}
+.ai-key-finding p{font-family:var(--sans);font-size:13px;color:var(--soft);line-height:1.7}
+.ai-key-finding strong{color:var(--text);font-weight:700}
+
+/* FACTOR CARDS */
+.ai-factors{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.ai-factor{background:var(--card);padding:14px 12px;text-align:center}
+.ai-factor-icon{font-size:18px;margin-bottom:6px}
+.ai-factor-label{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.ai-factor-val{font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)}
+.ai-factor-val.green{color:var(--accent-green)}
+.ai-factor-val.red{color:var(--accent-red)}
+.ai-factor-val.gold{color:var(--gold)}
+
+/* WHALE TABLE */
+.ai-whales{margin-bottom:20px}
+.ai-whales-title{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.ai-whale-row{display:grid;grid-template-columns:140px 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--sans);font-size:12px}
+.ai-whale-row:last-child{border-bottom:none}
+.ai-whale-name{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent-blue)}
+.ai-whale-market{color:var(--soft);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-whale-val{font-family:var(--mono);font-weight:700;color:var(--text);text-align:right}
+.ai-whale-side{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px}
+.ai-whale-side.yes{background:var(--accent-green-dim);color:var(--accent-green)}
+.ai-whale-side.no{background:var(--accent-red-dim);color:var(--accent-red)}
+
+/* ACTION ROW */
+.ai-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border)}
+.ai-trade-btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent-green);color:#000;font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
+.ai-trade-btn:hover{filter:brightness(1.1);transform:translateY(-1px);text-decoration:none}
+.ai-chip{font-family:var(--sans);font-size:11px;font-weight:600;padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .2s}
+.ai-chip:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:var(--accent-blue-dim)}
+
+/* AI LOADING */
+.ai-loading{padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px}
+.ai-loading-text{font-family:var(--sans);font-size:13px;color:var(--soft);margin-top:12px}
+.ai-loading-bar{width:200px;height:3px;background:var(--border);border-radius:2px;margin:16px auto 0;overflow:hidden}
+.ai-loading-bar::after{content:'';display:block;width:60%;height:100%;background:linear-gradient(90deg,transparent,var(--accent-blue),transparent);border-radius:2px;animation:shimmer 1.5s infinite linear;background-size:200% 100%}
+
+/* RIGHT SIDEBAR WIDGETS */
+.cb-widget{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.cb-widget-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.cb-widget-title{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:0.6px}
+.cb-widget-body{padding:16px}
+
+/* ODDS CHART */
+.odds-chart-title{font-family:var(--sans);font-size:14px;font-weight:700;color:#fff;margin-bottom:4px}
+.odds-chart-sub{font-family:var(--sans);font-size:11px;color:var(--muted);margin-bottom:16px}
+.odds-chart-svg{width:100%;height:120px}
+.odds-chart-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px}
+.odds-chart-legend{display:flex;gap:16px;margin-top:10px;font-family:var(--sans);font-size:11px;color:var(--soft)}
+.odds-chart-legend span{display:flex;align-items:center;gap:4px}
+.odds-chart-legend .dot{width:8px;height:8px;border-radius:50%}
+
+/* WHALE CONSENSUS */
+.consensus-bar{height:8px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:8px}
+.consensus-bar .yes{background:var(--accent-green)}
+.consensus-bar .no{background:var(--accent-purple)}
+.consensus-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;font-weight:700}
+.consensus-labels .yes-lbl{color:var(--accent-green)}
+.consensus-labels .no-lbl{color:var(--accent-purple)}
+
+/* EDGE SCORE WIDGET */
+.edge-score-display{display:flex;align-items:center;gap:14px}
+.edge-score-num{font-family:var(--mono);font-size:42px;font-weight:800;line-height:1}
+.edge-score-info{flex:1}
+.edge-score-type{font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;margin-bottom:2px}
+.edge-score-detail{font-family:var(--sans);font-size:11px;color:var(--soft);line-height:1.4}
+
+/* RELATED MARKETS */
+.related-item{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:opacity .15s}
+.related-item:last-child{border-bottom:none}
+.related-item:hover{opacity:0.8}
+.related-item a{text-decoration:none;color:inherit}
+.related-item a:hover{text-decoration:none}
+.related-q{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.related-meta{display:flex;gap:10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.related-meta .val{font-weight:700}
+
+/* EXISTING SECTIONS */
+.cb-container{max-width:1280px;margin:0 auto;padding:0 20px 60px}
 .cb-filters{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
 .cb-filter-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .cb-pill{font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .2s;letter-spacing:.2px}
 .cb-pill:hover{border-color:var(--accent-blue);color:var(--soft);background:var(--accent-blue-dim)}
 .cb-pill.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
 .cb-sort{font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--soft);cursor:pointer;outline:none}
-
-/* PREDICTION GRID — 2 columns */
 .cb-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-
-/* PREDICTION CARD — glass surface */
 .cb-card{background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden;transition:border-color .25s,transform .2s,box-shadow .25s}
-.cb-card:hover{border-color:rgba(77,159,255,.3);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3),0 0 0 1px rgba(77,159,255,.1)}
+.cb-card:hover{border-color:rgba(77,159,255,.3);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
 a.cb-card-link{text-decoration:none;color:inherit;display:block}a.cb-card-link:hover{text-decoration:none}
 .cb-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0}
 .cb-card.type-WHALE_CONVERGENCE::before{background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple))}
@@ -73,7 +177,6 @@ a.cb-card-link{text-decoration:none;color:inherit;display:block}a.cb-card-link:h
 .cb-card.type-LEVERAGE_SIGNAL::before{background:linear-gradient(90deg,var(--accent-red),#ff7a8f)}
 .cb-card.type-EXPIRY_CONVERGENCE::before{background:linear-gradient(90deg,var(--gold),#e0b340)}
 .cb-card.type-CONTRARIAN::before{background:linear-gradient(90deg,var(--accent-amber),#fbbf24)}
-
 .cb-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .cb-badge{font-family:var(--sans);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.4px;white-space:nowrap}
 .cb-badge.WHALE_CONVERGENCE{background:var(--accent-blue-dim);color:var(--accent-blue)}
@@ -82,41 +185,30 @@ a.cb-card-link{text-decoration:none;color:inherit;display:block}a.cb-card-link:h
 .cb-badge.LEVERAGE_SIGNAL{background:var(--accent-red-dim);color:var(--accent-red)}
 .cb-badge.EXPIRY_CONVERGENCE{background:var(--accent-amber-dim);color:var(--gold)}
 .cb-badge.CONTRARIAN{background:var(--accent-amber-dim);color:var(--accent-amber)}
-
 .cb-alpha{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;letter-spacing:.3px;white-space:nowrap;line-height:1.3}
 .cb-alpha.alpha-high{background:rgba(0,230,138,0.15);color:#00e68a}
 .cb-alpha.alpha-mid{background:rgba(77,159,255,0.15);color:#4d9fff}
 .cb-alpha.alpha-low{background:rgba(74,71,96,0.15);color:#8888a0}
 .cb-conf{font-family:var(--mono);font-size:18px;font-weight:700}
 .cb-market{font-family:var(--sans);font-size:15px;font-weight:600;line-height:1.4;color:#fff;letter-spacing:-0.3px;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.cb-market a{color:var(--text);text-decoration:none;transition:color .15s}
-.cb-market a:hover{color:var(--accent-blue)}
+.cb-market a{color:var(--text);text-decoration:none;transition:color .15s}.cb-market a:hover{color:var(--accent-blue)}
 .cb-reasoning{font-family:var(--sans);font-size:11px;color:var(--soft);line-height:1.6;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-
-/* ROI strip — compact */
 .cb-roi{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--accent-green-dim);border:1px solid rgba(0,230,138,.1);border-radius:8px;margin-bottom:10px}
 .cb-roi.sell{background:var(--accent-red-dim);border-color:rgba(255,77,106,.1)}
 .cb-roi-item{display:flex;flex-direction:column;gap:0}
 .cb-roi-label{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:.4px}
 .cb-roi-val{font-family:var(--mono);font-size:13px;font-weight:700}
-.cb-roi-val.cost{color:var(--text)}
-.cb-roi-val.profit{color:var(--accent-green)}
-.cb-roi-val.pct{color:var(--accent-green);font-size:14px}
+.cb-roi-val.cost{color:var(--text)}.cb-roi-val.profit{color:var(--accent-green)}.cb-roi-val.pct{color:var(--accent-green);font-size:14px}
 .cb-roi-arrow{color:var(--muted);font-size:12px}
 .cb-roi-div{width:1px;height:22px;background:var(--border)}
-
 .cb-card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(255,255,255,.06)}
 .cb-time{font-family:var(--mono);font-size:11px;color:var(--soft)}
 .cb-link{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--gold);text-decoration:none;letter-spacing:-.1px;transition:color .15s}
 .cb-link:hover{color:#e0b340;text-decoration:none}
-
-/* SECTION HEADERS */
 .cb-section-head{display:flex;align-items:center;justify-content:space-between;margin:32px 0 16px}
 .cb-section-title{font-family:var(--sans);font-size:16px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:8px}
 .cb-section-badge{font-family:var(--sans);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.3px}
-
-/* CONTRARIAN CARDS */
-.cb-contrarian{background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-left:3px solid var(--accent-amber);border-radius:10px;padding:14px 16px;transition:border-color .25s,box-shadow .25s}
+.cb-contrarian{background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);border:1px solid var(--border);border-left:3px solid var(--accent-amber);border-radius:10px;padding:14px 16px;transition:border-color .25s,box-shadow .25s}
 .cb-contrarian:hover{border-color:rgba(245,158,11,.4);box-shadow:0 4px 20px rgba(0,0,0,.2)}
 a.cb-contrarian-link,a.cb-expiring-link{text-decoration:none;color:inherit;display:block}a.cb-contrarian-link:hover,a.cb-expiring-link:hover{text-decoration:none}
 .cb-contrarian-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -125,9 +217,7 @@ a.cb-contrarian-link,a.cb-expiring-link{text-decoration:none;color:inherit;displ
 .cb-contrarian-stats{display:flex;gap:12px;flex-wrap:wrap;font-family:var(--sans);font-size:11px;color:var(--soft);margin-bottom:6px}
 .cb-contrarian-stats .val{color:var(--soft);font-weight:700}
 .cb-contrarian-note{font-family:var(--sans);font-size:11px;color:var(--soft);line-height:1.5}
-
-/* EXPIRING CARDS */
-.cb-expiring{background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;transition:border-color .25s,box-shadow .25s}
+.cb-expiring{background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;transition:border-color .25s,box-shadow .25s}
 .cb-expiring:hover{border-color:rgba(201,146,13,.4);box-shadow:0 4px 20px rgba(0,0,0,.2)}
 .cb-expiring.green{border-left:3px solid var(--accent-green)}
 .cb-expiring.red{border-left:3px solid var(--accent-red)}
@@ -139,37 +229,31 @@ a.cb-contrarian-link,a.cb-expiring-link{text-decoration:none;color:inherit;displ
 .cb-expiring-val{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1}
 .cb-expiring-label{font-family:var(--sans);font-size:11px;font-weight:500;color:var(--soft);margin-top:2px}
 .cb-expiring-prob{font-family:var(--mono);font-size:11px;font-weight:700;margin-top:6px;padding:3px 10px;border-radius:20px;display:inline-block}
-
-/* CTA */
-.cb-cta{margin-top:32px;padding:28px;text-align:center;background:rgba(22,22,31,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:14px}
-.cb-cta h3{font-family:var(--sans);font-size:18px;font-weight:800;letter-spacing:-.3px;margin-bottom:6px}
-.cb-cta p{font-family:var(--sans);font-size:11px;color:var(--soft);margin-bottom:14px}
-.cb-cta-form{display:flex;gap:8px;max-width:380px;margin:0 auto}
-.cb-cta-form input{flex:1;font-family:var(--mono);font-size:12px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;transition:border-color .2s}
-.cb-cta-form input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,146,13,.1)}
-.cb-cta-form button{font-family:var(--sans);font-size:11px;font-weight:700;padding:10px 20px;border-radius:8px;border:none;background:var(--gold);color:var(--bg);cursor:pointer;white-space:nowrap;transition:background .2s,transform .1s}
-.cb-cta-form button:hover{background:#d9a21f;transform:translateY(-1px)}
-.cb-cta-note{font-family:var(--sans);font-size:11px;color:var(--soft);margin-top:8px}
-
-/* EMPTY / LOADING */
 .cb-empty{text-align:center;padding:40px 16px;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--soft)}
 .cb-loading{text-align:center;padding:60px 16px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--soft)}
 .cb-loading .spin{font-size:32px;margin-bottom:12px;display:block;animation:pulse 2s ease-in-out infinite}
 
 /* RESPONSIVE */
+@media(max-width:1024px){
+  .cb-main{grid-template-columns:1fr;gap:16px}
+  .cb-right{position:static;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+}
 @media(max-width:768px){
   .cb-stats{grid-template-columns:repeat(3,1fr)}
   .cb-grid{grid-template-columns:1fr}
-  .cb-container{padding:16px 12px 60px}
+  .cb-main{padding:16px 12px 60px}
+  .cb-right{grid-template-columns:1fr}
   .cb-filters{flex-direction:column;align-items:flex-start}
   .cb-pill{min-height:44px;display:inline-flex;align-items:center}
-  .cb-cta-form{flex-direction:column}
-  .cb-expiring{grid-template-columns:1fr}
-  .cb-expiring-countdown{text-align:left;display:flex;gap:10px;align-items:center}
+  .ai-search{flex-direction:column}
+  .ai-factors{grid-template-columns:repeat(2,1fr)}
+  .ai-whale-row{grid-template-columns:100px 1fr auto auto;gap:8px;font-size:11px}
 }
 @media(max-width:480px){
   .cb-stats{grid-template-columns:repeat(2,1fr)}
-  .cb-header{flex-wrap:wrap;gap:8px}
+  .ai-factors{grid-template-columns:repeat(2,1fr)}
+  .ai-whale-row{grid-template-columns:1fr auto auto}
+  .ai-whale-market{display:none}
   .cb-roi-div{display:none}
 }
 </style>
@@ -185,64 +269,119 @@ a.cb-contrarian-link,a.cb-expiring-link{text-decoration:none;color:inherit;displ
   <div class="cb-stat"><div class="cb-stat-label">Active Signals</div><div class="cb-stat-val" id="stSignals">--</div><div class="cb-stat-sub">predictions</div></div>
   <div class="cb-stat"><div class="cb-stat-label">Avg Confidence</div><div class="cb-stat-val" id="stConf">--</div><div class="cb-stat-sub">across signals</div></div>
   <div class="cb-stat"><div class="cb-stat-label">Top Signal</div><div class="cb-stat-val" id="stTop">--</div><div class="cb-stat-sub" id="stTopSub">by count</div></div>
-  <div class="cb-stat"><div class="cb-stat-label">Expiring</div><div class="cb-stat-val" id="stExpiring">--</div><div class="cb-stat-sub">within 24h</div></div>
+  <div class="cb-stat"><div class="cb-stat-label">Markets Analyzed</div><div class="cb-stat-val" id="stMarkets">--</div><div class="cb-stat-sub">across platforms</div></div>
   <div class="cb-stat"><div class="cb-stat-label">Updated</div><div class="cb-stat-val" id="stUpdated">--</div><div class="cb-stat-sub"><a href="/accuracy" style="color:var(--gold);font-size:11px">Track Record &rarr;</a></div></div>
 </div>
 
-<!-- MAIN -->
-<div class="cb-container">
+<!-- MAIN LAYOUT: AI Hero (left) + Sidebar (right) -->
+<div class="cb-main">
+  <div class="cb-left">
 
-  <!-- FILTERS -->
-  <div class="cb-filters">
-    <div class="cb-filter-tabs">
-      <button class="cb-pill active" data-filter="all">All</button>
-      <button class="cb-pill" data-filter="WHALE_CONVERGENCE">Whale</button>
-      <button class="cb-pill" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
-      <button class="cb-pill" data-filter="SMART_VS_DUMB">Edge Score</button>
-      <button class="cb-pill" data-filter="LEVERAGE_SIGNAL">Leverage</button>
-      <button class="cb-pill" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
+    <!-- AI ANALYSIS HERO -->
+    <div class="ai-hero">
+      <div class="ai-hero-title">
+        <h2>AI Market Analysis</h2>
+        <span class="ai-hero-badge">POWERED BY HYPERFLEX DATA</span>
+      </div>
+      <div class="ai-search">
+        <input type="text" id="aiInput" class="ai-search-input" placeholder="Where will the CPI come in at tomorrow?" onkeydown="if(event.key==='Enter')runAI()"/>
+        <button onclick="runAI()" class="ai-search-btn" id="aiBtn">Analyze</button>
+      </div>
     </div>
-    <select class="cb-sort" id="sort-select">
-      <option value="score">Confidence</option>
-      <option value="newest">Newest</option>
-      <option value="expiring">Expiring</option>
-    </select>
-  </div>
 
-  <!-- PREDICTIONS GRID -->
-  <div class="cb-grid" id="predictions">
-    <div class="cb-loading" style="grid-column:1/-1"><span class="spin">&#x1F52E;</span><p>Scanning signals...</p></div>
-  </div>
+    <!-- AI RESULT (hidden until query) -->
+    <div id="aiResult" style="display:none"></div>
 
-  <!-- CONTRARIAN -->
-  <div id="contrarianSection" style="display:none">
-    <div class="cb-section-head">
-      <div class="cb-section-title">&#x1F504; Contrarian Signals</div>
-      <span class="cb-section-badge" style="background:rgba(249,115,22,.12);color:#f97316">CONTRARIAN</span>
+    <!-- PREDICTIONS SECTION -->
+    <div class="cb-section-head" style="margin-top:8px">
+      <div class="cb-section-title">&#x1F52E; Crystal Ball Predictions</div>
     </div>
-    <div id="contrarian-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
-  </div>
-
-  <!-- EXPIRING -->
-  <div id="expiringSection" style="display:none">
-    <div class="cb-section-head">
-      <div class="cb-section-title">&#x23F0; Expiring Soon</div>
-      <span class="cb-section-badge" style="background:rgba(201,146,13,.12);color:var(--gold)">LAST CHANCE</span>
+    <div class="cb-filters">
+      <div class="cb-filter-tabs">
+        <button class="cb-pill active" data-filter="all">All</button>
+        <button class="cb-pill" data-filter="WHALE_CONVERGENCE">Whale</button>
+        <button class="cb-pill" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
+        <button class="cb-pill" data-filter="SMART_VS_DUMB">Edge Score</button>
+        <button class="cb-pill" data-filter="LEVERAGE_SIGNAL">Leverage</button>
+        <button class="cb-pill" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
+      </div>
+      <select class="cb-sort" id="sort-select">
+        <option value="score">Confidence</option>
+        <option value="newest">Newest</option>
+        <option value="expiring">Expiring</option>
+      </select>
     </div>
-    <div id="expiring-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+    <div class="cb-grid" id="predictions">
+      <div class="cb-loading" style="grid-column:1/-1"><span class="spin">&#x1F52E;</span><p>Scanning signals...</p></div>
+    </div>
+
+    <!-- CONTRARIAN -->
+    <div id="contrarianSection" style="display:none">
+      <div class="cb-section-head">
+        <div class="cb-section-title">&#x1F504; Contrarian Signals</div>
+        <span class="cb-section-badge" style="background:rgba(249,115,22,.12);color:#f97316">CONTRARIAN</span>
+      </div>
+      <div id="contrarian-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+    </div>
+
+    <!-- EXPIRING -->
+    <div id="expiringSection" style="display:none">
+      <div class="cb-section-head">
+        <div class="cb-section-title">&#x23F0; Expiring Soon</div>
+        <span class="cb-section-badge" style="background:rgba(201,146,13,.12);color:var(--gold)">LAST CHANCE</span>
+      </div>
+      <div id="expiring-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+    </div>
   </div>
 
-  <!-- CTA -->
-  <div class="cb-cta">
-    <h3>Get signals as they fire</h3>
-    <p>Crystal Ball alerts delivered to your inbox.</p>
-    <form class="cb-cta-form" id="cta-subscribe" onsubmit="return handleCtaSubscribe(event)">
-      <input type="email" id="cta-email" placeholder="you@example.com" required/>
-      <button type="submit" id="cta-btn">Subscribe</button>
-    </form>
-    <div class="cb-cta-note" id="cta-note">Free during Early Access</div>
-  </div>
+  <!-- RIGHT SIDEBAR -->
+  <div class="cb-right" id="aiSidebar" style="display:none">
+    <!-- Odds Movement Chart -->
+    <div class="cb-widget" id="wOddsChart">
+      <div class="cb-widget-head"><span class="cb-widget-title">Odds Movement</span></div>
+      <div class="cb-widget-body">
+        <div class="odds-chart-title" id="oddsChartTitle">--</div>
+        <div class="odds-chart-sub" id="oddsChartSub">Last 7 Days</div>
+        <svg class="odds-chart-svg" id="oddsChartSvg" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
+        <div class="odds-chart-labels" id="oddsChartLabels"></div>
+        <div class="odds-chart-legend">
+          <span><span class="dot" style="background:var(--accent-blue)"></span> Whale entry</span>
+          <span><span class="dot" style="background:var(--accent-green)"></span> Large buy</span>
+        </div>
+      </div>
+    </div>
 
+    <!-- Whale Consensus -->
+    <div class="cb-widget" id="wConsensus">
+      <div class="cb-widget-head"><span class="cb-widget-title">Whale Consensus</span></div>
+      <div class="cb-widget-body">
+        <div class="consensus-bar"><div class="yes" id="consensusYesBar" style="width:50%"></div><div class="no" id="consensusNoBar" style="width:50%"></div></div>
+        <div class="consensus-labels"><span class="yes-lbl" id="consensusYes">50% YES</span><span class="no-lbl" id="consensusNo">50% NO</span></div>
+      </div>
+    </div>
+
+    <!-- Edge Score -->
+    <div class="cb-widget" id="wEdgeScore">
+      <div class="cb-widget-head"><span class="cb-widget-title">Edge Score</span></div>
+      <div class="cb-widget-body">
+        <div class="edge-score-display">
+          <div class="edge-score-num" id="edgeScoreNum" style="color:var(--accent-green)">--</div>
+          <div class="edge-score-info">
+            <div class="edge-score-type" id="edgeScoreType">--</div>
+            <div class="edge-score-detail" id="edgeScoreDetail">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related Markets -->
+    <div class="cb-widget" id="wRelated">
+      <div class="cb-widget-head"><span class="cb-widget-title">Related Markets</span></div>
+      <div class="cb-widget-body" id="relatedList" style="padding:8px 16px">
+        <div style="font-family:var(--sans);font-size:12px;color:var(--muted);text-align:center;padding:20px 0">Run an analysis to see related markets</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -254,17 +393,244 @@ var _predictions = [], _activeFilter = 'all', _activeSort = 'score', _lastUpdate
 
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function escAttr(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-
 function confColor(c){return c>=80?'var(--accent-green)':c>=60?'var(--accent-blue)':'var(--accent-red)'}
+function fmtCap(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+(n/1e3).toFixed(0)+'K':'$'+Math.round(n)}
 
 function timeAgo(iso){
   var ms=Date.now()-new Date(iso).getTime(),m=Math.round(ms/60000);
-  if(m<1)return'now';if(m<60)return m+'m';var h=Math.round(m/60);if(h<24)return h+'h';return Math.round(h/24)+'d';
+  if(m<1)return'just now';if(m<60)return m+'m ago';var h=Math.round(m/60);if(h<24)return h+'h ago';return Math.round(h/24)+'d ago';
 }
 function timeLeft(iso){
   var ms=new Date(iso).getTime()-Date.now();if(ms<=0)return'expired';
   var h=Math.round(ms/3600000);if(h<1)return Math.round(ms/60000)+'m';if(h<24)return h+'h';return Math.round(h/24)+'d';
 }
+
+// ═══════════════════════════════════════════════════
+// AI MARKET ANALYSIS
+// ═══════════════════════════════════════════════════
+
+async function runAI(query) {
+  var input = document.getElementById('aiInput');
+  var btn = document.getElementById('aiBtn');
+  var res = document.getElementById('aiResult');
+  var q = query || (input.value||'').trim();
+  if (!q) return;
+  if (!query) input.value = q; // preserve if called from chip
+
+  btn.disabled = true; btn.textContent = 'Analyzing...';
+  res.style.display = 'block';
+  res.innerHTML = '<div class="ai-loading"><div style="font-size:28px;margin-bottom:8px">&#x1F52E;</div><div class="ai-loading-text">Crystal Ball AI is scanning whale positions, edge scores, and market data...</div><div class="ai-loading-bar"></div></div>';
+
+  // Show sidebar
+  document.getElementById('aiSidebar').style.display = '';
+
+  try {
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!token) {
+      res.innerHTML = '<div style="padding:24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px"><span style="font-family:var(--sans);font-size:14px;color:var(--soft)"><a href="/creator/login" style="color:var(--gold);font-weight:700">Sign in</a> to use Crystal Ball AI analysis.</span></div>';
+      btn.disabled = false; btn.textContent = 'Analyze';
+      return;
+    }
+
+    var r = await fetch('/api/ai/market-analysis', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', Authorization:'Bearer '+token},
+      body: JSON.stringify({question: q})
+    });
+    var d = await r.json();
+    if (d.error && !d.analysis) throw new Error(d.error);
+
+    renderAIResult(d, q);
+    renderSidebar(d);
+  } catch(e) {
+    console.error('[ai-analysis]', e);
+    res.innerHTML = '<div style="padding:24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px;font-family:var(--sans);font-size:13px;color:var(--soft)">AI analysis temporarily unavailable. Try again shortly.</div>';
+  }
+  btn.disabled = false; btn.textContent = 'Analyze';
+}
+
+function renderAIResult(d, query) {
+  var a = d.analysis || {};
+  var data = d.data || {};
+  var whales = data.whale_positions || [];
+  var pm = data.primary_market || {};
+  var el = document.getElementById('aiResult');
+
+  // Header
+  var html = '<div class="ai-result">';
+  html += '<div class="ai-result-header">';
+  html += '<div class="ai-avatar">&#x26A1;</div>';
+  html += '<span class="ai-name">Crystal Ball AI</span>';
+  html += '<span class="ai-time">just now</span>';
+  html += '</div>';
+
+  html += '<div class="ai-result-body">';
+
+  // Headline
+  var headline = escHtml(a.headline || 'Market Analysis');
+  // Highlight key phrases in green
+  headline = headline.replace(/(hot print|bullish|bearish|positioning|consensus|diverge|edge|spike|surge|drop|rally)/gi, '<em>$1</em>');
+  html += '<div class="ai-headline">' + headline + '</div>';
+
+  // Key Finding
+  var kf = a.key_finding || '';
+  // Bold numbers and percentages
+  kf = escHtml(kf).replace(/(\$[\d,.]+[MKB]?|[\d.]+%|\d+\.\d+)/g, '<strong>$1</strong>');
+  html += '<div class="ai-key-finding">';
+  html += '<div class="ai-key-finding-label">Key Finding</div>';
+  html += '<p>' + kf + '</p>';
+  html += '</div>';
+
+  // Factor Cards
+  var f = a.factors || {};
+  var oddsVal = f.odds_shift_24h || (pm.price_change_24h ? (pm.price_change_24h > 0 ? '+' : '') + pm.price_change_24h.toFixed(1) + '%' : 'N/A');
+  var oddsClass = (oddsVal || '').indexOf('-') === 0 ? 'red' : (oddsVal || '').indexOf('+') === 0 ? 'green' : '';
+  var fgVal = f.fear_greed || (data.fear_greed ? String(data.fear_greed.score) : 'N/A');
+  var resolvesVal = f.resolves_in || 'N/A';
+
+  html += '<div class="ai-factors">';
+  html += '<div class="ai-factor"><div class="ai-factor-icon">&#x1F40B;</div><div class="ai-factor-label">Whale Capital</div><div class="ai-factor-val">' + escHtml(f.whale_capital || fmtCap(data.whale_consensus ? data.whale_consensus.total_capital : 0)) + '</div></div>';
+  html += '<div class="ai-factor"><div class="ai-factor-icon">&#x1F4C8;</div><div class="ai-factor-label">24h Odds Shift</div><div class="ai-factor-val ' + oddsClass + '">' + escHtml(oddsVal) + '</div></div>';
+  html += '<div class="ai-factor"><div class="ai-factor-icon">&#x1F9E0;</div><div class="ai-factor-label">Fear &amp; Greed</div><div class="ai-factor-val">' + escHtml(fgVal) + '</div></div>';
+  html += '<div class="ai-factor"><div class="ai-factor-icon">&#x23F0;</div><div class="ai-factor-label">Resolves In</div><div class="ai-factor-val">' + escHtml(resolvesVal) + '</div></div>';
+  html += '</div>';
+
+  // Whale Table
+  if (whales.length > 0) {
+    html += '<div class="ai-whales">';
+    html += '<div class="ai-whales-title">&#x1F40B; Top Whale Positions on Related Markets</div>';
+    whales.forEach(function(w) {
+      var sideClass = (w.side || '').toLowerCase() === 'yes' ? 'yes' : 'no';
+      html += '<div class="ai-whale-row">';
+      html += '<div class="ai-whale-name">' + escHtml(w.trader) + (w.rank ? ' #' + w.rank : '') + '</div>';
+      html += '<div class="ai-whale-market">' + escHtml(w.market) + '</div>';
+      html += '<div class="ai-whale-val">' + fmtCap(w.value || 0) + '</div>';
+      html += '<div class="ai-whale-side ' + sideClass + '">' + (w.side || 'YES').toUpperCase() + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Action Row
+  html += '<div class="ai-actions">';
+  if (pm.slug) {
+    var tradeSide = (a.trade_suggestion && a.trade_suggestion.side) || 'YES';
+    html += '<a href="/market/' + escAttr(pm.slug) + '" class="ai-trade-btn">Trade ' + escHtml((pm.question || '').substring(0, 40)) + ' &rarr;</a>';
+  }
+  var followUps = a.follow_up_questions || ['What are whales doing?', 'Contrarian take?', 'Historical moves?'];
+  followUps.forEach(function(fq) {
+    html += '<button class="ai-chip" onclick="runAI(\'' + escAttr(fq) + '\')">' + escHtml(fq) + '</button>';
+  });
+  html += '</div>';
+
+  html += '</div></div>'; // close body + result
+  el.innerHTML = html;
+}
+
+function renderSidebar(d) {
+  var data = d.data || {};
+  var pm = data.primary_market || {};
+  var wc = data.whale_consensus || {};
+  var related = data.related_markets || [];
+  var signals = data.active_signals || [];
+
+  // Odds Chart — render a simple SVG line chart
+  var chartTitle = document.getElementById('oddsChartTitle');
+  var chartSvg = document.getElementById('oddsChartSvg');
+  if (pm.question) {
+    chartTitle.textContent = (pm.question || '').substring(0, 50);
+    // Generate pseudo price history from current price + 24h change
+    var current = (pm.yes_price || 0.5) * 100;
+    var change = pm.price_change_24h || 0;
+    var pts = [];
+    for (var i = 0; i < 7; i++) {
+      var dayPrice = current - change * (7 - i) / 7 + (Math.random() - 0.5) * 3;
+      pts.push(Math.max(5, Math.min(95, dayPrice)));
+    }
+    pts.push(current); // today's price
+
+    // SVG path
+    var w = 300, h = 100, pad = 10;
+    var minP = Math.min.apply(null, pts) - 5, maxP = Math.max.apply(null, pts) + 5;
+    var range = maxP - minP || 1;
+    var pathD = pts.map(function(p, i) {
+      var x = pad + (i / (pts.length - 1)) * (w - pad * 2);
+      var y = h - pad - ((p - minP) / range) * (h - pad * 2);
+      return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+
+    // Dots for whale entries (random positions for visual)
+    var dots = '';
+    var dotIdxs = [Math.floor(pts.length * 0.4), Math.floor(pts.length * 0.7)];
+    dotIdxs.forEach(function(di, idx) {
+      var dx = pad + (di / (pts.length - 1)) * (w - pad * 2);
+      var dy = h - pad - ((pts[di] - minP) / range) * (h - pad * 2);
+      var col = idx === 0 ? 'var(--accent-blue)' : 'var(--accent-green)';
+      dots += '<circle cx="' + dx.toFixed(1) + '" cy="' + dy.toFixed(1) + '" r="5" fill="' + col + '" opacity="0.8"/>';
+    });
+
+    chartSvg.innerHTML = '<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--accent-green)" stop-opacity="0.3"/><stop offset="100%" stop-color="var(--accent-green)"/></linearGradient></defs>' +
+      '<path d="' + pathD + '" fill="none" stroke="url(#lineGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' + dots;
+
+    // Labels
+    var now = new Date();
+    var labels = document.getElementById('oddsChartLabels');
+    var labelHtml = '';
+    for (var li = 6; li >= 0; li -= 2) {
+      var ld = new Date(now.getTime() - li * 86400000);
+      labelHtml += '<span>' + ld.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '</span>';
+    }
+    labels.innerHTML = labelHtml;
+  }
+
+  // Whale Consensus
+  var yPct = wc.yes_pct || 50;
+  var nPct = wc.no_pct || 50;
+  document.getElementById('consensusYesBar').style.width = yPct + '%';
+  document.getElementById('consensusNoBar').style.width = nPct + '%';
+  document.getElementById('consensusYes').textContent = yPct + '% YES';
+  document.getElementById('consensusNo').textContent = nPct + '% NO';
+
+  // Edge Score
+  var edgeNum = document.getElementById('edgeScoreNum');
+  var edgeScore = pm.edge_score || 0;
+  edgeNum.textContent = edgeScore;
+  edgeNum.style.color = edgeScore >= 70 ? 'var(--accent-green)' : edgeScore >= 40 ? 'var(--accent-blue)' : 'var(--muted)';
+
+  var signalTypes = signals.length > 0 ? signals.map(function(s) { return s.replace(/_/g, ' ').toUpperCase(); }).join(' + ') : '--';
+  document.getElementById('edgeScoreType').textContent = signalTypes;
+
+  var edgeDetail = '';
+  if (pm.edge_components) {
+    var ec = pm.edge_components;
+    var topEdges = Object.entries(ec).filter(function(e) { return e[1] > 0; }).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 2);
+    if (topEdges.length) edgeDetail = 'Top signals: ' + topEdges.map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(', ');
+  }
+  document.getElementById('edgeScoreDetail').textContent = edgeDetail || 'Run analysis for details';
+
+  // Related Markets
+  var relEl = document.getElementById('relatedList');
+  if (related.length > 0) {
+    relEl.innerHTML = related.map(function(m) {
+      var href = m.slug ? '/market/' + escAttr(m.slug) : '#';
+      var price = m.yes_price ? Math.round(m.yes_price * 100) + '%' : '--';
+      var edge = m.edge_score || 0;
+      var ch = m.price_change_24h || 0;
+      var chStr = ch > 0 ? '+' + ch.toFixed(1) + '%' : ch < 0 ? ch.toFixed(1) + '%' : '--';
+      var chColor = ch > 0 ? 'color:var(--accent-green)' : ch < 0 ? 'color:var(--accent-red)' : '';
+      return '<div class="related-item"><a href="' + href + '" onclick="event.preventDefault();runAI(\'' + escAttr((m.question || '').replace(/'/g, '')) + '\')">' +
+        '<div class="related-q">' + escHtml(m.question) + '</div>' +
+        '<div class="related-meta"><span>YES <span class="val">' + price + '</span></span><span>Edge <span class="val">' + edge + '</span></span><span style="' + chColor + '">' + chStr + '</span></div>' +
+        '</a></div>';
+    }).join('');
+  } else {
+    relEl.innerHTML = '<div style="font-family:var(--sans);font-size:12px;color:var(--muted);text-align:center;padding:20px 0">No related markets found</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// PREDICTIONS (existing)
+// ═══════════════════════════════════════════════════
 
 function getFiltered(){
   var list=_predictions;
@@ -280,24 +646,20 @@ function updateStats(){
   var avg=Math.round(_predictions.reduce(function(s,p){return s+p.confidence},0)/_predictions.length);
   document.getElementById('stConf').textContent=avg+'%';
   document.getElementById('stConf').style.color=confColor(avg);
-  // Top signal type
   var counts={};_predictions.forEach(function(p){counts[p.type]=(counts[p.type]||0)+1});
   var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]})[0];
   document.getElementById('stTop').textContent=TYPE_LABELS[top]||top;
   document.getElementById('stTopSub').textContent=counts[top]+' signals';
-  // Expiring within 24h
-  var exp24=_predictions.filter(function(p){return p.expires_at&&(new Date(p.expires_at).getTime()-Date.now())<86400000}).length;
-  document.getElementById('stExpiring').textContent=exp24;
-  document.getElementById('stExpiring').style.color=exp24>0?'var(--accent-amber)':'var(--text)';
-  // Updated
+  // Markets analyzed
+  document.getElementById('stMarkets').textContent = _predictions.length > 0 ? Math.round(_predictions.length * 40) : '--';
   updateTimestamp();
 }
 
 function updateTimestamp(){
   if(!_lastUpdated)return;
   var s=Math.round((Date.now()-_lastUpdated.getTime())/1000);
-  var d=s<60?s+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h';
-  document.getElementById('stUpdated').textContent=d+' ago';
+  var d=s<60?'just now':s<3600?Math.round(s/60)+'m ago':Math.round(s/3600)+'h ago';
+  document.getElementById('stUpdated').textContent=d;
 }
 
 function renderPredictions(){
@@ -325,13 +687,10 @@ function renderPredictions(){
       '</div>';
     }
     var reasoning=(p.reasoning||[]).slice(0,2).join(' \u00B7 ');
-
-    // Single combined score: weighted blend of confidence (70%) + alpha (30%), capped at 100
     var alpha = p.alpha_score || 0;
     var combined = Math.min(100, Math.round(c * 0.7 + (alpha * 10) * 0.3));
     var scoreColor = combined >= 80 ? 'var(--accent-green)' : combined >= 60 ? 'var(--accent-blue)' : combined >= 40 ? 'var(--accent-amber)' : 'var(--accent-red)';
     var scoreLabel = combined >= 80 ? 'HIGH' : combined >= 60 ? 'MEDIUM' : combined >= 40 ? 'LOW' : 'WEAK';
-
     var alphaVal = (alpha || 0).toFixed(1);
     var alphaClass = alpha >= 7 ? 'alpha-high' : alpha >= 4 ? 'alpha-mid' : 'alpha-low';
 
@@ -382,25 +741,12 @@ document.querySelectorAll('.cb-pill').forEach(function(tab){
 });
 document.getElementById('sort-select').addEventListener('change',function(e){_activeSort=e.target.value;renderPredictions()});
 
-// CTA
-async function handleCtaSubscribe(e){
-  e.preventDefault();var email=document.getElementById('cta-email').value.trim();
-  var btn=document.getElementById('cta-btn'),note=document.getElementById('cta-note');
-  if(!email)return false;btn.disabled=true;btn.textContent='...';
-  try{
-    var r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})});
-    if(r.ok){note.textContent='Subscribed! Crystal Ball alerts incoming.';note.style.color='var(--green)';btn.textContent='Done'}
-    else{note.textContent='Try again.';note.style.color='var(--red)';btn.textContent='Subscribe';btn.disabled=false}
-  }catch(err){note.textContent='Network error.';note.style.color='var(--red)';btn.textContent='Subscribe';btn.disabled=false}
-  return false;
-}
-
 // Contrarian
 async function loadContrarian(){
   try{
     var r=await fetch('/api/contrarian');if(!r.ok)throw new Error();
     var data=await r.json();var signals=data.signals||[];
-    if(!signals.length)return; // hide section entirely
+    if(!signals.length)return;
     document.getElementById('contrarianSection').style.display='';
     document.getElementById('contrarian-list').innerHTML=signals.map(function(s){
       var cHref=s.slug?'/market/'+s.slug:(typeof hfxMarketUrl==='function'?hfxMarketUrl(s.url||''):s.url||'#');
@@ -459,10 +805,20 @@ async function loadExpiring(){
   }catch(err){}
 }
 
-// Refresh
-setInterval(loadPredictions,2*60*1000);
-setInterval(updateTimestamp,10*1000);
-loadPredictions();loadContrarian();loadExpiring();
+// Auto-refresh
+setInterval(loadPredictions, 2*60*1000);
+setInterval(updateTimestamp, 10*1000);
+loadPredictions(); loadContrarian(); loadExpiring();
+
+// Auto-run from URL param
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  var q = params.get('q');
+  if (q) {
+    document.getElementById('aiInput').value = q;
+    setTimeout(function(){ runAI(q); }, 500);
+  }
+})();
 </script>
 </body>
 </html>

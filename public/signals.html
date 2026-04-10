@@ -151,15 +151,7 @@ a.s-row-link-wrap:last-child .s-row{border-bottom:none}
 .s-winner-pos{font-family:var(--sans);font-size:11px;padding:8px 14px;border-bottom:1px solid var(--border)}
 .s-winner-pos:last-child{border-bottom:none}
 
-/* AI SECTION */
-.s-ai{padding:20px;border-top:1px solid var(--border);margin-top:20px;position:relative}
-.s-ai::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(77,159,255,0.2),transparent)}
-.s-ai-row{display:flex;gap:8px}
-.s-ai-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text);outline:none;transition:border-color .2s}
-.s-ai-input:focus{border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(77,159,255,0.1)}
-.s-ai-btn{background:var(--gold);color:var(--bg);border:none;border-radius:8px;padding:12px 20px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .2s;letter-spacing:-0.2px}
-.s-ai-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
-.s-ai-result{font-family:var(--sans);font-size:11px;color:var(--soft);line-height:1.7;white-space:pre-wrap;margin-top:12px}
+/* AI SECTION — moved to Crystal Ball */
 
 /* LOADING / EMPTY */
 .s-empty{text-align:center;padding:40px 16px;font-family:var(--sans);font-size:12px;font-weight:500;color:#9a9590}
@@ -264,15 +256,7 @@ a.s-row-link-wrap:last-child .s-row{border-bottom:none}
 
 </div>
 
-<!-- AI ANALYSIS -->
-<div class="s-ai">
-  <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:#9a9590;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">AI Market Analysis</div>
-  <div class="s-ai-row">
-    <input type="text" id="aiInput" class="s-ai-input" placeholder="Enter a market question..." onkeydown="if(event.key==='Enter')runAI()"/>
-    <button onclick="runAI()" class="s-ai-btn" id="aiBtn">Analyze</button>
-  </div>
-  <div id="aiResult" style="display:none"></div>
-</div>
+<!-- AI Analysis moved to Crystal Ball -->
 </div>
 
 <script>
@@ -572,30 +556,7 @@ async function loadWinners() {
 }
 
 // ── AI ANALYSIS ──
-async function runAI() {
-  var input = document.getElementById('aiInput');
-  var btn = document.getElementById('aiBtn');
-  var res = document.getElementById('aiResult');
-  var q = (input.value||'').trim();
-  if (!q) return;
-  btn.disabled = true; btn.textContent = '...';
-  res.style.display = 'block';
-  res.innerHTML = '<div class="s-loading">Claude is thinking...</div>';
-  try {
-    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    if (!token) { res.innerHTML = '<div style="color:var(--gold);font-family:var(--sans);font-size:13px;font-weight:500"><a href="/creator/login" style="color:var(--gold);font-weight:600">Sign in</a> to use AI analysis.</div>'; btn.disabled=false; btn.textContent='Analyze'; return; }
-    var r = await fetch('/api/ai/market-analysis', {
-      method: 'POST', headers: {'Content-Type':'application/json', Authorization:'Bearer '+token},
-      body: JSON.stringify({markets:[{question:q,yes_pct:50,volume:'N/A',platform:'Polymarket'}]})
-    });
-    var d = await r.json();
-    if (d.error) throw new Error(d.error);
-    res.innerHTML = '<div class="s-ai-result">' + escH(d.analysis||d.content||'') + '</div>';
-  } catch(e) {
-    res.innerHTML = '<div style="color:#9a9590;font-family:var(--sans);font-size:12px;font-weight:500">AI analysis temporarily unavailable.</div>';
-  }
-  btn.disabled = false; btn.textContent = 'Analyze';
-}
+// AI Analysis moved to Crystal Ball page
 
 // ── PYTH ORACLE DIVERGENCE ──
 async function loadPythDivergence() {

@@ -24203,36 +24203,207 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     _aiAnalysisRateLimit.set(ip, rl);
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return res.json({ analysis: 'AI analysis is not configured yet. Check back soon.' });
+      return res.json({ error: 'AI analysis is not configured yet.' });
     }
 
-    // Build market summary for Claude
-    const top3 = markets.length > 0
-      ? markets.slice(0, 3)
-      : [{ question, yes_pct: body.yes_pct || 'N/A', volume: body.volume || 'N/A', platform: body.platform || 'Polymarket' }];
+    // ── Step 1: Gather HyperFlex data layer ──────────────────────────
+    const queryLower = question.toLowerCase();
+    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
 
-    const marketSummary = top3.map((m, i) => {
-      const q = (typeof m === 'string') ? m : (m.question || m.title || 'Unknown');
-      const pct = m.yes_pct || 'N/A';
-      const vol = m.volume || 'N/A';
-      const plat = m.platform || 'Polymarket';
-      return `${i + 1}. "${q}" — YES ${pct}% — Volume: ${vol} — Platform: ${plat}`;
-    }).join('\n');
+    // 1a. Screener data — find related markets
+    let relatedMarkets = [];
+    let primaryMarket = null;
+    try {
+      const screenerData = _screenerCache?.data || [];
+      relatedMarkets = screenerData.filter(m => {
+        const mq = (m.question || '').toLowerCase();
+        return queryWords.some(w => mq.includes(w));
+      }).sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)).slice(0, 8);
+      primaryMarket = relatedMarkets[0] || null;
+    } catch (e) { /* silent */ }
 
+    // 1b. Whale data — find whale positions on related markets
+    let whalePositions = [];
+    let whaleCapital = 0;
+    let whaleYesPct = 0;
+    try {
+      const whaleData = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data : {};
+      const allWhales = whaleData.whales || [];
+      whalePositions = allWhales.filter(w => {
+        const wm = (w.market || '').toLowerCase();
+        return queryWords.some(word => wm.includes(word));
+      }).slice(0, 10);
+      whaleCapital = whalePositions.reduce((s, w) => s + (parseFloat(w.current_value) || 0), 0);
+      const yesWhales = whalePositions.filter(w => (w.side || '').toUpperCase() === 'YES');
+      whaleYesPct = whalePositions.length > 0 ? Math.round((yesWhales.length / whalePositions.length) * 100) : 50;
+    } catch (e) { /* silent */ }
+
+    // 1c. Fear & Greed
+    let fearGreed = { score: 50, label: 'Neutral' };
+    try {
+      if (_fearGreedCache && _fearGreedCache.data) {
+        fearGreed = _fearGreedCache.data;
+      }
+    } catch (e) { /* silent */ }
+
+    // 1d. Price history for primary market (from CLOB if available)
+    let oddsShift24h = 0;
+    let currentPrice = null;
+    let hoursToExpiry = null;
+    if (primaryMarket) {
+      currentPrice = primaryMarket.yes_price || null;
+      oddsShift24h = primaryMarket.price_change_24h || 0;
+      if (primaryMarket.end_date) {
+        hoursToExpiry = Math.max(0, (new Date(primaryMarket.end_date).getTime() - Date.now()) / 3600000);
+      }
+    }
+
+    // 1e. Signal types active on this market
+    let activeSignals = [];
+    try {
+      const signalsData = _signalsCache?.data?.signals || [];
+      activeSignals = signalsData.filter(s => {
+        const sm = (s.market || '').toLowerCase();
+        return queryWords.some(w => sm.includes(w));
+      }).map(s => s.type).filter(Boolean);
+    } catch (e) { /* silent */ }
+
+    // ── Step 2: Build data context for Claude ─────────────────────────
+    let dataContext = `\n== HYPERFLEX LIVE DATA ==\n`;
+    dataContext += `Fear & Greed Index: ${fearGreed.score}/100 (${fearGreed.label})\n`;
+
+    if (primaryMarket) {
+      dataContext += `\nPrimary Market: "${primaryMarket.question}"\n`;
+      dataContext += `  Current YES price: ${currentPrice ? (currentPrice * 100).toFixed(1) + '%' : 'N/A'}\n`;
+      dataContext += `  24h price change: ${oddsShift24h > 0 ? '+' : ''}${oddsShift24h.toFixed(1)}%\n`;
+      dataContext += `  Edge Score: ${primaryMarket.edge_score || 'N/A'}/100\n`;
+      dataContext += `  Volume: $${Math.round(primaryMarket.volume || 0).toLocaleString()}\n`;
+      if (hoursToExpiry !== null) dataContext += `  Resolves in: ${hoursToExpiry < 24 ? Math.round(hoursToExpiry) + ' hours' : Math.round(hoursToExpiry / 24) + ' days'}\n`;
+      if (primaryMarket.edge_components) {
+        const ec = primaryMarket.edge_components;
+        const topSignals = Object.entries(ec).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a).slice(0, 3).map(([k, v]) => `${k}:${v}`);
+        if (topSignals.length) dataContext += `  Top edge signals: ${topSignals.join(', ')}\n`;
+      }
+    }
+
+    if (whalePositions.length > 0) {
+      dataContext += `\nWhale Positions (${whalePositions.length} found):\n`;
+      dataContext += `  Total capital: $${Math.round(whaleCapital).toLocaleString()}\n`;
+      dataContext += `  Whale consensus: ${whaleYesPct}% YES / ${100 - whaleYesPct}% NO\n`;
+      whalePositions.slice(0, 5).forEach(w => {
+        dataContext += `  • ${w.trader} (#${w.trader_rank || '?'}) — ${w.side} — $${Math.round(parseFloat(w.current_value) || 0).toLocaleString()} — "${(w.market || '').substring(0, 60)}"\n`;
+      });
+    } else {
+      dataContext += `\nNo whale positions found matching this query.\n`;
+    }
+
+    if (relatedMarkets.length > 1) {
+      dataContext += `\nRelated Markets:\n`;
+      relatedMarkets.slice(1, 6).forEach(m => {
+        dataContext += `  • "${(m.question || '').substring(0, 70)}" — YES ${m.yes_price ? (m.yes_price * 100).toFixed(0) + '%' : 'N/A'} — Edge: ${m.edge_score || 0}\n`;
+      });
+    }
+
+    if (activeSignals.length > 0) {
+      dataContext += `\nActive signal types: ${[...new Set(activeSignals)].join(', ')}\n`;
+    }
+
+    // ── Step 3: Call Claude with full data context ─────────────────────
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
+      max_tokens: 800,
       messages: [{
         role: 'user',
-        content: `You are a prediction market analyst. Analyze these markets and give a brief, actionable take on each. Focus on: Is the price fair? What factors could move it? Any edge?\n\nMarkets:\n${marketSummary}\n\nKeep your analysis concise but insightful. Use bullet points for each market.`
+        content: `You are Crystal Ball AI, the prediction market analyst for HYPERFLEX. You have access to live whale tracking, edge scoring, and cross-platform odds data.
+
+A trader asked: "${question}"
+
+${dataContext}
+
+Respond with a JSON object (no markdown fences, just raw JSON) with this exact structure:
+{
+  "headline": "One bold sentence summarizing the key finding, e.g. 'Whales are positioning for a hot CPI print'",
+  "key_finding": "2-3 sentences with SPECIFIC numbers from the data above. Reference whale capital amounts, consensus percentages, odds shifts, edge scores. Be precise.",
+  "factors": {
+    "whale_capital": "$X.XM or $XXK — total whale capital on related markets",
+    "odds_shift_24h": "+X.X% or -X.X% — 24h movement",
+    "fear_greed": "XX — the fear & greed score",
+    "resolves_in": "Xh or Xd — time to resolution"
+  },
+  "trade_suggestion": {
+    "side": "YES or NO",
+    "reasoning": "One sentence why"
+  },
+  "follow_up_questions": ["question 1?", "question 2?", "question 3?"]
+}
+
+IMPORTANT: Use REAL numbers from the data. If no data was found, say so honestly but still give your best analytical take based on market knowledge. Always be specific and actionable.`
       }]
     });
 
-    const analysis = resp.content[0]?.text?.trim() || 'Unable to generate analysis.';
-    res.json({ analysis });
+    let aiText = resp.content[0]?.text?.trim() || '';
+    // Try to parse JSON from Claude's response
+    let structured = null;
+    try {
+      // Strip markdown fences if present
+      aiText = aiText.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
+      structured = JSON.parse(aiText);
+    } catch (e) {
+      // Fallback: return as plain text analysis
+      structured = {
+        headline: 'Market Analysis',
+        key_finding: aiText.substring(0, 500),
+        factors: {
+          whale_capital: whaleCapital > 0 ? '$' + (whaleCapital >= 1e6 ? (whaleCapital / 1e6).toFixed(1) + 'M' : Math.round(whaleCapital / 1e3) + 'K') : 'N/A',
+          odds_shift_24h: oddsShift24h ? (oddsShift24h > 0 ? '+' : '') + oddsShift24h.toFixed(1) + '%' : 'N/A',
+          fear_greed: String(fearGreed.score),
+          resolves_in: hoursToExpiry !== null ? (hoursToExpiry < 24 ? Math.round(hoursToExpiry) + 'h' : Math.round(hoursToExpiry / 24) + 'd') : 'N/A'
+        },
+        trade_suggestion: null,
+        follow_up_questions: ['What are whales doing?', 'Contrarian take?', 'Historical moves?']
+      };
+    }
+
+    // ── Step 4: Attach raw data for frontend rendering ────────────────
+    res.json({
+      analysis: structured,
+      data: {
+        primary_market: primaryMarket ? {
+          question: primaryMarket.question,
+          slug: primaryMarket.slug,
+          yes_price: primaryMarket.yes_price,
+          volume: primaryMarket.volume,
+          edge_score: primaryMarket.edge_score,
+          edge_components: primaryMarket.edge_components,
+          price_change_24h: primaryMarket.price_change_24h,
+          end_date: primaryMarket.end_date,
+          days_until_expiry: primaryMarket.days_until_expiry
+        } : null,
+        whale_positions: whalePositions.slice(0, 5).map(w => ({
+          trader: w.trader,
+          rank: w.trader_rank,
+          market: (w.market || '').substring(0, 80),
+          side: w.side,
+          value: parseFloat(w.current_value) || 0,
+          price: parseFloat(w.current_price) || 0,
+          pnl: parseFloat(w.pnl) || 0
+        })),
+        whale_consensus: { yes_pct: whaleYesPct, no_pct: 100 - whaleYesPct, total_capital: whaleCapital, count: whalePositions.length },
+        fear_greed: fearGreed,
+        related_markets: relatedMarkets.slice(0, 5).map(m => ({
+          question: m.question,
+          slug: m.slug,
+          yes_price: m.yes_price,
+          edge_score: m.edge_score,
+          volume: m.volume,
+          price_change_24h: m.price_change_24h
+        })),
+        active_signals: [...new Set(activeSignals)]
+      }
+    });
   } catch (err) {
     console.error('[ai-analysis] ERROR:', err.message, err.stack);
-    res.json({ analysis: 'AI analysis temporarily unavailable. The whale data and momentum signals provide the key signal for this market.' });
+    res.json({ error: 'AI analysis temporarily unavailable.' });
   }
 });
 
