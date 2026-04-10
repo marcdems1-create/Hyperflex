@@ -19475,6 +19475,147 @@ app.get('/api/whale-index', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// HEDGE PAIRS — algorithmically-detected correlated market pairs
+// Public endpoint, no auth. 10-min cache.
+// ════════════════════════════════════════════════════════════
+let _hedgePairCache = null;
+
+// Extract significant keywords from a question (skip stopwords)
+const _hedgeStopWords = new Set(['will','the','a','an','in','on','at','to','of','by','for','is','be','or','and','with','from','this','that','it','not','do','does','if','has','have','was','are','were','been','did','can','could','would','should','its','his','her','he','she','they','their','them','than','more','before','after','over','under','any','all','into','about','which','what','who','when','where','how','between','each','other','some','no','yes','up','down','out','most','through','during','win','winning','next']);
+
+function _extractHedgeKeywords(question) {
+  return (question || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !_hedgeStopWords.has(w));
+}
+
+app.get('/api/hedge-pairs', (req, res) => {
+  try {
+    // Check cache (10 min TTL)
+    if (_hedgePairCache && (Date.now() - _hedgePairCache.ts < 10 * 60 * 1000)) {
+      return res.json(_hedgePairCache.data);
+    }
+
+    const markets = (_screenerCache && _screenerCache.data) || [];
+    if (markets.length < 10) {
+      return res.json({ pairs: [], updated_at: new Date().toISOString() });
+    }
+
+    // Only consider markets with real prices, decent volume, and not near resolution
+    const candidates = markets.filter(m =>
+      m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95 &&
+      m.volume >= 5000 &&
+      m.slug &&
+      (m.days_until_expiry == null || m.days_until_expiry > 1)
+    );
+
+    // Build keyword index: keyword -> [market indices]
+    const kwIndex = {};
+    const kwSets = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const kws = _extractHedgeKeywords(candidates[i].question);
+      kwSets.push(new Set(kws));
+      for (const kw of kws) {
+        if (!kwIndex[kw]) kwIndex[kw] = [];
+        kwIndex[kw].push(i);
+      }
+    }
+
+    // Find pairs with high keyword overlap but different predicted outcomes
+    const seenPairs = new Set();
+    const pairs = [];
+
+    for (let i = 0; i < candidates.length && pairs.length < 10; i++) {
+      const kwsA = kwSets[i];
+      if (kwsA.size < 2) continue;
+
+      // Find candidates with shared keywords
+      const neighborScores = {};
+      for (const kw of kwsA) {
+        const lst = kwIndex[kw] || [];
+        for (const j of lst) {
+          if (j <= i) continue; // avoid duplicates
+          neighborScores[j] = (neighborScores[j] || 0) + 1;
+        }
+      }
+
+      // Sort by overlap count, take best match
+      const ranked = Object.entries(neighborScores)
+        .filter(([, count]) => count >= 2) // at least 2 shared keywords
+        .sort((a, b) => b[1] - a[1]);
+
+      for (const [jStr, overlap] of ranked) {
+        if (pairs.length >= 6) break;
+        const j = parseInt(jStr);
+        const pairKey = i + ':' + j;
+        if (seenPairs.has(pairKey)) continue;
+        seenPairs.add(pairKey);
+
+        const mA = candidates[i];
+        const mB = candidates[j];
+
+        // Skip if same market
+        if (mA.market_id === mB.market_id) continue;
+        // Skip if questions are too similar (likely same event with different wording)
+        const kwsB = kwSets[j];
+        const union = new Set([...kwsA, ...kwsB]);
+        const intersection = [...kwsA].filter(k => kwsB.has(k));
+        const similarity = intersection.length / union.size;
+        if (similarity > 0.8) continue; // too similar, not a real hedge
+
+        // Determine sides — prefer opposing sides for a true hedge
+        const sideA = mA.trade ? mA.trade.side : (mA.yes_price <= 0.5 ? 'YES' : 'NO');
+        const sideB = mB.trade ? mB.trade.side : (mB.yes_price <= 0.5 ? 'YES' : 'NO');
+        const entryA = sideA === 'YES' ? Math.round(mA.yes_price * 100) : Math.round((1 - mA.yes_price) * 100);
+        const entryB = sideB === 'YES' ? Math.round(mB.yes_price * 100) : Math.round((1 - mB.yes_price) * 100);
+
+        // Build correlation reason from shared keywords
+        const sharedTopics = intersection.slice(0, 4).join(', ');
+        const reason = `Both assess ${sharedTopics} outcomes`;
+
+        pairs.push({
+          market_a: {
+            question: mA.question,
+            slug: mA.slug,
+            side: sideA,
+            entry_cost: entryA,
+            yes_price: mA.yes_price,
+            whale_count: mA.whale_count || 0,
+            volume: mA.volume || 0
+          },
+          market_b: {
+            question: mB.question,
+            slug: mB.slug,
+            side: sideB,
+            entry_cost: entryB,
+            yes_price: mB.yes_price,
+            whale_count: mB.whale_count || 0,
+            volume: mB.volume || 0
+          },
+          correlation_reason: reason,
+          total_cost: entryA + entryB,
+          shared_keywords: intersection.length,
+          combined_volume: (mA.volume || 0) + (mB.volume || 0)
+        });
+        break; // only one pair per market A
+      }
+    }
+
+    // Sort by combined volume (most liquid pairs first)
+    pairs.sort((a, b) => b.combined_volume - a.combined_volume);
+
+    const result = { pairs: pairs.slice(0, 6), updated_at: new Date().toISOString() };
+    _hedgePairCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[hedge-pairs]', err.message);
+    if (_hedgePairCache) return res.json(_hedgePairCache.data);
+    res.json({ pairs: [], updated_at: new Date().toISOString() });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // CLOB LIVE PRICE UPGRADE — replaces stale gamma-api prices with real-time CLOB midpoints
 // Reusable utility: call on any array of markets that have clobTokenIds or outcomePrices
 // ════════════════════════════════════════════════════════════

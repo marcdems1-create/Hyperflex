@@ -593,6 +593,7 @@ footer {
   .product-block.reverse .product-copy { order: 1; }
   .product-block.reverse .product-visual { order: 2; }
   .product-section { padding-left: 20px; padding-right: 20px; }
+  #hedge-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
 }
 @media (max-width: 640px) {
@@ -1089,6 +1090,21 @@ function logTradeIntent() {
   </div>
 </section>
 
+<!-- HEDGE PAIRS — live correlated trades -->
+<section style="padding:60px 40px 40px;max-width:1100px;margin:0 auto" id="hedge-section">
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px">Live hedge opportunities</div>
+    <h2 style="font-family:var(--sans);font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--text);margin:0 0 8px">Correlated markets. One-click hedge.</h2>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--dim);max-width:500px;margin:0 auto;line-height:1.7">Markets that move together — buy both sides to hedge your exposure or double down on a thesis. Updated every 10 minutes from live CLOB data.</p>
+  </div>
+  <div id="hedgePairsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Loading hedge pairs...</div>
+  </div>
+  <div style="text-align:center;margin-top:24px">
+    <a href="/signals" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#a855f7;text-decoration:none;transition:color .15s" onmouseover="this.style.color='#c084fc'" onmouseout="this.style.color='#a855f7'">See all signals &rarr;</a>
+  </div>
+</section>
+
 <!-- EMAIL CAPTURE -->
 <section class="email-section">
   <div class="email-card">
@@ -1375,6 +1391,61 @@ function escH(s) { const d = document.createElement('div'); d.textContent = s; r
     document.getElementById('feargreed-detail').textContent = 'Neutral — market sentiment balanced';
     document.getElementById('expiring-stat').textContent = '3 markets expiring in 24h';
     document.getElementById('expiring-detail').textContent = 'Last chance to trade before resolution';
+  }
+})();
+
+// ── Hedge Pairs ──
+(async function loadHedgePairs() {
+  const grid = document.getElementById('hedgePairsGrid');
+  if (!grid) return;
+  try {
+    const r = await fetch('/api/hedge-pairs');
+    const data = await r.json();
+    const pairs = data.pairs || [];
+    if (!pairs.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Scanning for correlated markets...</div>';
+      return;
+    }
+    grid.innerHTML = pairs.slice(0, 3).map(function(h) {
+      const sA = (h.market_a.side || 'YES').toUpperCase();
+      const sB = (h.market_b.side || 'YES').toUpperCase();
+      const colA = sA === 'YES' ? '#00e68a' : '#ff4d6a';
+      const colB = sB === 'YES' ? '#00e68a' : '#ff4d6a';
+      const slugA = h.market_a.slug || '';
+      const slugB = h.market_b.slug || '';
+      const linkA = slugA ? '/market/' + slugA : '/signals';
+      const linkB = slugB ? '/market/' + slugB : '/signals';
+      const hedgeUrl = slugA && slugB
+        ? '/market/' + slugA + '?side=' + sA + '&hedge=' + encodeURIComponent(slugB) + '&hedgeSide=' + sB + '&from=hedge'
+        : '/signals';
+      const totalCost = (h.market_a.entry_cost || 0) + (h.market_b.entry_cost || 0);
+      const wA = h.market_a.whale_count || 0;
+      const wB = h.market_b.whale_count || 0;
+      return '<div style="background:#0c0c0b;border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:18px;position:relative;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(168,85,247,0.5)\'" onmouseleave="this.style.borderColor=\'rgba(168,85,247,0.2)\'">' +
+        '<a href="' + hedgeUrl + '" style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(168,85,247,0.2);color:#a855f7;text-decoration:none;font-weight:700;cursor:pointer;border:1px solid rgba(168,85,247,0.3);transition:all .15s" onmouseenter="this.style.background=\'rgba(168,85,247,0.4)\'" onmouseleave="this.style.background=\'rgba(168,85,247,0.2)\'">\u26A1 BUY HEDGE</a>' +
+        '<a href="' + linkA + '" style="display:block;text-decoration:none;color:inherit;padding-right:110px;margin-bottom:6px">' +
+          '<div style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);line-height:1.35;transition:color .15s" onmouseenter="this.style.color=\'#a855f7\'" onmouseleave="this.style.color=\'var(--text)\'">' + escH(h.market_a.question.substring(0, 60)) + '</div>' +
+        '</a>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + colA + '">' + sA + ' ' + h.market_a.entry_cost + '\u00A2</span>' +
+          (wA >= 3 ? '<span style="font-family:var(--mono);font-size:11px;color:#a855f7">\uD83D\uDC33 ' + wA + '</span>' : '') +
+        '</div>' +
+        '<div style="text-align:center;font-family:var(--sans);font-size:11px;color:var(--dim);margin:6px 0;letter-spacing:1px">\u27F7 hedged against \u27F7</div>' +
+        '<a href="' + linkB + '" style="display:block;text-decoration:none;color:inherit;margin-bottom:6px">' +
+          '<div style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);line-height:1.35;transition:color .15s" onmouseenter="this.style.color=\'#a855f7\'" onmouseleave="this.style.color=\'var(--text)\'">' + escH(h.market_b.question.substring(0, 60)) + '</div>' +
+        '</a>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + colB + '">' + sB + ' ' + h.market_b.entry_cost + '\u00A2</span>' +
+          (wB >= 3 ? '<span style="font-family:var(--mono);font-size:11px;color:#a855f7">\uD83D\uDC33 ' + wB + '</span>' : '') +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1917;padding-top:10px">' +
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.4">' + escH(h.correlation_reason) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7;white-space:nowrap;margin-left:8px">' + totalCost + '\u00A2 total</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Hedge pairs loading...</div>';
   }
 })();
 
