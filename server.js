@@ -19746,6 +19746,9 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 // deploys — without persistence the map resets every Railway redeploy and
 // every market looks "fresh" for the first 60 minutes after each push.
 const _alphaFreshness = new Map();
+// Rolling edge score history — Map<market_id, [{ts, score}]> — last 24h sampled per build cycle
+const _edgeScoreHistory = new Map();
+const EDGE_HISTORY_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
 const EDGE_FRESH_THRESHOLD = 50; // score must cross this to get a stamp
 const EDGE_DROP_THRESHOLD = 40;  // if score falls below this, edge has died — clear stamp
 const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
@@ -20779,6 +20782,38 @@ async function _buildAlphaListInner(opts = {}) {
 
       console.log('[screener] Freshness:', freshNew, 'newly stamped,', _alphaFreshness.size, 'tracked total');
     } catch (e) { console.warn('[screener] freshness tracking failed:', e.message); }
+
+    // ── EDGE SCORE HISTORY — record current scores for sparklines ──
+    try {
+      const nowMs = Date.now();
+      const cutoffMs = nowMs - EDGE_HISTORY_MAX_AGE;
+      for (const m of markets) {
+        if (!m.market_id || !m.edge_score) continue;
+        let hist = _edgeScoreHistory.get(m.market_id);
+        if (!hist) { hist = []; _edgeScoreHistory.set(m.market_id, hist); }
+        hist.push({ ts: nowMs, score: m.edge_score });
+        // Prune old entries
+        while (hist.length > 0 && hist[0].ts < cutoffMs) hist.shift();
+      }
+      // Evict markets with no recent data
+      for (const [k, v] of _edgeScoreHistory) {
+        if (v.length === 0 || v[v.length - 1].ts < cutoffMs) _edgeScoreHistory.delete(k);
+      }
+      // Attach sparkline data to each market (last 20 samples for compact SVG)
+      for (const m of markets) {
+        const hist = _edgeScoreHistory.get(m.market_id);
+        if (hist && hist.length >= 2) {
+          const step = Math.max(1, Math.floor(hist.length / 20));
+          m.edge_history = [];
+          for (let i = 0; i < hist.length; i += step) m.edge_history.push(hist[i].score);
+          if (m.edge_history[m.edge_history.length - 1] !== hist[hist.length - 1].score) {
+            m.edge_history.push(hist[hist.length - 1].score);
+          }
+        } else {
+          m.edge_history = null;
+        }
+      }
+    } catch (e) { console.warn('[screener] edge history tracking failed:', e.message); }
 
     // ── AI HOOKS — generate sharp trade rationales for the top 5 via Claude Haiku ──
     try {
