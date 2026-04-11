@@ -30309,33 +30309,96 @@ app.get('/admin/relayer', (req, res) => {
 
 // GET /api/bridge/quote — get a cross-chain quote
 // Query: fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount, slippage
+//
+// LI.FI has an annoying behavior where its token deny-list sometimes rejects
+// valid hex addresses (especially for recently-added tokens like native
+// Arbitrum USDC). As a fallback, we retry with symbol-based lookup — LI.FI
+// accepts 'USDC', 'USDC.e', etc. as the fromToken/toToken and resolves them
+// internally. This has better coverage than hex addresses.
+async function _lifiQuote(params) {
+  const r = await fetch('https://li.quest/v1/quote?' + params.toString(), {
+    headers: { 'Accept': 'application/json' }
+  });
+  let data;
+  try { data = await r.json(); } catch (e) { data = { error: 'invalid json from li.fi' }; }
+  return { ok: r.ok, status: r.status, data };
+}
+
 app.get('/api/bridge/quote', async (req, res) => {
   try {
     const { fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount, slippage } = req.query;
     if (!fromChain || !fromToken || !toChain || !toToken || !fromAddress || !toAddress || !fromAmount) {
-      return res.status(400).json({ error: 'Missing required params: fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount' });
+      return res.status(400).json({ error: 'Missing required params' });
     }
-    const params = new URLSearchParams({
+
+    // Attempt 1: as provided (usually hex addresses)
+    const baseParams = {
       fromChain: String(fromChain),
-      fromToken: String(fromToken),
       toChain: String(toChain),
-      toToken: String(toToken),
       fromAddress: String(fromAddress),
       toAddress: String(toAddress),
       fromAmount: String(fromAmount),
-      slippage: String(slippage || '0.005'), // 0.5% default
+      slippage: String(slippage || '0.005'),
       integrator: 'hyperflex',
       order: 'FASTEST'
-    });
-    const r = await fetch('https://li.quest/v1/quote?' + params.toString(), {
-      headers: { 'Accept': 'application/json' }
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      console.warn('[bridge/quote] LI.FI error:', data.message || data.error || r.status);
-      return res.status(r.status).json({ error: data.message || data.error || 'LI.FI returned ' + r.status });
+    };
+
+    const attempt1 = new URLSearchParams(Object.assign({}, baseParams, {
+      fromToken: String(fromToken),
+      toToken: String(toToken)
+    }));
+    let result = await _lifiQuote(attempt1);
+    if (result.ok) return res.json(result.data);
+
+    const err1 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
+    console.warn('[bridge/quote] attempt 1 failed (hex):', err1);
+
+    // Attempt 2: retry with symbol-based lookup. Map hex addresses to canonical symbols.
+    const hexToSymbol = {
+      '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087': 'USDC',  // Arbitrum native USDC
+      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',  // Ethereum USDC
+      '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC',  // Base native USDC
+      '0x0b2c639c533813f4aa9d7837caf62653d097ff85': 'USDC',  // Optimism native USDC
+      '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 'USDC',  // BSC USDC
+      '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'USDC.e' // Polygon bridged USDC.e
+    };
+    const fromSym = hexToSymbol[String(fromToken).toLowerCase()] || String(fromToken);
+    const toSym = hexToSymbol[String(toToken).toLowerCase()] || String(toToken);
+
+    // Only retry if we actually got different values
+    if (fromSym !== String(fromToken) || toSym !== String(toToken)) {
+      const attempt2 = new URLSearchParams(Object.assign({}, baseParams, {
+        fromToken: fromSym,
+        toToken: toSym
+      }));
+      result = await _lifiQuote(attempt2);
+      if (result.ok) {
+        console.log('[bridge/quote] attempt 2 (symbol) succeeded');
+        return res.json(result.data);
+      }
+      const err2 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
+      console.warn('[bridge/quote] attempt 2 failed (symbol):', err2);
     }
-    res.json(data);
+
+    // Attempt 3: retry with USDC → USDC (same symbol for both, since bridged USDC.e
+    // on Polygon may not be in LI.FI's deny-list-safe list anymore). LI.FI's router
+    // will pick whichever USDC variant on Polygon it can route to.
+    const attempt3 = new URLSearchParams(Object.assign({}, baseParams, {
+      fromToken: 'USDC',
+      toToken: 'USDC'
+    }));
+    result = await _lifiQuote(attempt3);
+    if (result.ok) {
+      console.log('[bridge/quote] attempt 3 (USDC → USDC) succeeded — note: toToken may be native Polygon USDC, not USDC.e');
+      return res.json(result.data);
+    }
+    const err3 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
+    console.warn('[bridge/quote] all attempts failed:', err1, '|', err3);
+    return res.status(result.status || 502).json({
+      error: err1,
+      detail: 'Tried hex addresses, symbol lookup, and USDC→USDC — all rejected by LI.FI. Fall back to external Jumper link.',
+      attempts: [err1, err3]
+    });
   } catch (err) {
     console.error('[bridge/quote]', err.message);
     res.status(500).json({ error: err.message });

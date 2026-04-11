@@ -333,6 +333,14 @@
           var toAmt = parseFloat(est.toAmountUSD || est.toAmount || 0).toFixed(2);
           // toAmount is in token units; convert to USDC (6 decimals)
           var toUsdc = est.toAmount ? (parseFloat(est.toAmount) / 1e6).toFixed(2) : toAmt;
+          // Check if LI.FI is delivering to bridged USDC.e (Polymarket-compatible)
+          // or native Polygon USDC (would need an extra swap to trade)
+          var actualToAddr = (quote.action && quote.action.toToken && quote.action.toToken.address) || '';
+          var isCompatible = actualToAddr.toLowerCase() === USDC_ADDRESS.toLowerCase();
+          var routeWarning = '';
+          if (actualToAddr && !isCompatible) {
+            routeWarning = '<div style="padding:10px 12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:10px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.6">⚠ This route delivers <strong>native Polygon USDC</strong>, but Polymarket needs <strong>bridged USDC.e</strong>. You\'ll need to swap on Polygon after. Use Jumper externally for direct USDC.e routing.</div>';
+          }
           var duration = est.executionDuration || 300;
           var durationStr = duration < 120 ? duration + 's' : Math.round(duration / 60) + 'm';
           var gasCostUsd = est.gasCosts && est.gasCosts.length ? est.gasCosts.reduce(function(s, g) { return s + parseFloat(g.amountUSD || 0); }, 0).toFixed(2) : '—';
@@ -345,6 +353,8 @@
               '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Route found</div>' +
               '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">' + _esc(toolName) + '</strong> · estimated ' + durationStr + '</div>' +
             '</div>' +
+
+            routeWarning +
 
             '<div style="display:flex;flex-direction:column;gap:8px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:12px">' +
               '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You send</span><span style="color:#f0f0f5;font-weight:700">$' + fromAmt + ' USDC on ' + _esc(srcChainName) + '</span></div>' +
@@ -992,6 +1002,11 @@
     _state.currentTab = tab;
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
+    // Auto-fetch source balance when entering Bridge tab for the first time
+    if (tab === 'bridge' && _state.bridgeSourceBalance == null) {
+      var defaultChain = _state.bridgeFromChain || 42161;
+      _setBridgeChain(defaultChain);
+    }
   }
 
   // Copy the proxy address to clipboard with visual feedback
