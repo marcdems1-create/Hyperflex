@@ -495,6 +495,28 @@ canvas{display:block;width:100%!important}
       <div class="mkt-poly-link">
         <a id="polyLink" href="#" target="_blank" rel="noopener">↗ View on Polymarket</a>
       </div>
+
+      <!-- CRYSTAL BALL AI ANALYSIS -->
+      <div id="crystalBallSection" style="margin-top:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:16px">&#x1F52E;</span>
+            <span style="font-family:var(--display);font-size:13px;font-weight:700;color:var(--text)">Crystal Ball AI</span>
+          </div>
+          <button id="cbRunBtn" onclick="runCrystalBall()" style="font-family:var(--mono);font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid rgba(168,85,247,0.3);background:rgba(168,85,247,0.08);color:#a855f7;cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(168,85,247,0.15)'" onmouseout="this.style.background='rgba(168,85,247,0.08)'">Analyze</button>
+        </div>
+        <div id="cbContent" style="padding:14px 16px;font-family:var(--body);font-size:12px;color:var(--soft);line-height:1.7">
+          <div style="color:var(--muted);font-size:11px">Click Analyze to get AI-powered market intelligence — whale positions, key factors, and edge assessment.</div>
+        </div>
+      </div>
+
+      <!-- COPY-BOT CTA -->
+      <div id="copyBotCta" style="margin-top:12px;background:linear-gradient(135deg,rgba(0,230,138,0.05),rgba(77,159,255,0.05));border:1px solid rgba(0,230,138,0.15);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:14px;margin-bottom:6px">&#x1F916;</div>
+        <div style="font-family:var(--display);font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">Copy Top Whales</div>
+        <div style="font-family:var(--body);font-size:11px;color:var(--soft);margin-bottom:12px;line-height:1.4">Auto-mirror trades from the top 50 Polymarket whales. Set it and forget it.</div>
+        <a href="/whales#copy" style="display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 18px;border-radius:8px;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.25);color:#00e68a;text-decoration:none;transition:all .15s" onmouseover="this.style.background='rgba(0,230,138,0.18)'" onmouseout="this.style.background='rgba(0,230,138,0.1)'">Set up Copy-Bot &rarr;</a>
+      </div>
     </div>
   </div>
 </div>
@@ -3867,6 +3889,46 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice) {
       showTradeStatus('Stop sell error: ' + e.message, 'error');
     }
   }
+}
+
+// Crystal Ball AI Analysis
+async function runCrystalBall() {
+  if (!_market) return;
+  var btn = document.getElementById('cbRunBtn');
+  var content = document.getElementById('cbContent');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+  content.innerHTML = '<div style="color:var(--muted);font-size:11px"><span style="display:inline-block;animation:spin 0.8s linear infinite;font-size:14px">&#x1F52E;</span> Running AI analysis...</div>';
+
+  try {
+    var question = _market.question || _market.title || '';
+    var r = await fetch('/api/ai/market-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: question })
+    });
+    if (!r.ok) throw new Error('Analysis failed');
+    var data = await r.json();
+    var analysis = data.analysis || data.text || 'No analysis available.';
+    // Render with basic HTML formatting
+    var html = analysis
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>');
+    content.innerHTML = '<div style="font-size:12px;color:var(--soft);line-height:1.7">' + html + '</div>' +
+      '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
+        '<a href="/crystal-ball" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none">Full Crystal Ball &rarr;</a>' +
+        '<button onclick="runCrystalBall()" style="font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Refresh</button>' +
+      '</div>';
+    btn.textContent = 'Done';
+    btn.style.borderColor = 'rgba(0,230,138,0.3)';
+    btn.style.color = '#00e68a';
+    btn.style.background = 'rgba(0,230,138,0.08)';
+  } catch (e) {
+    content.innerHTML = '<div style="color:var(--red);font-size:11px">Analysis unavailable. <a href="/crystal-ball" style="color:var(--blue)">Try Crystal Ball directly &rarr;</a></div>';
+    btn.textContent = 'Retry';
+  }
+  btn.disabled = false;
 }
 
 // Init

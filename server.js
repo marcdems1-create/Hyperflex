@@ -232,17 +232,47 @@ function apiKeyAuth(req, res, next) {
 
 // ── Telegram Bot (optional — no-op if TELEGRAM_BOT_TOKEN not set) ──
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_WHALE_CHANNEL = process.env.TELEGRAM_WHALE_CHANNEL_ID; // Public whale alerts channel
 
-function sendTelegramAlert(chatId, message) {
+function sendTelegramAlert(chatId, message, opts = {}) {
   if (!TELEGRAM_BOT_TOKEN || !chatId) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  // _nodeFetch is declared later in the file — safe because this function is only called at runtime, not at import time
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'HTML',
+      disable_web_page_preview: opts.noPreview !== false,
+      ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
+    })
   }).catch(err => console.warn('[telegram]', err.message));
 }
+
+// Broadcast whale move to the public channel (all $10K+ trades)
+function broadcastWhaleToChannel(evt) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WHALE_CHANNEL) return;
+  const actionEmoji = { opened: '\u{1F7E2}', closed: '\u{1F534}', increased: '\u{2B06}\uFE0F', decreased: '\u{2B07}\uFE0F' };
+  const emoji = actionEmoji[evt.action] || '\u{1F40B}';
+  const priceStr = evt.price ? ` @ ${(evt.price * 100).toFixed(0)}\u00A2` : '';
+  const sizeChange = evt.old_size_display && evt.new_size_display
+    ? ` (${evt.old_size_display} \u2192 ${evt.new_size_display})`
+    : '';
+  const traderRank = evt.trader_rank ? ` (#${evt.trader_rank})` : '';
+  const pnlStr = evt.trader_pnl ? ` | P&L: ${evt.trader_pnl >= 0 ? '+' : ''}$${Math.abs(evt.trader_pnl) >= 1000000 ? (Math.abs(evt.trader_pnl)/1000000).toFixed(1)+'M' : Math.abs(evt.trader_pnl) >= 1000 ? (Math.abs(evt.trader_pnl)/1000).toFixed(0)+'K' : Math.abs(evt.trader_pnl).toFixed(0)}` : '';
+  const question = (evt.question || 'Unknown').substring(0, 80);
+  const slug = evt.slug ? `\n<a href="https://hyperflex.network/market/${evt.slug}">Trade on HYPERFLEX \u2192</a>` : '';
+
+  const msg = `${emoji} <b>${evt.trader_name || 'Whale'}${traderRank}</b> ${evt.action} <b>${evt.size_display}</b> ${evt.side}${priceStr}${sizeChange}\n\n` +
+    `<b>${question}</b>${pnlStr}${slug}\n\n` +
+    `<a href="https://hyperflex.network/whales">\u{1F40B} Live Whale Tracker</a>`;
+
+  sendTelegramAlert(TELEGRAM_WHALE_CHANNEL, msg);
+}
+
+// Telegram bot subscriber set (chat IDs that want all whale alerts via /alerts command)
+const _tgWhaleSubscribers = new Set();
 
 app.use(cors());
 
@@ -388,6 +418,144 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// ── Telegram Bot Webhook (handles /start, /alerts, /stop, /whales commands) ──
+app.post('/telegram/webhook', (req, res) => {
+  res.sendStatus(200); // Always ACK immediately
+  if (!TELEGRAM_BOT_TOKEN) return;
+  const msg = req.body && req.body.message;
+  if (!msg || !msg.text || !msg.chat) return;
+  const chatId = msg.chat.id;
+  const text = msg.text.trim().toLowerCase();
+  const firstName = msg.from ? msg.from.first_name || 'trader' : 'trader';
+
+  if (text === '/start') {
+    sendTelegramAlert(chatId,
+      `\u{1F40B} <b>Welcome to HYPERFLEX Whale Alerts, ${firstName}!</b>\n\n` +
+      `Get real-time notifications when Polymarket's top 50 whales make $10K+ moves.\n\n` +
+      `<b>Commands:</b>\n` +
+      `/alerts — Toggle whale alerts ON/OFF\n` +
+      `/whales — See current top whale positions\n` +
+      `/stats — Market stats snapshot\n` +
+      `/stop — Unsubscribe from alerts\n\n` +
+      `<a href="https://hyperflex.network/whales">\u{1F40B} Live Whale Tracker</a> | <a href="https://hyperflex.network/alpha-live">\u26A1 Alpha Terminal</a>`
+    );
+    return;
+  }
+
+  if (text === '/alerts' || text === '/subscribe') {
+    if (_tgWhaleSubscribers.has(String(chatId))) {
+      sendTelegramAlert(chatId, `\u2705 You're already subscribed to whale alerts!\n\nYou'll get notified on every $10K+ whale move. Use /stop to unsubscribe.`);
+    } else {
+      _tgWhaleSubscribers.add(String(chatId));
+      // Persist to DB
+      if (pool) {
+        dbQuery(`INSERT INTO telegram_whale_subs (chat_id, first_name, subscribed_at) VALUES ($1, $2, NOW()) ON CONFLICT (chat_id) DO UPDATE SET active = true, subscribed_at = NOW()`, [String(chatId), firstName]).catch(() => {});
+      } else if (supabase) {
+        supabase.from('telegram_whale_subs').upsert({ chat_id: String(chatId), first_name: firstName, active: true, subscribed_at: new Date().toISOString() }, { onConflict: 'chat_id' }).then(() => {});
+      }
+      sendTelegramAlert(chatId,
+        `\u{1F514} <b>Whale alerts activated!</b>\n\n` +
+        `You'll receive notifications when top Polymarket whales make $10K+ moves:\n\n` +
+        `\u{1F7E2} New positions opened\n` +
+        `\u{1F534} Positions closed\n` +
+        `\u2B06\uFE0F Size increases\n` +
+        `\u2B07\uFE0F Size decreases\n\n` +
+        `Use /stop to turn off.`
+      );
+    }
+    return;
+  }
+
+  if (text === '/stop' || text === '/unsubscribe') {
+    _tgWhaleSubscribers.delete(String(chatId));
+    if (pool) {
+      dbQuery(`UPDATE telegram_whale_subs SET active = false WHERE chat_id = $1`, [String(chatId)]).catch(() => {});
+    } else if (supabase) {
+      supabase.from('telegram_whale_subs').update({ active: false }).eq('chat_id', String(chatId)).then(() => {});
+    }
+    sendTelegramAlert(chatId, `\u{1F515} Whale alerts turned off. Use /alerts to re-subscribe anytime.`);
+    return;
+  }
+
+  if (text === '/whales') {
+    // Send top 5 whale positions from cache
+    const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+    if (!whaleData || !whaleData.whales || !whaleData.whales.length) {
+      sendTelegramAlert(chatId, `\u{1F40B} Whale data is loading... try again in a minute.\n\n<a href="https://hyperflex.network/whales">View live tracker \u2192</a>`);
+      return;
+    }
+    const top5 = whaleData.whales.slice(0, 5);
+    const lines = top5.map((w, i) => {
+      const name = w.trader || 'Unknown';
+      const size = w.currentSize >= 1000000 ? '$' + (w.currentSize/1000000).toFixed(1) + 'M' : w.currentSize >= 1000 ? '$' + (w.currentSize/1000).toFixed(0) + 'K' : '$' + (w.currentSize||0).toFixed(0);
+      const market = (w.market || w.position || '').substring(0, 50);
+      return `${i+1}. <b>${name}</b> — ${size} ${w.side || ''}\n   ${market}`;
+    });
+    sendTelegramAlert(chatId,
+      `\u{1F40B} <b>Top 5 Whale Positions</b>\n\n${lines.join('\n\n')}\n\n<a href="https://hyperflex.network/whales">See all ${whaleData.total_whales || ''} whales \u2192</a>`
+    );
+    return;
+  }
+
+  if (text === '/stats') {
+    const screener = _screenerCache || [];
+    const totalVol = screener.reduce((s, m) => s + (m.volume_24h || m.volume24hr || 0), 0);
+    const marketCount = screener.length;
+    const whaleCount = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data.total_whales || 0 : 0;
+    const fmtVol = totalVol >= 1e9 ? '$' + (totalVol/1e9).toFixed(1) + 'B' : totalVol >= 1e6 ? '$' + (totalVol/1e6).toFixed(0) + 'M' : '$' + (totalVol/1e3).toFixed(0) + 'K';
+    sendTelegramAlert(chatId,
+      `\u{1F4CA} <b>HYPERFLEX Market Snapshot</b>\n\n` +
+      `\u{1F4B0} 24h Volume: <b>${fmtVol}</b>\n` +
+      `\u{1F4C8} Active Markets: <b>${marketCount}</b>\n` +
+      `\u{1F40B} Whales Tracked: <b>${whaleCount}</b>\n` +
+      `\u{1F525} Subscribers: <b>${_tgWhaleSubscribers.size}</b>\n\n` +
+      `<a href="https://hyperflex.network/alpha-live">\u26A1 Alpha Terminal</a> | <a href="https://hyperflex.network/whales">\u{1F40B} Whales</a>`
+    );
+    return;
+  }
+
+  // Unknown command
+  sendTelegramAlert(chatId,
+    `\u{1F914} I don't recognise that command.\n\n` +
+    `/alerts — Toggle whale alerts\n` +
+    `/whales — Top positions now\n` +
+    `/stats — Market snapshot\n` +
+    `/stop — Unsubscribe`
+  );
+});
+
+// One-time: register webhook URL with Telegram API
+app.get('/api/telegram/setup-webhook', async (req, res) => {
+  if (!TELEGRAM_BOT_TOKEN) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+  const webhookUrl = `https://hyperflex.network/telegram/webhook`;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message'] })
+    });
+    const data = await r.json();
+    res.json({ ok: data.ok, description: data.description, webhook_url: webhookUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Load persisted Telegram whale subscribers on boot
+async function loadTelegramWhaleSubscribers() {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery(`SELECT chat_id FROM telegram_whale_subs WHERE active = true`);
+    } else if (supabase) {
+      const { data } = await supabase.from('telegram_whale_subs').select('chat_id').eq('active', true);
+      rows = data || [];
+    }
+    if (rows) rows.forEach(r => _tgWhaleSubscribers.add(String(r.chat_id)));
+    console.log(`[telegram] Loaded ${_tgWhaleSubscribers.size} whale alert subscribers`);
+  } catch (e) { console.warn('[telegram] Could not load subscribers:', e.message); }
+}
 
 // ── Polymarket referral tag interceptor ──────────────────────────────
 // Auto-tags every polymarket.com URL in JSON API responses with ?via=CODE
@@ -9853,7 +10021,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare'
 ]);
 
 // GET /my — private member dashboard
@@ -19439,36 +19607,60 @@ async function fetchWhalePositions() {
     }
   }
 
-  // ── Optional Telegram alerts: whale moves > $50K → notify users who subscribed to that trader ──
-  if (!isFirstSnapshot && TELEGRAM_BOT_TOKEN && pool) {
-    const bigMoves = _whaleTradeStream.filter(e => e.size >= 50000 && e.ts === now);
-    if (bigMoves.length > 0) {
-      (async () => {
-        try {
-          // Build wallet→traderName map from newSnapshot for lookup
-          const walletToName = new Map();
-          for (const [w, positions] of newSnapshot) {
-            if (positions[0]) walletToName.set(w, positions[0].trader);
+  // ── Telegram alerts: channel broadcast ($10K+) + per-user subscriptions ($50K+) + /alerts subscribers ($10K+) ──
+  if (!isFirstSnapshot && TELEGRAM_BOT_TOKEN) {
+    const allMoves = _whaleTradeStream.filter(e => e.size >= 10000 && e.ts === now);
+    if (allMoves.length > 0) {
+      // 1. Broadcast to public channel (all $10K+ moves, max 5 per tick)
+      for (const evt of allMoves.slice(0, 5)) {
+        broadcastWhaleToChannel(evt);
+      }
+
+      // 2. Notify /alerts bot subscribers (all $10K+ moves)
+      if (_tgWhaleSubscribers.size > 0) {
+        for (const evt of allMoves.slice(0, 8)) {
+          const actionEmoji = { opened: '\u{1F7E2}', closed: '\u{1F534}', increased: '\u2B06\uFE0F', decreased: '\u2B07\uFE0F' };
+          const emoji = actionEmoji[evt.action] || '\u{1F40B}';
+          const priceStr = evt.price ? ` @ ${(evt.price * 100).toFixed(0)}\u00A2` : '';
+          const question = (evt.question || 'Unknown').substring(0, 70);
+          const slug = evt.slug ? `\nhttps://hyperflex.network/market/${evt.slug}` : '';
+          const msg = `${emoji} <b>${evt.trader_name || 'Whale'}</b> ${evt.action} <b>${evt.size_display}</b> ${evt.side}${priceStr}\n${question}${slug}`;
+          for (const chatId of _tgWhaleSubscribers) {
+            sendTelegramAlert(chatId, msg);
           }
-          for (const evt of bigMoves.slice(0, 10)) {
-            // Find the wallet for this trader
-            let traderWallet = null;
-            for (const [w, name] of walletToName) {
-              if (name === evt.trader_name) { traderWallet = w; break; }
-            }
-            if (!traderWallet) continue;
-            const tgUsers = await dbQuery(
-              "SELECT DISTINCT u.telegram_chat_id FROM whale_alerts wa JOIN users u ON wa.user_id = u.id WHERE wa.trader_wallet = $1 AND u.telegram_chat_id IS NOT NULL LIMIT 50",
-              [traderWallet]
-            ).catch(() => []);
-            for (const u of tgUsers) {
-              const priceDisplay = evt.price ? (evt.price * 100).toFixed(0) + '%' : '?';
-              const msg = `\u{1F40B} Whale Alert: ${evt.trader_name || 'Unknown'} just ${evt.action || 'moved'} ${evt.size_display} ${evt.side} on ${evt.question}\nPrice: ${priceDisplay}\n\nView: https://hyperflex.network/whales`;
-              sendTelegramAlert(u.telegram_chat_id, msg);
-            }
-          }
-        } catch (e) { console.warn('[whale-alert-telegram]', e.message); }
-      })();
+        }
+      }
+
+      // 3. Per-user trader subscriptions ($50K+ threshold, existing whale_alerts table)
+      if (pool) {
+        const bigMoves = allMoves.filter(e => e.size >= 50000);
+        if (bigMoves.length > 0) {
+          (async () => {
+            try {
+              const walletToName = new Map();
+              for (const [w, positions] of newSnapshot) {
+                if (positions[0]) walletToName.set(w, positions[0].trader);
+              }
+              for (const evt of bigMoves.slice(0, 10)) {
+                let traderWallet = null;
+                for (const [w, name] of walletToName) {
+                  if (name === evt.trader_name) { traderWallet = w; break; }
+                }
+                if (!traderWallet) continue;
+                const tgUsers = await dbQuery(
+                  "SELECT DISTINCT u.telegram_chat_id FROM whale_alerts wa JOIN users u ON wa.user_id = u.id WHERE wa.trader_wallet = $1 AND u.telegram_chat_id IS NOT NULL LIMIT 50",
+                  [traderWallet]
+                ).catch(() => []);
+                for (const u of tgUsers) {
+                  const priceDisplay = evt.price ? (evt.price * 100).toFixed(0) + '%' : '?';
+                  const msg = `\u{1F40B} Whale Alert: ${evt.trader_name || 'Unknown'} just ${evt.action || 'moved'} ${evt.size_display} ${evt.side} on ${evt.question}\nPrice: ${priceDisplay}\n\nView: https://hyperflex.network/whales`;
+                  sendTelegramAlert(u.telegram_chat_id, msg);
+                }
+              }
+            } catch (e) { console.warn('[whale-alert-telegram]', e.message); }
+          })();
+        }
+      }
     }
   }
 
@@ -19828,6 +20020,9 @@ app.get('/api/smart-money-leaderboard', async (req, res) => {
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
 // GET /market-intel — serves whale watch page (rebranded in nav)
 app.get('/market-intel', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
+
+// GET /compare — SEO comparison page (HYPERFLEX vs competitors)
+app.get('/compare', (req, res) => res.sendFile(path.join(__dirname, 'public', 'compare.html')));
 
 // GET /whale-index — whale index portfolio page
 app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whale-index.html')));
@@ -36014,6 +36209,7 @@ app.listen(PORT, () => {
   setTimeout(async () => {
     console.log('[boot] Pre-warming data caches...');
     const warmups = [
+      ['telegram-subs', async () => { await loadTelegramWhaleSubscribers(); }],
       ['whale-watch', async () => { const data = await fetchWhalePositions(); _whaleWatchCache = { ts: Date.now(), data }; }],
       ['market-movers', async () => { const r = await fetch(`http://localhost:${PORT}/api/market-movers`); if (!r.ok) throw new Error(r.status); }],
       ['whale-flow', async () => { const r = await fetch(`http://localhost:${PORT}/api/whale-flow`); if (!r.ok) throw new Error(r.status); }],
