@@ -1083,6 +1083,71 @@ nav {
   </div>
 </div>
 
+<!-- ═══ LIVE HEDGE OPPORTUNITIES ═══ -->
+<div style="max-width:1200px;margin:0 auto 24px;padding:0 40px" id="explore-hedge-section">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7">
+        <span style="display:inline-block;width:6px;height:6px;background:#a855f7;border-radius:50%;animation:pulse-dot 1.8s infinite"></span>
+        NET-PROFITABLE HEDGES
+      </span>
+      <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(0,230,138,0.1);color:#00e68a;font-weight:700">GUARANTEED +ROI</span>
+    </div>
+    <a href="/signals" style="font-family:var(--mono);font-size:11px;color:#a855f7;text-decoration:none">See all →</a>
+  </div>
+  <div id="exploreHedgeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+    <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px">Scanning for correlated markets…</div>
+  </div>
+</div>
+
+<script>
+(async function loadExploreHedgePairs() {
+  const grid = document.getElementById('exploreHedgeGrid');
+  if (!grid) return;
+  try {
+    const r = await fetch('/api/hedge-pairs');
+    const d = await r.json();
+    const pairs = d.pairs || [];
+    if (!pairs.length) {
+      document.getElementById('explore-hedge-section').style.display = 'none';
+      return;
+    }
+    function _esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+    grid.innerHTML = pairs.slice(0, 3).map(function(h) {
+      var sA = (h.market_a.side || 'YES').toUpperCase();
+      var sB = (h.market_b.side || 'YES').toUpperCase();
+      var colA = sA === 'YES' ? '#00e68a' : '#ff4d6a';
+      var colB = sB === 'YES' ? '#00e68a' : '#ff4d6a';
+      var slugA = h.market_a.slug || '';
+      var slugB = h.market_b.slug || '';
+      var linkA = slugA ? '/market/' + slugA : '/signals';
+      var linkB = slugB ? '/market/' + slugB : '/signals';
+      var hedgeUrl = slugA && slugB
+        ? '/market/' + slugA + '?side=' + sA + '&hedge=' + encodeURIComponent(slugB) + '&hedgeSide=' + sB + '&from=hedge'
+        : '/signals';
+      var totalCost = h.total_cost || ((h.market_a.entry_cost||0) + (h.market_b.entry_cost||0));
+      var profit = h.profit_if_one_wins || (100 - totalCost);
+      var roi = h.roi_pct || (totalCost > 0 ? Math.round((profit/totalCost)*100) : 0);
+      return '<div style="background:var(--card);border:1px solid rgba(168,85,247,0.25);border-radius:12px;padding:14px;position:relative;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(168,85,247,0.55)\'" onmouseleave="this.style.borderColor=\'rgba(168,85,247,0.25)\'">' +
+        '<a href="' + hedgeUrl + '" style="position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:5px;background:rgba(168,85,247,0.2);color:#a855f7;text-decoration:none;font-weight:700;cursor:pointer;border:1px solid rgba(168,85,247,0.35)">⚡ BUY HEDGE</a>' +
+        '<a href="' + linkA + '" style="display:block;text-decoration:none;color:inherit;padding-right:100px;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.35">' + _esc((h.market_a.question||'').substring(0,55)) + '</div></a>' +
+        '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + colA + ';margin-bottom:8px">' + sA + ' ' + h.market_a.entry_cost + '¢</div>' +
+        '<div style="text-align:center;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin:4px 0">⟷ HEDGED ⟷</div>' +
+        '<a href="' + linkB + '" style="display:block;text-decoration:none;color:inherit;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.35">' + _esc((h.market_b.question||'').substring(0,55)) + '</div></a>' +
+        '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + colB + ';margin-bottom:10px">' + sB + ' ' + h.market_b.entry_cost + '¢</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5;padding:8px 10px;background:rgba(0,230,138,0.04);border-radius:6px;margin-bottom:8px">Buy both for <strong style="color:var(--text)">' + totalCost + '¢</strong>. Either wins → <strong style="color:#00e68a">+' + profit + '¢</strong></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:8px">' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + _esc(h.correlation_reason||'') + '</span>' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a">+' + roi + '% ROI</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    document.getElementById('explore-hedge-section').style.display = 'none';
+  }
+})();
+</script>
+
 <!-- LIVE TRADING FEED TICKER -->
 <div id="liveFeedTicker" style="max-width:1200px;margin:0 auto 16px;padding:0 40px;overflow:hidden">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
