@@ -640,6 +640,9 @@ function urlBase64ToUint8Array(base64String) {
 .wi-portfolio-alloc-fill { height: 100%; background: #a855f7; }
 .wi-portfolio-pos-q { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wi-portfolio-pos-size { color: var(--muted); flex-shrink: 0; }
+.mirror-amt-btn { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; min-height: 36px; }
+.mirror-amt-btn:hover { border-color: #00e68a; color: #00e68a; }
+.mirror-amt-btn.active { background: rgba(0,230,138,0.1); border-color: #00e68a; color: #00e68a; }
 @media (max-width: 640px) {
   .wi-consensus-card { padding: 12px; gap: 10px; }
   .wi-consensus-q { font-size: 13px; }
@@ -700,11 +703,12 @@ async function loadWhalePortfolios() {
     var r = await fetch('/api/whale-portfolios');
     var d = await r.json();
     var whales = d.whales || [];
+    window._wiWhales = whales; // stash for mirror modal access
     if (!whales.length) {
       grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:10px">Whale positions loading... first snapshot takes ~30s on fresh boot.</div>';
       return;
     }
-    grid.innerHTML = whales.slice(0, 10).map(function(w) {
+    grid.innerHTML = whales.slice(0, 10).map(function(w, idx) {
       var capDisplay = w.total_capital >= 1e6 ? '$' + (w.total_capital/1e6).toFixed(1) + 'M' : '$' + Math.round(w.total_capital/1e3) + 'K';
       var pnlDisplay = w.trader_pnl >= 0 ? '+$' + Math.round(w.trader_pnl).toLocaleString() : '-$' + Math.round(Math.abs(w.trader_pnl)).toLocaleString();
       var pnlColor = w.trader_pnl >= 0 ? '#00e68a' : '#ff4d6a';
@@ -726,6 +730,7 @@ async function loadWhalePortfolios() {
           '<div class="wi-portfolio-stat"><strong>' + capDisplay + '</strong> deployed</div>' +
           '<div class="wi-portfolio-stat"><strong>' + w.position_count + '</strong> positions</div>' +
           '<div class="wi-portfolio-stat">All-time: <strong style="color:' + pnlColor + '">' + pnlDisplay + '</strong></div>' +
+          '<button onclick="openMirrorModal(' + idx + ')" style="margin-left:auto;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.35);color:#00e68a;padding:6px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:32px">📋 Mirror allocation</button>' +
         '</div>' +
         '<div class="wi-portfolio-positions">' + positionsHtml + '</div>' +
       '</div>';
@@ -733,6 +738,185 @@ async function loadWhalePortfolios() {
   } catch (e) {
     grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--red);font-family:var(--mono);font-size:11px">Failed to load whale portfolios</div>';
   }
+}
+
+// ── Mirror Allocation Modal ──
+// User picks a budget, we compute proportional allocation, then open each
+// market in a new tab with ?from=mirror prefill. No multi-sig orchestration.
+var _mirrorWhaleIdx = null;
+var _mirrorBudget = 500;
+// Minimum filter: only mirror positions in markets with a slug that are
+// still trading (not resolved, not expired)
+function _getMirrorablePositions(whale) {
+  return (whale.positions || []).filter(function(p) {
+    if (!p.slug) return false;
+    if (p.current_price != null && (p.current_price <= 0.02 || p.current_price >= 0.98)) return false;
+    return (p.size || 0) > 0;
+  });
+}
+
+function openMirrorModal(idx) {
+  var whales = window._wiWhales || [];
+  var whale = whales[idx];
+  if (!whale) return;
+  _mirrorWhaleIdx = idx;
+  _mirrorBudget = 500;
+  var mirrorable = _getMirrorablePositions(whale);
+  if (!mirrorable.length) {
+    alert('No mirrorable positions found — this whale\'s markets may all be closed or resolved.');
+    return;
+  }
+  var overlay = document.getElementById('mirrorOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'mirrorOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.onclick = function(e) { if (e.target === overlay) closeMirrorModal(); };
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML =
+    '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(168,85,247,0.4);border-radius:14px;padding:24px;max-width:580px;width:100%;font-family:var(--sans);color:var(--text);max-height:90vh;overflow-y:auto">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+        '<span style="font-size:20px">📋</span>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:16px;font-weight:800;color:var(--text)">Mirror ' + escH(whale.trader || 'Whale') + '\'s Allocation</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">' + mirrorable.length + ' mirrorable positions · proportional to their $' + (whale.total_capital || 0).toLocaleString() + ' book</div>' +
+        '</div>' +
+        '<button onclick="closeMirrorModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
+      '</div>' +
+
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Your total budget</div>' +
+      '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">' +
+        '<button class="mirror-amt-btn" data-amt="100" onclick="setMirrorAmt(100, this)">$100</button>' +
+        '<button class="mirror-amt-btn" data-amt="500" onclick="setMirrorAmt(500, this)">$500</button>' +
+        '<button class="mirror-amt-btn" data-amt="1000" onclick="setMirrorAmt(1000, this)">$1,000</button>' +
+        '<button class="mirror-amt-btn" data-amt="5000" onclick="setMirrorAmt(5000, this)">$5,000</button>' +
+        '<input type="number" id="mirrorAmtInput" placeholder="Custom" oninput="setMirrorAmt(parseFloat(this.value)||0, null)" style="flex:1;min-width:90px;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>' +
+      '</div>' +
+
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Proportional allocation preview</div>' +
+      '<div id="mirrorPreview" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.02);padding:10px;margin-bottom:14px"></div>' +
+
+      '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;padding:10px 12px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:8px;margin-bottom:14px">' +
+        '<strong style="color:var(--gold,#c9920d)">⚠ Review before executing.</strong> This opens each market in a new tab with the side + size pre-filled. You\'ll sign each trade individually in MetaMask. Whale prices may have moved since we snapshotted — always check the current price on each market page before confirming.' +
+      '</div>' +
+
+      '<div style="display:flex;gap:8px">' +
+        '<button onclick="closeMirrorModal()" style="background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px 18px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Cancel</button>' +
+        '<button id="mirrorLaunchBtn" onclick="launchMirror()" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px 18px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer">Launch <span id="mirrorLaunchCount">' + mirrorable.length + '</span> trades →</button>' +
+      '</div>' +
+    '</div>';
+
+  // Wire up default amount
+  updateMirrorPreview();
+  // Highlight the default budget button
+  setTimeout(function() {
+    var btn = document.querySelector('.mirror-amt-btn[data-amt="500"]');
+    if (btn) btn.classList.add('active');
+  }, 10);
+}
+
+function closeMirrorModal() {
+  var o = document.getElementById('mirrorOverlay');
+  if (o) o.remove();
+  _mirrorWhaleIdx = null;
+}
+
+function setMirrorAmt(amt, btn) {
+  _mirrorBudget = amt;
+  document.querySelectorAll('.mirror-amt-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  else {
+    // Custom input — clear the preset highlight
+    var input = document.getElementById('mirrorAmtInput');
+    if (input && input.value) input.focus();
+  }
+  updateMirrorPreview();
+}
+
+function updateMirrorPreview() {
+  var whales = window._wiWhales || [];
+  var whale = whales[_mirrorWhaleIdx];
+  if (!whale) return;
+  var el = document.getElementById('mirrorPreview');
+  if (!el) return;
+  var positions = _getMirrorablePositions(whale);
+  var budget = parseFloat(_mirrorBudget) || 0;
+  if (budget <= 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px">Enter a budget to see allocation preview.</div>';
+    return;
+  }
+
+  // Re-normalize allocation across only mirrorable positions (may not sum to 100% of whale's book)
+  var totalMirrorCap = positions.reduce(function(s, p) { return s + (p.size || 0); }, 0);
+  if (totalMirrorCap <= 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px">No mirrorable capital.</div>';
+    return;
+  }
+
+  var allocations = positions.map(function(p) {
+    var share = p.size / totalMirrorCap;
+    var dollarAmt = budget * share;
+    return {
+      pos: p,
+      share: share,
+      dollarAmt: dollarAmt,
+      // Skip allocations under $1 — CLOB minimum
+      skipped: dollarAmt < 1
+    };
+  });
+
+  var validCount = allocations.filter(function(a) { return !a.skipped; }).length;
+  var btn = document.getElementById('mirrorLaunchCount');
+  if (btn) btn.textContent = validCount;
+
+  el.innerHTML = allocations.map(function(a) {
+    var p = a.pos;
+    var sideColor = (p.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+    var dollarStr = a.dollarAmt >= 100 ? '$' + Math.round(a.dollarAmt) : '$' + a.dollarAmt.toFixed(2);
+    var shareStr = Math.round(a.share * 100) + '%';
+    var priceStr = p.current_price != null ? Math.round(p.current_price * 100) + '¢' : '—';
+    var skippedStyle = a.skipped ? 'opacity:0.4' : '';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;' + skippedStyle + '">' +
+      '<span style="color:' + sideColor + ';font-weight:700;min-width:30px">' + (p.side || '').substring(0, 3) + '</span>' +
+      '<span style="flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escH((p.market || '').substring(0, 60)) + '</span>' +
+      '<span style="color:var(--muted);flex-shrink:0">' + priceStr + '</span>' +
+      '<span style="color:var(--muted);flex-shrink:0;min-width:34px;text-align:right">' + shareStr + '</span>' +
+      '<span style="color:#00e68a;font-weight:700;flex-shrink:0;min-width:56px;text-align:right">' + dollarStr + '</span>' +
+      (a.skipped ? '<span style="color:var(--red);font-size:9px;flex-shrink:0">SKIP</span>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function launchMirror() {
+  var whales = window._wiWhales || [];
+  var whale = whales[_mirrorWhaleIdx];
+  if (!whale) return;
+  var positions = _getMirrorablePositions(whale);
+  var budget = parseFloat(_mirrorBudget) || 0;
+  if (budget <= 0) { alert('Enter a budget'); return; }
+
+  var totalMirrorCap = positions.reduce(function(s, p) { return s + (p.size || 0); }, 0);
+  if (totalMirrorCap <= 0) return;
+
+  var opened = 0;
+  positions.forEach(function(p, i) {
+    var dollarAmt = (p.size / totalMirrorCap) * budget;
+    if (dollarAmt < 1) return; // skip below-minimum
+    var side = (p.side || 'YES').toUpperCase();
+    var url = '/market/' + p.slug + '?from=mirror&side=' + side + '&size=' + dollarAmt.toFixed(2) + '&mirror_whale=' + encodeURIComponent(whale.trader || '');
+    // Stagger openings slightly so browser pop-up blockers don't throttle
+    setTimeout(function() { window.open(url, '_blank'); }, i * 150);
+    opened++;
+  });
+
+  closeMirrorModal();
+  // Show toast
+  var toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:12px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:10001;box-shadow:0 4px 20px rgba(0,230,138,0.3)';
+  toast.textContent = '✓ Opened ' + opened + ' trades in new tabs — review and sign each one';
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.remove(); }, 5000);
 }
 
 function showWiTab(tab) {

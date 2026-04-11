@@ -3522,7 +3522,7 @@ function applyAlphaPrefill() {
   try {
     var p = new URLSearchParams(window.location.search);
     var from = p.get('from');
-    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge') return;
+    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge' && from !== 'mirror' && from !== 'copy-exit') return;
     var side = (p.get('side') || '').toLowerCase();
     var size = parseFloat(p.get('size') || '');
     if (side === 'yes' || side === 'no') {
@@ -3531,7 +3531,8 @@ function applyAlphaPrefill() {
     if (size > 0) {
       var input = document.getElementById('tradeAmount');
       if (input) {
-        input.value = Math.round(size);
+        // Mirror flow uses decimal sizes (e.g. $17.83) — keep 2 decimals
+        input.value = from === 'mirror' ? size.toFixed(2) : Math.round(size);
         updateTradeCalc();
       }
     }
@@ -3545,6 +3546,9 @@ function applyAlphaPrefill() {
     var hedgeSlug = p.get('hedge');
     if (from === 'hedge' && hedgeSlug) banner = '🔗 Hedge Leg 1 of 2 — buy this side, then we\'ll open leg 2';
     if (from === 'hedge' && !hedgeSlug) banner = '🔗 Hedge Leg 2 of 2 — complete your hedge';
+    var mirrorWhale = p.get('mirror_whale');
+    if (from === 'mirror') banner = '📋 Mirroring ' + (mirrorWhale || 'whale') + '\'s allocation — review current price & sign';
+    if (from === 'copy-exit') banner = '🚪 Closing your copy position — review & sign';
     hint.textContent = banner;
     hint.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:8px 16px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;font-size:12px;z-index:1000;box-shadow:0 4px 16px rgba(0,230,138,0.3);animation:fadeOut 4s forwards';
     var style = document.createElement('style');
