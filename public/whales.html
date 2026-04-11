@@ -888,6 +888,15 @@ function updateMirrorPreview() {
   }).join('');
 }
 
+// ── Mirror Wizard — in-page step-by-step execution ──
+// Replaces the multi-tab launch with a single-modal walkthrough. Each step:
+//   1. Fetches live CLOB midpoint for the current position
+//   2. Shows market name, side, whale-price-then vs live-price-now, user amount
+//   3. User can ± adjust amount, Sign & Submit, Skip, or Cancel all
+//   4. Executes via HFXCopyBot.executeOrder (same CLOB path as market.html)
+//   5. On success, auto-advances; on failure, allows retry or skip
+var _wizState = null; // { queue: [], idx: 0, whale, results: [] }
+
 function launchMirror() {
   var whales = window._wiWhales || [];
   var whale = whales[_mirrorWhaleIdx];
@@ -899,24 +908,345 @@ function launchMirror() {
   var totalMirrorCap = positions.reduce(function(s, p) { return s + (p.size || 0); }, 0);
   if (totalMirrorCap <= 0) return;
 
-  var opened = 0;
-  positions.forEach(function(p, i) {
-    var dollarAmt = (p.size / totalMirrorCap) * budget;
-    if (dollarAmt < 1) return; // skip below-minimum
-    var side = (p.side || 'YES').toUpperCase();
-    var url = '/market/' + p.slug + '?from=mirror&side=' + side + '&size=' + dollarAmt.toFixed(2) + '&mirror_whale=' + encodeURIComponent(whale.trader || '');
-    // Stagger openings slightly so browser pop-up blockers don't throttle
-    setTimeout(function() { window.open(url, '_blank'); }, i * 150);
-    opened++;
+  // Build the trade queue — each entry carries enough data to execute
+  var queue = positions.map(function(p) {
+    return {
+      slug: p.slug,
+      market: p.market,
+      side: (p.side || 'YES').toUpperCase(),
+      whale_entry_price: p.avg_price || p.current_price,
+      whale_size: p.size,
+      allocation_pct: Math.round((p.size / totalMirrorCap) * 100),
+      planned_usd: (p.size / totalMirrorCap) * budget,
+      clob_token_ids: null, // resolved per-step from screener cache
+      condition_id: null,
+      status: 'pending' // pending | executing | filled | skipped | failed
+    };
+  }).filter(function(q) {
+    return q.planned_usd >= 1; // skip below CLOB minimum
   });
 
+  if (!queue.length) { alert('No positions meet the $1 minimum allocation'); return; }
+
+  _wizState = { queue: queue, idx: 0, whale: whale, budget: budget, results: [] };
   closeMirrorModal();
-  // Show toast
-  var toast = document.createElement('div');
-  toast.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:12px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:10001;box-shadow:0 4px 20px rgba(0,230,138,0.3)';
-  toast.textContent = '✓ Opened ' + opened + ' trades in new tabs — review and sign each one';
-  document.body.appendChild(toast);
-  setTimeout(function() { toast.remove(); }, 5000);
+  openWizardModal();
+}
+
+function openWizardModal() {
+  var overlay = document.getElementById('wizardOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'wizardOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(overlay);
+  }
+  renderWizardStep();
+}
+
+function closeWizardModal() {
+  var o = document.getElementById('wizardOverlay');
+  if (o) o.remove();
+  _wizState = null;
+}
+
+async function renderWizardStep() {
+  if (!_wizState) return;
+  var overlay = document.getElementById('wizardOverlay');
+  if (!overlay) return;
+  var state = _wizState;
+
+  // Are we done?
+  if (state.idx >= state.queue.length) {
+    renderWizardDone();
+    return;
+  }
+
+  var step = state.queue[state.idx];
+  var total = state.queue.length;
+  var progress = Math.round(((state.idx) / total) * 100);
+  var sideColor = step.side === 'YES' ? '#00e68a' : '#ff4d6a';
+  var whaleName = state.whale.trader || 'Whale';
+
+  // Show loading state while we resolve clob_token_ids + fetch live price
+  overlay.innerHTML = _wizardFrame(state, 'loading', step);
+
+  // Resolve clob_token_ids from screener cache if not already
+  if (!step.clob_token_ids) {
+    try {
+      var r = await fetch('/api/screener');
+      var data = await r.json();
+      var markets = data.markets || data || [];
+      var match = markets.find(function(m) { return m.slug === step.slug; });
+      if (match) {
+        step.clob_token_ids = match.clobTokenIds || match.clob_token_ids || null;
+        step.condition_id = match.market_id || match.conditionId || null;
+      }
+    } catch (e) {}
+  }
+
+  // Fetch live midpoint price for the token
+  step.live_price = null;
+  step.live_side_price = null;
+  step.price_moved_pct = null;
+  if (step.clob_token_ids && typeof HFXCopyBot !== 'undefined' && HFXCopyBot.fetchClobMidpoint) {
+    try {
+      var tids = step.clob_token_ids;
+      if (typeof tids === 'string') tids = JSON.parse(tids);
+      var tokenIndex = step.side === 'YES' ? 0 : 1;
+      var tokenId = tids[tokenIndex] || tids[0];
+      var mid = await HFXCopyBot.fetchClobMidpoint(tokenId);
+      if (mid && mid.midpoint) {
+        // midpoint is in YES-space; convert to side-space
+        step.live_price = mid.midpoint; // raw YES midpoint
+        step.live_side_price = step.side === 'YES' ? mid.midpoint : (1 - mid.midpoint);
+        // How much has the side-price moved since whale entered?
+        if (step.whale_entry_price) {
+          var whaleSideEntry = step.side === 'YES' ? step.whale_entry_price : (1 - step.whale_entry_price);
+          step.price_moved_pct = Math.round(((step.live_side_price - whaleSideEntry) / whaleSideEntry) * 100);
+        }
+      }
+    } catch (e) { console.warn('[wizard] fetchClobMidpoint failed:', e.message); }
+  }
+
+  // If we couldn't resolve the token, mark skipped and advance
+  if (!step.clob_token_ids) {
+    step.status = 'failed';
+    state.results.push({ step: step, error: 'Market not found in active screener — may have resolved or be delisted' });
+    state.idx++;
+    setTimeout(renderWizardStep, 500);
+    return;
+  }
+
+  overlay.innerHTML = _wizardFrame(state, 'ready', step);
+
+  // Wire up the amount input — user can ± adjust their size per trade
+  var amtInput = document.getElementById('wizAmount');
+  if (amtInput && !amtInput._wired) {
+    amtInput._wired = true;
+    amtInput.addEventListener('input', function() {
+      var val = parseFloat(amtInput.value) || 0;
+      step.planned_usd = val;
+      var payoutEl = document.getElementById('wizPayout');
+      if (payoutEl && step.live_side_price) {
+        var shares = val / step.live_side_price;
+        var payout = shares * 1;
+        var profit = payout - val;
+        payoutEl.textContent = 'Shares: ' + shares.toFixed(1) + ' · Win payout: $' + payout.toFixed(2) + ' (+$' + profit.toFixed(2) + ')';
+      }
+    });
+  }
+}
+
+function _wizardFrame(state, status, step) {
+  var whaleName = state.whale.trader || 'Whale';
+  var idx = state.idx;
+  var total = state.queue.length;
+  var progress = Math.round(((idx) / total) * 100);
+  var sideColor = step.side === 'YES' ? '#00e68a' : '#ff4d6a';
+  var whaleCents = step.whale_entry_price != null ? Math.round((step.side === 'YES' ? step.whale_entry_price : (1 - step.whale_entry_price)) * 100) : null;
+  var liveCents = step.live_side_price != null ? Math.round(step.live_side_price * 100) : null;
+
+  var slippageBadge = '';
+  if (step.price_moved_pct != null) {
+    var sp = step.price_moved_pct;
+    if (sp > 5) slippageBadge = '<span style="color:#ff4d6a;font-weight:700;font-family:monospace;font-size:11px">↑' + sp + '% (slippage high — edge may be gone)</span>';
+    else if (sp < -5) slippageBadge = '<span style="color:#00e68a;font-weight:700;font-family:monospace;font-size:11px">↓' + Math.abs(sp) + '% (better entry than whale)</span>';
+    else slippageBadge = '<span style="color:var(--muted);font-family:monospace;font-size:11px">±' + Math.abs(sp || 0) + '%</span>';
+  }
+
+  var bodyHtml = '';
+  if (status === 'loading') {
+    bodyHtml = '<div style="padding:60px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px"><div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:12px">Fetching live price…</div></div>';
+  } else if (status === 'signing') {
+    bodyHtml = '<div style="padding:40px 20px;text-align:center"><div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:12px;font-family:var(--mono);font-size:13px;color:#00e68a">Check MetaMask → sign the order</div></div>';
+  } else if (status === 'success') {
+    var r = state.results[state.results.length - 1];
+    bodyHtml = '<div style="padding:40px 20px;text-align:center"><div style="font-size:48px">✅</div><div style="margin-top:8px;font-family:var(--sans);font-size:14px;font-weight:700;color:#00e68a">Order filled</div><div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Executed at ' + (r && r.execution_price ? Math.round(r.execution_price * 100) : '?') + '¢ · Next trade in 1.5s…</div></div>';
+  } else if (status === 'failed') {
+    var last = state.results[state.results.length - 1];
+    var errMsg = last && last.error ? last.error : 'Unknown error';
+    bodyHtml = '<div style="padding:30px 20px;text-align:center"><div style="font-size:40px">✗</div><div style="margin-top:8px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--red)">Order failed</div><div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted);max-width:360px;margin-left:auto;margin-right:auto">' + escH(errMsg.substring(0, 200)) + '</div></div>';
+  } else {
+    // status === 'ready'
+    bodyHtml =
+      '<div style="text-align:left">' +
+        '<div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:12px">' + escH(step.market || '') + '</div>' +
+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + sideColor + ';padding:4px 12px;background:' + (step.side === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)') + ';border:1px solid ' + sideColor + ';border-radius:6px">' + step.side + '</span>' +
+          (whaleCents != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">Whale entry: <strong style="color:var(--text)">' + whaleCents + '¢</strong></span>' : '') +
+          (liveCents != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">Now: <strong style="color:var(--text)">' + liveCents + '¢</strong></span>' : '') +
+          slippageBadge +
+        '</div>' +
+
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your allocation · ' + (step.allocation_pct || 0) + '% of whale book</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+          '<button onclick="wizAdjust(-5)" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:6px;font-family:var(--mono);font-size:14px;font-weight:700;cursor:pointer;min-height:40px">−</button>' +
+          '<div style="flex:1;position:relative">' +
+            '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:14px;color:var(--muted)">$</span>' +
+            '<input type="number" id="wizAmount" value="' + step.planned_usd.toFixed(2) + '" step="0.01" min="1" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:10px 12px 10px 26px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
+          '</div>' +
+          '<button onclick="wizAdjust(5)" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:6px;font-family:var(--mono);font-size:14px;font-weight:700;cursor:pointer;min-height:40px">+</button>' +
+        '</div>' +
+        '<div id="wizPayout" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px">' +
+          (liveCents ? 'Shares: ' + (step.planned_usd / step.live_side_price).toFixed(1) + ' · Win payout: $' + (step.planned_usd / step.live_side_price).toFixed(2) + ' (+$' + (step.planned_usd / step.live_side_price - step.planned_usd).toFixed(2) + ')' : '') +
+        '</div>' +
+      '</div>';
+  }
+
+  var ctaHtml = '';
+  if (status === 'ready') {
+    ctaHtml =
+      '<button onclick="wizSkip()" style="background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;min-height:44px">Skip</button>' +
+      '<button id="wizSubmitBtn" onclick="wizSubmit()" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Sign & Submit ' + step.side + ' →</button>';
+  } else if (status === 'failed') {
+    ctaHtml =
+      '<button onclick="wizSkip()" style="background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;min-height:44px">Skip this one</button>' +
+      '<button onclick="wizRetry()" style="flex:1;background:var(--gold,#c9920d);color:#0a0a0f;border:none;padding:12px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Retry →</button>';
+  }
+
+  return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:22px;max-width:520px;width:100%;font-family:var(--sans);color:var(--text);max-height:92vh;overflow-y:auto">' +
+    // Header
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+      '<span style="font-size:18px">📋</span>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:14px;font-weight:800">Mirroring ' + escH(whaleName) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Trade ' + (idx + 1) + ' of ' + total + ' · $' + (state.budget || 0).toLocaleString() + ' total budget</div>' +
+      '</div>' +
+      '<button onclick="wizCancel()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
+    '</div>' +
+
+    // Progress bar
+    '<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-bottom:18px"><div style="height:100%;background:linear-gradient(90deg,#00e68a,#4d9fff);width:' + progress + '%;transition:width 0.3s"></div></div>' +
+
+    // Body (varies by status)
+    bodyHtml +
+
+    // Footer — CTAs
+    (ctaHtml ? '<div style="display:flex;gap:8px;margin-top:18px">' + ctaHtml + '</div>' : '') +
+  '</div>';
+}
+
+function wizAdjust(delta) {
+  if (!_wizState) return;
+  var step = _wizState.queue[_wizState.idx];
+  if (!step) return;
+  step.planned_usd = Math.max(1, (step.planned_usd || 0) + delta);
+  var input = document.getElementById('wizAmount');
+  if (input) input.value = step.planned_usd.toFixed(2);
+  // Update payout preview
+  var payoutEl = document.getElementById('wizPayout');
+  if (payoutEl && step.live_side_price) {
+    var shares = step.planned_usd / step.live_side_price;
+    var payout = shares * 1;
+    var profit = payout - step.planned_usd;
+    payoutEl.textContent = 'Shares: ' + shares.toFixed(1) + ' · Win payout: $' + payout.toFixed(2) + ' (+$' + profit.toFixed(2) + ')';
+  }
+}
+
+function wizSkip() {
+  if (!_wizState) return;
+  var step = _wizState.queue[_wizState.idx];
+  if (step) { step.status = 'skipped'; _wizState.results.push({ step: step, skipped: true }); }
+  _wizState.idx++;
+  renderWizardStep();
+}
+
+function wizRetry() {
+  // Just re-render the step — the error result stays in results but the user can try again
+  if (_wizState) {
+    // Remove the last error result to avoid duplication
+    var last = _wizState.results[_wizState.results.length - 1];
+    if (last && last.error) _wizState.results.pop();
+    var step = _wizState.queue[_wizState.idx];
+    if (step) step.status = 'pending';
+    renderWizardStep();
+  }
+}
+
+function wizCancel() {
+  if (_wizState && _wizState.idx < _wizState.queue.length - 1) {
+    if (!confirm('Cancel the rest of the mirror? Trades already executed will remain.')) return;
+  }
+  closeWizardModal();
+}
+
+async function wizSubmit() {
+  if (!_wizState) return;
+  var state = _wizState;
+  var step = state.queue[state.idx];
+  if (!step) return;
+
+  // Sync the amount from input
+  var amtInput = document.getElementById('wizAmount');
+  if (amtInput) step.planned_usd = parseFloat(amtInput.value) || step.planned_usd;
+  if (step.planned_usd < 1) { alert('Minimum $1 per trade'); return; }
+
+  // Show signing state
+  var overlay = document.getElementById('wizardOverlay');
+  if (overlay) overlay.innerHTML = _wizardFrame(state, 'signing', step);
+
+  try {
+    if (typeof HFXCopyBot === 'undefined' || !HFXCopyBot.executeOrder) {
+      throw new Error('HFXCopyBot.executeOrder not loaded — refresh the page');
+    }
+    var result = await HFXCopyBot.executeOrder({
+      slug: step.slug,
+      clob_token_ids: step.clob_token_ids,
+      side: step.side,
+      amount_usd: step.planned_usd
+      // price omitted → executeOrder fetches live midpoint
+    });
+    step.status = 'filled';
+    state.results.push({ step: step, execution_price: result.execution_price, order_id: result.order_id });
+    // Show success state briefly, then advance
+    if (overlay) overlay.innerHTML = _wizardFrame(state, 'success', step);
+    setTimeout(function() {
+      state.idx++;
+      renderWizardStep();
+    }, 1500);
+  } catch (err) {
+    var errMsg = (err && err.message) || 'Unknown error';
+    if (err && (err.code === 4001 || err.code === 'ACTION_REJECTED')) errMsg = 'Signature rejected in MetaMask';
+    step.status = 'failed';
+    state.results.push({ step: step, error: errMsg });
+    if (overlay) overlay.innerHTML = _wizardFrame(state, 'failed', step);
+  }
+}
+
+function renderWizardDone() {
+  var overlay = document.getElementById('wizardOverlay');
+  if (!overlay || !_wizState) return;
+  var state = _wizState;
+  var filled = state.results.filter(function(r) { return r.step && r.step.status === 'filled'; });
+  var skipped = state.results.filter(function(r) { return r.step && r.step.status === 'skipped'; });
+  var failed = state.results.filter(function(r) { return r.step && r.step.status === 'failed'; });
+  var totalSpent = filled.reduce(function(s, r) { return s + (r.step.planned_usd || 0); }, 0);
+
+  overlay.innerHTML =
+    '<div style="background:var(--paper,#0e0e0c);border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:520px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
+      '<div style="font-size:48px;margin-bottom:8px">' + (filled.length === state.queue.length ? '🎉' : '✓') + '</div>' +
+      '<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px">Mirror complete</div>' +
+      '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:20px">Spent $' + totalSpent.toFixed(2) + ' across ' + filled.length + ' trades</div>' +
+
+      '<div style="display:flex;gap:10px;margin-bottom:20px;justify-content:center;flex-wrap:wrap">' +
+        '<div style="flex:1;min-width:100px;padding:12px;background:rgba(0,230,138,0.08);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">FILLED</div>' +
+          '<div style="font-size:20px;font-weight:800;color:#00e68a">' + filled.length + '</div>' +
+        '</div>' +
+        (skipped.length > 0 ? '<div style="flex:1;min-width:100px;padding:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px">' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">SKIPPED</div>' +
+          '<div style="font-size:20px;font-weight:800;color:var(--muted)">' + skipped.length + '</div>' +
+        '</div>' : '') +
+        (failed.length > 0 ? '<div style="flex:1;min-width:100px;padding:12px;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.2);border-radius:8px">' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">FAILED</div>' +
+          '<div style="font-size:20px;font-weight:800;color:var(--red)">' + failed.length + '</div>' +
+        '</div>' : '') +
+      '</div>' +
+
+      '<button onclick="closeWizardModal()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Done</button>' +
+    '</div>';
 }
 
 function showWiTab(tab) {

@@ -443,8 +443,185 @@
     } catch (e) {}
   }
 
+  // ══════════════════════════════════════════════════════════
+  // Public CLOB helpers — reusable by any UI flow that needs to
+  // execute an order without the copy-bot banner infrastructure
+  // (mirror wizard, quick-buy widgets, etc.)
+  // ══════════════════════════════════════════════════════════
+
+  // Fetch the live midpoint price for a token from CLOB.
+  // Returns { midpoint, bid, ask } in 0-1 scale, or null on failure.
+  async function fetchClobMidpoint(tokenId) {
+    if (!tokenId) return null;
+    try {
+      var [midRes, bookRes] = await Promise.all([
+        fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null}),
+        fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null})
+      ]);
+      var midpoint = (midRes && midRes.mid) ? parseFloat(midRes.mid) : null;
+      var bid = null, ask = null;
+      if (bookRes && bookRes.bids && bookRes.bids.length) bid = parseFloat(bookRes.bids[bookRes.bids.length - 1].price);
+      if (bookRes && bookRes.asks && bookRes.asks.length) ask = parseFloat(bookRes.asks[bookRes.asks.length - 1].price);
+      if (midpoint == null && bid != null && ask != null) midpoint = (bid + ask) / 2;
+      if (midpoint == null) return null;
+      return { midpoint: midpoint, bid: bid, ask: ask };
+    } catch (e) {
+      _warn('fetchClobMidpoint failed:', e.message);
+      return null;
+    }
+  }
+
+  // Execute a single CLOB BUY order. Pure CLOB flow — no banner, no server
+  // reporting, no cross-tab lock. Caller gets a promise that resolves to:
+  //   { ok: true, order_id, execution_price, amount_usd, shares }
+  // or rejects with Error (msg describes the failure, .code may be 4001 for rejection)
+  //
+  // opts: {
+  //   slug:         string (for logging/context)
+  //   clob_token_ids: array|string (JSON array of tokenIds, YES at [0], NO at [1])
+  //   side:         'YES' | 'NO'
+  //   amount_usd:   number (dollars to spend)
+  //   price:        optional — if not provided, fetches live midpoint + small slippage buffer
+  // }
+  async function executeOrder(opts) {
+    if (!opts || !opts.clob_token_ids) throw new Error('executeOrder: clob_token_ids required');
+    if (!opts.side) throw new Error('executeOrder: side required');
+    if (!opts.amount_usd || opts.amount_usd <= 0) throw new Error('executeOrder: amount_usd required');
+
+    if (!_hasWallet()) {
+      throw new Error('Wallet not connected. Set up trading on any market page first.');
+    }
+
+    // Balance check — prevents CLOB 400 errors
+    var bal = await _getUsdcBalance();
+    var amount = parseFloat(opts.amount_usd);
+    if (bal !== null && bal < amount) {
+      throw new Error('Insufficient USDC. Have $' + bal.toFixed(2) + ', need $' + amount.toFixed(0));
+    }
+
+    // Parse clob token IDs
+    var tids = opts.clob_token_ids;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    if (!tids || !tids.length) throw new Error('No token IDs available');
+
+    var tokenIndex = (opts.side || 'YES').toUpperCase() === 'YES' ? 0 : 1;
+    var tokenId = tids[tokenIndex] || tids[0];
+    if (!tokenId) throw new Error('Could not resolve token ID for ' + opts.side);
+
+    var apiKey = localStorage.getItem('poly_api_key');
+    var apiSecret = localStorage.getItem('poly_api_secret');
+    var apiPassphrase = localStorage.getItem('poly_api_passphrase');
+    var proxyAddress = localStorage.getItem('hf_poly_wallet');
+    var eoaAddress = localStorage.getItem('poly_eoa_address');
+
+    // Fetch CLOB metadata in parallel with price lookup (if price not provided)
+    var metaPromise = Promise.all([
+      fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null}),
+      fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null}),
+      fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(function(r){return r.ok?r.json():null}).catch(function(){return null})
+    ]);
+
+    var livePrice = opts.price;
+    if (livePrice == null) {
+      var mid = await fetchClobMidpoint(tokenId);
+      if (mid && mid.midpoint) livePrice = mid.midpoint;
+      else throw new Error('Could not fetch live price');
+    }
+
+    var metaResults = await metaPromise;
+    var tickSize = (metaResults[0] && metaResults[0].minimum_tick_size) ? parseFloat(metaResults[0].minimum_tick_size) : 0.01;
+    var isNegRisk = !!(metaResults[1] && metaResults[1].neg_risk);
+    var feeRateBps = (metaResults[2] && metaResults[2].base_fee !== undefined) ? String(metaResults[2].base_fee) : '0';
+
+    // Round price to tick size, cap to valid range
+    var price = parseFloat(livePrice);
+    price = Math.round(price / tickSize) * tickSize;
+    if (price < tickSize) price = tickSize;
+    if (price > 1 - tickSize) price = 1 - tickSize;
+
+    var rawMakerAmt = parseFloat(amount.toFixed(2));
+    var rawTakerAmt = parseFloat((amount / price).toFixed(4));
+
+    // Sign via HFXWallet
+    if (typeof HFXWallet === 'undefined' || !HFXWallet.getSigner) {
+      throw new Error('HFXWallet module not loaded');
+    }
+    var signerCtx = await HFXWallet.getSigner();
+    var signer = signerCtx.signer || signerCtx; // handle both { signer } and raw signer
+    var salt = Math.floor(Math.random() * 9007199254740991);
+    var exchange = isNegRisk ? '0xC5d563A36AE78145C45a50134d48A1215220f80a' : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
+
+    var signature = await signer.signTypedData(
+      { name: 'ClobExchange', version: '1', chainId: 137, verifyingContract: exchange },
+      { Order: [
+        {name:'salt',type:'uint256'},{name:'maker',type:'address'},{name:'signer',type:'address'},
+        {name:'taker',type:'address'},{name:'tokenId',type:'uint256'},{name:'makerAmount',type:'uint256'},
+        {name:'takerAmount',type:'uint256'},{name:'expiration',type:'uint256'},{name:'nonce',type:'uint256'},
+        {name:'feeRateBps',type:'uint256'},{name:'side',type:'uint8'},{name:'signatureType',type:'uint8'}
+      ]},
+      {
+        salt: salt, maker: proxyAddress, signer: eoaAddress, taker: '0x0000000000000000000000000000000000000000',
+        tokenId: tokenId, makerAmount: String(Math.round(rawMakerAmt * 1e6)),
+        takerAmount: String(Math.round(rawTakerAmt * 1e6)), expiration: '0', nonce: '0',
+        feeRateBps: feeRateBps, side: 0, signatureType: 2
+      }
+    );
+
+    // Builder fee headers (we earn on every trade)
+    var builderHeaders = {};
+    try {
+      var bRes = await fetch('/api/polymarket/builder-sign', { method: 'POST' });
+      if (bRes.ok) builderHeaders = await bRes.json();
+    } catch (e) {}
+
+    // Submit order
+    var body = JSON.stringify({
+      order: {
+        salt: salt, maker: proxyAddress, signer: eoaAddress, taker: '0x0000000000000000000000000000000000000000',
+        tokenId: tokenId, makerAmount: String(Math.round(rawMakerAmt * 1e6)),
+        takerAmount: String(Math.round(rawTakerAmt * 1e6)), expiration: '0', nonce: '0',
+        feeRateBps: feeRateBps, side: 'BUY', signatureType: 2, signature: signature
+      },
+      orderType: 'GTC', deferExec: false
+    });
+
+    var ts = Math.floor(Date.now() / 1000).toString();
+    var hmacMsg = ts + 'POST' + '/order' + body;
+    var keyBytes = Uint8Array.from(atob(apiSecret.replace(/-/g,'+').replace(/_/g,'/')), function(c){return c.charCodeAt(0)});
+    var cryptoKey = await crypto.subtle.importKey('raw', keyBytes, {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+    var sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(hmacMsg));
+    var b64Sig = btoa(String.fromCharCode.apply(null, new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+
+    var headers = {
+      'Content-Type': 'application/json',
+      'POLY_ADDRESS': proxyAddress, 'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase, 'POLY_TIMESTAMP': ts, 'POLY_SIGNATURE': b64Sig
+    };
+    Object.assign(headers, builderHeaders);
+
+    var clobRes = await fetch('https://clob.polymarket.com/order', { method: 'POST', headers: headers, body: body });
+    var clobData = await clobRes.json();
+
+    if (clobRes.ok && !clobData.error) {
+      return {
+        ok: true,
+        order_id: clobData.orderID || clobData.orderId || null,
+        execution_price: price,
+        amount_usd: amount,
+        shares: rawTakerAmt
+      };
+    }
+    var err = new Error(clobData.error || clobData.message || 'CLOB rejected');
+    throw err;
+  }
+
   // ── Public API ──
-  window.HFXCopyBot = { start: start, stop: stop, execute: execute, skip: skip };
+  window.HFXCopyBot = {
+    start: start, stop: stop, execute: execute, skip: skip,
+    // New reusable CLOB helpers for mirror wizard + future flows
+    executeOrder: executeOrder,
+    fetchClobMidpoint: fetchClobMidpoint,
+  };
 
   // Auto-start on page load if auth present
   if (document.readyState === 'loading') {
