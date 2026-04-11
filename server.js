@@ -654,6 +654,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/features', priority: '0.7', freq: 'weekly' },
       { loc: '/alpha', priority: '0.9', freq: 'hourly' },
       { loc: '/brief', priority: '0.7', freq: 'daily' },
+      { loc: '/compare', priority: '0.7', freq: 'monthly' },
     ];
 
     // Fetch top markets from screener cache for market pages
