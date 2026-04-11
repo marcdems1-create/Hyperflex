@@ -22,7 +22,9 @@
   var _sse = null;
   var _reconnectTimer = null;
   var _activeBanners = {}; // trade_id -> banner element
-  var _executingTrades = new Set(); // prevent double-execute
+  var _executingTrades = new Set(); // prevent double-execute (in-tab)
+  var LOCK_PREFIX = 'hfx_cb_lock_'; // cross-tab lock prefix
+  var LOCK_TTL_MS = 60000; // lock expires after 60s
 
   function _log() { try { console.log.apply(console, ['[copy-bot]'].concat([].slice.call(arguments))); } catch(e){} }
   function _warn() { try { console.warn.apply(console, ['[copy-bot]'].concat([].slice.call(arguments))); } catch(e){} }
@@ -39,6 +41,45 @@
               window.ethereum);
   }
 
+  // Cross-tab execution lock — prevents two tabs from both trying to execute the same trade
+  function _acquireLock(tradeId) {
+    try {
+      var key = LOCK_PREFIX + tradeId;
+      var existing = localStorage.getItem(key);
+      if (existing) {
+        var ts = parseInt(existing, 10) || 0;
+        if (Date.now() - ts < LOCK_TTL_MS) return false; // another tab holds it
+      }
+      localStorage.setItem(key, String(Date.now()));
+      return true;
+    } catch (e) { return true; } // if localStorage fails, allow execution
+  }
+  function _releaseLock(tradeId) {
+    try { localStorage.removeItem(LOCK_PREFIX + tradeId); } catch (e) {}
+  }
+
+  // Fetch USDC balance from proxy wallet (non-blocking best-effort)
+  async function _getUsdcBalance() {
+    try {
+      var proxy = localStorage.getItem('hf_poly_wallet');
+      if (!proxy) return null;
+      var r = await fetch('https://polygon-bor-rpc.publicnode.com', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          jsonrpc:'2.0', id:1, method:'eth_call',
+          params:[{
+            to: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+            data: '0x70a08231' + proxy.slice(2).padStart(64, '0')
+          }, 'latest']
+        })
+      });
+      var j = await r.json();
+      if (!j.result) return null;
+      var balWei = BigInt(j.result);
+      return Number(balWei) / 1e6; // USDC has 6 decimals
+    } catch (e) { return null; }
+  }
+
   // ── SSE Connection ──
   function start() {
     if (_sse) return;
@@ -51,6 +92,13 @@
           var data = JSON.parse(e.data);
           _log('opportunity:', data);
           _handleOpportunity(data);
+        } catch (err) { _warn('parse error', err.message); }
+      });
+      _sse.addEventListener('copy_exit', function(e) {
+        try {
+          var data = JSON.parse(e.data);
+          _log('exit signal:', data);
+          _handleExit(data);
         } catch (err) { _warn('parse error', err.message); }
       });
       _sse.onerror = function() {
@@ -68,26 +116,64 @@
   }
 
   // ── Opportunity handler ──
-  function _handleOpportunity(data) {
+  async function _handleOpportunity(data) {
     if (!data.trade_id) return;
-    if (_activeBanners[data.trade_id]) return; // already showing
-    _showBanner(data);
-    // Auto-execute if possible (non-blocking)
-    if (_hasWallet()) {
+    if (_activeBanners[data.trade_id]) return; // already showing in this tab
+
+    // Pre-flight check: wallet + balance
+    var wallet = _hasWallet();
+    var balance = wallet ? await _getUsdcBalance() : null;
+    var needed = parseFloat(data.alloc_usd || 0);
+    var canExecute = wallet && (balance === null || balance >= needed);
+    var preflightReason = null;
+    if (!wallet) preflightReason = 'Connect wallet to execute';
+    else if (balance !== null && balance < needed) preflightReason = 'Need $' + needed.toFixed(0) + ' USDC (you have $' + balance.toFixed(2) + ')';
+
+    _showBanner(data, { canExecute: canExecute, reason: preflightReason, balance: balance });
+
+    // Auto-execute if possible — but only if cross-tab lock is available
+    if (canExecute && _acquireLock(data.trade_id)) {
       _executeTrade(data).catch(function(err) {
         _warn('auto-exec failed:', err.message);
-        // Banner stays visible for manual click
+        _releaseLock(data.trade_id);
       });
     }
   }
 
+  // ── Exit handler ──
+  async function _handleExit(data) {
+    if (!data.trade_id) return;
+    // Show distinct exit banner (red) — never auto-execute exits, require manual confirm
+    _showExitBanner(data);
+  }
+
   // ── Banner UI ──
-  function _showBanner(data) {
+  function _showBanner(data, preflight) {
+    preflight = preflight || { canExecute: true };
     var b = document.createElement('div');
     b.id = 'cbBanner_' + data.trade_id;
     b.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;background:linear-gradient(135deg,#0c0c0b,#141412);color:#fff;padding:16px;border-radius:12px;border:1px solid #a855f7;box-shadow:0 8px 32px rgba(168,85,247,0.3);font-family:Inter,sans-serif;font-size:13px;z-index:10001;animation:cbSlideIn 0.3s ease-out';
     var sideColor = data.side && data.side.toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
     var priceCents = Math.round((data.price || 0.5) * 100);
+
+    // Build CTA based on preflight state
+    var ctaHtml;
+    if (preflight.canExecute) {
+      ctaHtml = '<button id="cbExec_' + data.trade_id + '" onclick="HFXCopyBot.execute(\'' + data.trade_id + '\')" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer">Execute $' + Math.round(data.alloc_usd) + ' →</button>' +
+                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'user_skipped\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+    } else if (!_hasWallet()) {
+      // No wallet — link to market page for setup flow
+      var setupUrl = data.slug ? '/market/' + data.slug : '/whales';
+      ctaHtml = '<a href="' + setupUrl + '" style="flex:1;background:#4d9fff;color:#fff;text-align:center;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;text-decoration:none">Connect wallet →</a>' +
+                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'no_wallet\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+    } else {
+      // Wallet exists but insufficient balance — show warning
+      ctaHtml = '<button disabled style="flex:1;background:rgba(255,77,106,0.1);color:#ff4d6a;border:1px solid rgba(255,77,106,0.3);padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:not-allowed">Insufficient USDC</button>' +
+                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'no_balance\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+    }
+
+    var statusMsg = preflight.reason || '';
+
     b.innerHTML =
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
         '<span style="font-size:18px">🤖</span>' +
@@ -96,16 +182,14 @@
       '</div>' +
       '<div style="font-weight:700;margin-bottom:4px">' + _esc(data.whale_name || 'A whale') + ' opened position</div>' +
       '<div style="font-size:12px;color:#aaa;line-height:1.4;margin-bottom:8px">' + _esc((data.market || '').substring(0, 80)) + '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
         '<span style="font-family:monospace;font-size:12px;font-weight:700;color:' + sideColor + '">' + (data.side || '').toUpperCase() + ' ' + priceCents + '¢</span>' +
         '<span style="font-family:monospace;font-size:11px;color:#888">·</span>' +
         '<span style="font-family:monospace;font-size:11px;color:#888">Whale: $' + (data.whale_size >= 1000 ? Math.round(data.whale_size/1000) + 'K' : Math.round(data.whale_size)) + '</span>' +
+        (preflight.balance !== null && preflight.balance !== undefined ? '<span style="font-family:monospace;font-size:11px;color:#888">·</span><span style="font-family:monospace;font-size:11px;color:#888">Bal: $' + preflight.balance.toFixed(0) + '</span>' : '') +
       '</div>' +
-      '<div style="display:flex;gap:6px">' +
-        '<button id="cbExec_' + data.trade_id + '" onclick="HFXCopyBot.execute(\'' + data.trade_id + '\')" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer">Execute $' + Math.round(data.alloc_usd) + ' →</button>' +
-        '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'user_skipped\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>' +
-      '</div>' +
-      '<div id="cbStatus_' + data.trade_id + '" style="margin-top:8px;font-family:monospace;font-size:10px;color:#888;min-height:12px"></div>';
+      '<div style="display:flex;gap:6px">' + ctaHtml + '</div>' +
+      '<div id="cbStatus_' + data.trade_id + '" style="margin-top:8px;font-family:monospace;font-size:10px;color:' + (statusMsg ? '#f59e0b' : '#888') + ';min-height:12px">' + _esc(statusMsg) + '</div>';
 
     if (!document.getElementById('cbBannerStyle')) {
       var style = document.createElement('style');
@@ -122,6 +206,42 @@
         skip(data.trade_id, 'timeout');
       }
     }, 120000);
+  }
+
+  // ── Exit banner (red, manual-only) ──
+  function _showExitBanner(data) {
+    if (_activeBanners['exit_' + data.trade_id]) return;
+    var b = document.createElement('div');
+    b.id = 'cbExitBanner_' + data.trade_id;
+    b.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;background:linear-gradient(135deg,#1a0a0a,#2a0f0f);color:#fff;padding:16px;border-radius:12px;border:1px solid #ff4d6a;box-shadow:0 8px 32px rgba(255,77,106,0.3);font-family:Inter,sans-serif;font-size:13px;z-index:10002;animation:cbSlideIn 0.3s ease-out';
+    var sideColor = data.side && data.side.toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+    var entryCents = Math.round((data.entry_price || 0) * 100);
+    var currentCents = Math.round((data.current_price || data.entry_price || 0) * 100);
+    var priceDelta = currentCents - entryCents;
+    var marketUrl = data.slug ? '/market/' + data.slug : '#';
+    b.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+        '<span style="font-size:18px">🚪</span>' +
+        '<span style="font-family:monospace;font-size:11px;color:#ff4d6a;font-weight:700;letter-spacing:1px">WHALE EXITED</span>' +
+        '<button onclick="document.getElementById(\'cbExitBanner_' + data.trade_id + '\').remove()" style="margin-left:auto;background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:0 4px">✕</button>' +
+      '</div>' +
+      '<div style="font-weight:700;margin-bottom:4px">' + _esc(data.whale_name || 'A whale') + ' closed their position</div>' +
+      '<div style="font-size:12px;color:#aaa;line-height:1.4;margin-bottom:8px">' + _esc((data.market || '').substring(0, 80)) + '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-family:monospace;font-size:11px;flex-wrap:wrap">' +
+        '<span style="color:' + sideColor + '">' + (data.side || '') + '</span>' +
+        '<span style="color:#888">·</span>' +
+        '<span style="color:#888">Your size: $' + Math.round(data.size || 0) + '</span>' +
+        '<span style="color:#888">·</span>' +
+        '<span style="color:#aaa">' + entryCents + '¢ → ' + currentCents + '¢ <span style="color:' + (priceDelta >= 0 ? '#00e68a' : '#ff4d6a') + '">(' + (priceDelta >= 0 ? '+' : '') + priceDelta + '¢)</span></span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
+        '<a href="' + marketUrl + '?from=copy-exit" style="flex:1;background:#ff4d6a;color:#fff;text-align:center;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;text-decoration:none">Review & close →</a>' +
+        '<button onclick="document.getElementById(\'cbExitBanner_' + data.trade_id + '\').remove()" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Hold</button>' +
+      '</div>';
+    document.body.appendChild(b);
+    _activeBanners['exit_' + data.trade_id] = data;
+    // Exit banners persist for 5 min
+    setTimeout(function() { b.remove(); delete _activeBanners['exit_' + data.trade_id]; }, 5 * 60000);
   }
 
   function _setStatus(tradeId, msg, color) {
@@ -141,6 +261,11 @@
   async function execute(tradeId) {
     var data = _activeBanners[tradeId];
     if (!data) return;
+    // Manual click → try to acquire cross-tab lock
+    if (!_acquireLock(tradeId)) {
+      _setStatus(tradeId, 'Another tab is executing this trade', '#f59e0b');
+      return;
+    }
     return _executeTrade(data);
   }
 
@@ -155,6 +280,13 @@
     try {
       if (!_hasWallet()) {
         throw new Error('Wallet not connected. Visit a market page and connect MetaMask first.');
+      }
+
+      // Final balance check — prevents CLOB 400 errors
+      var bal = await _getUsdcBalance();
+      var amount = parseFloat(data.alloc_usd);
+      if (bal !== null && bal < amount) {
+        throw new Error('Insufficient USDC. Have $' + bal.toFixed(2) + ', need $' + amount.toFixed(0));
       }
 
       // Parse clob token IDs
@@ -184,8 +316,7 @@
       var feeRateBps = (feeRes && feeRes.base_fee !== undefined) ? String(feeRes.base_fee) : '0';
 
       // Market-buy order: use current price + small buffer to ensure fill
-      // Buy $allocUsd worth of shares at market price
-      var amount = parseFloat(data.alloc_usd);  // USDC to spend
+      // Buy $allocUsd worth of shares at market price (amount already set above for balance check)
       var price = parseFloat(data.price || 0.5);
       // Round price to tick size
       price = Math.round(price / tickSize) * tickSize;
@@ -265,7 +396,8 @@
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
           body: JSON.stringify({ execution_price: price, order_id: clobData.orderID || clobData.orderId || null })
         }).catch(function(){});
-        // Remove banner after 4 seconds
+        // Release cross-tab lock and remove banner after 4 seconds
+        _releaseLock(data.trade_id);
         setTimeout(function() { _removeBanner(data.trade_id); }, 4000);
       } else {
         throw new Error(clobData.error || clobData.message || 'CLOB rejected');
@@ -276,11 +408,13 @@
       _setStatus(data.trade_id, '✗ ' + msg, '#ff4d6a');
       if (execBtn) { execBtn.disabled = false; execBtn.textContent = 'Retry →'; }
       _executingTrades.delete(data.trade_id);
+      _releaseLock(data.trade_id);
     }
   }
 
   async function skip(tradeId, reason) {
     _removeBanner(tradeId);
+    _releaseLock(tradeId);
     var token = _getToken();
     if (!token) return;
     try {

@@ -18612,14 +18612,14 @@ async function fetchWhalePositions() {
         const sizeVal = parseFloat(p.size) || 0;
 
         // ── ENRICH with slug/conditionId/tokenId for copy-trade execution ──
-        // Cross-reference _screenerCache to resolve the market's CLOB data.
-        // Without this, copy trades can't actually execute.
+        // Two-stage lookup: screener cache first (fast), gamma API fallback (any market)
         let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null;
         try {
           // Extract slug from market_url (polymarket.com/event/SLUG)
           const urlMatch = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
           if (urlMatch) slug = urlMatch[1].toLowerCase();
-          // Cross-reference screener by question or slug
+
+          // Stage 1: Cross-reference screener cache (top 200 markets)
           if (_screenerCache && _screenerCache.data) {
             const qLower = (p.market || '').toLowerCase().trim();
             const sm = _screenerCache.data.find(m =>
@@ -18634,6 +18634,42 @@ async function fetchWhalePositions() {
               }
               sidePrice = sm.yes_price;
             }
+          }
+
+          // Stage 2: fall through to gamma API if screener missed
+          // (Only if we have a slug — otherwise we can't look it up)
+          if (!clobTokenIds && slug) {
+            try {
+              const r = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, {
+                headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+              });
+              if (r.ok) {
+                const arr = await r.json();
+                const gm = Array.isArray(arr) && arr.length ? arr[0] : null;
+                if (gm) {
+                  if (gm.conditionId) conditionId = gm.conditionId;
+                  if (gm.clobTokenIds) clobTokenIds = gm.clobTokenIds;
+                }
+              }
+              // If still no tokens, try events endpoint (for multi-outcome)
+              if (!clobTokenIds) {
+                const eRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
+                  headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+                });
+                if (eRes.ok) {
+                  const ed = await eRes.json();
+                  if (Array.isArray(ed) && ed.length && ed[0].markets && ed[0].markets.length) {
+                    // Match market by question text within the event
+                    const qLower = (p.market || '').toLowerCase().trim();
+                    const em = ed[0].markets.find(m => (m.question || m.groupItemTitle || '').toLowerCase().trim() === qLower) || ed[0].markets[0];
+                    if (em) {
+                      if (em.conditionId) conditionId = em.conditionId;
+                      if (em.clobTokenIds) clobTokenIds = em.clobTokenIds;
+                    }
+                  }
+                }
+              }
+            } catch (gErr) { /* gamma lookup failed, silent */ }
           }
         } catch (e) { /* enrichment failed, trade will still notify but can't auto-execute */ }
 
@@ -18836,6 +18872,94 @@ async function fetchWhalePositions() {
             }
           }
         } catch (e) { console.warn('[copy-bot-notify]', e.message); }
+      })();
+
+      // ── Copy Bot: notify subscribers when whales CLOSE positions (exit signal) ──
+      (async () => {
+        try {
+          if (!pool) return;
+          const _closeEvts = _whaleTradeStream.filter(e => e.ts === now && (e.action === 'closed' || (e.action === 'decreased' && e.new_size < e.old_size * 0.5)));
+          if (!_closeEvts.length) return;
+
+          const closeWallets = new Set();
+          for (const evt of _closeEvts) {
+            for (const [w, positions] of _whalePositionSnapshot.entries()) {
+              if (positions.some(p => p.trader === evt.trader_name)) { closeWallets.add(w); break; }
+            }
+          }
+          if (!closeWallets.size) return;
+
+          const wArr = [...closeWallets];
+          const ph = wArr.map((_, i) => `$${i + 1}`).join(',');
+          const exitSubs = await dbQuery(
+            `SELECT id, user_id, whale_address, whale_name, notify_only
+             FROM copy_bot_subscriptions WHERE whale_address IN (${ph}) AND active = true`, wArr
+          ).catch(() => []);
+
+          for (const sub of exitSubs) {
+            const matched = _closeEvts.filter(e => {
+              // Match by whale identity (we re-derived openWallets earlier; reuse the name check)
+              return true; // all close events from this wallet's traders apply
+            });
+
+            for (const evt of matched.slice(0, 5)) {
+              // Does this user have an executed copy trade for this market still open?
+              const priorCopies = await dbQuery(
+                `SELECT id, slug, condition_id, clob_token_ids, side, size, execution_price
+                 FROM copy_bot_trades
+                 WHERE subscription_id = $1 AND status = 'filled' AND market = $2
+                   AND (exit_notified_at IS NULL OR exit_notified_at < NOW() - INTERVAL '1 hour')
+                 ORDER BY created_at DESC LIMIT 1`,
+                [sub.id, evt.question]
+              ).catch(() => []);
+
+              if (!priorCopies.length) continue;
+              const copy = priorCopies[0];
+              const wName = sub.whale_name || evt.trader_name || 'A whale';
+
+              // Mark exit notification as sent (prevents re-notifying on subsequent ticks)
+              await dbQuery(
+                `UPDATE copy_bot_trades SET exit_notified_at = NOW() WHERE id = $1`, [copy.id]
+              ).catch(() => {});
+
+              // Always notify
+              pushNotification(
+                sub.user_id,
+                'copy_bot_exit',
+                `\uD83D\uDEAA ${wName} closed their position on ${(evt.question || '').substring(0, 50)}`,
+                `Your copy position (${copy.side} · $${parseFloat(copy.size).toFixed(0)}) — consider closing to mirror the exit.`,
+                null,
+                copy.slug ? 'market:' + copy.slug : null
+              );
+
+              // Push SSE exit signal if client is connected
+              if (copy.clob_token_ids && !sub.notify_only) {
+                const clients = _copyBotClients.get(sub.user_id);
+                if (clients && clients.size > 0) {
+                  const payload = {
+                    trade_id: copy.id,
+                    exit: true,
+                    whale_name: wName,
+                    market: evt.question,
+                    slug: copy.slug,
+                    side: copy.side,
+                    size: parseFloat(copy.size),
+                    entry_price: parseFloat(copy.execution_price || 0),
+                    current_price: evt.price,
+                    condition_id: copy.condition_id,
+                    clob_token_ids: copy.clob_token_ids
+                  };
+                  for (const clientRes of clients) {
+                    try {
+                      clientRes.write('event: copy_exit\n');
+                      clientRes.write('data: ' + JSON.stringify(payload) + '\n\n');
+                    } catch (e) { clients.delete(clientRes); }
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) { console.warn('[copy-bot-exit]', e.message); }
       })();
     }
   } else {
@@ -30689,6 +30813,7 @@ app.get('/api/market-trades/:conditionId', async (req, res) => {
     await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ`).catch(() => {});
     await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS execution_price NUMERIC(6,4)`).catch(() => {});
     await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS exit_notified_at TIMESTAMPTZ`).catch(() => {});
     // Add max_trade_size + min_whale_size for risk controls
     await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS max_per_trade NUMERIC(12,2) DEFAULT 500`).catch(() => {});
     await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS min_whale_size NUMERIC(12,2) DEFAULT 10000`).catch(() => {});

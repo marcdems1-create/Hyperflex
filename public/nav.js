@@ -2,13 +2,43 @@
 // Injects navbar + scoped CSS into #nav-root, highlights active page, shows Dashboard if logged in
 // Also auto-loads /copy-bot.js so every page can receive real-time copy-trade opportunities.
 (function() {
-  // Load copy-bot runtime on every page that uses nav.js (idempotent)
-  if (!document.querySelector('script[data-hfx-copybot]')) {
+  // ── Global wallet + copy-bot loading ──
+  // Auto-load ethers + HFXWallet on every page so copy-bot can sign orders
+  // regardless of which page the user is on. Only load if MetaMask exists —
+  // no point on mobile browsers without injected wallet.
+  function loadScript(src, id, cb) {
+    if (document.querySelector('script[data-hfx-id="' + id + '"]')) return cb && cb();
+    var s = document.createElement('script');
+    s.src = src;
+    s.async = false; // preserve load order
+    s.setAttribute('data-hfx-id', id);
+    s.onload = function() { cb && cb(); };
+    document.head.appendChild(s);
+  }
+
+  function loadCopyBot() {
+    if (document.querySelector('script[data-hfx-id="copy-bot"]')) return;
     var cb = document.createElement('script');
-    cb.src = '/copy-bot.js?v=1';
+    cb.src = '/copy-bot.js?v=2';
     cb.async = true;
-    cb.setAttribute('data-hfx-copybot', '1');
+    cb.setAttribute('data-hfx-id', 'copy-bot');
     document.head.appendChild(cb);
+  }
+
+  // Only load ethers/wallet if the browser has a wallet injected
+  var hasWallet = (typeof window.ethereum !== 'undefined');
+  if (hasWallet && typeof window.ethers === 'undefined') {
+    loadScript('https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js', 'ethers', function() {
+      loadScript('/wallet.js', 'wallet', function() {
+        loadCopyBot();
+      });
+    });
+  } else if (hasWallet && typeof window.HFXWallet === 'undefined') {
+    // ethers already loaded (e.g. market.html) but wallet.js isn't
+    loadScript('/wallet.js', 'wallet', loadCopyBot);
+  } else {
+    // No wallet or already fully loaded — still load copy-bot for notifications
+    loadCopyBot();
   }
 })();
 (function() {
