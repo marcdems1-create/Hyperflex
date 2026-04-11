@@ -25,20 +25,34 @@
     document.head.appendChild(cb);
   }
 
+  function loadDeposit() {
+    if (document.querySelector('script[data-hfx-id="deposit"]')) return;
+    var d = document.createElement('script');
+    d.src = '/deposit.js?v=1';
+    d.async = true;
+    d.setAttribute('data-hfx-id', 'deposit');
+    document.head.appendChild(d);
+  }
+
+  function loadAllDependents() {
+    loadCopyBot();
+    loadDeposit();
+  }
+
   // Only load ethers/wallet if the browser has a wallet injected
   var hasWallet = (typeof window.ethereum !== 'undefined');
   if (hasWallet && typeof window.ethers === 'undefined') {
     loadScript('https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js', 'ethers', function() {
       loadScript('/wallet.js', 'wallet', function() {
-        loadCopyBot();
+        loadAllDependents();
       });
     });
   } else if (hasWallet && typeof window.HFXWallet === 'undefined') {
     // ethers already loaded (e.g. market.html) but wallet.js isn't
-    loadScript('/wallet.js', 'wallet', loadCopyBot);
+    loadScript('/wallet.js', 'wallet', loadAllDependents);
   } else {
-    // No wallet or already fully loaded — still load copy-bot for notifications
-    loadCopyBot();
+    // No wallet or already fully loaded — still load dependents for notifications
+    loadAllDependents();
   }
 
   // ── Bug reporter — floating button + modal on every page ──
