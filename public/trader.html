@@ -2,94 +2,128 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Trader Profile | HYPERFLEX</title>
 <meta name="description" content="Multi-platform trader profile — Polymarket positions, P&L, and analytics."/>
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
-:root{--bg:#141412;--card:#1a1917;--border:#2a2a25;--gold:#c9920d;--gold-lt:#e0b340;--text:#e8e4d9;--dim:#7a7870;--green:#22c55e;--red:#ef4444;--blue:#0066ff;--purple:#7c3aed;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
-a{color:var(--gold);text-decoration:none}
+:root {
+  --paper: #0a0a0f; --surface: #111118; --card: #16161f; --card-hover: #1a1a24;
+  --border: #1e1e2a; --border-hover: #2a2a38;
+  --text: #e8e6f0; --soft: #a0a0b4; --muted: #6b6880; --dim: #4a4760;
+  --green: #00e68a; --green-dim: rgba(0,230,138,0.12);
+  --red: #ff4d6a; --red-dim: rgba(255,77,106,0.12);
+  --blue: #4d9fff; --blue-dim: rgba(77,159,255,0.12);
+  --purple: #a855f7; --purple-dim: rgba(168,85,247,0.12);
+  --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.12);
+  --gold: #c9920d;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --radius: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--paper); scroll-behavior: smooth; }
+body { font-family: var(--sans); background: var(--paper); color: var(--text); min-height: 100vh; overflow-x: hidden; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.container{max-width:1000px;margin:0 auto;padding:24px 20px}
-.back{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:24px;display:inline-block}
-.back:hover{color:var(--text)}
+.container { max-width: 960px; margin: 0 auto; padding: 24px 20px; }
+.back { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); margin-bottom: 24px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: color 0.15s; }
+.back:hover { color: var(--text); text-decoration: none; }
 
-/* Hero */
-.hero-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:20px}
-.hero-top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
-.avatar{width:52px;height:52px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:18px;font-weight:700;color:#000;flex-shrink:0}
-.addr{font-family:var(--mono);font-size:14px;color:var(--text);cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)}
-.addr:hover{color:var(--gold)}
-.badges{display:flex;gap:6px;flex-wrap:wrap}
-.badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.05em}
-.badge-poly{background:rgba(0,102,255,0.15);color:var(--blue);border:1px solid rgba(0,102,255,0.3)}
-.badge-hfx{background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
-.follow-btn{font-family:var(--mono);font-size:11px;padding:6px 16px;border-radius:6px;border:1px solid var(--gold);color:var(--gold);background:none;cursor:pointer;transition:all .15s;margin-left:auto}
-.follow-btn:hover{background:rgba(201,146,13,0.1)}
-.follow-btn.active{background:var(--gold);color:#000}
+/* Hero Card */
+.hero-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 20px; position: relative; overflow: hidden; }
+.hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--green), var(--blue), var(--purple)); opacity: 0.6; }
+.hero-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--green-dim); border: 2px solid var(--green); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--green); flex-shrink: 0; }
+.addr { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; border-bottom: 1px dashed var(--dim); transition: color 0.15s; }
+.addr:hover { color: var(--green); }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 6px; letter-spacing: 0.05em; }
+.badge-poly { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(77,159,255,0.25); }
+.badge-hfx { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,230,138,0.25); }
+.follow-btn { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 6px 16px; border-radius: 8px; border: 1px solid var(--green); color: var(--green); background: transparent; cursor: pointer; transition: all 0.15s; margin-left: auto; min-height: 44px; min-width: 44px; }
+.follow-btn:hover { background: var(--green-dim); }
+.follow-btn.active { background: var(--green); color: var(--paper); }
 
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
-.stat-pill{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
-.stat-label{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
-.stat-val{font-family:var(--sans);font-size:22px;font-weight:800}
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; transition: border-color 0.2s; }
+.stat-pill:hover { border-color: var(--border-hover); }
+.stat-label { font-family: var(--mono); font-size: 9px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.stat-val { font-family: var(--sans); font-size: 22px; font-weight: 800; }
+
+.ext-links { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.ext-link { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--blue); border: 1px solid rgba(77,159,255,0.25); border-radius: 8px; padding: 6px 14px; text-decoration: none; background: var(--blue-dim); transition: all 0.15s; min-height: 44px; display: inline-flex; align-items: center; }
+.ext-link:hover { background: rgba(77,159,255,0.18); text-decoration: none; }
 
 /* Chart */
-.chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
-.chart-title{font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
-canvas{width:100%;height:160px;display:block}
+.chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+.chart-title { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+canvas { width: 100%; height: 160px; display: block; }
 
 /* Sections */
-.section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
-.section-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.section-title{font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+.section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.section-title { font-family: var(--mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); }
 
 /* Tables */
-table{width:100%;border-collapse:collapse}
-th{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
-td{font-family:var(--mono);font-size:12px;padding:10px;border-bottom:1px solid rgba(42,42,36,0.4)}
-tr:last-child td{border-bottom:none}
-tr:hover{background:rgba(201,146,13,0.03)}
-.side-yes{background:rgba(201,146,13,0.12);color:var(--gold);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.side-no{background:rgba(255,255,255,0.06);color:var(--dim);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.side-long{background:rgba(0,200,100,0.15);color:#00c864;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.side-short{background:rgba(231,76,60,0.15);color:#e74c3c;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.pnl-pos{color:var(--green);font-weight:700}
-.pnl-neg{color:var(--red);font-weight:700}
-.win-badge{background:rgba(34,197,94,0.15);color:var(--green);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.loss-badge{background:rgba(239,68,68,0.15);color:var(--red);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
-.mkt-link{color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.3)}
-.mkt-link:hover{color:var(--gold)}
-.copy-trade-btn{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.10);border:1px solid rgba(201,146,13,0.35);border-radius:6px;padding:5px 10px;text-decoration:none;white-space:nowrap;transition:all .15s}
-.copy-trade-btn:hover{background:rgba(201,146,13,0.22);border-color:var(--gold)}
+table { width: 100%; border-collapse: collapse; }
+th { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+td { font-family: var(--mono); font-size: 12px; padding: 10px; border-bottom: 1px solid rgba(30,30,42,0.6); }
+tr:last-child td { border-bottom: none; }
+tr:hover { background: rgba(0,230,138,0.02); }
+
+.side-yes { background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.side-no { background: rgba(255,255,255,0.06); color: var(--soft); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.side-long { background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.side-short { background: var(--red-dim); color: var(--red); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.pnl-pos { color: var(--green); font-weight: 700; }
+.pnl-neg { color: var(--red); font-weight: 700; }
+.win-badge { background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.loss-badge { background: var(--red-dim); color: var(--red); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.mkt-link { color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--dim); transition: color 0.15s; }
+.mkt-link:hover { color: var(--green); text-decoration: none; }
+.copy-trade-btn { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--green); background: var(--green-dim); border: 1px solid rgba(0,230,138,0.25); border-radius: 6px; padding: 5px 10px; text-decoration: none; white-space: nowrap; transition: all 0.15s; min-height: 36px; }
+.copy-trade-btn:hover { background: rgba(0,230,138,0.2); border-color: var(--green); text-decoration: none; }
+
+/* Wins/Losses rows */
+.wl-section-label { margin-top: 20px; font-family: var(--mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.wl-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(30,30,42,0.4); font-family: var(--mono); font-size: 11px; }
+.wl-row:last-child { border-bottom: none; }
+.wl-question { flex: 1; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* CTA */
-.cta-section{text-align:center;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:40px 20px;margin-top:16px}
-.cta-section h3{font-size:18px;font-weight:700;margin-bottom:6px}
-.cta-section p{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:20px}
-.cta-btn{display:inline-block;background:var(--gold);color:#000;font-family:var(--mono);font-weight:700;font-size:13px;padding:14px 28px;border-radius:8px;text-decoration:none;transition:all .15s}
-.cta-btn:hover{background:var(--gold-lt);transform:translateY(-1px)}
+.cta-section { text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 20px; margin-top: 16px; position: relative; overflow: hidden; }
+.cta-section::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--green), var(--blue), transparent); }
+.cta-section h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.cta-section p { font-family: var(--mono); font-size: 12px; color: var(--soft); margin-bottom: 20px; }
+.cta-btn { display: inline-flex; align-items: center; background: var(--green); color: var(--paper); font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 14px 28px; border-radius: 10px; text-decoration: none; transition: all 0.15s; min-height: 44px; }
+.cta-btn:hover { background: #00ff99; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,230,138,0.25); text-decoration: none; }
 
-.loading{text-align:center;padding:80px 20px;font-family:var(--mono);font-size:13px;color:var(--dim)}
-.error-state{text-align:center;padding:80px 20px}
-.error-state h2{font-size:20px;margin-bottom:8px}
-.error-state p{font-family:var(--mono);font-size:12px;color:var(--dim)}
-.empty{font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-family:var(--mono);font-size:12px;font-weight:700;padding:10px 20px;border-radius:8px;z-index:999;opacity:0;transition:opacity .2s}
-.toast.show{opacity:1}
+.loading { text-align: center; padding: 80px 20px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.error-state { text-align: center; padding: 80px 20px; }
+.error-state h2 { font-size: 20px; margin-bottom: 8px; }
+.error-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.empty { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 20px; text-align: center; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--green); color: var(--paper); font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 20px; border-radius: 8px; z-index: 999; opacity: 0; transition: opacity 0.2s; }
+.toast.show { opacity: 1; }
 
-@media(max-width:768px){
-  .container{padding:16px}
-  .hero-top{gap:10px}
-  .avatar{width:40px;height:40px;font-size:14px}
-  .stat-val{font-size:18px}
-  .follow-btn{margin-left:0}
-  td{padding:8px 6px;font-size:11px}
-  th{font-size:9px;padding:6px}
+@media (max-width: 768px) {
+  .container { padding: 16px; }
+  .hero-top { gap: 10px; }
+  .avatar { width: 40px; height: 40px; font-size: 14px; }
+  .stat-val { font-size: 18px; }
+  .follow-btn { margin-left: 0; }
+  td { padding: 8px 6px; font-size: 11px; }
+  th { font-size: 9px; padding: 6px; }
+  .hero-card { padding: 20px; }
+  .section { padding: 16px; }
 }
 </style>
 </head>
@@ -125,7 +159,7 @@ async function loadProfile(){
   if(!/^0x[0-9a-fA-F]{40}$/i.test(addr)){
     document.getElementById('loadingState').style.display='none';
     document.getElementById('errorState').style.display='';
-    document.getElementById('errorState').innerHTML='<h2>Invalid Address</h2><p>Please provide a valid EVM wallet address (0x...).</p><a href="/predictors" style="display:inline-block;margin-top:16px;color:var(--gold);font-family:var(--mono);font-size:12px">Back to Predictors &rarr;</a>';
+    document.getElementById('errorState').innerHTML='<h2>Invalid Address</h2><p>Please provide a valid EVM wallet address (0x...).</p><a href="/predictors" style="display:inline-block;margin-top:16px;color:var(--blue);font-family:var(--mono);font-size:12px">Back to Predictors &rarr;</a>';
     return;
   }
   document.title=addr.substring(0,6)+'...'+addr.slice(-4)+' \u2014 Trader Profile | HYPERFLEX';
@@ -139,7 +173,7 @@ async function loadProfile(){
   }catch(e){
     document.getElementById('loadingState').style.display='none';
     document.getElementById('errorState').style.display='';
-    document.getElementById('errorState').innerHTML='<h2>Profile Error</h2><p>'+escH(e.message)+'</p><a href="/predictors" style="display:inline-block;margin-top:16px;color:var(--gold);font-family:var(--mono);font-size:12px">Back to Predictors &rarr;</a>';
+    document.getElementById('errorState').innerHTML='<h2>Profile Error</h2><p>'+escH(e.message)+'</p><a href="/predictors" style="display:inline-block;margin-top:16px;color:var(--blue);font-family:var(--mono);font-size:12px">Back to Predictors &rarr;</a>';
   }
 }
 
@@ -174,15 +208,15 @@ function render(){
 
   // No activity
   if(!d.polymarket.active){
-    el.innerHTML='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span></div></div><div class="empty" style="padding:60px">No activity found for this address on Polymarket.<br><a href="/predictors" style="color:var(--gold);margin-top:12px;display:inline-block">Browse active traders &rarr;</a></div>';
+    el.innerHTML='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span></div></div><div class="empty" style="padding:60px">No activity found for this address on Polymarket.<br><a href="/predictors" style="color:var(--blue);margin-top:12px;display:inline-block">Browse active traders &rarr;</a></div>';
     return;
   }
 
   var html='';
 
   // Hero
-  var extLinksHtml='<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
-    (d.polymarket&&d.polymarket.active?'<a href="'+polyRef('https://polymarket.com/profile/'+d.address)+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue);border:1px solid rgba(0,102,255,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(0,102,255,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(0,102,255,0.12)\'" onmouseout="this.style.background=\'rgba(0,102,255,0.06)\'">&#x1F50D; Polymarket Profile</a>':'')+
+  var extLinksHtml='<div class="ext-links">'+
+    (d.polymarket&&d.polymarket.active?'<a href="'+polyRef('https://polymarket.com/profile/'+d.address)+'" target="_blank" rel="noopener" class="ext-link">&#x1F50D; Polymarket Profile</a>':'')+
   '</div>';
   html+='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span><div class="badges">'+badgesHtml+'</div>'+followHtml+'</div><div class="stats-grid">'+statsHtml+'</div>'+extLinksHtml+'</div>';
 
@@ -194,12 +228,10 @@ function render(){
   if(d.polymarket.active){
     html+='<div class="section"><div class="section-header"><span class="section-title">\uD83D\uDCCA Polymarket Positions</span><span class="badge badge-poly">POLY</span></div>';
     if(d.polymarket.open_positions.length){
-      html+='<table><thead><tr><th>Market</th><th>Side</th><th>Value</th><th>P&L</th><th>Odds</th><th></th></tr></thead><tbody>';
+      html+='<div style="overflow-x:auto"><table><thead><tr><th>Market</th><th>Side</th><th>Value</th><th>P&L</th><th>Odds</th><th></th></tr></thead><tbody>';
       d.polymarket.open_positions.sort(function(a,b){return Math.abs(b.pnl)-Math.abs(a.pnl)});
       d.polymarket.open_positions.forEach(function(p){
         var odds=Math.round(p.cur_price*100);
-        // Internal /market/:slug link routes the trade through our widget + builder fees.
-        // Fall back to polymarket.com only if we somehow have no slug.
         var internalUrl = p.slug ? '/market/'+encodeURIComponent(p.slug) : (p.market_url || 'https://polymarket.com');
         var copyHref = p.slug ? '/market/'+encodeURIComponent(p.slug)+'?from=trader&side='+(p.side==='YES'?'YES':'NO') : null;
         html+='<tr><td><a href="'+escH(internalUrl)+'" class="mkt-link">'+escH(p.question.length>50?p.question.substring(0,47)+'...':p.question)+'</a></td>';
@@ -210,22 +242,22 @@ function render(){
         html+='<td>'+(copyHref?'<a href="'+escH(copyHref)+'" class="copy-trade-btn" title="Copy this trade">Copy '+p.side+' &rarr;</a>':'')+'</td>';
         html+='</tr>';
       });
-      html+='</tbody></table>';
+      html+='</tbody></table></div>';
     }else{html+='<div class="empty">No open positions</div>';}
     // Won positions
     if(d.polymarket.won_positions.length){
       var wins=d.polymarket.won_positions.filter(function(w){return w.payout>0});
       var losses=d.polymarket.won_positions.filter(function(w){return w.payout<=0});
       if(wins.length){
-        html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Wins ('+wins.length+')</div>';
+        html+='<div class="wl-section-label" style="color:var(--green)">Recent Wins ('+wins.length+')</div>';
         wins.slice(0,10).forEach(function(w){
-          html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px"><span class="win-badge">WIN</span><span style="flex:1;color:var(--dim)">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span><span class="pnl-pos">+'+fmt$(w.payout)+'</span></div>';
+          html+='<div class="wl-row"><span class="win-badge">WIN</span><span class="wl-question">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span><span class="pnl-pos">+'+fmt$(w.payout)+'</span></div>';
         });
       }
       if(losses.length){
-        html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Losses ('+losses.length+')</div>';
+        html+='<div class="wl-section-label" style="color:var(--red)">Recent Losses ('+losses.length+')</div>';
         losses.slice(0,5).forEach(function(w){
-          html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px"><span class="loss-badge">LOSS</span><span style="flex:1;color:var(--dim)">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span>'+fmtPnl(w.payout)+'</div>';
+          html+='<div class="wl-row"><span class="loss-badge">LOSS</span><span class="wl-question">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span>'+fmtPnl(w.payout)+'</div>';
         });
       }
     }
@@ -283,28 +315,28 @@ function drawPnlChart(){
   var plotW=w-padL-padR;var plotH=h-padT-padB;
 
   // Grid lines + Y-axis labels
-  ctx.font='10px "Space Mono",monospace';
+  ctx.font='10px "JetBrains Mono",monospace';
   ctx.textAlign='right';
   var ySteps=4;
   for(var i=0;i<=ySteps;i++){
     var val=mn+(range/ySteps)*i;
     var py=padT+plotH-(val-mn)/range*plotH;
-    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(padL,py);ctx.lineTo(w-padR,py);ctx.stroke();
-    ctx.fillStyle='#5a5752';
+    ctx.fillStyle='#4a4760';
     var label=Math.abs(val)>=1000?(val>=0?'+':'')+'$'+(val/1000).toFixed(1)+'K':(val>=0?'+':'-')+'$'+Math.abs(val).toFixed(0);
     ctx.fillText(label,padL-6,py+4);
   }
 
   // Zero line (thicker)
   var zeroY=padT+plotH-(0-mn)/range*plotH;
-  ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1;
   ctx.setLineDash([4,4]);
   ctx.beginPath();ctx.moveTo(padL,zeroY);ctx.lineTo(w-padR,zeroY);ctx.stroke();
   ctx.setLineDash([]);
 
   // X-axis date labels
-  ctx.textAlign='center';ctx.fillStyle='#5a5752';
+  ctx.textAlign='center';ctx.fillStyle='#4a4760';
   var dateStep=Math.max(1,Math.floor(points.length/5));
   for(var i=0;i<points.length;i+=dateStep){
     var x=padL+i/(points.length-1)*plotW;
@@ -312,9 +344,9 @@ function drawPnlChart(){
     ctx.fillText((d.getMonth()+1)+'/'+d.getDate(),x,h-6);
   }
 
-  // Fill area — green above zero, red below
+  // Fill area
   var finalPnl=points[points.length-1].cum;
-  var fillColor=finalPnl>=0?'rgba(34,197,94,0.10)':'rgba(239,68,68,0.10)';
+  var fillColor=finalPnl>=0?'rgba(0,230,138,0.08)':'rgba(255,77,106,0.08)';
   ctx.beginPath();
   points.forEach(function(p,i){
     var x=padL+i/(points.length-1)*plotW;
@@ -326,7 +358,7 @@ function drawPnlChart(){
   ctx.fillStyle=fillColor;ctx.fill();
 
   // P&L line
-  var lineColor=finalPnl>=0?'#22c55e':'#ef4444';
+  var lineColor=finalPnl>=0?'#00e68a':'#ff4d6a';
   ctx.strokeStyle=lineColor;ctx.lineWidth=2;ctx.beginPath();
   points.forEach(function(p,i){
     var x=padL+i/(points.length-1)*plotW;
@@ -342,7 +374,7 @@ function drawPnlChart(){
   ctx.fillStyle=lineColor;ctx.fill();
 
   // End label
-  ctx.textAlign='left';ctx.font='bold 12px "Space Mono",monospace';
+  ctx.textAlign='left';ctx.font='bold 12px "JetBrains Mono",monospace';
   ctx.fillStyle=lineColor;
   var endLabel=finalPnl>=0?'+$'+Math.abs(finalPnl).toLocaleString(undefined,{maximumFractionDigits:0}):'-$'+Math.abs(finalPnl).toLocaleString(undefined,{maximumFractionDigits:0});
   ctx.fillText(endLabel,lastX+8,lastY+4);
