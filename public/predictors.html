@@ -97,8 +97,13 @@ a:hover { text-decoration: underline; }
 .podium-meta { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .podium-meta-item { font-size: 11px; color: var(--muted); }
 .podium-meta-item strong { color: var(--soft); }
-.podium-link { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); text-decoration: none; padding: 6px 16px; border: 1px solid rgba(0,230,138,0.2); border-radius: 20px; transition: all 0.2s; position: relative; z-index: 1; }
-.podium-link:hover { background: var(--green-dim); border-color: rgba(0,230,138,0.4); text-decoration: none; }
+.podium-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
+.podium-link { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--soft); text-decoration: none; padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; transition: all 0.2s; }
+.podium-link:hover { border-color: var(--border-hover); color: var(--text); text-decoration: none; }
+.copy-trades-btn { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--paper); background: var(--green); text-decoration: none; padding: 7px 16px; border-radius: 20px; transition: all 0.15s; position: relative; z-index: 1; white-space: nowrap; border: none; cursor: pointer; }
+.copy-trades-btn:hover { background: #00ff99; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,230,138,0.3); text-decoration: none; }
+.copy-trades-table { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--paper); background: var(--green); text-decoration: none; padding: 5px 12px; border-radius: 8px; transition: all 0.15s; white-space: nowrap; border: none; cursor: pointer; }
+.copy-trades-table:hover { background: #00ff99; box-shadow: 0 2px 8px rgba(0,230,138,0.25); text-decoration: none; }
 
 /* RISING STARS */
 .rising-section { position: relative; z-index: 1; max-width: 1200px; margin: 40px auto 0; padding: 0 20px; }
@@ -246,7 +251,7 @@ a:hover { text-decoration: underline; }
   .mobile-stats { display: flex; gap: 12px; width: 100%; padding-top: 6px; }
   .mobile-stat { font-size: 11px; color: var(--muted); }
   .mobile-stat strong { color: var(--text); }
-  .filter-pill, .cat-tab, .follow-btn, .rising-follow { min-height: 44px; display: inline-flex; align-items: center; }
+  .filter-pill, .cat-tab, .follow-btn, .rising-follow, .copy-trades-table, .copy-trades-btn { min-height: 44px; display: inline-flex; align-items: center; }
   .hof-section { padding: 0 16px 24px; }
   .hof-grid { gap: 12px; justify-content: flex-start; }
   .hof-card { flex: 0 0 160px; }
@@ -622,7 +627,10 @@ function renderPodium(topN){
       '<div class="podium-meta">'+platformHtml+
         '<span class="podium-meta-item">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
       '</div>'+
-      '<a href="'+profileUrl+'" class="podium-link">View Profile &rarr;</a>'+
+      '<div class="podium-actions">'+
+        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-btn">&#x1F4CB; Copy Trades</a>'+
+        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="podium-link">Profile</a>'+
+      '</div>'+
     '</div>';
   }).join('');
 }
@@ -677,7 +685,7 @@ function renderTable(data){
       '<td class="td-platform">'+platformHtml+'</td>'+
       '<td class="td-sharp">'+sharpHtml+'</td>'+
       '<td class="td-actions">'+
-        (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" class="track-record-link">Track Record</a>':'')+
+        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-table">Copy</a>'+
         '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
       '</td>'+
     '</tr>';
