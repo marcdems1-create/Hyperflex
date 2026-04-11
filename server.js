@@ -30292,6 +30292,98 @@ app.get('/admin/relayer', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-relayer.html'));
 });
 
+// ════════════════════════════════════════════════════════════
+// BRIDGE — LI.FI API proxy for native in-app cross-chain USDC delivery
+// ════════════════════════════════════════════════════════════
+//
+// LI.FI (li.quest) is a meta-router that aggregates Across, Stargate,
+// Hop, CCTP, Connext and others. We proxy their public API so:
+//  1. CORS works (their API allows direct browser calls, but we also
+//     get server-side logging for debugging)
+//  2. We can cache responses briefly to reduce load
+//  3. We never need to ship an API key to the client
+//
+// LI.FI's public API is free for reasonable volumes — no auth needed
+// for /quote and /status endpoints.
+// ════════════════════════════════════════════════════════════
+
+// GET /api/bridge/quote — get a cross-chain quote
+// Query: fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount, slippage
+app.get('/api/bridge/quote', async (req, res) => {
+  try {
+    const { fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount, slippage } = req.query;
+    if (!fromChain || !fromToken || !toChain || !toToken || !fromAddress || !toAddress || !fromAmount) {
+      return res.status(400).json({ error: 'Missing required params: fromChain, fromToken, toChain, toToken, fromAddress, toAddress, fromAmount' });
+    }
+    const params = new URLSearchParams({
+      fromChain: String(fromChain),
+      fromToken: String(fromToken),
+      toChain: String(toChain),
+      toToken: String(toToken),
+      fromAddress: String(fromAddress),
+      toAddress: String(toAddress),
+      fromAmount: String(fromAmount),
+      slippage: String(slippage || '0.005'), // 0.5% default
+      integrator: 'hyperflex',
+      order: 'FASTEST'
+    });
+    const r = await fetch('https://li.quest/v1/quote?' + params.toString(), {
+      headers: { 'Accept': 'application/json' }
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      console.warn('[bridge/quote] LI.FI error:', data.message || data.error || r.status);
+      return res.status(r.status).json({ error: data.message || data.error || 'LI.FI returned ' + r.status });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[bridge/quote]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/bridge/status — check cross-chain transfer status
+// Query: txHash, fromChain, toChain (+ optional bridge name)
+app.get('/api/bridge/status', async (req, res) => {
+  try {
+    const { txHash, fromChain, toChain, bridge } = req.query;
+    if (!txHash) return res.status(400).json({ error: 'txHash required' });
+    const params = new URLSearchParams({ txHash: String(txHash) });
+    if (fromChain) params.set('fromChain', String(fromChain));
+    if (toChain) params.set('toChain', String(toChain));
+    if (bridge) params.set('bridge', String(bridge));
+    const r = await fetch('https://li.quest/v1/status?' + params.toString(), {
+      headers: { 'Accept': 'application/json' }
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      return res.status(r.status).json({ error: data.message || data.error || 'LI.FI returned ' + r.status });
+    }
+    // Shape: { status: 'NOT_FOUND' | 'INVALID' | 'PENDING' | 'DONE' | 'FAILED',
+    //          substatus, substatusMessage, sending, receiving, tool }
+    res.json(data);
+  } catch (err) {
+    console.error('[bridge/status]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/bridge/chains — list supported chains (cached server-side)
+let _bridgeChainsCache = null;
+app.get('/api/bridge/chains', async (req, res) => {
+  try {
+    if (_bridgeChainsCache && (Date.now() - _bridgeChainsCache.ts < 60 * 60 * 1000)) {
+      return res.json(_bridgeChainsCache.data);
+    }
+    const r = await fetch('https://li.quest/v1/chains', { headers: { 'Accept': 'application/json' } });
+    const data = await r.json();
+    _bridgeChainsCache = { ts: Date.now(), data: data };
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {

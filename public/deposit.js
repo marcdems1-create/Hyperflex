@@ -149,10 +149,13 @@
 
     // SUCCESS
     if (state.success) {
+      var badge = '';
+      if (state.gasless) badge = '<div style="display:inline-block;padding:3px 8px;background:rgba(168,85,247,0.12);color:#a855f7;border-radius:4px;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;margin-bottom:10px;letter-spacing:1px">✨ GASLESS · HYPERFLEX PAID THE GAS</div>';
+      else if (state.bridged) badge = '<div style="display:inline-block;padding:3px 8px;background:rgba(77,159,255,0.12);color:#4d9fff;border-radius:4px;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;margin-bottom:10px;letter-spacing:1px">🌉 BRIDGED CROSS-CHAIN</div>';
       return '<div style="background:' + bg + ';border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:440px;width:100%;color:#f0f0f5;text-align:center">' +
         '<div style="font-size:48px;margin-bottom:8px">✅</div>' +
         '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (state.amount || 0).toFixed(2) + ' USDC</div>' +
-        (state.gasless ? '<div style="display:inline-block;padding:3px 8px;background:rgba(168,85,247,0.12);color:#a855f7;border-radius:4px;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;margin-bottom:10px;letter-spacing:1px">✨ GASLESS · HYPERFLEX PAID THE GAS</div>' : '') +
+        badge +
         '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;margin-bottom:18px">New Polymarket balance: <strong style="color:#f0f0f5">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
         (state.txHash ? '<div style="margin-bottom:18px"><a href="https://polygonscan.com/tx/' + _esc(state.txHash) + '" target="_blank" rel="noopener" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#4d9fff;text-decoration:none">View tx on Polygonscan ↗</a></div>' : '') +
         '<button onclick="HFXDeposit.close()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Close</button>' +
@@ -292,57 +295,119 @@
           '<strong style="color:#f59e0b">Note:</strong> On-ramps require KYC (ID verification). Typical time: 5-15 min for first purchase, then instant. Fees: 1.5-3.5% depending on payment method.' +
         '</div>';
     } else if (currentTab === 'bridge') {
-      // Bridge providers — external links only. Most bridge UIs (Jumper,
-      // Across, etc.) set X-Frame-Options: DENY so iframe embedding is
-      // impossible from a third-party site. Attempting it shows the
-      // browser's "refused to connect" error which is worse than a clean
-      // external link. Polymarket itself uses external links for this.
+      // Native in-app bridge flow via LI.FI API.
+      // Users never leave HYPERFLEX — they pick a source chain, we fetch a
+      // quote, show the route, they sign ONE transaction on the source chain,
+      // and USDC lands directly in their Polymarket proxy in 1-5 minutes.
       var proxyAddr = state.proxy || '';
-      // Deep-link with destination pre-filled so USDC lands directly
-      // in the user's Polymarket wallet — no extra forwarding step.
-      var jumperHref = 'https://jumper.exchange/?fromChain=1&toChain=137&toToken=' + USDC_ADDRESS + '&toAddress=' + encodeURIComponent(proxyAddr);
-      var acrossHref = 'https://app.across.to/bridge?from=1&to=137&inputToken=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&outputToken=' + USDC_ADDRESS;
-      var polyBridgeHref = 'https://wallet.polygon.technology/polygon/bridge/deposit';
+      var bridgeStep = state.bridgeStep || 'select'; // select | quote | executing | polling | done | error
 
-      bodyHtml =
-        '<div style="padding:16px 18px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;margin-bottom:14px">' +
-          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
-            '<span style="font-size:22px">🌉</span>' +
-            '<div style="font-size:14px;font-weight:700;color:#4d9fff">Cross-chain bridging</div>' +
+      if (bridgeStep === 'executing' || bridgeStep === 'polling') {
+        // Progress view
+        var pollMsg = state.bridgePollMessage || 'Bridging…';
+        bodyHtml =
+          '<div style="padding:30px 20px;text-align:center">' +
+            '<div style="display:inline-block;width:48px;height:48px;border:4px solid #1e1e2a;border-top-color:#4d9fff;border-radius:50%;animation:hfxDepositSpin 0.8s linear infinite;margin-bottom:14px"></div>' +
+            '<div style="font-size:16px;font-weight:800;color:#4d9fff;margin-bottom:6px">' + _esc(pollMsg) + '</div>' +
+            (state.bridgeSubMessage ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6;margin-bottom:14px">' + _esc(state.bridgeSubMessage) + '</div>' : '') +
+            (state.bridgeTxHash ? '<div style="margin-top:14px"><a href="' + (state.bridgeFromChain === 42161 ? 'https://arbiscan.io/tx/' : state.bridgeFromChain === 1 ? 'https://etherscan.io/tx/' : state.bridgeFromChain === 8453 ? 'https://basescan.org/tx/' : state.bridgeFromChain === 10 ? 'https://optimistic.etherscan.io/tx/' : state.bridgeFromChain === 56 ? 'https://bscscan.com/tx/' : 'https://polygonscan.com/tx/') + _esc(state.bridgeTxHash) + '" target="_blank" rel="noopener" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#4d9fff;text-decoration:none">View source tx ↗</a></div>' : '') +
           '</div>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.7">Got USDC on Ethereum, Arbitrum, Base, Optimism, or BSC? These bridges deliver it directly to your Polymarket wallet on Polygon in 1-5 minutes.</div>' +
-        '</div>' +
+          '<div style="padding:10px 12px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.15);border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;text-align:center">' +
+            'Cross-chain bridges typically take 1-5 minutes. Feel free to close this modal — we\'ll keep monitoring and show you the result.' +
+          '</div>';
+      } else if (bridgeStep === 'quote') {
+        // Quote preview step — fetched by _fetchBridgeQuote
+        var quote = state.bridgeQuote;
+        if (!quote) {
+          bodyHtml = '<div style="padding:30px;text-align:center"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1e1e2a;border-top-color:#4d9fff;border-radius:50%;animation:hfxDepositSpin 0.8s linear infinite"></div><div style="margin-top:12px;font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#8888a0">Fetching best route…</div></div>';
+        } else if (quote.error) {
+          bodyHtml =
+            '<div style="padding:16px 18px;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.3);border-radius:10px;margin-bottom:14px">' +
+              '<div style="font-size:14px;font-weight:700;color:#ff4d6a;margin-bottom:6px">Could not find a route</div>' +
+              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">' + _esc(quote.error) + '</div>' +
+            '</div>' +
+            '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="width:100%;background:rgba(255,255,255,0.06);color:#f0f0f5;border:1px solid #1e1e2a;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer">← Try different amount or chain</button>';
+        } else {
+          var est = quote.estimate || {};
+          var fromAmt = parseFloat(est.fromAmountUSD || 0).toFixed(2);
+          var toAmt = parseFloat(est.toAmountUSD || est.toAmount || 0).toFixed(2);
+          // toAmount is in token units; convert to USDC (6 decimals)
+          var toUsdc = est.toAmount ? (parseFloat(est.toAmount) / 1e6).toFixed(2) : toAmt;
+          var duration = est.executionDuration || 300;
+          var durationStr = duration < 120 ? duration + 's' : Math.round(duration / 60) + 'm';
+          var gasCostUsd = est.gasCosts && est.gasCosts.length ? est.gasCosts.reduce(function(s, g) { return s + parseFloat(g.amountUSD || 0); }, 0).toFixed(2) : '—';
+          var bridgeFeeUsd = est.feeCosts && est.feeCosts.length ? est.feeCosts.reduce(function(s, f) { return s + parseFloat(f.amountUSD || 0); }, 0).toFixed(2) : '0.00';
+          var toolName = (quote.tool || 'auto').toUpperCase();
+          var srcChainName = _bridgeChainName(state.bridgeFromChain);
 
-        // PRIMARY CTA — Jumper with pre-filled destination
-        '<a href="' + jumperHref + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:14px;padding:18px;background:linear-gradient(135deg,rgba(0,230,138,0.12),rgba(77,159,255,0.12));border:1px solid rgba(0,230,138,0.35);border-radius:12px;color:#f0f0f5;cursor:pointer;margin-bottom:12px;text-decoration:none;transition:all 0.15s" onmouseover="this.style.borderColor=\'#00e68a\'" onmouseout="this.style.borderColor=\'rgba(0,230,138,0.35)\'">' +
-          '<span style="font-size:32px">⚡</span>' +
-          '<div style="flex:1">' +
-            '<div style="font-size:15px;font-weight:800;margin-bottom:4px">Bridge via Jumper <span style="background:#00e68a;color:#0a0a0f;font-size:9px;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:900">RECOMMENDED</span></div>' +
-            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">Auto-routes via LI.FI / Across / CCTP · destination pre-filled to your Polymarket wallet · 1-5 min</div>' +
+          bodyHtml =
+            '<div style="padding:14px 16px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
+              '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Route found</div>' +
+              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">' + _esc(toolName) + '</strong> · estimated ' + durationStr + '</div>' +
+            '</div>' +
+
+            '<div style="display:flex;flex-direction:column;gap:8px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:12px">' +
+              '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You send</span><span style="color:#f0f0f5;font-weight:700">$' + fromAmt + ' USDC on ' + _esc(srcChainName) + '</span></div>' +
+              '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You receive</span><span style="color:#00e68a;font-weight:700">$' + toUsdc + ' USDC on Polygon</span></div>' +
+              '<div style="height:1px;background:#1e1e2a;margin:4px 0"></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Bridge fee</span><span style="color:#aaa">$' + bridgeFeeUsd + '</span></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Source chain gas</span><span style="color:#aaa">~$' + gasCostUsd + '</span></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Destination</span><span style="color:#aaa">' + _esc(proxyAddr.slice(0,6)) + '…' + _esc(proxyAddr.slice(-4)) + '</span></div>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px">' +
+              '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="background:rgba(255,255,255,0.06);color:#8888a0;border:1px solid #1e1e2a;padding:12px 16px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">← Back</button>' +
+              '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + fromAmt + ' →</button>' +
+            '</div>' +
+
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:12px;text-align:center">We\'ll switch MetaMask to ' + _esc(srcChainName) + ' and request one signature. USDC lands in your Polymarket wallet automatically.</div>';
+        }
+      } else {
+        // SELECT step (default) — chain picker + amount
+        var sourceChains = [
+          { id: 42161, name: 'Arbitrum', icon: '🔵', usdc: '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087' },
+          { id: 8453,  name: 'Base',     icon: '🔷', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+          { id: 10,    name: 'Optimism', icon: '🔴', usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' },
+          { id: 1,     name: 'Ethereum', icon: '🔶', usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+          { id: 56,    name: 'BSC',      icon: '🟡', usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d' }
+        ];
+        var selectedChainId = state.bridgeFromChain || 42161; // default Arbitrum
+        var chainBtnsHtml = sourceChains.map(function(c) {
+          var active = c.id === selectedChainId;
+          return '<button onclick="HFXDeposit._setBridgeChain(' + c.id + ')" style="padding:10px 8px;border:1px solid ' + (active ? '#4d9fff' : '#1e1e2a') + ';background:' + (active ? 'rgba(77,159,255,0.08)' : 'transparent') + ';color:' + (active ? '#4d9fff' : '#f0f0f5') + ';font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;border-radius:8px;cursor:pointer;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px;flex:1;min-width:80px">' + c.icon + ' ' + c.name + '</button>';
+        }).join('');
+
+        var chainBalance = state.bridgeSourceBalance;
+        var balDisplay = chainBalance == null ? '…' : (chainBalance > 0 ? '$' + chainBalance.toFixed(2) : '$0.00');
+        var balColor = chainBalance == null ? '#8888a0' : (chainBalance > 0 ? '#00e68a' : '#ff4d6a');
+
+        bodyHtml =
+          '<div style="padding:14px 16px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;margin-bottom:14px">' +
+            '<div style="font-size:13px;font-weight:700;color:#4d9fff;margin-bottom:4px">🌉 Bridge USDC to Polymarket</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">Your USDC bridges from any source chain directly to your Polymarket wallet. One signature, 1-5 min, no leaving HYPERFLEX.</div>' +
           '</div>' +
-          '<span style="color:#00e68a;font-size:20px">→</span>' +
-        '</a>' +
 
-        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Alternatives</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">1 · Source chain</div>' +
+          '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">' + chainBtnsHtml + '</div>' +
 
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">' +
-          '<a href="' + acrossHref + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5;transition:border-color 0.15s" onmouseover="this.style.borderColor=\'#4d9fff\'" onmouseout="this.style.borderColor=\'#1e1e2a\'">' +
-            '<span style="font-size:20px">🔀</span>' +
-            '<div style="flex:1"><div style="font-size:13px;font-weight:700">Across Protocol</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Direct to Across · fastest optimistic bridge · 1-3 min · lowest fees</div></div>' +
-            '<span style="color:#8888a0;font-size:16px">→</span>' +
-          '</a>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:1px">2 · Amount</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:' + balColor + '">Balance: ' + balDisplay + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+            '<div style="flex:1;position:relative">' +
+              '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:\'JetBrains Mono\',monospace;font-size:15px;color:#8888a0">$</span>' +
+              '<input type="number" id="hfxBridgeAmount" placeholder="0.00" step="0.01" min="1" value="' + (state.bridgeAmount || '') + '" style="width:100%;background:#1a1917;border:1px solid #1e1e2a;border-radius:6px;padding:12px 12px 12px 26px;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:700;color:#f0f0f5;outline:none;box-sizing:border-box"/>' +
+            '</div>' +
+            (chainBalance != null && chainBalance > 0 ? '<button onclick="document.getElementById(\'hfxBridgeAmount\').value=' + chainBalance.toFixed(2) + '" style="background:rgba(77,159,255,0.1);border:1px solid rgba(77,159,255,0.3);color:#4d9fff;padding:10px 14px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' : '') +
+          '</div>' +
 
-          '<a href="' + polyBridgeHref + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:20px">🏛</span>' +
-            '<div style="flex:1"><div style="font-size:13px;font-weight:700">Polygon PoS Bridge (official)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;margin-top:2px">⚠ 22-45 min finality · last resort if fast bridges fail</div></div>' +
-            '<span style="color:#8888a0;font-size:16px">→</span>' +
-          '</a>' +
-        '</div>' +
+          '<button onclick="HFXDeposit._fetchBridgeQuote()" style="width:100%;background:#4d9fff;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Get bridge quote →</button>' +
 
-        // Show the pre-filled destination so users know what to expect
-        (proxyAddr ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">' +
-          '<strong style="color:#00e68a">Destination pre-filled.</strong> The Jumper link already sets your Polymarket wallet <span style="color:#f0f0f5">' + _esc(proxyAddr.slice(0,6)) + '…' + _esc(proxyAddr.slice(-4)) + '</span> as the receiving address on Polygon. Just pick your source chain inside Jumper and sign.' +
-        '</div>' : '');
+          '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1e1e2a">' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;text-align:center">Prefer an external UI? <a href="https://jumper.exchange/?toChain=137&toToken=' + USDC_ADDRESS + '&toAddress=' + encodeURIComponent(proxyAddr) + '" target="_blank" rel="noopener" style="color:#4d9fff">Open in Jumper ↗</a></div>' +
+          '</div>';
+      }
     }
 
     return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:14px;padding:22px;max-width:500px;width:100%;color:#f0f0f5;max-height:92vh;overflow-y:auto">' +
@@ -661,6 +726,266 @@
     }
   }
 
+  // ── Bridge flow helpers ──
+  // LI.FI chain config
+  var BRIDGE_CHAINS = {
+    1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpc: 'https://eth.llamarpc.com', scan: 'https://etherscan.io/tx/' },
+    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087', rpc: 'https://arb1.arbitrum.io/rpc', scan: 'https://arbiscan.io/tx/' },
+    8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', rpc: 'https://mainnet.base.org', scan: 'https://basescan.org/tx/' },
+    10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', rpc: 'https://mainnet.optimism.io', scan: 'https://optimistic.etherscan.io/tx/' },
+    56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpc: 'https://bsc-dataseed.binance.org', scan: 'https://bscscan.com/tx/' }
+  };
+
+  function _bridgeChainName(id) { return (BRIDGE_CHAINS[id] || {}).name || 'Unknown'; }
+
+  // Set source chain + fetch USDC balance on that chain
+  async function _setBridgeChain(chainId) {
+    if (!_state) return;
+    _state.bridgeFromChain = chainId;
+    _state.bridgeSourceBalance = null;
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+
+    // Fetch balance on the source chain
+    try {
+      var cfg = BRIDGE_CHAINS[chainId];
+      if (!cfg || !_state.eoa) return;
+      var provider = new window.ethers.JsonRpcProvider(cfg.rpc);
+      var contract = new window.ethers.Contract(cfg.usdc, ['function balanceOf(address) view returns (uint256)'], provider);
+      var raw = await contract.balanceOf(_state.eoa);
+      var bal = parseFloat(window.ethers.formatUnits(raw, 6));
+      _state.bridgeSourceBalance = bal;
+      // Re-render to show the balance
+      var overlay2 = document.getElementById('hfxDepositOverlay');
+      if (overlay2) overlay2.innerHTML = _frame(_state);
+    } catch (e) {
+      console.warn('[bridge] source balance fetch failed:', e.message);
+      _state.bridgeSourceBalance = 0;
+      var overlay3 = document.getElementById('hfxDepositOverlay');
+      if (overlay3) overlay3.innerHTML = _frame(_state);
+    }
+  }
+
+  function _setBridgeStep(step) {
+    if (!_state) return;
+    _state.bridgeStep = step;
+    if (step === 'select') {
+      _state.bridgeQuote = null;
+      _state.bridgeTxHash = null;
+      _state.bridgePollMessage = null;
+    }
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+  }
+
+  // Fetch a quote from LI.FI (via our server proxy)
+  async function _fetchBridgeQuote() {
+    var amtInput = document.getElementById('hfxBridgeAmount');
+    if (!amtInput) return;
+    var amount = parseFloat(amtInput.value);
+    if (!amount || amount < 1) {
+      amtInput.style.borderColor = '#ff4d6a';
+      return;
+    }
+    if (!_state) return;
+    _state.bridgeAmount = amount;
+
+    var chainId = _state.bridgeFromChain || 42161;
+    var cfg = BRIDGE_CHAINS[chainId];
+    if (!cfg) return;
+
+    // Check balance
+    if (_state.bridgeSourceBalance != null && _state.bridgeSourceBalance < amount) {
+      alert('Not enough USDC on ' + cfg.name + '. You have $' + _state.bridgeSourceBalance.toFixed(2) + ' but tried to bridge $' + amount.toFixed(2));
+      return;
+    }
+
+    _state.bridgeStep = 'quote';
+    _state.bridgeQuote = null;
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+
+    try {
+      // LI.FI expects fromAmount in token base units (6 decimals for USDC)
+      var fromAmount = Math.floor(amount * 1e6).toString();
+      var params = new URLSearchParams({
+        fromChain: String(chainId),
+        fromToken: cfg.usdc,
+        toChain: '137',
+        toToken: USDC_ADDRESS,
+        fromAddress: _state.eoa,
+        toAddress: _state.proxy,
+        fromAmount: fromAmount
+      });
+      var r = await fetch('/api/bridge/quote?' + params.toString());
+      var data = await r.json();
+      if (!r.ok) {
+        _state.bridgeQuote = { error: data.error || 'Failed to fetch route' };
+      } else {
+        _state.bridgeQuote = data;
+      }
+    } catch (e) {
+      _state.bridgeQuote = { error: e.message || 'Network error' };
+    }
+    var overlay2 = document.getElementById('hfxDepositOverlay');
+    if (overlay2) overlay2.innerHTML = _frame(_state);
+  }
+
+  // Execute the bridge transaction (user signs on source chain)
+  async function _executeBridge() {
+    if (!_state || !_state.bridgeQuote || !_state.bridgeQuote.transactionRequest) {
+      alert('No quote available — please refresh and try again.');
+      return;
+    }
+    var chainId = _state.bridgeFromChain;
+    var cfg = BRIDGE_CHAINS[chainId];
+    var txReq = _state.bridgeQuote.transactionRequest;
+
+    _state.bridgeStep = 'executing';
+    _state.bridgePollMessage = 'Switching to ' + cfg.name + '…';
+    _state.bridgeSubMessage = 'Check MetaMask';
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+
+    try {
+      // Switch MetaMask to source chain
+      var currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (currentChainId !== cfg.hex) {
+        try {
+          await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hex }] });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            // Add chain first
+            var chainParams = {
+              1: { chainId: '0x1', chainName: 'Ethereum', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://etherscan.io'] },
+              42161: { chainId: '0xa4b1', chainName: 'Arbitrum One', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://arbiscan.io'] },
+              8453: { chainId: '0x2105', chainName: 'Base', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://basescan.org'] },
+              10: { chainId: '0xa', chainName: 'Optimism', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://optimistic.etherscan.io'] },
+              56: { chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://bscscan.com'] }
+            }[chainId];
+            if (chainParams) {
+              await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
+            }
+          } else {
+            throw switchErr;
+          }
+        }
+      }
+
+      // HFXWallet cache may be stale after chain switch — invalidate + get fresh signer
+      if (window.HFXWallet && window.HFXWallet.invalidate) window.HFXWallet.invalidate();
+      var provider = new window.ethers.BrowserProvider(window.ethereum);
+      var signer = await provider.getSigner();
+
+      _state.bridgePollMessage = 'Sign in MetaMask…';
+      _state.bridgeSubMessage = 'Your wallet will ask to approve the bridge transaction';
+      var overlay2 = document.getElementById('hfxDepositOverlay');
+      if (overlay2) overlay2.innerHTML = _frame(_state);
+
+      // Submit the tx as returned by LI.FI
+      var tx = await signer.sendTransaction({
+        to: txReq.to,
+        data: txReq.data,
+        value: txReq.value || '0',
+        gasLimit: txReq.gasLimit || undefined
+      });
+
+      _state.bridgeTxHash = tx.hash;
+      _state.bridgePollMessage = 'Transaction sent';
+      _state.bridgeSubMessage = 'Waiting for confirmation on ' + cfg.name + '…';
+      var overlay3 = document.getElementById('hfxDepositOverlay');
+      if (overlay3) overlay3.innerHTML = _frame(_state);
+
+      // Wait for source chain confirmation
+      await tx.wait(1);
+
+      // Start polling LI.FI status
+      _state.bridgeStep = 'polling';
+      _state.bridgePollMessage = 'Bridging to Polygon…';
+      _state.bridgeSubMessage = 'This typically takes 1-5 minutes depending on the route';
+      var overlay4 = document.getElementById('hfxDepositOverlay');
+      if (overlay4) overlay4.innerHTML = _frame(_state);
+      _pollBridgeStatus(tx.hash, chainId);
+    } catch (err) {
+      var msg = (err && err.message) || 'Unknown error';
+      if (err && (err.code === 'ACTION_REJECTED' || err.code === 4001)) {
+        msg = 'You rejected the transaction in MetaMask.';
+      }
+      var overlay5 = document.getElementById('hfxDepositOverlay');
+      if (overlay5) overlay5.innerHTML = _frame({ error: msg });
+    }
+  }
+
+  // Poll LI.FI /status endpoint until DONE or FAILED
+  async function _pollBridgeStatus(txHash, fromChainId) {
+    var maxPolls = 90; // 90 × 5s = 7.5 min max
+    var pollInterval = 5000;
+    var polls = 0;
+    var tool = (_state && _state.bridgeQuote && _state.bridgeQuote.tool) || '';
+
+    async function tick() {
+      polls++;
+      try {
+        var params = new URLSearchParams({ txHash: txHash, fromChain: String(fromChainId), toChain: '137' });
+        if (tool) params.set('bridge', tool);
+        var r = await fetch('/api/bridge/status?' + params.toString());
+        var data = await r.json();
+        var status = data.status || 'PENDING';
+        var substatus = data.substatus || '';
+
+        if (status === 'DONE') {
+          // Fetch new proxy balance to show
+          var newBal = await _usdcBalance(_state.proxy);
+          var overlay = document.getElementById('hfxDepositOverlay');
+          if (overlay) {
+            overlay.innerHTML = _frame({
+              success: true,
+              amount: _state.bridgeAmount || 0,
+              newProxyBalance: newBal != null ? newBal : 0,
+              txHash: (data.receiving && data.receiving.txHash) || txHash,
+              bridged: true
+            });
+          }
+          try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('hfx_deposit_success', { detail: { amount: _state.bridgeAmount, bridged: true } })); } catch (e) {}
+          return;
+        }
+        if (status === 'FAILED') {
+          var overlay2 = document.getElementById('hfxDepositOverlay');
+          if (overlay2) overlay2.innerHTML = _frame({ error: 'Bridge failed: ' + (data.substatusMessage || 'Unknown reason') });
+          return;
+        }
+
+        // Still pending — update the message
+        if (_state && _state.bridgeStep === 'polling') {
+          var statusMsg = substatus === 'BRIDGE_NOT_AVAILABLE' ? 'Finding route…' :
+                          substatus === 'CHAIN_NOT_AVAILABLE' ? 'Waiting for bridge…' :
+                          substatus === 'WAIT_SOURCE_CONFIRMATIONS' ? 'Waiting for source chain confirmations…' :
+                          substatus === 'WAIT_DESTINATION_TRANSACTION' ? 'Bridge initiated — waiting for Polygon delivery…' :
+                          'Bridging to Polygon…';
+          _state.bridgePollMessage = statusMsg;
+          _state.bridgeSubMessage = 'Usually 1-5 min · you can close this modal and we\'ll finish in the background';
+          var overlay3 = document.getElementById('hfxDepositOverlay');
+          if (overlay3) overlay3.innerHTML = _frame(_state);
+        }
+
+        if (polls < maxPolls) {
+          setTimeout(tick, pollInterval);
+        } else {
+          var overlay4 = document.getElementById('hfxDepositOverlay');
+          if (overlay4) overlay4.innerHTML = _frame({ error: 'Bridge still pending after 7 minutes. Your source tx succeeded — check ' + (BRIDGE_CHAINS[fromChainId] || {}).scan + txHash + ' and try refreshing your balance later.' });
+        }
+      } catch (e) {
+        if (polls < maxPolls) setTimeout(tick, pollInterval);
+        else {
+          var overlay5 = document.getElementById('hfxDepositOverlay');
+          if (overlay5) overlay5.innerHTML = _frame({ error: 'Polling error: ' + e.message });
+        }
+      }
+    }
+    setTimeout(tick, 3000); // first poll after 3s
+  }
+
   // Switch tabs without re-fetching balances
   function _setTab(tab) {
     if (!_state) return;
@@ -720,6 +1045,11 @@
     _submit: _submit,
     _submitGasless: _submitGasless,
     _setTab: _setTab,
-    _copyAddr: _copyAddr
+    _copyAddr: _copyAddr,
+    // Bridge flow
+    _setBridgeChain: _setBridgeChain,
+    _setBridgeStep: _setBridgeStep,
+    _fetchBridgeQuote: _fetchBridgeQuote,
+    _executeBridge: _executeBridge
   };
 })();
