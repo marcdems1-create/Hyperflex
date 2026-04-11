@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0f"/>
+      <stop offset="50%" stop-color="#121218"/>
+      <stop offset="100%" stop-color="#0e0e15"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="greenGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e68a"/>
+      <stop offset="100%" stop-color="#00b876"/>
+    </linearGradient>
+    <radialGradient id="spotlight" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <rect width="1200" height="675" fill="url(#spotlight)"/>
+
+  <!-- Grid pattern overlay -->
+  <g opacity="0.03">
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="400" x2="1200" y2="400" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="500" x2="1200" y2="500" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="600" x2="1200" y2="600" stroke="#fff" stroke-width="1"/>
+    <line x1="200" y1="0" x2="200" y2="675" stroke="#fff" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="675" stroke="#fff" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="675" stroke="#fff" stroke-width="1"/>
+    <line x1="800" y1="0" x2="800" y2="675" stroke="#fff" stroke-width="1"/>
+    <line x1="1000" y1="0" x2="1000" y2="675" stroke="#fff" stroke-width="1"/>
+  </g>
+
+  <!-- HYPERFLEX Logo -->
+  <g transform="translate(60, 60)">
+    <polygon points="0,20 14,12 28,20 28,36 14,44 0,36" fill="none" stroke="#c9920d" stroke-width="1.5"/>
+    <polygon points="4,22 14,16 24,22 24,34 14,40 4,34" fill="#c9920d" opacity="0.6"/>
+    <text x="40" y="36" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="800" fill="#f0f0f5" letter-spacing="2">HYPERFLEX</text>
+  </g>
+
+  <!-- Eyebrow tag -->
+  <g transform="translate(60, 130)">
+    <rect x="0" y="0" width="240" height="28" rx="6" fill="rgba(168,85,247,0.12)" stroke="rgba(168,85,247,0.4)" stroke-width="1"/>
+    <text x="120" y="19" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#a855f7" text-anchor="middle" letter-spacing="2">⚡ NEW FEATURE</text>
+  </g>
+
+  <!-- Headline -->
+  <text x="60" y="220" font-family="Inter, system-ui, sans-serif" font-size="58" font-weight="800" fill="#ffffff" letter-spacing="-1.5">Net-profitable hedges.</text>
+  <text x="60" y="280" font-family="Inter, system-ui, sans-serif" font-size="58" font-weight="800" fill="#a855f7" letter-spacing="-1.5" filter="url(#glow)">One click.</text>
+
+  <!-- Subheadline -->
+  <text x="60" y="325" font-family="JetBrains Mono, monospace" font-size="16" fill="#8a8a9a" letter-spacing="0.2">Correlated Polymarket pairs where total cost &lt; $1.</text>
+  <text x="60" y="350" font-family="JetBrains Mono, monospace" font-size="16" fill="#8a8a9a" letter-spacing="0.2">If either leg wins → you profit. Guaranteed math.</text>
+
+  <!-- Example hedge card -->
+  <g transform="translate(60, 395)">
+    <rect x="0" y="0" width="560" height="220" rx="14" fill="#0c0c0b" stroke="rgba(168,85,247,0.4)" stroke-width="1.5"/>
+
+    <!-- BUY HEDGE button -->
+    <rect x="450" y="14" width="96" height="28" rx="6" fill="rgba(168,85,247,0.2)" stroke="rgba(168,85,247,0.5)" stroke-width="1"/>
+    <text x="498" y="32" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#a855f7" text-anchor="middle">⚡ BUY HEDGE</text>
+
+    <!-- Market A -->
+    <text x="20" y="36" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#f0f0f5">Iran ceasefire by May 15?</text>
+    <text x="20" y="58" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#ff4d6a">NO  33¢</text>
+
+    <!-- Divider -->
+    <text x="280" y="88" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#55556a" text-anchor="middle" letter-spacing="1">⟷ HEDGED AGAINST ⟷</text>
+
+    <!-- Market B -->
+    <text x="20" y="118" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#f0f0f5">Trump ends Iran operations?</text>
+    <text x="20" y="140" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#00e68a">YES 11¢</text>
+
+    <!-- Profit math strip -->
+    <g transform="translate(20, 160)">
+      <rect x="0" y="0" width="520" height="42" rx="8" fill="rgba(0,230,138,0.04)" stroke="#1a1917" stroke-width="1"/>
+      <line x1="173" y1="0" x2="173" y2="42" stroke="#1a1917" stroke-width="1"/>
+      <line x1="346" y1="0" x2="346" y2="42" stroke="#1a1917" stroke-width="1"/>
+
+      <text x="86" y="16" font-family="JetBrains Mono, monospace" font-size="9" fill="#55556a" text-anchor="middle" letter-spacing="0.5">COST</text>
+      <text x="86" y="33" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#f0f0f5" text-anchor="middle">44¢</text>
+
+      <text x="259" y="16" font-family="JetBrains Mono, monospace" font-size="9" fill="#55556a" text-anchor="middle" letter-spacing="0.5">IF EITHER WINS</text>
+      <text x="259" y="33" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#00e68a" text-anchor="middle">+56¢</text>
+
+      <text x="432" y="16" font-family="JetBrains Mono, monospace" font-size="9" fill="#55556a" text-anchor="middle" letter-spacing="0.5">IF BOTH WIN</text>
+      <text x="432" y="33" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#00e68a" text-anchor="middle">+156¢</text>
+    </g>
+  </g>
+
+  <!-- Right side: big ROI stat -->
+  <g transform="translate(720, 395)">
+    <rect x="0" y="0" width="420" height="220" rx="14" fill="rgba(0,230,138,0.04)" stroke="rgba(0,230,138,0.3)" stroke-width="1.5"/>
+
+    <text x="210" y="50" font-family="JetBrains Mono, monospace" font-size="11" fill="#55556a" text-anchor="middle" letter-spacing="2">GUARANTEED ROI</text>
+
+    <text x="210" y="135" font-family="Inter, system-ui, sans-serif" font-size="100" font-weight="800" fill="#00e68a" text-anchor="middle" letter-spacing="-3" filter="url(#glow)">+127%</text>
+
+    <text x="210" y="170" font-family="JetBrains Mono, monospace" font-size="13" fill="#8a8a9a" text-anchor="middle">if at least one leg hits</text>
+
+    <!-- Stars -->
+    <g transform="translate(80, 188)">
+      <circle cx="0" cy="0" r="3" fill="#00e68a"/>
+      <circle cx="14" cy="0" r="3" fill="#00e68a"/>
+      <circle cx="28" cy="0" r="3" fill="#00e68a"/>
+      <circle cx="42" cy="0" r="3" fill="#00e68a"/>
+      <circle cx="56" cy="0" r="3" fill="#00e68a"/>
+      <text x="80" y="4" font-family="JetBrains Mono, monospace" font-size="11" fill="#55556a">NET-POSITIVE MATH</text>
+    </g>
+  </g>
+
+  <!-- Footer tagline -->
+  <g transform="translate(60, 640)">
+    <text x="0" y="0" font-family="JetBrains Mono, monospace" font-size="13" fill="#55556a" letter-spacing="0.5">The Bloomberg Terminal for Polymarket</text>
+    <text x="1080" y="0" font-family="JetBrains Mono, monospace" font-size="13" fill="#c9920d" font-weight="700" text-anchor="end">hyperflex.network</text>
+  </g>
+</svg>
