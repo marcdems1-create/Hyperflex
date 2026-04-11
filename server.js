@@ -19625,14 +19625,80 @@ async function fetchWhalePositions() {
               const allocUsd = Math.min(baseAlloc, maxAlloc);
               // 3. Must have execution data to actually trade
               const canExecute = evt.slug && evt.clob_token_ids;
-              const execStatus = sub.notify_only ? 'notified' : (canExecute ? 'pending_execution' : 'cannot_execute');
+
+              // ── SMART FILTERS ──
+              // Copy trading loses to on-chain bots on speed, so we filter out
+              // the trades where slippage has already killed the edge. These
+              // checks only apply to auto-execute mode — notify-only subs still
+              // see everything so users can make their own call.
+              let filterSkipReason = null;
+
+              // Filter 1: Slippage cap — skip if current market price has moved
+              // more than 5% from whale's entry price. At that point we're
+              // buying a different trade than the one the whale got.
+              try {
+                if (_screenerCache && _screenerCache.data && evt.slug) {
+                  const liveMarket = _screenerCache.data.find(m => m.slug === evt.slug);
+                  if (liveMarket && liveMarket.yes_price != null && evt.price > 0) {
+                    const whaleSidePrice = (evt.side || '').toUpperCase() === 'YES' ? evt.price : (1 - evt.price);
+                    const liveSidePrice = (evt.side || '').toUpperCase() === 'YES' ? liveMarket.yes_price : (1 - liveMarket.yes_price);
+                    const slippagePct = Math.abs(liveSidePrice - whaleSidePrice) / Math.max(whaleSidePrice, 0.01);
+                    if (slippagePct > 0.05) {
+                      filterSkipReason = `price moved ${Math.round(slippagePct * 100)}% since whale entry`;
+                    }
+                  }
+
+                  // Filter 2: Expiry filter — skip markets expiring in < 48h
+                  // (no time for the bet to work out if the whale is wrong on timing)
+                  if (!filterSkipReason && liveMarket && liveMarket.days_until_expiry != null) {
+                    if (liveMarket.days_until_expiry < 2) {
+                      filterSkipReason = `market expires in ${liveMarket.days_until_expiry < 1 ? 'hours' : '< 48h'}`;
+                    }
+                  }
+                }
+              } catch (fErr) { /* filter errors don't block the trade */ }
+
+              // Filter 3: Whale concentration — if the whale has opened 5+
+              // positions in the last hour, they're almost certainly arbing or
+              // running an algo, not taking conviction bets. Skip.
+              if (!filterSkipReason) {
+                try {
+                  const recentOpens = _whaleTradeStream.filter(e =>
+                    e.trader_name === evt.trader_name &&
+                    e.action === 'opened' &&
+                    (Date.now() - new Date(e.ts).getTime()) < 60 * 60 * 1000
+                  );
+                  if (recentOpens.length >= 5) {
+                    filterSkipReason = `whale opened ${recentOpens.length} positions in last hour (arbing, not conviction)`;
+                  }
+                } catch (fErr) {}
+              }
+
+              // Filter 4: Portfolio size — whales running 20+ concurrent positions
+              // are doing systematic strategies we can't meaningfully copy.
+              if (!filterSkipReason) {
+                const whaleTotalPositions = (newSnapshot.get(sub.whale_address) || []).length;
+                if (whaleTotalPositions >= 20) {
+                  filterSkipReason = `whale has ${whaleTotalPositions} active positions (systematic strategy, not directional)`;
+                }
+              }
+
+              // If any filter skipped the trade AND the user wanted auto-execute,
+              // downgrade to notify-only so they still see it but can't blindly copy.
+              const effectivelyNotifyOnly = sub.notify_only || !!filterSkipReason;
+              const execStatus = effectivelyNotifyOnly ? 'notified' : (canExecute ? 'pending_execution' : 'cannot_execute');
+
+              // Notification body includes the filter reason so users understand why it was downgraded
+              const noteBody = filterSkipReason
+                ? `⚠ Filtered: ${filterSkipReason}. Notify-only.`
+                : `Copying at $${allocUsd}. ${sub.notify_only ? 'Notify-only mode.' : 'Auto-executing if your tab is open.'}`;
 
               // Always notify (bell icon)
               pushNotification(
                 sub.user_id,
                 'copy_bot',
                 `\uD83E\uDD16 ${wName} opened ${evt.size_display} ${evt.side} on ${(evt.question || '').substring(0, 50)}`,
-                `Copying at $${allocUsd}. ${sub.notify_only ? 'Notify-only mode.' : 'Auto-executing if your tab is open.'}`,
+                noteBody,
                 null,
                 evt.slug ? 'market:' + evt.slug : null
               );
@@ -19647,8 +19713,8 @@ async function fetchWhalePositions() {
               const tradeId = tradeRows && tradeRows[0] ? tradeRows[0].id : null;
 
               // ── Push SSE event to copier's connected browser ──
-              // Client listens on /api/copy-bot/stream, auto-executes if canExecute && !notify_only
-              if (tradeId && canExecute && !sub.notify_only) {
+              // Only fire auto-execute SSE if NOT filtered out
+              if (tradeId && canExecute && !effectivelyNotifyOnly) {
                 try {
                   const clients = _copyBotClients.get(sub.user_id);
                   if (clients && clients.size > 0) {
@@ -19773,6 +19839,136 @@ async function fetchWhalePositions() {
 
   // Update snapshot
   _whalePositionSnapshot = newSnapshot;
+
+  // ════════════════════════════════════════════════════════════
+  // WHALE CONSENSUS SIGNALS
+  // Fires when 3+ distinct top whales independently hold the same side of
+  // the same market. Higher-signal than individual whale trades because:
+  //  - Consensus takes time to form → gives users time to act before price moves
+  //  - Multi-whale agreement filters out individual bad trades / arbs
+  //  - Dedup per market+side per day so we don't spam on every snapshot refresh
+  // ════════════════════════════════════════════════════════════
+  (async () => {
+    try {
+      if (!pool || newSnapshot.size === 0) return;
+
+      // Group positions by (market, side) → list of whale wallets holding it
+      const consensusMap = new Map(); // key: "market||side" → { market, side, whales: Set, totalCapital, avgPrice }
+      for (const [wallet, positions] of newSnapshot.entries()) {
+        for (const p of positions) {
+          const mkt = (p.market || '').trim();
+          const side = (p.side || 'YES').toUpperCase();
+          const size = parseFloat(p.size) || 0;
+          if (!mkt || size < 5000) continue; // skip small positions
+          const key = mkt + '||' + side;
+          if (!consensusMap.has(key)) {
+            consensusMap.set(key, {
+              market: mkt, side: side, whales: new Set(),
+              totalCapital: 0, priceSum: 0, priceCount: 0,
+              marketUrl: p.market_url || ''
+            });
+          }
+          const c = consensusMap.get(key);
+          c.whales.add(wallet);
+          c.totalCapital += size;
+          if (p.current_price > 0 && p.current_price < 1) {
+            c.priceSum += parseFloat(p.current_price);
+            c.priceCount++;
+          }
+        }
+      }
+
+      // Find consensus: 3+ whales on same side
+      const consensusCandidates = [];
+      for (const [key, c] of consensusMap.entries()) {
+        if (c.whales.size >= 3) {
+          const avgPrice = c.priceCount > 0 ? c.priceSum / c.priceCount : null;
+          consensusCandidates.push({
+            market: c.market, side: c.side,
+            whale_count: c.whales.size,
+            total_capital: Math.round(c.totalCapital),
+            avg_price: avgPrice ? parseFloat(avgPrice.toFixed(4)) : null,
+            market_url: c.marketUrl,
+            // Enrich with slug + clobTokenIds from screener cache
+            slug: null, condition_id: null, clob_token_ids: null
+          });
+        }
+      }
+      if (!consensusCandidates.length) return;
+
+      // Enrich with screener cache data (slug, condition_id, token_ids)
+      if (_screenerCache && _screenerCache.data) {
+        for (const sig of consensusCandidates) {
+          const qLower = sig.market.toLowerCase().trim();
+          const match = _screenerCache.data.find(m => (m.question || '').toLowerCase().trim() === qLower);
+          if (match) {
+            if (match.slug) sig.slug = match.slug;
+            if (match.market_id) sig.condition_id = match.market_id;
+            if (match.clobTokenIds) sig.clob_token_ids = typeof match.clobTokenIds === 'string' ? match.clobTokenIds : JSON.stringify(match.clobTokenIds);
+          }
+        }
+      }
+
+      // Ensure consensus table exists (idempotent)
+      await dbQuery(`
+        CREATE TABLE IF NOT EXISTS whale_consensus_signals (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+          market TEXT NOT NULL,
+          side TEXT NOT NULL,
+          whale_count INTEGER NOT NULL,
+          total_capital NUMERIC NOT NULL,
+          avg_price NUMERIC,
+          slug TEXT,
+          condition_id TEXT,
+          clob_token_ids TEXT,
+          market_url TEXT,
+          first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          status TEXT DEFAULT 'active',
+          UNIQUE(market, side, first_seen_at)
+        )
+      `).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_wcs_active ON whale_consensus_signals(status, last_seen_at DESC) WHERE status = 'active'`).catch(() => {});
+
+      // Upsert-ish: for each signal, see if we already have an active row for this market+side
+      // within the last 24h. If yes, update whale_count/capital. If no, insert fresh + notify.
+      for (const sig of consensusCandidates) {
+        try {
+          const existing = await dbQuery(
+            `SELECT id, whale_count FROM whale_consensus_signals
+             WHERE market = $1 AND side = $2 AND status = 'active'
+               AND first_seen_at > NOW() - INTERVAL '24 hours'
+             LIMIT 1`,
+            [sig.market, sig.side]
+          );
+
+          if (existing.length > 0) {
+            // Update existing signal
+            await dbQuery(
+              `UPDATE whale_consensus_signals
+               SET whale_count = $1, total_capital = $2, avg_price = $3, last_seen_at = NOW()
+               WHERE id = $4`,
+              [sig.whale_count, sig.total_capital, sig.avg_price, existing[0].id]
+            );
+          } else {
+            // New consensus — insert + notify subscribers
+            await dbQuery(
+              `INSERT INTO whale_consensus_signals
+               (market, side, whale_count, total_capital, avg_price, slug, condition_id, clob_token_ids, market_url)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              [sig.market, sig.side, sig.whale_count, sig.total_capital, sig.avg_price, sig.slug, sig.condition_id, sig.clob_token_ids, sig.market_url]
+            );
+            console.log(`[whale-consensus] NEW: ${sig.whale_count} whales ${sig.side} on "${sig.market.substring(0, 60)}" ($${Math.round(sig.total_capital/1000)}k)`);
+
+            // Push notification to users subscribed to whale intelligence
+            // (for v1, we notify any user with email_notify_whale_consensus = true,
+            // or we can just log it to the activity feed. For now, skip broadcast —
+            // users see signals on the whales dashboard instead.)
+          }
+        } catch (sigErr) { console.warn('[whale-consensus] per-sig error:', sigErr.message); }
+      }
+    } catch (wcErr) { console.warn('[whale-consensus] error:', wcErr.message); }
+  })();
 
   // ── Optional email alerts: whale opens > $100K on a market a HYPERFLEX user holds ──
   if (!isFirstSnapshot && pool) {
@@ -20057,6 +20253,176 @@ function computeMarketAlphaScore(market, whaleIndex, eliteScores) {
   const raw = (divergence / 10) * avgGrade * capitalWeight;
   return Math.round(Math.min(10, Math.max(0, raw)) * 10) / 10; // 0.0 - 10.0
 }
+
+// ════════════════════════════════════════════════════════════
+// WHALE INTELLIGENCE — consensus signals + portfolio snapshots
+// ════════════════════════════════════════════════════════════
+
+// GET /api/whale-consensus — active multi-whale consensus signals
+// Public, no auth. Returns signals where 3+ top whales agree on same position.
+app.get('/api/whale-consensus', async (req, res) => {
+  try {
+    if (!pool) return res.json({ signals: [], updated_at: new Date().toISOString() });
+    const signals = await dbQuery(
+      `SELECT id, market, side, whale_count, total_capital, avg_price,
+              slug, condition_id, clob_token_ids, market_url,
+              first_seen_at, last_seen_at
+       FROM whale_consensus_signals
+       WHERE status = 'active'
+         AND last_seen_at > NOW() - INTERVAL '4 hours'
+       ORDER BY whale_count DESC, total_capital DESC
+       LIMIT 30`,
+      []
+    ).catch(() => []);
+
+    // Enrich with current market price + expiry from screener cache
+    const enriched = signals.map(s => {
+      const out = {
+        market: s.market,
+        side: s.side,
+        whale_count: parseInt(s.whale_count),
+        total_capital: parseFloat(s.total_capital),
+        avg_price: s.avg_price ? parseFloat(s.avg_price) : null,
+        slug: s.slug,
+        condition_id: s.condition_id,
+        market_url: s.market_url,
+        first_seen_at: s.first_seen_at,
+        last_seen_at: s.last_seen_at,
+        age_minutes: Math.round((Date.now() - new Date(s.first_seen_at).getTime()) / 60000),
+        current_price: null,
+        days_until_expiry: null,
+        volume: null,
+        price_moved_pct: null
+      };
+      if (_screenerCache && _screenerCache.data && s.slug) {
+        const live = _screenerCache.data.find(m => m.slug === s.slug);
+        if (live) {
+          out.current_price = live.yes_price;
+          out.days_until_expiry = live.days_until_expiry;
+          out.volume = live.volume;
+          // Compute how much the side-price has moved since consensus formed
+          if (out.avg_price != null && live.yes_price != null) {
+            const sideOrig = s.side === 'YES' ? out.avg_price : (1 - out.avg_price);
+            const sideNow = s.side === 'YES' ? live.yes_price : (1 - live.yes_price);
+            if (sideOrig > 0) out.price_moved_pct = Math.round(((sideNow - sideOrig) / sideOrig) * 100);
+          }
+        }
+      }
+      return out;
+    }).filter(s => {
+      // Filter out signals where the market no longer exists or has resolved
+      if (!s.current_price) return s; // keep even if no current price (screener might not have it)
+      return s.current_price > 0.02 && s.current_price < 0.98;
+    });
+
+    res.json({ signals: enriched, updated_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[whale-consensus]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/whale-portfolios — list top whale portfolios (snapshot of current positions)
+// Public, no auth. Used by /whales intelligence dashboard.
+app.get('/api/whale-portfolios', async (req, res) => {
+  try {
+    if (!_whalePositionSnapshot || _whalePositionSnapshot.size === 0) {
+      return res.json({ whales: [], updated_at: new Date().toISOString() });
+    }
+
+    // Build one entry per whale with full portfolio
+    const whales = [];
+    for (const [wallet, positions] of _whalePositionSnapshot.entries()) {
+      if (!positions.length) continue;
+      const first = positions[0];
+      // Sort positions by size desc
+      const sorted = [...positions].sort((a, b) => (parseFloat(b.size) || 0) - (parseFloat(a.size) || 0));
+      const totalCapital = sorted.reduce((s, p) => s + (parseFloat(p.size) || 0), 0);
+      const totalPnl = sorted.reduce((s, p) => s + (parseFloat(p.pnl) || 0), 0);
+
+      whales.push({
+        wallet: wallet,
+        trader: first.trader || wallet.slice(0, 10),
+        rank: first.trader_rank || null,
+        trader_pnl: first.trader_pnl || 0,
+        position_count: sorted.length,
+        total_capital: Math.round(totalCapital),
+        total_pnl: Math.round(totalPnl),
+        positions: sorted.slice(0, 20).map(p => {
+          // Extract slug from market_url
+          let slug = null;
+          const m = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
+          if (m) slug = m[1].toLowerCase();
+          return {
+            market: p.market || p.position,
+            side: p.side,
+            size: parseFloat(p.size) || 0,
+            avg_price: parseFloat(p.avg_price) || null,
+            current_price: parseFloat(p.current_price) || null,
+            pnl: parseFloat(p.pnl) || 0,
+            slug: slug,
+            allocation_pct: totalCapital > 0 ? Math.round(((parseFloat(p.size) || 0) / totalCapital) * 100) : 0
+          };
+        })
+      });
+    }
+
+    // Sort by total capital desc, limit to top 20 whales
+    whales.sort((a, b) => b.total_capital - a.total_capital);
+
+    res.json({ whales: whales.slice(0, 20), updated_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[whale-portfolios]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/whales/:address/portfolio — single whale's full portfolio
+app.get('/api/whales/:address/portfolio', async (req, res) => {
+  try {
+    const address = (req.params.address || '').toLowerCase();
+    if (!_whalePositionSnapshot || !_whalePositionSnapshot.has(address)) {
+      return res.json({ whale: null, updated_at: new Date().toISOString() });
+    }
+    const positions = _whalePositionSnapshot.get(address);
+    if (!positions.length) return res.json({ whale: null });
+    const first = positions[0];
+    const sorted = [...positions].sort((a, b) => (parseFloat(b.size) || 0) - (parseFloat(a.size) || 0));
+    const totalCapital = sorted.reduce((s, p) => s + (parseFloat(p.size) || 0), 0);
+    const totalPnl = sorted.reduce((s, p) => s + (parseFloat(p.pnl) || 0), 0);
+
+    res.json({
+      whale: {
+        wallet: address,
+        trader: first.trader || address.slice(0, 10),
+        rank: first.trader_rank || null,
+        trader_pnl: first.trader_pnl || 0,
+        position_count: sorted.length,
+        total_capital: Math.round(totalCapital),
+        total_pnl: Math.round(totalPnl),
+        positions: sorted.map(p => {
+          let slug = null;
+          const m = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
+          if (m) slug = m[1].toLowerCase();
+          return {
+            market: p.market || p.position,
+            side: p.side,
+            size: parseFloat(p.size) || 0,
+            avg_price: parseFloat(p.avg_price) || null,
+            current_price: parseFloat(p.current_price) || null,
+            pnl: parseFloat(p.pnl) || 0,
+            slug: slug,
+            allocation_pct: totalCapital > 0 ? Math.round(((parseFloat(p.size) || 0) / totalCapital) * 100) : 0
+          };
+        })
+      },
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[whale-portfolio]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/whale-watch', async (req, res) => {
   try {

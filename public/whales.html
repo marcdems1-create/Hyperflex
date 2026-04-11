@@ -578,6 +578,178 @@ function urlBase64ToUint8Array(base64String) {
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- WHALE INTELLIGENCE — Consensus signals + Portfolios     -->
+<!-- The real value prop: not "mirror trades" (too slow),    -->
+<!-- but "see what smart money AGREES on" (conviction).      -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="whaleIntelSection" style="padding:0 24px 24px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-family:var(--sans);font-size:11px;font-weight:800;color:#00e68a;letter-spacing:2px">🧠 WHALE INTELLIGENCE</span>
+      <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(0,230,138,0.1);color:#00e68a;font-weight:700">LIVE</span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button id="wiTabConsensus" onclick="showWiTab('consensus')" class="wi-tab active">🎯 Consensus</button>
+      <button id="wiTabPortfolios" onclick="showWiTab('portfolios')" class="wi-tab">🐋 Portfolios</button>
+    </div>
+  </div>
+
+  <!-- Consensus tab -->
+  <div id="wiConsensusPanel">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:14px;max-width:700px">
+      Markets where <strong style="color:var(--text)">3+ top whales independently agree</strong>. Consensus is slower than individual trades but way higher signal — multi-whale agreement filters out arbs, bad fills, and one-off noise. Only trades with real conviction show up here.
+    </div>
+    <div id="wiConsensusGrid">
+      <div style="padding:24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading consensus signals…</div>
+    </div>
+  </div>
+
+  <!-- Portfolios tab -->
+  <div id="wiPortfoliosPanel" style="display:none">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:14px;max-width:700px">
+      The full book of each top whale, sorted by capital. See their <strong style="color:var(--text)">entire thesis</strong>, not just one trade — which markets they're heavily allocated to, which they've de-risked from, and where their P&L is coming from.
+    </div>
+    <div id="wiPortfoliosGrid">
+      <div style="padding:24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading whale portfolios…</div>
+    </div>
+  </div>
+</div>
+
+<style>
+.wi-tab { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; min-height: 36px; }
+.wi-tab:hover { border-color: var(--gold); color: var(--text); }
+.wi-tab.active { background: rgba(0,230,138,0.08); border-color: rgba(0,230,138,0.4); color: #00e68a; }
+.wi-consensus-card { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; background: rgba(0,230,138,0.03); border: 1px solid rgba(0,230,138,0.15); border-radius: 10px; margin-bottom: 8px; text-decoration: none; color: inherit; transition: all 0.15s; }
+.wi-consensus-card:hover { background: rgba(0,230,138,0.06); border-color: rgba(0,230,138,0.3); transform: translateY(-1px); }
+.wi-consensus-num { font-family: var(--mono); font-size: 18px; font-weight: 800; color: #00e68a; min-width: 36px; text-align: center; }
+.wi-consensus-body { flex: 1; min-width: 0; }
+.wi-consensus-q { font-family: var(--sans); font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; line-height: 1.35; }
+.wi-consensus-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.wi-consensus-meta .yes { color: #00e68a; font-weight: 700; }
+.wi-consensus-meta .no { color: #ff4d6a; font-weight: 700; }
+.wi-portfolio-card { background: rgba(168,85,247,0.03); border: 1px solid rgba(168,85,247,0.15); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+.wi-portfolio-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.wi-portfolio-name { font-family: var(--sans); font-size: 14px; font-weight: 800; color: var(--text); }
+.wi-portfolio-stat { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.wi-portfolio-stat strong { color: var(--text); }
+.wi-portfolio-positions { display: flex; flex-direction: column; gap: 6px; }
+.wi-portfolio-pos { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; text-decoration: none; color: inherit; font-family: var(--mono); font-size: 11px; transition: background 0.15s; }
+.wi-portfolio-pos:hover { background: rgba(168,85,247,0.08); }
+.wi-portfolio-alloc-bar { height: 4px; background: #1a1917; border-radius: 2px; overflow: hidden; flex: 0 0 60px; }
+.wi-portfolio-alloc-fill { height: 100%; background: #a855f7; }
+.wi-portfolio-pos-q { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wi-portfolio-pos-size { color: var(--muted); flex-shrink: 0; }
+@media (max-width: 640px) {
+  .wi-consensus-card { padding: 12px; gap: 10px; }
+  .wi-consensus-q { font-size: 13px; }
+  .wi-portfolio-header { gap: 8px; }
+}
+</style>
+
+<script>
+// Load consensus signals + portfolios on page load
+async function loadWhaleConsensus() {
+  var grid = document.getElementById('wiConsensusGrid');
+  if (!grid) return;
+  try {
+    var r = await fetch('/api/whale-consensus');
+    var d = await r.json();
+    var signals = d.signals || [];
+    if (!signals.length) {
+      grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:10px">No consensus signals right now. Whales will converge when they see an edge — usually 1-3 live at any time.</div>';
+      return;
+    }
+    grid.innerHTML = signals.slice(0, 12).map(function(s, i) {
+      var href = s.slug ? '/market/' + s.slug : '#';
+      var sideCls = (s.side || 'YES').toUpperCase() === 'YES' ? 'yes' : 'no';
+      var avgCents = s.avg_price != null ? Math.round(s.avg_price * 100) : null;
+      var currentCents = s.current_price != null ? Math.round(s.current_price * 100) : null;
+      var capDisplay = s.total_capital >= 1e6 ? '$' + (s.total_capital/1e6).toFixed(1) + 'M' : s.total_capital >= 1e3 ? '$' + Math.round(s.total_capital/1e3) + 'K' : '$' + Math.round(s.total_capital);
+      var ageStr = s.age_minutes < 60 ? s.age_minutes + 'm ago' : Math.round(s.age_minutes/60) + 'h ago';
+      var priceMoved = s.price_moved_pct;
+      var moveBadge = '';
+      if (priceMoved != null) {
+        if (priceMoved > 5) moveBadge = '<span style="color:#ff4d6a;font-weight:700">↑' + priceMoved + '% since</span>';
+        else if (priceMoved < -5) moveBadge = '<span style="color:#00e68a;font-weight:700">↓' + Math.abs(priceMoved) + '% since</span>';
+        else moveBadge = '<span style="color:var(--muted)">±' + Math.abs(priceMoved) + '%</span>';
+      }
+      return '<a href="' + href + '" class="wi-consensus-card">' +
+        '<div class="wi-consensus-num">' + s.whale_count + 'x</div>' +
+        '<div class="wi-consensus-body">' +
+          '<div class="wi-consensus-q">' + escH((s.market || '').substring(0, 80)) + '</div>' +
+          '<div class="wi-consensus-meta">' +
+            '<span class="' + sideCls + '">' + (s.side || '').toUpperCase() + (avgCents != null ? ' ' + avgCents + '¢' : '') + '</span>' +
+            (currentCents != null && currentCents !== avgCents ? '<span>·</span><span>now ' + currentCents + '¢</span>' : '') +
+            (moveBadge ? '<span>·</span>' + moveBadge : '') +
+            '<span>·</span><span>🐋 ' + s.whale_count + ' whales ' + capDisplay + '</span>' +
+            '<span>·</span><span>' + ageStr + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch (e) {
+    grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--red);font-family:var(--mono);font-size:11px">Failed to load consensus signals</div>';
+  }
+}
+
+async function loadWhalePortfolios() {
+  var grid = document.getElementById('wiPortfoliosGrid');
+  if (!grid) return;
+  try {
+    var r = await fetch('/api/whale-portfolios');
+    var d = await r.json();
+    var whales = d.whales || [];
+    if (!whales.length) {
+      grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:10px">Whale positions loading... first snapshot takes ~30s on fresh boot.</div>';
+      return;
+    }
+    grid.innerHTML = whales.slice(0, 10).map(function(w) {
+      var capDisplay = w.total_capital >= 1e6 ? '$' + (w.total_capital/1e6).toFixed(1) + 'M' : '$' + Math.round(w.total_capital/1e3) + 'K';
+      var pnlDisplay = w.trader_pnl >= 0 ? '+$' + Math.round(w.trader_pnl).toLocaleString() : '-$' + Math.round(Math.abs(w.trader_pnl)).toLocaleString();
+      var pnlColor = w.trader_pnl >= 0 ? '#00e68a' : '#ff4d6a';
+      var positionsHtml = (w.positions || []).slice(0, 8).map(function(p) {
+        var href = p.slug ? '/market/' + p.slug : '#';
+        var sizeDisplay = p.size >= 1e6 ? '$' + (p.size/1e6).toFixed(1) + 'M' : p.size >= 1e3 ? '$' + Math.round(p.size/1e3) + 'K' : '$' + Math.round(p.size);
+        var sideColor = (p.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+        return '<a href="' + href + '" class="wi-portfolio-pos">' +
+          '<span style="color:' + sideColor + ';font-weight:700;flex-shrink:0;min-width:30px">' + (p.side || '').substring(0, 3) + '</span>' +
+          '<span class="wi-portfolio-pos-q">' + escH((p.market || '').substring(0, 55)) + '</span>' +
+          '<span class="wi-portfolio-pos-size">' + sizeDisplay + '</span>' +
+          '<div class="wi-portfolio-alloc-bar"><div class="wi-portfolio-alloc-fill" style="width:' + Math.min(100, p.allocation_pct * 3) + '%"></div></div>' +
+          '<span style="color:var(--muted);flex-shrink:0;min-width:30px;text-align:right">' + p.allocation_pct + '%</span>' +
+        '</a>';
+      }).join('');
+      return '<div class="wi-portfolio-card">' +
+        '<div class="wi-portfolio-header">' +
+          '<div class="wi-portfolio-name">🐋 ' + escH(w.trader || 'Whale') + (w.rank ? '<span style="color:var(--gold);font-weight:600;font-size:11px;margin-left:6px">#' + w.rank + '</span>' : '') + '</div>' +
+          '<div class="wi-portfolio-stat"><strong>' + capDisplay + '</strong> deployed</div>' +
+          '<div class="wi-portfolio-stat"><strong>' + w.position_count + '</strong> positions</div>' +
+          '<div class="wi-portfolio-stat">All-time: <strong style="color:' + pnlColor + '">' + pnlDisplay + '</strong></div>' +
+        '</div>' +
+        '<div class="wi-portfolio-positions">' + positionsHtml + '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--red);font-family:var(--mono);font-size:11px">Failed to load whale portfolios</div>';
+  }
+}
+
+function showWiTab(tab) {
+  document.getElementById('wiConsensusPanel').style.display = tab === 'consensus' ? 'block' : 'none';
+  document.getElementById('wiPortfoliosPanel').style.display = tab === 'portfolios' ? 'block' : 'none';
+  document.getElementById('wiTabConsensus').classList.toggle('active', tab === 'consensus');
+  document.getElementById('wiTabPortfolios').classList.toggle('active', tab === 'portfolios');
+  if (tab === 'portfolios' && document.getElementById('wiPortfoliosGrid').innerHTML.indexOf('Loading') !== -1) {
+    loadWhalePortfolios();
+  }
+}
+
+// Auto-load on page load + refresh every 2 min
+setTimeout(loadWhaleConsensus, 600);
+setInterval(loadWhaleConsensus, 120000);
+</script>
+
 <!-- MY COPIES — active subscriptions + pending/history -->
 <div id="myCopiesSection" style="padding:0 24px 20px;display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -1942,10 +2114,13 @@ function closeWhaleProfile() {
     <div id="acmCustomWrap" style="display:none;margin-bottom:16px">
       <input type="number" class="ct-input" id="acmCustomInput" placeholder="Enter amount..." min="1" style="width:100%"/>
     </div>
-    <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Mode</div>
+    <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Mode <span style="color:var(--gold);font-weight:600;text-transform:none;letter-spacing:0">· Notify is strongly recommended</span></div>
     <div class="acm-mode">
       <button class="acm-mode-btn active" data-mode="notify" onclick="setAcmMode('notify', this)">&#x1F514; Notify Only</button>
       <button class="acm-mode-btn" data-mode="auto" onclick="setAcmMode('auto', this)">&#x26A1; Auto-Execute</button>
+    </div>
+    <div id="acmAutoWarning" style="display:none;margin-top:10px;padding:12px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--gold);line-height:1.6">
+      <strong>⚠ Auto-execute has real limits.</strong> Bots move faster than you — by the time your order signs, the price may have moved. HYPERFLEX auto-skips trades where: price moved >5%, market expires <48h, whale opened 5+ positions in the last hour (arbing), or whale has 20+ active positions (systematic). If a skip happens, you'll still get a notification.
     </div>
     <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Auto-Mirroring &rarr;</button>
     <div class="acm-info">Safe mode: You'll be notified before any trade is placed. Auto-execute requires CLOB trading to be enabled.</div>
@@ -2088,6 +2263,9 @@ function setAcmMode(mode, el) {
   _acmMode = mode;
   document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.remove('active'); });
   el.classList.add('active');
+  // Show honest warning when user picks auto-execute — bots are faster than us
+  var warn = document.getElementById('acmAutoWarning');
+  if (warn) warn.style.display = mode === 'auto' ? 'block' : 'none';
 }
 
 function hasTradingSetup() {
