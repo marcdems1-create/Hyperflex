@@ -253,11 +253,15 @@ function renderStatus(d) {
   }
 
   function envRow(label, value, required) {
-    var ok = value ? true : false;
+    // Treat 0 as a valid value (not missing) for counts like "SSE clients: 0"
+    var hasValue = value === 0 || value === false ? true : !!value;
+    var ok = hasValue;
     var cls = ok ? 'ok' : (required ? 'err' : 'warn');
     var display;
     if (typeof value === 'boolean') {
       display = value ? '✓ set' : '✗ missing';
+    } else if (value === 0) {
+      display = '0';
     } else {
       display = value ? esc(value) : '— missing';
     }
