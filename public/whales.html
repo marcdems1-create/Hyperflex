@@ -696,6 +696,45 @@ async function cancelCopy(subId) {
 setTimeout(loadMyCopies, 1200);
 // Refresh every 30s
 setInterval(loadMyCopies, 30000);
+
+// ── Resume pending copy subscription after setup flow ──
+(function() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('resume_copy') === '1') {
+      var pendingStr = sessionStorage.getItem('hfx_pending_copy');
+      if (pendingStr) {
+        var pending = JSON.parse(pendingStr);
+        sessionStorage.removeItem('hfx_pending_copy');
+        // Verify setup completed
+        if (typeof hasTradingSetup === 'function' && hasTradingSetup() && pending.whale_address) {
+          setTimeout(function() {
+            var token = (typeof getToken === 'function') ? getToken() : localStorage.getItem('hf_token');
+            if (!token) return;
+            fetch('/api/copy-bot/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+              body: JSON.stringify(pending)
+            }).then(function(r) { return r.json(); }).then(function(d) {
+              if (d.error) return;
+              // Show success banner
+              var banner = document.createElement('div');
+              banner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00e68a,#00b876);color:#0a0a0f;padding:14px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 20px rgba(0,230,138,0.3);max-width:90vw;text-align:center';
+              banner.innerHTML = '✅ Wallet ready! Now auto-mirroring ' + (pending.whale_name || 'this whale') + ' at $' + Math.round(pending.allocation_per_trade) + '/trade';
+              document.body.appendChild(banner);
+              setTimeout(function() { banner.remove(); }, 5000);
+              loadMyCopies();
+              // Clean up URL
+              if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, '', '/whales');
+              }
+            }).catch(function(){});
+          }, 800);
+        }
+      }
+    }
+  } catch (e) { console.warn('[resume-copy]', e.message); }
+})();
 </script>
 
 <!-- WHALE POSITIONS (collapsed, for users who want raw data) -->
@@ -2034,10 +2073,56 @@ function setAcmMode(mode, el) {
   el.classList.add('active');
 }
 
+function hasTradingSetup() {
+  return !!(localStorage.getItem('poly_api_key') &&
+            localStorage.getItem('poly_api_secret') &&
+            localStorage.getItem('hf_poly_wallet') &&
+            localStorage.getItem('poly_eoa_address'));
+}
+
+async function redirectToSetup() {
+  // Save the current auto-copy intent so we can resume after setup
+  try {
+    sessionStorage.setItem('hfx_pending_copy', JSON.stringify({
+      whale_address: _acmAddress,
+      whale_name: _acmName,
+      allocation_per_trade: _acmAlloc,
+      notify_only: false
+    }));
+  } catch (e) {}
+  // Find a high-volume market to host the setup flow
+  var setupSlug = 'trump-wins-2028-presidential-election';
+  try {
+    var r = await fetch('/api/screener?sort=volume&min_volume=1000000');
+    if (r.ok) {
+      var d = await r.json();
+      var mks = d.markets || d || [];
+      if (mks.length && mks[0].slug) setupSlug = mks[0].slug;
+    }
+  } catch (e) {}
+  window.location.href = '/market/' + setupSlug + '?setup=1&return=' + encodeURIComponent('/whales?resume_copy=1');
+}
+
 function submitAutoCopy() {
   var customVal = document.getElementById('acmCustomInput').value;
   if (document.getElementById('acmCustomWrap').style.display !== 'none' && customVal) {
     _acmAlloc = parseFloat(customVal) || 100;
+  }
+
+  // ── Setup check: if user picked auto-execute but has no wallet, redirect to setup ──
+  if (_acmMode !== 'notify' && !hasTradingSetup()) {
+    var status = document.getElementById('acmStatus');
+    status.style.display = '';
+    status.style.background = 'rgba(168,85,247,0.1)';
+    status.style.color = '#a855f7';
+    status.innerHTML = '⚡ Auto-execute needs a Polymarket wallet (one-time setup, ~30s).<br>' +
+      '<div style="margin-top:10px;display:flex;gap:8px">' +
+        '<button onclick="redirectToSetup()" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Set up trading →</button>' +
+        '<button onclick="setAcmMode(\'notify\',document.querySelector(\'.acm-mode-btn[data-mode=notify]\'));submitAutoCopy()" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer">Use notify-only</button>' +
+      '</div>';
+    var cta = document.getElementById('acmCta');
+    cta.style.display = 'none';
+    return;
   }
 
   var cta = document.getElementById('acmCta');

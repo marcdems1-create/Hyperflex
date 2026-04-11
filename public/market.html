@@ -2444,11 +2444,66 @@ async function runFullSetup() {
   if (deployed) {
     setSetupStep(1, 'done', 'Proxy Wallet');
   } else {
-    // Not deployed — user must activate on polymarket.com first
-    setSetupStep(1, 'error', 'Proxy Wallet — not yet activated');
-    showTradeStatus('Your Polymarket wallet needs to be activated. Visit polymarket.com and complete the Enable Trading setup, then come back.', 'error');
-    if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-    return false;
+    // Not deployed — attempt to deploy directly via Safe factory
+    setSetupStep(1, 'active', 'Deploying proxy wallet...');
+    if (cta) cta.textContent = 'Deploying wallet...';
+    showTradeStatus('Deploying your Polymarket wallet (one-time, ~$0.01 in MATIC gas)...', 'info');
+
+    var deploySuccess = false;
+    try {
+      // Safe factory exposes createProxy(address user) — deterministic, one-time deploy
+      var signer = await HFXWallet.getSigner();
+      var factoryWrite = new ethers.Contract(SAFE_FACTORY_ADDRESS, [
+        'function createProxy(address user) returns (address)',
+        'function proxy(address user) returns (address)'
+      ], signer);
+
+      // Try createProxy first, fall back to proxy() if it doesn't exist
+      var tx;
+      try {
+        tx = await factoryWrite.createProxy(eoaAddress);
+      } catch (e1) {
+        console.warn('[setup] createProxy failed, trying proxy():', e1.message);
+        try { tx = await factoryWrite.proxy(eoaAddress); } catch (e2) { throw e2; }
+      }
+      console.log('[setup] Deploy tx sent:', tx.hash);
+      if (cta) cta.textContent = 'Confirming...';
+      showTradeStatus('Waiting for confirmation... (~3-5 seconds)', 'info');
+      var receipt = await tx.wait();
+      console.log('[setup] Deploy confirmed in block', receipt.blockNumber);
+
+      // Re-check deployment
+      await new Promise(function(r) { setTimeout(r, 2000); }); // wait for relayer to index
+      deployed = await checkProxyDeployed(proxyAddr);
+      if (deployed) {
+        deploySuccess = true;
+        setSetupStep(1, 'done', 'Proxy Wallet');
+        showTradeStatus('Wallet deployed! Continuing setup...', 'success');
+      }
+    } catch (deployErr) {
+      console.warn('[setup] Direct deploy failed:', deployErr.message);
+      // Specific error messages
+      if (deployErr.code === 'ACTION_REJECTED' || deployErr.code === 4001) {
+        setSetupStep(1, 'error', 'Proxy Wallet — deploy rejected');
+        showTradeStatus('You rejected the deployment transaction. Click "Set Up Trading" to try again.', 'error');
+        if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+        return false;
+      }
+      if (deployErr.message && /insufficient funds/i.test(deployErr.message)) {
+        setSetupStep(1, 'error', 'Proxy Wallet — need MATIC for gas');
+        showTradeStatus('Your MetaMask needs a tiny amount of MATIC for gas (~$0.01). Add some to continue.', 'error');
+        if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+        return false;
+      }
+      // Generic fallback to polymarket.com
+    }
+
+    if (!deploySuccess) {
+      setSetupStep(1, 'error', 'Proxy Wallet — deployment failed');
+      showTradeStatus('Could not deploy your wallet from here. Visit polymarket.com → Enable Trading, then come back.', 'error');
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
   }
 
   // Step 2: CLOB Auth (if not already done)
@@ -3833,6 +3888,40 @@ loadMarket().then(function() {
   _livePriceInterval = setInterval(fetchLivePrices, 10000);
   // Alpha-terminal prefill runs after market is loaded + rendered
   setTimeout(applyAlphaPrefill, 400);
+
+  // ── ?setup=1 auto-run mode ──
+  // When linked here from /whales (or anywhere) with ?setup=1, auto-open the
+  // setup flow and redirect back to ?return= on completion.
+  try {
+    var setupParams = new URLSearchParams(window.location.search);
+    if (setupParams.get('setup') === '1') {
+      var returnUrl = setupParams.get('return') || '/whales';
+      // Show a banner at the top explaining what's happening
+      var setupBanner = document.createElement('div');
+      setupBanner.id = 'setupBanner';
+      setupBanner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:12px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 20px rgba(168,85,247,0.4);max-width:90vw;text-align:center';
+      setupBanner.innerHTML = '🤖 Setting up your trading wallet... You\'ll be redirected back when done.';
+      document.body.appendChild(setupBanner);
+      // Auto-trigger setup after a short delay for page to settle
+      setTimeout(function() {
+        runFullSetup().then(function(success) {
+          if (success) {
+            setupBanner.innerHTML = '✅ Setup complete! Redirecting...';
+            setupBanner.style.background = 'linear-gradient(135deg,#00e68a,#00b876)';
+            setTimeout(function() {
+              window.location.href = returnUrl;
+            }, 1500);
+          } else {
+            setupBanner.innerHTML = '⚠ Setup incomplete — see details below';
+            setupBanner.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
+          }
+        }).catch(function(err) {
+          console.warn('[auto-setup] failed:', err.message);
+          setupBanner.remove();
+        });
+      }, 1500);
+    }
+  } catch (e) {}
 });
 updateTradingUI();
 // Run trading setup check on page load (non-blocking)

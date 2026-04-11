@@ -40,6 +40,149 @@
     // No wallet or already fully loaded — still load copy-bot for notifications
     loadCopyBot();
   }
+
+  // ── Bug reporter — floating button + modal on every page ──
+  // Captures: page URL, user agent, last console errors, user message
+  // Sends to /api/bug-reports → Claude Haiku triage + admin email
+  var _consoleErrors = [];
+  var _origConsoleError = console.error;
+  console.error = function() {
+    try {
+      var args = [].slice.call(arguments).map(function(a) {
+        if (a instanceof Error) return { message: a.message, stack: (a.stack || '').slice(0, 500) };
+        if (typeof a === 'object') { try { return JSON.stringify(a).slice(0, 300); } catch (e) { return String(a); } }
+        return String(a).slice(0, 300);
+      });
+      _consoleErrors.push({ ts: Date.now(), args: args });
+      if (_consoleErrors.length > 20) _consoleErrors.shift();
+    } catch (e) {}
+    return _origConsoleError.apply(console, arguments);
+  };
+  // Also catch unhandled errors
+  window.addEventListener('error', function(e) {
+    try {
+      _consoleErrors.push({ ts: Date.now(), args: [{ message: e.message, file: e.filename, line: e.lineno, col: e.colno, stack: (e.error && e.error.stack || '').slice(0, 500) }] });
+      if (_consoleErrors.length > 20) _consoleErrors.shift();
+    } catch (err) {}
+  });
+
+  function injectBugReporter() {
+    if (document.getElementById('hfxBugBtn')) return;
+    var btn = document.createElement('button');
+    btn.id = 'hfxBugBtn';
+    btn.title = 'Report a bug';
+    btn.innerHTML = '🐛';
+    btn.style.cssText = 'position:fixed;bottom:20px;left:20px;width:40px;height:40px;border-radius:50%;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);color:#a855f7;font-size:18px;cursor:pointer;z-index:9998;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(8px)';
+    btn.onmouseenter = function() { btn.style.background = 'rgba(168,85,247,0.3)'; btn.style.transform = 'scale(1.1)'; };
+    btn.onmouseleave = function() { btn.style.background = 'rgba(168,85,247,0.15)'; btn.style.transform = 'scale(1)'; };
+    btn.onclick = openBugModal;
+    document.body.appendChild(btn);
+  }
+
+  function openBugModal() {
+    if (document.getElementById('hfxBugModal')) return;
+    var overlay = document.createElement('div');
+    overlay.id = 'hfxBugModal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:10003;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.onclick = function(e) { if (e.target === overlay) closeBugModal(); };
+    overlay.innerHTML =
+      '<div style="background:#0e0e0c;border:1px solid #a855f7;border-radius:14px;padding:24px;max-width:480px;width:100%;font-family:Inter,system-ui,sans-serif;color:#e8e4d9">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+          '<span style="font-size:20px">🐛</span>' +
+          '<h3 style="margin:0;font-size:16px;font-weight:800;color:#a855f7">Report a Bug</h3>' +
+          '<button onclick="HFXBug.close()" style="margin-left:auto;background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:0 4px">✕</button>' +
+        '</div>' +
+        '<div style="font-family:monospace;font-size:11px;color:#7a7870;margin-bottom:10px;line-height:1.5">' +
+          'Auto-captured: <span style="color:#c0c0d0">page URL · console errors · wallet state</span><br>' +
+          'Our AI triages instantly and routes critical bugs to the team.' +
+        '</div>' +
+        '<textarea id="hfxBugMsg" placeholder="What went wrong? Be specific — what did you click, what did you expect, what happened instead?" rows="6" style="width:100%;background:#1a1917;border:1px solid #2a2a25;border-radius:8px;padding:12px;font-family:monospace;font-size:13px;color:#e8e4d9;outline:none;resize:vertical;box-sizing:border-box"></textarea>' +
+        '<div id="hfxBugResponse" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-family:monospace;font-size:12px;line-height:1.5"></div>' +
+        '<div style="display:flex;gap:8px;margin-top:14px">' +
+          '<button id="hfxBugSubmit" onclick="HFXBug.submit()" style="flex:1;background:#a855f7;color:#fff;border:none;padding:10px 14px;border-radius:8px;font-family:monospace;font-size:12px;font-weight:700;cursor:pointer">Send to team →</button>' +
+          '<button onclick="HFXBug.close()" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:10px 14px;border-radius:8px;font-family:monospace;font-size:12px;cursor:pointer">Cancel</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    setTimeout(function() { var t = document.getElementById('hfxBugMsg'); if (t) t.focus(); }, 50);
+  }
+
+  function closeBugModal() {
+    var m = document.getElementById('hfxBugModal');
+    if (m) m.remove();
+  }
+
+  async function submitBug() {
+    var msg = (document.getElementById('hfxBugMsg') || {}).value || '';
+    if (msg.trim().length < 5) { alert('Please describe the bug (at least 5 characters)'); return; }
+    var btn = document.getElementById('hfxBugSubmit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+    // Capture context
+    var context = {
+      url: window.location.href,
+      referrer: document.referrer,
+      viewport: window.innerWidth + 'x' + window.innerHeight,
+      has_wallet: !!window.ethereum,
+      has_hf_token: !!localStorage.getItem('hf_token'),
+      has_poly_proxy: !!localStorage.getItem('hf_poly_wallet'),
+      has_clob_keys: !!localStorage.getItem('poly_api_key')
+    };
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+
+    try {
+      var r = await fetch('/api/bug-reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? ('Bearer ' + token) : ''
+        },
+        body: JSON.stringify({
+          message: msg,
+          page_url: window.location.href,
+          user_agent: navigator.userAgent,
+          context: context,
+          console_errors: _consoleErrors.slice(-10)
+        })
+      });
+      var d = await r.json();
+      var resp = document.getElementById('hfxBugResponse');
+      if (r.ok) {
+        if (resp) {
+          resp.style.display = 'block';
+          resp.style.background = 'rgba(0,230,138,0.08)';
+          resp.style.border = '1px solid rgba(0,230,138,0.25)';
+          resp.style.color = '#00e68a';
+          var aiMsg = (d.ai_response && d.ai_response.message) || 'Thanks! Report received.';
+          var sevBadge = d.ai_response && d.ai_response.severity ? ' · <span style="color:#f59e0b">' + d.ai_response.severity.toUpperCase() + '</span>' : '';
+          resp.innerHTML = '✓ ' + aiMsg + sevBadge;
+        }
+        if (btn) { btn.textContent = 'Sent ✓'; btn.style.background = '#00e68a'; }
+        setTimeout(closeBugModal, 3500);
+      } else {
+        if (resp) {
+          resp.style.display = 'block';
+          resp.style.background = 'rgba(255,77,106,0.08)';
+          resp.style.border = '1px solid rgba(255,77,106,0.25)';
+          resp.style.color = '#ff4d6a';
+          resp.innerHTML = '✗ ' + (d.error || 'Failed to submit. Try again.');
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry →'; }
+      }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry →'; }
+      alert('Network error: ' + e.message);
+    }
+  }
+
+  window.HFXBug = { open: openBugModal, close: closeBugModal, submit: submitBug };
+
+  // Inject button once DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectBugReporter);
+  } else {
+    injectBugReporter();
+  }
 })();
 (function() {
   // Inject CSS if .topbar not already styled

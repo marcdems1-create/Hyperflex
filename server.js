@@ -11971,6 +11971,169 @@ app.post('/api/nominate', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// BUG REPORTS — user-submitted issues with AI triage
+// ════════════════════════════════════════════════════════════
+// POST /api/bug-reports — stores bug report, runs Claude Haiku for triage,
+// emails admin if severity >= medium
+// Route: /api/bug-reports
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        user_id UUID,
+        user_email TEXT,
+        page_url TEXT,
+        user_agent TEXT,
+        message TEXT NOT NULL,
+        context JSONB,
+        console_errors JSONB,
+        ai_category TEXT,
+        ai_severity TEXT,
+        ai_likely_cause TEXT,
+        ai_suggested_fix TEXT,
+        status TEXT DEFAULT 'new',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ
+      )
+    `);
+    console.log('[bug-reports] Table ensured');
+  } catch (e) { console.warn('[bug-reports] Migration skipped:', e.message?.slice(0, 80)); }
+})();
+
+app.post('/api/bug-reports', async (req, res) => {
+  try {
+    const { message, page_url, user_agent, context, console_errors } = req.body || {};
+    if (!message || typeof message !== 'string' || message.trim().length < 5) {
+      return res.status(400).json({ error: 'message required (min 5 chars)' });
+    }
+    if (message.length > 4000) return res.status(400).json({ error: 'message too long (max 4000)' });
+
+    // Optional auth — logged-in users get their ID attached
+    let userId = null, userEmail = null;
+    try {
+      userId = getUserIdFromReq(req);
+      if (userId && pool) {
+        const ur = await dbQuery('SELECT email FROM users WHERE id = $1', [userId]).catch(() => []);
+        if (ur && ur[0]) userEmail = ur[0].email;
+      }
+    } catch {}
+
+    // AI triage via Claude Haiku — non-blocking
+    let aiTriage = null;
+    try {
+      const triagePrompt = `You are a HYPERFLEX technical support triage agent. HYPERFLEX is a Polymarket trading frontend with copy-trading, stop-loss, and whale tracking. A user just reported this bug:
+
+PAGE: ${page_url || 'unknown'}
+USER AGENT: ${(user_agent || '').slice(0, 120)}
+CONSOLE ERRORS: ${JSON.stringify((console_errors || []).slice(0, 3))}
+MESSAGE: ${message.slice(0, 2000)}
+
+Classify and diagnose. Respond ONLY with JSON:
+{
+  "category": "wallet|trade_execution|copy_bot|stop_loss|ui|data|auth|other",
+  "severity": "low|medium|high|critical",
+  "likely_cause": "brief technical hypothesis in 1-2 sentences",
+  "suggested_fix": "specific fix in 1-2 sentences, or 'needs investigation'"
+}`;
+      const aiResp = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: triagePrompt }]
+      });
+      const aiText = aiResp?.content?.[0]?.text || '';
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) aiTriage = JSON.parse(jsonMatch[0]);
+    } catch (aiErr) { console.warn('[bug-reports] AI triage failed:', aiErr.message); }
+
+    // Store in DB
+    let bugId = null;
+    if (pool) {
+      try {
+        const rows = await dbQuery(
+          `INSERT INTO bug_reports
+           (user_id, user_email, page_url, user_agent, message, context, console_errors, ai_category, ai_severity, ai_likely_cause, ai_suggested_fix)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
+          [
+            userId,
+            userEmail,
+            (page_url || '').slice(0, 500),
+            (user_agent || '').slice(0, 500),
+            message.slice(0, 4000),
+            context ? JSON.stringify(context).slice(0, 4000) : null,
+            console_errors ? JSON.stringify(console_errors).slice(0, 2000) : null,
+            aiTriage?.category || null,
+            aiTriage?.severity || null,
+            aiTriage?.likely_cause || null,
+            aiTriage?.suggested_fix || null
+          ]
+        );
+        bugId = rows[0]?.id;
+      } catch (dbErr) { console.error('[bug-reports] DB insert failed:', dbErr.message); }
+    }
+
+    console.log(`[bug-reports] NEW BUG ${bugId || '(no-db)'} — ${aiTriage?.severity || '?'} · ${aiTriage?.category || '?'} — ${message.slice(0, 80)}`);
+
+    // Email admin for medium+ severity
+    if (aiTriage && ['medium', 'high', 'critical'].includes(aiTriage.severity)) {
+      try {
+        const transporter = createMailTransport();
+        if (transporter && process.env.ADMIN_EMAIL) {
+          const sevColor = aiTriage.severity === 'critical' ? '#ff4d6a' : aiTriage.severity === 'high' ? '#f59e0b' : '#4d9fff';
+          await transporter.sendMail({
+            from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+            to: process.env.ADMIN_EMAIL,
+            subject: `🐛 [${aiTriage.severity.toUpperCase()}] Bug: ${aiTriage.category} — ${message.slice(0, 50)}`,
+            html: `<div style="font-family:monospace;background:#0e0e0c;color:#e8e4d9;padding:24px;border-radius:8px;max-width:600px">
+              <div style="display:inline-block;padding:4px 10px;background:${sevColor}22;color:${sevColor};border-radius:4px;font-weight:700;letter-spacing:1px;margin-bottom:14px">${aiTriage.severity.toUpperCase()} · ${aiTriage.category}</div>
+              <h2 style="color:#c9920d;margin:0 0 12px">New Bug Report</h2>
+              <p><strong style="color:#c9920d">User:</strong> ${userEmail || 'anonymous'} ${userId ? `(${userId.slice(0, 8)})` : ''}</p>
+              <p><strong style="color:#c9920d">Page:</strong> ${(page_url || 'unknown').replace(/</g, '&lt;')}</p>
+              <p><strong style="color:#c9920d">Message:</strong></p>
+              <pre style="background:#1a1917;padding:12px;border-radius:6px;white-space:pre-wrap;word-break:break-word">${message.replace(/</g, '&lt;').slice(0, 2000)}</pre>
+              ${aiTriage.likely_cause ? `<p><strong style="color:#c9920d">🤖 Likely cause:</strong> ${aiTriage.likely_cause.replace(/</g, '&lt;')}</p>` : ''}
+              ${aiTriage.suggested_fix ? `<p><strong style="color:#c9920d">🤖 Suggested fix:</strong> ${aiTriage.suggested_fix.replace(/</g, '&lt;')}</p>` : ''}
+              ${console_errors && console_errors.length ? `<p><strong style="color:#c9920d">Console errors:</strong></p><pre style="background:#1a1917;padding:8px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto">${JSON.stringify(console_errors.slice(0, 5), null, 2).replace(/</g, '&lt;')}</pre>` : ''}
+              <p style="color:#7a7870;font-size:11px;margin-top:14px">Bug ID: ${bugId || 'not-saved'}</p>
+            </div>`,
+          }).catch(e => console.warn('[bug-reports] email error:', e.message));
+        }
+      } catch (emailErr) { console.warn('[bug-reports] email setup failed:', emailErr.message); }
+    }
+
+    res.json({
+      ok: true,
+      bug_id: bugId,
+      ai_response: aiTriage ? {
+        category: aiTriage.category,
+        severity: aiTriage.severity,
+        // Show a user-friendly response — our AI thinks this is X, suggests Y
+        message: aiTriage.likely_cause ? `Thanks! We think this is a ${aiTriage.category} issue. ${aiTriage.suggested_fix || 'Our team is on it.'}` : 'Report received. Our team will investigate.'
+      } : { message: 'Report received. Our team will investigate.' }
+    });
+  } catch (err) {
+    console.error('[bug-reports] Error:', err.message);
+    res.status(500).json({ error: 'Failed to submit bug report' });
+  }
+});
+
+// GET /api/bug-reports/admin — admin view (password-gated)
+app.get('/api/bug-reports/admin', async (req, res) => {
+  try {
+    if (req.query.key !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+    if (!pool) return res.json({ reports: [] });
+    const reports = await dbQuery(
+      `SELECT * FROM bug_reports ORDER BY created_at DESC LIMIT 200`, []
+    );
+    res.json({ reports });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/activity — global activity feed (mixed event types for Twitter-like feed)
 app.get('/api/activity', async (req, res) => {
   try {
