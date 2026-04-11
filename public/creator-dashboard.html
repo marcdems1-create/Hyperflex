@@ -5293,6 +5293,11 @@ body.nav-open .sidebar-backdrop {
                       style="width:100%;padding:10px 12px 10px 34px;background:#0f0e0c;border:1px solid #2a2825;border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color .15s"
                       onfocus="this.style.borderColor='rgba(201,146,13,0.4)'" onblur="this.style.borderColor='#2a2825'" />
                   </div>
+                  <!-- View toggle: List / Calendar -->
+                  <div style="display:flex;border:1px solid #2a2825;border-radius:8px;overflow:hidden">
+                    <button id="posViewList" onclick="setPosView('list')" style="padding:7px 14px;background:var(--green);border:none;color:#000;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s" title="List view">&#9776; List</button>
+                    <button id="posViewCal" onclick="setPosView('calendar')" style="padding:7px 14px;background:transparent;border:none;color:var(--dim);font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s" title="Calendar view">&#128197; Calendar</button>
+                  </div>
                   <button id="hideDustBtn" onclick="toggleHideDust()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:transparent;border:1px solid #2a2825;border-radius:8px;color:var(--dim);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">
                     <span style="font-size:12px">⚙</span> Hide &lt;10¢
                   </button>
@@ -5306,6 +5311,32 @@ body.nav-open .sidebar-backdrop {
                     </select>
                     <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:11px;pointer-events:none">▼</span>
                   </div>
+                </div>
+                <!-- CALENDAR VIEW (hidden by default) -->
+                <div id="posCalendarView" style="display:none;margin-bottom:24px">
+                  <!-- Calendar navigation -->
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <button onclick="navPosCalendar(-1)" style="background:none;border:1px solid #2a2825;border-radius:8px;padding:8px 14px;color:var(--text);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)'" onmouseout="this.style.borderColor='#2a2825'">&lt; Prev</button>
+                    <div style="display:flex;align-items:center;gap:12px">
+                      <span id="posCalMonthLabel" style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text);letter-spacing:-0.02em"></span>
+                      <button onclick="navPosCalendarToday()" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 12px;color:var(--dim);font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.3)'" onmouseout="this.style.borderColor='#2a2825'">Today</button>
+                    </div>
+                    <button onclick="navPosCalendar(1)" style="background:none;border:1px solid #2a2825;border-radius:8px;padding:8px 14px;color:var(--text);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)'" onmouseout="this.style.borderColor='#2a2825'">Next &gt;</button>
+                  </div>
+                  <!-- Day-of-week headers -->
+                  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:1px">
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Sun</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Mon</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Tue</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Wed</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Thu</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Fri</div>
+                    <div style="text-align:center;padding:8px 4px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Sat</div>
+                  </div>
+                  <!-- Calendar grid -->
+                  <div id="posCalGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#1a1918;border:1px solid #2a2825;border-radius:12px;overflow:hidden"></div>
+                  <!-- Stats summary below calendar -->
+                  <div id="posCalStats" style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap"></div>
                 </div>
                 <!-- Open Positions Section -->
                 <div id="openPositionsSection" style="display:none;margin-bottom:20px">
@@ -13115,7 +13146,7 @@ async function loadPortfolio() {
     if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
     if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
     fetches.push(loadHFXPositions(false));
-    Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); updatePortfolioSummary(); });
+    Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') { if (_posViewMode === 'calendar') renderPosCalendar(); else updateAllPositionsTab(); } updatePortfolioSummary(); });
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -14521,7 +14552,7 @@ function switchPortfolioTab(tab) {
     if (btn) { btn.style.borderBottom = t===tab ? '2px solid '+colors[t] : '2px solid transparent'; btn.style.color = t===tab ? 'var(--text)' : 'var(--dim)'; btn.style.fontWeight = t===tab ? '700' : '600'; }
     if (content) content.style.display = t===tab ? 'block' : 'none';
   });
-  if (tab === 'all') updateAllPositionsTab();
+  if (tab === 'all') { if (_posViewMode === 'calendar') { renderPosCalendar(); setPosView('calendar'); } else updateAllPositionsTab(); }
   if (tab === 'hfx') loadHFXPositions(false);
   if (tab === 'history') loadTradeHistory();
 }
@@ -16490,6 +16521,175 @@ function togglePosGroup(headerEl) {
   }
 }
 
+// ── POSITION CALENDAR VIEW ─────────────────────────────────────────────────
+var _posViewMode = 'list'; // 'list' or 'calendar'
+var _posCalMonth = new Date().getMonth();
+var _posCalYear = new Date().getFullYear();
+
+function setPosView(mode) {
+  _posViewMode = mode;
+  var listBtn = document.getElementById('posViewList');
+  var calBtn = document.getElementById('posViewCal');
+  var calView = document.getElementById('posCalendarView');
+  var listParts = ['openPositionsSection','closedPositionsSection','allPositionsEmpty'];
+  var sortDrop = document.getElementById('posSortDropdown');
+  var dustBtn = document.getElementById('hideDustBtn');
+  if (mode === 'calendar') {
+    if (listBtn) { listBtn.style.background = 'transparent'; listBtn.style.color = 'var(--dim)'; }
+    if (calBtn) { calBtn.style.background = 'var(--green)'; calBtn.style.color = '#000'; }
+    if (calView) calView.style.display = 'block';
+    if (sortDrop) sortDrop.style.display = 'none';
+    if (dustBtn) dustBtn.style.display = 'none';
+    listParts.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    renderPosCalendar();
+  } else {
+    if (listBtn) { listBtn.style.background = 'var(--green)'; listBtn.style.color = '#000'; }
+    if (calBtn) { calBtn.style.background = 'transparent'; calBtn.style.color = 'var(--dim)'; }
+    if (calView) calView.style.display = 'none';
+    if (sortDrop) sortDrop.style.display = 'block';
+    if (dustBtn) dustBtn.style.display = 'flex';
+    updateAllPositionsTab();
+  }
+}
+
+function navPosCalendar(delta) {
+  _posCalMonth += delta;
+  if (_posCalMonth > 11) { _posCalMonth = 0; _posCalYear++; }
+  if (_posCalMonth < 0) { _posCalMonth = 11; _posCalYear--; }
+  renderPosCalendar();
+}
+function navPosCalendarToday() {
+  _posCalMonth = new Date().getMonth();
+  _posCalYear = new Date().getFullYear();
+  renderPosCalendar();
+}
+
+function renderPosCalendar() {
+  var grid = document.getElementById('posCalGrid');
+  var label = document.getElementById('posCalMonthLabel');
+  var statsEl = document.getElementById('posCalStats');
+  if (!grid) return;
+
+  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if (label) label.textContent = monthNames[_posCalMonth] + ' ' + _posCalYear;
+
+  // Get all open positions with end dates
+  var positions = getAllPositionsFlat().filter(function(p) { return !p._isResolved; });
+
+  // Group by date string (YYYY-MM-DD)
+  var byDate = {};
+  var noDate = [];
+  positions.forEach(function(p) {
+    var ed = p.end_date || p.endDateIso || p.endDate || null;
+    if (!ed) { noDate.push(p); return; }
+    var d = new Date(ed);
+    if (isNaN(d.getTime())) { noDate.push(p); return; }
+    var key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    if (!byDate[key]) byDate[key] = [];
+    byDate[key].push(p);
+  });
+
+  // Build calendar grid
+  var firstDay = new Date(_posCalYear, _posCalMonth, 1).getDay(); // 0=Sun
+  var daysInMonth = new Date(_posCalYear, _posCalMonth + 1, 0).getDate();
+  var todayStr = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0') + '-' + String(new Date().getDate()).padStart(2,'0');
+
+  var html = '';
+  // Leading empty cells
+  for (var i = 0; i < firstDay; i++) {
+    html += '<div style="min-height:100px;background:#0e0d0b;padding:6px"></div>';
+  }
+
+  var monthTotal = 0;
+  var monthExpiring = 0;
+  var monthValue = 0;
+
+  for (var day = 1; day <= daysInMonth; day++) {
+    var dateKey = _posCalYear + '-' + String(_posCalMonth+1).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+    var dayPositions = byDate[dateKey] || [];
+    var isToday = dateKey === todayStr;
+    var isPast = new Date(dateKey) < new Date(todayStr);
+    var dayValue = dayPositions.reduce(function(s,p) { return s + (parseFloat(p.cash_value) || 0); }, 0);
+
+    monthTotal += dayPositions.length;
+    if (dayPositions.length > 0) { monthExpiring++; monthValue += dayValue; }
+
+    // Cell background
+    var cellBg = '#0e0d0b';
+    if (isToday) cellBg = 'rgba(0,230,138,0.06)';
+    else if (dayPositions.length > 0 && !isPast) cellBg = 'rgba(77,159,255,0.04)';
+    else if (dayPositions.length > 0 && isPast) cellBg = 'rgba(255,77,106,0.04)';
+
+    var borderStyle = isToday ? 'border:1px solid rgba(0,230,138,0.4)' : 'border:none';
+
+    html += '<div style="min-height:100px;background:' + cellBg + ';padding:6px;' + borderStyle + ';position:relative;transition:background .15s" onmouseover="this.style.background=\'' + (dayPositions.length > 0 ? 'rgba(0,230,138,0.08)' : '#13120f') + '\'" onmouseout="this.style.background=\'' + cellBg + '\'">';
+
+    // Day number + count badge
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">';
+    html += '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + (isToday ? 'var(--green)' : isPast ? 'var(--dim)' : 'var(--text)') + '">' + day + '</span>';
+    if (dayPositions.length > 0) {
+      html += '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#000;background:' + (isPast ? '#ff4d6a' : 'var(--green)') + ';border-radius:4px;padding:1px 5px;min-width:18px;text-align:center">' + dayPositions.length + '</span>';
+    }
+    html += '</div>';
+
+    // Position pills (max 3 visible, then "+N more")
+    var shown = Math.min(dayPositions.length, 3);
+    for (var pi = 0; pi < shown; pi++) {
+      var pos = dayPositions[pi];
+      var q = (pos.question || pos.market_title || '').slice(0, 28);
+      if ((pos.question || pos.market_title || '').length > 28) q += '…';
+      var price = pos.current_price != null ? Math.round(pos.current_price * 100) + '¢' : '';
+      var sideColor = pos.side === 'YES' || pos.side === 'BUY' ? '#00e68a' : '#ff4d6a';
+      var platformDot = pos._platform === 'polymarket' ? '#a78bfa' : pos._platform === 'kalshi' ? '#fbbf24' : '#4d9fff';
+      var marketUrl = buildMarketUrl({ url: pos.market_url, slug: pos.slug || pos.eventSlug, question: pos.question || pos.market_title });
+
+      html += '<a href="' + (marketUrl || '#') + '" target="_blank" style="display:flex;align-items:center;gap:4px;padding:2px 5px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:4px;margin-bottom:2px;text-decoration:none;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(0,230,138,0.3)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.06)\'">';
+      html += '<span style="width:5px;height:5px;border-radius:50%;background:' + platformDot + ';flex-shrink:0"></span>';
+      html += '<span style="font-size:10px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3">' + escHtmlDash(q) + '</span>';
+      if (price) html += '<span style="font-family:var(--mono);font-size:9px;color:' + sideColor + ';flex-shrink:0">' + price + '</span>';
+      html += '</a>';
+    }
+    if (dayPositions.length > 3) {
+      html += '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);padding:1px 5px;cursor:default">+' + (dayPositions.length - 3) + ' more</div>';
+    }
+
+    html += '</div>';
+  }
+
+  // Trailing empty cells to fill row
+  var totalCells = firstDay + daysInMonth;
+  var remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (var t = 0; t < remaining; t++) {
+    html += '<div style="min-height:100px;background:#0e0d0b;padding:6px"></div>';
+  }
+
+  grid.innerHTML = html;
+
+  // Stats below calendar
+  if (statsEl) {
+    var statsHtml = '';
+    statsHtml += '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:12px 18px;flex:1;min-width:140px">';
+    statsHtml += '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Expiring This Month</div>';
+    statsHtml += '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--text)">' + monthTotal + '</div>';
+    statsHtml += '</div>';
+    statsHtml += '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:12px 18px;flex:1;min-width:140px">';
+    statsHtml += '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Expiry Days</div>';
+    statsHtml += '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--text)">' + monthExpiring + '</div>';
+    statsHtml += '</div>';
+    statsHtml += '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:12px 18px;flex:1;min-width:140px">';
+    statsHtml += '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Value at Risk</div>';
+    statsHtml += '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--green)">$' + monthValue.toFixed(2) + '</div>';
+    statsHtml += '</div>';
+    if (noDate.length > 0) {
+      statsHtml += '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:12px 18px;flex:1;min-width:140px">';
+      statsHtml += '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">No Expiry Date</div>';
+      statsHtml += '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--dim)">' + noDate.length + '</div>';
+      statsHtml += '</div>';
+    }
+    statsEl.innerHTML = statsHtml;
+  }
+}
+
 function updateAllPositionsTab() {
   const positions = getAllPositionsFlat();
   const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
@@ -17023,7 +17223,7 @@ async function loadHFXPositions(force) {
     if (open.length) html += `<div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 16px 8px">Open (${open.length})</div><div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px">${open.map(renderRow).join('')}</div>`;
     if (settled.length) html += `<div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 16px 8px">Settled (${settled.length})</div><div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden">${settled.map(renderRow).join('')}</div>`;
     el.innerHTML = html;
-    if (_activePortfolioTab === 'all') updateAllPositionsTab();
+    if (_activePortfolioTab === 'all') { if (_posViewMode === 'calendar') renderPosCalendar(); else updateAllPositionsTab(); }
   } catch(e) { el.innerHTML = `<div style="padding:24px;text-align:center;color:#ff6b6b;font-family:var(--mono);font-size:12px">${e.message}</div>`; }
 }
 
@@ -17508,7 +17708,7 @@ async function saveProxyAddr() {
   renderPolymarketConnectState();
   loadPolymarketPositions(true);
   setTimeout(updatePortfolioSummary, 500);
-  setTimeout(function() { if (_activePortfolioTab === 'all') updateAllPositionsTab(); }, 1000);
+  setTimeout(function() { if (_activePortfolioTab === 'all') { if (_posViewMode === 'calendar') renderPosCalendar(); else updateAllPositionsTab(); } }, 1000);
   showToast('Connected! Loading positions...', 'success');
 }
 
