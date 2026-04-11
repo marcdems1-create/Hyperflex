@@ -55,7 +55,7 @@ canvas{display:block;width:100%!important}
 .mkt-outcomes-table{width:100%;border-collapse:collapse}
 .mkt-outcomes-table thead th{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
 .mkt-outcomes-table thead th:not(:first-child){text-align:center}
-.mkt-outcomes-table tbody tr{cursor:pointer;transition:background .15s cubic-bezier(.4,0,.2,1);border-bottom:1px solid var(--border)}
+.mkt-outcomes-table tbody tr{cursor:pointer;transition:background .15s cubic-bezier(.4,0,.2,1);border-bottom:1px solid var(--border);touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,230,138,0.15)}
 .mkt-outcomes-table tbody tr:last-child{border-bottom:none}
 .mkt-outcomes-table tbody tr:hover{background:rgba(255,255,255,.03)}
 .mkt-outcomes-table tbody tr.active-outcome{background:rgba(201,146,13,.06);border-left:2px solid var(--gold)}
@@ -66,7 +66,7 @@ canvas{display:block;width:100%!important}
 .position-badge-yes{background:rgba(34,197,94,.08);color:#5fbe82;border:none}
 .position-badge-no{background:rgba(239,68,68,.08);color:#f87171;border:none}
 .pos-side{font-weight:700}.pos-shares{font-weight:500}.pos-sep{opacity:.4}.pos-price{opacity:.6}
-.outcome-btn{display:inline-flex;align-items:center;gap:4px;padding:8px 16px;border-radius:7px;font-family:var(--body);font-size:13px;font-weight:600;min-width:90px;height:40px;text-align:center;justify-content:center;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);border:none}
+.outcome-btn{display:inline-flex;align-items:center;gap:4px;padding:8px 16px;border-radius:7px;font-family:var(--body);font-size:13px;font-weight:600;min-width:90px;height:40px;text-align:center;justify-content:center;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);border:none;-webkit-tap-highlight-color:rgba(0,230,138,0.3);touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .outcome-btn-yes{background:rgba(34,197,94,.12);color:#3db468}
 .outcome-btn-yes:hover{background:rgba(34,197,94,.22)}
 .outcome-btn-no{background:rgba(239,68,68,.12);color:#cb3131}
@@ -2978,6 +2978,18 @@ var _tradeRetrying = false;
 async function executeTrade() {
   var cta = document.getElementById('tradeCta');
 
+  // Global safety timeout — if trade flow hangs for 45s on mobile, unblock the button
+  var _tradeTimeout = setTimeout(function() {
+    if (cta && cta.disabled) {
+      cta.disabled = false;
+      updateCtaButton();
+      showTradeStatus('Trade timed out — check your MetaMask app and try again', 'error');
+    }
+  }, 45000);
+
+  // Wrap existing finally to also clear timeout
+  var _clearTradeTimeout = function() { clearTimeout(_tradeTimeout); };
+
   // Check if full setup is needed (no keys, no proxy, not approved)
   var proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
   var eoaAddr = localStorage.getItem('poly_eoa_address') || '';
@@ -2988,7 +3000,7 @@ async function executeTrade() {
   if (!hasKeys || !proxyValid) {
     // Run the full 3-step setup flow (deploy → auth → approve)
     var setupOk = await runFullSetup();
-    if (!setupOk) return; // Setup incomplete — user action needed
+    if (!setupOk) { _clearTradeTimeout(); return; } // Setup incomplete — user action needed
     // After setup, continue to place the trade
     showTradeStatus('Setup complete! Placing your order...', 'info');
   }
@@ -3090,10 +3102,15 @@ async function executeTrade() {
     var isNegRisk = false;
     var feeRateBps = '0';
     try {
-      var [tickRes, negRes, feeRes] = await Promise.all([
-        fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-        fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-        fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+      // 8s timeout on CLOB metadata — mobile can be slow
+      var _metaTimeout = new Promise(function(r) { setTimeout(function() { r([null, null, null]); }, 8000); });
+      var [tickRes, negRes, feeRes] = await Promise.race([
+        Promise.all([
+          fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+          fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+          fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+        ]),
+        _metaTimeout
       ]);
       if (tickRes && tickRes.minimum_tick_size) tickSize = parseFloat(tickRes.minimum_tick_size);
       if (negRes && negRes.neg_risk !== undefined) isNegRisk = !!negRes.neg_risk;
@@ -3117,8 +3134,19 @@ async function executeTrade() {
     }
     var shares = amount / clobPrice;
 
-    showTradeStatus('Connecting to MetaMask...', 'info');
-    var walletCtx = await HFXWallet.getSigner();
+    showTradeStatus('Connecting to wallet...', 'info');
+    // Timeout guard: MetaMask mobile can silently hang on getSigner()
+    var walletCtx;
+    try {
+      walletCtx = await Promise.race([
+        HFXWallet.getSigner(),
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('Wallet connection timed out. Open your MetaMask app and try again.')); }, 15000); })
+      ]);
+    } catch (walletErr) {
+      showTradeStatus(walletErr.message || 'Could not connect wallet', 'error');
+      cta.disabled = false; updateCtaButton();
+      return;
+    }
     var provider = walletCtx.provider;
     var signer = walletCtx.signer;
     var signerAddress = walletCtx.address;
@@ -3155,8 +3183,12 @@ async function executeTrade() {
 
     // Always resolve proxy via on-chain computeProxyAddress() — single source of truth
     // This fixes stale localStorage values from old sessions or other pages
+    // Timeout guard: public RPCs can silently hang on mobile cellular
     try {
-      var freshProxy = await getPolymarketProxy(eoaAddress);
+      var freshProxy = await Promise.race([
+        getPolymarketProxy(eoaAddress),
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('RPC timeout')); }, 10000); })
+      ]);
       if (freshProxy && freshProxy !== ethers.ZeroAddress && freshProxy.toLowerCase() !== eoaAddress.toLowerCase()) {
         freshProxy = freshProxy.toLowerCase();
         if (proxyAddress && proxyAddress.toLowerCase() !== freshProxy) {
@@ -3167,7 +3199,8 @@ async function executeTrade() {
         localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), freshProxy);
       }
     } catch (proxyErr) {
-      console.warn('[trade] computeProxyAddress failed:', proxyErr.message);
+      console.warn('[trade] computeProxyAddress failed:', proxyErr.message, '— using cached proxy');
+      // On timeout, fall through with whatever proxyAddress we already have from localStorage
     }
 
     if (!proxyAddress) {
@@ -3551,6 +3584,7 @@ async function executeTrade() {
       console.error('[trade] Error:', err);
     }
   } finally {
+    _clearTradeTimeout();
     cta.disabled = false;
     updateCtaButton();
     _tradeRetrying = false;
@@ -3831,22 +3865,38 @@ function updateOutcomePricesDOM() {
 }
 
 // Event delegation for outcome buttons — survives price DOM updates without onclick replacement
+// Uses both click AND touchend for iOS reliability (MetaMask in-app browser can swallow clicks)
 (function() {
-  document.addEventListener('click', function(e) {
+  var _outcomeTouchHandled = false; // prevent double-fire from touch + click
+  function handleOutcomeClick(e) {
+    // Prevent double-fire
+    if (e.type === 'click' && _outcomeTouchHandled) { _outcomeTouchHandled = false; return; }
+    if (e.type === 'touchend') _outcomeTouchHandled = true;
+
     var btn = e.target.closest('.outcome-btn-yes, .outcome-btn-no');
-    if (!btn) return;
+    if (!btn) {
+      // Row click (not on a button) — select outcome without trading
+      var row = e.target.closest('.outcome-row');
+      if (row && !e.target.closest('.outcome-btn')) {
+        var ridx = parseInt(row.getAttribute('data-idx'));
+        if (!isNaN(ridx)) switchOutcome(ridx);
+      }
+      return;
+    }
     e.stopPropagation();
+    if (e.type === 'touchend') e.preventDefault(); // prevent ghost click on iOS
     var idx = parseInt(btn.getAttribute('data-idx'));
     var price = parseInt(btn.getAttribute('data-price'));
     var side = btn.classList.contains('outcome-btn-yes') ? 'yes' : 'no';
-    if (!isNaN(idx) && !isNaN(price)) buyOutcome(idx, side, price);
-  });
-  document.addEventListener('click', function(e) {
-    var row = e.target.closest('.outcome-row');
-    if (!row || e.target.closest('.outcome-btn')) return;
-    var idx = parseInt(row.getAttribute('data-idx'));
-    if (!isNaN(idx)) switchOutcome(idx);
-  });
+    if (!isNaN(idx) && !isNaN(price)) {
+      // Visual feedback for mobile
+      btn.style.opacity = '0.6';
+      setTimeout(function() { btn.style.opacity = ''; }, 200);
+      buyOutcome(idx, side, price);
+    }
+  }
+  document.addEventListener('click', handleOutcomeClick);
+  document.addEventListener('touchend', handleOutcomeClick);
 })();
 
 function updateActiveTradePrice() {
