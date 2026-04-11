@@ -329,7 +329,8 @@
       <button class="filter-pill" data-filter="category" data-value="ui">UI</button>
       <button class="filter-pill" data-filter="category" data-value="auth">Auth</button>
     </div>
-    <button class="bug-btn primary" onclick="loadBugs()" style="margin-left:auto">↻ Refresh</button>
+    <button class="bug-btn" onclick="sendTestBug()" style="margin-left:auto">🧪 Test pipeline</button>
+    <button class="bug-btn primary" onclick="loadBugs()">↻ Refresh</button>
   </div>
 
   <div id="bugListWrap">
@@ -479,6 +480,7 @@ function renderBug(b) {
       (status !== 'duplicate' ? '<button class="bug-btn" onclick="updateStatus(\'' + b.id + '\',\'duplicate\')">Duplicate</button>' : '') +
       (status !== 'new' ? '<button class="bug-btn" onclick="updateStatus(\'' + b.id + '\',\'new\')">Reopen</button>' : '') +
       (pageUrl ? '<a class="bug-btn" href="' + esc(pageUrl) + '" target="_blank" rel="noopener">↗ Open page</a>' : '') +
+      '<button class="bug-btn danger" onclick="deleteBug(\'' + b.id + '\')" style="margin-left:auto">🗑 Delete</button>' +
     '</div>' +
   '</div>';
 }
@@ -493,6 +495,44 @@ async function updateStatus(id, status) {
     if (!r.ok) { alert('Failed to update status'); return; }
     loadBugs();
   } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function deleteBug(id) {
+  if (!confirm('Delete this bug report? This cannot be undone.')) return;
+  try {
+    var r = await fetch('/api/admin/bug-reports/' + id + '/delete?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST'
+    });
+    if (!r.ok) { alert('Failed to delete'); return; }
+    loadBugs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function sendTestBug() {
+  if (!confirm('Fire a synthetic bug through the full pipeline (AI triage + email)?\n\nThis will:\n1. Create a fake bug report in the DB\n2. Run it through Claude Haiku triage\n3. Send a test email via Resend\n\nYou can delete it after.')) return;
+  try {
+    var r = await fetch('/api/admin/bug-reports/test?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    var d = await r.json();
+    if (!r.ok) { alert('Test failed: ' + (d.error || 'unknown')); return; }
+
+    var emailStatus = d.email && d.email.sent
+      ? '✓ Email sent to ' + d.email.recipient + ' via ' + d.email.provider
+      : '✗ Email NOT sent' + (d.email && d.email.error ? ' (' + d.email.error + ')' : '') +
+        '\n\nCheck these env vars on Railway:\n- BUG_REPORT_EMAIL or ADMIN_EMAIL (recipient)\n- RESEND_API_KEY or SMTP_PASS (Resend API key)';
+
+    var triageStatus = d.ai_triage
+      ? '✓ Claude Haiku triage:\n  category: ' + d.ai_triage.category + '\n  severity: ' + d.ai_triage.severity
+      : '✗ AI triage did not run';
+
+    alert('🧪 Test bug created (id: ' + (d.bug_id || '?') + ')\n\n' + triageStatus + '\n\n' + emailStatus);
+    loadBugs();
+  } catch (e) {
+    alert('Network error: ' + e.message);
+  }
 }
 
 // Filter pills

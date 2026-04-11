@@ -12077,31 +12077,36 @@ Classify and diagnose. Respond ONLY with JSON:
 
     console.log(`[bug-reports] NEW BUG ${bugId || '(no-db)'} — ${aiTriage?.severity || '?'} · ${aiTriage?.category || '?'} — ${message.slice(0, 80)}`);
 
-    // Email admin for medium+ severity
+    // Email admin for medium+ severity via Resend
     if (aiTriage && ['medium', 'high', 'critical'].includes(aiTriage.severity)) {
-      try {
-        const transporter = createMailTransport();
-        if (transporter && process.env.ADMIN_EMAIL) {
-          const sevColor = aiTriage.severity === 'critical' ? '#ff4d6a' : aiTriage.severity === 'high' ? '#f59e0b' : '#4d9fff';
-          await transporter.sendMail({
-            from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-            to: process.env.ADMIN_EMAIL,
-            subject: `🐛 [${aiTriage.severity.toUpperCase()}] Bug: ${aiTriage.category} — ${message.slice(0, 50)}`,
-            html: `<div style="font-family:monospace;background:#0e0e0c;color:#e8e4d9;padding:24px;border-radius:8px;max-width:600px">
-              <div style="display:inline-block;padding:4px 10px;background:${sevColor}22;color:${sevColor};border-radius:4px;font-weight:700;letter-spacing:1px;margin-bottom:14px">${aiTriage.severity.toUpperCase()} · ${aiTriage.category}</div>
-              <h2 style="color:#c9920d;margin:0 0 12px">New Bug Report</h2>
-              <p><strong style="color:#c9920d">User:</strong> ${userEmail || 'anonymous'} ${userId ? `(${userId.slice(0, 8)})` : ''}</p>
-              <p><strong style="color:#c9920d">Page:</strong> ${(page_url || 'unknown').replace(/</g, '&lt;')}</p>
-              <p><strong style="color:#c9920d">Message:</strong></p>
-              <pre style="background:#1a1917;padding:12px;border-radius:6px;white-space:pre-wrap;word-break:break-word">${message.replace(/</g, '&lt;').slice(0, 2000)}</pre>
-              ${aiTriage.likely_cause ? `<p><strong style="color:#c9920d">🤖 Likely cause:</strong> ${aiTriage.likely_cause.replace(/</g, '&lt;')}</p>` : ''}
-              ${aiTriage.suggested_fix ? `<p><strong style="color:#c9920d">🤖 Suggested fix:</strong> ${aiTriage.suggested_fix.replace(/</g, '&lt;')}</p>` : ''}
-              ${console_errors && console_errors.length ? `<p><strong style="color:#c9920d">Console errors:</strong></p><pre style="background:#1a1917;padding:8px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto">${JSON.stringify(console_errors.slice(0, 5), null, 2).replace(/</g, '&lt;')}</pre>` : ''}
-              <p style="color:#7a7870;font-size:11px;margin-top:14px">Bug ID: ${bugId || 'not-saved'}</p>
-            </div>`,
-          }).catch(e => console.warn('[bug-reports] email error:', e.message));
-        }
-      } catch (emailErr) { console.warn('[bug-reports] email setup failed:', emailErr.message); }
+      const recipient = getBugReportRecipient();
+      if (recipient) {
+        const sevColor = aiTriage.severity === 'critical' ? '#ff4d6a' : aiTriage.severity === 'high' ? '#f59e0b' : '#4d9fff';
+        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const adminUrl = (process.env.APP_URL || 'https://hyperflex.network') + '/admin/bugs';
+        const html = `<div style="font-family:'SF Mono',Menlo,monospace;background:#0e0e0c;color:#e8e4d9;padding:24px;border-radius:8px;max-width:600px">
+          <div style="display:inline-block;padding:4px 10px;background:${sevColor}22;color:${sevColor};border-radius:4px;font-weight:700;letter-spacing:1px;margin-bottom:14px">${aiTriage.severity.toUpperCase()} · ${esc(aiTriage.category)}</div>
+          <h2 style="color:#c9920d;margin:0 0 12px;font-family:sans-serif">🐛 New Bug Report</h2>
+          <p style="margin:6px 0"><strong style="color:#c9920d">User:</strong> ${esc(userEmail || 'anonymous')} ${userId ? `(${userId.slice(0, 8)})` : ''}</p>
+          <p style="margin:6px 0"><strong style="color:#c9920d">Page:</strong> <a href="${esc(page_url || '')}" style="color:#4d9fff">${esc(page_url || 'unknown')}</a></p>
+          <p style="margin:14px 0 6px"><strong style="color:#c9920d">User message:</strong></p>
+          <pre style="background:#1a1917;padding:12px;border-radius:6px;white-space:pre-wrap;word-break:break-word;color:#e8e4d9;font-size:13px;line-height:1.5">${esc(message.slice(0, 2000))}</pre>
+          ${aiTriage.likely_cause ? `<p style="margin:14px 0 6px"><strong style="color:#a855f7">🤖 Likely cause:</strong><br>${esc(aiTriage.likely_cause)}</p>` : ''}
+          ${aiTriage.suggested_fix ? `<p style="margin:10px 0 6px"><strong style="color:#a855f7">🤖 Suggested fix:</strong><br>${esc(aiTriage.suggested_fix)}</p>` : ''}
+          ${console_errors && console_errors.length ? `<p style="margin:14px 0 6px"><strong style="color:#c9920d">Console errors (${console_errors.length}):</strong></p><pre style="background:#1a1917;padding:8px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto;color:#ff4d6a">${esc(JSON.stringify(console_errors.slice(0, 5), null, 2))}</pre>` : ''}
+          <div style="margin-top:20px;padding:12px 14px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:6px">
+            <a href="${adminUrl}" style="color:#a855f7;text-decoration:none;font-weight:700">Open Bug Dashboard →</a>
+          </div>
+          <p style="color:#7a7870;font-size:11px;margin-top:14px">Bug ID: ${bugId || 'not-saved'}</p>
+        </div>`;
+        sendResendEmail({
+          to: recipient,
+          subject: `🐛 [${aiTriage.severity.toUpperCase()}] ${aiTriage.category}: ${message.slice(0, 60)}`,
+          html
+        }).catch(e => console.warn('[bug-reports] email error:', e.message));
+      } else {
+        console.warn('[bug-reports] No email recipient configured (set BUG_REPORT_EMAIL or ADMIN_EMAIL)');
+      }
     }
 
     res.json({
@@ -12202,6 +12207,135 @@ app.post('/api/admin/bug-reports/:id/reply', requireAdmin, async (req, res) => {
       );
     }
     console.log('[bug-reports] Admin reply to', id, ':', message.slice(0, 200));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/bug-reports/test — create a test bug report to verify the pipeline
+// Fires the full flow: DB insert → AI triage → email. Returns the created bug.
+app.post('/api/admin/bug-reports/test', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+
+    // Fake bug that looks realistic so you can see the full pipeline
+    const testMessage = 'TEST BUG: clicked Auto-Mirror on a whale, modal opened but Execute button does nothing. No error in console. This is a synthetic test from /admin/bugs to verify the reporting pipeline works end-to-end.';
+    const testContext = {
+      url: 'https://hyperflex.network/whales',
+      referrer: '',
+      viewport: '1440x900',
+      has_wallet: true,
+      has_hf_token: true,
+      has_poly_proxy: true,
+      has_clob_keys: false,
+      _test: true
+    };
+    const testConsoleErrors = [
+      { ts: Date.now(), args: [{ message: 'TEST: CLOB 401 Unauthorized', file: '/whales', line: 1994 }] }
+    ];
+
+    // Run triage
+    let aiTriage = null;
+    try {
+      const triagePrompt = `You are a HYPERFLEX technical support triage agent. HYPERFLEX is a Polymarket trading frontend with copy-trading, stop-loss, and whale tracking. A user just reported this bug:
+
+PAGE: https://hyperflex.network/whales
+USER AGENT: test-admin-synthetic
+CONSOLE ERRORS: ${JSON.stringify(testConsoleErrors)}
+MESSAGE: ${testMessage}
+
+Classify and diagnose. Respond ONLY with JSON:
+{
+  "category": "wallet|trade_execution|copy_bot|stop_loss|ui|data|auth|other",
+  "severity": "low|medium|high|critical",
+  "likely_cause": "brief technical hypothesis in 1-2 sentences",
+  "suggested_fix": "specific fix in 1-2 sentences, or 'needs investigation'"
+}`;
+      const aiResp = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: triagePrompt }]
+      });
+      const aiText = aiResp?.content?.[0]?.text || '';
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) aiTriage = JSON.parse(jsonMatch[0]);
+    } catch (aiErr) { console.warn('[bug-reports test] AI triage failed:', aiErr.message); }
+
+    // Insert DB row
+    const rows = await dbQuery(
+      `INSERT INTO bug_reports
+       (user_email, page_url, user_agent, message, context, console_errors, ai_category, ai_severity, ai_likely_cause, ai_suggested_fix)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [
+        '[email protected]',
+        'https://hyperflex.network/whales',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) — TEST SYNTHETIC',
+        testMessage,
+        JSON.stringify(testContext),
+        JSON.stringify(testConsoleErrors),
+        aiTriage?.category || 'copy_bot',
+        aiTriage?.severity || 'medium',
+        aiTriage?.likely_cause || null,
+        aiTriage?.suggested_fix || null
+      ]
+    ).catch(e => { console.error('[bug-reports test] DB insert failed:', e.message); return []; });
+    const bugId = rows[0]?.id;
+
+    // Fire email via Resend
+    let emailResult = { ok: false, error: 'no recipient' };
+    if (aiTriage && ['medium', 'high', 'critical'].includes(aiTriage.severity)) {
+      const recipient = getBugReportRecipient();
+      if (recipient) {
+        const sevColor = aiTriage.severity === 'critical' ? '#ff4d6a' : aiTriage.severity === 'high' ? '#f59e0b' : '#4d9fff';
+        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const adminUrl = (process.env.APP_URL || 'https://hyperflex.network') + '/admin/bugs';
+        const html = `<div style="font-family:'SF Mono',Menlo,monospace;background:#0e0e0c;color:#e8e4d9;padding:24px;border-radius:8px;max-width:600px">
+          <div style="display:inline-block;padding:4px 10px;background:${sevColor}22;color:${sevColor};border-radius:4px;font-weight:700;letter-spacing:1px;margin-bottom:14px">${aiTriage.severity.toUpperCase()} · ${esc(aiTriage.category)} · 🧪 SYNTHETIC TEST</div>
+          <h2 style="color:#c9920d;margin:0 0 12px;font-family:sans-serif">🐛 Bug Report Pipeline Test</h2>
+          <p style="margin:6px 0;color:#00e68a">If you're reading this, the bug report email pipeline works. ✓</p>
+          <p style="margin:6px 0"><strong style="color:#c9920d">Recipient:</strong> ${esc(recipient)}</p>
+          <p style="margin:6px 0"><strong style="color:#c9920d">Via:</strong> ${(process.env.RESEND_API_KEY || process.env.SMTP_PASS) ? 'Resend API' : 'SMTP fallback'}</p>
+          <p style="margin:14px 0 6px"><strong style="color:#c9920d">Test message:</strong></p>
+          <pre style="background:#1a1917;padding:12px;border-radius:6px;white-space:pre-wrap;color:#e8e4d9;font-size:13px">${esc(testMessage)}</pre>
+          ${aiTriage.likely_cause ? `<p style="margin:14px 0 6px"><strong style="color:#a855f7">🤖 Claude Haiku's triage (likely cause):</strong><br>${esc(aiTriage.likely_cause)}</p>` : ''}
+          ${aiTriage.suggested_fix ? `<p style="margin:10px 0 6px"><strong style="color:#a855f7">🤖 Suggested fix:</strong><br>${esc(aiTriage.suggested_fix)}</p>` : ''}
+          <div style="margin-top:20px;padding:12px 14px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:6px">
+            <a href="${adminUrl}" style="color:#a855f7;text-decoration:none;font-weight:700">Open Bug Dashboard →</a>
+          </div>
+          <p style="color:#7a7870;font-size:11px;margin-top:14px">Test bug ID: ${bugId || 'not-saved'}. Safe to delete from /admin/bugs.</p>
+        </div>`;
+        emailResult = await sendResendEmail({
+          to: recipient,
+          subject: `🧪 [TEST] Bug pipeline verification — ${aiTriage.severity}`,
+          html
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      bug_id: bugId,
+      ai_triage: aiTriage,
+      email: {
+        recipient: getBugReportRecipient() || '(none configured)',
+        sent: emailResult.ok,
+        error: emailResult.error || null,
+        provider: (process.env.RESEND_API_KEY || process.env.SMTP_PASS) ? 'resend' : (process.env.SMTP_HOST ? 'smtp' : 'none')
+      }
+    });
+  } catch (err) {
+    console.error('[bug-reports test]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/bug-reports/:id/delete — delete a bug report (for cleaning up test bugs)
+app.post('/api/admin/bug-reports/:id/delete', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    await dbQuery(`DELETE FROM bug_reports WHERE id = $1`, [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -15231,6 +15365,63 @@ app.get('/unsubscribe', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// sendResendEmail — lightweight wrapper around Resend API
+// Prefers RESEND_API_KEY, falls back to SMTP_PASS (we store the Resend key there).
+// Falls back to nodemailer via createMailTransport() if no Resend key is present.
+// Returns { ok: true } on success, { ok: false, error } on failure.
+async function sendResendEmail({ to, subject, html, text, from }) {
+  try {
+    if (!to) return { ok: false, error: 'no recipient' };
+    const apiKey = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
+    const fromAddr = from || process.env.SMTP_FROM || 'HYPERFLEX <contact@hyperflex.network>';
+
+    if (apiKey) {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: fromAddr,
+          to: Array.isArray(to) ? to : [to],
+          subject: subject || '(no subject)',
+          html: html || text || '',
+          text: text || undefined,
+          reply_to: fromAddr,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        console.warn('[resend] send failed:', r.status, d.message || JSON.stringify(d));
+        return { ok: false, error: d.message || `HTTP ${r.status}` };
+      }
+      return { ok: true };
+    }
+
+    // Fallback: nodemailer SMTP
+    const transporter = createMailTransport();
+    if (!transporter) return { ok: false, error: 'no mail transport configured' };
+    await transporter.sendMail({ from: fromAddr, to, subject, html, text });
+    return { ok: true };
+  } catch (err) {
+    console.warn('[sendResendEmail]', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+// Where bug reports go. Fallback chain so this works regardless of which
+// env var the admin has configured:
+//   1. BUG_REPORT_EMAIL (explicit, preferred)
+//   2. ADMIN_EMAIL (legacy)
+//   3. SMTP_FROM parsed out of "Name <email>" format (last resort — will at
+//      least land in the same inbox as outgoing transactional mail)
+function getBugReportRecipient() {
+  if (process.env.BUG_REPORT_EMAIL) return process.env.BUG_REPORT_EMAIL;
+  if (process.env.ADMIN_EMAIL) return process.env.ADMIN_EMAIL;
+  const smtpFrom = process.env.SMTP_FROM || '';
+  const m = smtpFrom.match(/<([^>]+)>/);
+  if (m) return m[1];
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtpFrom)) return smtpFrom;
+  return null;
+}
 
 function createMailTransport() {
   if (!process.env.SMTP_HOST) return null;
