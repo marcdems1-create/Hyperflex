@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bug Reports — HYPERFLEX Admin</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #121218;
+    --border: #1e1e2a;
+    --text: #f0f0f5;
+    --dim: #8888a0;
+    --muted: #55556a;
+    --purple: #a855f7;
+    --green: #00e68a;
+    --red: #ff4d6a;
+    --amber: #f59e0b;
+    --blue: #4d9fff;
+    --mono: 'JetBrains Mono', 'SF Mono', monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 14px; min-height: 100vh;
+  }
+
+  /* Auth gate */
+  #authGate {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  .auth-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 32px; width: 90%; max-width: 380px;
+    text-align: center;
+  }
+  .auth-logo {
+    font-family: var(--sans); font-weight: 800; font-size: 18px;
+    letter-spacing: -0.5px; margin-bottom: 4px;
+    background: linear-gradient(135deg, var(--green), var(--blue), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .auth-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 1px; margin-bottom: 24px; text-transform: uppercase; }
+  .auth-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px; color: var(--text);
+    font-family: var(--mono); font-size: 13px; outline: none; margin-bottom: 12px;
+  }
+  .auth-input:focus { border-color: var(--purple); }
+  .auth-btn {
+    width: 100%; background: var(--purple); color: #fff; border: none;
+    border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 13px;
+    font-weight: 700; cursor: pointer; letter-spacing: 0.5px;
+  }
+  .auth-err {
+    display: none; color: var(--red); font-family: var(--mono); font-size: 11px;
+    margin-top: 10px;
+  }
+  .auth-err.show { display: block; }
+
+  /* Main app */
+  #app { display: none; max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px;
+  }
+  .header-title {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .header-logo {
+    font-weight: 800; font-size: 16px; letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--green), var(--blue), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    color: var(--purple); background: rgba(168,85,247,0.12);
+    border: 1px solid rgba(168,85,247,0.3);
+    padding: 3px 8px; border-radius: 4px; letter-spacing: 1px;
+  }
+  .nav-links {
+    display: flex; gap: 14px; align-items: center;
+  }
+  .nav-link {
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    text-decoration: none; padding: 6px 10px; border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .signout {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    cursor: pointer; padding: 6px 10px;
+  }
+  .signout:hover { color: var(--red); }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .stat-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: var(--mono); font-size: 24px; font-weight: 800;
+    color: var(--text); line-height: 1;
+  }
+  .stat-card.critical .stat-value { color: var(--red); }
+  .stat-card.high .stat-value { color: var(--amber); }
+  .stat-card.medium .stat-value { color: var(--blue); }
+
+  /* Filters */
+  .filters {
+    display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .filter-group {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .filter-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px; margin-right: 4px;
+  }
+  .filter-pill {
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px;
+    border-radius: 5px; background: transparent; color: var(--dim);
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.15s;
+  }
+  .filter-pill:hover { color: var(--text); border-color: rgba(255,255,255,0.18); }
+  .filter-pill.active { background: rgba(168,85,247,0.15); color: var(--purple); border-color: rgba(168,85,247,0.4); }
+
+  /* Bug list */
+  .bug-list {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .bug-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 10px; padding: 16px; transition: border-color 0.15s;
+  }
+  .bug-card:hover { border-color: rgba(255,255,255,0.12); }
+  .bug-card.sev-critical { border-left-color: var(--red); }
+  .bug-card.sev-high { border-left-color: var(--amber); }
+  .bug-card.sev-medium { border-left-color: var(--blue); }
+  .bug-card.sev-low { border-left-color: var(--muted); }
+
+  .bug-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .sev-badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 3px 8px; border-radius: 4px; letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .sev-critical .sev-badge, .sev-badge.critical { background: rgba(255,77,106,0.15); color: var(--red); border: 1px solid rgba(255,77,106,0.3); }
+  .sev-high .sev-badge, .sev-badge.high { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+  .sev-medium .sev-badge, .sev-badge.medium { background: rgba(77,159,255,0.15); color: var(--blue); border: 1px solid rgba(77,159,255,0.3); }
+  .sev-low .sev-badge, .sev-badge.low { background: rgba(85,85,106,0.15); color: var(--muted); border: 1px solid rgba(85,85,106,0.3); }
+
+  .cat-badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    padding: 3px 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.04); color: var(--dim);
+    border: 1px solid var(--border); letter-spacing: 0.5px;
+  }
+  .status-badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 3px 8px; border-radius: 4px; letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .status-new { background: rgba(0,230,138,0.12); color: var(--green); border: 1px solid rgba(0,230,138,0.3); }
+  .status-investigating { background: rgba(168,85,247,0.12); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+  .status-resolved { background: rgba(136,136,160,0.1); color: var(--muted); border: 1px solid rgba(136,136,160,0.2); }
+  .status-wontfix { background: rgba(136,136,160,0.1); color: var(--muted); border: 1px solid rgba(136,136,160,0.2); text-decoration: line-through; }
+  .status-duplicate { background: rgba(136,136,160,0.1); color: var(--muted); border: 1px solid rgba(136,136,160,0.2); }
+
+  .bug-time {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    margin-left: auto;
+  }
+
+  .bug-message {
+    font-size: 14px; color: var(--text); line-height: 1.5;
+    margin-bottom: 12px; white-space: pre-wrap; word-break: break-word;
+  }
+
+  .ai-box {
+    background: rgba(168,85,247,0.04); border: 1px solid rgba(168,85,247,0.15);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  }
+  .ai-box .ai-label {
+    font-family: var(--mono); font-size: 9px; color: var(--purple);
+    font-weight: 700; letter-spacing: 1px; margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .ai-box .ai-row {
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    line-height: 1.5; margin-bottom: 4px;
+  }
+  .ai-box .ai-row strong { color: var(--text); font-weight: 600; }
+
+  .bug-meta {
+    display: flex; gap: 12px; font-family: var(--mono); font-size: 10px;
+    color: var(--muted); flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .bug-meta span { display: inline-flex; align-items: center; gap: 4px; }
+  .bug-meta code { color: var(--dim); background: rgba(255,255,255,0.03); padding: 1px 5px; border-radius: 3px; }
+
+  .bug-context {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    background: rgba(0,0,0,0.25); border-radius: 6px; padding: 8px 10px;
+    margin-bottom: 10px; max-height: 80px; overflow: auto;
+  }
+
+  .bug-actions {
+    display: flex; gap: 6px; flex-wrap: wrap; padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .bug-btn {
+    font-family: var(--mono); font-size: 10px; padding: 6px 12px;
+    border-radius: 5px; background: transparent; color: var(--dim);
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.15s;
+  }
+  .bug-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .bug-btn.primary { background: rgba(168,85,247,0.12); color: var(--purple); border-color: rgba(168,85,247,0.3); }
+  .bug-btn.primary:hover { background: rgba(168,85,247,0.25); }
+  .bug-btn.success { background: rgba(0,230,138,0.1); color: var(--green); border-color: rgba(0,230,138,0.3); }
+  .bug-btn.danger { background: rgba(255,77,106,0.1); color: var(--red); border-color: rgba(255,77,106,0.3); }
+
+  details.bug-raw {
+    margin-top: 10px;
+  }
+  details.bug-raw summary {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    cursor: pointer; padding: 4px 0;
+  }
+  details.bug-raw pre {
+    background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px;
+    font-size: 10px; color: var(--dim); overflow: auto; max-height: 200px;
+    margin: 6px 0 0 0;
+  }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .empty-state .emoji { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid var(--border); border-top-color: var(--purple);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">HYPERFLEX</div>
+    <div class="auth-sub">Bug Reports Admin</div>
+    <input type="password" class="auth-input" id="secretInput" placeholder="Admin secret" autocomplete="current-password"/>
+    <button class="auth-btn" onclick="doAuth()">Access Dashboard</button>
+    <div class="auth-err" id="authErr">Incorrect secret</div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>
+    <div class="header-title">
+      <div class="header-logo">HYPERFLEX</div>
+      <div class="header-badge">🐛 BUG REPORTS</div>
+    </div>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">← Main Admin</a>
+      <span class="signout" onclick="signOut()">Sign out</span>
+    </div>
+  </header>
+
+  <!-- Summary stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="statTotal">—</div></div>
+    <div class="stat-card"><div class="stat-label">Last 24h</div><div class="stat-value" id="stat24h">—</div></div>
+    <div class="stat-card critical"><div class="stat-label">Critical (new)</div><div class="stat-value" id="statCritical">—</div></div>
+    <div class="stat-card high"><div class="stat-label">High (new)</div><div class="stat-value" id="statHigh">—</div></div>
+    <div class="stat-card medium"><div class="stat-label">Medium (new)</div><div class="stat-value" id="statMedium">—</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <div class="filter-group">
+      <span class="filter-label">Status:</span>
+      <button class="filter-pill active" data-filter="status" data-value="">All</button>
+      <button class="filter-pill" data-filter="status" data-value="new">New</button>
+      <button class="filter-pill" data-filter="status" data-value="investigating">Investigating</button>
+      <button class="filter-pill" data-filter="status" data-value="resolved">Resolved</button>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Severity:</span>
+      <button class="filter-pill active" data-filter="severity" data-value="">All</button>
+      <button class="filter-pill" data-filter="severity" data-value="critical">Critical</button>
+      <button class="filter-pill" data-filter="severity" data-value="high">High</button>
+      <button class="filter-pill" data-filter="severity" data-value="medium">Medium</button>
+      <button class="filter-pill" data-filter="severity" data-value="low">Low</button>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Category:</span>
+      <button class="filter-pill active" data-filter="category" data-value="">All</button>
+      <button class="filter-pill" data-filter="category" data-value="wallet">Wallet</button>
+      <button class="filter-pill" data-filter="category" data-value="trade_execution">Trade</button>
+      <button class="filter-pill" data-filter="category" data-value="copy_bot">Copy Bot</button>
+      <button class="filter-pill" data-filter="category" data-value="stop_loss">Stop-Loss</button>
+      <button class="filter-pill" data-filter="category" data-value="ui">UI</button>
+      <button class="filter-pill" data-filter="category" data-value="auth">Auth</button>
+    </div>
+    <button class="bug-btn primary" onclick="loadBugs()" style="margin-left:auto">↻ Refresh</button>
+  </div>
+
+  <div id="bugListWrap">
+    <div class="empty-state"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<script>
+var adminSecret = '';
+var currentFilters = { status: '', severity: '', category: '' };
+var allBugs = [];
+
+// Auth
+document.getElementById('secretInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doAuth();
+});
+
+async function doAuth() {
+  var secret = document.getElementById('secretInput').value.trim();
+  if (!secret) return;
+  var errEl = document.getElementById('authErr');
+  errEl.classList.remove('show');
+  try {
+    var r = await fetch('/api/admin/bug-reports?secret=' + encodeURIComponent(secret));
+    if (r.status === 403 || r.status === 401) {
+      errEl.textContent = 'Incorrect secret';
+      errEl.classList.add('show');
+      return;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    adminSecret = secret;
+    sessionStorage.setItem('hf_admin_secret', secret);
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    var data = await r.json();
+    renderSummary(data.summary || {});
+    allBugs = data.reports || [];
+    renderBugs();
+  } catch (e) {
+    errEl.textContent = 'Network error — try again.';
+    errEl.classList.add('show');
+  }
+}
+
+function signOut() {
+  sessionStorage.removeItem('hf_admin_secret');
+  adminSecret = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('authGate').style.display = 'flex';
+  document.getElementById('secretInput').value = '';
+}
+
+// Auto-login if cached
+(function() {
+  var cached = sessionStorage.getItem('hf_admin_secret');
+  if (cached) {
+    document.getElementById('secretInput').value = cached;
+    doAuth();
+  }
+})();
+
+async function loadBugs() {
+  if (!adminSecret) return;
+  var params = new URLSearchParams({ secret: adminSecret });
+  if (currentFilters.status) params.set('status', currentFilters.status);
+  if (currentFilters.severity) params.set('severity', currentFilters.severity);
+  if (currentFilters.category) params.set('category', currentFilters.category);
+  document.getElementById('bugListWrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    var r = await fetch('/api/admin/bug-reports?' + params.toString());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var data = await r.json();
+    renderSummary(data.summary || {});
+    allBugs = data.reports || [];
+    renderBugs();
+  } catch (e) {
+    document.getElementById('bugListWrap').innerHTML = '<div class="empty-state">Failed to load: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderSummary(s) {
+  document.getElementById('statTotal').textContent = s.total || '0';
+  document.getElementById('stat24h').textContent = s.last_24h || '0';
+  document.getElementById('statCritical').textContent = s.critical_new || '0';
+  document.getElementById('statHigh').textContent = s.high_new || '0';
+  document.getElementById('statMedium').textContent = s.medium_new || '0';
+}
+
+function renderBugs() {
+  var wrap = document.getElementById('bugListWrap');
+  if (!allBugs.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="emoji">✨</div>No bug reports match these filters.<br>Users are happy (or nobody\'s tried it yet).</div>';
+    return;
+  }
+  wrap.innerHTML = '<div class="bug-list">' + allBugs.map(renderBug).join('') + '</div>';
+}
+
+function renderBug(b) {
+  var sev = b.ai_severity || 'low';
+  var cat = b.ai_category || 'other';
+  var status = b.status || 'new';
+  var created = b.created_at ? new Date(b.created_at) : null;
+  var ago = created ? timeAgo(created) : '';
+
+  var contextJson = b.context;
+  if (typeof contextJson === 'string') { try { contextJson = JSON.parse(contextJson); } catch(e) { contextJson = null; } }
+  var consoleErrs = b.console_errors;
+  if (typeof consoleErrs === 'string') { try { consoleErrs = JSON.parse(consoleErrs); } catch(e) { consoleErrs = []; } }
+
+  var pageUrl = b.page_url || '';
+  var pagePath = '';
+  try { pagePath = new URL(pageUrl).pathname; } catch(e) { pagePath = pageUrl; }
+
+  return '<div class="bug-card sev-' + sev + '">' +
+    '<div class="bug-header">' +
+      '<span class="sev-badge ' + sev + '">' + sev + '</span>' +
+      '<span class="cat-badge">' + esc(cat) + '</span>' +
+      '<span class="status-badge status-' + status + '">' + status + '</span>' +
+      (b.user_email ? '<span class="cat-badge">' + esc(b.user_email) + '</span>' : '<span class="cat-badge">anon</span>') +
+      '<span class="bug-time">' + ago + '</span>' +
+    '</div>' +
+    '<div class="bug-message">' + esc(b.message || '') + '</div>' +
+    (b.ai_likely_cause || b.ai_suggested_fix ?
+      '<div class="ai-box">' +
+        '<div class="ai-label">🤖 AI Triage</div>' +
+        (b.ai_likely_cause ? '<div class="ai-row"><strong>Cause:</strong> ' + esc(b.ai_likely_cause) + '</div>' : '') +
+        (b.ai_suggested_fix ? '<div class="ai-row"><strong>Fix:</strong> ' + esc(b.ai_suggested_fix) + '</div>' : '') +
+      '</div>' : ''
+    ) +
+    '<div class="bug-meta">' +
+      (pagePath ? '<span>📍 <code>' + esc(pagePath) + '</code></span>' : '') +
+      (contextJson && contextJson.has_wallet !== undefined ? '<span>👛 ' + (contextJson.has_wallet ? 'wallet' : 'no wallet') + '</span>' : '') +
+      (contextJson && contextJson.has_poly_proxy !== undefined ? '<span>🔐 ' + (contextJson.has_poly_proxy ? 'proxy' : 'no proxy') + '</span>' : '') +
+      (contextJson && contextJson.has_clob_keys !== undefined ? '<span>🔑 ' + (contextJson.has_clob_keys ? 'clob' : 'no clob') + '</span>' : '') +
+      (contextJson && contextJson.viewport ? '<span>📱 ' + esc(contextJson.viewport) + '</span>' : '') +
+    '</div>' +
+    (consoleErrs && consoleErrs.length ?
+      '<details class="bug-raw"><summary>Console errors (' + consoleErrs.length + ')</summary><pre>' + esc(JSON.stringify(consoleErrs, null, 2)) + '</pre></details>' : ''
+    ) +
+    (b.user_agent ?
+      '<details class="bug-raw"><summary>User agent</summary><pre>' + esc(b.user_agent) + '</pre></details>' : ''
+    ) +
+    '<div class="bug-actions">' +
+      (status !== 'investigating' ? '<button class="bug-btn primary" onclick="updateStatus(\'' + b.id + '\',\'investigating\')">🔍 Investigating</button>' : '') +
+      (status !== 'resolved' ? '<button class="bug-btn success" onclick="updateStatus(\'' + b.id + '\',\'resolved\')">✓ Resolved</button>' : '') +
+      (status !== 'wontfix' ? '<button class="bug-btn" onclick="updateStatus(\'' + b.id + '\',\'wontfix\')">Won\'t fix</button>' : '') +
+      (status !== 'duplicate' ? '<button class="bug-btn" onclick="updateStatus(\'' + b.id + '\',\'duplicate\')">Duplicate</button>' : '') +
+      (status !== 'new' ? '<button class="bug-btn" onclick="updateStatus(\'' + b.id + '\',\'new\')">Reopen</button>' : '') +
+      (pageUrl ? '<a class="bug-btn" href="' + esc(pageUrl) + '" target="_blank" rel="noopener">↗ Open page</a>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+async function updateStatus(id, status) {
+  try {
+    var r = await fetch('/api/admin/bug-reports/' + id + '/status?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status })
+    });
+    if (!r.ok) { alert('Failed to update status'); return; }
+    loadBugs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// Filter pills
+document.querySelectorAll('.filter-pill').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var filter = btn.dataset.filter;
+    var value = btn.dataset.value;
+    currentFilters[filter] = value;
+    // Update active state within group
+    document.querySelectorAll('.filter-pill[data-filter="' + filter + '"]').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.value === value);
+    });
+    loadBugs();
+  });
+});
+
+function esc(s) {
+  if (s == null) return '';
+  var d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+function timeAgo(date) {
+  var diff = (Date.now() - date.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+  return date.toLocaleDateString();
+}
+
+// Auto-refresh every 60s
+setInterval(function() { if (adminSecret) loadBugs(); }, 60000);
+</script>
+
+</body>
+</html>

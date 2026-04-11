@@ -12120,18 +12120,97 @@ Classify and diagnose. Respond ONLY with JSON:
   }
 });
 
-// GET /api/bug-reports/admin — admin view (password-gated)
-app.get('/api/bug-reports/admin', async (req, res) => {
+// GET /api/admin/bug-reports — list all bug reports with filters
+app.get('/api/admin/bug-reports', requireAdmin, async (req, res) => {
   try {
-    if (req.query.key !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-    if (!pool) return res.json({ reports: [] });
+    if (!pool) return res.json({ reports: [], summary: { total: 0, new: 0, resolved: 0, by_severity: {} } });
+    const status = req.query.status || null;
+    const severity = req.query.severity || null;
+    const category = req.query.category || null;
+
+    let where = [];
+    let params = [];
+    let idx = 1;
+    if (status) { where.push(`status = $${idx++}`); params.push(status); }
+    if (severity) { where.push(`ai_severity = $${idx++}`); params.push(severity); }
+    if (category) { where.push(`ai_category = $${idx++}`); params.push(category); }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
     const reports = await dbQuery(
-      `SELECT * FROM bug_reports ORDER BY created_at DESC LIMIT 200`, []
+      `SELECT id, user_id, user_email, page_url, user_agent, message, context, console_errors,
+              ai_category, ai_severity, ai_likely_cause, ai_suggested_fix, status,
+              created_at, resolved_at
+       FROM bug_reports ${whereClause}
+       ORDER BY
+         CASE ai_severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
+         created_at DESC
+       LIMIT 500`,
+      params
     );
-    res.json({ reports });
+
+    // Summary counts
+    const summary = await dbQuery(
+      `SELECT
+         COUNT(*) AS total,
+         COUNT(*) FILTER (WHERE status = 'new') AS new_count,
+         COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
+         COUNT(*) FILTER (WHERE ai_severity = 'critical' AND status = 'new') AS critical_new,
+         COUNT(*) FILTER (WHERE ai_severity = 'high' AND status = 'new') AS high_new,
+         COUNT(*) FILTER (WHERE ai_severity = 'medium' AND status = 'new') AS medium_new,
+         COUNT(*) FILTER (WHERE ai_severity = 'low' AND status = 'new') AS low_new,
+         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') AS last_24h
+       FROM bug_reports`
+    ).catch(() => [{}]);
+
+    res.json({ reports, summary: summary[0] || {} });
+  } catch (err) {
+    console.error('[bug-reports admin]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/bug-reports/:id/status — update bug status (new/investigating/resolved/wontfix)
+app.post('/api/admin/bug-reports/:id/status', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const { id } = req.params;
+    const { status } = req.body || {};
+    if (!['new', 'investigating', 'resolved', 'wontfix', 'duplicate'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const resolvedAt = (status === 'resolved' || status === 'wontfix') ? 'NOW()' : 'NULL';
+    await dbQuery(
+      `UPDATE bug_reports SET status = $1, resolved_at = ${resolvedAt} WHERE id = $2`,
+      [status, id]
+    );
+    res.json({ ok: true, status });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// POST /api/admin/bug-reports/:id/reply — AI-assisted reply (stored for future user-visible replies)
+app.post('/api/admin/bug-reports/:id/reply', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body || {};
+    if (!message) return res.status(400).json({ error: 'message required' });
+    // For now, just log + mark as investigating. Future: email the reporter, chat thread, etc.
+    if (pool) {
+      await dbQuery(
+        `UPDATE bug_reports SET status = 'investigating' WHERE id = $1`, [id]
+      );
+    }
+    console.log('[bug-reports] Admin reply to', id, ':', message.slice(0, 200));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Serve admin bugs dashboard
+app.get('/admin/bugs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-bugs.html'));
 });
 
 // GET /api/activity — global activity feed (mixed event types for Twitter-like feed)
