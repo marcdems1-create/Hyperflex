@@ -5058,35 +5058,36 @@ body.nav-open .sidebar-backdrop {
                 <button onclick="toggleConnectionsPanel()" id="connectionsToggleBtn" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue,#4d9fff);background:none;border:1px solid rgba(77,159,255,0.25);border-radius:8px;padding:5px 14px;cursor:pointer;min-height:36px;transition:all .15s" onmouseover="this.style.background='rgba(77,159,255,0.08)'" onmouseout="this.style.background='none'">+ Connect / Switch</button>
               </div>
               <!-- Connection status pills (always visible) -->
-              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-                <!-- Poly status pill -->
-                <div id="polyConnectionPill" style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--cream);border:1px solid var(--border);border-radius:10px;min-width:180px;transition:border-color .15s">
-                  <span style="font-size:14px">🟣</span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:12px;font-weight:700;color:var(--text)">Polymarket</div>
-                    <div id="polyPillStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Not connected</div>
-                  </div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+                <!-- Polymarket pill — expands when connected to show wallet + actions -->
+                <div id="polyConnectionPill" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s;flex-wrap:wrap">
                   <span id="polyPillDot" style="width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0"></span>
-                </div>
-                <!-- Kalshi status pill -->
-                <div id="kalshiConnectionPill" style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--cream);border:1px solid var(--border);border-radius:10px;min-width:160px;transition:border-color .15s">
-                  <span style="font-size:14px">🟡</span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:12px;font-weight:700;color:var(--text)">Kalshi</div>
-                    <div id="kalshiPillStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim)">Not connected</div>
+                  <div id="polyPillLabel" style="font-size:13px;font-weight:700;color:var(--text);flex:1;min-width:120px">
+                    <span style="margin-right:4px">🟣</span> Polymarket
+                    <span id="polyPillStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:6px">Not connected</span>
                   </div>
+                  <!-- Actions — shown only when connected -->
+                  <div id="polyPillActions" style="display:none;align-items:center;gap:8px;flex-shrink:0">
+                    <button onclick="loadPolymarketPositions(true)" style="background:none;border:1px solid rgba(124,58,237,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#a78bfa;cursor:pointer;font-family:var(--mono);min-height:32px;transition:all .15s" onmouseover="this.style.background='rgba(124,58,237,0.08)'" onmouseout="this.style.background='none'">↺ Sync</button>
+                    <button onclick="switchWallet()" title="Pick a different account" style="background:none;border:1px solid rgba(77,159,255,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#4d9fff;cursor:pointer;font-family:var(--mono);min-height:32px;transition:all .15s" onmouseover="this.style.background='rgba(77,159,255,0.08)'" onmouseout="this.style.background='none'">⇄ Switch</button>
+                    <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);min-height:32px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='none'">Disconnect</button>
+                  </div>
+                </div>
+                <!-- Kalshi pill -->
+                <div id="kalshiConnectionPill" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s">
                   <span id="kalshiPillDot" style="width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0"></span>
-                </div>
-                <!-- Browser wallet pill -->
-                <div id="walletConnectionPill" style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--cream);border:1px solid var(--border);border-radius:10px;min-width:160px;transition:border-color .15s">
-                  <span style="font-size:14px">🦊</span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:12px;font-weight:700;color:var(--text)">Browser Wallet</div>
-                    <div id="walletPillStatus" style="font-family:var(--mono);font-size:10px;color:var(--dim)">Not connected</div>
+                  <div style="font-size:13px;font-weight:700;color:var(--text);flex:1">
+                    <span style="margin-right:4px">🟡</span> Kalshi
+                    <span id="kalshiPillStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:6px">Not connected</span>
                   </div>
-                  <span id="walletPillDot" style="width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0"></span>
+                  <div id="kalshiPillActions" style="display:none;align-items:center;gap:8px;flex-shrink:0">
+                    <button onclick="loadKalshiPositions(true)" style="background:none;border:1px solid rgba(217,119,6,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#fbbf24;cursor:pointer;font-family:var(--mono);min-height:32px">↺ Sync</button>
+                    <button onclick="disconnectKalshi()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);min-height:32px">Disconnect</button>
+                  </div>
                 </div>
               </div>
+              <!-- Hidden legacy elements for JS references -->
+              <div id="walletConnectionPill" style="display:none"><span id="walletPillStatus"></span><span id="walletPillDot"></span></div>
               <!-- Expandable connections panel -->
               <div id="connectionsPanel" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:8px">
                 <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Connect or switch accounts</div>
@@ -14290,41 +14291,40 @@ function connectManifoldFromPanel() {
 }
 
 function updateConnectionPills() {
-  // Polymarket
+  // Polymarket pill — expands with actions when connected
   var polyPill = document.getElementById('polyPillStatus');
   var polyDot = document.getElementById('polyPillDot');
+  var polyActions = document.getElementById('polyPillActions');
+  var polyContainer = document.getElementById('polyConnectionPill');
   if (polyPill && polyDot) {
     if (_polyWalletAddress) {
-      polyPill.textContent = _polyWalletAddress.slice(0,6) + '…' + _polyWalletAddress.slice(-4);
+      polyPill.textContent = 'Wallet: ' + _polyWalletAddress.slice(0,6) + '…' + _polyWalletAddress.slice(-4);
       polyDot.style.background = '#a78bfa';
+      if (polyActions) polyActions.style.display = 'flex';
+      if (polyContainer) polyContainer.style.borderColor = 'rgba(167,139,250,0.4)';
     } else {
       polyPill.textContent = 'Not connected';
       polyDot.style.background = '#444';
+      if (polyActions) polyActions.style.display = 'none';
+      if (polyContainer) polyContainer.style.borderColor = 'var(--border)';
     }
   }
-  // Kalshi
+  // Kalshi pill — expands with actions when connected
   var kalshiPill = document.getElementById('kalshiPillStatus');
   var kalshiDot = document.getElementById('kalshiPillDot');
+  var kalshiActions = document.getElementById('kalshiPillActions');
+  var kalshiContainer = document.getElementById('kalshiConnectionPill');
   if (kalshiPill && kalshiDot) {
     if (_kalshiConnected) {
       kalshiPill.textContent = 'API key connected';
       kalshiDot.style.background = '#fbbf24';
+      if (kalshiActions) kalshiActions.style.display = 'flex';
+      if (kalshiContainer) kalshiContainer.style.borderColor = 'rgba(251,191,36,0.4)';
     } else {
       kalshiPill.textContent = 'Not connected';
       kalshiDot.style.background = '#444';
-    }
-  }
-  // Browser wallet
-  var walletPill = document.getElementById('walletPillStatus');
-  var walletDot = document.getElementById('walletPillDot');
-  if (walletPill && walletDot) {
-    var cw = window._connectedWallet || localStorage.getItem('hf_connected_wallet') || '';
-    if (cw) {
-      walletPill.textContent = cw.slice(0,6) + '…' + cw.slice(-4);
-      walletDot.style.background = '#00e68a';
-    } else {
-      walletPill.textContent = 'Not connected';
-      walletDot.style.background = '#444';
+      if (kalshiActions) kalshiActions.style.display = 'none';
+      if (kalshiContainer) kalshiContainer.style.borderColor = 'var(--border)';
     }
   }
 }
