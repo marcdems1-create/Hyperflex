@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>QA Test Harness — HYPERFLEX Admin</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #121218;
+    --border: #1e1e2a;
+    --text: #f0f0f5;
+    --dim: #8888a0;
+    --muted: #55556a;
+    --purple: #a855f7;
+    --green: #00e68a;
+    --red: #ff4d6a;
+    --amber: #f59e0b;
+    --blue: #4d9fff;
+    --mono: 'JetBrains Mono','SF Mono',monospace;
+    --sans: 'Inter',-apple-system,sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; min-height:100vh; }
+
+  #authGate { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .auth-box { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:32px; width:90%; max-width:380px; text-align:center; }
+  .auth-logo { font-weight:800; font-size:18px; background:linear-gradient(135deg,var(--green),var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .auth-sub { font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:1px; margin:4px 0 24px; text-transform:uppercase; }
+  .auth-input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px 16px; color:var(--text); font-family:var(--mono); font-size:13px; outline:none; margin-bottom:12px; }
+  .auth-input:focus { border-color:var(--purple); }
+  .auth-btn { width:100%; background:var(--purple); color:#fff; border:none; border-radius:8px; padding:12px; font-family:var(--mono); font-size:13px; font-weight:700; cursor:pointer; letter-spacing:0.5px; }
+  .auth-err { display:none; color:var(--red); font-family:var(--mono); font-size:11px; margin-top:10px; }
+  .auth-err.show { display:block; }
+
+  #app { display:none; max-width:1200px; margin:0 auto; padding:32px 24px 80px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding-bottom:24px; border-bottom:1px solid var(--border); margin-bottom:24px; }
+  .header-title { display:flex; align-items:center; gap:12px; }
+  .header-logo { font-weight:800; font-size:16px; background:linear-gradient(135deg,var(--green),var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-badge { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--amber); background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:3px 8px; border-radius:4px; letter-spacing:1px; }
+  .nav-links { display:flex; gap:14px; align-items:center; }
+  .nav-link { font-family:var(--mono); font-size:11px; color:var(--dim); text-decoration:none; padding:6px 10px; border-radius:6px; transition:all 0.15s; }
+  .nav-link:hover { color:var(--text); background:rgba(255,255,255,0.04); }
+  .signout { font-family:var(--mono); font-size:11px; color:var(--muted); cursor:pointer; padding:6px 10px; }
+
+  h2 { font-family:var(--sans); font-size:14px; font-weight:700; color:var(--text); margin:0 0 14px; letter-spacing:0.5px; display:flex; align-items:center; gap:8px; }
+  h2 .h2-num { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--purple); background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:4px; letter-spacing:1px; }
+  .section { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
+  .section-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.6; margin:-4px 0 14px; }
+
+  .button-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .test-btn { font-family:var(--mono); font-size:11px; font-weight:700; padding:10px 14px; border-radius:8px; border:1px solid var(--border); background:rgba(255,255,255,0.02); color:var(--text); cursor:pointer; transition:all 0.15s; letter-spacing:0.3px; }
+  .test-btn:hover { border-color:var(--purple); background:rgba(168,85,247,0.08); color:var(--purple); }
+  .test-btn.primary { background:var(--purple); color:#fff; border-color:var(--purple); }
+  .test-btn.primary:hover { filter:brightness(1.1); }
+  .test-btn.danger { border-color:rgba(255,77,106,0.3); color:var(--red); }
+  .test-btn.danger:hover { background:rgba(255,77,106,0.1); }
+
+  .status-panel { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-top:14px; font-family:var(--mono); font-size:11px; max-height:300px; overflow:auto; }
+  .status-panel pre { margin:0; color:var(--dim); white-space:pre-wrap; word-break:break-word; }
+
+  .env-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+  .env-item { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:6px; }
+  .env-item.ok { border-color:rgba(0,230,138,0.3); }
+  .env-item.warn { border-color:rgba(245,158,11,0.3); }
+  .env-item.err { border-color:rgba(255,77,106,0.3); }
+  .env-label { font-family:var(--mono); font-size:11px; color:var(--dim); }
+  .env-value { font-family:var(--mono); font-size:11px; font-weight:700; }
+  .env-value.ok { color:var(--green); }
+  .env-value.warn { color:var(--amber); }
+  .env-value.err { color:var(--red); }
+
+  .checklist { list-style:none; padding:0; margin:0; }
+  .checklist li { padding:10px 0; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:12px; }
+  .checklist li:last-child { border-bottom:none; }
+  .checklist input[type="checkbox"] { width:18px; height:18px; accent-color:var(--purple); margin-top:2px; flex-shrink:0; }
+  .checklist label { flex:1; font-size:13px; color:var(--text); line-height:1.5; cursor:pointer; }
+  .checklist label .desc { display:block; font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; font-weight:normal; }
+  .checklist li.done label { color:var(--muted); text-decoration:line-through; }
+
+  .toast { position:fixed; top:74px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--purple); border-radius:8px; padding:12px 20px; font-family:var(--mono); font-size:12px; z-index:10000; box-shadow:0 4px 20px rgba(168,85,247,0.3); max-width:90vw; }
+  .toast.ok { border-color:var(--green); }
+  .toast.err { border-color:var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">HYPERFLEX</div>
+    <div class="auth-sub">QA Test Harness</div>
+    <input type="password" class="auth-input" id="secretInput" placeholder="Admin secret" autocomplete="current-password"/>
+    <button class="auth-btn" onclick="doAuth()">Unlock</button>
+    <div class="auth-err" id="authErr">Incorrect secret</div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>
+    <div class="header-title">
+      <div class="header-logo">HYPERFLEX</div>
+      <div class="header-badge">🧪 QA HARNESS</div>
+    </div>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">← Main Admin</a>
+      <a href="/admin/bugs" class="nav-link">🐛 Bugs</a>
+      <span class="signout" onclick="signOut()">Sign out</span>
+    </div>
+  </header>
+
+  <!-- 0. System status -->
+  <div class="section">
+    <h2><span class="h2-num">0</span>System Status</h2>
+    <div class="section-desc">Verifies env vars, DB connections, SSE clients, and screener cache. Refresh this first to confirm everything's wired up.</div>
+    <div class="button-row">
+      <button class="test-btn primary" onclick="loadStatus()">↻ Refresh system status</button>
+    </div>
+    <div id="statusWrap"></div>
+  </div>
+
+  <!-- 1. Copy bot test -->
+  <div class="section">
+    <h2><span class="h2-num">1</span>Copy Bot — Fire Synthetic Events</h2>
+    <div class="section-desc">
+      These fire <strong>dry-run</strong> events through the real SSE channel.<br>
+      Open a second browser tab signed in to HYPERFLEX (any page), then click below.<br>
+      The slide-in banner should appear in bottom-right of your signed-in tab within ~1s.<br>
+      <strong>Dry-run mode means NO real orders are placed — execution is stubbed.</strong>
+    </div>
+    <div class="button-row">
+      <button class="test-btn primary" onclick="fireCopyEvent('YES', 0.42)">🤖 Fire Copy Opportunity (YES 42¢)</button>
+      <button class="test-btn" onclick="fireCopyEvent('NO', 0.38)">🤖 Fire Copy Opportunity (NO 38¢)</button>
+      <button class="test-btn" onclick="fireCopyEvent('YES', 0.15)">🤖 Longshot (YES 15¢)</button>
+      <button class="test-btn danger" onclick="fireExitEvent()">🚪 Fire Exit Signal</button>
+    </div>
+    <div id="copyResult" class="status-panel" style="display:none"></div>
+  </div>
+
+  <!-- 2. Stop-loss test -->
+  <div class="section">
+    <h2><span class="h2-num">2</span>Stop-Loss / Take-Profit — Fire Synthetic Trigger</h2>
+    <div class="section-desc">
+      Fires a synthetic stop_triggered event through the stop-order SSE channel.<br>
+      Open <a href="/market/will-trump-win-the-2028-republican-nomination" target="_blank" style="color:var(--blue)">any market page</a> while signed in, then click below.<br>
+      A red banner should appear at the top of the market tab with "Execute Sell" button.
+    </div>
+    <div class="button-row">
+      <button class="test-btn primary" onclick="fireStopEvent('stop_loss', 0.35)">🛑 Fire Stop-Loss (triggered at 35¢)</button>
+      <button class="test-btn" onclick="fireStopEvent('take_profit', 0.85)">🎯 Fire Take-Profit (triggered at 85¢)</button>
+    </div>
+    <div id="stopResult" class="status-panel" style="display:none"></div>
+  </div>
+
+  <!-- 3. Bug reporter -->
+  <div class="section">
+    <h2><span class="h2-num">3</span>Bug Reporter + AI Triage</h2>
+    <div class="section-desc">
+      Fires a synthetic bug report through the full pipeline (DB insert → Claude Haiku triage → Resend email).<br>
+      Same as the 🧪 Test pipeline button on /admin/bugs.
+    </div>
+    <div class="button-row">
+      <button class="test-btn primary" onclick="fireBugTest()">🧪 Fire Test Bug → AI Triage → Email</button>
+      <a class="test-btn" href="/admin/bugs" target="_blank">Open Bug Dashboard →</a>
+    </div>
+    <div id="bugResult" class="status-panel" style="display:none"></div>
+  </div>
+
+  <!-- 4. Manual checklist -->
+  <div class="section">
+    <h2><span class="h2-num">4</span>Manual Pre-Launch Checklist</h2>
+    <div class="section-desc">
+      These can't be automated — you need to physically click through them. Progress is saved to localStorage.
+    </div>
+    <ul class="checklist" id="checklist"></ul>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="test-btn" onclick="resetChecklist()">Reset checklist</button>
+      <span id="checklistProgress" style="font-family:var(--mono);font-size:11px;color:var(--dim);padding:10px"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+var adminSecret = '';
+
+document.getElementById('secretInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doAuth();
+});
+
+async function doAuth() {
+  var secret = document.getElementById('secretInput').value.trim();
+  if (!secret) return;
+  var errEl = document.getElementById('authErr');
+  errEl.classList.remove('show');
+  try {
+    var r = await fetch('/api/admin/qa/status?secret=' + encodeURIComponent(secret));
+    if (r.status === 403 || r.status === 401) {
+      errEl.textContent = 'Incorrect secret';
+      errEl.classList.add('show');
+      return;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    adminSecret = secret;
+    sessionStorage.setItem('hf_admin_secret', secret);
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    var data = await r.json();
+    renderStatus(data);
+    renderChecklist();
+  } catch (e) {
+    errEl.textContent = 'Network error — try again.';
+    errEl.classList.add('show');
+  }
+}
+
+function signOut() {
+  sessionStorage.removeItem('hf_admin_secret');
+  adminSecret = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('authGate').style.display = 'flex';
+}
+
+(function() {
+  var cached = sessionStorage.getItem('hf_admin_secret');
+  if (cached) { document.getElementById('secretInput').value = cached; doAuth(); }
+})();
+
+async function loadStatus() {
+  try {
+    var r = await fetch('/api/admin/qa/status?secret=' + encodeURIComponent(adminSecret));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    renderStatus(d);
+    toast('System status refreshed', 'ok');
+  } catch (e) { toast('Failed: ' + e.message, 'err'); }
+}
+
+function renderStatus(d) {
+  var wrap = document.getElementById('statusWrap');
+  var env = d.env || {};
+  var sse = d.sse_connections || {};
+  var cache = d.screener_cache || {};
+  var live = d.live_stream || {};
+  var db = d.db || {};
+
+  function envRow(label, value, required) {
+    var ok = value ? true : false;
+    var cls = ok ? 'ok' : (required ? 'err' : 'warn');
+    var display = typeof value === 'boolean' ? (value ? '✓ set' : '✗ missing') : (value || '— missing');
+    return '<div class="env-item ' + cls + '"><span class="env-label">' + label + '</span><span class="env-value ' + cls + '">' + display + '</span></div>';
+  }
+
+  var html = '<div class="status-panel" style="display:block">';
+  html += '<div style="color:var(--purple);font-weight:700;margin-bottom:8px">ENVIRONMENT</div>';
+  html += '<div class="env-grid">';
+  html += envRow('ADMIN_SECRET', env.admin_secret, true);
+  html += envRow('DATABASE_URL', env.database_url, true);
+  html += envRow('ANTHROPIC_API_KEY', env.anthropic_api_key, true);
+  html += envRow('RESEND_API_KEY', env.resend_api_key || env.smtp_pass, true);
+  html += envRow('Bug report email', env.bug_report_email || env.admin_email || '—', false);
+  html += envRow('SMTP_FROM', env.smtp_from || '—', false);
+  html += '</div>';
+
+  html += '<div style="color:var(--purple);font-weight:700;margin:14px 0 8px">LIVE CONNECTIONS</div>';
+  html += '<div class="env-grid">';
+  html += envRow('Copy-bot SSE clients', sse.copy_bot_clients || 0);
+  html += envRow('Stop-order SSE clients', sse.stop_order_clients || 0);
+  html += envRow('Active stop orders (in-memory)', (d.memory && d.memory.active_stops_loaded) || 0);
+  html += envRow('Live stream connected', live.connected ? '✓ ' + (live.total_trades || 0) + ' trades' : '✗ disconnected', true);
+  html += envRow('Screener cache', cache.loaded ? '✓ ' + cache.size + ' markets (' + Math.round((cache.age_ms || 0)/1000) + 's old)' : '✗ empty', true);
+  html += '</div>';
+
+  html += '<div style="color:var(--purple);font-weight:700;margin:14px 0 8px">DATABASE STATE</div>';
+  html += '<pre>' + JSON.stringify(db, null, 2) + '</pre>';
+
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+async function fireCopyEvent(side, price) {
+  var el = document.getElementById('copyResult');
+  el.style.display = 'block';
+  el.innerHTML = '<pre>Firing...</pre>';
+  try {
+    var r = await fetch('/api/admin/qa/fire-copy-event?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ side: side, price: price, alloc_usd: 50, dry_run: true })
+    });
+    var d = await r.json();
+    el.innerHTML = '<pre>' + JSON.stringify(d, null, 2) + '</pre>';
+    if (d.fired_to_clients > 0) toast('✓ Fired to ' + d.fired_to_clients + ' client(s). Check your other tab.', 'ok');
+    else toast('⚠ No connected clients. Open /whales in a signed-in tab first.', 'err');
+  } catch (e) { el.innerHTML = '<pre>Error: ' + e.message + '</pre>'; toast('Failed', 'err'); }
+}
+
+async function fireExitEvent() {
+  var el = document.getElementById('copyResult');
+  el.style.display = 'block';
+  el.innerHTML = '<pre>Firing exit signal...</pre>';
+  try {
+    var r = await fetch('/api/admin/qa/fire-exit-event?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_price: 0.38 })
+    });
+    var d = await r.json();
+    el.innerHTML = '<pre>' + JSON.stringify(d, null, 2) + '</pre>';
+    if (d.fired_to_clients > 0) toast('✓ Exit fired to ' + d.fired_to_clients + ' client(s).', 'ok');
+    else toast('⚠ No connected clients.', 'err');
+  } catch (e) { el.innerHTML = '<pre>Error: ' + e.message + '</pre>'; toast('Failed', 'err'); }
+}
+
+async function fireStopEvent(type, triggerPrice) {
+  var el = document.getElementById('stopResult');
+  el.style.display = 'block';
+  el.innerHTML = '<pre>Firing...</pre>';
+  try {
+    var r = await fetch('/api/admin/qa/fire-stop-event?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_type: type, trigger_price: triggerPrice })
+    });
+    var d = await r.json();
+    el.innerHTML = '<pre>' + JSON.stringify(d, null, 2) + '</pre>';
+    if (d.fired_to_clients > 0) toast('✓ Stop trigger fired. Check your market tab.', 'ok');
+    else toast('⚠ No stop-order SSE clients. Open /market/<slug> first.', 'err');
+  } catch (e) { el.innerHTML = '<pre>Error: ' + e.message + '</pre>'; toast('Failed', 'err'); }
+}
+
+async function fireBugTest() {
+  var el = document.getElementById('bugResult');
+  el.style.display = 'block';
+  el.innerHTML = '<pre>Firing...</pre>';
+  try {
+    var r = await fetch('/api/admin/bug-reports/test?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+    });
+    var d = await r.json();
+    el.innerHTML = '<pre>' + JSON.stringify(d, null, 2) + '</pre>';
+    if (d.ok && d.email && d.email.sent) toast('✓ Bug test complete. Check your inbox.', 'ok');
+    else toast('⚠ Bug created but email may have failed. See details.', 'err');
+  } catch (e) { el.innerHTML = '<pre>Error: ' + e.message + '</pre>'; toast('Failed', 'err'); }
+}
+
+// ── Manual checklist ──
+var CHECKLIST_ITEMS = [
+  { id: 'env', t: 'All env vars green in System Status', d: 'Refresh system status above — everything should be green or amber, nothing red.' },
+  { id: 'bug_loggedout', t: 'Submit bug report while SIGNED OUT', d: 'Sign out, visit any page, click the 🐛 button, submit. Verify the toast shows AI response.' },
+  { id: 'bug_loggedin', t: 'Submit bug report while SIGNED IN', d: 'Sign in, submit a bug, verify it shows up on /admin/bugs with your email attached.' },
+  { id: 'hedge_visible', t: 'Hedge section loads on /explore or /', d: 'Visit /explore. Either hedge cards appear or section auto-hides. No broken placeholders.' },
+  { id: 'hedge_links', t: 'Hedge card links go to /market/:slug', d: 'Click a market title in a hedge card — should open internal market page, NOT polymarket.com.' },
+  { id: 'whales_sub_notify', t: 'Subscribe to whale in NOTIFY-ONLY mode', d: 'On /whales, click Auto-Mirror on any whale, pick Notify. Submit. Verify it appears in My Copies.' },
+  { id: 'whales_sub_auto_nowallet', t: 'Try Auto-Execute WITHOUT wallet setup', d: 'Same flow but pick Auto-Execute. Should see "Set up trading" button instead of submitting silently.' },
+  { id: 'whales_my_copies', t: 'My Copies section renders subscriptions', d: 'Both active subs and history tabs should work. Toggle a sub between notify/auto.' },
+  { id: 'qa_copy_event', t: 'Fire synthetic copy event → banner appears', d: 'Click "Fire Copy Opportunity" above. Check /whales tab — yellow-bordered "QA TEST" banner appears in bottom-right.' },
+  { id: 'qa_exit_event', t: 'Fire synthetic exit event → red banner', d: 'Click "Fire Exit Signal" — red exit banner appears on the target tab.' },
+  { id: 'market_stops_ui', t: 'Stop-loss panel renders on market page', d: 'Visit any /market/:slug where you have a position. Stop-loss panel should show below position card.' },
+  { id: 'qa_stop_event', t: 'Fire synthetic stop trigger → red banner', d: 'Click "Fire Stop-Loss" above. Red banner with "Execute Sell" appears on the market tab.' },
+  { id: 'nav_bug_btn', t: '🐛 Bug button visible on every key page', d: 'Check /, /whales, /explore, /terminal, /market/:slug, /signals. Purple button bottom-left.' },
+  { id: 'no_polymarket_leaks', t: 'No direct polymarket.com links on UI', d: 'Right-click links on /explore, /whales, /signals, /terminal — none should go to polymarket.com directly.' },
+  { id: 'mobile_responsive', t: 'Mobile view — resize to 375px', d: 'Chrome devtools → mobile view. Bug button, banners, modals all responsive. No horizontal scroll.' },
+  { id: 'console_clean', t: 'No console errors on page load', d: 'Open devtools console. Visit /, /whales, /explore, /terminal. Only warnings acceptable, no uncaught errors.' },
+  { id: 'real_trade', t: '(If you dare) Execute one REAL $2 trade', d: 'Ultimate test. Trade a small amount through market.html to verify the full CLOB flow works end-to-end.' }
+];
+
+function renderChecklist() {
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem('hfx_qa_checklist') || '{}'); } catch(e){}
+  var el = document.getElementById('checklist');
+  el.innerHTML = CHECKLIST_ITEMS.map(function(item) {
+    var checked = done[item.id] ? 'checked' : '';
+    var doneClass = done[item.id] ? 'done' : '';
+    return '<li class="' + doneClass + '">' +
+      '<input type="checkbox" id="chk_' + item.id + '" ' + checked + ' onchange="toggleCheck(\'' + item.id + '\')"/>' +
+      '<label for="chk_' + item.id + '">' + item.t + '<span class="desc">' + item.d + '</span></label>' +
+    '</li>';
+  }).join('');
+  updateProgress();
+}
+
+function toggleCheck(id) {
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem('hfx_qa_checklist') || '{}'); } catch(e){}
+  done[id] = !done[id];
+  localStorage.setItem('hfx_qa_checklist', JSON.stringify(done));
+  renderChecklist();
+}
+
+function resetChecklist() {
+  if (!confirm('Reset all checklist items?')) return;
+  localStorage.removeItem('hfx_qa_checklist');
+  renderChecklist();
+}
+
+function updateProgress() {
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem('hfx_qa_checklist') || '{}'); } catch(e){}
+  var doneCount = Object.values(done).filter(Boolean).length;
+  var total = CHECKLIST_ITEMS.length;
+  var el = document.getElementById('checklistProgress');
+  if (el) el.textContent = doneCount + ' / ' + total + ' complete' + (doneCount === total ? ' ✓ READY TO LAUNCH' : '');
+}
+
+function toast(msg, cls) {
+  var t = document.getElementById('toast');
+  t.className = 'toast ' + (cls || '');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 4000);
+}
+</script>
+
+</body>
+</html>

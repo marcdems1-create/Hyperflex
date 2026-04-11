@@ -12516,6 +12516,209 @@ app.get('/admin/bugs', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-bugs.html'));
 });
 
+// ════════════════════════════════════════════════════════════
+// QA TEST HARNESS — synthetic events for pre-launch verification
+// All endpoints require ADMIN_SECRET. The user_id to receive events
+// is passed in the request body so the admin can test their own
+// account (or any test user).
+// ════════════════════════════════════════════════════════════
+
+// Serve the test harness HTML
+app.get('/admin/qa', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-qa.html'));
+});
+
+// POST /api/admin/qa/fire-copy-event — fire a synthetic copy_opportunity
+// Body: { user_id?, whale_name?, market?, slug?, side?, price?, alloc_usd?, dry_run? }
+// If user_id not provided, fires to ALL connected clients (useful when testing yourself)
+app.post('/api/admin/qa/fire-copy-event', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const targetUserId = b.user_id || null; // null = broadcast to all
+    const payload = {
+      trade_id: 'qa_test_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      whale_name: b.whale_name || 'TestWhale_3000',
+      whale_address: '0x0000000000000000000000000000000000000000',
+      market: b.market || 'Will Trump win the 2028 Republican nomination?',
+      slug: b.slug || 'will-trump-win-the-2028-republican-nomination',
+      side: b.side || 'YES',
+      price: parseFloat(b.price) || 0.42,
+      alloc_usd: parseFloat(b.alloc_usd) || 50,
+      whale_size: 500000,
+      condition_id: b.condition_id || null,
+      clob_token_ids: b.clob_token_ids || null,
+      _qa_test: true,
+      _dry_run: b.dry_run !== false // default true — no real execution
+    };
+
+    let fired = 0;
+    const clientMap = _copyBotClients || new Map();
+    if (targetUserId) {
+      const clients = clientMap.get(targetUserId);
+      if (clients) {
+        for (const res2 of clients) {
+          try {
+            res2.write('event: copy_opportunity\n');
+            res2.write('data: ' + JSON.stringify(payload) + '\n\n');
+            fired++;
+          } catch (e) { clients.delete(res2); }
+        }
+      }
+    } else {
+      for (const [uid, clients] of clientMap) {
+        for (const res2 of clients) {
+          try {
+            res2.write('event: copy_opportunity\n');
+            res2.write('data: ' + JSON.stringify(payload) + '\n\n');
+            fired++;
+          } catch (e) { clients.delete(res2); }
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      fired_to_clients: fired,
+      target: targetUserId || 'all',
+      payload,
+      hint: fired === 0 ? 'No connected clients. Open any HYPERFLEX page in another tab with /copy-bot.js loaded (i.e. signed in).' : 'Check the browser tab you\'re signed in on for the slide-in banner.'
+    });
+  } catch (err) {
+    console.error('[qa/fire-copy-event]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/qa/fire-exit-event — fire a synthetic copy_exit event
+app.post('/api/admin/qa/fire-exit-event', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const targetUserId = b.user_id || null;
+    const payload = {
+      trade_id: 'qa_exit_' + Date.now(),
+      exit: true,
+      whale_name: b.whale_name || 'TestWhale_3000',
+      market: b.market || 'Will Trump win the 2028 Republican nomination?',
+      slug: b.slug || 'will-trump-win-the-2028-republican-nomination',
+      side: b.side || 'YES',
+      size: 118.5,
+      entry_price: 0.42,
+      current_price: parseFloat(b.current_price) || 0.38,
+      condition_id: null,
+      clob_token_ids: null,
+      _qa_test: true
+    };
+
+    let fired = 0;
+    const clientMap = _copyBotClients || new Map();
+    const targets = targetUserId ? (clientMap.has(targetUserId) ? [clientMap.get(targetUserId)] : []) : [...clientMap.values()];
+    for (const clients of targets) {
+      for (const res2 of clients) {
+        try {
+          res2.write('event: copy_exit\n');
+          res2.write('data: ' + JSON.stringify(payload) + '\n\n');
+          fired++;
+        } catch (e) { clients.delete(res2); }
+      }
+    }
+    res.json({ ok: true, fired_to_clients: fired, payload });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/qa/fire-stop-event — fire a synthetic stop_triggered event
+app.post('/api/admin/qa/fire-stop-event', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const targetUserId = b.user_id || null;
+    const payload = {
+      stop_id: 'qa_stop_' + Date.now(),
+      order_type: b.order_type || 'stop_loss',
+      side: b.side || 'YES',
+      shares: parseFloat(b.shares) || 100,
+      trigger_price: parseFloat(b.trigger_price) || 0.35,
+      fill_price: parseFloat(b.fill_price) || 0.34,
+      market_slug: b.market_slug || 'will-trump-win-the-2028-republican-nomination',
+      market_title: b.market_title || 'Will Trump win the 2028 Republican nomination?',
+      token_id: 'qa_test_token',
+      entry_price: 0.45,
+      _qa_test: true
+    };
+
+    let fired = 0;
+    const clientMap = _stopClients || new Map();
+    const targets = targetUserId ? (clientMap.has(targetUserId) ? [clientMap.get(targetUserId)] : []) : [...clientMap.values()];
+    for (const clients of targets) {
+      for (const res2 of clients) {
+        try {
+          res2.write('event: stop_triggered\n');
+          res2.write('data: ' + JSON.stringify(payload) + '\n\n');
+          fired++;
+        } catch (e) { clients.delete(res2); }
+      }
+    }
+    res.json({ ok: true, fired_to_clients: fired, payload, hint: fired === 0 ? 'No stop-SSE clients connected. Visit /market/<slug> as a signed-in user with an open position first.' : 'Banner should appear on the market page.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/qa/status — snapshot of what's live and testable
+app.get('/api/admin/qa/status', requireAdmin, async (req, res) => {
+  try {
+    const copyClientCount = _copyBotClients ? [..._copyBotClients.values()].reduce((s, set) => s + set.size, 0) : 0;
+    const stopClientCount = _stopClients ? [..._stopClients.values()].reduce((s, set) => s + set.size, 0) : 0;
+    const activeStopsCount = _activeStops ? [..._activeStops.values()].reduce((s, a) => s + a.length, 0) : 0;
+
+    let dbStats = {};
+    if (pool) {
+      try {
+        const cbSubs = await dbQuery(`SELECT COUNT(*) FROM copy_bot_subscriptions WHERE active = true`);
+        const cbTrades = await dbQuery(`SELECT status, COUNT(*) as c FROM copy_bot_trades GROUP BY status`);
+        const sOrders = await dbQuery(`SELECT status, COUNT(*) as c FROM stop_orders GROUP BY status`);
+        const bugs = await dbQuery(`SELECT status, COUNT(*) as c FROM bug_reports GROUP BY status`);
+        dbStats = {
+          active_copy_subscriptions: parseInt(cbSubs[0]?.count || 0),
+          copy_trades_by_status: cbTrades.reduce((o, r) => { o[r.status] = parseInt(r.c); return o; }, {}),
+          stop_orders_by_status: sOrders.reduce((o, r) => { o[r.status] = parseInt(r.c); return o; }, {}),
+          bug_reports_by_status: bugs.reduce((o, r) => { o[r.status] = parseInt(r.c); return o; }, {})
+        };
+      } catch (e) { dbStats.error = e.message; }
+    }
+
+    res.json({
+      ok: true,
+      sse_connections: {
+        copy_bot_clients: copyClientCount,
+        stop_order_clients: stopClientCount
+      },
+      memory: {
+        active_stops_loaded: activeStopsCount
+      },
+      live_stream: (typeof liveStream !== 'undefined') ? liveStream.getStats() : null,
+      screener_cache: {
+        loaded: !!(typeof _screenerCache !== 'undefined' && _screenerCache && _screenerCache.data),
+        size: (typeof _screenerCache !== 'undefined' && _screenerCache && _screenerCache.data) ? _screenerCache.data.length : 0,
+        age_ms: (typeof _screenerCache !== 'undefined' && _screenerCache) ? (Date.now() - _screenerCache.ts) : null
+      },
+      env: {
+        admin_secret: !!process.env.ADMIN_SECRET,
+        resend_api_key: !!process.env.RESEND_API_KEY,
+        smtp_pass: !!process.env.SMTP_PASS,
+        bug_report_email: process.env.BUG_REPORT_EMAIL || null,
+        admin_email: process.env.ADMIN_EMAIL || null,
+        smtp_from: process.env.SMTP_FROM || null,
+        anthropic_api_key: !!process.env.ANTHROPIC_API_KEY,
+        database_url: !!process.env.DATABASE_URL
+      },
+      db: dbStats
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/activity — global activity feed (mixed event types for Twitter-like feed)
 app.get('/api/activity', async (req, res) => {
   try {

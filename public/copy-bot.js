@@ -120,19 +120,25 @@
     if (!data.trade_id) return;
     if (_activeBanners[data.trade_id]) return; // already showing in this tab
 
+    // ── DRY RUN / QA TEST mode ──
+    // Server-side QA endpoints set _qa_test: true and _dry_run: true
+    // Dry run: show banner + pre-flight UI but NEVER submit a real order
+    var isDryRun = !!(data._dry_run || data._qa_test);
+
     // Pre-flight check: wallet + balance
     var wallet = _hasWallet();
     var balance = wallet ? await _getUsdcBalance() : null;
     var needed = parseFloat(data.alloc_usd || 0);
     var canExecute = wallet && (balance === null || balance >= needed);
     var preflightReason = null;
-    if (!wallet) preflightReason = 'Connect wallet to execute';
+    if (isDryRun) preflightReason = '🧪 DRY RUN — banner only, no order will be placed';
+    else if (!wallet) preflightReason = 'Connect wallet to execute';
     else if (balance !== null && balance < needed) preflightReason = 'Need $' + needed.toFixed(0) + ' USDC (you have $' + balance.toFixed(2) + ')';
 
-    _showBanner(data, { canExecute: canExecute, reason: preflightReason, balance: balance });
+    _showBanner(data, { canExecute: canExecute, reason: preflightReason, balance: balance, dryRun: isDryRun });
 
-    // Auto-execute if possible — but only if cross-tab lock is available
-    if (canExecute && _acquireLock(data.trade_id)) {
+    // Auto-execute only if NOT a dry run
+    if (!isDryRun && canExecute && _acquireLock(data.trade_id)) {
       _executeTrade(data).catch(function(err) {
         _warn('auto-exec failed:', err.message);
         _releaseLock(data.trade_id);
@@ -152,7 +158,10 @@
     preflight = preflight || { canExecute: true };
     var b = document.createElement('div');
     b.id = 'cbBanner_' + data.trade_id;
-    b.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;background:linear-gradient(135deg,#0c0c0b,#141412);color:#fff;padding:16px;border-radius:12px;border:1px solid #a855f7;box-shadow:0 8px 32px rgba(168,85,247,0.3);font-family:Inter,sans-serif;font-size:13px;z-index:10001;animation:cbSlideIn 0.3s ease-out';
+    // Dry-run banners get a yellow border to clearly mark them as test events
+    var borderColor = preflight.dryRun ? '#f59e0b' : '#a855f7';
+    var shadowColor = preflight.dryRun ? 'rgba(245,158,11,0.3)' : 'rgba(168,85,247,0.3)';
+    b.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;background:linear-gradient(135deg,#0c0c0b,#141412);color:#fff;padding:16px;border-radius:12px;border:1px solid ' + borderColor + ';box-shadow:0 8px 32px ' + shadowColor + ';font-family:Inter,sans-serif;font-size:13px;z-index:10001;animation:cbSlideIn 0.3s ease-out';
     var sideColor = data.side && data.side.toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
     var priceCents = Math.round((data.price || 0.5) * 100);
 
@@ -176,8 +185,8 @@
 
     b.innerHTML =
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
-        '<span style="font-size:18px">🤖</span>' +
-        '<span style="font-family:monospace;font-size:11px;color:#a855f7;font-weight:700;letter-spacing:1px">COPY OPPORTUNITY</span>' +
+        '<span style="font-size:18px">' + (preflight.dryRun ? '🧪' : '🤖') + '</span>' +
+        '<span style="font-family:monospace;font-size:11px;color:' + (preflight.dryRun ? '#f59e0b' : '#a855f7') + ';font-weight:700;letter-spacing:1px">' + (preflight.dryRun ? 'QA TEST (DRY RUN)' : 'COPY OPPORTUNITY') + '</span>' +
         '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'dismissed\')" style="margin-left:auto;background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:0 4px">✕</button>' +
       '</div>' +
       '<div style="font-weight:700;margin-bottom:4px">' + _esc(data.whale_name || 'A whale') + ' opened position</div>' +
@@ -261,6 +270,14 @@
   async function execute(tradeId) {
     var data = _activeBanners[tradeId];
     if (!data) return;
+    // Dry run: show fake success without hitting CLOB
+    if (data._dry_run || data._qa_test) {
+      _setStatus(tradeId, '✓ DRY RUN — no real order placed', '#f59e0b');
+      var btn = document.getElementById('cbExec_' + tradeId);
+      if (btn) { btn.disabled = true; btn.textContent = 'Dry run ✓'; btn.style.background = '#f59e0b'; }
+      setTimeout(function() { _removeBanner(tradeId); }, 3000);
+      return;
+    }
     // Manual click → try to acquire cross-tab lock
     if (!_acquireLock(tradeId)) {
       _setStatus(tradeId, 'Another tab is executing this trade', '#f59e0b');
