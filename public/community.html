@@ -1902,7 +1902,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
     <div id="socialRow" class="social-row" style="display:none"></div>
     <div class="hero-mini-stats">
       <div class="hero-mini-stat"><strong id="statMarkets">—</strong> open markets</div>
-      <div class="hero-mini-stat"><strong id="statTraders">—</strong> members</div>
+      <div class="hero-mini-stat"><strong id="statTraders">—</strong> predictors</div>
       <div class="hero-mini-stat gold"><strong id="statPoints">—</strong> <span id="statPointsLabel">pts</span></div>
       <button class="hero-mini-stat leaderboard-jump-pill" onclick="document.getElementById('leaderboardSection').scrollIntoView({behavior:'smooth',block:'start'})">🏆 Leaderboard</button>
       <button id="heroFollowBtn" class="hero-mini-stat" onclick="currentUser ? followCommunity() : openAuth('register')" style="display:none;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:var(--green);font-weight:700;cursor:pointer">🔔 Follow</button>
@@ -2636,8 +2636,9 @@ function renderPage(data) {
     });
   }
 
-  // Stats
-  const active   = markets.filter(m => !m.resolved);
+  // Stats — only count truly open markets (not resolved, not archived, not expired)
+  const now = new Date();
+  const active   = markets.filter(m => !m.resolved && !m.archived && !(m.expiry_date && new Date(m.expiry_date) < now));
   const resolved = markets.filter(m =>  m.resolved);
 
   document.getElementById('statMarkets').textContent  = active.length;
@@ -2695,7 +2696,8 @@ function renderPage(data) {
 }
 
 function buildFilterCounts() {
-  const active = markets.filter(m => !m.resolved);
+  const _now = new Date();
+  const active = markets.filter(m => !m.resolved && !m.archived && !(m.expiry_date && new Date(m.expiry_date) < _now));
   const hot    = active.filter(m => isHot(m));
   const soon   = active.filter(m => isClosingSoon(m));
   const mine   = active.filter(m => myPositions[m.id]);
