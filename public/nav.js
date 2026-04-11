@@ -28,7 +28,7 @@
   function loadDeposit() {
     if (document.querySelector('script[data-hfx-id="deposit"]')) return;
     var d = document.createElement('script');
-    d.src = '/deposit.js?v=4';
+    d.src = '/deposit.js?v=5';
     d.async = true;
     d.setAttribute('data-hfx-id', 'deposit');
     d.onerror = function() { console.warn('[nav.js] deposit.js failed to load'); };

@@ -270,36 +270,78 @@
           '<strong style="color:#f59e0b">Note:</strong> On-ramps require KYC (ID verification). Typical time: 5-15 min for first purchase, then instant. Fees: 1.5-3.5% depending on payment method.' +
         '</div>';
     } else if (currentTab === 'bridge') {
-      bodyHtml =
-        '<div style="padding:16px 18px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;text-align:center;margin-bottom:14px">' +
-          '<div style="font-size:28px;margin-bottom:8px">🌉</div>' +
-          '<div style="font-size:14px;font-weight:700;color:#4d9fff;margin-bottom:4px">Cross-chain bridging</div>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">Have USDC on Ethereum, Arbitrum, Base, Optimism, or BSC? Bridge it to Polygon in one transaction.</div>' +
-        '</div>' +
+      // Sub-state: external links view vs embedded widget view
+      var bridgeMode = state.bridgeMode || 'links';
+      var proxyAddr = state.proxy || '';
 
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">' +
-          '<a href="https://jumper.exchange/?fromChain=1&toChain=137&toToken=' + USDC_ADDRESS + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:24px">⚡</span>' +
-            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Jumper.exchange (LI.FI)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">From any chain · auto-routes via Across/Stargate/CCTP · 1-5 min</div></div>' +
+      if (bridgeMode === 'widget') {
+        // Embedded Jumper.exchange widget with all pre-fills
+        // toAddress=proxy makes USDC land directly in the Polymarket wallet
+        var jumperUrl = 'https://jumper.exchange/?fromChain=1&toChain=137&toToken=' + USDC_ADDRESS + '&toAddress=' + encodeURIComponent(proxyAddr);
+        bodyHtml =
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+            '<button onclick="HFXDeposit._setBridgeMode(\'links\')" style="background:rgba(255,255,255,0.06);border:1px solid #1e1e2a;color:#f0f0f5;padding:6px 12px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer">← Back</button>' +
+            '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0">Embedded Jumper widget · USDC lands directly in your Polymarket wallet</span>' +
+          '</div>' +
+
+          '<div style="position:relative;width:100%;height:540px;background:#000;border:1px solid #1e1e2a;border-radius:10px;overflow:hidden">' +
+            // Fallback message shown first, iframe loads on top if successful
+            '<div id="hfxBridgeIframeFallback" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;color:#8888a0;font-family:\'JetBrains Mono\',monospace;font-size:11px;line-height:1.7">' +
+              '<div>' +
+                '<div style="font-size:28px;margin-bottom:10px">🔒</div>' +
+                '<div style="font-weight:700;color:#f0f0f5;margin-bottom:6px">Loading Jumper widget…</div>' +
+                '<div>If this doesn\'t appear within a few seconds, Jumper blocks iframe embedding. Use the button below instead.</div>' +
+                '<a href="' + jumperUrl + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;background:#00e68a;color:#0a0a0f;padding:10px 18px;border-radius:6px;font-weight:800;text-decoration:none;font-family:\'JetBrains Mono\',monospace;font-size:11px">Open Jumper in new tab →</a>' +
+              '</div>' +
+            '</div>' +
+            '<iframe src="' + jumperUrl + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent" onload="var f=document.getElementById(\'hfxBridgeIframeFallback\');if(f)f.style.display=\'none\'" sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"></iframe>' +
+          '</div>' +
+
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:10px;padding:10px 12px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.15);border-radius:6px">' +
+            '<strong style="color:#4d9fff">Destination pre-filled.</strong> USDC will land in your Polymarket wallet <span style="color:#f0f0f5">' + _esc(proxyAddr.slice(0,8)) + '…' + _esc(proxyAddr.slice(-4)) + '</span> on Polygon. Your source wallet connects inside the widget below.' +
+          '</div>';
+      } else {
+        // Default: links view
+        bodyHtml =
+          '<div style="padding:16px 18px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;text-align:center;margin-bottom:14px">' +
+            '<div style="font-size:28px;margin-bottom:8px">🌉</div>' +
+            '<div style="font-size:14px;font-weight:700;color:#4d9fff;margin-bottom:4px">Cross-chain bridging</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">Have USDC on Ethereum, Arbitrum, Base, Optimism, or BSC? Bridge it to Polygon in one transaction.</div>' +
+          '</div>' +
+
+          // NEW: prominent "Bridge inside HYPERFLEX" button (loads iframe)
+          '<button onclick="HFXDeposit._setBridgeMode(\'widget\')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;background:linear-gradient(135deg,rgba(0,230,138,0.12),rgba(77,159,255,0.12));border:1px solid rgba(0,230,138,0.35);border-radius:10px;color:#f0f0f5;cursor:pointer;margin-bottom:12px;text-align:left;font-family:inherit">' +
+            '<span style="font-size:24px">✨</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Bridge inside HYPERFLEX <span style="background:#00e68a;color:#0a0a0f;font-size:9px;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:900">NEW</span></div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Jumper widget embedded right here · destination pre-filled to your Polymarket wallet</div></div>' +
             '<span style="color:#00e68a;font-size:18px">→</span>' +
-          '</a>' +
+          '</button>' +
 
-          '<a href="https://app.across.to/bridge?from=1&to=137&inputToken=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&outputToken=' + USDC_ADDRESS + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:24px">🔀</span>' +
-            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Across Protocol</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Fastest optimistic bridge · ~1-3 min</div></div>' +
-            '<span style="color:#a855f7;font-size:18px">→</span>' +
-          '</a>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Or open in a new tab</div>' +
 
-          '<a href="https://wallet.polygon.technology/polygon/bridge/deposit" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:24px">🏛</span>' +
-            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Polygon PoS Bridge (official)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;margin-top:2px">⚠ 22-45 min finality · only if the fast bridges fail</div></div>' +
-            '<span style="color:#8888a0;font-size:18px">→</span>' +
-          '</a>' +
-        '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">' +
+            '<a href="https://jumper.exchange/?fromChain=1&toChain=137&toToken=' + USDC_ADDRESS + '&toAddress=' + encodeURIComponent(proxyAddr) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+              '<span style="font-size:20px">⚡</span>' +
+              '<div style="flex:1"><div style="font-size:13px;font-weight:700">Jumper.exchange</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">LI.FI router · auto-picks fastest/cheapest path · 1-5 min</div></div>' +
+              '<span style="color:#00e68a;font-size:16px">→</span>' +
+            '</a>' +
 
-        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">' +
-          '<strong style="color:#00e68a">Tip:</strong> Jumper is the best choice for most cases — it auto-routes across 10+ chains and picks the cheapest/fastest path. After bridging, USDC lands in your MetaMask — then use the MetaMask tab above to forward it to Polymarket.' +
-        '</div>';
+            '<a href="https://app.across.to/bridge?from=1&to=137&inputToken=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&outputToken=' + USDC_ADDRESS + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+              '<span style="font-size:20px">🔀</span>' +
+              '<div style="flex:1"><div style="font-size:13px;font-weight:700">Across Protocol</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Optimistic bridge · ~1-3 min · lowest fees</div></div>' +
+              '<span style="color:#8888a0;font-size:16px">→</span>' +
+            '</a>' +
+
+            '<a href="https://wallet.polygon.technology/polygon/bridge/deposit" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+              '<span style="font-size:20px">🏛</span>' +
+              '<div style="flex:1"><div style="font-size:13px;font-weight:700">Polygon PoS Bridge (official)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;margin-top:2px">⚠ 22-45 min finality · only if fast bridges fail</div></div>' +
+              '<span style="color:#8888a0;font-size:16px">→</span>' +
+            '</a>' +
+          '</div>' +
+
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">' +
+            '<strong style="color:#00e68a">Tip:</strong> The embedded Jumper widget pre-fills your Polymarket wallet as the destination — USDC lands directly without an extra forwarding step.' +
+          '</div>';
+      }
     }
 
     return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:14px;padding:22px;max-width:500px;width:100%;color:#f0f0f5;max-height:92vh;overflow-y:auto">' +
@@ -476,6 +518,16 @@
   function _setTab(tab) {
     if (!_state) return;
     _state.currentTab = tab;
+    // Reset bridge sub-mode when switching tabs
+    if (tab !== 'bridge') _state.bridgeMode = null;
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+  }
+
+  // Switch bridge sub-mode: 'links' (default) vs 'widget' (embedded iframe)
+  function _setBridgeMode(mode) {
+    if (!_state) return;
+    _state.bridgeMode = mode;
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
   }
@@ -530,6 +582,7 @@
     close: close,
     _submit: _submit,
     _setTab: _setTab,
+    _setBridgeMode: _setBridgeMode,
     _copyAddr: _copyAddr
   };
 })();
