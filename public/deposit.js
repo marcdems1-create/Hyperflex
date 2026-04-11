@@ -25,6 +25,8 @@
 (function() {
   'use strict';
 
+  try { console.log('[HFXDeposit] loaded at', new Date().toISOString()); } catch (e) {}
+
   var USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
   var SAFE_FACTORY = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
   var POLYGON_RPCS = [

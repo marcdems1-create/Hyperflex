@@ -28,14 +28,23 @@
   function loadDeposit() {
     if (document.querySelector('script[data-hfx-id="deposit"]')) return;
     var d = document.createElement('script');
-    d.src = '/deposit.js?v=1';
+    d.src = '/deposit.js?v=2';
     d.async = true;
     d.setAttribute('data-hfx-id', 'deposit');
+    d.onerror = function() { console.warn('[nav.js] deposit.js failed to load'); };
     document.head.appendChild(d);
   }
 
+  // ── Load deposit.js IMMEDIATELY (not chained behind wallet.js) ──
+  // deposit.js is self-contained enough to load in parallel. It only
+  // needs window.ethers + window.HFXWallet when the user actually clicks
+  // Deposit, not at script-evaluation time. Loading it up-front prevents
+  // the "module still loading" race condition.
+  loadDeposit();
+
   function loadAllDependents() {
     loadCopyBot();
+    // deposit.js already loaded above — no-op if called again
     loadDeposit();
   }
 
@@ -1009,4 +1018,29 @@ window.hfxMarketUrl = function(polyUrl) {
     return window.polyRef(polyUrl);
   }
   return polyUrl;
+};
+
+// ── hfxOpenDeposit — race-safe deposit opener ──
+// Call from anywhere. If HFXDeposit is ready, opens it. If not, polls
+// every 200ms for up to 3 seconds waiting for it to load before giving up.
+// This is what every Deposit button on the site should use instead of
+// calling HFXDeposit.open() directly — avoids the "module still loading"
+// race condition when users click before the script finishes loading.
+window.hfxOpenDeposit = function() {
+  var attempts = 0;
+  var maxAttempts = 15; // 15 × 200ms = 3 seconds
+  function tryOpen() {
+    if (window.HFXDeposit && typeof window.HFXDeposit.open === 'function') {
+      try { window.HFXDeposit.open(); } catch (e) { console.error('[hfxOpenDeposit] error:', e); }
+      return;
+    }
+    attempts++;
+    if (attempts >= maxAttempts) {
+      console.warn('[hfxOpenDeposit] HFXDeposit did not load after ' + (maxAttempts * 200) + 'ms');
+      alert('Could not load the deposit module. Please refresh the page and try again.');
+      return;
+    }
+    setTimeout(tryOpen, 200);
+  }
+  tryOpen();
 };
