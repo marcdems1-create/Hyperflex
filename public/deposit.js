@@ -158,88 +158,188 @@
       '</div>';
     }
 
-    // READY
+    // READY — tabbed interface
     var eoaBal = state.eoaBalance != null ? state.eoaBalance : 0;
     var proxyBal = state.proxyBalance != null ? state.proxyBalance : 0;
     var hasEoaUsdc = eoaBal >= 0.01;
     var hasGas = state.polBalance == null || state.polBalance >= 0.001;
 
+    // Default tab: if user has USDC in MetaMask, start on transfer.
+    // Otherwise start on Exchange (most common path for new users).
+    var currentTab = state.currentTab || (hasEoaUsdc ? 'metamask' : 'exchange');
+
+    function tabBtn(tab, label, icon) {
+      var active = currentTab === tab;
+      return '<button onclick="HFXDeposit._setTab(\'' + tab + '\')" style="flex:1;min-width:auto;padding:10px 8px;border:1px solid ' + (active ? '#00e68a' : '#1e1e2a') + ';background:' + (active ? 'rgba(0,230,138,0.08)' : 'transparent') + ';color:' + (active ? '#00e68a' : '#8888a0') + ';font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;border-radius:8px;cursor:pointer;transition:all 0.15s;min-height:40px;white-space:nowrap">' + icon + ' ' + label + '</button>';
+    }
+
+    var tabsHtml =
+      '<div style="display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;padding-bottom:2px">' +
+        tabBtn('metamask', 'MetaMask', '🦊') +
+        tabBtn('exchange', 'Exchange', '🏦') +
+        tabBtn('card', 'Card/Bank', '💳') +
+        tabBtn('bridge', 'Bridge', '🌉') +
+      '</div>';
+
     var bodyHtml;
-    if (hasEoaUsdc) {
-      bodyHtml =
-        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
-          '<div style="flex:1;position:relative">' +
-            '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:\'JetBrains Mono\',monospace;font-size:15px;color:#8888a0">$</span>' +
-            '<input type="number" id="hfxDepositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:#1a1917;border:1px solid #1e1e2a;border-radius:6px;padding:12px 12px 12px 26px;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:700;color:#f0f0f5;outline:none;box-sizing:border-box"/>' +
+    if (currentTab === 'metamask') {
+      if (hasEoaUsdc) {
+        bodyHtml =
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+            '<div style="flex:1;position:relative">' +
+              '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:\'JetBrains Mono\',monospace;font-size:15px;color:#8888a0">$</span>' +
+              '<input type="number" id="hfxDepositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:#1a1917;border:1px solid #1e1e2a;border-radius:6px;padding:12px 12px 12px 26px;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:700;color:#f0f0f5;outline:none;box-sizing:border-box"/>' +
+            '</div>' +
+            '<button onclick="document.getElementById(\'hfxDepositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
           '</div>' +
-          '<button onclick="document.getElementById(\'hfxDepositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
-        '</div>' +
-
-        (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
-
-        '<button onclick="HFXDeposit._submit()" id="hfxDepositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
-
-        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:14px;text-align:center">Standard USDC ERC-20 transfer · Gas: ~$0.01 in POL</div>';
-    } else {
-      // No USDC on Polygon — show onramps
+          (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5">⚠ Your MetaMask has no POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
+          '<button onclick="HFXDeposit._submit()" id="hfxDepositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:14px;text-align:center">Standard USDC ERC-20 transfer on Polygon · Gas: ~$0.01 in POL</div>';
+      } else {
+        // MetaMask tab but no USDC in EOA
+        bodyHtml =
+          '<div style="padding:18px 20px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:10px;text-align:center">' +
+            '<div style="font-size:28px;margin-bottom:8px">🦊</div>' +
+            '<div style="font-size:14px;font-weight:700;color:#f59e0b;margin-bottom:4px">No USDC in your MetaMask</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.7">Your MetaMask wallet has no USDC on Polygon. Switch to one of the other tabs above to fund your Polymarket wallet another way.</div>' +
+          '</div>';
+      }
+    } else if (currentTab === 'exchange') {
+      var addr = state.proxy || '';
+      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=' + encodeURIComponent(addr);
       bodyHtml =
-        '<div style="padding:14px 16px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:10px;margin-bottom:14px">' +
-          '<div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:6px">You need USDC on Polygon first</div>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.7">Your MetaMask wallet has no USDC on the Polygon network. You have a few options:</div>' +
+        '<div style="padding:12px 14px;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.3);border-radius:8px;margin-bottom:14px">' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:800;color:#ff4d6a;margin-bottom:6px">⚠ READ THIS BEFORE SENDING</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#f0f0f5;line-height:1.6">' +
+            '<strong>Network MUST be Polygon</strong> (not Ethereum, not Optimism, not Base). ' +
+            'Sending on the wrong network will lose your funds permanently. If your exchange calls it "MATIC", that\'s the same as Polygon.' +
+          '</div>' +
         '</div>' +
 
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
-          '<a href="https://buy.ramp.network/?userAddress=' + _esc(state.eoa || '') + '&swapAsset=MATIC_USDC&defaultAsset=MATIC_USDC" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:8px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:20px">💳</span>' +
-            '<div style="flex:1"><div style="font-size:13px;font-weight:700">Buy with card / bank (Ramp)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0">Fastest path · sends USDC directly to your MetaMask</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
-          '<a href="https://app.uniswap.org/#/swap?outputCurrency=' + USDC_ADDRESS + '&chain=polygon" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:8px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:20px">🔄</span>' +
-            '<div style="flex:1"><div style="font-size:13px;font-weight:700">Swap POL → USDC (Uniswap)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0">If you already have POL on Polygon</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
-          '<a href="https://www.coinbase.com/price/usd-coin" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:8px;text-decoration:none;color:#f0f0f5">' +
-            '<span style="font-size:20px">🏦</span>' +
-            '<div style="flex:1"><div style="font-size:13px;font-weight:700">Withdraw from Coinbase</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0">Send USDC on Polygon network (not Ethereum!)</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
+        // Address + QR
+        '<div style="display:flex;gap:14px;align-items:center;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;margin-bottom:14px;flex-wrap:wrap">' +
+          '<div style="width:150px;height:150px;background:#fff;border-radius:8px;flex-shrink:0;padding:8px;box-sizing:border-box">' +
+            '<img src="' + qrUrl + '" alt="Deposit address QR" style="width:100%;height:100%;display:block" onerror="this.style.display=\'none\'"/>' +
+          '</div>' +
+          '<div style="flex:1;min-width:200px">' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your Polymarket address</div>' +
+            '<div id="hfxDepositAddrEl" style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;color:#f0f0f5;word-break:break-all;line-height:1.5;margin-bottom:10px;user-select:all">' + _esc(addr) + '</div>' +
+            '<button onclick="HFXDeposit._copyAddr()" id="hfxDepositCopyBtn" style="width:100%;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:40px">📋 Copy address</button>' +
+          '</div>' +
+        '</div>' +
+
+        // Exchange-specific instructions (collapsible-ish)
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">How to send from your exchange</div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +
+          _exchangeRow('Coinbase', 'Pay → Send → USDC → enter this address → Network: <strong style="color:#f0f0f5">Polygon</strong>', 'https://www.coinbase.com/') +
+          _exchangeRow('Binance', 'Wallet → Withdraw → USDC → paste this address → Network: <strong style="color:#f0f0f5">Polygon (MATIC)</strong>', 'https://www.binance.com/en/my/wallet/account/main/withdrawal/crypto/USDC') +
+          _exchangeRow('Kraken', 'Funding → Withdraw → USDC → New address → Network: <strong style="color:#f0f0f5">Polygon</strong>', 'https://www.kraken.com/u/funding/withdraw?asset=USDC') +
+          _exchangeRow('OKX', 'Assets → Withdraw → USDC → On-chain → Network: <strong style="color:#f0f0f5">Polygon</strong>', 'https://www.okx.com/balance/withdrawal/usdc') +
+          _exchangeRow('Robinhood', 'Crypto → USDC → Send → Polygon network', 'https://robinhood.com/') +
         '</div>' +
 
         '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.15);border-radius:6px">' +
-          '<strong style="color:#4d9fff">Important:</strong> Make sure you get USDC on the <strong style="color:#f0f0f5">Polygon</strong> network (not Ethereum mainnet). Polygon is much cheaper. After you have USDC, come back here to deposit.' +
+          '<strong style="color:#4d9fff">Timing:</strong> Most exchanges confirm within 2-5 minutes on Polygon. You\'ll see your balance update on HYPERFLEX automatically.' +
+        '</div>';
+    } else if (currentTab === 'card') {
+      bodyHtml =
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.7;margin-bottom:14px">Buy USDC directly with a card, bank transfer, or existing crypto. These providers send USDC straight to your MetaMask, then use the MetaMask tab above to forward it to Polymarket.</div>' +
+
+        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+          '<a href="https://buy.ramp.network/?userAddress=' + _esc(state.eoa || '') + '&swapAsset=MATIC_USDC&defaultAsset=MATIC_USDC" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5;transition:background 0.15s">' +
+            '<span style="font-size:24px">💳</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Ramp Network</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Card · Apple Pay · Bank transfer · 🇺🇸 🇪🇺 🇬🇧</div></div>' +
+            '<span style="color:#00e68a;font-size:18px">→</span>' +
+          '</a>' +
+
+          '<a href="https://pay.coinbase.com/buy/select-asset?appId=hyperflex&destinationWallets=' + encodeURIComponent(JSON.stringify([{ address: state.eoa || '', blockchains: ['polygon'], assets: ['USDC'] }])) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+            '<span style="font-size:24px">🟦</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Coinbase Pay</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Use your Coinbase account · instant · fee-free</div></div>' +
+            '<span style="color:#4d9fff;font-size:18px">→</span>' +
+          '</a>' +
+
+          '<a href="https://global.transak.com/?apiKey=e8e5c1a9-3d2a-4f15-9a25-5f4c9e2dc97f&cryptoCurrencyCode=USDC&network=polygon&walletAddress=' + encodeURIComponent(state.eoa || '') + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+            '<span style="font-size:24px">🌐</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Transak</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">130+ countries · SEPA · UPI · Local methods</div></div>' +
+            '<span style="color:#a855f7;font-size:18px">→</span>' +
+          '</a>' +
         '</div>' +
 
-        '<button onclick="HFXDeposit.close()" style="width:100%;background:rgba(255,255,255,0.06);color:#8888a0;border:1px solid #1e1e2a;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;margin-top:14px">Close</button>';
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.15);border-radius:6px">' +
+          '<strong style="color:#f59e0b">Note:</strong> On-ramps require KYC (ID verification). Typical time: 5-15 min for first purchase, then instant. Fees: 1.5-3.5% depending on payment method.' +
+        '</div>';
+    } else if (currentTab === 'bridge') {
+      bodyHtml =
+        '<div style="padding:16px 18px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;text-align:center;margin-bottom:14px">' +
+          '<div style="font-size:28px;margin-bottom:8px">🌉</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#4d9fff;margin-bottom:4px">Cross-chain bridging</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">Have USDC on Ethereum, Arbitrum, Base, Optimism, or BSC? Bridge it to Polygon in one transaction.</div>' +
+        '</div>' +
+
+        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">' +
+          '<a href="https://jumper.exchange/?fromChain=1&toChain=137&toToken=' + USDC_ADDRESS + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+            '<span style="font-size:24px">⚡</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Jumper.exchange (LI.FI)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">From any chain · auto-routes via Across/Stargate/CCTP · 1-5 min</div></div>' +
+            '<span style="color:#00e68a;font-size:18px">→</span>' +
+          '</a>' +
+
+          '<a href="https://app.across.to/bridge?from=1&to=137&inputToken=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&outputToken=' + USDC_ADDRESS + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.25);border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+            '<span style="font-size:24px">🔀</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Across Protocol</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">Fastest optimistic bridge · ~1-3 min</div></div>' +
+            '<span style="color:#a855f7;font-size:18px">→</span>' +
+          '</a>' +
+
+          '<a href="https://wallet.polygon.technology/polygon/bridge/deposit" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;text-decoration:none;color:#f0f0f5">' +
+            '<span style="font-size:24px">🏛</span>' +
+            '<div style="flex:1"><div style="font-size:14px;font-weight:800">Polygon PoS Bridge (official)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;margin-top:2px">⚠ 22-45 min finality · only if the fast bridges fail</div></div>' +
+            '<span style="color:#8888a0;font-size:18px">→</span>' +
+          '</a>' +
+        '</div>' +
+
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">' +
+          '<strong style="color:#00e68a">Tip:</strong> Jumper is the best choice for most cases — it auto-routes across 10+ chains and picks the cheapest/fastest path. After bridging, USDC lands in your MetaMask — then use the MetaMask tab above to forward it to Polymarket.' +
+        '</div>';
     }
 
-    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:14px;padding:22px;max-width:460px;width:100%;color:#f0f0f5;max-height:92vh;overflow-y:auto">' +
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:14px;padding:22px;max-width:500px;width:100%;color:#f0f0f5;max-height:92vh;overflow-y:auto">' +
       // Header
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
         '<span style="font-size:20px">💰</span>' +
         '<div style="flex:1">' +
           '<div style="font-size:16px;font-weight:800">Deposit to Polymarket</div>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;margin-top:2px">Transfer USDC from your MetaMask wallet to your Polymarket wallet</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;margin-top:2px">Fund your Polymarket wallet from any source</div>' +
         '</div>' +
         '<button onclick="HFXDeposit.close()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
       '</div>' +
 
       // Balance display
-      '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">' +
+      '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:8px">' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🦊 MetaMask (source)</div>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:18px;font-weight:800;color:' + (hasEoaUsdc ? '#f0f0f5' : '#ff4d6a') + '">$' + eoaBal.toFixed(2) + '</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🦊 MetaMask</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:18px;font-weight:800;color:' + (hasEoaUsdc ? '#f0f0f5' : '#8888a0') + '">$' + eoaBal.toFixed(2) + '</div>' +
           '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">' + (state.eoa ? state.eoa.slice(0,6) + '…' + state.eoa.slice(-4) : '') + '</div>' +
         '</div>' +
         '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Polymarket (destination)</div>' +
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Polymarket</div>' +
           '<div style="font-family:\'JetBrains Mono\',monospace;font-size:18px;font-weight:800;color:#f0f0f5">$' + proxyBal.toFixed(2) + '</div>' +
           '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;margin-top:2px">' + (state.proxy ? state.proxy.slice(0,6) + '…' + state.proxy.slice(-4) : '') + '</div>' +
         '</div>' +
       '</div>' +
 
+      tabsHtml +
       bodyHtml +
+    '</div>';
+  }
+
+  // Helper to render an exchange instruction row
+  function _exchangeRow(name, instructions, url) {
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:8px">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:12px;font-weight:800;color:#f0f0f5;margin-bottom:2px">' + _esc(name) + '</div>' +
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.5">' + instructions + '</div>' +
+      '</div>' +
+      '<a href="' + url + '" target="_blank" rel="noopener" style="color:#00e68a;text-decoration:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;padding:6px 10px;border:1px solid rgba(0,230,138,0.3);border-radius:5px;flex-shrink:0;white-space:nowrap">Open →</a>' +
     '</div>';
   }
 
@@ -372,10 +472,64 @@
     }
   }
 
+  // Switch tabs without re-fetching balances
+  function _setTab(tab) {
+    if (!_state) return;
+    _state.currentTab = tab;
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+  }
+
+  // Copy the proxy address to clipboard with visual feedback
+  function _copyAddr() {
+    if (!_state || !_state.proxy) return;
+    var addr = _state.proxy;
+    var btn = document.getElementById('hfxDepositCopyBtn');
+    var done = function() {
+      if (btn) {
+        var original = btn.innerHTML;
+        btn.innerHTML = '✓ Copied!';
+        btn.style.background = 'rgba(0,230,138,0.25)';
+        setTimeout(function() { btn.innerHTML = original; btn.style.background = 'rgba(0,230,138,0.1)'; }, 1500);
+      }
+    };
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(addr).then(done).catch(function() {
+        // Fallback to execCommand
+        try {
+          var tmp = document.createElement('textarea');
+          tmp.value = addr;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand('copy');
+          document.body.removeChild(tmp);
+          done();
+        } catch (e) {
+          alert('Copy failed. Address: ' + addr);
+        }
+      });
+    } else {
+      try {
+        var tmp2 = document.createElement('textarea');
+        tmp2.value = addr;
+        document.body.appendChild(tmp2);
+        tmp2.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp2);
+        done();
+      } catch (e) {
+        alert('Copy failed. Address: ' + addr);
+      }
+    }
+  }
+
   // Public API
   window.HFXDeposit = {
     open: open,
     close: close,
-    _submit: _submit
+    _submit: _submit,
+    _setTab: _setTab,
+    _copyAddr: _copyAddr
   };
 })();
