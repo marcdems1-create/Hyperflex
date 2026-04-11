@@ -22509,7 +22509,46 @@ let _stopsLoaded = false;
 // SSE clients watching for stop triggers: Map<userId, Set<res>>
 const _stopClients = new Map();
 
+// Auto-migrate stop_orders table on boot — idempotent, matches
+// supabase_migration_stop_orders.sql so the feature works even if the admin
+// forgot to run the manual migration.
+async function ensureStopOrdersTable() {
+  if (!pool) return;
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS stop_orders (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id       UUID NOT NULL,
+        token_id      TEXT NOT NULL,
+        condition_id  TEXT,
+        market_slug   TEXT,
+        market_title  TEXT,
+        side          TEXT NOT NULL DEFAULT 'YES',
+        shares        NUMERIC NOT NULL DEFAULT 0,
+        entry_price   NUMERIC,
+        order_type    TEXT NOT NULL DEFAULT 'stop_loss',
+        trigger_price NUMERIC NOT NULL,
+        trigger_direction TEXT NOT NULL DEFAULT 'below',
+        status        TEXT NOT NULL DEFAULT 'active',
+        triggered_at  TIMESTAMPTZ,
+        executed_at   TIMESTAMPTZ,
+        execution_price NUMERIC,
+        created_at    TIMESTAMPTZ DEFAULT now(),
+        updated_at    TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_stop_orders_active_token ON stop_orders(token_id) WHERE status = 'active'`);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_stop_orders_user ON stop_orders(user_id, status)`);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_stop_orders_triggered ON stop_orders(status) WHERE status = 'triggered'`);
+    console.log('[stop-orders] Table ensured');
+  } catch (e) {
+    console.warn('[stop-orders] Migration skipped:', e.message?.slice(0, 100));
+  }
+}
+
 async function loadActiveStops() {
+  // Ensure table exists before loading (runs once on first call)
+  await ensureStopOrdersTable();
   try {
     let rows;
     if (pool) {

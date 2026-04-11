@@ -246,11 +246,22 @@ function renderStatus(d) {
   var live = d.live_stream || {};
   var db = d.db || {};
 
+  // Escape HTML so values with < or > don't break the layout
+  // (e.g. SMTP_FROM = "HYPERFLEX <contact@hyperflex.network>")
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function envRow(label, value, required) {
     var ok = value ? true : false;
     var cls = ok ? 'ok' : (required ? 'err' : 'warn');
-    var display = typeof value === 'boolean' ? (value ? '✓ set' : '✗ missing') : (value || '— missing');
-    return '<div class="env-item ' + cls + '"><span class="env-label">' + label + '</span><span class="env-value ' + cls + '">' + display + '</span></div>';
+    var display;
+    if (typeof value === 'boolean') {
+      display = value ? '✓ set' : '✗ missing';
+    } else {
+      display = value ? esc(value) : '— missing';
+    }
+    return '<div class="env-item ' + cls + '"><span class="env-label">' + esc(label) + '</span><span class="env-value ' + cls + '">' + display + '</span></div>';
   }
 
   var html = '<div class="status-panel" style="display:block">';
