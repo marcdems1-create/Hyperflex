@@ -19762,13 +19762,26 @@ app.get('/api/hedge-pairs', (req, res) => {
       return res.json({ pairs: [], updated_at: new Date().toISOString() });
     }
 
-    // Only consider markets with real prices, decent volume, and not near resolution
-    const candidates = markets.filter(m =>
-      m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95 &&
-      m.volume >= 5000 &&
-      m.slug &&
-      (m.days_until_expiry == null || m.days_until_expiry > 1)
-    );
+    // Only consider markets with MEANINGFUL probability on BOTH sides.
+    //
+    // Critical fix: prediction markets are efficient. A "hedge" between
+    // two cheap longshots (Tucker 5¢ + Kamala 5¢) has ZERO expected value
+    // because P(either wins) = 10% ≈ cost. The +900% ROI number is
+    // misleading — it assumes one leg wins, but there's a 90% chance
+    // neither does and you lose your stake.
+    //
+    // Require each leg to have at least 30% probability — this ensures
+    // P(at least one wins) under independence is >= 51%, making the
+    // hedge a real risk-management play instead of a lottery ticket.
+    const candidates = markets.filter(m => {
+      if (m.yes_price == null) return false;
+      const cheapest = Math.min(m.yes_price, 1 - m.yes_price);
+      if (cheapest < 0.30) return false; // ≥30¢ on the cheapest side
+      if (m.volume < 25000) return false; // real liquidity
+      if (!m.slug) return false;
+      if (m.days_until_expiry != null && m.days_until_expiry < 3) return false;
+      return true;
+    });
 
     // Build keyword index: keyword -> [market indices]
     const kwIndex = {};
@@ -19782,22 +19795,25 @@ app.get('/api/hedge-pairs', (req, res) => {
       }
     }
 
-    // ── Find profitable hedge pairs ──
-    // A hedge is net-profitable when: totalCost < 100¢
-    // Because prediction markets pay $1 on win, if at least one leg hits
-    // you make (100 - totalCost)¢ profit. Both legs hitting = even more.
+    // ── Find genuine HEDGE OPPORTUNITIES ──
     //
-    // Strategy: for each market, compute the cheapest side (YES or NO).
-    // Then find correlated pairs where cheapA + cheapB < 100¢.
-    // Sort by profit margin (lower total cost = higher margin).
+    // These are pairs where you can BUY BOTH SIDES of a correlated trade
+    // and reduce directional risk. The pitch is risk management, not
+    // guaranteed profit. Prediction markets are efficient — the only way
+    // to make guaranteed money is true arbitrage, which is rare.
+    //
+    // What we're actually finding: pairs with meaningful probability on
+    // both legs (≥30¢ each) that share enough keywords to plausibly be
+    // correlated. A trader with an opinion on the underlying event can
+    // use these to build a position that wins in multiple scenarios.
+
     const seenMarkets = new Set();
     const rawPairs = [];
 
     for (let i = 0; i < candidates.length; i++) {
       const kwsA = kwSets[i];
-      if (kwsA.size < 2) continue;
+      if (kwsA.size < 4) continue; // require rich keyword set for real correlation
 
-      // Find candidates with shared keywords
       const neighborScores = {};
       for (const kw of kwsA) {
         const lst = kwIndex[kw] || [];
@@ -19808,7 +19824,7 @@ app.get('/api/hedge-pairs', (req, res) => {
       }
 
       const ranked = Object.entries(neighborScores)
-        .filter(([, count]) => count >= 2)
+        .filter(([, count]) => count >= 4) // strong correlation signal
         .sort((a, b) => b[1] - a[1]);
 
       for (const [jStr] of ranked) {
@@ -19821,28 +19837,33 @@ app.get('/api/hedge-pairs', (req, res) => {
         const union = new Set([...kwsA, ...kwsB]);
         const intersection = [...kwsA].filter(k => kwsB.has(k));
         const similarity = intersection.length / union.size;
-        if (similarity > 0.8) continue;
+        if (similarity > 0.8) continue;  // too similar = same market
+        if (similarity < 0.35) continue; // too different = not actually correlated
 
-        // For each market, pick the cheapest side — that maximises profit margin
-        const yesCostA = Math.round(mA.yes_price * 100);
-        const noCostA = 100 - yesCostA;
-        const sideA = yesCostA <= noCostA ? 'YES' : 'NO';
-        const entryA = Math.min(yesCostA, noCostA);
-
-        const yesCostB = Math.round(mB.yes_price * 100);
-        const noCostB = 100 - yesCostB;
-        const sideB = yesCostB <= noCostB ? 'YES' : 'NO';
-        const entryB = Math.min(yesCostB, noCostB);
-
+        // Pick the cheapest side of each market
+        const pA = mA.yes_price;
+        const pB = mB.yes_price;
+        const sideA = pA <= 0.5 ? 'YES' : 'NO';
+        const sideB = pB <= 0.5 ? 'YES' : 'NO';
+        const probA = sideA === 'YES' ? pA : (1 - pA);
+        const probB = sideB === 'YES' ? pB : (1 - pB);
+        const entryA = Math.round(probA * 100);
+        const entryB = Math.round(probB * 100);
         const totalCost = entryA + entryB;
 
-        // ── PROFITABILITY GATE: total cost must be under 100¢ ──
-        // If at least one leg wins, payout = $1 = 100¢, profit = 100 - totalCost
-        if (totalCost >= 100) continue;
+        // Double-check each leg has meaningful probability (≥30¢)
+        if (probA < 0.30 || probB < 0.30) continue;
 
-        // Also skip tiny margins (<5¢ profit) — not worth the execution cost
-        const profitIfOneWins = 100 - totalCost;
-        if (profitIfOneWins < 5) continue;
+        // Total cost must leave room for upside — skip pairs costing more than
+        // $0.90, since the best case profit would be ≤10¢ for $90 at risk.
+        if (totalCost > 90) continue;
+        if (totalCost < 60) continue; // if legs are <30¢ each, it's filtered, but also want sum ≥60 for real stake
+
+        // Expected payout under independence (the EV-neutral baseline):
+        // E[payout] = pA + pB (in dollars), so E[profit] = (pA + pB) − cost.
+        // If the markets are truly correlated (anti-correlated), the real
+        // EV can be higher than this, but we don't claim it.
+        const evIndependent = Math.round(((probA + probB) - (totalCost / 100)) * 100);
 
         const sharedTopics = intersection.slice(0, 4).join(', ');
 
@@ -19865,11 +19886,15 @@ app.get('/api/hedge-pairs', (req, res) => {
             whale_count: mB.whale_count || 0,
             volume: mB.volume || 0
           },
-          correlation_reason: `Both assess ${sharedTopics} outcomes`,
+          correlation_reason: `Both track: ${sharedTopics}`,
           total_cost: totalCost,
-          profit_if_one_wins: profitIfOneWins,
+          // Honest scenario payouts (no misleading "guaranteed" labels)
+          payout_if_one_wins: 100, // $1 from the winner
+          payout_if_both_win: 200, // $1 from each
+          profit_if_one_wins: 100 - totalCost, // scenario, not guaranteed
           profit_if_both_win: 200 - totalCost,
-          roi_pct: Math.round((profitIfOneWins / totalCost) * 100),
+          max_loss: totalCost, // if neither hits
+          ev_independent: evIndependent, // ~0 in efficient markets
           shared_keywords: intersection.length,
           combined_volume: (mA.volume || 0) + (mB.volume || 0),
           _idxA: i,
@@ -19878,8 +19903,8 @@ app.get('/api/hedge-pairs', (req, res) => {
       }
     }
 
-    // Sort by best profit margin (highest ROI first), then volume for liquidity
-    rawPairs.sort((a, b) => b.roi_pct - a.roi_pct || b.combined_volume - a.combined_volume);
+    // Sort by: cheapest pairs first (better risk/reward), then liquidity
+    rawPairs.sort((a, b) => a.total_cost - b.total_cost || b.combined_volume - a.combined_volume);
 
     // Deduplicate: each market appears in at most one pair
     const pairs = [];
