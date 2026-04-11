@@ -399,7 +399,7 @@ canvas{display:block;width:100%!important}
         <div class="trade-field">
           <div class="trade-field-label">
             <span>Limit Price (0.01-99.99¢)</span>
-            <span id="tradeBalance" style="color:var(--gold)">Balance: —</span>
+            <span><span id="tradeBalance" onclick="openDepositModal()" title="Click to deposit USDC" style="color:var(--gold);cursor:pointer">Balance: —</span> <button onclick="openDepositModal()" title="Deposit USDC from your MetaMask to Polymarket" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:2px 8px;border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;margin-left:6px;min-height:24px">+ Deposit</button></span>
           </div>
           <input type="number" class="trade-input" id="tradePrice" value="50" min="1" max="99" step="1" oninput="updateTradeCalc()"/>
         </div>
@@ -1572,6 +1572,318 @@ function updateTradeCalc() {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// DEPOSIT FLOW — USDC from EOA → Polymarket proxy wallet
+// ════════════════════════════════════════════════════════════
+// Without this, new users have a deployed proxy + CLOB API keys + USDC
+// approved, but $0 on the proxy. Any trade attempt fails with "insufficient
+// balance". This flow lets them transfer USDC from their MetaMask wallet
+// into their Polymarket proxy in one transaction.
+
+// Fetch the USDC balance of any address via public RPC
+async function fetchUsdcBalance(address) {
+  if (!address) return null;
+  try {
+    var provider = await getPublicProvider();
+    var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+    var abi = ['function balanceOf(address) view returns (uint256)'];
+    var contract = new ethers.Contract(usdcAddress, abi, provider);
+    var raw = await contract.balanceOf(address);
+    return parseFloat(ethers.formatUnits(raw, 6));
+  } catch (e) {
+    console.warn('[deposit] USDC balance lookup failed:', e.message);
+    return null;
+  }
+}
+
+// Fetch the native MATIC/POL balance (for gas) of any address
+async function fetchPolBalance(address) {
+  if (!address) return null;
+  try {
+    var provider = await getPublicProvider();
+    var raw = await provider.getBalance(address);
+    return parseFloat(ethers.formatEther(raw));
+  } catch (e) { return null; }
+}
+
+// Open the deposit modal — shows both balances, amount input, action button
+async function openDepositModal() {
+  if (!window.ethereum) {
+    alert('MetaMask required. Install or connect a wallet first.');
+    return;
+  }
+
+  // Close any existing modal
+  var existing = document.getElementById('depositOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'depositOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.onclick = function(e) { if (e.target === overlay) closeDepositModal(); };
+  document.body.appendChild(overlay);
+
+  overlay.innerHTML = _depositModalFrame({ loading: true });
+
+  // Ensure we have the user's EOA + proxy addresses
+  try {
+    // If not connected yet, trigger connect flow
+    var eoa = localStorage.getItem('poly_eoa_address');
+    if (!eoa) {
+      var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts && accounts.length) {
+        eoa = accounts[0].toLowerCase();
+        localStorage.setItem('poly_eoa_address', eoa);
+      }
+    }
+    if (!eoa) throw new Error('Could not resolve your wallet address');
+
+    // Ensure proxy is resolved
+    var proxy = localStorage.getItem('hf_poly_wallet');
+    if (!proxy || proxy.toLowerCase() === eoa.toLowerCase()) {
+      var resolved = await getPolymarketProxy(eoa);
+      if (resolved && resolved !== ethers.ZeroAddress && resolved.toLowerCase() !== eoa.toLowerCase()) {
+        proxy = resolved.toLowerCase();
+        localStorage.setItem('hf_poly_wallet', proxy);
+      }
+    }
+    if (!proxy) throw new Error('Could not resolve your Polymarket wallet. Complete setup first.');
+
+    // Fetch both balances in parallel
+    var [eoaBal, proxyBal, polBal] = await Promise.all([
+      fetchUsdcBalance(eoa),
+      fetchUsdcBalance(proxy),
+      fetchPolBalance(eoa)
+    ]);
+
+    overlay.innerHTML = _depositModalFrame({
+      eoa: eoa,
+      proxy: proxy,
+      eoaBalance: eoaBal,
+      proxyBalance: proxyBal,
+      polBalance: polBal
+    });
+  } catch (e) {
+    overlay.innerHTML = _depositModalFrame({ error: e.message || 'Unable to load deposit info' });
+  }
+}
+
+function closeDepositModal() {
+  var o = document.getElementById('depositOverlay');
+  if (o) o.remove();
+}
+
+// Renders the modal body in its various states
+function _depositModalFrame(state) {
+  var esc = function(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+
+  if (state.loading) {
+    return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
+      '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+      '<div style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--muted)">Loading your wallet balances…</div>' +
+    '</div>';
+  }
+
+  if (state.error) {
+    return '<div style="background:var(--paper,#0e0e0c);border:1px solid var(--red,#ff4d6a);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text)">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+        '<span style="font-size:18px">⚠</span>' +
+        '<div style="font-size:15px;font-weight:800">Deposit unavailable</div>' +
+        '<button onclick="closeDepositModal()" style="margin-left:auto;background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
+      '</div>' +
+      '<div style="font-family:var(--mono);font-size:12px;color:var(--dim,#aaa);line-height:1.6;margin-bottom:16px">' + esc(state.error) + '</div>' +
+      '<button onclick="closeDepositModal()" style="width:100%;background:rgba(255,255,255,0.06);color:var(--text);border:1px solid var(--border);padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Close</button>' +
+    '</div>';
+  }
+
+  if (state.signing) {
+    return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
+      '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+      '<div style="margin-top:14px;font-family:var(--sans);font-size:14px;font-weight:700;color:#00e68a">Check MetaMask → sign the transfer</div>' +
+      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Sending $' + (state.amount || 0).toFixed(2) + ' USDC to your Polymarket wallet</div>' +
+    '</div>';
+  }
+
+  if (state.confirming) {
+    return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
+      '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+      '<div style="margin-top:14px;font-family:var(--sans);font-size:14px;font-weight:700;color:#00e68a">Waiting for confirmation…</div>' +
+      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Usually 2–5 seconds on Polygon</div>' +
+      (state.txHash ? '<div style="margin-top:12px"><a href="https://polygonscan.com/tx/' + state.txHash + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue,#4d9fff);text-decoration:none">View on Polygonscan ↗</a></div>' : '') +
+    '</div>';
+  }
+
+  if (state.success) {
+    return '<div style="background:var(--paper,#0e0e0c);border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
+      '<div style="font-size:48px;margin-bottom:8px">✅</div>' +
+      '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (state.amount || 0).toFixed(2) + ' USDC</div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px">New Polymarket balance: <strong style="color:var(--text)">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
+      (state.txHash ? '<div style="margin-bottom:18px"><a href="https://polygonscan.com/tx/' + state.txHash + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue,#4d9fff);text-decoration:none">View tx on Polygonscan ↗</a></div>' : '') +
+      '<button onclick="closeDepositModal()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Close</button>' +
+    '</div>';
+  }
+
+  // Default state: ready to deposit
+  var eoaBal = state.eoaBalance != null ? state.eoaBalance : 0;
+  var proxyBal = state.proxyBalance != null ? state.proxyBalance : 0;
+  var hasEoaUsdc = eoaBal >= 0.01;
+  var hasGas = state.polBalance == null || state.polBalance >= 0.001; // ~$0.0005 gas
+
+  return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:22px;max-width:460px;width:100%;font-family:var(--sans);color:var(--text);max-height:92vh;overflow-y:auto">' +
+    // Header
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+      '<span style="font-size:20px">💰</span>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:16px;font-weight:800">Deposit to Polymarket</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Transfer USDC from your MetaMask wallet to your Polymarket wallet</div>' +
+      '</div>' +
+      '<button onclick="closeDepositModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
+    '</div>' +
+
+    // Balance display
+    '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px">' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🦊 MetaMask (source)</div>' +
+        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (hasEoaUsdc ? 'var(--text)' : 'var(--red,#ff4d6a)') + '">$' + eoaBal.toFixed(2) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.eoa ? state.eoa.slice(0,6) + '…' + state.eoa.slice(-4) : '') + '</div>' +
+      '</div>' +
+      '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
+        '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Polymarket (destination)</div>' +
+        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)">$' + proxyBal.toFixed(2) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.proxy ? state.proxy.slice(0,6) + '…' + state.proxy.slice(-4) : '') + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Main content depends on whether they have USDC to deposit
+    (hasEoaUsdc
+      ? // ── Has USDC → show input + action ──
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+          '<div style="flex:1;position:relative">' +
+            '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:15px;color:var(--muted)">$</span>' +
+            '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
+          '</div>' +
+          '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
+        '</div>' +
+
+        (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:var(--mono);font-size:10px;color:var(--gold,#c9920d);line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
+
+        '<button onclick="executeDeposit()" id="depositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
+
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">This is a standard USDC ERC-20 transfer. Gas: ~$0.01 in POL.</div>'
+
+      : // ── No USDC → show how to get some ──
+        '<div style="padding:14px 16px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:10px;margin-bottom:14px">' +
+          '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gold,#c9920d);margin-bottom:6px">You need USDC on Polygon first</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Your MetaMask wallet has no USDC on the Polygon network. You have a few options:</div>' +
+        '</div>' +
+
+        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+          '<a href="https://buy.ramp.network/?userAddress=' + (state.eoa || '') + '&swapAsset=MATIC_USDC&defaultAsset=MATIC_USDC" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
+            '<span style="font-size:20px">💳</span>' +
+            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Buy with card / bank (Ramp)</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">Fastest path · sends USDC directly to your MetaMask</div></div>' +
+            '<span style="color:#00e68a">→</span>' +
+          '</a>' +
+
+          '<a href="https://app.uniswap.org/#/swap?outputCurrency=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174&chain=polygon" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
+            '<span style="font-size:20px">🔄</span>' +
+            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Swap POL → USDC (Uniswap)</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">If you already have POL on Polygon</div></div>' +
+            '<span style="color:#00e68a">→</span>' +
+          '</a>' +
+
+          '<a href="https://www.coinbase.com/price/usd-coin" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
+            '<span style="font-size:20px">🏦</span>' +
+            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Withdraw from Coinbase</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">Send USDC on Polygon network (not Ethereum!)</div></div>' +
+            '<span style="color:#00e68a">→</span>' +
+          '</a>' +
+        '</div>' +
+
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;padding:10px 12px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.15);border-radius:6px">' +
+          '<strong style="color:#4d9fff">Important:</strong> Make sure you get USDC on the <strong style="color:var(--text)">Polygon</strong> network (not Ethereum mainnet). Polygon is much cheaper. After you have USDC, come back here to deposit.' +
+        '</div>' +
+
+        '<button onclick="closeDepositModal()" style="width:100%;background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;margin-top:14px">Close</button>'
+    ) +
+  '</div>';
+}
+
+// Execute the USDC transfer from EOA → proxy
+async function executeDeposit() {
+  var amountInput = document.getElementById('depositAmount');
+  if (!amountInput) return;
+  var amount = parseFloat(amountInput.value);
+  if (!amount || amount <= 0) {
+    amountInput.style.borderColor = 'var(--red,#ff4d6a)';
+    return;
+  }
+
+  var eoa = localStorage.getItem('poly_eoa_address');
+  var proxy = localStorage.getItem('hf_poly_wallet');
+  if (!eoa || !proxy) { alert('Wallet not fully set up. Complete setup first.'); return; }
+
+  var overlay = document.getElementById('depositOverlay');
+  if (!overlay) return;
+  overlay.innerHTML = _depositModalFrame({ signing: true, amount: amount });
+
+  try {
+    // Make sure we're on Polygon
+    try {
+      var chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== '0x89') {
+        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+      }
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+        });
+      }
+    }
+
+    // Get signer (uses HFXWallet cache if possible)
+    var signerCtx = await HFXWallet.getSigner();
+    var signer = signerCtx.signer || signerCtx;
+
+    // USDC contract
+    var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+    var abi = ['function transfer(address to, uint256 amount) returns (bool)'];
+    var usdc = new ethers.Contract(usdcAddress, abi, signer);
+
+    // USDC has 6 decimals — amount * 1e6
+    var amountWei = ethers.parseUnits(amount.toFixed(6), 6);
+
+    var tx = await usdc.transfer(proxy, amountWei);
+    console.log('[deposit] Transfer tx sent:', tx.hash);
+
+    overlay.innerHTML = _depositModalFrame({ confirming: true, amount: amount, txHash: tx.hash });
+
+    var receipt = await tx.wait();
+    console.log('[deposit] Confirmed in block', receipt.blockNumber);
+
+    // Fetch new proxy balance to show the user
+    var newProxyBal = await fetchUsdcBalance(proxy);
+
+    overlay.innerHTML = _depositModalFrame({
+      success: true,
+      amount: amount,
+      newProxyBalance: newProxyBal != null ? newProxyBal : 0,
+      txHash: tx.hash
+    });
+
+    // Refresh the main trade balance display
+    setTimeout(fetchTradeBalance, 500);
+  } catch (err) {
+    var msg = err && err.message || 'Unknown error';
+    if (err && (err.code === 'ACTION_REJECTED' || err.code === 4001)) {
+      msg = 'You rejected the transaction in MetaMask.';
+    } else if (err && err.message && /insufficient funds/i.test(err.message)) {
+      msg = 'Not enough POL in your wallet for gas. You need a tiny amount (~$0.01 in POL).';
+    }
+    overlay.innerHTML = _depositModalFrame({ error: msg });
+  }
+}
+
 // ── Fetch USDC balance from Polygon ──────────────────────────────────────────
 async function fetchTradeBalance() {
   var proxyAddress = localStorage.getItem('hf_poly_wallet');
@@ -2681,6 +2993,20 @@ async function executeTrade() {
     showTradeStatus('Minimum amount is $1', 'error');
     return;
   }
+
+  // Pre-flight balance check — if the proxy doesn't have enough USDC, open the
+  // deposit modal instead of silently letting CLOB reject with "insufficient balance"
+  try {
+    var proxyForBal = localStorage.getItem('hf_poly_wallet');
+    if (proxyForBal) {
+      var proxyBal = await fetchUsdcBalance(proxyForBal);
+      if (proxyBal != null && proxyBal < amount) {
+        showTradeStatus('Need $' + amount.toFixed(2) + ' but your Polymarket wallet only has $' + proxyBal.toFixed(2) + '. Opening deposit flow…', 'error');
+        setTimeout(openDepositModal, 500);
+        return;
+      }
+    }
+  } catch (balErr) { /* if balance check fails, fall through and let CLOB handle it */ }
 
   var clobSide = _tradeMode === 'buy' ? 'BUY' : 'SELL';
   var sideLabel = (_tradeSide === 'yes' ? 'YES' : 'NO');
