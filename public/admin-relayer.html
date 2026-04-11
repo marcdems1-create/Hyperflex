@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Relayer Status — HYPERFLEX Admin</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #121218;
+    --border: #1e1e2a;
+    --text: #f0f0f5;
+    --dim: #8888a0;
+    --muted: #55556a;
+    --green: #00e68a;
+    --red: #ff4d6a;
+    --amber: #f59e0b;
+    --blue: #4d9fff;
+    --purple: #a855f7;
+    --mono: 'JetBrains Mono','SF Mono',monospace;
+    --sans: 'Inter',-apple-system,sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; min-height:100vh; }
+
+  #authGate { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .auth-box { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:32px; width:90%; max-width:380px; text-align:center; }
+  .auth-logo { font-weight:800; font-size:18px; background:linear-gradient(135deg,var(--green),var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .auth-sub { font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:1px; margin:4px 0 24px; text-transform:uppercase; }
+  .auth-input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px 16px; color:var(--text); font-family:var(--mono); font-size:13px; outline:none; margin-bottom:12px; }
+  .auth-btn { width:100%; background:var(--green); color:#0a0a0f; border:none; border-radius:8px; padding:12px; font-family:var(--mono); font-size:13px; font-weight:700; cursor:pointer; }
+  .auth-err { display:none; color:var(--red); font-family:var(--mono); font-size:11px; margin-top:10px; }
+  .auth-err.show { display:block; }
+
+  #app { display:none; max-width:800px; margin:0 auto; padding:32px 24px 80px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding-bottom:24px; border-bottom:1px solid var(--border); margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .header-title { display:flex; align-items:center; gap:12px; }
+  .header-logo { font-weight:800; font-size:16px; background:linear-gradient(135deg,var(--green),var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-badge { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--amber); background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:3px 8px; border-radius:4px; letter-spacing:1px; }
+  .nav-links { display:flex; gap:12px; align-items:center; }
+  .nav-link { font-family:var(--mono); font-size:11px; color:var(--dim); text-decoration:none; padding:6px 10px; border-radius:6px; }
+  .nav-link:hover { color:var(--text); background:rgba(255,255,255,0.04); }
+
+  h2 { font-family:var(--sans); font-size:14px; font-weight:700; color:var(--text); margin:0 0 14px; display:flex; align-items:center; gap:10px; }
+
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:18px; }
+  .card.critical { border-color: rgba(255,77,106,0.5); background: rgba(255,77,106,0.03); }
+  .card.warning { border-color: rgba(245,158,11,0.5); background: rgba(245,158,11,0.03); }
+  .card.healthy { border-color: rgba(0,230,138,0.3); background: rgba(0,230,138,0.03); }
+
+  .big-balance { font-family:var(--mono); font-size:48px; font-weight:800; letter-spacing:-2px; margin:8px 0; }
+  .big-balance.critical { color:var(--red); }
+  .big-balance.warning { color:var(--amber); }
+  .big-balance.healthy { color:var(--green); }
+
+  .status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:16px; }
+  .stat-item { padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:8px; }
+  .stat-label { font-family:var(--mono); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+  .stat-value { font-family:var(--mono); font-size:14px; font-weight:700; color:var(--text); word-break:break-all; }
+
+  .addr { font-family:var(--mono); font-size:11px; color:var(--dim); word-break:break-all; background:rgba(255,255,255,0.02); padding:8px 12px; border-radius:6px; border:1px solid var(--border); margin-top:8px; }
+
+  .btn { display:inline-flex; align-items:center; gap:8px; background:var(--green); color:#0a0a0f; padding:10px 18px; border-radius:8px; font-family:var(--mono); font-size:12px; font-weight:800; text-decoration:none; border:none; cursor:pointer; min-height:40px; }
+  .btn.secondary { background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border); }
+
+  .instructions { background:rgba(77,159,255,0.04); border:1px solid rgba(77,159,255,0.2); border-radius:10px; padding:16px 20px; margin-top:14px; }
+  .instructions h3 { margin:0 0 12px; font-size:13px; color:var(--blue); }
+  .instructions ol { margin:0; padding-left:20px; line-height:1.8; }
+  .instructions li { font-family:var(--mono); font-size:11px; color:var(--dim); margin-bottom:8px; }
+  .instructions code { background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:3px; color:var(--text); font-size:10px; }
+
+  .copy-btn { background:rgba(0,230,138,0.1); border:1px solid rgba(0,230,138,0.3); color:var(--green); padding:4px 10px; border-radius:4px; font-family:var(--mono); font-size:10px; font-weight:700; cursor:pointer; margin-left:6px; }
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">HYPERFLEX</div>
+    <div class="auth-sub">Relayer Status</div>
+    <input type="password" class="auth-input" id="secretInput" placeholder="Admin secret" autocomplete="current-password"/>
+    <button class="auth-btn" onclick="doAuth()">Unlock</button>
+    <div class="auth-err" id="authErr">Incorrect secret</div>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="header-title">
+      <div class="header-logo">HYPERFLEX</div>
+      <div class="header-badge">⛽ GASLESS RELAYER</div>
+    </div>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">← Main Admin</a>
+      <a href="/admin/bugs" class="nav-link">🐛 Bugs</a>
+      <a href="/admin/qa" class="nav-link">🧪 QA</a>
+      <span class="nav-link" style="cursor:pointer" onclick="loadStatus()">↻ Refresh</span>
+    </div>
+  </header>
+
+  <div id="statusContainer">
+    <div style="padding:40px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading…</div>
+  </div>
+
+  <div class="instructions">
+    <h3>📖 Setup & operations</h3>
+    <ol>
+      <li><strong style="color:var(--text)">Create a hot wallet:</strong> Use MetaMask or ethers to generate a new Polygon wallet. <code>ethers.Wallet.createRandom()</code> or MetaMask → Create Account. Save the private key in a password manager.</li>
+      <li><strong style="color:var(--text)">Set Railway env var:</strong> <code>RELAYER_PRIVATE_KEY=0x...</code> (the private key, with 0x prefix). Redeploy.</li>
+      <li><strong style="color:var(--text)">Fund with POL:</strong> Send ~$5 worth of POL (~15 POL at $0.30) to the relayer address. This covers ~1000 gasless deposits. Use any CEX (Binance, Coinbase) withdrawal to Polygon.</li>
+      <li><strong style="color:var(--text)">Monitor:</strong> This page shows the balance. A bug report is auto-filed to <code>/admin/bugs</code> when balance drops below <code>0.1 POL</code>. Refill before it hits zero.</li>
+      <li><strong style="color:var(--text)">Security:</strong> This wallet has no purpose besides paying gas. Even if the key leaks, the worst case is someone drains the ~$5 balance. Users' funds are NOT at risk. Rotate the key quarterly as a best practice.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+let adminSecret = '';
+
+document.getElementById('secretInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doAuth();
+});
+
+async function doAuth() {
+  const secret = document.getElementById('secretInput').value.trim();
+  if (!secret) return;
+  const errEl = document.getElementById('authErr');
+  errEl.classList.remove('show');
+  try {
+    const r = await fetch('/api/admin/relayer-status?secret=' + encodeURIComponent(secret));
+    if (r.status === 403 || r.status === 401) {
+      errEl.classList.add('show');
+      return;
+    }
+    adminSecret = secret;
+    sessionStorage.setItem('hf_admin_secret', secret);
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    const data = await r.json();
+    renderStatus(data);
+  } catch (e) {
+    errEl.textContent = 'Network error — try again';
+    errEl.classList.add('show');
+  }
+}
+
+(function() {
+  const cached = sessionStorage.getItem('hf_admin_secret');
+  if (cached) { document.getElementById('secretInput').value = cached; doAuth(); }
+})();
+
+async function loadStatus() {
+  if (!adminSecret) return;
+  const r = await fetch('/api/admin/relayer-status?secret=' + encodeURIComponent(adminSecret));
+  const data = await r.json();
+  renderStatus(data);
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+function copyAddr(addr) {
+  navigator.clipboard.writeText(addr).then(() => {
+    alert('Address copied: ' + addr);
+  }).catch(() => {});
+}
+
+function renderStatus(data) {
+  const el = document.getElementById('statusContainer');
+
+  if (!data.configured) {
+    el.innerHTML =
+      '<div class="card critical">' +
+        '<h2>⚠ Relayer not configured</h2>' +
+        '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.7">' + esc(data.message || '') + '</div>' +
+        '<div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7">' +
+          '<strong style="color:var(--text)">Quick setup:</strong><br>' +
+          '1. Generate a new wallet (MetaMask → Create Account)<br>' +
+          '2. Add <code style="background:rgba(255,255,255,0.06);padding:1px 4px">RELAYER_PRIVATE_KEY=0x...</code> to Railway env vars<br>' +
+          '3. Redeploy<br>' +
+          '4. Fund the new wallet with ~$5 of POL<br>' +
+          '5. Refresh this page' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  const status = data.status || 'unknown';
+  const balance = parseFloat(data.pol_balance || 0);
+  const statusLabel = status === 'critical' ? '🔴 CRITICAL' : (status === 'warning' ? '🟡 LOW' : '🟢 HEALTHY');
+
+  el.innerHTML =
+    '<div class="card ' + status + '">' +
+      '<h2>⛽ Relayer Wallet · <span style="font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(255,255,255,0.05)">' + statusLabel + '</span></h2>' +
+
+      '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Current POL balance</div>' +
+      '<div class="big-balance ' + status + '">' + balance.toFixed(4) + ' POL</div>' +
+
+      '<div style="display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap">' +
+        '<div class="addr" style="flex:1;min-width:240px">' + esc(data.address) +
+          ' <button class="copy-btn" onclick="copyAddr(\'' + data.address + '\')">📋</button>' +
+        '</div>' +
+        '<a href="' + esc(data.polygonscan_url) + '" target="_blank" rel="noopener" class="btn secondary">View on Polygonscan →</a>' +
+      '</div>' +
+
+      '<div class="status-grid">' +
+        '<div class="stat-item">' +
+          '<div class="stat-label">Status thresholds</div>' +
+          '<div class="stat-value">Min: ' + data.min_threshold_pol + ' · Critical: ' + data.critical_threshold_pol + '</div>' +
+        '</div>' +
+        '<div class="stat-item">' +
+          '<div class="stat-label">Cost per deposit</div>' +
+          '<div class="stat-value">' + parseFloat(data.estimated_cost_per_deposit_pol || 0).toFixed(6) + ' POL</div>' +
+        '</div>' +
+        '<div class="stat-item">' +
+          '<div class="stat-label">Deposits remaining</div>' +
+          '<div class="stat-value">' + (data.estimated_deposits_remaining != null ? '~' + data.estimated_deposits_remaining : '—') + '</div>' +
+        '</div>' +
+        '<div class="stat-item">' +
+          '<div class="stat-label">Rate-limited users</div>' +
+          '<div class="stat-value">' + (data.rate_limited_users || 0) + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      (status !== 'healthy' ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--amber);line-height:1.6">' +
+        (status === 'critical'
+          ? '🔴 <strong>Gasless deposits are DISABLED</strong> until this wallet is refilled. Users will be asked to use regular transfers. Send POL to the address above immediately.'
+          : '🟡 Balance is getting low. Send POL to the address above to avoid downtime.'
+        ) +
+      '</div>' : '') +
+    '</div>';
+}
+</script>
+
+</body>
+</html>

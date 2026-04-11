@@ -152,6 +152,7 @@
       return '<div style="background:' + bg + ';border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:440px;width:100%;color:#f0f0f5;text-align:center">' +
         '<div style="font-size:48px;margin-bottom:8px">✅</div>' +
         '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (state.amount || 0).toFixed(2) + ' USDC</div>' +
+        (state.gasless ? '<div style="display:inline-block;padding:3px 8px;background:rgba(168,85,247,0.12);color:#a855f7;border-radius:4px;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;margin-bottom:10px;letter-spacing:1px">✨ GASLESS · HYPERFLEX PAID THE GAS</div>' : '') +
         '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;margin-bottom:18px">New Polymarket balance: <strong style="color:#f0f0f5">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
         (state.txHash ? '<div style="margin-bottom:18px"><a href="https://polygonscan.com/tx/' + _esc(state.txHash) + '" target="_blank" rel="noopener" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#4d9fff;text-decoration:none">View tx on Polygonscan ↗</a></div>' : '') +
         '<button onclick="HFXDeposit.close()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Close</button>' +
@@ -184,6 +185,15 @@
     var bodyHtml;
     if (currentTab === 'metamask') {
       if (hasEoaUsdc) {
+        // Auto-pick gasless if user has no POL — this is the key UX:
+        // they never need to buy POL just to deposit USDC.
+        var useGasless = !hasGas;
+        var submitFn = useGasless ? 'HFXDeposit._submitGasless()' : 'HFXDeposit._submit()';
+        var submitLabel = useGasless ? '✨ Sign gasless (free) →' : 'Sign & Deposit →';
+        var footerNote = useGasless
+          ? 'Gasless deposit via EIP-3009 · You sign a message, we pay the POL gas · No POL needed in your wallet'
+          : 'Standard USDC ERC-20 transfer on Polygon · Gas: ~$0.01 in POL';
+
         bodyHtml =
           '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
@@ -193,9 +203,21 @@
             '</div>' +
             '<button onclick="document.getElementById(\'hfxDepositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
           '</div>' +
-          (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5">⚠ Your MetaMask has no POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
-          '<button onclick="HFXDeposit._submit()" id="hfxDepositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
-          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:14px;text-align:center">Standard USDC ERC-20 transfer on Polygon · Gas: ~$0.01 in POL</div>';
+
+          (useGasless ? '<div style="padding:12px 14px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.25);border-radius:8px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#00e68a;line-height:1.6">' +
+            '<strong>✨ Gasless mode enabled</strong><br>' +
+            '<span style="color:#8888a0">You have no POL for gas, so we\'ll cover the transaction fee. You just sign a message in MetaMask — no gas required. USDC lands in your Polymarket wallet in ~5 seconds.</span>' +
+          '</div>' : '') +
+
+          '<button onclick="' + submitFn + '" id="hfxDepositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:48px">' + submitLabel + '</button>' +
+
+          '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:14px;text-align:center">' + footerNote + '</div>' +
+
+          // Show the other option as a link
+          (useGasless
+            ? '' // already gasless, nothing to offer
+            : '<div style="text-align:center;margin-top:10px"><a href="#" onclick="event.preventDefault();HFXDeposit._submitGasless()" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#4d9fff;text-decoration:none">Or sign gasless instead (free, we pay the gas) →</a></div>'
+          );
       } else {
         // MetaMask tab but no USDC in EOA
         bodyHtml =
@@ -493,6 +515,152 @@
     }
   }
 
+  // ── Gasless deposit via EIP-3009 TransferWithAuthorization ──
+  //
+  // User signs an EIP-712 message (FREE — no gas, no on-chain tx). Server
+  // relayer submits USDC.transferWithAuthorization() on their behalf and
+  // pays the POL gas. User gets USDC in their Polymarket wallet in seconds
+  // without needing any POL at all.
+  //
+  // Polygon USDC (0x2791Bca...) uses a `salt`-based EIP-712 domain instead
+  // of the standard `chainId` field — this predates the chainId-in-domain
+  // standard. The salt is the chainId encoded as bytes32.
+  async function _submitGasless() {
+    var amountInput = document.getElementById('hfxDepositAmount');
+    if (!amountInput) return;
+    var amount = parseFloat(amountInput.value);
+    if (!amount || amount <= 0) {
+      amountInput.style.borderColor = '#ff4d6a';
+      return;
+    }
+    if (!_state) return;
+
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (!overlay) return;
+    overlay.innerHTML = _frame(Object.assign({}, _state, { signing: true, amount: amount }));
+
+    try {
+      // Ensure MetaMask is on Polygon (required for signing with the right chainId)
+      var chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== '0x89') {
+        try {
+          await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+            });
+          } else throw switchErr;
+        }
+      }
+
+      // Get signer
+      var signer;
+      if (window.HFXWallet && window.HFXWallet.getSigner) {
+        var ctx = await window.HFXWallet.getSigner();
+        signer = ctx.signer || ctx;
+      } else {
+        var provider = new window.ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+      }
+
+      // Build the EIP-712 TransferWithAuthorization message
+      var amountWei = window.ethers.parseUnits(amount.toFixed(6), 6).toString();
+      var validAfter = 0;
+      var validBefore = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+
+      // Generate a 32-byte random nonce
+      var nonceBytes = new Uint8Array(32);
+      (window.crypto || window.msCrypto).getRandomValues(nonceBytes);
+      var nonce = '0x' + Array.from(nonceBytes).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+
+      // Polygon USDC uses `salt` (bytes32 chainId) instead of chainId in the domain
+      // This is a Circle quirk — their v1 USDC on Polygon was deployed before
+      // chainId-in-domain was standardized.
+      var domain = {
+        name: 'USD Coin (PoS)',
+        version: '1',
+        verifyingContract: USDC_ADDRESS,
+        salt: '0x0000000000000000000000000000000000000000000000000000000000000089'  // chainId 137 as bytes32
+      };
+      var types = {
+        TransferWithAuthorization: [
+          { name: 'from', type: 'address' },
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'validAfter', type: 'uint256' },
+          { name: 'validBefore', type: 'uint256' },
+          { name: 'nonce', type: 'bytes32' }
+        ]
+      };
+      var message = {
+        from: _state.eoa,
+        to: _state.proxy,
+        value: amountWei,
+        validAfter: validAfter,
+        validBefore: validBefore,
+        nonce: nonce
+      };
+
+      // Sign the EIP-712 message (free, no gas)
+      var signature = await signer.signTypedData(domain, types, message);
+      var sig = window.ethers.Signature.from(signature);
+
+      overlay.innerHTML = _frame(Object.assign({}, _state, { confirming: true, amount: amount }));
+
+      // Submit the authorization to our relayer
+      var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+      var r = await fetch('/api/gasless-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+        body: JSON.stringify({
+          from: _state.eoa,
+          to: _state.proxy,
+          value: amountWei,
+          validAfter: validAfter,
+          validBefore: validBefore,
+          nonce: nonce,
+          v: sig.v,
+          r: sig.r,
+          s: sig.s
+        })
+      });
+      var data = await r.json();
+
+      if (!r.ok) {
+        throw new Error(data.error || 'Relayer submission failed');
+      }
+
+      // Success — update the overlay
+      overlay.innerHTML = _frame(Object.assign({}, _state, { confirming: true, amount: amount, txHash: data.tx_hash }));
+
+      // Small delay so the user sees the confirming state (tx already confirmed at this point)
+      setTimeout(async function() {
+        var newProxyBal = await _usdcBalance(_state.proxy);
+        overlay.innerHTML = _frame({
+          success: true,
+          amount: amount,
+          newProxyBalance: newProxyBal != null ? newProxyBal : (_state.proxyBalance || 0) + amount,
+          txHash: data.tx_hash,
+          gasless: true
+        });
+
+        // Refresh any external balance displays
+        try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('hfx_deposit_success', { detail: { amount: amount, txHash: data.tx_hash, gasless: true } })); } catch (e) {}
+      }, 600);
+    } catch (err) {
+      var msg = (err && err.message) || 'Unknown error';
+      if (err && (err.code === 'ACTION_REJECTED' || err.code === 4001)) {
+        msg = 'You rejected the signature in MetaMask.';
+      } else if (err && err.message && /auth required/i.test(err.message)) {
+        msg = 'Please sign in to HYPERFLEX first — gasless deposits require an account.';
+      }
+      overlay.innerHTML = _frame({ error: msg });
+    }
+  }
+
   // Switch tabs without re-fetching balances
   function _setTab(tab) {
     if (!_state) return;
@@ -550,6 +718,7 @@
     open: open,
     close: close,
     _submit: _submit,
+    _submitGasless: _submitGasless,
     _setTab: _setTab,
     _copyAddr: _copyAddr
   };

@@ -30038,6 +30038,260 @@ function _trackBuilderSign(status, err, req) {
   console.warn('[builder-sign] FAIL', status, (err || '').toString().slice(0, 200));
 }
 
+// ════════════════════════════════════════════════════════════
+// GASLESS DEPOSITS — EIP-3009 transferWithAuthorization
+// ════════════════════════════════════════════════════════════
+//
+// User signs an EIP-712 message authorizing a USDC transfer (free, no gas).
+// Our server relayer submits transferWithAuthorization() on-chain and pays
+// the POL gas (~$0.005 per tx). User gets USDC in their Polymarket proxy
+// wallet without needing any POL at all — matches Polymarket's own UX.
+//
+// USDC on Polygon (0x2791Bca...) implements FiatTokenV2 which has
+// transferWithAuthorization built in. The EIP-712 domain uses `salt`
+// (not chainId) for historical reasons — Polygon USDC predates the
+// chainId-in-domain standard.
+//
+// Rate limiting: per-user in-memory counter, 1 per minute, 10 per day.
+// The relayer wallet's POL balance is also checked before submission.
+//
+// Env var: RELAYER_PRIVATE_KEY — hot wallet with POL on Polygon.
+// Fund it with ~$5 of POL (covers ~1000 deposits).
+// ════════════════════════════════════════════════════════════
+
+const { ethers: _serverEthers } = require('ethers');
+const USDC_ADDRESS_POLYGON = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+const POLYGON_RPCS_SERVER = [
+  'https://polygon-bor-rpc.publicnode.com',
+  'https://1rpc.io/matic',
+  'https://polygon-rpc.com'
+];
+
+let _relayerWallet = null;
+let _relayerProvider = null;
+let _relayerBalancePol = null;
+let _relayerLastCheck = 0;
+const RELAYER_MIN_POL = 0.5; // alert if balance drops below
+const RELAYER_LOW_POL = 0.1; // hard-fail if balance below this
+
+async function getRelayerProvider() {
+  if (_relayerProvider) return _relayerProvider;
+  for (const rpc of POLYGON_RPCS_SERVER) {
+    try {
+      const p = new _serverEthers.JsonRpcProvider(rpc);
+      await p.getBlockNumber(); // connectivity check
+      _relayerProvider = p;
+      return p;
+    } catch (e) { /* try next */ }
+  }
+  throw new Error('All Polygon RPCs failed');
+}
+
+function getRelayerWallet() {
+  if (_relayerWallet) return _relayerWallet;
+  const pk = process.env.RELAYER_PRIVATE_KEY;
+  if (!pk) throw new Error('RELAYER_PRIVATE_KEY not configured');
+  if (!_relayerProvider) throw new Error('Relayer provider not initialized — call getRelayerProvider first');
+  _relayerWallet = new _serverEthers.Wallet(pk, _relayerProvider);
+  return _relayerWallet;
+}
+
+// Periodic balance check — logs a bug report when POL runs low
+async function checkRelayerBalance() {
+  try {
+    if (!process.env.RELAYER_PRIVATE_KEY) return;
+    const provider = await getRelayerProvider();
+    const wallet = getRelayerWallet();
+    const balWei = await provider.getBalance(wallet.address);
+    const balPol = parseFloat(_serverEthers.formatEther(balWei));
+    _relayerBalancePol = balPol;
+    _relayerLastCheck = Date.now();
+
+    if (balPol < RELAYER_LOW_POL) {
+      console.error(`[relayer] CRITICAL: POL balance ${balPol.toFixed(4)} — gasless deposits will fail. Fund ${wallet.address} on Polygon.`);
+      // Auto-file a bug report so the admin sees it in /admin/bugs
+      if (pool) {
+        try {
+          await dbQuery(
+            `INSERT INTO bug_reports (user_email, page_url, message, ai_category, ai_severity, ai_likely_cause, ai_suggested_fix, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT DO NOTHING`,
+            [
+              '[email protected]',
+              '/admin/relayer',
+              `Relayer wallet POL balance is critically low: ${balPol.toFixed(4)} POL. Gasless deposits will fail until refilled. Wallet: ${wallet.address}`,
+              'wallet',
+              'critical',
+              'Relayer wallet is running out of POL gas and can no longer submit gasless deposit transactions.',
+              `Send ~$5 of POL to ${wallet.address} on Polygon. /admin/relayer shows current balance.`,
+              'new'
+            ]
+          ).catch(() => {});
+        } catch (dbe) {}
+      }
+    } else if (balPol < RELAYER_MIN_POL) {
+      console.warn(`[relayer] LOW: POL balance ${balPol.toFixed(4)} — consider refilling soon.`);
+    }
+  } catch (e) {
+    console.warn('[relayer] balance check failed:', e.message);
+  }
+}
+
+// Run on boot (after server setup) and every hour
+setTimeout(() => { checkRelayerBalance().catch(() => {}); }, 10000);
+setInterval(() => { checkRelayerBalance().catch(() => {}); }, 60 * 60 * 1000);
+
+// Rate limiting — in-memory, resets on restart
+const _gaslessRateLimit = new Map(); // userId → [timestamps]
+function _checkRateLimit(userId) {
+  const now = Date.now();
+  const history = _gaslessRateLimit.get(userId) || [];
+  // Clean old entries (older than 24h)
+  const recent = history.filter(ts => now - ts < 24 * 60 * 60 * 1000);
+  const lastMinute = recent.filter(ts => now - ts < 60 * 1000);
+  if (lastMinute.length >= 1) return { allowed: false, reason: 'Too many gasless deposits — please wait 60 seconds.' };
+  if (recent.length >= 10) return { allowed: false, reason: 'Daily limit reached (10 gasless deposits per day). Deposit with regular transfer instead.' };
+  recent.push(now);
+  _gaslessRateLimit.set(userId, recent);
+  return { allowed: true };
+}
+
+// POST /api/gasless-deposit — submit a signed TransferWithAuthorization
+// Body: { from, to, value, validAfter, validBefore, nonce, v, r, s }
+// Requires user auth so we can rate-limit per user.
+app.post('/api/gasless-deposit', async (req, res) => {
+  try {
+    // Auth check — rate limit per user
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required (sign in to HYPERFLEX first)' });
+
+    const rate = _checkRateLimit(userId);
+    if (!rate.allowed) return res.status(429).json({ error: rate.reason });
+
+    if (!process.env.RELAYER_PRIVATE_KEY) {
+      return res.status(503).json({ error: 'Gasless deposits not configured on this deployment. Use a regular transfer instead.' });
+    }
+
+    const { from, to, value, validAfter, validBefore, nonce, v, r, s } = req.body || {};
+    if (!from || !to || !value || !nonce || v == null || !r || !s) {
+      return res.status(400).json({ error: 'Missing required signature fields' });
+    }
+
+    // Sanity check: value should be reasonable (0.01 to 100,000 USDC)
+    const valueNum = parseFloat(value) / 1e6;
+    if (valueNum < 0.01 || valueNum > 100000) {
+      return res.status(400).json({ error: 'Invalid amount (must be between 0.01 and 100,000 USDC)' });
+    }
+
+    // Check relayer has enough POL to submit
+    const provider = await getRelayerProvider();
+    const wallet = getRelayerWallet();
+    const balWei = await provider.getBalance(wallet.address);
+    const balPol = parseFloat(_serverEthers.formatEther(balWei));
+    _relayerBalancePol = balPol;
+    if (balPol < RELAYER_LOW_POL) {
+      return res.status(503).json({ error: 'Relayer wallet temporarily out of gas. Use a regular transfer or try again later — admin has been notified.' });
+    }
+
+    // Submit the transferWithAuthorization call on-chain
+    const usdc = new _serverEthers.Contract(
+      USDC_ADDRESS_POLYGON,
+      ['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'],
+      wallet
+    );
+
+    console.log(`[relayer] Submitting gasless deposit: ${from.slice(0,10)} → ${to.slice(0,10)} · ${valueNum} USDC`);
+    const tx = await usdc.transferWithAuthorization(
+      from,
+      to,
+      value,
+      validAfter || 0,
+      validBefore,
+      nonce,
+      parseInt(v),
+      r,
+      s,
+      { gasLimit: 150000 } // transferWithAuthorization uses ~90k, buffer to 150k
+    );
+
+    console.log(`[relayer] tx sent: ${tx.hash}`);
+    // Wait for 1 confirmation
+    const receipt = await tx.wait(1);
+    console.log(`[relayer] confirmed in block ${receipt.blockNumber}`);
+
+    res.json({
+      ok: true,
+      tx_hash: tx.hash,
+      block_number: receipt.blockNumber,
+      gas_used: receipt.gasUsed?.toString(),
+      amount: valueNum,
+      from: from,
+      to: to
+    });
+  } catch (err) {
+    console.error('[relayer] error:', err.message);
+    // Parse ethers errors for a friendlier message
+    let userMsg = err.message || 'Unknown error';
+    if (userMsg.includes('invalid signature') || userMsg.includes('signature mismatch')) {
+      userMsg = 'Signature invalid. This usually means the EIP-712 domain was wrong — please refresh and try again.';
+    } else if (userMsg.includes('insufficient funds')) {
+      userMsg = 'Relayer temporarily out of gas. Try again in a minute — admin has been notified.';
+    } else if (userMsg.includes('nonce') && userMsg.includes('used')) {
+      userMsg = 'This deposit was already submitted. Check your balance.';
+    } else if (userMsg.includes('authorization is expired') || userMsg.includes('validBefore')) {
+      userMsg = 'Signature expired. Please sign again.';
+    }
+    res.status(500).json({ error: userMsg, detail: err.message?.slice(0, 200) });
+  }
+});
+
+// GET /api/admin/relayer-status — admin dashboard for relayer health
+app.get('/api/admin/relayer-status', requireAdmin, async (req, res) => {
+  try {
+    if (!process.env.RELAYER_PRIVATE_KEY) {
+      return res.json({
+        configured: false,
+        message: 'RELAYER_PRIVATE_KEY not set. Add it to Railway env vars to enable gasless deposits.'
+      });
+    }
+    const provider = await getRelayerProvider();
+    const wallet = getRelayerWallet();
+    const balWei = await provider.getBalance(wallet.address);
+    const balPol = parseFloat(_serverEthers.formatEther(balWei));
+    _relayerBalancePol = balPol;
+
+    // How many deposits can we afford at current gas price
+    const gasPrice = await provider.getFeeData();
+    const gasPricePerTx = (gasPrice.gasPrice || gasPrice.maxFeePerGas || 30000000000n) * 150000n;
+    const gasPricePol = parseFloat(_serverEthers.formatEther(gasPricePerTx));
+    const depositsRemaining = gasPricePol > 0 ? Math.floor(balPol / gasPricePol) : null;
+
+    // Count active rate limits
+    const activeUsers = _gaslessRateLimit.size;
+
+    res.json({
+      configured: true,
+      address: wallet.address,
+      pol_balance: balPol.toFixed(6),
+      status: balPol < RELAYER_LOW_POL ? 'critical' : (balPol < RELAYER_MIN_POL ? 'warning' : 'healthy'),
+      min_threshold_pol: RELAYER_MIN_POL,
+      critical_threshold_pol: RELAYER_LOW_POL,
+      estimated_cost_per_deposit_pol: gasPricePol.toFixed(6),
+      estimated_deposits_remaining: depositsRemaining,
+      rate_limited_users: activeUsers,
+      last_check_ms_ago: _relayerLastCheck ? Date.now() - _relayerLastCheck : null,
+      polygonscan_url: `https://polygonscan.com/address/${wallet.address}`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Serve the /admin/relayer HTML page
+app.get('/admin/relayer', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-relayer.html'));
+});
+
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
