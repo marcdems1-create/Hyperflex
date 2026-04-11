@@ -561,6 +561,143 @@ function urlBase64ToUint8Array(base64String) {
   </div>
 </div>
 
+<!-- MY COPIES — active subscriptions + pending/history -->
+<div id="myCopiesSection" style="padding:0 24px 20px;display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-family:var(--sans);font-size:11px;font-weight:700;color:#a855f7;letter-spacing:.08em">🤖 MY COPIES</span>
+      <span id="mcStatus" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button id="mcTabSubs" onclick="showMcTab('subs')" style="padding:6px 12px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid rgba(168,85,247,0.35);background:rgba(168,85,247,0.12);color:#a855f7;cursor:pointer">Active</button>
+      <button id="mcTabHistory" onclick="showMcTab('history')" style="padding:6px 12px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">History</button>
+    </div>
+  </div>
+  <div id="mcSubsList"></div>
+  <div id="mcHistoryList" style="display:none"></div>
+</div>
+
+<script>
+var _mcData = { subs: [], history: [] };
+var _mcTab = 'subs';
+
+async function loadMyCopies() {
+  var token = getToken && typeof getToken === 'function' ? getToken() : (localStorage.getItem('hf_token') || '');
+  if (!token) return;
+  try {
+    var [sRes, hRes] = await Promise.all([
+      fetch('/api/copy-bot/subscriptions', { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch('/api/copy-bot/history', { headers: { 'Authorization': 'Bearer ' + token } })
+    ]);
+    var sData = sRes.ok ? await sRes.json() : { subscriptions: [] };
+    var hData = hRes.ok ? await hRes.json() : { trades: [] };
+    _mcData.subs = sData.subscriptions || [];
+    _mcData.history = hData.trades || [];
+    var section = document.getElementById('myCopiesSection');
+    if (_mcData.subs.length || _mcData.history.length) {
+      section.style.display = 'block';
+      renderMyCopies();
+    }
+  } catch (e) { console.warn('[my-copies]', e.message); }
+}
+
+function showMcTab(tab) {
+  _mcTab = tab;
+  document.getElementById('mcSubsList').style.display = tab === 'subs' ? 'block' : 'none';
+  document.getElementById('mcHistoryList').style.display = tab === 'history' ? 'block' : 'none';
+  var sBtn = document.getElementById('mcTabSubs');
+  var hBtn = document.getElementById('mcTabHistory');
+  if (tab === 'subs') {
+    sBtn.style.background = 'rgba(168,85,247,0.12)'; sBtn.style.borderColor = 'rgba(168,85,247,0.35)'; sBtn.style.color = '#a855f7';
+    hBtn.style.background = 'transparent'; hBtn.style.borderColor = 'var(--border)'; hBtn.style.color = 'var(--muted)';
+  } else {
+    hBtn.style.background = 'rgba(168,85,247,0.12)'; hBtn.style.borderColor = 'rgba(168,85,247,0.35)'; hBtn.style.color = '#a855f7';
+    sBtn.style.background = 'transparent'; sBtn.style.borderColor = 'var(--border)'; sBtn.style.color = 'var(--muted)';
+  }
+}
+
+function renderMyCopies() {
+  var subsEl = document.getElementById('mcSubsList');
+  var histEl = document.getElementById('mcHistoryList');
+  var statEl = document.getElementById('mcStatus');
+  statEl.textContent = _mcData.subs.length + ' active · ' + _mcData.history.length + ' copies total';
+
+  // Subscriptions
+  if (!_mcData.subs.length) {
+    subsEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:8px">No active copy subscriptions. Click 🤖 Auto-Mirror on any whale to start.</div>';
+  } else {
+    subsEl.innerHTML = _mcData.subs.map(function(s) {
+      var modeLabel = s.notify_only ? 'Notify only' : 'Auto-execute';
+      var modeColor = s.notify_only ? '#f59e0b' : '#00e68a';
+      return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#141412;border:1px solid rgba(168,85,247,0.18);border-radius:10px;margin-bottom:8px">' +
+        '<span style="font-size:18px">🐋</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">' + escMc(s.whale_name || s.whale_address.slice(0,10)) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">$' + parseFloat(s.allocation || 0).toFixed(0) + ' per trade · <span style="color:' + modeColor + '">' + modeLabel + '</span> · ' + (s.trades_copied || 0) + ' copies</div>' +
+        '</div>' +
+        '<button onclick="toggleCopyMode(\'' + s.id + '\',' + !s.notify_only + ')" style="padding:6px 10px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer" title="' + (s.notify_only ? 'Switch to auto-execute' : 'Switch to notify only') + '">' + (s.notify_only ? '⚡ Auto' : '🔔 Notify') + '</button>' +
+        '<button onclick="cancelCopy(\'' + s.id + '\')" style="padding:6px 10px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--red);cursor:pointer">Cancel</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  // History
+  if (!_mcData.history.length) {
+    histEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:8px">No copy trades yet.</div>';
+  } else {
+    histEl.innerHTML = _mcData.history.slice(0, 20).map(function(t) {
+      var statusColor = { filled: '#00e68a', notified: '#f59e0b', pending_execution: '#4d9fff', skipped: '#888', cannot_execute: '#ff4d6a' }[t.status] || '#888';
+      var sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+      var agoMins = t.created_at ? Math.round((Date.now() - new Date(t.created_at).getTime()) / 60000) : 0;
+      var ago = agoMins < 60 ? agoMins + 'm' : Math.round(agoMins / 60) + 'h';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141412;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">' +
+        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + statusColor + ';padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05)">' + (t.status || '').toUpperCase() + '</span>' +
+        '<div style="flex:1;min-width:0"><div style="font-family:var(--sans);font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escMc((t.market || '').substring(0, 55)) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px"><span style="color:' + sideColor + '">' + (t.side || '') + '</span> · $' + parseFloat(t.size || 0).toFixed(0) + ' · ' + (t.whale_name || '') + ' · ' + ago + ' ago</div></div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+function escMc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+async function toggleCopyMode(subId, newAutoMode) {
+  var token = getToken && typeof getToken === 'function' ? getToken() : (localStorage.getItem('hf_token') || '');
+  if (!token) return;
+  // We don't have an update endpoint, so delete + resubscribe (subscribe uses ON CONFLICT UPDATE)
+  var sub = _mcData.subs.find(function(s){return s.id === subId});
+  if (!sub) return;
+  try {
+    await fetch('/api/copy-bot/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        whale_address: sub.whale_address,
+        whale_name: sub.whale_name,
+        allocation_per_trade: sub.allocation,
+        notify_only: !newAutoMode
+      })
+    });
+    loadMyCopies();
+  } catch (e) { alert('Failed to update: ' + e.message); }
+}
+
+async function cancelCopy(subId) {
+  if (!confirm('Cancel this copy subscription?')) return;
+  var token = getToken && typeof getToken === 'function' ? getToken() : (localStorage.getItem('hf_token') || '');
+  if (!token) return;
+  try {
+    await fetch('/api/copy-bot/' + subId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+    loadMyCopies();
+  } catch (e) { alert('Failed to cancel: ' + e.message); }
+}
+
+// Auto-load on page
+setTimeout(loadMyCopies, 1200);
+// Refresh every 30s
+setInterval(loadMyCopies, 30000);
+</script>
+
 <!-- WHALE POSITIONS (collapsed, for users who want raw data) -->
 <details id="rawWhaleDetails" style="padding:0 24px 24px">
   <summary style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;padding:12px 0;letter-spacing:.06em;text-transform:uppercase">Show Raw Whale Positions ▾</summary>

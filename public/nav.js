@@ -1,5 +1,16 @@
 // HYPERFLEX shared navbar — include via <script src="/nav.js"></script>
 // Injects navbar + scoped CSS into #nav-root, highlights active page, shows Dashboard if logged in
+// Also auto-loads /copy-bot.js so every page can receive real-time copy-trade opportunities.
+(function() {
+  // Load copy-bot runtime on every page that uses nav.js (idempotent)
+  if (!document.querySelector('script[data-hfx-copybot]')) {
+    var cb = document.createElement('script');
+    cb.src = '/copy-bot.js?v=1';
+    cb.async = true;
+    cb.setAttribute('data-hfx-copybot', '1');
+    document.head.appendChild(cb);
+  }
+})();
 (function() {
   // Inject CSS if .topbar not already styled
   if (!document.querySelector('style[data-hfx-nav]')) {

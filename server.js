@@ -18610,6 +18610,33 @@ async function fetchWhalePositions() {
       for (const change of changes) {
         const p = change.position;
         const sizeVal = parseFloat(p.size) || 0;
+
+        // ── ENRICH with slug/conditionId/tokenId for copy-trade execution ──
+        // Cross-reference _screenerCache to resolve the market's CLOB data.
+        // Without this, copy trades can't actually execute.
+        let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null;
+        try {
+          // Extract slug from market_url (polymarket.com/event/SLUG)
+          const urlMatch = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
+          if (urlMatch) slug = urlMatch[1].toLowerCase();
+          // Cross-reference screener by question or slug
+          if (_screenerCache && _screenerCache.data) {
+            const qLower = (p.market || '').toLowerCase().trim();
+            const sm = _screenerCache.data.find(m =>
+              (slug && m.slug === slug) ||
+              (m.question || '').toLowerCase().trim() === qLower
+            );
+            if (sm) {
+              if (!slug && sm.slug) slug = sm.slug;
+              if (sm.market_id) conditionId = sm.market_id;
+              if (sm.clobTokenIds) {
+                clobTokenIds = typeof sm.clobTokenIds === 'string' ? sm.clobTokenIds : JSON.stringify(sm.clobTokenIds);
+              }
+              sidePrice = sm.yes_price;
+            }
+          }
+        } catch (e) { /* enrichment failed, trade will still notify but can't auto-execute */ }
+
         _whaleTradeStream.unshift({
           type: 'whale_trade',
           id: `wt_${wallet.slice(0,8)}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
@@ -18625,8 +18652,12 @@ async function fetchWhalePositions() {
           old_size_display: change.oldSize ? (change.oldSize >= 1000000 ? '$' + (change.oldSize / 1000000).toFixed(1) + 'M' : change.oldSize >= 1000 ? '$' + (change.oldSize / 1000).toFixed(0) + 'K' : '$' + change.oldSize.toFixed(0)) : null,
           new_size: change.newSize || null,
           new_size_display: change.newSize ? (change.newSize >= 1000000 ? '$' + (change.newSize / 1000000).toFixed(1) + 'M' : change.newSize >= 1000 ? '$' + (change.newSize / 1000).toFixed(0) + 'K' : '$' + change.newSize.toFixed(0)) : null,
-          price: p.current_price || 0,
+          price: p.current_price || sidePrice || 0,
           url: p.market_url || 'https://polymarket.com',
+          // Execution data for copy-bot
+          slug: slug,
+          condition_id: conditionId,
+          clob_token_ids: clobTokenIds,
           ts: now,
         });
       }
@@ -18732,7 +18763,7 @@ async function fetchWhalePositions() {
           const wArr = [...openWallets];
           const ph = wArr.map((_, i) => `$${i + 1}`).join(',');
           const cbSubs = await dbQuery(
-            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only
+            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only, max_per_trade, min_whale_size
              FROM copy_bot_subscriptions WHERE whale_address IN (${ph}) AND active = true`, wArr
           ).catch(() => []);
 
@@ -18743,20 +18774,65 @@ async function fetchWhalePositions() {
 
             for (const evt of matched.slice(0, 3)) {
               const wName = sub.whale_name || evt.trader_name || 'A whale';
-              // Always notify
+              // ── Risk gates ──
+              // 1. Skip if whale's position is below min threshold (copying a small nibble is noise)
+              const minWhale = parseFloat(sub.min_whale_size) || 10000;
+              if (evt.size < minWhale) continue;
+              // 2. Cap copier allocation at max_per_trade
+              const baseAlloc = parseFloat(sub.allocation) || 100;
+              const maxAlloc = parseFloat(sub.max_per_trade) || 500;
+              const allocUsd = Math.min(baseAlloc, maxAlloc);
+              // 3. Must have execution data to actually trade
+              const canExecute = evt.slug && evt.clob_token_ids;
+              const execStatus = sub.notify_only ? 'notified' : (canExecute ? 'pending_execution' : 'cannot_execute');
+
+              // Always notify (bell icon)
               pushNotification(
                 sub.user_id,
                 'copy_bot',
-                `\uD83E\uDD16 Copy Bot: ${wName} opened ${evt.size_display} on ${(evt.question || '').substring(0, 50)}`,
-                `${(evt.side || '').toUpperCase()} position. Your allocation: $${sub.allocation}`
+                `\uD83E\uDD16 ${wName} opened ${evt.size_display} ${evt.side} on ${(evt.question || '').substring(0, 50)}`,
+                `Copying at $${allocUsd}. ${sub.notify_only ? 'Notify-only mode.' : 'Auto-executing if your tab is open.'}`,
+                null,
+                evt.slug ? 'market:' + evt.slug : null
               );
 
-              // Log the copy trade
-              await dbQuery(
-                `INSERT INTO copy_bot_trades (subscription_id, user_id, whale_address, market, side, size, price, status)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [sub.id, sub.user_id, sub.whale_address, evt.question, evt.side, sub.allocation, evt.price, sub.notify_only ? 'notified' : 'pending']
-              ).catch(e => console.warn('[copy-bot trade log]', e.message));
+              // Log the copy trade with full execution data
+              const tradeRows = await dbQuery(
+                `INSERT INTO copy_bot_trades (subscription_id, user_id, whale_address, market, side, size, price, status, slug, condition_id, clob_token_ids, whale_size, expires_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW() + INTERVAL '2 hours')
+                 RETURNING id`,
+                [sub.id, sub.user_id, sub.whale_address, evt.question, evt.side, allocUsd, evt.price, execStatus, evt.slug, evt.condition_id, evt.clob_token_ids, evt.size]
+              ).catch(e => { console.warn('[copy-bot trade log]', e.message); return []; });
+              const tradeId = tradeRows && tradeRows[0] ? tradeRows[0].id : null;
+
+              // ── Push SSE event to copier's connected browser ──
+              // Client listens on /api/copy-bot/stream, auto-executes if canExecute && !notify_only
+              if (tradeId && canExecute && !sub.notify_only) {
+                try {
+                  const clients = _copyBotClients.get(sub.user_id);
+                  if (clients && clients.size > 0) {
+                    const payload = {
+                      trade_id: tradeId,
+                      whale_name: wName,
+                      whale_address: sub.whale_address,
+                      market: evt.question,
+                      slug: evt.slug,
+                      side: evt.side,
+                      price: evt.price,
+                      alloc_usd: allocUsd,
+                      whale_size: evt.size,
+                      condition_id: evt.condition_id,
+                      clob_token_ids: evt.clob_token_ids
+                    };
+                    for (const clientRes of clients) {
+                      try {
+                        clientRes.write('event: copy_opportunity\n');
+                        clientRes.write('data: ' + JSON.stringify(payload) + '\n\n');
+                      } catch (e) { clients.delete(clientRes); }
+                    }
+                  }
+                } catch (sseErr) { console.warn('[copy-bot SSE]', sseErr.message); }
+              }
             }
           }
         } catch (e) { console.warn('[copy-bot-notify]', e.message); }
@@ -30605,11 +30681,147 @@ app.get('/api/market-trades/:conditionId', async (req, res) => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Add execution data columns if missing (idempotent)
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS slug TEXT`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS condition_id TEXT`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS clob_token_ids TEXT`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS whale_size NUMERIC(14,2)`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS execution_price NUMERIC(6,4)`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_trades ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`).catch(() => {});
+    // Add max_trade_size + min_whale_size for risk controls
+    await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS max_per_trade NUMERIC(12,2) DEFAULT 500`).catch(() => {});
+    await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS min_whale_size NUMERIC(12,2) DEFAULT 10000`).catch(() => {});
     console.log('[copy-bot] Tables ensured');
   } catch (e) {
     console.warn('[copy-bot] Migration skipped (table may already exist):', e.message?.slice(0, 80));
   }
 })();
+
+// ════════════════════════════════════════════════════════════
+// COPY BOT — SSE + auto-execution
+// Hybrid architecture: server monitors whales, browser signs + submits.
+// ════════════════════════════════════════════════════════════
+
+// SSE clients: Map<userId, Set<Response>>
+const _copyBotClients = new Map();
+
+// GET /api/copy-bot/stream — SSE stream of copy opportunities for current user
+app.get('/api/copy-bot/stream', (req, res) => {
+  // EventSource can't set headers — accept token as query param
+  let userId = getUserIdFromReq(req);
+  if (!userId && req.query.token) {
+    try { const p = jwt.verify(req.query.token, JWT_SECRET); userId = p.id || null; } catch {}
+  }
+  if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+
+  if (!_copyBotClients.has(userId)) _copyBotClients.set(userId, new Set());
+  _copyBotClients.get(userId).add(res);
+
+  // Send pending trades immediately on connect (drain any that fired while tab was closed)
+  (async () => {
+    try {
+      if (!pool) return;
+      const pending = await dbQuery(
+        `SELECT t.id AS trade_id, t.market, t.side, t.size AS alloc_usd, t.price, t.slug,
+                t.condition_id, t.clob_token_ids, t.whale_size, s.whale_name, s.whale_address
+         FROM copy_bot_trades t
+         JOIN copy_bot_subscriptions s ON s.id = t.subscription_id
+         WHERE t.user_id = $1 AND t.status = 'pending_execution'
+           AND t.expires_at > NOW()
+         ORDER BY t.created_at DESC`,
+        [userId]
+      ).catch(() => []);
+      for (const p of pending) {
+        try {
+          res.write('event: copy_opportunity\n');
+          res.write('data: ' + JSON.stringify({
+            trade_id: p.trade_id, whale_name: p.whale_name, whale_address: p.whale_address,
+            market: p.market, slug: p.slug, side: p.side, price: parseFloat(p.price),
+            alloc_usd: parseFloat(p.alloc_usd), whale_size: parseFloat(p.whale_size || 0),
+            condition_id: p.condition_id, clob_token_ids: p.clob_token_ids
+          }) + '\n\n');
+        } catch (e) {}
+      }
+    } catch (e) {}
+  })();
+
+  // Heartbeat every 20s
+  const hb = setInterval(() => {
+    try { res.write('event: heartbeat\ndata: {}\n\n'); } catch (e) { clearInterval(hb); }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    const set = _copyBotClients.get(userId);
+    if (set) { set.delete(res); if (!set.size) _copyBotClients.delete(userId); }
+  });
+});
+
+// POST /api/copy-bot/trades/:id/executed — client confirms the trade was placed on CLOB
+app.post('/api/copy-bot/trades/:id/executed', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { execution_price, order_id } = req.body;
+    if (pool) {
+      await dbQuery(
+        `UPDATE copy_bot_trades SET status = 'filled', executed_at = NOW(), execution_price = $1, order_id = $2
+         WHERE id = $3 AND user_id = $4`,
+        [execution_price || 0, order_id || null, id, req.userId]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/copy-bot/trades/:id/skipped — user dismissed or sign failed
+app.post('/api/copy-bot/trades/:id/skipped', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (pool) {
+      await dbQuery(
+        `UPDATE copy_bot_trades SET status = 'skipped', executed_at = NOW(), order_id = $1
+         WHERE id = $2 AND user_id = $3`,
+        [reason ? reason.slice(0, 200) : 'user_skipped', id, req.userId]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/copy-bot/pending — list pending_execution trades for current user
+app.get('/api/copy-bot/pending', requireAuth, async (req, res) => {
+  try {
+    let pending = [];
+    if (pool) {
+      pending = await dbQuery(
+        `SELECT t.id, t.market, t.side, t.size, t.price, t.slug, t.condition_id,
+                t.clob_token_ids, t.whale_size, t.status, t.created_at, t.expires_at,
+                s.whale_name, s.whale_address
+         FROM copy_bot_trades t
+         JOIN copy_bot_subscriptions s ON s.id = t.subscription_id
+         WHERE t.user_id = $1 AND t.status = 'pending_execution'
+           AND t.expires_at > NOW()
+         ORDER BY t.created_at DESC`,
+        [req.userId]
+      );
+    }
+    res.json({ pending });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // POST /api/copy-bot/subscribe — subscribe to copy a whale
 app.post('/api/copy-bot/subscribe', requireAuth, async (req, res) => {
