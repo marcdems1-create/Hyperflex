@@ -17422,60 +17422,86 @@ if (window._connectedWallet) {
   setTimeout(updateWalletUI, 500);
 }
 
-// Listen for account changes
-if (typeof window.ethereum !== 'undefined') {
-  window.ethereum.on && window.ethereum.on('accountsChanged', async function(accounts) {
-    if (accounts.length === 0) {
-      disconnectBrowserWallet();
-    } else if (accounts[0].toLowerCase() !== (window._connectedWallet || '').toLowerCase()) {
-      // Clear stale CLOB keys from previous wallet — both naming conventions
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      localStorage.removeItem('hf_poly_wallet');
-      sessionStorage.removeItem('hf_poly_wallet_session');
-      localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
-      _polyWalletAddress = '';
+// ── Wallet switch handler — fires from HFXWallet on accountsChanged OR tab-focus polling ──
+// Centralized in wallet.js so it catches silent account switches that
+// MetaMask doesn't fire accountsChanged for (multi-account permission, etc.)
+async function hfxDashHandleWalletSwitch(detail) {
+  const oldEoa = detail && detail.oldEoa;
+  const newEoa = detail && detail.newEoa;
+  console.log('[dashboard] wallet switched:', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
 
-      const newAddr = accounts[0];
-      window._connectedWallet = newAddr;
-      window._walletSigner = null;
-      window._walletProvider = null;
-      localStorage.setItem('hf_wallet_address', newAddr);
-      localStorage.setItem('hf_connected_wallet', newAddr);
-      localStorage.setItem('poly_eoa_address', newAddr);
+  if (!newEoa) {
+    // User disconnected from MetaMask entirely
+    try { disconnectBrowserWallet(); } catch (e) {}
+    return;
+  }
 
-      // Re-establish signer + resolve proxy for new account
-      // (HFXWallet auto-invalidated its cache on the accountsChanged event)
-      try {
-        const walletCtx = await HFXWallet.getSigner();
-        window._walletSigner = walletCtx.signer;
-        window._walletProvider = walletCtx.provider;
-        fetchWalletBalance(walletCtx.provider, newAddr);
-      } catch (e) { console.warn('[wallet switch] signer failed:', e.message); }
+  // Clear stale wallet state
+  localStorage.removeItem('poly_api_key');
+  localStorage.removeItem('poly_api_secret');
+  localStorage.removeItem('poly_api_passphrase');
+  localStorage.removeItem('hf_clob_api_key');
+  localStorage.removeItem('hf_clob_api_secret');
+  localStorage.removeItem('hf_clob_api_passphrase');
+  localStorage.removeItem('hf_poly_wallet');
+  sessionStorage.removeItem('hf_poly_wallet_session');
+  localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+  _polyWalletAddress = '';
 
-      // Resolve proxy for new wallet
-      try {
-        const proxy = await getPolymarketProxy(newAddr);
-        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== newAddr.toLowerCase()) {
-          _polyWalletAddress = proxy.toLowerCase();
-          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-          sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
-          localStorage.setItem('hf_poly_proxy_' + newAddr.toLowerCase(), _polyWalletAddress);
-          console.log('[wallet switch] Resolved proxy:', _polyWalletAddress.slice(0, 10));
-        }
-      } catch (e) { console.warn('[wallet switch] proxy resolution failed:', e.message); }
+  // Set new wallet
+  window._connectedWallet = newEoa;
+  window._walletSigner = null;
+  window._walletProvider = null;
+  localStorage.setItem('hf_wallet_address', newEoa);
+  localStorage.setItem('hf_connected_wallet', newEoa);
+  localStorage.setItem('poly_eoa_address', newEoa);
 
-      updateWalletUI();
-      renderPolymarketConnectState();
-      _portfolioLoaded = false; // force portfolio reload
-      loadPortfolio();
-      showToast('Wallet switched to ' + newAddr.slice(0,6) + '…' + newAddr.slice(-4), 'success');
+  // Re-establish signer + resolve proxy for the new account
+  try {
+    const walletCtx = await HFXWallet.getSigner();
+    window._walletSigner = walletCtx.signer;
+    window._walletProvider = walletCtx.provider;
+    fetchWalletBalance(walletCtx.provider, newEoa);
+  } catch (e) { console.warn('[dashboard] getSigner failed:', e.message); }
+
+  try {
+    const proxy = await getPolymarketProxy(newEoa);
+    if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== newEoa.toLowerCase()) {
+      _polyWalletAddress = proxy.toLowerCase();
+      localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+      sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
+      localStorage.setItem('hf_poly_proxy_' + newEoa.toLowerCase(), _polyWalletAddress);
     }
+  } catch (e) { console.warn('[dashboard] proxy resolution failed:', e.message); }
+
+  updateWalletUI();
+  renderPolymarketConnectState();
+  _portfolioLoaded = false;
+  try { loadPortfolio(); } catch (e) {}
+  showToast('Wallet switched to ' + newEoa.slice(0,6) + '…' + newEoa.slice(-4), 'success');
+}
+
+// Register with HFXWallet — fires on accountsChanged AND on tab-focus polling
+if (typeof HFXWallet !== 'undefined' && HFXWallet.onWalletSwitched) {
+  HFXWallet.onWalletSwitched(hfxDashHandleWalletSwitch);
+}
+// Backup: also listen to the DOM event in case the module loads after HFXWallet
+window.addEventListener('hfx_wallet_switched', function(e) { hfxDashHandleWalletSwitch(e.detail); });
+
+// Run initial sync on page load to catch any switches that happened before
+// this tab was opened (e.g. user switched in MetaMask while on another site).
+if (typeof HFXWallet !== 'undefined' && HFXWallet.syncCurrentAccount) {
+  setTimeout(function() { HFXWallet.syncCurrentAccount().catch(function(){}); }, 800);
+}
+
+// Also keep a legacy accountsChanged listener as a belt-and-suspenders backup.
+// HFXWallet will handle most cases but this ensures we never miss an event.
+if (typeof window.ethereum !== 'undefined' && window.ethereum.on) {
+  window.ethereum.on('accountsChanged', function(accounts) {
+    if (!accounts || accounts.length === 0) {
+      try { disconnectBrowserWallet(); } catch (e) {}
+    }
+    // The actual reset logic is fired by HFXWallet via hfx_wallet_switched
   });
 }
 

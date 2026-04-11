@@ -3990,86 +3990,72 @@ updateTradingUI();
 setTimeout(function() { checkTradingSetup(); }, 500);
 
 // ── MetaMask wallet sync — detect current account on load + listen for changes ──
+// ── Handle wallet switches from HFXWallet ──
+// HFXWallet fires `hfx_wallet_switched` whenever the current MetaMask account
+// differs from our cached EOA (detected on accountsChanged OR on tab focus /
+// visibility change). We do the full reset: clear keys, re-derive proxy,
+// refresh positions, show a toast.
+async function hfxHandleWalletSwitch(detail) {
+  var oldEoa = detail && detail.oldEoa;
+  var newEoa = detail && detail.newEoa;
+  console.log('[market] wallet switched:', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
+
+  // Clear all stale data
+  localStorage.removeItem('poly_api_key');
+  localStorage.removeItem('poly_api_secret');
+  localStorage.removeItem('poly_api_passphrase');
+  localStorage.removeItem('hf_clob_api_key');
+  localStorage.removeItem('hf_clob_api_secret');
+  localStorage.removeItem('hf_clob_api_passphrase');
+  localStorage.removeItem('hf_poly_wallet');
+  sessionStorage.removeItem('hf_poly_wallet_session');
+
+  if (!newEoa) {
+    // User disconnected from MetaMask entirely
+    localStorage.removeItem('poly_eoa_address');
+    showTradeStatus('Wallet disconnected. Connect MetaMask to trade.', 'info');
+    var balEl = document.getElementById('tradeBalance');
+    if (balEl) balEl.textContent = 'Balance: —';
+    var posEl = document.getElementById('tradePosition');
+    if (posEl) posEl.style.display = 'none';
+    updateTradingUI();
+    return;
+  }
+
+  // Set new EOA + derive new proxy
+  localStorage.setItem('poly_eoa_address', newEoa);
+  try {
+    var newProxy = await getPolymarketProxy(newEoa);
+    if (newProxy && newProxy !== ethers.ZeroAddress && newProxy.toLowerCase() !== newEoa) {
+      localStorage.setItem('hf_poly_wallet', newProxy.toLowerCase());
+      console.log('[market] Resolved new proxy:', newProxy.slice(0,10));
+    }
+  } catch(e) { console.warn('[market] Proxy resolve failed:', e.message); }
+
+  // Refresh UI + data
+  showTradeStatus('Wallet switched to ' + newEoa.slice(0,6) + '…' + newEoa.slice(-4) + '. Reloading positions…', 'success');
+  fetchTradeBalance();
+  setTimeout(fetchUserPositions, 500);
+  updateTradingUI();
+  checkTradingSetup();
+}
+
+// Register with HFXWallet — fires on both accountsChanged and tab-focus polling
+if (typeof HFXWallet !== 'undefined' && HFXWallet.onWalletSwitched) {
+  HFXWallet.onWalletSwitched(hfxHandleWalletSwitch);
+}
+// Also listen to the DOM event as a backup (if the script loads after HFXWallet init)
+window.addEventListener('hfx_wallet_switched', function(e) { hfxHandleWalletSwitch(e.detail); });
+
 (async function syncMetaMaskOnLoad() {
   if (typeof window.ethereum === 'undefined') return;
-  try {
-    var accounts = await window.ethereum.request({ method: 'eth_accounts' });
-    if (accounts && accounts.length > 0) {
-      var currentEoa = accounts[0].toLowerCase();
-      var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
-      if (cachedEoa && cachedEoa !== currentEoa) {
-        console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
-        HFXWallet.invalidate();
-        // Clear stale data — both key naming conventions
-        localStorage.removeItem('poly_eoa_address');
-        localStorage.removeItem('hf_poly_wallet');
-        localStorage.removeItem('poly_api_key');
-        localStorage.removeItem('poly_api_secret');
-        localStorage.removeItem('poly_api_passphrase');
-        localStorage.removeItem('hf_clob_api_key');
-        localStorage.removeItem('hf_clob_api_secret');
-        localStorage.removeItem('hf_clob_api_passphrase');
-        // Set new EOA
-        localStorage.setItem('poly_eoa_address', currentEoa);
-        // Resolve new proxy
-        try {
-          var newProxy = await getPolymarketProxy(currentEoa);
-          if (newProxy && newProxy !== ethers.ZeroAddress && newProxy.toLowerCase() !== currentEoa) {
-            localStorage.setItem('hf_poly_wallet', newProxy.toLowerCase());
-            console.log('[wallet] Resolved new proxy:', newProxy.slice(0,10));
-          }
-        } catch(e) { console.log('[wallet] Proxy resolve skipped:', e.message); }
-        // Refresh balance + positions
-        fetchTradeBalance();
-        setTimeout(fetchUserPositions, 500);
-      }
-    }
-  } catch(e) { console.log('[wallet] eth_accounts check skipped:', e.message); }
-
-  // Listen for account changes (user switches wallet in MetaMask)
-  if (window.ethereum.on) {
-    window.ethereum.on('accountsChanged', async function(accounts) {
-      if (!accounts || accounts.length === 0) {
-        localStorage.removeItem('poly_eoa_address');
-        localStorage.removeItem('hf_poly_wallet');
-        localStorage.removeItem('poly_api_key');
-        localStorage.removeItem('poly_api_secret');
-        localStorage.removeItem('poly_api_passphrase');
-        localStorage.removeItem('hf_clob_api_key');
-        localStorage.removeItem('hf_clob_api_secret');
-        localStorage.removeItem('hf_clob_api_passphrase');
-        var balEl = document.getElementById('tradeBalance');
-        if (balEl) balEl.textContent = 'Balance: —';
-        document.getElementById('tradePosition').style.display = 'none';
-        return;
-      }
-      var newEoa = accounts[0].toLowerCase();
-      var oldEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
-      if (newEoa === oldEoa) return;
-      console.log('[wallet] Account changed to:', newEoa.slice(0,10));
-      // Clear old keys — both naming conventions
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.setItem('poly_eoa_address', newEoa);
-      localStorage.removeItem('hf_poly_wallet');
-      // Resolve proxy for new account
-      try {
-        var proxy = await getPolymarketProxy(newEoa);
-        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== newEoa) {
-          localStorage.setItem('hf_poly_wallet', proxy.toLowerCase());
-          console.log('[wallet] New proxy:', proxy.slice(0,10));
-        }
-      } catch(e) { console.log('[wallet] Proxy resolve skipped:', e.message); }
-      // Refresh everything
-      fetchTradeBalance();
-      setTimeout(fetchUserPositions, 500);
-      checkTradingSetup();
-    });
+  // HFXWallet.syncCurrentAccount() handles the first-load sync and fires
+  // hfx_wallet_switched if needed (which hfxHandleWalletSwitch picks up).
+  if (typeof HFXWallet !== 'undefined' && HFXWallet.syncCurrentAccount) {
+    try { await HFXWallet.syncCurrentAccount(); } catch(e) {}
   }
+  // accountsChanged handling is now centralized in wallet.js — it fires the
+  // hfx_wallet_switched event which hfxHandleWalletSwitch() above handles.
 })();
 
 // ── Holder Distribution Donut Chart ──────────────────────────────────────────

@@ -141,12 +141,86 @@
     return false;
   }
 
-  // Wire up the only events that should drop the cache. Both files used to
-  // do this independently; now it's centralized so neither can forget.
+  // ── Wallet state sync — catches silent account switches ──
+  //
+  // MetaMask's accountsChanged event is unreliable: it fires on some version
+  // combinations and not others, especially when the user has granted
+  // permission to multiple accounts. The fix is to poll the current account
+  // whenever the user returns to the HYPERFLEX tab (visibilitychange/focus)
+  // and compare it to our cached EOA. If they differ, we fire a custom
+  // `hfx_wallet_switched` event that any page can listen for to trigger
+  // its own reset logic.
+
+  // Listeners registered via onWalletSwitched(fn). Fires with { oldEoa, newEoa }
+  var _switchListeners = new Set();
+
+  function onWalletSwitched(fn) {
+    if (typeof fn === 'function') _switchListeners.add(fn);
+  }
+  function offWalletSwitched(fn) { _switchListeners.delete(fn); }
+
+  function _fireSwitched(oldEoa, newEoa) {
+    // Invalidate cached signer first — whatever listeners do, they need a fresh one
+    invalidate();
+    for (var fn of _switchListeners) {
+      try { fn({ oldEoa: oldEoa, newEoa: newEoa }); } catch (e) { console.warn('[HFXWallet] listener error:', e && e.message); }
+    }
+    // Also dispatch a regular DOM event so non-module code can listen
+    try { global.dispatchEvent(new CustomEvent('hfx_wallet_switched', { detail: { oldEoa: oldEoa, newEoa: newEoa } })); } catch (e) {}
+  }
+
+  // Returns { changed: bool, oldEoa, newEoa }. Swallows errors.
+  async function syncCurrentAccount() {
+    if (!global.ethereum) return { changed: false };
+    var accounts;
+    try {
+      accounts = await global.ethereum.request({ method: 'eth_accounts' });
+    } catch (e) { return { changed: false }; }
+    var currentEoa = (accounts && accounts[0]) ? accounts[0].toLowerCase() : null;
+    var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+
+    if (!currentEoa) {
+      // User disconnected from MetaMask entirely
+      if (cachedEoa) { _fireSwitched(cachedEoa, null); return { changed: true, oldEoa: cachedEoa, newEoa: null }; }
+      return { changed: false };
+    }
+    if (!cachedEoa) {
+      // First connection this session — don't fire switch, let normal connect flow handle
+      return { changed: false, newEoa: currentEoa };
+    }
+    if (cachedEoa !== currentEoa) {
+      _fireSwitched(cachedEoa, currentEoa);
+      return { changed: true, oldEoa: cachedEoa, newEoa: currentEoa };
+    }
+    return { changed: false };
+  }
+
+  // Wire up the events that should drop the cache + trigger a resync.
   if (global.ethereum && typeof global.ethereum.on === 'function') {
-    global.ethereum.on('accountsChanged', function() { invalidate(); });
+    global.ethereum.on('accountsChanged', function(accounts) {
+      invalidate();
+      // Also re-run the sync logic to fire our custom switch event
+      syncCurrentAccount();
+    });
     global.ethereum.on('chainChanged', function() { invalidate(); });
   }
+
+  // Poll on visibility change — catches the case where user switches their
+  // active account in MetaMask while HYPERFLEX is in a background tab, then
+  // returns to HYPERFLEX. Also triggers on window focus as a backup.
+  var _lastSyncTs = 0;
+  function _maybeSyncOnFocus() {
+    // Throttle to once per 500ms to avoid firing on minor focus blips
+    if (Date.now() - _lastSyncTs < 500) return;
+    _lastSyncTs = Date.now();
+    syncCurrentAccount();
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') _maybeSyncOnFocus();
+    });
+  }
+  global.addEventListener('focus', _maybeSyncOnFocus);
 
   global.HFXWallet = {
     getSigner: getSigner,
@@ -155,5 +229,8 @@
     adoptSigner: adoptSigner,
     invalidate: invalidate,
     is32002Error: is32002Error,
+    syncCurrentAccount: syncCurrentAccount,
+    onWalletSwitched: onWalletSwitched,
+    offWalletSwitched: offWalletSwitched,
   };
 })(window);
