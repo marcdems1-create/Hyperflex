@@ -2999,6 +2999,29 @@ body.nav-open .sidebar-backdrop {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
 <script src="/wallet.js?v=1"></script>
+<script src="/deposit.js?v=3"></script>
+<script>
+// Local hfxOpenDeposit helper (race-safe) — creator-dashboard doesn't
+// include nav.js so we can't rely on the global helper defined there.
+// Polls for HFXDeposit to be ready (up to 3 seconds) before giving up.
+window.hfxOpenDeposit = function() {
+  var attempts = 0;
+  var maxAttempts = 15;
+  function tryOpen() {
+    if (window.HFXDeposit && typeof window.HFXDeposit.open === 'function') {
+      try { window.HFXDeposit.open(); } catch (e) { console.error('[hfxOpenDeposit]', e); }
+      return;
+    }
+    if (++attempts >= maxAttempts) {
+      console.warn('[hfxOpenDeposit] HFXDeposit did not load after 3s');
+      alert('Could not load the deposit module. Please refresh the page and try again.');
+      return;
+    }
+    setTimeout(tryOpen, 200);
+  }
+  tryOpen();
+};
+</script>
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="plan-premium">
