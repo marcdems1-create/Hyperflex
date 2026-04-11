@@ -120,8 +120,7 @@
     { href: '/screener', label: 'Screener' },
     { href: '/whales', label: 'Market Intel' },
     { href: '/crystal-ball', label: 'Crystal Ball' },
-    { href: '/predictors', label: 'Predictors' },
-    { href: '/explore', label: 'Explore' }
+    { href: '/predictors', label: 'Predictors' }
   ];
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
@@ -150,7 +149,7 @@
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
-    '<a href="/explore" class="topbar-logo">HYPER<span>FLEX</span></a>' +
+    '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
       primaryLinks.map(function(l) {
         var isActive = path === l.href;
@@ -229,7 +228,7 @@
     }).join('');
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
-        '<a href="/explore" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
+        '<a href="/" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
         '<button class="nav-mobile-close" id="navMobileClose">' +
           '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
         '</button>' +
@@ -412,7 +411,7 @@
       { name: 'Ecosystem', desc: 'Prediction market ecosystem', href: '/ecosystem', icon: '🌐' },
       { name: 'Features', desc: 'All HYPERFLEX features & tools', href: '/features', icon: '✨' },
       { name: 'Alpha Terminal', desc: 'Live edges ranked by Edge Score', href: '/alpha', icon: '⚡' },
-      { name: 'Explore', desc: 'Discover communities & activity', href: '/explore', icon: '🔍' },
+      { name: 'Home', desc: 'Live market activity & intelligence', href: '/', icon: '🏠' },
       { name: 'Rewards', desc: 'Earn from referrals', href: '/rewards', icon: '💰' },
       { name: 'Data', desc: 'Market data & analytics', href: '/data', icon: '📈' },
       { name: 'API', desc: 'Developer API docs', href: '/api-docs', icon: '⚙️' },

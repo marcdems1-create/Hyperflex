@@ -479,7 +479,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/crystal-ball', priority: '0.8', freq: 'daily' },
       { loc: '/whales', priority: '0.8', freq: 'daily' },
       { loc: '/whale-index', priority: '0.7', freq: 'daily' },
-      { loc: '/explore', priority: '0.7', freq: 'daily' },
+      /* /explore redirects to / — removed from sitemap */
       { loc: '/templates', priority: '0.6', freq: 'weekly' },
       { loc: '/data', priority: '0.6', freq: 'daily' },
       { loc: '/ecosystem', priority: '0.8', freq: 'daily' },
@@ -15852,10 +15852,8 @@ app.get('/api/explore', async (req, res) => {
   }
 });
 
-app.get('/explore', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'explore.html'));
-});
+// /explore is now the homepage — redirect for old bookmarks/SEO
+app.get('/explore', (req, res) => res.redirect(301, '/'));
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 2 — PUT /api/user/display-name
@@ -18796,7 +18794,7 @@ async function fetchWhalePositions() {
                     <h2 style="color:#c9920d">Whale Alert</h2>
                     <p><strong>${(evt.trader_name || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong> (ranked #${evt.trader_rank}, ${evt.trader_pnl >= 0 ? '+' : ''}$${Math.round(evt.trader_pnl).toLocaleString()} PnL) just opened a <strong>${evt.size_display}</strong> ${(evt.side || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')} position on:</p>
                     <p style="font-size:16px;font-weight:600">${(evt.question || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
-                    <p>This market is in your portfolio. <a href="https://hyperflex.network/explore" style="color:#c9920d">View activity →</a></p>
+                    <p>This market is in your portfolio. <a href="https://hyperflex.network/" style="color:#c9920d">View activity →</a></p>
                     <p style="color:#888;font-size:12px">— HYPERFLEX</p>
                   </div>`
                 }).catch(() => {});

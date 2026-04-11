@@ -3079,7 +3079,7 @@ function renderFilteredMarkets() {
       mine:  { icon: '🎯', title: 'You haven\'t predicted yet', sub: 'Your active bets will appear here. Jump in — pick a market and make your call.',
                cta: `<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">Browse markets to predict</button>` },
       all:   { icon: '📊', title: 'No open markets yet', sub: 'This community\'s prediction markets haven\'t launched yet. Check back soon or explore other communities.',
-               cta: `<a href="/explore" class="empty-cta empty-cta-gold">Explore communities</a>` }
+               cta: `<a href="/" class="empty-cta empty-cta-gold">Explore communities</a>` }
     };
     const m = msgs[currentFilter] || msgs.all;
     // If filtering by category and empty, show a category-specific message

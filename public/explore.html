@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Explore — Live Prediction Market Activity | HYPERFLEX</title>
-<meta name="description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
-<link rel="canonical" href="https://hyperflex.network/explore"/>
+<title>HYPERFLEX — Prediction Market Intelligence</title>
+<meta name="description" content="Live prediction market intelligence — whale trades, edge scores, and market signals across all platforms."/>
+<link rel="canonical" href="https://hyperflex.network/"/>
 <!-- Open Graph -->
 <meta property="og:type" content="website"/>
-<meta property="og:url" content="https://hyperflex.network/explore"/>
-<meta property="og:title" content="Explore — HYPERFLEX"/>
+<meta property="og:url" content="https://hyperflex.network/"/>
+<meta property="og:title" content="HYPERFLEX — Prediction Market Intelligence"/>
 <meta property="og:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
 <meta property="og:image" content="https://hyperflex.network/og-default.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
@@ -952,7 +952,7 @@ nav {
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
-<script src="/nav.js?v=11"></script>
+<script src="/nav.js?v=12"></script>
 
 <!-- Member Auth Modal -->
 <div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
@@ -1205,7 +1205,7 @@ nav {
         var market = (t.market || 'Unknown');
         if (market.length > 40) market = market.substring(0, 37) + '...';
         var lfUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(t.url || '') : '#';
-        if (lfUrl === '#') lfUrl = '/explore'; // fallback to explore if no slug found
+        if (lfUrl === '#') lfUrl = '/'; // fallback to explore if no slug found
         return '<a class="lf-item" href="' + lfUrl + '"' + (lfUrl.startsWith('http') ? ' target="_blank" rel="noopener"' : '') + '>' +
           '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
           '<span class="lf-size">' + sizeStr + '</span>' +
@@ -1555,7 +1555,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var sideColor = sideUp === 'YES' ? '#00e68a' : '#ff4d6a';
       var sideBg = sideUp === 'YES' ? 'rgba(0,230,138,.1)' : 'rgba(255,77,106,.1)';
       var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : '#';
-      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '/explore';
+      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '/';
       var meta = [];
       if (s.whale_count) meta.push(s.whale_count + ' whales');
       if (s.capital) meta.push(fmtC(s.capital));
@@ -1842,7 +1842,7 @@ function slugToColor(slug, communities) {
 function activityCard(a) {
   const color = a.community_color || '#c9920d';
   const initials = (a.user || a.community_name || 'H').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-  const communityUrl = a.creator_slug ? `/${a.creator_slug}` : '/explore';
+  const communityUrl = a.creator_slug ? `/${a.creator_slug}` : '/';
   const marketUrl    = a.market_id    ? `/${a.creator_slug}?market=${a.market_id}` : communityUrl;
 
   // Build card HTML per type
@@ -2111,7 +2111,7 @@ function activityCard(a) {
       : '';
     var destRaw = typeof polyRef==='function' ? polyRef(a.url || 'https://polymarket.com') : (a.url || 'https://polymarket.com');
     const dest = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '#';
-    const finalDest = (dest && dest !== '#') ? dest : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '/explore');
+    const finalDest = (dest && dest !== '#') ? dest : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '/');
     const isExt = finalDest.startsWith('http');
     const _ctTrader = escHtml(a.trader_name || 'Whale');
     const _ctQuestion = escHtml(a.question || '');
@@ -2154,7 +2154,7 @@ function activityCard(a) {
       manifold:   { label: 'Manifold',   color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.3)',  emoji: '🟢' },
     };
     const pm = platformMeta[platform] || platformMeta.polymarket;
-    const dest = a.market_url || '/explore';
+    const dest = a.market_url || '/';
     const isExt = dest.startsWith('http');
     const pnlBadge = a.pnl_pct ? `<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:${a.pnl_pct > 0 ? '#22c55e' : '#ef4444'}">${a.pnl_pct > 0 ? '+' : ''}${a.pnl_pct}%</span>` : '';
     const cashBadge = a.cash_value ? `<span class="ac-stat">$${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
@@ -3122,7 +3122,7 @@ function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) 
   document.getElementById('ect-size').textContent = fmtSize;
   document.getElementById('ect-amount').value = '';
   document.getElementById('ect-alert').checked = false;
-  document.getElementById('ect-cta').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(marketUrl || '') : '/explore';
+  document.getElementById('ect-cta').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(marketUrl || '') : '/';
   modal.style.display = 'flex';
 }
 function closeExploreCopy() {

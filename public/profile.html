@@ -274,7 +274,7 @@
   </a>
   <div class="nav-actions">
     <a href="/predictors" class="btn btn-ghost">Predictors</a>
-    <a href="/explore" class="btn btn-ghost">Explore</a>
+    <a href="/" class="btn btn-ghost">Explore</a>
     <a id="navDashLink" href="/dashboard" class="btn btn-ghost" style="display:none;color:#c9920d;border-color:rgba(201,146,13,0.3)">Dashboard</a>
     <a id="navJoinBtn" href="#join" class="btn btn-gold">Join Community →</a>
   </div>
@@ -377,7 +377,7 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
   const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
 }
 const slug = location.pathname.replace(/^\/u\//, '').replace(/\/$/, '');
-if (!slug) location.href = '/explore';
+if (!slug) location.href = '/';
 
 let profileActiveMarkets = [];
 let _profileSearchTimer = null;
@@ -467,7 +467,7 @@ async function load() {
         <div style="font-size:48px;margin-bottom:20px">🔍</div>
         <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px">Creator not found</div>
         <div style="font-size:14px;color:var(--muted);margin-bottom:28px">This creator profile doesn't exist or hasn't been set up yet.</div>
-        <a href="/explore" style="background:var(--gold);color:#141412;font-weight:700;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none">Browse Communities →</a>
+        <a href="/" style="background:var(--gold);color:#141412;font-weight:700;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none">Browse Communities →</a>
       </div>`;
     return;
   }
