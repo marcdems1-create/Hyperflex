@@ -1614,6 +1614,9 @@ async function openDepositModal() {
     return;
   }
 
+  // Default to bridge tab (earns us integrator fees)
+  if (!window._depositModalTab) window._depositModalTab = 'bridge';
+
   // Close any existing modal
   var existing = document.getElementById('depositOverlay');
   if (existing) existing.remove();
@@ -1657,13 +1660,15 @@ async function openDepositModal() {
       fetchPolBalance(eoa)
     ]);
 
-    overlay.innerHTML = _depositModalFrame({
+    window._lastDepositState = {
       eoa: eoa,
       proxy: proxy,
       eoaBalance: eoaBal,
       proxyBalance: proxyBal,
       polBalance: polBal
-    });
+    };
+    if (!window._depositModalTab) window._depositModalTab = 'bridge';
+    overlay.innerHTML = _depositModalFrame(window._lastDepositState);
   } catch (e) {
     overlay.innerHTML = _depositModalFrame({ error: e.message || 'Unable to load deposit info' });
   }
@@ -1672,6 +1677,14 @@ async function openDepositModal() {
 function closeDepositModal() {
   var o = document.getElementById('depositOverlay');
   if (o) o.remove();
+  window._depositModalTab = 'bridge'; // reset to bridge tab for next open
+}
+
+// Re-render deposit modal with current tab (used when switching tabs)
+function refreshDepositModal() {
+  var overlay = document.getElementById('depositOverlay');
+  if (!overlay || !window._lastDepositState) return;
+  overlay.innerHTML = _depositModalFrame(window._lastDepositState);
 }
 
 // Renders the modal body in its various states
@@ -1730,15 +1743,24 @@ function _depositModalFrame(state) {
   var hasEoaUsdc = eoaBal >= 0.01;
   var hasGas = state.polBalance == null || state.polBalance >= 0.001; // ~$0.0005 gas
 
-  return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:22px;max-width:460px;width:100%;font-family:var(--sans);color:var(--text);max-height:92vh;overflow-y:auto">' +
+  // Tab state for deposit modal — 'transfer' (direct USDC) or 'bridge' (Jumper widget)
+  var depositTab = window._depositModalTab || 'transfer';
+
+  return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:22px;max-width:480px;width:100%;font-family:var(--sans);color:var(--text);max-height:92vh;overflow-y:auto">' +
     // Header
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
       '<span style="font-size:20px">💰</span>' +
       '<div style="flex:1">' +
-        '<div style="font-size:16px;font-weight:800">Deposit USDC</div>' +
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Transfer USDC from your MetaMask wallet to your trading wallet</div>' +
+        '<div style="font-size:16px;font-weight:800">Fund Your Account</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Get USDC into your trading wallet to start trading</div>' +
       '</div>' +
       '<button onclick="closeDepositModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
+    '</div>' +
+
+    // Tab selector: Bridge & Swap | Direct Transfer
+    '<div style="display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">' +
+      '<button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="flex:1;padding:10px 8px;font-family:var(--mono);font-size:11px;font-weight:700;border:none;cursor:pointer;transition:all .15s;' + (depositTab === 'bridge' ? 'background:#00e68a;color:#0a0a0f' : 'background:transparent;color:var(--dim)') + '">⚡ Bridge & Swap</button>' +
+      '<button onclick="window._depositModalTab=\'transfer\';refreshDepositModal()" style="flex:1;padding:10px 8px;font-family:var(--mono);font-size:11px;font-weight:700;border:none;cursor:pointer;transition:all .15s;' + (depositTab === 'transfer' ? 'background:#00e68a;color:#0a0a0f' : 'background:transparent;color:var(--dim)') + '">💸 Direct Transfer</button>' +
     '</div>' +
 
     // Balance display
@@ -1749,61 +1771,70 @@ function _depositModalFrame(state) {
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.eoa ? state.eoa.slice(0,6) + '…' + state.eoa.slice(-4) : '') + '</div>' +
       '</div>' +
       '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
-        '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Trading Wallet (destination)</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Trading Wallet</div>' +
         '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)">$' + proxyBal.toFixed(2) + '</div>' +
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.proxy ? state.proxy.slice(0,6) + '…' + state.proxy.slice(-4) : '') + '</div>' +
       '</div>' +
     '</div>' +
 
-    // Main content depends on whether they have USDC to deposit
-    (hasEoaUsdc
-      ? // ── Has USDC → show input + action ──
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
-          '<div style="flex:1;position:relative">' +
-            '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:15px;color:var(--muted)">$</span>' +
-            '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
+    (depositTab === 'bridge'
+      ? // ── BRIDGE & SWAP TAB — Jumper/LI.FI widget ──
+        '<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px">' +
+          '<iframe id="jumperWidget" src="https://iframe.jumper.exchange/?toChain=137&toToken=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' +
+            (state.proxy ? '&toAddress=' + state.proxy : '') +
+            '&integrator=hyperflex&fee=0.005&appearance=dark&variant=compact" ' +
+            'style="width:100%;height:440px;border:none;display:block" ' +
+            'allow="clipboard-write" loading="lazy"></iframe>' +
+        '</div>' +
+        '<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:8px;margin-bottom:10px">' +
+          '<span style="font-size:14px;flex-shrink:0;margin-top:1px">✦</span>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6">' +
+            'Bridge from <strong style="color:var(--text)">any chain</strong> (Ethereum, Arbitrum, Base, Solana, etc.) directly to your trading wallet. Swap any token → USDC automatically.' +
           '</div>' +
-          '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
-        '</div>' +
+        '</div>'
 
-        (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:var(--mono);font-size:10px;color:var(--gold,#c9920d);line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
+      : // ── DIRECT TRANSFER TAB ──
+      (hasEoaUsdc
+        ? // Has USDC → show input + action
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+            '<div style="flex:1;position:relative">' +
+              '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:15px;color:var(--muted)">$</span>' +
+              '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
+            '</div>' +
+            '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
+          '</div>' +
 
-        '<button onclick="executeDeposit()" id="depositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
+          (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:var(--mono);font-size:10px;color:var(--gold,#c9920d);line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
 
-        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">This is a standard USDC ERC-20 transfer. Gas: ~$0.01 in POL.</div>'
+          '<button onclick="executeDeposit()" id="depositSubmitBtn" style="width:100%;background:#00e68a;color:#0a0a0f;border:none;padding:14px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:800;cursor:pointer;min-height:48px">Sign & Deposit →</button>' +
 
-      : // ── No USDC → show how to get some ──
-        '<div style="padding:14px 16px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:10px;margin-bottom:14px">' +
-          '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gold,#c9920d);margin-bottom:6px">You need USDC on Polygon first</div>' +
-          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Your MetaMask wallet has no USDC on the Polygon network. You have a few options:</div>' +
-        '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">Direct USDC transfer on Polygon. Gas: ~$0.01 in POL.</div>' +
 
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
-          '<a href="https://buy.ramp.network/?userAddress=' + (state.eoa || '') + '&swapAsset=MATIC_USDC&defaultAsset=MATIC_USDC" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
-            '<span style="font-size:20px">💳</span>' +
-            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Buy with card / bank (Ramp)</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">Fastest path · sends USDC directly to your MetaMask</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
+          '<div style="text-align:center;margin-top:10px"><button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="background:none;border:none;color:var(--blue,#4d9fff);font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:underline">Need USDC from another chain? Use Bridge & Swap →</button></div>'
 
-          '<a href="https://app.uniswap.org/#/swap?outputCurrency=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174&chain=polygon" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
-            '<span style="font-size:20px">🔄</span>' +
-            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Swap POL → USDC (Uniswap)</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">If you already have POL on Polygon</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
+        : // No USDC → show bridge as primary, Ramp as fallback
+          '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
+            '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#00e68a;margin-bottom:6px">No USDC on Polygon</div>' +
+            '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Use <strong style="color:var(--text)">Bridge & Swap</strong> to send funds from any chain, or buy USDC with a card.</div>' +
+          '</div>' +
 
-          '<a href="https://www.coinbase.com/price/usd-coin" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
-            '<span style="font-size:20px">🏦</span>' +
-            '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Withdraw from Coinbase</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">Send USDC on Polygon network (not Ethereum!)</div></div>' +
-            '<span style="color:#00e68a">→</span>' +
-          '</a>' +
-        '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+            '<button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.3);border-radius:8px;color:var(--text);cursor:pointer;transition:all 0.15s;width:100%;text-align:left">' +
+              '<span style="font-size:20px">⚡</span>' +
+              '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Bridge & Swap (any chain)</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">ETH, SOL, USDT, any token → USDC on Polygon</div></div>' +
+              '<span style="color:#00e68a;font-weight:700">→</span>' +
+            '</button>' +
 
-        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;padding:10px 12px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.15);border-radius:6px">' +
-          '<strong style="color:#4d9fff">Important:</strong> Make sure you get USDC on the <strong style="color:var(--text)">Polygon</strong> network (not Ethereum mainnet). Polygon is much cheaper. After you have USDC, come back here to deposit.' +
-        '</div>' +
+            '<a href="https://buy.ramp.network/?userAddress=' + (state.eoa || '') + '&swapAsset=MATIC_USDC&defaultAsset=MATIC_USDC" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text);transition:all 0.15s">' +
+              '<span style="font-size:20px">💳</span>' +
+              '<div style="flex:1"><div style="font-family:var(--sans);font-size:13px;font-weight:700">Buy with card / bank</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">Credit card or bank transfer via Ramp</div></div>' +
+              '<span style="color:var(--dim)">→</span>' +
+            '</a>' +
+          '</div>' +
 
-        '<button onclick="closeDepositModal()" style="width:100%;background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;margin-top:14px">Close</button>'
+          '<button onclick="closeDepositModal()" style="width:100%;background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border);padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Close</button>'
+      )
     ) +
   '</div>';
 }
