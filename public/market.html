@@ -173,8 +173,8 @@ canvas{display:block;width:100%!important}
 .setup-action-btn:hover{opacity:.85}
 .setup-action-btn:disabled{opacity:.5;cursor:not-allowed}
 
-/* View on Polymarket link */
-.mkt-poly-link{display:flex;align-items:center;gap:6px;font-family:var(--body);font-size:12px;font-weight:500;color:var(--gold);padding:10px 0;justify-content:center}
+/* External link (hidden) */
+.mkt-poly-link{display:none}
 
 /* Loading */
 .mkt-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px}
@@ -399,7 +399,7 @@ canvas{display:block;width:100%!important}
         <div class="trade-field">
           <div class="trade-field-label">
             <span>Limit Price (0.01-99.99¢)</span>
-            <span><span id="tradeBalance" onclick="openDepositModal()" title="Click to deposit USDC" style="color:var(--gold);cursor:pointer">Balance: —</span> <button onclick="openDepositModal()" title="Deposit USDC from your MetaMask to Polymarket" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:2px 8px;border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;margin-left:6px;min-height:24px">+ Deposit</button></span>
+            <span><span id="tradeBalance" onclick="openDepositModal()" title="Click to deposit USDC" style="color:var(--gold);cursor:pointer">Balance: —</span> <button onclick="openDepositModal()" title="Deposit USDC from your wallet" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:2px 8px;border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;margin-left:6px;min-height:24px">+ Deposit</button></span>
           </div>
           <input type="number" class="trade-input" id="tradePrice" value="50" min="1" max="99" step="1" oninput="updateTradeCalc()"/>
         </div>
@@ -437,7 +437,7 @@ canvas{display:block;width:100%!important}
           <span style="color:#a855f7;font-weight:700">⚡ FLEX Points</span>
           <span id="flexPointsBadge" style="color:var(--text);font-weight:800">—</span>
         </div>
-        <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
+        <div class="trade-disclaimer">Click "Connect Wallet" to enable trading</div>
 
         <!-- Trading setup runs silently in background — no checklist UI -->
         <div id="tradingSetup" style="display:none"></div>
@@ -492,8 +492,9 @@ canvas{display:block;width:100%!important}
         </div>
       </div>
 
-      <div class="mkt-poly-link">
-        <a id="polyLink" href="#" target="_blank" rel="noopener">↗ View on Polymarket</a>
+      <!-- polyLink removed — sends users out of our CLOB fee funnel -->
+      <div class="mkt-poly-link" style="display:none">
+        <a id="polyLink" href="#" target="_blank" rel="noopener"></a>
       </div>
 
       <!-- CRYSTAL BALL AI ANALYSIS -->
@@ -514,7 +515,7 @@ canvas{display:block;width:100%!important}
       <div id="copyBotCta" style="margin-top:12px;background:linear-gradient(135deg,rgba(0,230,138,0.05),rgba(77,159,255,0.05));border:1px solid rgba(0,230,138,0.15);border-radius:12px;padding:16px;text-align:center">
         <div style="font-size:14px;margin-bottom:6px">&#x1F916;</div>
         <div style="font-family:var(--display);font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">Copy Top Whales</div>
-        <div style="font-family:var(--body);font-size:11px;color:var(--soft);margin-bottom:12px;line-height:1.4">Auto-mirror trades from the top 50 Polymarket whales. Set it and forget it.</div>
+        <div style="font-family:var(--body);font-size:11px;color:var(--soft);margin-bottom:12px;line-height:1.4">Auto-mirror trades from the top 50 whales. Set it and forget it.</div>
         <a href="/whales#copy" style="display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 18px;border-radius:8px;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.25);color:#00e68a;text-decoration:none;transition:all .15s" onmouseover="this.style.background='rgba(0,230,138,0.18)'" onmouseout="this.style.background='rgba(0,230,138,0.1)'">Set up Copy-Bot &rarr;</a>
       </div>
     </div>
@@ -1647,7 +1648,7 @@ async function openDepositModal() {
         localStorage.setItem('hf_poly_wallet', proxy);
       }
     }
-    if (!proxy) throw new Error('Could not resolve your Polymarket wallet. Complete setup first.');
+    if (!proxy) throw new Error('Could not resolve your trading wallet. Complete setup first.');
 
     // Fetch both balances in parallel
     var [eoaBal, proxyBal, polBal] = await Promise.all([
@@ -1700,7 +1701,7 @@ function _depositModalFrame(state) {
     return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
       '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
       '<div style="margin-top:14px;font-family:var(--sans);font-size:14px;font-weight:700;color:#00e68a">Check MetaMask → sign the transfer</div>' +
-      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Sending $' + (state.amount || 0).toFixed(2) + ' USDC to your Polymarket wallet</div>' +
+      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Sending $' + (state.amount || 0).toFixed(2) + ' USDC to your trading wallet</div>' +
     '</div>';
   }
 
@@ -1717,7 +1718,7 @@ function _depositModalFrame(state) {
     return '<div style="background:var(--paper,#0e0e0c);border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
       '<div style="font-size:48px;margin-bottom:8px">✅</div>' +
       '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (state.amount || 0).toFixed(2) + ' USDC</div>' +
-      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px">New Polymarket balance: <strong style="color:var(--text)">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px">New trading balance: <strong style="color:var(--text)">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
       (state.txHash ? '<div style="margin-bottom:18px"><a href="https://polygonscan.com/tx/' + state.txHash + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue,#4d9fff);text-decoration:none">View tx on Polygonscan ↗</a></div>' : '') +
       '<button onclick="closeDepositModal()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Close</button>' +
     '</div>';
@@ -1734,8 +1735,8 @@ function _depositModalFrame(state) {
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
       '<span style="font-size:20px">💰</span>' +
       '<div style="flex:1">' +
-        '<div style="font-size:16px;font-weight:800">Deposit to Polymarket</div>' +
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Transfer USDC from your MetaMask wallet to your Polymarket wallet</div>' +
+        '<div style="font-size:16px;font-weight:800">Deposit USDC</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">Transfer USDC from your MetaMask wallet to your trading wallet</div>' +
       '</div>' +
       '<button onclick="closeDepositModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;padding:0 6px">✕</button>' +
     '</div>' +
@@ -1748,7 +1749,7 @@ function _depositModalFrame(state) {
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.eoa ? state.eoa.slice(0,6) + '…' + state.eoa.slice(-4) : '') + '</div>' +
       '</div>' +
       '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
-        '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Polymarket (destination)</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Trading Wallet (destination)</div>' +
         '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)">$' + proxyBal.toFixed(2) + '</div>' +
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.proxy ? state.proxy.slice(0,6) + '…' + state.proxy.slice(-4) : '') + '</div>' +
       '</div>' +
@@ -2367,7 +2368,7 @@ async function checkTradingSetup() {
   } else {
     setSetupStep(1, 'error', 'Proxy Wallet \u2014 not yet activated');
     var btn1 = document.getElementById('setupBtn1');
-    if (btn1) { btn1.style.display = 'inline-block'; btn1.textContent = 'Activate on polymarket.com'; }
+    if (btn1) { btn1.style.display = 'inline-block'; btn1.textContent = 'Activate wallet'; }
   }
 
   // Step 2: CLOB auth
@@ -2557,9 +2558,9 @@ async function enableTrading() {
             tradeDebug('browser-direct create FAIL', { status: createRes.status, error: clobErr });
             var errorMsg = clobErr.error || clobErr.message || 'CLOB auth failed (' + createRes.status + ')';
             if (createRes.status === 400 && (errorMsg.includes('derive') || errorMsg.includes('signature'))) {
-              errorMsg = 'Invalid signature or wallet not registered with Polymarket. Visit polymarket.com to set up your account first.';
+              errorMsg = 'Invalid signature or wallet not registered. Visit polymarket.com to set up your account first.';
             } else if (createRes.status === 401) {
-              errorMsg = 'Unauthorized. Please make sure you have a Polymarket account connected to this wallet.';
+              errorMsg = 'Unauthorized. Please make sure your wallet is set up for trading.';
             }
             throw new Error(errorMsg);
           }
@@ -2578,7 +2579,7 @@ async function enableTrading() {
     var passphrase = data.passphrase || data.apiPassphrase || '';
     tradeDebug('extracted keys', { apiKey: apiKey.slice(0,8) + '...', hasSecret: !!secret, hasPassphrase: !!passphrase });
 
-    if (!apiKey) throw new Error('No API key returned — you may need a Polymarket account first');
+    if (!apiKey) throw new Error('No API key returned — you may need to set up your account first');
 
     localStorage.setItem('poly_api_key', apiKey);
     localStorage.setItem('poly_api_secret', secret);
@@ -2683,7 +2684,7 @@ function updateTradingUI() {
       disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Resolve proxy</a>';
       disclaimer.style.color = 'var(--gold)';
     } else {
-      disclaimer.innerHTML = '<a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Set up trading</a> to trade on Polymarket';
+      disclaimer.innerHTML = '<a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Set up trading</a> to start trading';
       disclaimer.style.color = 'var(--dim)';
     }
   }
@@ -2781,7 +2782,7 @@ async function runFullSetup() {
     // Not deployed — attempt to deploy directly via Safe factory
     setSetupStep(1, 'active', 'Deploying proxy wallet...');
     if (cta) cta.textContent = 'Deploying wallet...';
-    showTradeStatus('Deploying your Polymarket wallet (one-time, ~$0.01 in MATIC gas)...', 'info');
+    showTradeStatus('Deploying your trading wallet (one-time, ~$0.01 in MATIC gas)...', 'info');
 
     var deploySuccess = false;
     try {
@@ -3001,7 +3002,7 @@ async function executeTrade() {
     if (proxyForBal) {
       var proxyBal = await fetchUsdcBalance(proxyForBal);
       if (proxyBal != null && proxyBal < amount) {
-        showTradeStatus('Need $' + amount.toFixed(2) + ' but your Polymarket wallet only has $' + proxyBal.toFixed(2) + '. Opening deposit flow…', 'error');
+        showTradeStatus('Need $' + amount.toFixed(2) + ' but your trading wallet only has $' + proxyBal.toFixed(2) + '. Opening deposit flow…', 'error');
         setTimeout(openDepositModal, 500);
         return;
       }
@@ -3363,7 +3364,7 @@ async function executeTrade() {
     tradeDebug('order signed', { sig: orderSignature.slice(0,20) + '...', maker: orderStruct.maker.slice(0,10), signer: orderStruct.signer.slice(0,10), token: orderStruct.tokenId.slice(0,15) + '...', makerAmt: orderStruct.makerAmount, takerAmt: orderStruct.takerAmount, exchange: exchangeAddr.slice(0,10), negRisk: isNegRisk });
 
     // Step 4: Submit to CLOB
-    showTradeStatus('Submitting order to Polymarket...', 'info');
+    showTradeStatus('Submitting order...', 'info');
     cta.textContent = 'Placing order...';
     // Request body for CLOB /order endpoint
     // NOTE: 'side' in the JSON body is a STRING ("BUY"/"SELL") per SDK's orderToJson.
@@ -3699,7 +3700,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
   } catch (directErr) {
     tradeDebug('direct THREW', directErr.message);
-    return { _error: true, _errorMsg: 'Could not reach Polymarket — please try again' };
+    return { _error: true, _errorMsg: 'Could not submit order — please try again' };
   }
 }
 
