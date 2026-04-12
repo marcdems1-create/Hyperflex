@@ -2575,6 +2575,9 @@ function renderPage(data) {
   const c = community;
   document.title = `${c.display_name} — HYPERFLEX`;
 
+  // Store creator's wallet for trading record
+  if (data.creator_wallet) window._creatorWallet = data.creator_wallet.toLowerCase();
+
   // Apply creator accent color
   if (c.primary_color) {
     document.documentElement.style.setProperty('--gold', c.primary_color);
@@ -3461,8 +3464,9 @@ function toggleResolved() {
 
 // ── TRADING RECORD ────────────────────────────────────────────
 async function loadTradingRecord() {
-  var eoa = localStorage.getItem('poly_eoa_address');
-  if (!eoa && community && community.polymarket_address) eoa = community.polymarket_address;
+  // Use the community CREATOR's wallet — this is their trading record page
+  // Falls back to the viewer's wallet if creator has no wallet connected
+  var eoa = window._creatorWallet || localStorage.getItem('poly_eoa_address');
   if (!eoa) return;
 
   try {

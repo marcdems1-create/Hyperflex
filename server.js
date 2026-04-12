@@ -8683,6 +8683,18 @@ app.get('/api/community/:slug', async (req, res) => {
         suggestions_enabled:  settings.suggestions_enabled  || false,
         creator_id:           settings.creator_id
       },
+      // Include creator's Polymarket wallet for trading record display
+      creator_wallet: await (async () => {
+        try {
+          if (pool) {
+            const rows = await dbQuery('SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [settings.creator_id]);
+            return (rows[0] && rows[0].polymarket_address) || null;
+          } else {
+            const { data } = await supabase.from('users').select('polymarket_address').eq('id', settings.creator_id).maybeSingle();
+            return (data && data.polymarket_address) || null;
+          }
+        } catch (e) { return null; }
+      })(),
       member_count: memberCount || 0,
       markets: markets || [],
       recent_activity: recentActivity,
