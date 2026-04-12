@@ -390,6 +390,12 @@
         var chainBalance = state.bridgeSourceBalance;
         var balDisplay = chainBalance == null ? '…' : (chainBalance > 0 ? '$' + chainBalance.toFixed(2) : '$0.00');
         var balColor = chainBalance == null ? '#8888a0' : (chainBalance > 0 ? '#00e68a' : '#ff4d6a');
+        // Show USDC.e breakdown if user has bridged tokens
+        if (chainBalance != null && chainBalance > 0 && state.bridgeBridgedBalance > 0 && state.bridgeNativeBalance > 0) {
+          balDisplay += ' (USDC + .e)';
+        } else if (chainBalance != null && chainBalance > 0 && state.bridgeBridgedBalance > 0) {
+          balDisplay += ' (USDC.e)';
+        }
 
         bodyHtml =
           '<div style="padding:14px 16px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.25);border-radius:10px;margin-bottom:14px">' +
@@ -738,34 +744,74 @@
 
   // ── Bridge flow helpers ──
   // LI.FI chain config
+  // Native USDC + bridged USDC.e addresses per chain.
+  // Many users hold USDC.e (the old bridged version), not native USDC.
+  // We check BOTH and show the sum so the balance display is never $0
+  // when the user actually has funds. LI.FI can route either token.
   var BRIDGE_CHAINS = {
-    1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpc: 'https://eth.llamarpc.com', scan: 'https://etherscan.io/tx/' },
-    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087', rpc: 'https://arb1.arbitrum.io/rpc', scan: 'https://arbiscan.io/tx/' },
-    8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', rpc: 'https://mainnet.base.org', scan: 'https://basescan.org/tx/' },
-    10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', rpc: 'https://mainnet.optimism.io', scan: 'https://optimistic.etherscan.io/tx/' },
-    56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpc: 'https://bsc-dataseed.binance.org', scan: 'https://bscscan.com/tx/' }
+    1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpcs: ['https://eth.llamarpc.com', 'https://1rpc.io/eth'], scan: 'https://etherscan.io/tx/' },
+    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e77a8cCe5A93F8f12F6DbCE46c4E600A', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], scan: 'https://arbiscan.io/tx/' },
+    8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdce: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', rpcs: ['https://mainnet.base.org', 'https://1rpc.io/base'], scan: 'https://basescan.org/tx/' },
+    10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', usdce: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', rpcs: ['https://mainnet.optimism.io', 'https://1rpc.io/op'], scan: 'https://optimistic.etherscan.io/tx/' },
+    56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpcs: ['https://bsc-dataseed.binance.org', 'https://1rpc.io/bnb'], scan: 'https://bscscan.com/tx/' }
   };
 
   function _bridgeChainName(id) { return (BRIDGE_CHAINS[id] || {}).name || 'Unknown'; }
 
-  // Set source chain + fetch USDC balance on that chain
+  // Get a working provider from the rpcs list (with fallback)
+  async function _getChainProvider(rpcs) {
+    for (var i = 0; i < rpcs.length; i++) {
+      try {
+        var p = new window.ethers.JsonRpcProvider(rpcs[i]);
+        await p.getBlockNumber();
+        return p;
+      } catch (e) { console.warn('[bridge] RPC failed:', rpcs[i], e.message); }
+    }
+    throw new Error('All RPCs failed');
+  }
+
+  // Set source chain + fetch USDC balance (native + bridged USDC.e)
   async function _setBridgeChain(chainId) {
     if (!_state) return;
     _state.bridgeFromChain = chainId;
     _state.bridgeSourceBalance = null;
+    _state.bridgeActiveToken = null; // which USDC token the user actually holds
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
 
-    // Fetch balance on the source chain
     try {
       var cfg = BRIDGE_CHAINS[chainId];
       if (!cfg || !_state.eoa) return;
-      var provider = new window.ethers.JsonRpcProvider(cfg.rpc);
-      var contract = new window.ethers.Contract(cfg.usdc, ['function balanceOf(address) view returns (uint256)'], provider);
-      var raw = await contract.balanceOf(_state.eoa);
-      var bal = parseFloat(window.ethers.formatUnits(raw, 6));
-      _state.bridgeSourceBalance = bal;
-      // Re-render to show the balance
+      var provider = await _getChainProvider(cfg.rpcs);
+      var abi = ['function balanceOf(address) view returns (uint256)'];
+
+      // Check native USDC balance
+      var nativeBal = 0;
+      try {
+        var nativeContract = new window.ethers.Contract(cfg.usdc, abi, provider);
+        var nativeRaw = await nativeContract.balanceOf(_state.eoa);
+        nativeBal = parseFloat(window.ethers.formatUnits(nativeRaw, 6));
+      } catch (e) { console.warn('[bridge] native USDC balance failed:', e.message); }
+
+      // Check USDC.e (bridged) balance if this chain has it
+      var bridgedBal = 0;
+      if (cfg.usdce) {
+        try {
+          var bridgedContract = new window.ethers.Contract(cfg.usdce, abi, provider);
+          var bridgedRaw = await bridgedContract.balanceOf(_state.eoa);
+          bridgedBal = parseFloat(window.ethers.formatUnits(bridgedRaw, 6));
+        } catch (e) { console.warn('[bridge] USDC.e balance failed:', e.message); }
+      }
+
+      console.log('[bridge]', cfg.name, 'native USDC:', nativeBal.toFixed(2), 'USDC.e:', bridgedBal.toFixed(2));
+
+      // Show combined balance — LI.FI can route either token
+      _state.bridgeSourceBalance = nativeBal + bridgedBal;
+      // Track which token has more funds (for LI.FI fromToken param)
+      _state.bridgeActiveToken = bridgedBal > nativeBal ? (cfg.usdce || cfg.usdc) : cfg.usdc;
+      _state.bridgeNativeBalance = nativeBal;
+      _state.bridgeBridgedBalance = bridgedBal;
+
       var overlay2 = document.getElementById('hfxDepositOverlay');
       if (overlay2) overlay2.innerHTML = _frame(_state);
     } catch (e) {
@@ -818,9 +864,12 @@
     try {
       // LI.FI expects fromAmount in token base units (6 decimals for USDC)
       var fromAmount = Math.floor(amount * 1e6).toString();
+      // Use the token the user actually holds (USDC.e or native)
+      var fromToken = _state.bridgeActiveToken || cfg.usdc;
+      console.log('[bridge] quoting with fromToken:', fromToken, 'amount:', amount);
       var params = new URLSearchParams({
         fromChain: String(chainId),
-        fromToken: cfg.usdc,
+        fromToken: fromToken,
         toChain: '137',
         toToken: USDC_ADDRESS,
         fromAddress: _state.eoa,
@@ -867,11 +916,11 @@
           if (switchErr.code === 4902) {
             // Add chain first
             var chainParams = {
-              1: { chainId: '0x1', chainName: 'Ethereum', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://etherscan.io'] },
-              42161: { chainId: '0xa4b1', chainName: 'Arbitrum One', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://arbiscan.io'] },
-              8453: { chainId: '0x2105', chainName: 'Base', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://basescan.org'] },
-              10: { chainId: '0xa', chainName: 'Optimism', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://optimistic.etherscan.io'] },
-              56: { chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: [cfg.rpc], blockExplorerUrls: ['https://bscscan.com'] }
+              1: { chainId: '0x1', chainName: 'Ethereum', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://etherscan.io'] },
+              42161: { chainId: '0xa4b1', chainName: 'Arbitrum One', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://arbiscan.io'] },
+              8453: { chainId: '0x2105', chainName: 'Base', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://basescan.org'] },
+              10: { chainId: '0xa', chainName: 'Optimism', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://optimistic.etherscan.io'] },
+              56: { chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://bscscan.com'] }
             }[chainId];
             if (chainParams) {
               await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
