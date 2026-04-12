@@ -30359,8 +30359,7 @@ app.get('/api/bridge/quote', async (req, res) => {
 
     // Attempt 2: retry with symbol-based lookup. Map hex addresses to canonical symbols.
     const hexToSymbol = {
-      '0xaf88d065e77a8cce5a93f8f12f6dbce46c4e600a': 'USDC',  // Arbitrum native USDC
-      '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087': 'USDC',  // Arbitrum native USDC (alt casing)
+      '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC',  // Arbitrum native USDC (Circle)
       '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 'USDC.e', // Arbitrum bridged USDC.e
       '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',  // Ethereum USDC
       '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC',  // Base native USDC

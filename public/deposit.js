@@ -375,7 +375,7 @@
       } else {
         // SELECT step (default) — chain picker + amount
         var sourceChains = [
-          { id: 42161, name: 'Arbitrum', icon: '🔵', usdc: '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087' },
+          { id: 42161, name: 'Arbitrum', icon: '🔵', usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
           { id: 8453,  name: 'Base',     icon: '🔷', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
           { id: 10,    name: 'Optimism', icon: '🔴', usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' },
           { id: 1,     name: 'Ethereum', icon: '🔶', usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
@@ -750,7 +750,7 @@
   // when the user actually has funds. LI.FI can route either token.
   var BRIDGE_CHAINS = {
     1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpcs: ['https://eth.llamarpc.com', 'https://1rpc.io/eth'], scan: 'https://etherscan.io/tx/' },
-    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e77a8cCe5A93F8f12F6DbCE46c4E600A', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], scan: 'https://arbiscan.io/tx/' },
+    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], scan: 'https://arbiscan.io/tx/' },
     8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdce: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', rpcs: ['https://mainnet.base.org', 'https://1rpc.io/base'], scan: 'https://basescan.org/tx/' },
     10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', usdce: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', rpcs: ['https://mainnet.optimism.io', 'https://1rpc.io/op'], scan: 'https://optimistic.etherscan.io/tx/' },
     56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpcs: ['https://bsc-dataseed.binance.org', 'https://1rpc.io/bnb'], scan: 'https://bscscan.com/tx/' }
