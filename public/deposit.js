@@ -383,7 +383,8 @@
               '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + fromAmt + ' →</button>' +
             '</div>' +
 
-            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:12px;text-align:center">We\'ll switch MetaMask to ' + _esc(srcChainName) + ' and request one signature. USDC lands in your Polymarket wallet automatically.</div>';
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:12px;text-align:center">We\'ll switch MetaMask to ' + _esc(srcChainName) + ' and request one signature. USDC lands in your Polymarket wallet automatically.</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5;margin-top:8px;text-align:center;padding:6px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">⛽ You need a small amount of ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + ' on ' + _esc(srcChainName) + ' for gas (~$' + gasCostUsd + '). USDC alone won\'t cover gas fees.</div>';
         }
       } else {
         // SELECT step (default) — chain picker + amount
@@ -772,11 +773,11 @@
   // We check BOTH and show the sum so the balance display is never $0
   // when the user actually has funds. LI.FI can route either token.
   var BRIDGE_CHAINS = {
-    1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpcs: ['https://eth.llamarpc.com', 'https://1rpc.io/eth'], scan: 'https://etherscan.io/tx/' },
-    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], scan: 'https://arbiscan.io/tx/' },
-    8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdce: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', rpcs: ['https://mainnet.base.org', 'https://1rpc.io/base'], scan: 'https://basescan.org/tx/' },
-    10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', usdce: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', rpcs: ['https://mainnet.optimism.io', 'https://1rpc.io/op'], scan: 'https://optimistic.etherscan.io/tx/' },
-    56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpcs: ['https://bsc-dataseed.binance.org', 'https://1rpc.io/bnb'], scan: 'https://bscscan.com/tx/' }
+    1:     { name: 'Ethereum', hex: '0x1',    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', rpcs: ['https://eth.llamarpc.com', 'https://1rpc.io/eth'], scan: 'https://etherscan.io/tx/', gas: 'ETH' },
+    42161: { name: 'Arbitrum', hex: '0xa4b1', usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], scan: 'https://arbiscan.io/tx/', gas: 'ETH' },
+    8453:  { name: 'Base',     hex: '0x2105', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdce: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', rpcs: ['https://mainnet.base.org', 'https://1rpc.io/base'], scan: 'https://basescan.org/tx/', gas: 'ETH' },
+    10:    { name: 'Optimism', hex: '0xa',    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', usdce: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', rpcs: ['https://mainnet.optimism.io', 'https://1rpc.io/op'], scan: 'https://optimistic.etherscan.io/tx/', gas: 'ETH' },
+    56:    { name: 'BSC',      hex: '0x38',   usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', rpcs: ['https://bsc-dataseed.binance.org', 'https://1rpc.io/bnb'], scan: 'https://bscscan.com/tx/', gas: 'BNB' }
   };
 
   function _bridgeChainName(id) { return (BRIDGE_CHAINS[id] || {}).name || 'Unknown'; }
@@ -995,6 +996,18 @@
       if (window.HFXWallet && window.HFXWallet.invalidate) window.HFXWallet.invalidate();
       var provider = new window.ethers.BrowserProvider(window.ethereum);
       var signer = await provider.getSigner();
+
+      // Check native gas balance before prompting wallet signature
+      try {
+        var gasBalance = await provider.getBalance(await signer.getAddress());
+        var gasEth = parseFloat(window.ethers.formatEther(gasBalance));
+        if (gasEth < 0.0001) {
+          var gasToken = cfg.gas || 'ETH';
+          var overlay_gas = document.getElementById('hfxDepositOverlay');
+          if (overlay_gas) overlay_gas.innerHTML = _frame({ error: 'You need ' + gasToken + ' on ' + cfg.name + ' to pay for gas. Send ~$0.50 of ' + gasToken + ' to your wallet and try again. USDC alone isn\'t enough — every transaction needs a tiny amount of ' + gasToken + ' for network fees.' });
+          return;
+        }
+      } catch (gasErr) { /* non-fatal — let MetaMask handle it */ }
 
       // ── ERC-20 approval check ──
       // LI.FI routes require the router contract to spend the user's USDC.
