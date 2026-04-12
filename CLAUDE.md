@@ -254,6 +254,67 @@ This is **NOT** part of the `HFXWallet` shared module (`public/wallet.js`) inten
 
 ---
 
+## 🚨 TRADE FAILURE RUNBOOK — Read this FIRST before debugging
+
+Trade failures have been fixed multiple times. **Do NOT guess.** Follow this decision tree.
+
+### Error: "Trading restricted in your region"
+**Cause:** Geo-blocking. Polymarket blocks by IP. The US, UK, France, Germany, Italy, Netherlands, Australia + 25 others are blocked.
+**Diagnosis:** `GET https://hyperflex.network/api/polymarket/geocheck` — shows what IP/country the Railway server has.
+**Fix rules:**
+- Railway is US-based (IP 54.153.42.107, CA) → **ALWAYS geo-blocked**. NEVER make Railway the primary trade route.
+- User's browser IP (Sweden) is NOT blocked → **Direct CLOB from browser works**.
+- Correct routing order: **Direct CLOB → CF Worker → Railway (last resort)**
+- If user moves to a blocked country: CF Worker also blocked (runs at nearest edge). Need a proxy in an allowed country.
+- **NEVER** re-introduce Railway as primary for orders. It was tried and failed. The US is blocked.
+
+### Error: "order couldn't be fully filled. FOK orders are fully filled or killed"
+**Cause:** FOK (Fill-or-Kill) market order can't find enough liquidity at the limit price.
+**Diagnosis checklist:**
+1. **Is the book empty?** Fetch `GET https://clob.polymarket.com/book?token_id=TOKEN_ID`. If bids (for SELL) or asks (for BUY) are empty or thin, there's simply no liquidity. User should switch to Limit order or reduce size.
+2. **Is the book walk code present?** Both `market.html` and `creator-dashboard.html` MUST walk the orderbook before submitting FOK. Search for `Checking depth` or `book?token_id`. If missing, the order uses mid/best-bid as limit, which fails on any depth >1 level.
+3. **Is slippage buffer present?** After walking, the limit price MUST have 1 tick of slack: `SELL: Math.floor - tickSize` (1 tick below worst bid), `BUY: Math.ceil + tickSize` (1 tick above worst ask). Without this, book shifts between read and submit cause failures.
+4. **Are shares recalculated after walk?** **MUST NOT** recalculate `shares = amount / walkedPrice`. The walked price is the LIMIT, not the fill price. Share count must stay as originally derived from the user's input.
+5. **Are FOK decimal constraints correct?** FOK orders have HARD-CODED precision (NOT tick-driven): BUY: makerAmount (USDC) ≤ 2 decimals, takerAmount (shares) ≤ 4 decimals. SELL: makerAmount (shares) ≤ 4 decimals, takerAmount (USDC) ≤ 2 decimals. Limit (GTC) orders use tick-driven `ROUNDING_CONFIG`.
+
+**SDK reference for amounts:**
+```
+BUY market:  rawMakerAmt = roundDown(usdAmount, 2);  rawTakerAmt = roundDown(usdAmount / price, 4)
+SELL market: rawMakerAmt = roundDown(shares, 4);      rawTakerAmt = roundDown(shares * price, 2)
+```
+
+### Error: "API key expired" / 401 loop / multiple MetaMask popups
+**Cause:** CLOB API keys expired. `derivePolymarketApiKey()` requires a MetaMask EIP-712 signature.
+**Fix rules:**
+- Auto-derive is implemented in `confirmTrade()` — it calls `derivePolymarketApiKey()` then retries.
+- **MUST have recursion guard**: `_confirmTradeRetryCount` caps retries at 1. Without this, 401 → derive → retry → 401 → derive → infinite loop with 4+ MetaMask popups.
+- If derive succeeds but trade still 401s: the issue is NOT the keys. Check if the order is hitting the wrong route (duplicate `app.post('/api/polymarket/order')` in server.js was the cause last time).
+- **Check for duplicate routes**: `grep -n "app.post.*polymarket/order" server.js` — must return exactly ONE result.
+- The old route at ~line 18520 (with `requireAuth`) was removed. If it reappears (e.g., from a merge), it shadows the real proxy and forwards orders WITHOUT CLOB auth headers → permanent 401.
+
+### Error: "not enough balance"
+**Cause:** Proxy wallet doesn't have enough USDC. User needs to deposit/bridge.
+**Not a code bug.** Show the deposit modal.
+
+### General trade debugging
+- **Always check BOTH files**: `market.html` (`executeTrade` + `submitClobOrder`) and `creator-dashboard.html` (`confirmTrade`). They have independent trade code that MUST stay in sync.
+- **Console logs**: Both files log `[qt-trade]` or `[trade]` prefixed messages. Check browser console for the exact path taken (Direct/CF/Railway) and response.
+- **Test geocheck**: `curl https://hyperflex.network/api/polymarket/geocheck` shows Railway's IP and whether it's blocked.
+- **`deferExec: false`** must be in the request body (both files).
+- **Book walk order**: BUY walks asks cheapest→expensive, SELL walks bids expensive→cheapest.
+- **SELL amount = shares, not USD.** The SDK's `getMarketOrderRawAmounts` takes shares for SELL. Our code derives shares from `amount / originalPrice` where amount is the user's USD input.
+
+### ⛔ NEVER do these (proven to break things):
+1. Never make Railway server the primary order route (US IP = blocked)
+2. Never remove the book walk or slippage buffer from FOK orders
+3. Never recalculate shares using the walked price (use original price)
+4. Never add a second `app.post('/api/polymarket/order')` route in server.js
+5. Never remove the `_confirmTradeRetryCount` guard from `confirmTrade()`
+6. Never use tick-driven rounding for FOK orders (use hard-coded 2/4 decimals)
+7. Never skip `deferExec: false` in the order body
+
+---
+
 ## This session (March 16, session 6) — committed `a6a2b7d`, needs push + new commits
 
 - **Rewards tab fix**: `'rewards'` was missing from `showTab()` array — tab was permanently invisible. Fixed.
