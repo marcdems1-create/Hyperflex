@@ -30853,36 +30853,58 @@ app.get('/api/bridge/balance', async (req, res) => {
   }
 });
 
-// GET /api/proxy/deployed — check if a Polymarket proxy is deployed (server-side, no CORS)
+// GET /api/proxy/deployed — check if a Polymarket proxy is deployed + return proxy address
 app.get('/api/proxy/deployed', async (req, res) => {
   try {
     const { address } = req.query;
     if (!address) return res.status(400).json({ error: 'address required' });
-    // Try Polymarket relayer first
-    try {
-      const r = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(address));
-      if (r.ok) {
-        const data = await r.json();
-        return res.json({ deployed: data.deployed === true, source: 'relayer' });
-      }
-    } catch (e) {}
-    // Fallback: eth_getCode on Polygon
+
+    // Compute proxy address from EOA via Safe factory
+    let proxy = null;
     const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
+    const addr = address.toLowerCase().replace('0x', '').padStart(64, '0');
+    const calldata = '0x4d0c6cdb' + '000000000000000000000000' + addr.slice(-40);
     for (const rpc of rpcs) {
       try {
         const r = await fetch(rpc, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getCode', params: [address, 'latest'], id: 1 })
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data: calldata }, 'latest'], id: 1 })
+        });
+        const data = await r.json();
+        if (data.result && data.result !== '0x' && data.result.length >= 42) {
+          proxy = '0x' + data.result.slice(-40);
+          break;
+        }
+      } catch (e) {}
+    }
+
+    // Check if proxy is deployed
+    const checkAddr = proxy || address;
+    // Try Polymarket relayer first
+    try {
+      const r = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(checkAddr));
+      if (r.ok) {
+        const data = await r.json();
+        return res.json({ deployed: data.deployed === true, source: 'relayer', proxy });
+      }
+    } catch (e) {}
+    // Fallback: eth_getCode on Polygon
+    for (const rpc of rpcs) {
+      try {
+        const r = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getCode', params: [checkAddr, 'latest'], id: 1 })
         });
         const data = await r.json();
         if (data.result) {
           const deployed = data.result !== '0x' && data.result.length > 2;
-          return res.json({ deployed, source: 'rpc' });
+          return res.json({ deployed, source: 'rpc', proxy });
         }
       } catch (e) {}
     }
-    res.json({ deployed: false, source: 'unknown' });
+    res.json({ deployed: false, source: 'unknown', proxy });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
