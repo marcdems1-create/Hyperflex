@@ -771,7 +771,7 @@
   }
 
   // Set source chain + fetch USDC balance (native + bridged USDC.e)
-  // Uses server-side /api/bridge/balance to avoid browser CORS issues with public RPCs
+  // Three-tier fetch: server → MetaMask eth_call → browser JsonRpcProvider
   async function _setBridgeChain(chainId) {
     if (!_state) return;
     _state.bridgeFromChain = chainId;
@@ -780,55 +780,100 @@
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
 
-    try {
-      var cfg = BRIDGE_CHAINS[chainId];
-      if (!cfg || !_state.eoa) return;
+    var cfg = BRIDGE_CHAINS[chainId];
+    if (!cfg || !_state.eoa) return;
+    var nativeBal = 0, bridgedBal = 0;
+    var fetched = false;
 
-      // Primary: server-side balance fetch (no CORS, reliable RPCs)
+    // Helper: read ERC-20 balance via raw eth_call
+    // balanceOf(address) = 0x70a08231 + left-padded address
+    var paddedAddr = _state.eoa.toLowerCase().replace('0x', '');
+    while (paddedAddr.length < 64) paddedAddr = '0' + paddedAddr;
+    var calldata = '0x70a08231' + paddedAddr;
+
+    function parseBalResult(hex) {
+      if (!hex || hex === '0x' || hex === '0x0') return 0;
+      return parseInt(hex, 16) / 1e6;
+    }
+
+    // ── Tier 1: Server-side balance endpoint (most reliable, no CORS) ──
+    try {
       var balRes = await fetch('/api/bridge/balance?address=' + encodeURIComponent(_state.eoa) + '&chainId=' + chainId);
       if (balRes.ok) {
         var balData = await balRes.json();
         console.log('[bridge]', cfg.name, 'server balance:', balData);
-        _state.bridgeSourceBalance = balData.total || 0;
-        _state.bridgeActiveToken = balData.activeToken || cfg.usdc;
-        _state.bridgeNativeBalance = balData.native || 0;
-        _state.bridgeBridgedBalance = balData.bridged || 0;
-      } else {
-        throw new Error('Server balance fetch returned ' + balRes.status);
+        nativeBal = balData.native || 0;
+        bridgedBal = balData.bridged || 0;
+        fetched = true;
       }
+    } catch (e) { console.warn('[bridge] server balance failed:', e.message); }
 
-      var overlay2 = document.getElementById('hfxDepositOverlay');
-      if (overlay2) overlay2.innerHTML = _frame(_state);
-    } catch (e) {
-      console.warn('[bridge] server balance failed, trying browser RPC:', e.message);
-      // Fallback: browser-side RPC (may fail due to CORS)
+    // ── Tier 2: MetaMask eth_call (works if user's wallet has the chain) ──
+    if (!fetched && window.ethereum) {
       try {
-        var cfg2 = BRIDGE_CHAINS[chainId];
-        var provider = await _getChainProvider(cfg2.rpcs);
-        var abi = ['function balanceOf(address) view returns (uint256)'];
-        var nativeBal = 0, bridgedBal = 0;
-        try {
-          var nativeRaw = await (new window.ethers.Contract(cfg2.usdc, abi, provider)).balanceOf(_state.eoa);
-          nativeBal = parseFloat(window.ethers.formatUnits(nativeRaw, 6));
-        } catch (e2) {}
-        if (cfg2.usdce) {
-          try {
-            var bridgedRaw = await (new window.ethers.Contract(cfg2.usdce, abi, provider)).balanceOf(_state.eoa);
-            bridgedBal = parseFloat(window.ethers.formatUnits(bridgedRaw, 6));
-          } catch (e3) {}
+        // Temporarily switch MetaMask to source chain to read balance
+        var prevChain = await window.ethereum.request({ method: 'eth_chainId' });
+        var needSwitch = prevChain !== cfg.hex;
+        if (needSwitch) {
+          try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hex }] }); } catch (sw) {}
         }
-        _state.bridgeSourceBalance = nativeBal + bridgedBal;
-        _state.bridgeActiveToken = bridgedBal > nativeBal ? (cfg2.usdce || cfg2.usdc) : cfg2.usdc;
-        _state.bridgeNativeBalance = nativeBal;
-        _state.bridgeBridgedBalance = bridgedBal;
-        console.log('[bridge]', cfg2.name, 'browser RPC: native=', nativeBal, 'bridged=', bridgedBal);
-      } catch (e4) {
-        console.warn('[bridge] browser RPC also failed:', e4.message);
-        _state.bridgeSourceBalance = 0;
-      }
-      var overlay3 = document.getElementById('hfxDepositOverlay');
-      if (overlay3) overlay3.innerHTML = _frame(_state);
+
+        // Read native USDC
+        try {
+          var nativeRes = await window.ethereum.request({
+            method: 'eth_call',
+            params: [{ to: cfg.usdc, data: calldata }, 'latest']
+          });
+          nativeBal = parseBalResult(nativeRes);
+        } catch (e2) { console.warn('[bridge] MetaMask native USDC call failed:', e2.message); }
+
+        // Read USDC.e if available
+        if (cfg.usdce) {
+          try {
+            var bridgedRes = await window.ethereum.request({
+              method: 'eth_call',
+              params: [{ to: cfg.usdce, data: calldata }, 'latest']
+            });
+            bridgedBal = parseBalResult(bridgedRes);
+          } catch (e3) { console.warn('[bridge] MetaMask USDC.e call failed:', e3.message); }
+        }
+
+        // Switch back to Polygon so trading isn't disrupted
+        if (needSwitch) {
+          try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); } catch (sw2) {}
+        }
+
+        console.log('[bridge]', cfg.name, 'MetaMask balance: native=', nativeBal, 'bridged=', bridgedBal);
+        fetched = (nativeBal > 0 || bridgedBal > 0);
+      } catch (e4) { console.warn('[bridge] MetaMask balance read failed:', e4.message); }
     }
+
+    // ── Tier 3: Browser JsonRpcProvider (may be CORS-blocked) ──
+    if (!fetched) {
+      try {
+        var provider = await _getChainProvider(cfg.rpcs);
+        var abi = ['function balanceOf(address) view returns (uint256)'];
+        try {
+          var nativeRaw = await (new window.ethers.Contract(cfg.usdc, abi, provider)).balanceOf(_state.eoa);
+          nativeBal = parseFloat(window.ethers.formatUnits(nativeRaw, 6));
+        } catch (e5) {}
+        if (cfg.usdce) {
+          try {
+            var bridgedRaw = await (new window.ethers.Contract(cfg.usdce, abi, provider)).balanceOf(_state.eoa);
+            bridgedBal = parseFloat(window.ethers.formatUnits(bridgedRaw, 6));
+          } catch (e6) {}
+        }
+        console.log('[bridge]', cfg.name, 'browser RPC: native=', nativeBal, 'bridged=', bridgedBal);
+      } catch (e7) { console.warn('[bridge] browser RPC also failed:', e7.message); }
+    }
+
+    _state.bridgeSourceBalance = nativeBal + bridgedBal;
+    _state.bridgeActiveToken = bridgedBal > nativeBal ? (cfg.usdce || cfg.usdc) : cfg.usdc;
+    _state.bridgeNativeBalance = nativeBal;
+    _state.bridgeBridgedBalance = bridgedBal;
+
+    var overlay2 = document.getElementById('hfxDepositOverlay');
+    if (overlay2) overlay2.innerHTML = _frame(_state);
   }
 
   function _setBridgeStep(step) {
