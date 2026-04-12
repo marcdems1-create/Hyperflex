@@ -19415,14 +19415,16 @@ const REDEEM_CONTRACTS = {
 };
 const PARENT_COLLECTION_ID = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-async function redeemPosition(posDataJson) {
+// redeemPosition returns: true = on-chain success, false = skipped/cancelled, throws on error
+async function redeemPosition(posDataJson, opts) {
+  opts = opts || {};
   const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
-  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return; }
-  if (!pos.condition_id) { showToast('Missing condition ID — cannot redeem', 'error'); return; }
-  if (!pos.redeemable) { showToast('This position is not redeemable yet', 'error'); return; }
+  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return false; }
+  if (!pos.condition_id) { showToast('Missing condition ID — cannot redeem', 'error'); return false; }
+  if (!pos.redeemable) { showToast('This position is not redeemable yet', 'error'); return false; }
 
   const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr) { showToast('Proxy wallet not found — connect wallet first', 'error'); return; }
+  if (!proxyAddr) { showToast('Proxy wallet not found — connect wallet first', 'error'); return false; }
 
   // Detect win by price (works for multi-outcome markets like "Baltimore Orioles" not just YES/NO)
   const won = pos._won || pos.current_price >= 0.99;
@@ -19447,14 +19449,16 @@ async function redeemPosition(posDataJson) {
 
   if (!hasPol) {
     showToast('You need at least 0.01 POL in your wallet for gas fees to claim this position.', 'error');
-    return;
+    return false;
   }
 
-  // Has POL — do direct on-chain redemption
-  if (!confirm(won
-    ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis burns your winning tokens and sends USDC to your wallet.\nGas cost: ~0.01 POL (fraction of a cent).'
-    : 'Clear resolved position "' + label + '"?\n\nGas cost: ~0.01 POL.'
-  )) return;
+  // Skip individual confirm when called from batch (redeemAllPositions already confirmed)
+  if (!opts.skipConfirm) {
+    if (!confirm(won
+      ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis burns your winning tokens and sends USDC to your wallet.\nGas cost: ~0.01 POL (fraction of a cent).'
+      : 'Clear resolved position "' + label + '"?\n\nGas cost: ~0.01 POL.'
+    )) return false;
+  }
 
   showToast('Preparing redemption...', 'info');
 
@@ -19548,24 +19552,34 @@ async function redeemPosition(posDataJson) {
     const receipt = await tx.wait();
 
     if (receipt.status === 1) {
-      showToast(won
-        ? '✓ Claimed $' + payout.toFixed(2) + ' USDC! TX: ' + tx.hash.slice(0, 10) + '...'
-        : '✓ Position cleared! TX: ' + tx.hash.slice(0, 10) + '...',
-        'success'
-      );
+      if (!opts.skipConfirm) {
+        // Single redeem: show celebration
+        showTradeCelebration({
+          side: 'SELL',
+          shares: parseFloat(pos.shares || 0),
+          price: 1.0,
+          amount: payout,
+          question: pos.question || pos.title || '',
+          pnl: payout > 0 ? payout - (parseFloat(pos.shares || 0) * (pos.avg_price || pos.avgPrice || 0.5)) : null
+        });
+      }
       setTimeout(() => {
         fetchWalletBalance(window._walletProvider, window._connectedWallet);
         loadPolymarketPositions(true);
-      }, 4000);
+      }, 3000);
+      return true;
     } else {
       showToast('Transaction reverted — check PolygonScan: ' + tx.hash.slice(0, 14), 'error');
+      return false;
     }
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       showToast('Redemption cancelled', 'info');
+      return false;
     } else {
       console.error('[redeem] Error:', e);
       showToast('Redeem failed: ' + (e.shortMessage || e.reason || e.message || 'Unknown error'), 'error');
+      throw e; // re-throw so batch caller knows it failed
     }
   }
 }
@@ -19581,19 +19595,47 @@ async function redeemAllPositions() {
     return sum + (p.current_price >= 0.99 ? parseFloat(p.shares) : 0);
   }, 0);
 
-  if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: $' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.01 POL per position.')) return;
+  if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: ~$' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.01 POL per position.\n\nYou\'ll need to approve ' + redeemable.length + ' transaction(s) in MetaMask.')) return;
 
-  let success = 0, failed = 0;
-  for (const pos of redeemable) {
+  let success = 0, failed = 0, skipped = 0;
+  for (let i = 0; i < redeemable.length; i++) {
+    const pos = redeemable[i];
+    const label = (pos.question || 'Position').substring(0, 40);
+    showToast('Claiming ' + (i + 1) + '/' + redeemable.length + ': ' + label + '...', 'info', 10000);
     try {
-      await redeemPosition(pos);
-      success++;
+      const result = await redeemPosition(pos, { skipConfirm: true });
+      if (result === true) {
+        success++;
+      } else {
+        skipped++;
+      }
     } catch (e) {
       failed++;
       console.warn('[redeem-all] Failed:', pos.question, e.message);
     }
   }
-  if (success > 0) showToast('Redeemed ' + success + '/' + redeemable.length + ' positions' + (failed > 0 ? ' (' + failed + ' failed)' : ''), 'success');
+
+  if (success > 0) {
+    // Show celebration for batch claim
+    showTradeCelebration({
+      side: 'SELL',
+      shares: redeemable.reduce((s, p) => s + parseFloat(p.shares || 0), 0),
+      price: 1.0,
+      amount: totalPayout,
+      question: success + ' position' + (success > 1 ? 's' : '') + ' claimed',
+      pnl: null
+    });
+    // Force refresh balance + positions
+    setTimeout(() => {
+      fetchWalletBalance(window._walletProvider, window._connectedWallet);
+      loadPolymarketPositions(true);
+    }, 3000);
+    setTimeout(() => loadPolymarketPositions(true), 8000);
+  } else if (skipped > 0 && failed === 0) {
+    showToast('Claim cancelled or skipped — no transactions sent.', 'info');
+  } else if (failed > 0) {
+    showToast(failed + ' position' + (failed > 1 ? 's' : '') + ' failed to claim. Check MetaMask and try again.', 'error');
+  }
 }
 
 // ── Technical Analysis Tab ──────────────────────────────────────────────────
