@@ -128,12 +128,14 @@
     // Pre-flight check: wallet + balance
     var wallet = _hasWallet();
     var balance = wallet ? await _getUsdcBalance() : null;
-    var needed = parseFloat(data.alloc_usd || 0);
-    var canExecute = wallet && (balance === null || balance >= needed);
+    // Users choose their own amount — default $5 or their full balance, whichever is less
+    var defaultAmount = balance != null ? Math.min(Math.max(1, Math.floor(balance)), 50) : 5;
+    data._copyAmount = defaultAmount; // can be changed by user in the banner UI
+    var canExecute = wallet && balance != null && balance >= 1; // just need $1 minimum
     var preflightReason = null;
     if (isDryRun) preflightReason = '🧪 DRY RUN — banner only, no order will be placed';
     else if (!wallet) preflightReason = 'Connect wallet to execute';
-    else if (balance !== null && balance < needed) preflightReason = 'Need $' + needed.toFixed(0) + ' USDC (you have $' + balance.toFixed(2) + ')';
+    else if (balance !== null && balance < 1) preflightReason = 'Need at least $1 USDC';
 
     _showBanner(data, { canExecute: canExecute, reason: preflightReason, balance: balance, dryRun: isDryRun });
 
@@ -165,20 +167,22 @@
     var sideColor = data.side && data.side.toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
     var priceCents = Math.round((data.price || 0.5) * 100);
 
-    // Build CTA based on preflight state
+    // Build CTA — always show amount picker + Skip button
+    var skipBtn = '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'user_skipped\')" style="background:rgba(255,255,255,0.08);color:#ccc;border:none;padding:8px 14px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:36px">Skip</button>';
     var ctaHtml;
     if (preflight.canExecute) {
-      ctaHtml = '<button id="cbExec_' + data.trade_id + '" onclick="HFXCopyBot.execute(\'' + data.trade_id + '\')" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer">Execute $' + Math.round(data.alloc_usd) + ' →</button>' +
-                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'user_skipped\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+      var copyAmt = data._copyAmount || 5;
+      ctaHtml = '<div style="display:flex;align-items:center;gap:4px;flex:1;background:#1a1a18;border:1px solid #a855f7;border-radius:6px;padding:2px 4px">' +
+                  '<span style="font-family:monospace;font-size:12px;color:#888;padding-left:4px">$</span>' +
+                  '<input id="cbAmt_' + data.trade_id + '" type="number" value="' + copyAmt + '" min="1" step="1" style="width:48px;background:transparent;border:none;color:#fff;font-family:monospace;font-size:13px;font-weight:700;outline:none;padding:6px 2px" onchange="HFXCopyBot._setCopyAmount(\'' + data.trade_id + '\',this.value)"/>' +
+                '</div>' +
+                '<button id="cbExec_' + data.trade_id + '" onclick="HFXCopyBot.execute(\'' + data.trade_id + '\')" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:36px">Copy →</button>' +
+                skipBtn;
     } else if (!_hasWallet()) {
-      // No wallet — link to market page for setup flow
       var setupUrl = data.slug ? '/market/' + data.slug : '/whales';
-      ctaHtml = '<a href="' + setupUrl + '" style="flex:1;background:#4d9fff;color:#fff;text-align:center;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;text-decoration:none">Connect wallet →</a>' +
-                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'no_wallet\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+      ctaHtml = '<a href="' + setupUrl + '" style="flex:1;background:#4d9fff;color:#fff;text-align:center;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;text-decoration:none;min-height:36px;display:flex;align-items:center;justify-content:center">Connect wallet →</a>' + skipBtn;
     } else {
-      // Wallet exists but insufficient balance — show warning
-      ctaHtml = '<button disabled style="flex:1;background:rgba(255,77,106,0.1);color:#ff4d6a;border:1px solid rgba(255,77,106,0.3);padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:not-allowed">Insufficient USDC</button>' +
-                '<button onclick="HFXCopyBot.skip(\'' + data.trade_id + '\',\'no_balance\')" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;cursor:pointer">Skip</button>';
+      ctaHtml = '<button onclick="if(window.HFXDeposit)HFXDeposit.open();else if(window.hfxOpenDeposit)hfxOpenDeposit()" style="flex:1;background:rgba(0,230,138,0.1);color:#00e68a;border:1px solid rgba(0,230,138,0.3);padding:8px 12px;border-radius:6px;font-family:monospace;font-size:11px;font-weight:700;cursor:pointer;min-height:36px">+ Deposit USDC</button>' + skipBtn;
     }
 
     var statusMsg = preflight.reason || '';
@@ -299,9 +303,10 @@
         throw new Error('Wallet not connected. Visit a market page and connect MetaMask first.');
       }
 
-      // Final balance check — prevents CLOB 400 errors
+      // Use user's chosen copy amount (from the amount input), not whale's full size
       var bal = await _getUsdcBalance();
-      var amount = parseFloat(data.alloc_usd);
+      var amount = parseFloat(data._copyAmount || data.alloc_usd || 5);
+      if (amount < 1) amount = 1;
       if (bal !== null && bal < amount) {
         throw new Error('Insufficient USDC. Have $' + bal.toFixed(2) + ', need $' + amount.toFixed(0));
       }
@@ -427,6 +432,12 @@
       _executingTrades.delete(data.trade_id);
       _releaseLock(data.trade_id);
     }
+  }
+
+  function _setCopyAmount(tradeId, val) {
+    var amt = parseFloat(val) || 1;
+    if (amt < 1) amt = 1;
+    if (_activeBanners[tradeId]) _activeBanners[tradeId]._copyAmount = amt;
   }
 
   async function skip(tradeId, reason) {
@@ -618,6 +629,7 @@
   // ── Public API ──
   window.HFXCopyBot = {
     start: start, stop: stop, execute: execute, skip: skip,
+    _setCopyAmount: _setCopyAmount,
     // New reusable CLOB helpers for mirror wizard + future flows
     executeOrder: executeOrder,
     fetchClobMidpoint: fetchClobMidpoint,
