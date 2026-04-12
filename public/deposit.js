@@ -1387,16 +1387,29 @@
       }
 
       // Process each step from Relay
-      // Relay step format: { kind: 'signature'|'transaction', items: [{ status, data: { sign, post } }] }
+      // Relay step format: { kind: 'signature'|'transaction', items: [{ status, data: { sign, post }, check: { endpoint, method } }] }
       var requestId = null;
       for (var si = 0; si < steps.length; si++) {
         var step = steps[si];
         var items = step.items || [];
-        console.log('[relay] step', si, 'kind:', step.kind, 'items:', items.length, JSON.stringify(step).slice(0, 500));
+        if (!items.length) continue; // skip empty steps per Relay docs
+        console.log('[relay] step', si, 'kind:', step.kind, 'items:', items.length, JSON.stringify(step).slice(0, 800));
 
         for (var ii = 0; ii < items.length; ii++) {
           var item = items[ii];
-          console.log('[relay] item', ii, 'keys:', Object.keys(item), JSON.stringify(item).slice(0, 500));
+          console.log('[relay] item', ii, 'keys:', Object.keys(item), JSON.stringify(item).slice(0, 800));
+
+          // Extract requestId from item.check endpoint URL (e.g. /intents/status/v3?requestId=0x...)
+          if (!requestId && item.check && item.check.endpoint) {
+            try {
+              var checkUrl = new URL(item.check.endpoint, 'https://api.relay.link');
+              var checkReqId = checkUrl.searchParams.get('requestId');
+              if (checkReqId) { requestId = checkReqId; console.log('[relay] requestId from check:', requestId); }
+            } catch (e) { /* parse error */ }
+          }
+          // Also check item-level fields
+          if (!requestId && item.requestId) { requestId = item.requestId; console.log('[relay] requestId from item:', requestId); }
+          if (!requestId && item.orderId) { requestId = item.orderId; console.log('[relay] requestId from item.orderId:', requestId); }
 
           // Relay nests sign data at item.data.sign or item.data directly
           var signData = (item.data && item.data.sign) ? item.data.sign : item.data;
@@ -1471,11 +1484,14 @@
 
               var postResult;
               try { postResult = await postRes.json(); } catch (e) { postResult = {}; }
-              console.log('[relay] post result:', JSON.stringify(postResult).slice(0, 300));
+              console.log('[relay] post result:', JSON.stringify(postResult).slice(0, 500));
 
-              // Extract requestId for status polling
-              if (postResult.requestId) requestId = postResult.requestId;
-              if (postResult.id) requestId = postResult.id;
+              // Extract requestId for status polling — check multiple locations
+              if (!requestId && postResult.requestId) requestId = postResult.requestId;
+              if (!requestId && postResult.id) requestId = postResult.id;
+              if (!requestId && postResult.orderId) requestId = postResult.orderId;
+              if (!requestId && postResult.data && postResult.data.requestId) requestId = postResult.data.requestId;
+              if (requestId) console.log('[relay] requestId from POST result:', requestId);
             }
 
           } else if (step.kind === 'transaction') {
@@ -1605,12 +1621,23 @@
       try {
         var r = await fetch('/api/bridge/relay-status?requestId=' + encodeURIComponent(requestId));
         var data = await r.json();
+        console.log('[relay-poll]', polls, JSON.stringify(data).slice(0, 500));
 
+        // Relay v3 may nest status in different places
         var status = (data.status || '').toLowerCase();
+        // Also check for orders array (v3 format)
+        if (!status && data.orders && data.orders[0]) {
+          status = (data.orders[0].status || '').toLowerCase();
+        }
 
         if (status === 'success' || status === 'complete' || status === 'completed') {
           var newBal = await _usdcBalance(_state.proxy);
+          // Extract tx hash from various response locations
           var relayTxHash = (data.txHashes && data.txHashes[0]) || (data.inTxHashes && data.inTxHashes[0]) || (data.outTxHashes && data.outTxHashes[0]) || null;
+          if (!relayTxHash && data.orders && data.orders[0]) {
+            var ord = data.orders[0];
+            relayTxHash = (ord.txHashes && ord.txHashes[0]) || ord.txHash || (ord.destinationTxHash) || null;
+          }
           var relayChainName = _bridgeChainName(_state.bridgeFromChain);
           _saveDeposit({ amount: _state.bridgeAmount || 0, txHash: relayTxHash, type: 'bridge', chain: relayChainName });
           var overlay = document.getElementById('hfxDepositOverlay');

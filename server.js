@@ -30972,6 +30972,11 @@ app.post('/api/bridge/relay-quote', async (req, res) => {
       return res.status(r.status).json({ error: (data && data.message) || 'Relay quote failed' });
     }
 
+    // Log response structure for debugging requestId extraction
+    const topKeys = data ? Object.keys(data) : [];
+    const stepKinds = (data.steps || []).map(s => s.kind);
+    console.log('[relay-quote] OK — keys:', topKeys.join(','), '| steps:', stepKinds.join(','), '| requestId:', data.requestId || 'none', '| full:', JSON.stringify(data).slice(0, 800));
+
     res.json(data);
   } catch (err) {
     console.error('[relay-quote] Error:', err.message);
