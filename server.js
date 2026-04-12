@@ -30651,6 +30651,94 @@ app.get('/api/bridge/chains', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// RELAY.LINK GASLESS BRIDGE — user signs a permit, Relay's solver pays gas
+// ══════════════════════════════════════════════════════════════════════════════
+const RELAY_API_KEY = process.env.RELAY_API_KEY || '';
+
+// USDC addresses per chain (native USDC that supports EIP-3009 permits)
+const RELAY_USDC = {
+  1:     '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  42161: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  8453:  '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  10:    '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+  137:   '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'  // native USDC on Polygon
+};
+// Polymarket uses bridged USDC.e on Polygon
+const POLYGON_USDCE = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+
+// POST /api/bridge/relay-quote — get gasless bridge quote from Relay
+app.post('/api/bridge/relay-quote', async (req, res) => {
+  try {
+    const { fromChain, toChain, fromAddress, toAddress, amount, currency } = req.body;
+    if (!fromChain || !fromAddress || !toAddress || !amount) {
+      return res.status(400).json({ error: 'Missing required params' });
+    }
+
+    const originChainId = parseInt(fromChain);
+    const destChainId = parseInt(toChain) || 137;
+
+    // Use the specified currency or default to USDC on the origin chain
+    const originCurrency = currency || RELAY_USDC[originChainId];
+    if (!originCurrency) {
+      return res.status(400).json({ error: 'Unsupported origin chain: ' + originChainId });
+    }
+
+    // Destination: Polymarket needs USDC.e on Polygon
+    const destCurrency = POLYGON_USDCE;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (RELAY_API_KEY) headers['Authorization'] = 'Bearer ' + RELAY_API_KEY;
+
+    const body = {
+      user: fromAddress,
+      originChainId: originChainId,
+      destinationChainId: destChainId,
+      originCurrency: originCurrency,
+      destinationCurrency: destCurrency,
+      amount: String(amount),
+      tradeType: 'EXACT_INPUT',
+      recipient: toAddress
+    };
+
+    const r = await fetch('https://api.relay.link/quote/v2', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+
+    let data;
+    try { data = await r.json(); } catch (e) { data = { error: 'Invalid response from Relay' }; }
+
+    if (!r.ok) {
+      console.warn('[relay-quote] Error:', r.status, JSON.stringify(data).slice(0, 300));
+      return res.status(r.status).json({ error: (data && data.message) || 'Relay quote failed' });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error('[relay-quote] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/bridge/relay-status — poll Relay intent status
+app.get('/api/bridge/relay-status', async (req, res) => {
+  try {
+    const { requestId } = req.query;
+    if (!requestId) return res.status(400).json({ error: 'requestId required' });
+
+    const headers = {};
+    if (RELAY_API_KEY) headers['Authorization'] = 'Bearer ' + RELAY_API_KEY;
+
+    const r = await fetch('https://api.relay.link/intents/status/v3?requestId=' + encodeURIComponent(requestId), { headers });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {

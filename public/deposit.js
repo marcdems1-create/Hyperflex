@@ -340,19 +340,60 @@
               '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0;line-height:1.6">' + _esc(quote.error) + '</div>' +
             '</div>' +
             '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="width:100%;background:rgba(255,255,255,0.06);color:#f0f0f5;border:1px solid #1e1e2a;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer">← Try different amount or chain</button>';
+        } else if (state.bridgeProvider === 'relay') {
+          // ── RELAY GASLESS QUOTE DISPLAY ──
+          var relayFees = quote.fees || {};
+          var relayDetails = quote.details || {};
+          var srcChainName = _bridgeChainName(state.bridgeFromChain);
+          var relayFromAmt = (_state.bridgeAmount || 0).toFixed(2);
+          // Calculate receive amount from details or fees
+          var relayGasFee = relayFees.gas ? parseFloat(relayFees.gas.amountUsd || relayFees.gas.amount || 0) : 0;
+          var relayRelayerFee = relayFees.relayer ? parseFloat(relayFees.relayer.amountUsd || relayFees.relayer.amount || 0) : 0;
+          var relayAppFee = relayFees.app ? parseFloat(relayFees.app.amountUsd || relayFees.app.amount || 0) : 0;
+          var relayTotalFees = relayGasFee + relayRelayerFee + relayAppFee;
+          var relayToAmt = (parseFloat(relayFromAmt) - relayTotalFees).toFixed(2);
+          // If details has currencyOut amount, use that instead
+          if (relayDetails.currencyOut && relayDetails.currencyOut.amountUsd) {
+            relayToAmt = parseFloat(relayDetails.currencyOut.amountUsd).toFixed(2);
+          } else if (relayDetails.currencyOut && relayDetails.currencyOut.amount) {
+            relayToAmt = (parseFloat(relayDetails.currencyOut.amount) / 1e6).toFixed(2);
+          }
+          var relayDuration = relayDetails.timeEstimate || 30;
+          var relayDurStr = relayDuration < 120 ? relayDuration + 's' : Math.round(relayDuration / 60) + 'm';
+
+          bodyHtml =
+            '<div style="padding:14px 16px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
+              '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Gasless route found</div>' +
+              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">RELAY</strong> · estimated ' + relayDurStr + ' · <span style="color:#00e68a;font-weight:700">no gas needed</span></div>' +
+            '</div>' +
+
+            '<div style="display:flex;flex-direction:column;gap:8px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:12px">' +
+              '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You send</span><span style="color:#f0f0f5;font-weight:700">$' + relayFromAmt + ' USDC on ' + _esc(srcChainName) + '</span></div>' +
+              '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You receive</span><span style="color:#00e68a;font-weight:700">~$' + relayToAmt + ' USDC on Polygon</span></div>' +
+              '<div style="height:1px;background:#1e1e2a;margin:4px 0"></div>' +
+              (relayTotalFees > 0 ? '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Fees (incl. gas)</span><span style="color:#aaa">~$' + relayTotalFees.toFixed(2) + '</span></div>' : '') +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Gas</span><span style="color:#00e68a;font-weight:700">Paid from USDC ✓</span></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Destination</span><span style="color:#aaa">' + _esc(proxyAddr.slice(0,6)) + '…' + _esc(proxyAddr.slice(-4)) + '</span></div>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px">' +
+              '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="background:rgba(255,255,255,0.06);color:#8888a0;border:1px solid #1e1e2a;padding:12px 16px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">← Back</button>' +
+              '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + relayFromAmt + ' →</button>' +
+            '</div>' +
+
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#00e68a;line-height:1.6;margin-top:12px;text-align:center;padding:6px 10px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">⚡ Gasless bridge — you only sign a message, no ETH needed. Gas is deducted from your USDC.</div>';
+
         } else {
+          // ── LI.FI QUOTE DISPLAY (fallback — requires gas) ──
           var est = quote.estimate || {};
           var fromAmt = parseFloat(est.fromAmountUSD || 0).toFixed(2);
           var toAmt = parseFloat(est.toAmountUSD || est.toAmount || 0).toFixed(2);
-          // toAmount is in token units; convert to USDC (6 decimals)
           var toUsdc = est.toAmount ? (parseFloat(est.toAmount) / 1e6).toFixed(2) : toAmt;
-          // Check if LI.FI is delivering to bridged USDC.e (Polymarket-compatible)
-          // or native Polygon USDC (would need an extra swap to trade)
           var actualToAddr = (quote.action && quote.action.toToken && quote.action.toToken.address) || '';
           var isCompatible = actualToAddr.toLowerCase() === USDC_ADDRESS.toLowerCase();
           var routeWarning = '';
           if (actualToAddr && !isCompatible) {
-            routeWarning = '<div style="padding:10px 12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:10px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.6">⚠ This route delivers <strong>native Polygon USDC</strong>, but Polymarket needs <strong>bridged USDC.e</strong>. You\'ll need to swap on Polygon after. Use Jumper externally for direct USDC.e routing.</div>';
+            routeWarning = '<div style="padding:10px 12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:10px;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.6">⚠ This route delivers <strong>native Polygon USDC</strong>, but Polymarket needs <strong>bridged USDC.e</strong>. You\'ll need to swap on Polygon after.</div>';
           }
           var duration = est.executionDuration || 300;
           var durationStr = duration < 120 ? duration + 's' : Math.round(duration / 60) + 'm';
@@ -362,9 +403,9 @@
           var srcChainName = _bridgeChainName(state.bridgeFromChain);
 
           bodyHtml =
-            '<div style="padding:14px 16px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
-              '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Route found</div>' +
-              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">' + _esc(toolName) + '</strong> · estimated ' + durationStr + '</div>' +
+            '<div style="padding:14px 16px;background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.25);border-radius:10px;margin-bottom:14px">' +
+              '<div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:4px">Route found (requires gas)</div>' +
+              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">' + _esc(toolName) + '</strong> · estimated ' + durationStr + ' · <span style="color:#f59e0b">needs ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + ' for gas</span></div>' +
             '</div>' +
 
             routeWarning +
@@ -374,17 +415,16 @@
               '<div style="display:flex;justify-content:space-between"><span style="color:#8888a0">You receive</span><span style="color:#00e68a;font-weight:700">$' + toUsdc + ' USDC on Polygon</span></div>' +
               '<div style="height:1px;background:#1e1e2a;margin:4px 0"></div>' +
               '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Bridge fee</span><span style="color:#aaa">$' + bridgeFeeUsd + '</span></div>' +
-              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Source chain gas</span><span style="color:#aaa">~$' + gasCostUsd + '</span></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Source chain gas</span><span style="color:#f59e0b">~$' + gasCostUsd + ' ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + '</span></div>' +
               '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#8888a0">Destination</span><span style="color:#aaa">' + _esc(proxyAddr.slice(0,6)) + '…' + _esc(proxyAddr.slice(-4)) + '</span></div>' +
             '</div>' +
 
             '<div style="display:flex;gap:8px">' +
               '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="background:rgba(255,255,255,0.06);color:#8888a0;border:1px solid #1e1e2a;padding:12px 16px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">← Back</button>' +
-              '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + fromAmt + ' →</button>' +
+              '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#f59e0b;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + fromAmt + ' →</button>' +
             '</div>' +
 
-            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;margin-top:12px;text-align:center">We\'ll switch MetaMask to ' + _esc(srcChainName) + ' and request one signature. USDC lands in your Polymarket wallet automatically.</div>' +
-            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5;margin-top:8px;text-align:center;padding:6px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">⛽ You need a small amount of ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + ' on ' + _esc(srcChainName) + ' for gas (~$' + gasCostUsd + '). USDC alone won\'t cover gas fees.</div>';
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.5;margin-top:12px;text-align:center;padding:6px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">⚠ Gasless route unavailable. You need ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + ' on ' + _esc(srcChainName) + ' for gas (~$' + gasCostUsd + ').</div>';
         }
       } else {
         // SELECT step (default) — chain picker + amount
@@ -881,7 +921,7 @@
     if (overlay) overlay.innerHTML = _frame(_state);
   }
 
-  // Fetch a quote from LI.FI (via our server proxy)
+  // Fetch a bridge quote — tries Relay (gasless) first, falls back to LI.FI
   async function _fetchBridgeQuote() {
     var amtInput = document.getElementById('hfxBridgeAmount');
     if (!amtInput) return;
@@ -894,7 +934,7 @@
     _state.bridgeAmount = amount;
 
     var chainId = _state.bridgeFromChain || 42161;
-    _state.bridgeFromChain = chainId; // persist fallback so quote display + executeBridge stay in sync
+    _state.bridgeFromChain = chainId;
     var cfg = BRIDGE_CHAINS[chainId];
     if (!cfg) return;
 
@@ -906,15 +946,45 @@
 
     _state.bridgeStep = 'quote';
     _state.bridgeQuote = null;
+    _state.bridgeProvider = null; // 'relay' or 'lifi'
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
 
+    var fromAmount = Math.floor(amount * 1e6).toString();
+    var fromToken = _state.bridgeActiveToken || cfg.usdc;
+
+    // ── Try Relay first (gasless — user only signs a permit, no ETH needed) ──
     try {
-      // LI.FI expects fromAmount in token base units (6 decimals for USDC)
-      var fromAmount = Math.floor(amount * 1e6).toString();
-      // Use the token the user actually holds (USDC.e or native)
-      var fromToken = _state.bridgeActiveToken || cfg.usdc;
-      console.log('[bridge] quoting with fromToken:', fromToken, 'amount:', amount);
+      console.log('[bridge] trying Relay gasless quote…');
+      var relayRes = await fetch('/api/bridge/relay-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromChain: chainId,
+          toChain: 137,
+          fromAddress: _state.eoa,
+          toAddress: _state.proxy,
+          amount: fromAmount,
+          currency: fromToken
+        })
+      });
+      var relayData = await relayRes.json();
+      if (relayRes.ok && relayData && relayData.steps && relayData.steps.length > 0) {
+        console.log('[bridge] Relay quote OK:', relayData);
+        _state.bridgeQuote = relayData;
+        _state.bridgeProvider = 'relay';
+        var overlay2 = document.getElementById('hfxDepositOverlay');
+        if (overlay2) overlay2.innerHTML = _frame(_state);
+        return;
+      }
+      console.warn('[bridge] Relay quote failed:', relayData.error || relayData.message || 'no steps');
+    } catch (relayErr) {
+      console.warn('[bridge] Relay error:', relayErr.message);
+    }
+
+    // ── Fallback: LI.FI (requires gas on source chain) ──
+    try {
+      console.log('[bridge] falling back to LI.FI…');
       var params = new URLSearchParams({
         fromChain: String(chainId),
         fromToken: fromToken,
@@ -930,18 +1000,30 @@
         _state.bridgeQuote = { error: data.error || 'Failed to fetch route' };
       } else {
         _state.bridgeQuote = data;
+        _state.bridgeProvider = 'lifi';
       }
     } catch (e) {
       _state.bridgeQuote = { error: e.message || 'Network error' };
     }
-    var overlay2 = document.getElementById('hfxDepositOverlay');
-    if (overlay2) overlay2.innerHTML = _frame(_state);
+    var overlay3 = document.getElementById('hfxDepositOverlay');
+    if (overlay3) overlay3.innerHTML = _frame(_state);
   }
 
-  // Execute the bridge transaction (user signs on source chain)
+  // Execute the bridge transaction — dispatches to Relay (gasless) or LI.FI
   async function _executeBridge() {
-    if (!_state || !_state.bridgeQuote || !_state.bridgeQuote.transactionRequest) {
+    if (!_state || !_state.bridgeQuote) {
       alert('No quote available — please refresh and try again.');
+      return;
+    }
+
+    // Dispatch to Relay gasless bridge if that's the active provider
+    if (_state.bridgeProvider === 'relay') {
+      return _executeRelayBridge();
+    }
+
+    // LI.FI flow — requires gas on source chain
+    if (!_state.bridgeQuote.transactionRequest) {
+      alert('No transaction data in quote — please go back and get a new quote.');
       return;
     }
     var chainId = _state.bridgeFromChain || 42161;
@@ -1160,6 +1242,236 @@
     setTimeout(tick, 3000); // first poll after 3s
   }
 
+  // ── Relay gasless bridge execution ──
+  // User signs permit messages (no gas), Relay's solver executes the bridge
+  async function _executeRelayBridge() {
+    if (!_state || !_state.bridgeQuote || !_state.bridgeQuote.steps) {
+      alert('No Relay quote available — please refresh and try again.');
+      return;
+    }
+
+    var steps = _state.bridgeQuote.steps;
+    var cfg = BRIDGE_CHAINS[_state.bridgeFromChain || 42161];
+
+    _state.bridgeStep = 'executing';
+    _state.bridgePollMessage = 'Preparing gasless bridge…';
+    _state.bridgeSubMessage = 'No gas needed — just sign the message';
+    var overlay = document.getElementById('hfxDepositOverlay');
+    if (overlay) overlay.innerHTML = _frame(_state);
+
+    try {
+      // Ensure MetaMask is on the source chain for signing
+      var currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (cfg && currentChainId !== cfg.hex) {
+        try {
+          await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hex }] });
+        } catch (switchErr) {
+          if (switchErr.code === 4902 && cfg) {
+            var chainParams = {
+              1: { chainId: '0x1', chainName: 'Ethereum', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://etherscan.io'] },
+              42161: { chainId: '0xa4b1', chainName: 'Arbitrum One', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://arbiscan.io'] },
+              8453: { chainId: '0x2105', chainName: 'Base', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://basescan.org'] },
+              10: { chainId: '0xa', chainName: 'Optimism', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://optimistic.etherscan.io'] },
+              56: { chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: [cfg.rpcs[0]], blockExplorerUrls: ['https://bscscan.com'] }
+            }[_state.bridgeFromChain];
+            if (chainParams) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
+          } else {
+            throw switchErr;
+          }
+        }
+      }
+
+      if (window.HFXWallet && window.HFXWallet.invalidate) window.HFXWallet.invalidate();
+      var provider = new window.ethers.BrowserProvider(window.ethereum);
+      var signer = await provider.getSigner();
+
+      // Process each step from Relay
+      var requestId = null;
+      for (var si = 0; si < steps.length; si++) {
+        var step = steps[si];
+        var items = step.items || [];
+
+        for (var ii = 0; ii < items.length; ii++) {
+          var item = items[ii];
+
+          if (step.kind === 'signature' || item.data) {
+            // ── Signature step (gasless permit) ──
+            _state.bridgePollMessage = 'Sign in wallet…';
+            _state.bridgeSubMessage = 'Approve USDC transfer (no gas needed)';
+            var overlaySign = document.getElementById('hfxDepositOverlay');
+            if (overlaySign) overlaySign.innerHTML = _frame(_state);
+
+            var signData = item.data;
+            var signature;
+
+            if (signData && signData.domain && signData.types && signData.message) {
+              // EIP-712 typed data signing
+              var types = Object.assign({}, signData.types);
+              delete types.EIP712Domain; // ethers adds this automatically
+              signature = await signer.signTypedData(signData.domain, types, signData.message);
+            } else if (signData && signData.signatureKind === 'eip191') {
+              // Personal sign
+              signature = await signer.signMessage(signData.message || signData);
+            } else if (typeof signData === 'string') {
+              signature = await signer.signMessage(signData);
+            } else {
+              // Try as typed data
+              var sd = signData || {};
+              var sdTypes = Object.assign({}, sd.types || {});
+              delete sdTypes.EIP712Domain;
+              signature = await signer.signTypedData(sd.domain || {}, sdTypes, sd.message || sd.value || {});
+            }
+
+            // POST the signature back to Relay
+            if (item.postData && item.postData.endpoint) {
+              var postUrl = item.postData.endpoint;
+              // Append signature as query param if needed
+              if (postUrl.indexOf('?') === -1) postUrl += '?signature=' + encodeURIComponent(signature);
+              else postUrl += '&signature=' + encodeURIComponent(signature);
+
+              var postBody = item.postData.body ? JSON.parse(JSON.stringify(item.postData.body)) : {};
+              postBody.signature = signature;
+
+              var postRes = await fetch(postUrl, {
+                method: item.postData.method || 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(postBody)
+              });
+
+              var postResult;
+              try { postResult = await postRes.json(); } catch (e) { postResult = {}; }
+              console.log('[relay] step', si, 'item', ii, 'posted:', postResult);
+
+              // Extract requestId for status polling
+              if (postResult.requestId) requestId = postResult.requestId;
+              if (postResult.id) requestId = postResult.id;
+            }
+
+          } else if (step.kind === 'transaction') {
+            // ── Transaction step (rare for gasless, but handle it) ──
+            _state.bridgePollMessage = 'Confirm transaction…';
+            _state.bridgeSubMessage = 'Your wallet will ask to sign';
+            var overlayTx = document.getElementById('hfxDepositOverlay');
+            if (overlayTx) overlayTx.innerHTML = _frame(_state);
+
+            var txData = item.data || item;
+            var tx = await signer.sendTransaction({
+              to: txData.to,
+              data: txData.data || '0x',
+              value: txData.value || '0',
+              gasLimit: txData.gasLimit || undefined
+            });
+            await tx.wait(1);
+            console.log('[relay] tx step confirmed:', tx.hash);
+            if (!requestId) requestId = tx.hash;
+          }
+        }
+      }
+
+      // Extract requestId from quote if not obtained from step execution
+      if (!requestId && _state.bridgeQuote.protocol) {
+        requestId = _state.bridgeQuote.protocol.requestId || _state.bridgeQuote.protocol.orderId;
+      }
+
+      if (!requestId) {
+        // No requestId — show optimistic success after a delay
+        _state.bridgeStep = 'polling';
+        _state.bridgePollMessage = 'Bridge submitted…';
+        _state.bridgeSubMessage = 'Waiting for Relay to process';
+        var overlayOpt = document.getElementById('hfxDepositOverlay');
+        if (overlayOpt) overlayOpt.innerHTML = _frame(_state);
+        // Check proxy balance after 30s
+        setTimeout(async function() {
+          var newBal = await _usdcBalance(_state.proxy);
+          var overlayDone = document.getElementById('hfxDepositOverlay');
+          if (overlayDone) overlayDone.innerHTML = _frame({
+            success: true, amount: _state.bridgeAmount || 0,
+            newProxyBalance: newBal != null ? newBal : 0, bridged: true
+          });
+          try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
+        }, 30000);
+        return;
+      }
+
+      // Start polling Relay status
+      _state.bridgeStep = 'polling';
+      _state.bridgePollMessage = 'Bridging to Polygon…';
+      _state.bridgeSubMessage = 'Gasless via Relay — usually takes 5-30 seconds';
+      var overlayPoll = document.getElementById('hfxDepositOverlay');
+      if (overlayPoll) overlayPoll.innerHTML = _frame(_state);
+      _pollRelayStatus(requestId);
+
+    } catch (err) {
+      var msg = (err && err.message) || 'Unknown error';
+      if (err && (err.code === 'ACTION_REJECTED' || err.code === 4001)) {
+        msg = 'You rejected the signature in MetaMask.';
+      }
+      var overlayErr = document.getElementById('hfxDepositOverlay');
+      if (overlayErr) overlayErr.innerHTML = _frame({ error: msg });
+    }
+  }
+
+  // Poll Relay /intents/status endpoint until completed or failed
+  function _pollRelayStatus(requestId) {
+    var maxPolls = 60; // 60 × 2s = 2 min
+    var pollInterval = 2000;
+    var polls = 0;
+
+    async function tick() {
+      polls++;
+      try {
+        var r = await fetch('/api/bridge/relay-status?requestId=' + encodeURIComponent(requestId));
+        var data = await r.json();
+
+        var status = (data.status || '').toLowerCase();
+
+        if (status === 'success' || status === 'complete' || status === 'completed') {
+          var newBal = await _usdcBalance(_state.proxy);
+          var overlay = document.getElementById('hfxDepositOverlay');
+          if (overlay) {
+            overlay.innerHTML = _frame({
+              success: true,
+              amount: _state.bridgeAmount || 0,
+              newProxyBalance: newBal != null ? newBal : 0,
+              bridged: true,
+              gasless: true
+            });
+          }
+          try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('hfx_deposit_success', { detail: { amount: _state.bridgeAmount, bridged: true } })); } catch (e) {}
+          return;
+        }
+
+        if (status === 'failed' || status === 'error' || status === 'refunded') {
+          var overlay2 = document.getElementById('hfxDepositOverlay');
+          if (overlay2) overlay2.innerHTML = _frame({ error: 'Bridge failed: ' + (data.message || data.error || 'Unknown reason') + '. Your USDC was not deducted.' });
+          return;
+        }
+
+        // Still pending
+        if (_state && _state.bridgeStep === 'polling') {
+          _state.bridgePollMessage = status === 'pending' ? 'Relay is processing…' : 'Bridging to Polygon…';
+          _state.bridgeSubMessage = 'Gasless bridge — usually 5-30 seconds';
+          var overlay3 = document.getElementById('hfxDepositOverlay');
+          if (overlay3) overlay3.innerHTML = _frame(_state);
+        }
+
+        if (polls < maxPolls) setTimeout(tick, pollInterval);
+        else {
+          var overlay4 = document.getElementById('hfxDepositOverlay');
+          if (overlay4) overlay4.innerHTML = _frame({ error: 'Bridge still pending after 2 minutes. Check your Polymarket balance shortly — it may still arrive.' });
+        }
+      } catch (e) {
+        if (polls < maxPolls) setTimeout(tick, pollInterval);
+        else {
+          var overlay5 = document.getElementById('hfxDepositOverlay');
+          if (overlay5) overlay5.innerHTML = _frame({ error: 'Status check failed: ' + e.message });
+        }
+      }
+    }
+    setTimeout(tick, 2000);
+  }
+
   // Switch tabs without re-fetching balances
   function _setTab(tab) {
     if (!_state) return;
@@ -1231,6 +1543,7 @@
     _setBridgeChain: _setBridgeChain,
     _setBridgeStep: _setBridgeStep,
     _fetchBridgeQuote: _fetchBridgeQuote,
-    _executeBridge: _executeBridge
+    _executeBridge: _executeBridge,
+    _executeRelayBridge: _executeRelayBridge
   };
 })();
