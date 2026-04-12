@@ -30442,6 +30442,62 @@ app.get('/api/bridge/quote', async (req, res) => {
   }
 });
 
+// GET /api/bridge/balance — fetch USDC balance on a source chain (server-side, no CORS issues)
+// Query: address (EOA), chainId (e.g. 42161)
+// Returns: { native: number, bridged: number, total: number, activeToken: string }
+const BRIDGE_CHAIN_CONFIG = {
+  1:     { rpcs: ['https://eth.llamarpc.com', 'https://1rpc.io/eth'], usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+  42161: { rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com', 'https://1rpc.io/arb'], usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', usdce: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8' },
+  8453:  { rpcs: ['https://mainnet.base.org', 'https://1rpc.io/base'], usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdce: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA' },
+  10:    { rpcs: ['https://mainnet.optimism.io', 'https://1rpc.io/op'], usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', usdce: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607' },
+  56:    { rpcs: ['https://bsc-dataseed.binance.org', 'https://1rpc.io/bnb'], usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d' }
+};
+
+app.get('/api/bridge/balance', async (req, res) => {
+  try {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).json({ error: 'address and chainId required' });
+    const cfg = BRIDGE_CHAIN_CONFIG[String(chainId)];
+    if (!cfg) return res.status(400).json({ error: 'Unsupported chain: ' + chainId });
+
+    // ERC-20 balanceOf(address) selector = 0x70a08231 + left-padded address
+    const addr = address.toLowerCase().replace('0x', '').padStart(64, '0');
+    const calldata = '0x70a08231' + addr;
+
+    async function getBalance(tokenAddr, rpcs) {
+      for (const rpc of rpcs) {
+        try {
+          const r = await fetch(rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddr, data: calldata }, 'latest'], id: 1 })
+          });
+          const data = await r.json();
+          if (data.result && data.result !== '0x') {
+            return parseInt(data.result, 16) / 1e6;
+          }
+          return 0;
+        } catch (e) { /* try next RPC */ }
+      }
+      return 0;
+    }
+
+    const [nativeBal, bridgedBal] = await Promise.all([
+      getBalance(cfg.usdc, cfg.rpcs),
+      cfg.usdce ? getBalance(cfg.usdce, cfg.rpcs) : Promise.resolve(0)
+    ]);
+
+    const total = nativeBal + bridgedBal;
+    const activeToken = bridgedBal > nativeBal ? (cfg.usdce || cfg.usdc) : cfg.usdc;
+
+    console.log(`[bridge/balance] chain=${chainId} addr=${address.slice(0,10)} native=${nativeBal.toFixed(2)} bridged=${bridgedBal.toFixed(2)}`);
+    res.json({ native: nativeBal, bridged: bridgedBal, total, activeToken });
+  } catch (err) {
+    console.error('[bridge/balance]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/bridge/status — check cross-chain transfer status
 // Query: txHash, fromChain, toChain (+ optional bridge name)
 app.get('/api/bridge/status', async (req, res) => {
