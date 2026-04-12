@@ -18351,7 +18351,16 @@ async function derivePolymarketApiKey() {
       // Save proxy address if returned directly
       var proxyAddr = data.proxyAddress || data.proxy_address || data.polyAddress || '';
 
-      // If no proxy in response, retry via server /api/polymarket/lookup-proxy with delays.
+      // If no proxy in response, check localStorage first (we may already have it from a prior session).
+      // Only do the slow retry loop if we truly don't have a proxy.
+      if (!proxyAddr) {
+        var existingProxy = localStorage.getItem('hf_poly_wallet');
+        if (existingProxy) {
+          proxyAddr = existingProxy;
+          console.log('[api-keys] Reusing existing proxy from localStorage:', proxyAddr);
+        }
+      }
+      // If still no proxy, retry via server /api/polymarket/lookup-proxy with delays.
       // New Polymarket API keys take ~2 minutes to activate — immediate lookups return 401.
       if (!proxyAddr && apiKey && secret && passphrase) {
         var retryDelays = [3000, 6000, 12000]; // 3s, 6s, 12s
@@ -18804,23 +18813,25 @@ async function confirmTrade() {
     if (window._connectedWallet && window.ethereum) {
       btn.disabled = true;
       btn.textContent = 'Enabling trading...';
-      errEl.textContent = 'Getting fresh trading keys — sign in MetaMask...';
+      errEl.textContent = 'Sign in MetaMask popup to enable trading...';
       errEl.style.color = 'var(--gold)';
       errEl.style.display = 'block';
       try {
-        await derivePolymarketApiKey();
+        await Promise.race([
+          derivePolymarketApiKey(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000))
+        ]);
         const newKey = localStorage.getItem('poly_api_key');
         if (newKey) {
           errEl.style.display = 'none';
           errEl.style.color = '';
           btn.disabled = false;
-          // Immediately retry the trade — don't make user click again
           return confirmTrade();
         }
       } catch(e) {
         console.warn('[auto-derive]', e.message);
       }
-      errEl.textContent = 'Could not derive keys. Connect MetaMask and try again.';
+      errEl.textContent = 'Sign in MetaMask popup, then click Confirm Trade.';
       errEl.style.color = '#ff6b6b';
       btn.disabled = false;
       btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
@@ -19118,11 +19129,15 @@ async function confirmTrade() {
         // Auto-derive fresh keys and retry the trade immediately
         if (window._connectedWallet && window.ethereum) {
           btn.textContent = 'Refreshing keys...';
-          errEl.textContent = 'Keys expired — refreshing automatically...';
+          errEl.textContent = 'Keys expired — check MetaMask to sign...';
           errEl.style.color = 'var(--gold)';
           errEl.style.display = 'block';
           try {
-            await derivePolymarketApiKey();
+            // Race derive against a 20s timeout so we don't hang forever
+            const deriveResult = await Promise.race([
+              derivePolymarketApiKey(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000))
+            ]);
             const freshKey = localStorage.getItem('poly_api_key');
             if (freshKey) {
               errEl.style.display = 'none';
@@ -19133,8 +19148,10 @@ async function confirmTrade() {
           } catch (deriveErr) {
             console.warn('[auto-derive on 401]', deriveErr.message);
           }
+          btn.disabled = false;
+          btn.textContent = 'Confirm Trade';
         }
-        errEl.textContent = 'API keys expired. Connect MetaMask and try again.';
+        errEl.textContent = 'API keys expired — sign in MetaMask popup, then click Confirm Trade.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
         errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
       } else if (res.status === 400 && errStr.includes('tick size')) {
