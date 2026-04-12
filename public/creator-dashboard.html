@@ -18772,6 +18772,7 @@ function updateTradeEstimate() {
   }
 }
 
+var _confirmTradeRetryCount = 0;
 async function confirmTrade() {
   if (!window._connectedWallet) {
     showToast('Connect your wallet first', 'error');
@@ -18809,7 +18810,15 @@ async function confirmTrade() {
   const proxyAddress = localStorage.getItem('hf_poly_wallet');
 
   if (!apiKey || !apiSecret || !apiPassphrase) {
-    // Auto-derive CLOB API keys and immediately retry — no second click needed
+    // Auto-derive CLOB API keys and immediately retry — max 1 retry
+    if (_confirmTradeRetryCount >= 1) {
+      errEl.textContent = 'Could not get valid trading keys. Try refreshing the page.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Confirm Trade';
+      _confirmTradeRetryCount = 0;
+      return;
+    }
     if (window._connectedWallet && window.ethereum) {
       btn.disabled = true;
       btn.textContent = 'Enabling trading...';
@@ -18826,6 +18835,7 @@ async function confirmTrade() {
           errEl.style.display = 'none';
           errEl.style.color = '';
           btn.disabled = false;
+          _confirmTradeRetryCount++;
           return confirmTrade();
         }
       } catch(e) {
@@ -19126,14 +19136,21 @@ async function confirmTrade() {
         localStorage.removeItem('hf_clob_api_key');
         localStorage.removeItem('hf_clob_api_secret');
         localStorage.removeItem('hf_clob_api_passphrase');
-        // Auto-derive fresh keys and retry the trade immediately
+        // Auto-derive fresh keys and retry — but only once to prevent infinite loop
+        if (_confirmTradeRetryCount >= 1) {
+          errEl.textContent = 'Keys keep expiring. Try refreshing the page or reconnecting MetaMask.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Confirm Trade';
+          _confirmTradeRetryCount = 0;
+          return;
+        }
         if (window._connectedWallet && window.ethereum) {
           btn.textContent = 'Refreshing keys...';
           errEl.textContent = 'Keys expired — check MetaMask to sign...';
           errEl.style.color = 'var(--gold)';
           errEl.style.display = 'block';
           try {
-            // Race derive against a 20s timeout so we don't hang forever
             const deriveResult = await Promise.race([
               derivePolymarketApiKey(),
               new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000))
@@ -19143,7 +19160,8 @@ async function confirmTrade() {
               errEl.style.display = 'none';
               errEl.style.color = '';
               btn.disabled = false;
-              return confirmTrade(); // retry with fresh keys
+              _confirmTradeRetryCount++;
+              return confirmTrade(); // retry with fresh keys (once only)
             }
           } catch (deriveErr) {
             console.warn('[auto-derive on 401]', deriveErr.message);
@@ -19169,6 +19187,7 @@ async function confirmTrade() {
       return;
     }
 
+    _confirmTradeRetryCount = 0; // reset on success
     showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + finalShares.toFixed(2) + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
     console.log('[qt-trade] Order success:', data);
     closeTradeModal();

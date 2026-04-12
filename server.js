@@ -18517,51 +18517,9 @@ app.get('/api/polymarket/tick-size/:tokenId', async (req, res) => {
 });
 
 // ── POLYMARKET ORDER PROXY (submits signed order to CLOB) ──────────────────
-app.post('/api/polymarket/order', requireAuth, async (req, res) => {
-  const { signed_order, market_id, side, amount } = req.body;
-  if (!signed_order || !signed_order.signature) {
-    return res.status(400).json({ error: 'Signed order with signature required' });
-  }
-  if (!market_id) {
-    return res.status(400).json({ error: 'Market ID required' });
-  }
-
-  try {
-    // Forward the signed order to Polymarket CLOB
-    const upstream = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'Hyperflex/1.0'
-      },
-      body: JSON.stringify(signed_order)
-    });
-
-    const data = await upstream.json().catch(() => ({}));
-
-    if (!upstream.ok) {
-      console.error('[polymarket order]', upstream.status, data);
-      return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
-        error: data.error || data.message || 'Order rejected by Polymarket',
-        detail: data
-      });
-    }
-
-    console.log(`[polymarket order] user=${req.userId} side=${side} amount=${amount} market=${market_id} status=ok`);
-    res.json({
-      success: true,
-      order_id: data.orderID || data.order_id || data.id || null,
-      market_id,
-      side,
-      amount,
-      ...data
-    });
-  } catch (err) {
-    console.error('[polymarket order]', err.message);
-    res.status(502).json({ error: 'Failed to submit order to Polymarket', detail: err.message });
-  }
-});
+// OLD /api/polymarket/order route removed — was missing CLOB auth header forwarding
+// and shadowed the proper geo-bypass proxy at line ~31151.
+// The new route forwards all POLY_* auth headers through Railway's US IP.
 
 // ── MARKET SEARCH AGGREGATOR ─────────────────────────────────────────────────
 // (Duplicate route removed — comprehensive search with synonym expansion,
