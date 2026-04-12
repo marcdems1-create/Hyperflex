@@ -19415,18 +19415,22 @@ const REDEEM_CONTRACTS = {
 };
 const PARENT_COLLECTION_ID = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-// redeemPosition returns: true = on-chain success, false = skipped/cancelled, throws on error
+// redeemPosition returns: { ok: true/false, reason: string }
 async function redeemPosition(posDataJson, opts) {
   opts = opts || {};
   const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
-  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return false; }
-  if (!pos.condition_id) { showToast('Missing condition ID — cannot redeem', 'error'); return false; }
-  if (!pos.redeemable) { showToast('This position is not redeemable yet', 'error'); return false; }
+  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return { ok: false, reason: 'no_wallet' }; }
+  if (!pos.condition_id) {
+    console.warn('[redeem] SKIP: no condition_id on position:', pos.question || pos.title, '| keys:', Object.keys(pos).join(','));
+    showToast('Missing condition ID — this position can\'t be redeemed from here. Try redeeming on polymarket.com directly.', 'error', 6000);
+    return { ok: false, reason: 'no_condition_id' };
+  }
+  if (!pos.redeemable) { showToast('This position is not redeemable yet', 'error'); return { ok: false, reason: 'not_redeemable' }; }
 
   const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr) { showToast('Proxy wallet not found — connect wallet first', 'error'); return false; }
+  if (!proxyAddr) { showToast('Proxy wallet not found — connect wallet first', 'error'); return { ok: false, reason: 'no_proxy' }; }
 
-  // Detect win by price (works for multi-outcome markets like "Baltimore Orioles" not just YES/NO)
+  // Detect win by price
   const won = pos._won || pos.current_price >= 0.99;
   const payout = won ? (pos.shares || 0) : 0;
   const label = pos.question ? pos.question.substring(0, 50) : 'position';
@@ -19439,17 +19443,18 @@ async function redeemPosition(posDataJson, opts) {
     catch (e) { /* try next */ }
   }
 
-  let hasPol = false;
+  let polBalance = 0;
   if (pubProvider) {
     try {
       const polBal = await pubProvider.getBalance(window._connectedWallet);
-      hasPol = parseFloat(ethers.formatEther(polBal)) >= 0.005;
-    } catch (e) { /* assume no POL */ }
+      polBalance = parseFloat(ethers.formatEther(polBal));
+    } catch (e) { /* assume 0 */ }
   }
 
-  if (!hasPol) {
-    showToast('You need at least 0.01 POL in your wallet for gas fees to claim this position.', 'error');
-    return false;
+  if (polBalance < 0.005) {
+    console.warn('[redeem] SKIP: insufficient POL for gas. Balance:', polBalance, 'POL. Need 0.005+');
+    showToast('You need POL (Polygon gas token) to claim. Your balance: ' + polBalance.toFixed(4) + ' POL. Send ~0.05 POL to your wallet (' + window._connectedWallet.slice(0,8) + '...) to cover gas.', 'error', 8000);
+    return { ok: false, reason: 'no_pol', polBalance: polBalance };
   }
 
   // Skip individual confirm when called from batch (redeemAllPositions already confirmed)
@@ -19457,7 +19462,7 @@ async function redeemPosition(posDataJson, opts) {
     if (!confirm(won
       ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis burns your winning tokens and sends USDC to your wallet.\nGas cost: ~0.01 POL (fraction of a cent).'
       : 'Clear resolved position "' + label + '"?\n\nGas cost: ~0.01 POL.'
-    )) return false;
+    )) return { ok: false, reason: 'cancelled' };
   }
 
   showToast('Preparing redemption...', 'info');
@@ -19567,19 +19572,19 @@ async function redeemPosition(posDataJson, opts) {
         fetchWalletBalance(window._walletProvider, window._connectedWallet);
         loadPolymarketPositions(true);
       }, 3000);
-      return true;
+      return { ok: true, txHash: tx.hash, payout: payout };
     } else {
       showToast('Transaction reverted — check PolygonScan: ' + tx.hash.slice(0, 14), 'error');
-      return false;
+      return { ok: false, reason: 'reverted', txHash: tx.hash };
     }
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       showToast('Redemption cancelled', 'info');
-      return false;
+      return { ok: false, reason: 'rejected' };
     } else {
       console.error('[redeem] Error:', e);
       showToast('Redeem failed: ' + (e.shortMessage || e.reason || e.message || 'Unknown error'), 'error');
-      throw e; // re-throw so batch caller knows it failed
+      return { ok: false, reason: 'error', error: e.shortMessage || e.reason || e.message };
     }
   }
 }
@@ -19597,26 +19602,30 @@ async function redeemAllPositions() {
 
   if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: ~$' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.01 POL per position.\n\nYou\'ll need to approve ' + redeemable.length + ' transaction(s) in MetaMask.')) return;
 
-  let success = 0, failed = 0, skipped = 0;
+  let success = 0, failed = 0, failReason = '';
   for (let i = 0; i < redeemable.length; i++) {
     const pos = redeemable[i];
     const label = (pos.question || 'Position').substring(0, 40);
     showToast('Claiming ' + (i + 1) + '/' + redeemable.length + ': ' + label + '...', 'info', 10000);
     try {
       const result = await redeemPosition(pos, { skipConfirm: true });
-      if (result === true) {
+      if (result && result.ok) {
         success++;
       } else {
-        skipped++;
+        failed++;
+        failReason = result ? result.reason : 'unknown';
+        console.warn('[redeem-all] Skipped:', pos.question, '| reason:', failReason);
+        break; // Stop batch on first failure — same issue will hit all remaining
       }
     } catch (e) {
       failed++;
-      console.warn('[redeem-all] Failed:', pos.question, e.message);
+      failReason = 'error: ' + (e.message || 'unknown');
+      console.warn('[redeem-all] Error:', pos.question, e.message);
+      break;
     }
   }
 
   if (success > 0) {
-    // Show celebration for batch claim
     showTradeCelebration({
       side: 'SELL',
       shares: redeemable.reduce((s, p) => s + parseFloat(p.shares || 0), 0),
@@ -19625,16 +19634,23 @@ async function redeemAllPositions() {
       question: success + ' position' + (success > 1 ? 's' : '') + ' claimed',
       pnl: null
     });
-    // Force refresh balance + positions
     setTimeout(() => {
       fetchWalletBalance(window._walletProvider, window._connectedWallet);
       loadPolymarketPositions(true);
     }, 3000);
     setTimeout(() => loadPolymarketPositions(true), 8000);
-  } else if (skipped > 0 && failed === 0) {
-    showToast('Claim cancelled or skipped — no transactions sent.', 'info');
-  } else if (failed > 0) {
-    showToast(failed + ' position' + (failed > 1 ? 's' : '') + ' failed to claim. Check MetaMask and try again.', 'error');
+  } else {
+    // Show specific failure reason
+    var reasonMsg = 'Claim failed';
+    if (failReason === 'no_condition_id') reasonMsg = 'Position is missing its condition ID. Try claiming on polymarket.com directly.';
+    else if (failReason === 'no_pol') reasonMsg = 'You need POL (Polygon gas token) in your wallet to pay for the claim transaction. Send ~0.05 POL to your wallet address.';
+    else if (failReason === 'no_wallet') reasonMsg = 'Connect your MetaMask wallet first.';
+    else if (failReason === 'no_proxy') reasonMsg = 'Proxy wallet not found. Reconnect your wallet.';
+    else if (failReason === 'not_redeemable') reasonMsg = 'Position is not redeemable yet — the market may not have settled.';
+    else if (failReason === 'rejected') reasonMsg = 'Transaction was rejected in MetaMask.';
+    else if (failReason === 'reverted') reasonMsg = 'Transaction reverted on-chain. The position may have already been claimed.';
+    else if (failReason === 'cancelled') reasonMsg = 'Claim cancelled.';
+    showToast(reasonMsg, 'error', 6000);
   }
 }
 
