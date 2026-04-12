@@ -24743,51 +24743,144 @@ app.get('/api/flex-points', requireAuth, async (req, res) => {
 });
 
 // ── POLYMARKET TRADE RECORDING ──────────────────────────────────────────────
-// Records every trade placed through HYPERFLEX for profile track records.
+// Full position lifecycle: open → hold → close (sell or resolution)
+// Every trade placed through HYPERFLEX builds a permanent track record.
 
-// POST /api/trades — record a successful trade
+// POST /api/trades — record a trade (buy opens a position, sell closes one)
 app.post('/api/trades', async (req, res) => {
   try {
     const { eoa_address, proxy_address, market_slug, market_question, condition_id,
             token_id, side, trade_mode, order_type, amount_usd, shares, price_cents,
-            potential_payout, order_id } = req.body;
+            potential_payout, order_id, market_price, volume_24h } = req.body;
 
     if (!eoa_address || !side || !amount_usd) {
       return res.status(400).json({ error: 'eoa_address, side, and amount_usd required' });
     }
 
+    const eoa = (eoa_address || '').toLowerCase();
+    const priceDec = price_cents ? parseFloat(price_cents) / 100 : null;
+    const sharesNum = parseFloat(shares) || 0;
+    const amountNum = parseFloat(amount_usd) || 0;
+
+    if (trade_mode === 'sell') {
+      // ── SELL: close an existing open position ──
+      // Find the matching open buy for this token
+      const { data: openTrade } = await supabase
+        .from('polymarket_trades')
+        .select('*')
+        .eq('eoa_address', eoa)
+        .eq('token_id', token_id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (openTrade) {
+        const entryCost = parseFloat(openTrade.amount_usd) || 0;
+        const pnl = amountNum - entryCost;
+        const pnlPct = entryCost > 0 ? (pnl / entryCost) * 100 : 0;
+        await supabase.from('polymarket_trades').update({
+          status: 'closed',
+          exit_price: priceDec,
+          exit_amount_usd: amountNum,
+          pnl: Math.round(pnl * 100) / 100,
+          pnl_percent: Math.round(pnlPct * 100) / 100,
+          closed_at: new Date().toISOString(),
+          close_reason: 'sold',
+          updated_at: new Date().toISOString()
+        }).eq('id', openTrade.id);
+        console.log(`[trades] Closed: ${openTrade.side} on ${(market_slug || '').slice(0, 25)} P&L=$${pnl.toFixed(2)}`);
+        return res.json({ recorded: true, action: 'closed', trade_id: openTrade.id, pnl });
+      }
+      // No matching open position found — record as standalone sell
+    }
+
+    // ── BUY (or standalone sell): open a new position ──
     const { data, error } = await supabase.from('polymarket_trades').insert({
-      eoa_address: (eoa_address || '').toLowerCase(),
+      eoa_address: eoa,
       proxy_address: (proxy_address || '').toLowerCase(),
       market_slug: market_slug || null,
       market_question: (market_question || '').slice(0, 500),
       condition_id: condition_id || null,
       token_id: token_id || null,
-      side: side.toUpperCase(),
+      side: (side || '').toUpperCase(),
       trade_mode: trade_mode || 'buy',
       order_type: order_type || 'GTC',
-      amount_usd: parseFloat(amount_usd) || 0,
-      shares: parseFloat(shares) || 0,
-      price_cents: parseInt(price_cents) || 0,
-      potential_payout: parseFloat(potential_payout) || 0,
-      order_id: order_id || null
+      entry_price: priceDec,
+      entry_price_cents: parseInt(price_cents) || 0,
+      amount_usd: amountNum,
+      shares: sharesNum,
+      order_id: order_id || null,
+      market_price_at_entry: market_price ? parseFloat(market_price) : priceDec,
+      volume_at_entry: volume_24h ? parseFloat(volume_24h) : null,
+      status: trade_mode === 'sell' ? 'closed' : 'open'
     }).select('id').single();
 
     if (error) {
-      // Table might not exist yet — log but don't fail the trade
       console.warn('[trades] insert error:', error.message);
       return res.json({ recorded: false, error: error.message });
     }
 
-    console.log(`[trades] Recorded: ${side} ${amount_usd} on ${(market_slug || 'unknown').slice(0, 30)}`);
-    res.json({ recorded: true, trade_id: data.id });
+    console.log(`[trades] Opened: ${side} $${amountNum} @ ${price_cents}¢ on ${(market_slug || 'unknown').slice(0, 25)}`);
+    res.json({ recorded: true, action: 'opened', trade_id: data.id });
   } catch (err) {
     console.warn('[trades] error:', err.message);
     res.json({ recorded: false, error: err.message });
   }
 });
 
-// GET /api/trades/:address — fetch trade history + stats for a wallet
+// POST /api/trades/resolve — batch-resolve trades when a market settles
+// Called by the resolution cron or manually after a market resolves
+app.post('/api/trades/resolve', async (req, res) => {
+  try {
+    const { condition_id, winning_side } = req.body;
+    if (!condition_id || !winning_side) {
+      return res.status(400).json({ error: 'condition_id and winning_side required' });
+    }
+
+    // Find all open trades for this market
+    const { data: openTrades, error } = await supabase
+      .from('polymarket_trades')
+      .select('*')
+      .eq('condition_id', condition_id)
+      .eq('status', 'open');
+
+    if (error || !openTrades || openTrades.length === 0) {
+      return res.json({ resolved: 0 });
+    }
+
+    let resolved = 0;
+    for (const trade of openTrades) {
+      const won = trade.side.toUpperCase() === winning_side.toUpperCase();
+      const entryCost = parseFloat(trade.amount_usd) || 0;
+      const sharesNum = parseFloat(trade.shares) || 0;
+      // Winners get $1 per share, losers get $0
+      const exitAmount = won ? sharesNum : 0;
+      const pnl = exitAmount - entryCost;
+      const pnlPct = entryCost > 0 ? (pnl / entryCost) * 100 : 0;
+
+      await supabase.from('polymarket_trades').update({
+        status: won ? 'won' : 'lost',
+        exit_price: won ? 1.0 : 0.0,
+        exit_amount_usd: Math.round(exitAmount * 100) / 100,
+        pnl: Math.round(pnl * 100) / 100,
+        pnl_percent: Math.round(pnlPct * 100) / 100,
+        closed_at: new Date().toISOString(),
+        close_reason: won ? 'resolved_win' : 'resolved_loss',
+        updated_at: new Date().toISOString()
+      }).eq('id', trade.id);
+      resolved++;
+    }
+
+    console.log(`[trades] Resolved ${resolved} trades for conditionId ${condition_id.slice(0, 15)} → ${winning_side}`);
+    res.json({ resolved, winning_side });
+  } catch (err) {
+    console.error('[trades/resolve]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/trades/:address — full track record: trades + stats + streaks
 app.get('/api/trades/:address', async (req, res) => {
   try {
     const address = (req.params.address || '').toLowerCase();
@@ -24795,51 +24888,102 @@ app.get('/api/trades/:address', async (req, res) => {
       return res.status(400).json({ error: 'Valid address required' });
     }
 
-    // Fetch all trades for this address
     const { data: trades, error } = await supabase
       .from('polymarket_trades')
       .select('*')
       .eq('eoa_address', address)
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(500);
 
     if (error) {
       console.warn('[trades] fetch error:', error.message);
       return res.json({ trades: [], stats: {} });
     }
 
-    // Compute stats
+    // ── Compute comprehensive stats ──
     const total = trades.length;
-    const resolved = trades.filter(t => t.outcome);
-    const wins = resolved.filter(t => t.outcome === 'won').length;
-    const losses = resolved.filter(t => t.outcome === 'lost').length;
-    const winRate = resolved.length > 0 ? Math.round((wins / resolved.length) * 100) : null;
-    const totalInvested = trades.reduce((sum, t) => sum + (parseFloat(t.amount_usd) || 0), 0);
-    const totalPnl = resolved.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
-    const avgTradeSize = total > 0 ? totalInvested / total : 0;
-    const biggestWin = resolved.filter(t => t.pnl > 0).sort((a, b) => b.pnl - a.pnl)[0] || null;
+    const open = trades.filter(t => t.status === 'open');
+    const closed = trades.filter(t => t.status !== 'open');
+    const wins = trades.filter(t => t.status === 'won');
+    const losses = trades.filter(t => t.status === 'lost');
+    const sold = trades.filter(t => t.status === 'closed');
 
-    // Active positions (unresolved trades)
-    const active = trades.filter(t => !t.outcome);
+    const resolvedCount = wins.length + losses.length;
+    const winRate = resolvedCount > 0 ? Math.round((wins.length / resolvedCount) * 100) : null;
+
+    const totalInvested = trades.reduce((s, t) => s + (parseFloat(t.amount_usd) || 0), 0);
+    const totalPnl = closed.reduce((s, t) => s + (parseFloat(t.pnl) || 0), 0);
+    const roi = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+    const avgTradeSize = total > 0 ? totalInvested / total : 0;
+
+    // Biggest win / loss
+    const sortedByPnl = closed.filter(t => t.pnl != null).sort((a, b) => b.pnl - a.pnl);
+    const biggestWin = sortedByPnl[0] && sortedByPnl[0].pnl > 0 ? sortedByPnl[0] : null;
+    const biggestLoss = sortedByPnl[sortedByPnl.length - 1] && sortedByPnl[sortedByPnl.length - 1].pnl < 0 ? sortedByPnl[sortedByPnl.length - 1] : null;
+
+    // Win streak (current + best)
+    let currentStreak = 0, bestStreak = 0, streak = 0;
+    const chronological = [...closed].sort((a, b) => new Date(a.closed_at) - new Date(b.closed_at));
+    for (const t of chronological) {
+      if (t.status === 'won') { streak++; bestStreak = Math.max(bestStreak, streak); }
+      else { streak = 0; }
+    }
+    // Current streak from most recent
+    for (let i = chronological.length - 1; i >= 0; i--) {
+      if (chronological[i].status === 'won') currentStreak++;
+      else break;
+    }
+
+    // Average hold time (for closed positions)
+    let avgHoldHours = null;
+    const withHoldTime = closed.filter(t => t.created_at && t.closed_at);
+    if (withHoldTime.length > 0) {
+      const totalMs = withHoldTime.reduce((s, t) => s + (new Date(t.closed_at) - new Date(t.created_at)), 0);
+      avgHoldHours = Math.round(totalMs / withHoldTime.length / 3600000);
+    }
+
+    // Avg entry price (weighted)
+    const avgEntry = total > 0
+      ? trades.reduce((s, t) => s + (parseFloat(t.entry_price_cents) || 0) * (parseFloat(t.amount_usd) || 0), 0) / totalInvested
+      : null;
+
+    // P&L by day (last 30 days) for chart
+    const pnlByDay = {};
+    closed.forEach(t => {
+      if (!t.closed_at) return;
+      const day = t.closed_at.slice(0, 10);
+      pnlByDay[day] = (pnlByDay[day] || 0) + (parseFloat(t.pnl) || 0);
+    });
+    const last30 = [];
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      last30.push({ date: key, pnl: Math.round((pnlByDay[key] || 0) * 100) / 100 });
+    }
 
     res.json({
-      trades: trades.slice(0, 50), // last 50 for display
+      trades: trades.slice(0, 100),
       stats: {
         total_trades: total,
-        resolved: resolved.length,
-        wins,
-        losses,
+        open_positions: open.length,
+        closed_trades: closed.length,
+        wins: wins.length,
+        losses: losses.length,
+        sold: sold.length,
         win_rate: winRate,
         total_invested: Math.round(totalInvested * 100) / 100,
         total_pnl: Math.round(totalPnl * 100) / 100,
+        roi: Math.round(roi * 10) / 10,
         avg_trade_size: Math.round(avgTradeSize * 100) / 100,
-        active_positions: active.length,
-        biggest_win: biggestWin ? {
-          question: biggestWin.market_question,
-          pnl: biggestWin.pnl,
-          side: biggestWin.side
-        } : null
-      }
+        avg_entry_cents: avgEntry != null ? Math.round(avgEntry) : null,
+        avg_hold_hours: avgHoldHours,
+        current_streak: currentStreak,
+        best_streak: bestStreak,
+        biggest_win: biggestWin ? { question: biggestWin.market_question, pnl: parseFloat(biggestWin.pnl), side: biggestWin.side } : null,
+        biggest_loss: biggestLoss ? { question: biggestLoss.market_question, pnl: parseFloat(biggestLoss.pnl), side: biggestLoss.side } : null
+      },
+      pnl_chart: last30
     });
   } catch (err) {
     console.error('[trades]', err.message);

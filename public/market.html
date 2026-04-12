@@ -3668,6 +3668,9 @@ async function executeTrade() {
     try {
       var tradeMarket = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || _market || {};
       var orderId = data && (data.orderID || data.order_id || data.id) || null;
+      // Get market price from live price display (most accurate current mid)
+      var livePrice = null;
+      try { livePrice = parseFloat(document.querySelector('.live-price-value')?.textContent) / 100; } catch(e2) {}
       fetch('/api/trades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3685,7 +3688,9 @@ async function executeTrade() {
           shares: shares,
           price_cents: price,
           potential_payout: shares,
-          order_id: orderId
+          order_id: orderId,
+          market_price: livePrice || (price / 100),
+          volume_24h: _market && _market.volume24hr ? parseFloat(_market.volume24hr) : null
         })
       }).catch(function() {});
     } catch (e) { /* silent */ }
