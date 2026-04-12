@@ -27,7 +27,8 @@
 
   try { console.log('[HFXDeposit] loaded at', new Date().toISOString()); } catch (e) {}
 
-  var USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+  var USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // Polygon USDC.e (Polymarket uses this)
+  var USDC_NATIVE_POLYGON = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Polygon native USDC (Circle)
   var SAFE_FACTORY = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
   var POLYGON_RPCS = [
     'https://polygon-bor-rpc.publicnode.com',
@@ -58,14 +59,25 @@
     return proxy;
   }
 
-  async function _usdcBalance(address) {
-    if (!address) return null;
+  // Check both Polygon USDC.e AND native USDC — many users have one or the other.
+  // Returns { total, usdce, native } so callers know which token(s) the user holds.
+  async function _usdcBalanceDetailed(address) {
+    if (!address) return { total: 0, usdce: 0, native: 0 };
     try {
       var provider = await _getPublicProvider();
-      var contract = new window.ethers.Contract(USDC_ADDRESS, ['function balanceOf(address) view returns (uint256)'], provider);
-      var raw = await contract.balanceOf(address);
-      return parseFloat(window.ethers.formatUnits(raw, 6));
-    } catch (e) { return null; }
+      var abi = ['function balanceOf(address) view returns (uint256)'];
+      var results = await Promise.all([
+        new window.ethers.Contract(USDC_ADDRESS, abi, provider).balanceOf(address).then(function(r) { return parseFloat(window.ethers.formatUnits(r, 6)); }).catch(function() { return 0; }),
+        new window.ethers.Contract(USDC_NATIVE_POLYGON, abi, provider).balanceOf(address).then(function(r) { return parseFloat(window.ethers.formatUnits(r, 6)); }).catch(function() { return 0; })
+      ]);
+      return { total: results[0] + results[1], usdce: results[0], native: results[1] };
+    } catch (e) { return { total: 0, usdce: 0, native: 0 }; }
+  }
+
+  // Simple total balance (backwards compat for proxy balance which is always USDC.e)
+  async function _usdcBalance(address) {
+    var d = await _usdcBalanceDetailed(address);
+    return d.total;
   }
 
   async function _polBalance(address) {
@@ -188,9 +200,10 @@
     var bodyHtml;
     if (currentTab === 'metamask') {
       if (hasEoaUsdc) {
-        // Auto-pick gasless if user has no POL — this is the key UX:
-        // they never need to buy POL just to deposit USDC.
-        var useGasless = !hasGas;
+        // Auto-pick gasless if user has no POL — but only if they have USDC.e.
+        // Gasless (EIP-3009) only works with USDC.e, not native USDC.
+        var hasUsdceForGasless = (state.eoaUsdce || 0) >= 0.01;
+        var useGasless = !hasGas && hasUsdceForGasless;
         var submitFn = useGasless ? 'HFXDeposit._submitGasless()' : 'HFXDeposit._submit()';
         var submitLabel = useGasless ? '✨ Sign gasless (free) →' : 'Sign & Deposit →';
         var footerNote = useGasless
@@ -506,16 +519,19 @@
       }
       if (!proxy) throw new Error('Could not resolve your Polymarket wallet. Complete setup first by visiting any market page.');
 
-      // Fetch balances
-      var [eoaBal, proxyBal, polBal] = await Promise.all([
-        _usdcBalance(eoa),
+      // Fetch balances — EOA gets detailed breakdown (USDC.e vs native)
+      var [eoaDetailed, proxyBal, polBal] = await Promise.all([
+        _usdcBalanceDetailed(eoa),
         _usdcBalance(proxy),
         _polBalance(eoa)
       ]);
 
+      console.log('[deposit] EOA balance:', eoaDetailed, 'proxy:', proxyBal, 'POL:', polBal);
+
       _state = {
         eoa: eoa, proxy: proxy,
-        eoaBalance: eoaBal, proxyBalance: proxyBal, polBalance: polBal
+        eoaBalance: eoaDetailed.total, eoaUsdce: eoaDetailed.usdce, eoaNativeUsdc: eoaDetailed.native,
+        proxyBalance: proxyBal, polBalance: polBal
       };
       overlay.innerHTML = _frame(_state);
     } catch (e) {
@@ -563,8 +579,15 @@
         signer = await provider.getSigner();
       }
 
-      // USDC.transfer(proxy, amount * 1e6)
-      var usdc = new window.ethers.Contract(USDC_ADDRESS, ['function transfer(address to, uint256 amount) returns (bool)'], signer);
+      // Pick the right USDC contract based on where the user's funds are.
+      // If they have enough USDC.e, use that (Polymarket native). Otherwise
+      // use native USDC. Both are valid ERC-20 transfers to the proxy.
+      var usdcAddr = USDC_ADDRESS; // default: USDC.e
+      if (_state.eoaUsdce != null && _state.eoaUsdce < amount && _state.eoaNativeUsdc >= amount) {
+        usdcAddr = USDC_NATIVE_POLYGON;
+        console.log('[deposit] Using native Polygon USDC (user has $' + _state.eoaNativeUsdc.toFixed(2) + ' native, $' + _state.eoaUsdce.toFixed(2) + ' USDC.e)');
+      }
+      var usdc = new window.ethers.Contract(usdcAddr, ['function transfer(address to, uint256 amount) returns (bool)'], signer);
       var amountWei = window.ethers.parseUnits(amount.toFixed(6), 6);
       var tx = await usdc.transfer(_state.proxy, amountWei);
 
