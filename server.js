@@ -30356,10 +30356,14 @@ app.get('/api/bridge/quote', async (req, res) => {
 
     // Attempt 2: retry with symbol-based lookup. Map hex addresses to canonical symbols.
     const hexToSymbol = {
-      '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087': 'USDC',  // Arbitrum native USDC
+      '0xaf88d065e77a8cce5a93f8f12f6dbce46c4e600a': 'USDC',  // Arbitrum native USDC
+      '0xaf88d065e7f2c4323cd1623f11b60d34aa1bb087': 'USDC',  // Arbitrum native USDC (alt casing)
+      '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 'USDC.e', // Arbitrum bridged USDC.e
       '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',  // Ethereum USDC
       '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC',  // Base native USDC
+      '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca': 'USDbC', // Base bridged USDbC
       '0x0b2c639c533813f4aa9d7837caf62653d097ff85': 'USDC',  // Optimism native USDC
+      '0x7f5c764cbc14f9669b88837ca1490cca17c31607': 'USDC.e', // Optimism bridged USDC.e
       '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 'USDC',  // BSC USDC
       '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'USDC.e' // Polygon bridged USDC.e
     };
