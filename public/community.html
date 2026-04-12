@@ -2111,12 +2111,14 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
   </div>
 
   <!-- Trading Record -->
-  <div id="tradingRecordSection" style="display:none;margin-bottom:40px">
+  <div id="tradingRecordSection" style="margin-bottom:40px">
     <div class="section-label">Trading Record</div>
     <!-- Stats bar -->
     <div id="tradeStatsBar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:16px"></div>
     <!-- Trade list -->
-    <div id="tradeList" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.01)"></div>
+    <div id="tradeList" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.01)">
+      <div style="padding:24px;text-align:center;color:#8888a0;font-size:13px">Loading trading record…</div>
+    </div>
   </div>
 
   <!-- Leaderboard -->
@@ -3477,255 +3479,85 @@ function toggleResolved() {
   document.getElementById('resolvedToggle').textContent = resolvedVisible ? '▼ hide' : '▶ show';
 }
 
-// ── TRADING RECORD ────────────────────────────────────────────
+// ── TRADING RECORD ─────────────────────────────────────────────────────────
+// Pulls live Polymarket positions for this profile's wallet, computes win
+// rate + profitability, and renders a full trading record section.
+/* old body removed */
+// ── TRADING RECORD (clean rewrite) ──────────────────────────────────────────
 async function loadTradingRecord() {
-  var eoa = window._creatorWallet;
+  var tradeList = document.getElementById('tradeList');
+  var statsBar = document.getElementById('tradeStatsBar');
 
-  // Try server lookup by creator ID
+  // 1. Find wallet address
+  var eoa = window._creatorWallet || null;
   if (!eoa && community && community.creator_id) {
-    try {
-      var wr = await fetch('/api/creator-wallet/' + encodeURIComponent(community.creator_id));
-      if (wr.ok) { var wd = await wr.json(); if (wd.eoa) eoa = wd.eoa.toLowerCase(); }
-    } catch(e) {}
+    try { var wr = await fetch('/api/creator-wallet/' + community.creator_id); if (wr.ok) { var wd = await wr.json(); eoa = wd.eoa || null; } } catch(e) {}
   }
-
-  // If viewer IS the creator, use their own wallet + save it to DB
-  if (!eoa && currentUser && community && currentUser.id === community.creator_id) {
-    eoa = localStorage.getItem('poly_eoa_address');
-    if (eoa) {
-      // Save to DB so future visitors can see it
-      try {
-        var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-        if (token) fetch('/api/user/wallets', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ polymarket_address: eoa }) }).catch(function(){});
-      } catch(e) {}
-    }
-  }
-
-  // Last resort for own profile
   if (!eoa) eoa = localStorage.getItem('poly_eoa_address');
-  if (!eoa) return;
+  if (!eoa) { if (tradeList) tradeList.innerHTML = '<div style="padding:24px;text-align:center;color:#8888a0;font-size:12px">No Polymarket wallet linked yet.</div>'; return; }
 
-  var section = document.getElementById('tradingRecordSection');
-  if (!section) return;
-  section.style.display = 'block';
+  // 2. Resolve proxy
+  var proxy = eoa;
+  try { var pr = await fetch('/api/proxy/deployed?address=' + encodeURIComponent(eoa)); if (pr.ok) { var pd = await pr.json(); if (pd.proxy) proxy = pd.proxy; } } catch(e) {}
 
+  // 3. Fetch positions from Polymarket (proxy address)
+  var positions = [];
   try {
-    // Fetch FULL trading history from /api/trader/:address/profile
-    // This endpoint pulls from Polymarket data API + computes all stats
-    var profileRes = await fetch('/api/trader/' + encodeURIComponent(eoa) + '/profile');
-    var profile = profileRes.ok ? await profileRes.json() : null;
-
-    // Build trades list from Polymarket positions
-    var trades = [];
-    var stats = {};
-
-    if (profile && profile.polymarket) {
-      var poly = profile.polymarket;
-      var allPositions = [].concat(poly.open_positions || [], poly.won_positions || []);
-
-      trades = allPositions.map(function(p) {
-        var size = parseFloat(p.shares || p.size) || 0;
-        var cost = parseFloat(p.cost_basis || p.initialValue) || 0;
-        var val = parseFloat(p.cash_value || p.currentValue) || 0;
-        var pnlVal = parseFloat(p.pnl || p.cashPnl) || (val - cost);
-        var pnlPct = cost > 0 ? (pnlVal / cost) * 100 : 0;
-        var curPrice = parseFloat(p.current_price || p.curPrice) || 0;
-        var avgPrice = cost > 0 && size > 0 ? cost / size : curPrice;
-        var isResolved = p.resolved || p.market_resolved || false;
-        var won = isResolved && pnlVal > 0;
-        return {
-          side: (p.side || p.outcome || 'YES').toUpperCase(),
-          market_question: p.question || p.title || '',
-          market_slug: p.slug || null,
-          icon: p.icon || null,
-          shares: size,
-          entry_price_cents: Math.round(avgPrice * 100),
-          current_price_cents: Math.round(curPrice * 100),
-          amount_usd: cost,
-          current_value: val,
-          pnl: pnlVal,
-          pnl_percent: pnlPct,
-          status: isResolved ? (won ? 'won' : 'lost') : 'open',
-          end_date: p.end_date || null,
-          platform: 'polymarket'
-        };
-      });
-
-      // Compute stats
-      var openArr = trades.filter(function(t) { return t.status === 'open'; });
-      var winsArr = trades.filter(function(t) { return t.status === 'won'; });
-      var lossArr = trades.filter(function(t) { return t.status === 'lost'; });
-      var resolvedCount = winsArr.length + lossArr.length;
-      var totalInv = trades.reduce(function(s, t) { return s + (parseFloat(t.amount_usd) || 0); }, 0);
-      var totalPnl = trades.reduce(function(s, t) { return s + (parseFloat(t.pnl) || 0); }, 0);
-      stats = {
-        total_trades: trades.length,
-        open_positions: openArr.length,
-        wins: winsArr.length,
-        losses: lossArr.length,
-        win_rate: resolvedCount > 0 ? Math.round((winsArr.length / resolvedCount) * 100) : null,
-        total_invested: totalInv,
-        total_pnl: totalPnl,
-        roi: totalInv > 0 ? (totalPnl / totalInv) * 100 : 0,
-        avg_trade_size: trades.length > 0 ? totalInv / trades.length : 0,
-        total_value: poly.open_value || 0,
-        realized_pnl: poly.realized_pnl || 0
-      };
-    }
-
-    // Also check local trades table
-    if (trades.length === 0) {
-      try {
-        var lr = await fetch('/api/trades/' + encodeURIComponent(eoa));
-        if (lr.ok) {
-          var localData = await lr.json();
-          trades = localData.trades || [];
-          stats = localData.stats || {};
-        }
-      } catch(e) {}
-    }
-
-    var chart = [];
-
-    if (trades.length === 0) {
-      var tradeList = document.getElementById('tradeList');
-      if (tradeList) tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center"><div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">No Trading Activity</div><div style="font-size:12px;color:#8888a0;line-height:1.6">Place a trade on any <a href="/alpha-live" style="color:#c9920d">market</a> to start building your track record.</div></div>';
-      return;
-    }
-
-    // ── Stats grid ──
-    var statsBar = document.getElementById('tradeStatsBar');
-    if (statsBar) {
-      var wr = stats.win_rate;
-      var wrColor = wr == null ? '#8888a0' : wr >= 60 ? '#00e68a' : wr >= 45 ? '#f59e0b' : '#ff4d6a';
-      var pnlColor = (stats.total_pnl || 0) >= 0 ? '#00e68a' : '#ff4d6a';
-      var roiColor = (stats.roi || 0) >= 0 ? '#00e68a' : '#ff4d6a';
-
-      function fmtDollar(v) { return v >= 1000 ? '$' + (v/1000).toFixed(1) + 'K' : '$' + v.toFixed(0); }
-
-      var items = [
-        { label: 'Win Rate', value: wr != null ? wr + '%' : '—', color: wrColor, sub: stats.wins + 'W · ' + stats.losses + 'L' },
-        { label: 'Total P&L', value: (stats.total_pnl >= 0 ? '+' : '') + fmtDollar(Math.abs(stats.total_pnl || 0)), color: pnlColor, sub: 'ROI ' + (stats.roi >= 0 ? '+' : '') + (stats.roi || 0).toFixed(1) + '%' },
-        { label: 'Trades', value: stats.total_trades, color: '#f0f0f5', sub: stats.open_positions + ' open' },
-        { label: 'Invested', value: fmtDollar(stats.total_invested || 0), color: '#f0f0f5', sub: 'Avg ' + fmtDollar(stats.avg_trade_size || 0) },
-        { label: 'Streak', value: stats.current_streak > 0 ? '🔥 ' + stats.current_streak : '—', color: stats.current_streak >= 3 ? '#00e68a' : '#f0f0f5', sub: 'Best: ' + (stats.best_streak || 0) },
-        { label: 'Avg Hold', value: stats.avg_hold_hours != null ? (stats.avg_hold_hours >= 24 ? Math.round(stats.avg_hold_hours / 24) + 'd' : stats.avg_hold_hours + 'h') : '—', color: '#8888a0', sub: stats.avg_entry_cents ? 'Avg entry ' + stats.avg_entry_cents + '¢' : '' }
-      ];
-
-      statsBar.innerHTML = items.map(function(s) {
-        return '<div style="padding:14px 10px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;text-align:center">' +
-          '<div style="font-family:var(--mono);font-size:20px;font-weight:800;color:' + s.color + '">' + s.value + '</div>' +
-          '<div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:.08em;margin-top:3px">' + s.label + '</div>' +
-          (s.sub ? '<div style="font-family:var(--mono);font-size:10px;color:#666;margin-top:2px">' + s.sub + '</div>' : '') +
-        '</div>';
-      }).join('');
-
-      // Biggest win callout
-      if (stats.biggest_win && stats.biggest_win.pnl > 0) {
-        var bw = stats.biggest_win;
-        var q = bw.question || ''; if (q.length > 50) q = q.slice(0,48) + '…';
-        statsBar.innerHTML += '<div style="grid-column:1/-1;padding:10px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:8px;display:flex;align-items:center;gap:8px">' +
-          '<span style="font-size:16px">🏆</span>' +
-          '<div style="flex:1;min-width:0"><div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:.08em">Best Trade</div>' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(q) + '</div></div>' +
-          '<div style="font-family:var(--mono);font-size:14px;font-weight:800;color:#00e68a">+$' + bw.pnl.toFixed(2) + '</div>' +
-        '</div>';
-      }
-    }
-
-    // ── P&L chart (30-day sparkline) ──
-    if (chart.length > 0) {
-      var cumPnl = 0;
-      var points = chart.map(function(d) { cumPnl += d.pnl; return cumPnl; });
-      var maxP = Math.max.apply(null, points.concat([1]));
-      var minP = Math.min.apply(null, points.concat([-1]));
-      var range = maxP - minP || 1;
-      var w = 100 / points.length;
-      var svgH = 60;
-      var pathParts = points.map(function(p, i) {
-        var x = (i / (points.length - 1)) * 100;
-        var y = svgH - ((p - minP) / range) * (svgH - 4) - 2;
-        return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-      });
-      var lineColor = cumPnl >= 0 ? '#00e68a' : '#ff4d6a';
-      var fillColor = cumPnl >= 0 ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
-      var fillPath = pathParts.join(' ') + ' L100,' + svgH + ' L0,' + svgH + ' Z';
-
-      var chartHtml = '<div style="margin-bottom:16px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-          '<span style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:.08em">30-Day P&L</span>' +
-          '<span style="font-family:var(--mono);font-size:13px;font-weight:800;color:' + lineColor + '">' + (cumPnl >= 0 ? '+' : '') + '$' + cumPnl.toFixed(2) + '</span>' +
-        '</div>' +
-        '<svg viewBox="0 0 100 ' + svgH + '" preserveAspectRatio="none" style="width:100%;height:' + svgH + 'px">' +
-          '<path d="' + fillPath + '" fill="' + fillColor + '"/>' +
-          '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + lineColor + '" stroke-width="1.5" vector-effect="non-scaling-stroke"/>' +
-        '</svg>' +
-      '</div>';
-
-      var tradeList = document.getElementById('tradeList');
-      if (tradeList) tradeList.insertAdjacentHTML('beforebegin', chartHtml);
-    }
-
-    // ── Trade list ──
-    var tradeList = document.getElementById('tradeList');
-    if (tradeList && trades.length > 0) {
-      var rows = trades.map(function(t) {
-        var sideColor = t.side === 'YES' ? '#00e68a' : '#ff4d6a';
-        var sideBg = t.side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
-        var statusHtml = '';
-        if (t.status === 'won') statusHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(0,230,138,0.12);color:#00e68a">WON</span>';
-        else if (t.status === 'lost') statusHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(255,77,106,0.12);color:#ff4d6a">LOST</span>';
-        else if (t.status === 'closed') statusHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);color:#8888a0">SOLD</span>';
-        else statusHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(77,159,255,0.12);color:#4d9fff">OPEN</span>';
-
-        var question = (t.market_question || 'Unknown');
-        if (question.length > 55) question = question.slice(0, 53) + '…';
-        var ago = _timeAgo(t.created_at);
-        var href = t.market_slug ? '/market/' + t.market_slug : '#';
-        var entryC = t.entry_price_cents || '—';
-        var pnlHtml = '';
-        if (t.pnl != null && t.status !== 'open') {
-          var pnlNum = parseFloat(t.pnl);
-          pnlHtml = '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (pnlNum >= 0 ? '#00e68a' : '#ff4d6a') + '">' + (pnlNum >= 0 ? '+' : '') + '$' + pnlNum.toFixed(2) + '</span>';
-        }
-
-        // Hold time
-        var holdHtml = '';
-        if (t.created_at && t.closed_at) {
-          var holdMs = new Date(t.closed_at) - new Date(t.created_at);
-          var holdH = Math.round(holdMs / 3600000);
-          holdHtml = holdH >= 24 ? Math.round(holdH / 24) + 'd' : holdH + 'h';
-        }
-
-        return '<a href="' + href + '" style="display:grid;grid-template-columns:1fr auto auto auto;gap:6px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.03);text-decoration:none;color:var(--text);transition:background .1s;align-items:center" onmouseover="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseout="this.style.background=\'\'">' +
-          '<div style="min-width:0">' +
-            '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(question) + '</div>' +
-            '<div style="display:flex;align-items:center;gap:4px;margin-top:3px;flex-wrap:wrap">' +
-              '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + '">' + t.side + '</span>' +
-              '<span style="font-family:var(--mono);font-size:10px;color:#8888a0">' + (t.shares ? parseFloat(t.shares).toFixed(1) + ' sh' : '') + '</span>' +
-              '<span style="font-family:var(--mono);font-size:10px;color:#8888a0">' + ago + '</span>' +
-              (holdHtml ? '<span style="font-family:var(--mono);font-size:10px;color:#666">held ' + holdHtml + '</span>' : '') +
-            '</div>' +
-          '</div>' +
-          '<div style="text-align:right"><div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">' + entryC + '¢</div>' +
-            (t.exit_price != null && t.status !== 'open' ? '<div style="font-family:var(--mono);font-size:10px;color:#8888a0">→ ' + Math.round(parseFloat(t.exit_price) * 100) + '¢</div>' : '') +
-          '</div>' +
-          '<div style="text-align:right"><div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">$' + (parseFloat(t.amount_usd) || 0).toFixed(0) + '</div>' +
-            pnlHtml +
-          '</div>' +
-          '<div style="min-width:44px;text-align:right">' + statusHtml + '</div>' +
-        '</a>';
-      }).join('');
-
-      tradeList.innerHTML = rows;
-    } else if (tradeList) {
-      tradeList.innerHTML = '<div style="padding:32px;text-align:center;color:#8888a0;font-size:13px">' +
-        '<div style="font-size:32px;margin-bottom:8px;opacity:0.4">📊</div>' +
-        'No trades recorded yet. Place a trade on any <a href="/alpha-live" style="color:#c9920d">market</a> to start building your track record.</div>';
-    }
-  } catch (e) {
-    console.warn('[trading-record] load failed:', e.message);
+    var r = await fetch('/api/polymarket/positions/' + encodeURIComponent(proxy));
+    if (r.ok) { var d = await r.json(); positions = d.positions || []; }
+  } catch(e) {}
+  // Also try EOA if proxy returned nothing
+  if (!positions.length && proxy !== eoa) {
+    try { var r2 = await fetch('/api/polymarket/positions/' + encodeURIComponent(eoa)); if (r2.ok) { var d2 = await r2.json(); positions = d2.positions || []; } } catch(e) {}
   }
+
+  if (!positions.length) { if (tradeList) tradeList.innerHTML = '<div style="padding:24px;text-align:center;color:#8888a0;font-size:12px">No Polymarket positions found for this wallet.</div>'; return; }
+
+  // 4. Map to trade objects
+  var trades = positions.map(function(p) {
+    var size = parseFloat(p.shares || p.size) || 0;
+    var cost = parseFloat(p.cost_basis || p.initialValue) || 0;
+    var val = parseFloat(p.cash_value || p.currentValue) || 0;
+    var pnl = parseFloat(p.pnl || p.cashPnl) || (val - cost);
+    var pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+    var curPrice = parseFloat(p.current_price || p.curPrice) || 0;
+    var avgPrice = size > 0 && cost > 0 ? cost / size : curPrice;
+    return { side: (p.side || p.outcome || 'YES').toUpperCase(), question: p.question || p.title || '', icon: p.icon || null, shares: size, avgPrice: avgPrice, curPrice: curPrice, cost: cost, value: val, pnl: pnl, pnlPct: pnlPct };
+  });
+
+  // 5. Compute stats
+  var profitable = trades.filter(function(t) { return t.pnl > 0; });
+  var losing = trades.filter(function(t) { return t.pnl < 0; });
+  var totalCost = trades.reduce(function(s,t) { return s + t.cost; }, 0);
+  var totalPnl = trades.reduce(function(s,t) { return s + t.pnl; }, 0);
+  var totalVal = trades.reduce(function(s,t) { return s + t.value; }, 0);
+  var winRate = trades.length > 0 ? Math.round((profitable.length / trades.length) * 100) : 0;
+  var roi = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+
+  // 6. Render stats
+  function fD(v) { return Math.abs(v) >= 1000 ? '$' + (v/1000).toFixed(1) + 'K' : '$' + Math.abs(v).toFixed(0); }
+  var wrColor = winRate >= 55 ? '#00e68a' : winRate >= 40 ? '#f59e0b' : '#ff4d6a';
+  var pnlColor = totalPnl >= 0 ? '#00e68a' : '#ff4d6a';
+
+  if (statsBar) statsBar.innerHTML = [
+    { l:'Positions', v:trades.length, c:'#f0f0f5', s:profitable.length+' profitable' },
+    { l:'Win Rate', v:winRate+'%', c:wrColor, s:profitable.length+'W · '+losing.length+'L' },
+    { l:'Total P&L', v:(totalPnl>=0?'+':'-')+fD(Math.abs(totalPnl)), c:pnlColor, s:'ROI '+(roi>=0?'+':'')+roi.toFixed(1)+'%' },
+    { l:'Invested', v:fD(totalCost), c:'#f0f0f5', s:'Value: '+fD(totalVal) }
+  ].map(function(s) {
+    return '<div style="padding:16px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;text-align:center"><div style="font-family:var(--mono);font-size:22px;font-weight:800;color:'+s.c+';line-height:1">'+s.v+'</div><div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:.08em;margin-top:6px">'+s.l+'</div><div style="font-family:var(--mono);font-size:10px;color:#555;margin-top:3px">'+s.s+'</div></div>';
+  }).join('');
+
+  // 7. Render trade list (sorted by P&L desc)
+  trades.sort(function(a,b) { return b.pnl - a.pnl; });
+  if (tradeList) tradeList.innerHTML = '<div style="padding:10px 16px;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8888a0;border-bottom:1px solid var(--border)">'+trades.length+' Positions · Sorted by P&L</div>' + trades.map(function(t) {
+    var sc = t.side === 'YES' ? '#00e68a' : '#ff4d6a';
+    var sb = t.side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
+    var pc = t.pnl >= 0 ? '#00e68a' : '#ff4d6a';
+    var q = t.question.length > 50 ? t.question.slice(0,48)+'…' : t.question;
+    var ico = t.icon ? '<img src="'+_esc(t.icon)+'" style="width:24px;height:24px;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'"/>' : '';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04)">'+ico+'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(q)+'</div><div style="display:flex;gap:4px;margin-top:3px"><span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:'+sb+';color:'+sc+'">'+t.side+'</span><span style="font-family:var(--mono);font-size:10px;color:#8888a0">'+t.shares.toFixed(1)+' sh @ '+Math.round(t.avgPrice*100)+'¢</span></div></div><div style="text-align:right;flex-shrink:0"><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)">$'+t.cost.toFixed(0)+'</div><div style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+pc+'">'+(t.pnl>=0?'+':'')+t.pnl.toFixed(2)+' ('+( t.pnlPct>=0?'+':'')+t.pnlPct.toFixed(0)+'%)</div></div></div>';
+  }).join('');
 }
 
 async function backfillTrades() {
