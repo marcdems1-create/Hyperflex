@@ -11471,6 +11471,73 @@ function showToast(msg, type = 'success', duration = 3000) {
   t._toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+// ── Trade success celebration ──────────────────────────────────────────────
+function showTradeCelebration({ side, shares, price, amount, question, pnl }) {
+  // Remove any existing celebration
+  var old = document.getElementById('tradeCelebration');
+  if (old) old.remove();
+
+  var isSell = side === 'SELL';
+  var emoji = isSell ? '💰' : '🚀';
+  var verb = isSell ? 'Sold' : 'Bought';
+  var color = isSell ? '#00e68a' : '#4d9fff';
+
+  // Build P&L line for sells
+  var pnlHtml = '';
+  if (isSell && pnl != null) {
+    var pnlSign = pnl >= 0 ? '+' : '';
+    var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+    pnlHtml = '<div style="margin-top:8px;font-size:18px;font-weight:800;color:' + pnlColor + '">' +
+      pnlSign + '$' + Math.abs(pnl).toFixed(2) + ' P&L</div>';
+  }
+
+  var overlay = document.createElement('div');
+  overlay.id = 'tradeCelebration';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);animation:celFadeIn .3s ease';
+  overlay.innerHTML = '' +
+    '<style>' +
+    '@keyframes celFadeIn{from{opacity:0}to{opacity:1}}' +
+    '@keyframes celPop{0%{transform:scale(0.5);opacity:0}50%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}' +
+    '@keyframes celConfetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(120vh) rotate(720deg);opacity:0}}' +
+    '</style>' +
+    '<div id="celConfettiBox"></div>' +
+    '<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:1.5px solid ' + color + '33;border-radius:20px;padding:40px 36px 32px;max-width:380px;width:90%;text-align:center;animation:celPop .4s ease;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.6)">' +
+      '<div style="font-size:52px;margin-bottom:8px">' + emoji + '</div>' +
+      '<div style="font-size:22px;font-weight:800;color:#f0f0f5;margin-bottom:6px">' + verb + '!</div>' +
+      '<div style="font-size:13px;color:#aaa;line-height:1.5;margin-bottom:14px;max-height:40px;overflow:hidden;text-overflow:ellipsis">' +
+        (question || '').slice(0, 80) + (question && question.length > 80 ? '…' : '') +
+      '</div>' +
+      '<div style="display:flex;justify-content:center;gap:20px;margin-bottom:6px">' +
+        '<div><div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Shares</div><div style="font-size:20px;font-weight:700;color:#f0f0f5">' + shares.toFixed(2) + '</div></div>' +
+        '<div><div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Price</div><div style="font-size:20px;font-weight:700;color:#f0f0f5">' + (price * 100).toFixed(1) + '¢</div></div>' +
+        '<div><div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Total</div><div style="font-size:20px;font-weight:700;color:' + color + '">$' + amount.toFixed(2) + '</div></div>' +
+      '</div>' +
+      pnlHtml +
+      '<button onclick="this.closest(\'#tradeCelebration\').remove()" style="margin-top:20px;padding:12px 32px;background:' + color + ';color:#000;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--sans)">Done</button>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+  // Spawn confetti
+  var confettiBox = document.getElementById('celConfettiBox');
+  var colors = ['#c9920d', '#00e68a', '#4d9fff', '#ff4d6a', '#a855f7', '#f59e0b', '#e74c3c', '#2ecc71'];
+  for (var ci = 0; ci < 60; ci++) {
+    var c = document.createElement('div');
+    var sz = 6 + Math.random() * 6;
+    var left = Math.random() * 100;
+    var delay = Math.random() * 0.8;
+    var dur = 1.5 + Math.random() * 2;
+    c.style.cssText = 'position:fixed;top:-10px;left:' + left + '%;width:' + sz + 'px;height:' + (sz * 0.6) + 'px;' +
+      'background:' + colors[ci % colors.length] + ';border-radius:2px;z-index:100001;' +
+      'animation:celConfetti ' + dur + 's ease-in ' + delay + 's forwards;pointer-events:none';
+    confettiBox.appendChild(c);
+  }
+
+  // Auto-dismiss after 6s
+  setTimeout(function() { var el = document.getElementById('tradeCelebration'); if (el) el.remove(); }, 6000);
+}
+
 // AI Content Scanner
 let ytSuggestedMarkets = [];
 let ytScanType = 'youtube';
@@ -19279,10 +19346,31 @@ async function confirmTrade() {
     }
 
     _confirmTradeRetryCount = 0; // reset on success
-    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + finalShares.toFixed(2) + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
     console.log('[qt-trade] Order success:', data);
+
+    // Calculate P&L for sells (estimated from cost basis if available)
+    var tradePnl = null;
+    if (clobSide === 'SELL' && _tradeModalData) {
+      var costBasis = _tradeModalData.avg_price || _tradeModalData.avgPrice || _tradeModalData.cost_basis || null;
+      if (costBasis && costBasis > 0) {
+        tradePnl = (roundedPrice - costBasis) * finalShares;
+      }
+    }
+
+    // Close the trade modal first, then show celebration
     closeTradeModal();
+    showTradeCelebration({
+      side: clobSide,
+      shares: finalShares,
+      price: roundedPrice,
+      amount: amount,
+      question: _tradeModalData?.question || _tradeModalData?.title || '',
+      pnl: tradePnl
+    });
+
+    // Auto-refresh positions at 2s and 8s so dashboard updates without manual refresh
     setTimeout(() => loadPolymarketPositions(true), 2000);
+    setTimeout(() => loadPolymarketPositions(true), 8000);
 
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
