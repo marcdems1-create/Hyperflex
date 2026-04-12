@@ -19083,8 +19083,8 @@ async function confirmTrade() {
       console.warn('[qt-trade] builder-sign error:', bsErr.message);
     }
 
-    // PRIMARY: Railway server proxy — US-based IP, never geo-blocked
-    const proxyHeaders = {
+    // Auth headers for CLOB
+    const clobHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'POLY_ADDRESS': eoaAddress,
@@ -19094,35 +19094,85 @@ async function confirmTrade() {
       'POLY_SIGNATURE': hmacSig
     };
     for (const bk in builderHeaders) {
-      if (builderHeaders.hasOwnProperty(bk)) proxyHeaders[bk] = builderHeaders[bk];
+      if (builderHeaders.hasOwnProperty(bk)) clobHeaders[bk] = builderHeaders[bk];
     }
 
-    console.log('[qt-trade] Submitting via server proxy (primary)');
+    // Order of attempts:
+    // 1. Direct CLOB — works if user's IP is in an allowed region
+    // 2. CF Worker — runs at nearest Cloudflare edge to user
+    // 3. Railway server proxy — last resort (US IP, may be geo-blocked)
+    console.log('[qt-trade] Submitting via direct CLOB (primary)');
     let res, data;
     try {
-      res = await fetch('/api/polymarket/order', {
+      res = await fetch('https://clob.polymarket.com/order', {
         method: 'POST',
-        headers: proxyHeaders,
+        headers: clobHeaders,
         body: requestBody
       });
       data = await res.json().catch(() => ({}));
-      console.log('[qt-trade] Server proxy:', res.status, JSON.stringify(data).slice(0, 300));
-    } catch (serverErr) {
-      // Server down — fall back to CF Worker
-      console.warn('[qt-trade] Server proxy failed:', serverErr.message, '— trying CF Worker');
+      console.log('[qt-trade] Direct CLOB:', res.status, JSON.stringify(data).slice(0, 200));
+
+      // If geo-blocked, try CF Worker
+      const geoBlocked = !res.ok && JSON.stringify(data).toLowerCase().includes('restricted');
+      if (geoBlocked) {
+        console.warn('[qt-trade] Direct CLOB geo-blocked — trying CF Worker');
+        try {
+          res = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
+            method: 'POST',
+            headers: clobHeaders,
+            body: requestBody
+          });
+          data = await res.json().catch(() => ({}));
+          console.log('[qt-trade] CF Worker:', res.status, JSON.stringify(data).slice(0, 200));
+
+          // If CF Worker also geo-blocked, try Railway
+          const cfGeoBlocked = !res.ok && JSON.stringify(data).toLowerCase().includes('restricted');
+          if (cfGeoBlocked) {
+            console.warn('[qt-trade] CF Worker geo-blocked — trying Railway proxy');
+            res = await fetch('/api/polymarket/order', {
+              method: 'POST',
+              headers: clobHeaders,
+              body: requestBody
+            });
+            data = await res.json().catch(() => ({}));
+            console.log('[qt-trade] Railway proxy:', res.status, JSON.stringify(data).slice(0, 200));
+          }
+        } catch (cfErr) {
+          console.warn('[qt-trade] CF Worker failed:', cfErr.message, '— trying Railway');
+          res = await fetch('/api/polymarket/order', {
+            method: 'POST',
+            headers: clobHeaders,
+            body: requestBody
+          });
+          data = await res.json().catch(() => ({}));
+        }
+      }
+    } catch (directErr) {
+      // Direct CLOB unreachable — try CF Worker then Railway
+      console.warn('[qt-trade] Direct CLOB failed:', directErr.message, '— trying CF Worker');
       try {
         res = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
           method: 'POST',
-          headers: proxyHeaders,
+          headers: clobHeaders,
           body: requestBody
         });
         data = await res.json().catch(() => ({}));
       } catch (cfErr) {
-        errEl.textContent = 'Could not reach Polymarket — check your connection and try again.';
-        errEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm Trade';
-        return;
+        console.warn('[qt-trade] CF Worker failed:', cfErr.message, '— trying Railway');
+        try {
+          res = await fetch('/api/polymarket/order', {
+            method: 'POST',
+            headers: clobHeaders,
+            body: requestBody
+          });
+          data = await res.json().catch(() => ({}));
+        } catch (railErr) {
+          errEl.textContent = 'Could not reach Polymarket — check your connection and try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Confirm Trade';
+          return;
+        }
       }
     }
 
