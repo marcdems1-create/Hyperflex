@@ -851,6 +851,12 @@
     var cfg = BRIDGE_CHAINS[chainId];
     var txReq = _state.bridgeQuote.transactionRequest;
 
+    if (!cfg) {
+      var overlay0 = document.getElementById('hfxDepositOverlay');
+      if (overlay0) overlay0.innerHTML = _frame({ error: 'Unsupported source chain (ID: ' + chainId + '). Please select Ethereum, Arbitrum, Base, Optimism, or BSC.' });
+      return;
+    }
+
     _state.bridgeStep = 'executing';
     _state.bridgePollMessage = 'Switching to ' + cfg.name + '…';
     _state.bridgeSubMessage = 'Check MetaMask';

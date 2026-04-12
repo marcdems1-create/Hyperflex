@@ -30340,6 +30340,7 @@ app.get('/api/bridge/quote', async (req, res) => {
       fromAmount: String(fromAmount),
       slippage: String(slippage || '0.005'),
       integrator: 'hyperflex',
+      fee: '0.005',           // 0.5% integrator fee — earned on every bridge/swap
       order: 'FASTEST'
     };
 
