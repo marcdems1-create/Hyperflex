@@ -770,8 +770,26 @@
     throw new Error('All RPCs failed');
   }
 
+  // Raw eth_call balance read via fetch — no ethers dependency, no CORS wrapper
+  // balanceOf(address) selector = 0x70a08231
+  function _rawBalanceCall(rpcUrl, tokenAddr, ownerAddr) {
+    var padded = ownerAddr.toLowerCase().replace('0x', '');
+    while (padded.length < 64) padded = '0' + padded;
+    var data = '0x70a08231' + padded;
+    return fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddr, data: data }, 'latest'], id: 1 })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (j.result && j.result !== '0x' && j.result !== '0x0') {
+        return parseInt(j.result, 16) / 1e6;
+      }
+      return 0;
+    });
+  }
+
   // Set source chain + fetch USDC balance (native + bridged USDC.e)
-  // Three-tier fetch: server → MetaMask eth_call → browser JsonRpcProvider
+  // Two-tier: server endpoint → direct browser fetch to RPCs
   async function _setBridgeChain(chainId) {
     if (!_state) return;
     _state.bridgeFromChain = chainId;
@@ -785,18 +803,7 @@
     var nativeBal = 0, bridgedBal = 0;
     var fetched = false;
 
-    // Helper: read ERC-20 balance via raw eth_call
-    // balanceOf(address) = 0x70a08231 + left-padded address
-    var paddedAddr = _state.eoa.toLowerCase().replace('0x', '');
-    while (paddedAddr.length < 64) paddedAddr = '0' + paddedAddr;
-    var calldata = '0x70a08231' + paddedAddr;
-
-    function parseBalResult(hex) {
-      if (!hex || hex === '0x' || hex === '0x0') return 0;
-      return parseInt(hex, 16) / 1e6;
-    }
-
-    // ── Tier 1: Server-side balance endpoint (most reliable, no CORS) ──
+    // ── Tier 1: Server-side /api/bridge/balance (no CORS, reliable) ──
     try {
       var balRes = await fetch('/api/bridge/balance?address=' + encodeURIComponent(_state.eoa) + '&chainId=' + chainId);
       if (balRes.ok) {
@@ -805,66 +812,28 @@
         nativeBal = balData.native || 0;
         bridgedBal = balData.bridged || 0;
         fetched = true;
+      } else {
+        console.warn('[bridge] server balance returned', balRes.status);
       }
     } catch (e) { console.warn('[bridge] server balance failed:', e.message); }
 
-    // ── Tier 2: MetaMask eth_call (works if user's wallet has the chain) ──
-    if (!fetched && window.ethereum) {
-      try {
-        // Temporarily switch MetaMask to source chain to read balance
-        var prevChain = await window.ethereum.request({ method: 'eth_chainId' });
-        var needSwitch = prevChain !== cfg.hex;
-        if (needSwitch) {
-          try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hex }] }); } catch (sw) {}
-        }
-
-        // Read native USDC
-        try {
-          var nativeRes = await window.ethereum.request({
-            method: 'eth_call',
-            params: [{ to: cfg.usdc, data: calldata }, 'latest']
-          });
-          nativeBal = parseBalResult(nativeRes);
-        } catch (e2) { console.warn('[bridge] MetaMask native USDC call failed:', e2.message); }
-
-        // Read USDC.e if available
-        if (cfg.usdce) {
-          try {
-            var bridgedRes = await window.ethereum.request({
-              method: 'eth_call',
-              params: [{ to: cfg.usdce, data: calldata }, 'latest']
-            });
-            bridgedBal = parseBalResult(bridgedRes);
-          } catch (e3) { console.warn('[bridge] MetaMask USDC.e call failed:', e3.message); }
-        }
-
-        // Switch back to Polygon so trading isn't disrupted
-        if (needSwitch) {
-          try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); } catch (sw2) {}
-        }
-
-        console.log('[bridge]', cfg.name, 'MetaMask balance: native=', nativeBal, 'bridged=', bridgedBal);
-        fetched = (nativeBal > 0 || bridgedBal > 0);
-      } catch (e4) { console.warn('[bridge] MetaMask balance read failed:', e4.message); }
-    }
-
-    // ── Tier 3: Browser JsonRpcProvider (may be CORS-blocked) ──
+    // ── Tier 2: Direct fetch to public RPCs (try each until one works) ──
     if (!fetched) {
-      try {
-        var provider = await _getChainProvider(cfg.rpcs);
-        var abi = ['function balanceOf(address) view returns (uint256)'];
+      for (var ri = 0; ri < cfg.rpcs.length && !fetched; ri++) {
         try {
-          var nativeRaw = await (new window.ethers.Contract(cfg.usdc, abi, provider)).balanceOf(_state.eoa);
-          nativeBal = parseFloat(window.ethers.formatUnits(nativeRaw, 6));
-        } catch (e5) {}
-        if (cfg.usdce) {
-          try {
-            var bridgedRaw = await (new window.ethers.Contract(cfg.usdce, abi, provider)).balanceOf(_state.eoa);
-            bridgedBal = parseFloat(window.ethers.formatUnits(bridgedRaw, 6));
-          } catch (e6) {}
+          var results = await Promise.all([
+            _rawBalanceCall(cfg.rpcs[ri], cfg.usdc, _state.eoa).catch(function() { return 0; }),
+            cfg.usdce ? _rawBalanceCall(cfg.rpcs[ri], cfg.usdce, _state.eoa).catch(function() { return 0; }) : Promise.resolve(0)
+          ]);
+          nativeBal = results[0];
+          bridgedBal = results[1];
+          if (nativeBal > 0 || bridgedBal > 0) fetched = true;
+          console.log('[bridge]', cfg.name, 'RPC', cfg.rpcs[ri], 'native=', nativeBal, 'bridged=', bridgedBal);
+          fetched = true; // even 0 balance from a successful RPC call is valid
+        } catch (rpcErr) {
+          console.warn('[bridge] RPC', cfg.rpcs[ri], 'failed:', rpcErr.message);
         }
-        console.log('[bridge]', cfg.name, 'browser RPC: native=', nativeBal, 'bridged=', bridgedBal);
-      } catch (e7) { console.warn('[bridge] browser RPC also failed:', e7.message); }
+      }
     }
 
     _state.bridgeSourceBalance = nativeBal + bridgedBal;

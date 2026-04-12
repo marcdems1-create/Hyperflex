@@ -719,8 +719,8 @@ app.get('/', (req, res) => {
 
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
-    // Prevent caching of HTML files so users always get latest version
-    if (filePath.endsWith('.html')) {
+    // Prevent caching of HTML and JS files so users always get latest version
+    if (filePath.endsWith('.html') || filePath.endsWith('.js')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   }
