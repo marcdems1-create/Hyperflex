@@ -19083,7 +19083,8 @@ async function confirmTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK'
+      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK',
+      deferExec: false
     });
 
     // Route through Cloudflare Worker edge proxy to avoid geo-blocking.

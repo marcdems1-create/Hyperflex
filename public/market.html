@@ -3385,19 +3385,28 @@ async function executeTrade() {
             }
           }
           if (fillPrice == null) {
-            showTradeStatus('Not enough orderbook depth to fully fill this size — try a smaller amount or use a Limit order', 'error');
+            var totalDepth = levels.reduce(function(s, l) { return s + parseFloat(l.size); }, 0);
+            showTradeStatus('Not enough ' + (clobSide === 'SELL' ? 'bid' : 'ask') + ' liquidity (available: ' + totalDepth.toFixed(1) + ') — try a smaller amount or use a Limit order', 'error');
             cta.disabled = false; updateCtaButton();
             return;
           }
-          // Round UP to tick — paying slightly more than the walk price ensures FOK fills
-          var bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize;
+          // Direction-aware rounding + 1 tick slippage buffer:
+          // SELL: round DOWN then subtract 1 tick (accept worse fills)
+          // BUY: round UP then add 1 tick (accept worse fills)
+          var bumped;
+          if (clobSide === 'SELL') {
+            bumped = Math.floor(fillPrice / tickSize + 1e-9) * tickSize - tickSize;
+          } else {
+            bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize + tickSize;
+          }
           if (bumped <= 0) bumped = tickSize;
           if (bumped >= 1) bumped = 1 - tickSize;
           var newClobPrice = parseFloat(bumped.toFixed(roundConfig.price));
           if (newClobPrice !== clobPrice) {
-            console.log('[trade] Market price walk: user entered ' + (clobPrice * 100).toFixed(1) + '¢, book needs ' + (newClobPrice * 100).toFixed(1) + '¢ for full fill');
+            console.log('[trade] Book walk: fill @ ' + (fillPrice * 100).toFixed(1) + '¢ → limit ' + (newClobPrice * 100).toFixed(1) + '¢ (1 tick slippage)');
             clobPrice = newClobPrice;
-            shares = amount / clobPrice;
+            // Do NOT recalculate shares here — keep the original share count
+            // that the book walk validated. Only the limit price changes.
           }
         } else {
           console.warn('[trade] /book fetch returned ' + bookRes.status + ', falling back to user-entered limit price');
@@ -3432,13 +3441,20 @@ async function executeTrade() {
       }
     } else {
       sideInt = 1;
-      // SELL: maker = shares (rounded down), taker = maker × price
-      rawMakerAmt = roundDown(shares, roundConfig.size);
-      rawTakerAmt = rawMakerAmt * rawPrice;
-      if (decimalPlaces(rawTakerAmt) > roundConfig.amount) {
-        rawTakerAmt = roundUp(rawTakerAmt, roundConfig.amount + 4);
+      if (isMarketOrder) {
+        // Market SELL (FOK): CLOB requires makerAmount (shares) ≤ 4 decimals,
+        // takerAmount (USDC) ≤ 2 decimals — hard-coded, NOT tick-driven.
+        rawMakerAmt = roundDown(shares, 4);
+        rawTakerAmt = roundDown(rawMakerAmt * rawPrice, 2);
+      } else {
+        // Limit SELL: maker = shares (rounded down), taker = maker × price
+        rawMakerAmt = roundDown(shares, roundConfig.size);
+        rawTakerAmt = rawMakerAmt * rawPrice;
         if (decimalPlaces(rawTakerAmt) > roundConfig.amount) {
-          rawTakerAmt = roundDown(rawTakerAmt, roundConfig.amount);
+          rawTakerAmt = roundUp(rawTakerAmt, roundConfig.amount + 4);
+          if (decimalPlaces(rawTakerAmt) > roundConfig.amount) {
+            rawTakerAmt = roundDown(rawTakerAmt, roundConfig.amount);
+          }
         }
       }
     }
