@@ -30383,26 +30383,55 @@ app.get('/api/bridge/quote', async (req, res) => {
       }
       const err2 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
       console.warn('[bridge/quote] attempt 2 failed (symbol):', err2);
+
+      // Attempt 2b: if fromSym was 'USDC.e' or 'USDbC', retry with plain 'USDC'
+      // LI.FI often routes bridged variants under the canonical 'USDC' symbol
+      if (fromSym === 'USDC.e' || fromSym === 'USDbC') {
+        const attempt2b = new URLSearchParams(Object.assign({}, baseParams, {
+          fromToken: 'USDC',
+          toToken: toSym === 'USDC.e' ? 'USDC' : toSym
+        }));
+        result = await _lifiQuote(attempt2b);
+        if (result.ok) {
+          console.log('[bridge/quote] attempt 2b (USDC.e→USDC symbol) succeeded');
+          return res.json(result.data);
+        }
+        console.warn('[bridge/quote] attempt 2b failed:', (result.data && result.data.message) || result.status);
+      }
     }
 
-    // Attempt 3: retry with USDC → USDC (same symbol for both, since bridged USDC.e
-    // on Polygon may not be in LI.FI's deny-list-safe list anymore). LI.FI's router
-    // will pick whichever USDC variant on Polygon it can route to.
+    // Attempt 3: use USDC symbol for fromToken but keep explicit USDC.e hex for toToken.
+    // This ensures we always receive Polygon USDC.e (what Polymarket's CTF Exchange needs),
+    // not native Polygon USDC which is a different contract.
+    const POLYGON_USDCE = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     const attempt3 = new URLSearchParams(Object.assign({}, baseParams, {
       fromToken: 'USDC',
-      toToken: 'USDC'
+      toToken: POLYGON_USDCE
     }));
     result = await _lifiQuote(attempt3);
     if (result.ok) {
-      console.log('[bridge/quote] attempt 3 (USDC → USDC) succeeded — note: toToken may be native Polygon USDC, not USDC.e');
+      console.log('[bridge/quote] attempt 3 (USDC → USDC.e hex) succeeded');
       return res.json(result.data);
     }
     const err3 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
-    console.warn('[bridge/quote] all attempts failed:', err1, '|', err3);
+    console.warn('[bridge/quote] attempt 3 failed:', err3);
+
+    // Attempt 4: both symbols as USDC (last resort — may deliver native Polygon USDC)
+    const attempt4 = new URLSearchParams(Object.assign({}, baseParams, {
+      fromToken: 'USDC',
+      toToken: 'USDC'
+    }));
+    result = await _lifiQuote(attempt4);
+    if (result.ok) {
+      console.log('[bridge/quote] attempt 4 (USDC → USDC symbols) succeeded — WARNING: may deliver native Polygon USDC, not USDC.e');
+      return res.json(result.data);
+    }
+    const err4 = (result.data && (result.data.message || result.data.error)) || ('LI.FI ' + result.status);
+    console.warn('[bridge/quote] all attempts failed:', err1, '|', err3, '|', err4);
     return res.status(result.status || 502).json({
       error: err1,
-      detail: 'Tried hex addresses, symbol lookup, and USDC→USDC — all rejected by LI.FI. Fall back to external Jumper link.',
-      attempts: [err1, err3]
+      detail: 'Tried hex addresses, symbol lookup, USDC.e hex, and USDC→USDC — all rejected by LI.FI. Fall back to external Jumper link.',
+      attempts: [err1, err3, err4]
     });
   } catch (err) {
     console.error('[bridge/quote]', err.message);

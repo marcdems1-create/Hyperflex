@@ -950,12 +950,54 @@
       var provider = new window.ethers.BrowserProvider(window.ethereum);
       var signer = await provider.getSigner();
 
-      _state.bridgePollMessage = 'Sign in MetaMask…';
-      _state.bridgeSubMessage = 'Your wallet will ask to approve the bridge transaction';
+      // ── ERC-20 approval check ──
+      // LI.FI routes require the router contract to spend the user's USDC.
+      // If the quote includes an approvalAddress, check allowance and approve if needed.
+      var approvalAddr = (_state.bridgeQuote.estimate && _state.bridgeQuote.estimate.approvalAddress) || txReq.to;
+      var fromTokenAddr = (_state.bridgeQuote.action && _state.bridgeQuote.action.fromToken && _state.bridgeQuote.action.fromToken.address) || (_state.bridgeActiveToken || cfg.usdc);
+
+      if (approvalAddr && fromTokenAddr) {
+        try {
+          var erc20Abi = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)'];
+          var tokenContract = new window.ethers.Contract(fromTokenAddr, erc20Abi, signer);
+          var signerAddr = await signer.getAddress();
+          var currentAllowance = await tokenContract.allowance(signerAddr, approvalAddr);
+          var neededAmount = window.ethers.parseUnits(String(_state.bridgeAmount), 6);
+
+          if (currentAllowance < neededAmount) {
+            _state.bridgePollMessage = 'Approve USDC spending…';
+            _state.bridgeSubMessage = 'MetaMask will ask to approve the bridge router';
+            var overlayApproval = document.getElementById('hfxDepositOverlay');
+            if (overlayApproval) overlayApproval.innerHTML = _frame(_state);
+
+            // Approve max uint256 so user doesn't need to re-approve for future bridges
+            var maxUint = window.ethers.MaxUint256;
+            var approveTx = await tokenContract.approve(approvalAddr, maxUint);
+            _state.bridgePollMessage = 'Waiting for approval…';
+            _state.bridgeSubMessage = 'Confirming on ' + cfg.name;
+            var overlayApproval2 = document.getElementById('hfxDepositOverlay');
+            if (overlayApproval2) overlayApproval2.innerHTML = _frame(_state);
+            await approveTx.wait(1);
+            console.log('[bridge] ERC-20 approval confirmed:', approveTx.hash);
+          } else {
+            console.log('[bridge] Sufficient allowance, skipping approval');
+          }
+        } catch (approveErr) {
+          if (approveErr && (approveErr.code === 'ACTION_REJECTED' || approveErr.code === 4001)) {
+            throw new Error('You rejected the approval in MetaMask.');
+          }
+          console.warn('[bridge] Approval check/tx failed:', approveErr.message);
+          // Continue anyway — the bridge tx might work if the token doesn't need approval
+          // (e.g., native ETH bridging) or if approval was already granted
+        }
+      }
+
+      _state.bridgePollMessage = 'Sign bridge transaction…';
+      _state.bridgeSubMessage = 'MetaMask will ask to confirm the bridge';
       var overlay2 = document.getElementById('hfxDepositOverlay');
       if (overlay2) overlay2.innerHTML = _frame(_state);
 
-      // Submit the tx as returned by LI.FI
+      // Submit the bridge tx as returned by LI.FI
       var tx = await signer.sendTransaction({
         to: txReq.to,
         data: txReq.data,
