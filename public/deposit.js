@@ -1551,7 +1551,6 @@
         _state.bridgeSubMessage = 'Waiting for funds to arrive on Polygon';
         var overlayOpt = document.getElementById('hfxDepositOverlay');
         if (overlayOpt) overlayOpt.innerHTML = _frame(_state);
-
         // Poll balance every 5s for up to 2 min — only show success when balance actually increases
         var balPolls = 0;
         var maxBalPolls = 24;
@@ -1672,8 +1671,21 @@
 
         if (polls < maxPolls) setTimeout(tick, pollInterval);
         else {
-          var overlay4 = document.getElementById('hfxDepositOverlay');
-          if (overlay4) overlay4.innerHTML = _frame({ error: 'Bridge still pending after 2 minutes. Check your Polymarket balance shortly — it may still arrive.' });
+          // Timeout — check balance one last time before showing error
+          var finalBal = await _usdcBalance(_state.proxy);
+          var prevBal = _state.proxyBalance || 0;
+          if (finalBal != null && finalBal > prevBal + 0.5) {
+            // Balance increased — bridge likely worked!
+            var overlayWin = document.getElementById('hfxDepositOverlay');
+            if (overlayWin) overlayWin.innerHTML = _frame({
+              success: true, amount: _state.bridgeAmount || 0,
+              newProxyBalance: finalBal, bridged: true, gasless: true
+            });
+            try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e2) {}
+          } else {
+            var overlay4 = document.getElementById('hfxDepositOverlay');
+            if (overlay4) overlay4.innerHTML = _frame({ error: 'Bridge is taking longer than expected. Your funds are safe — check your Polymarket balance in a few minutes. If the balance hasn\'t updated, your USDC is still on the source chain.' });
+          }
         }
       } catch (e) {
         if (polls < maxPolls) setTimeout(tick, pollInterval);
