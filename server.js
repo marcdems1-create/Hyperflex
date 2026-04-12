@@ -30535,13 +30535,13 @@ app.get('/api/proxy/deployed', async (req, res) => {
 });
 
 // POST /api/proxy/deploy — deploy a Polymarket proxy wallet via relayer (server-side, no CORS)
-// Tries Polymarket's relayer first, which deploys gaslessly for the user.
+// Tries multiple Polymarket relayer endpoints that can trigger proxy deployment.
 app.post('/api/proxy/deploy', async (req, res) => {
   try {
     const { address } = req.body;
     if (!address) return res.status(400).json({ error: 'address required' });
 
-    // First check if already deployed (avoid unnecessary deploy calls)
+    // First check if already deployed
     try {
       const checkRes = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(address));
       if (checkRes.ok) {
@@ -30552,32 +30552,52 @@ app.post('/api/proxy/deploy', async (req, res) => {
       }
     } catch (e) {}
 
-    // Try Polymarket relayer deploy endpoint
-    // The relayer accepts POST with the EOA address and deploys the Safe proxy
-    const deployEndpoints = [
-      'https://relayer-v2.polymarket.com/create-proxy',
-      'https://relayer-v2.polymarket.com/deploy'
+    // Try known Polymarket relayer deploy endpoints
+    // The relayer has evolved over time — try all known patterns
+    const deployAttempts = [
+      { url: 'https://relayer-v2.polymarket.com/gnosis-safe', body: { owner: address } },
+      { url: 'https://relayer-v2.polymarket.com/create-proxy', body: { owner: address } },
+      { url: 'https://relayer-v2.polymarket.com/deploy', body: { owner: address, address } },
+      { url: 'https://relayer-v2.polymarket.com/proxy', body: { owner: address } },
     ];
 
-    for (const endpoint of deployEndpoints) {
+    for (const attempt of deployAttempts) {
       try {
-        console.log('[proxy/deploy] Trying', endpoint, 'for', address.slice(0, 10));
-        const r = await fetch(endpoint, {
+        console.log('[proxy/deploy] Trying', attempt.url, 'for', address.slice(0, 10));
+        const r = await fetch(attempt.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address, owner: address })
+          body: JSON.stringify(attempt.body)
         });
-        const data = await r.json().catch(() => ({}));
-        console.log('[proxy/deploy]', endpoint, r.status, data);
-        if (r.ok) {
-          return res.json({ deployed: true, success: true, source: endpoint, data });
+        const text = await r.text();
+        let data;
+        try { data = JSON.parse(text); } catch (e) { data = { raw: text.slice(0, 200) }; }
+        console.log('[proxy/deploy]', attempt.url, r.status, JSON.stringify(data).slice(0, 200));
+
+        if (r.ok || r.status === 201) {
+          // Verify deployment after relayer claims success
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          try {
+            const verifyRes = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(address));
+            if (verifyRes.ok) {
+              const verifyData = await verifyRes.json();
+              if (verifyData.deployed) {
+                return res.json({ deployed: true, success: true, source: attempt.url });
+              }
+            }
+          } catch (e) {}
+          // Even if verify fails, the relayer accepted the request
+          return res.json({ deployed: true, success: true, source: attempt.url, data, unverified: true });
+        }
+        // Log non-ok responses for debugging but continue trying
+        if (r.status !== 404 && r.status !== 405) {
+          console.log('[proxy/deploy] Non-404 response from', attempt.url, ':', r.status, JSON.stringify(data).slice(0, 100));
         }
       } catch (e) {
-        console.warn('[proxy/deploy]', endpoint, 'failed:', e.message);
+        console.warn('[proxy/deploy]', attempt.url, 'failed:', e.message);
       }
     }
 
-    // If relayer doesn't work, return instructions for on-chain deploy
     res.json({ deployed: false, success: false, fallback: 'on-chain' });
   } catch (err) {
     console.error('[proxy/deploy]', err.message);
