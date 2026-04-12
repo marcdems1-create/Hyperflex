@@ -341,7 +341,8 @@
             '</div>' +
             '<button onclick="HFXDeposit._setBridgeStep(\'select\')" style="width:100%;background:rgba(255,255,255,0.06);color:#f0f0f5;border:1px solid #1e1e2a;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer">← Try different amount or chain</button>';
         } else if (state.bridgeProvider === 'relay') {
-          // ── RELAY GASLESS QUOTE DISPLAY ──
+          // ── RELAY QUOTE DISPLAY ──
+          var relayHasTxStep = (quote.steps || []).some(function(s) { return s.kind === 'transaction'; });
           var relayFees = quote.fees || {};
           var relayDetails = quote.details || {};
           var srcChainName = _bridgeChainName(state.bridgeFromChain);
@@ -363,8 +364,8 @@
 
           bodyHtml =
             '<div style="padding:14px 16px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
-              '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Gasless route found</div>' +
-              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">RELAY</strong> · estimated ' + relayDurStr + ' · <span style="color:#00e68a;font-weight:700">no gas needed</span></div>' +
+              '<div style="font-size:13px;font-weight:700;color:#00e68a;margin-bottom:4px">✓ Route found via Relay</div>' +
+              '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8888a0">Via <strong style="color:#f0f0f5">RELAY</strong> · estimated ' + relayDurStr + (relayHasTxStep ? ' · <span style="color:#f59e0b;font-weight:700">one-time approval needed</span>' : ' · <span style="color:#00e68a;font-weight:700">no gas needed</span>') + '</div>' +
             '</div>' +
 
             '<div style="display:flex;flex-direction:column;gap:8px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid #1e1e2a;border-radius:10px;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace;font-size:12px">' +
@@ -381,7 +382,9 @@
               '<button onclick="HFXDeposit._executeBridge()" id="hfxBridgeExecBtn" style="flex:1;background:#00e68a;color:#0a0a0f;border:none;padding:12px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:800;cursor:pointer;min-height:44px">Sign & bridge $' + relayFromAmt + ' →</button>' +
             '</div>' +
 
-            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#00e68a;line-height:1.6;margin-top:12px;text-align:center;padding:6px 10px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">⚡ Gasless bridge — you only sign a message, no ETH needed. Gas is deducted from your USDC.</div>';
+            (relayHasTxStep
+              ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#f59e0b;line-height:1.6;margin-top:12px;text-align:center;padding:6px 10px;background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.15);border-radius:6px">⚠ First bridge needs a one-time USDC approval (~$0.10 ' + _esc((BRIDGE_CHAINS[state.bridgeFromChain]||{}).gas||'ETH') + ' gas). After this, future bridges are fully gasless.</div>'
+              : '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#00e68a;line-height:1.6;margin-top:12px;text-align:center;padding:6px 10px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:6px">⚡ Gasless bridge — you only sign a message, no ETH needed. Gas is deducted from your USDC.</div>');
 
         } else {
           // ── LI.FI QUOTE DISPLAY (fallback — requires gas) ──
@@ -1285,6 +1288,23 @@
       var provider = new window.ethers.BrowserProvider(window.ethereum);
       var signer = await provider.getSigner();
 
+      // Pre-check: does any Relay step require an on-chain transaction?
+      // If so, user needs gas — warn them before we start
+      var hasTransactionStep = steps.some(function(s) { return s.kind === 'transaction'; });
+      if (hasTransactionStep) {
+        try {
+          var gasCheckBal = await provider.getBalance(await signer.getAddress());
+          var gasCheckEth = parseFloat(window.ethers.formatEther(gasCheckBal));
+          if (gasCheckEth < 0.0001) {
+            var gasToken = cfg ? (cfg.gas || 'ETH') : 'ETH';
+            var chainName = cfg ? cfg.name : 'this chain';
+            var overlayNoGas = document.getElementById('hfxDepositOverlay');
+            if (overlayNoGas) overlayNoGas.innerHTML = _frame({ error: 'This route requires a one-time USDC approval transaction which needs ' + gasToken + ' for gas on ' + chainName + '. Send ~$0.50 of ' + gasToken + ' to your wallet and try again. After this first approval, future bridges will be fully gasless.' });
+            return;
+          }
+        } catch (gasE) { /* continue — let it fail naturally if no gas */ }
+      }
+
       // Process each step from Relay
       // Relay step format: { kind: 'signature'|'transaction', items: [{ status, data: { sign, post } }] }
       var requestId = null;
@@ -1451,6 +1471,14 @@
       var msg = (err && err.message) || 'Unknown error';
       if (err && (err.code === 'ACTION_REJECTED' || err.code === 4001)) {
         msg = 'You rejected the signature in MetaMask.';
+      } else if (msg.indexOf('-32002') !== -1 || msg.indexOf('too many errors') !== -1) {
+        msg = 'RPC rate limited — the network endpoint is temporarily overloaded. Wait 30 seconds and try again.';
+      } else if (msg.indexOf('insufficient funds') !== -1 || msg.indexOf('gas required') !== -1) {
+        var gasToken = (cfg && cfg.gas) || 'ETH';
+        msg = 'Not enough ' + gasToken + ' for gas. This route needs a small amount of ' + gasToken + ' (~$0.20) for a one-time approval. After that, future bridges are gasless.';
+      } else if (msg.length > 200) {
+        // Truncate overly verbose RPC errors
+        msg = msg.slice(0, 150) + '…';
       }
       var overlayErr = document.getElementById('hfxDepositOverlay');
       if (overlayErr) overlayErr.innerHTML = _frame({ error: msg });
