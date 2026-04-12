@@ -801,6 +801,7 @@
     _state.bridgeAmount = amount;
 
     var chainId = _state.bridgeFromChain || 42161;
+    _state.bridgeFromChain = chainId; // persist fallback so quote display + executeBridge stay in sync
     var cfg = BRIDGE_CHAINS[chainId];
     if (!cfg) return;
 
@@ -847,13 +848,20 @@
       alert('No quote available — please refresh and try again.');
       return;
     }
-    var chainId = _state.bridgeFromChain;
+    var chainId = _state.bridgeFromChain || 42161;
+    _state.bridgeFromChain = chainId; // ensure persisted
     var cfg = BRIDGE_CHAINS[chainId];
     var txReq = _state.bridgeQuote.transactionRequest;
 
     if (!cfg) {
       var overlay0 = document.getElementById('hfxDepositOverlay');
       if (overlay0) overlay0.innerHTML = _frame({ error: 'Unsupported source chain (ID: ' + chainId + '). Please select Ethereum, Arbitrum, Base, Optimism, or BSC.' });
+      return;
+    }
+
+    if (!txReq || !txReq.to || !txReq.data) {
+      var overlay00 = document.getElementById('hfxDepositOverlay');
+      if (overlay00) overlay00.innerHTML = _frame({ error: 'Invalid transaction from bridge route. Please go back and get a new quote.' });
       return;
     }
 
@@ -1009,9 +1017,11 @@
     var overlay = document.getElementById('hfxDepositOverlay');
     if (overlay) overlay.innerHTML = _frame(_state);
     // Auto-fetch source balance when entering Bridge tab for the first time
-    if (tab === 'bridge' && _state.bridgeSourceBalance == null) {
-      var defaultChain = _state.bridgeFromChain || 42161;
-      _setBridgeChain(defaultChain);
+    if (tab === 'bridge') {
+      if (!_state.bridgeFromChain) _state.bridgeFromChain = 42161; // always ensure chain is set
+      if (_state.bridgeSourceBalance == null) {
+        _setBridgeChain(_state.bridgeFromChain);
+      }
     }
   }
 
