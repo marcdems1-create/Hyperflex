@@ -18866,14 +18866,71 @@ async function confirmTrade() {
     const rounding = tickRounding[tickSize] || tickRounding[0.01];
     function roundDown(val, decimals) { const f = Math.pow(10, decimals); return Math.floor(val * f) / f; }
 
+    // For FOK (market) orders, walk the orderbook to find the worst fill price
+    // Without this, FOK fails with "order couldn't be fully filled" on thin books
+    let walkPrice = price;
+    const isMarketOrder = (_tradeModalData._orderType || 'FOK') !== 'GTC';
+    if (isMarketOrder && tokenId) {
+      try {
+        btn.textContent = 'Checking depth...';
+        const bookRes = await fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(tokenId));
+        if (bookRes.ok) {
+          const bookData = await bookRes.json();
+          let levels, fillPrice = null;
+          if (clobSide === 'BUY') {
+            levels = (bookData.asks || []).slice().sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+            let spent = 0;
+            for (const lvl of levels) {
+              const lp = parseFloat(lvl.price), ls = parseFloat(lvl.size);
+              if (spent + lp * ls >= amount) { fillPrice = lp; break; }
+              spent += lp * ls;
+            }
+          } else {
+            levels = (bookData.bids || []).slice().sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+            let sharesLeft = shares;
+            for (const lvl of levels) {
+              const bp = parseFloat(lvl.price), bs = parseFloat(lvl.size);
+              if (sharesLeft <= bs) { fillPrice = bp; break; }
+              sharesLeft -= bs;
+            }
+          }
+          if (fillPrice == null) {
+            errEl.textContent = 'Not enough liquidity to fill this order — try a smaller amount or switch to Limit order.';
+            errEl.style.display = 'block';
+            btn.disabled = false; btn.textContent = 'Confirm Trade';
+            return;
+          }
+          // Round to tick — for SELL round DOWN (accept worse price), for BUY round UP
+          let bumped;
+          if (clobSide === 'SELL') {
+            bumped = Math.floor(fillPrice / tickSize + 1e-9) * tickSize;
+          } else {
+            bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize;
+          }
+          if (bumped <= 0) bumped = tickSize;
+          if (bumped >= 1) bumped = 1 - tickSize;
+          walkPrice = parseFloat(bumped.toFixed(rounding.priceDec));
+          if (walkPrice !== price) {
+            console.log('[qt-trade] Book walk: user price ' + (price * 100).toFixed(1) + '¢ → fill price ' + (walkPrice * 100).toFixed(1) + '¢');
+          }
+        }
+      } catch (bookErr) {
+        console.warn('[qt-trade] Book walk failed:', bookErr.message, '— using user price');
+      }
+      btn.textContent = 'Signing order...';
+    }
+
     // Round price to tick size
-    const roundedPrice = roundDown(price, rounding.priceDec);
+    const roundedPrice = roundDown(walkPrice, rounding.priceDec);
     if (roundedPrice <= 0 || roundedPrice >= 1) {
       errEl.textContent = 'Invalid price: ' + (price * 100).toFixed(1) + '¢';
       errEl.style.display = 'block';
       btn.disabled = false; btn.textContent = 'Confirm Trade';
       return;
     }
+
+    // Recalculate shares with the walked price for proper amounts
+    const finalShares = roundedPrice > 0 ? amount / roundedPrice : 0;
 
     // Build order amounts (6 decimal places = USDC decimals)
     const DECIMALS = 1000000;
@@ -18883,15 +18940,15 @@ async function confirmTrade() {
       // BUY: maker provides USDC, taker provides tokens
       // makerAmount = USDC to spend = shares * price
       // takerAmount = tokens to receive = shares
-      const rawMaker = roundDown(shares * roundedPrice, rounding.amountDec);
-      const rawTaker = roundDown(shares, rounding.sizeDec);
+      const rawMaker = roundDown(finalShares * roundedPrice, rounding.amountDec);
+      const rawTaker = roundDown(finalShares, rounding.sizeDec);
       makerAmt = Math.round(rawMaker * DECIMALS).toString();
       takerAmt = Math.round(rawTaker * DECIMALS).toString();
     } else {
       sideInt = 1;
       // SELL: maker provides tokens, taker provides USDC
-      const rawMaker = roundDown(shares, rounding.sizeDec);
-      const rawTaker = roundDown(shares * roundedPrice, rounding.amountDec);
+      const rawMaker = roundDown(finalShares, rounding.sizeDec);
+      const rawTaker = roundDown(finalShares * roundedPrice, rounding.amountDec);
       makerAmt = Math.round(rawMaker * DECIMALS).toString();
       takerAmt = Math.round(rawTaker * DECIMALS).toString();
     }
@@ -18951,7 +19008,7 @@ async function confirmTrade() {
 
     // Build CLOB request body — salt must be a JSON number, not string
     btn.textContent = 'Placing order...';
-    console.log('[qt-trade] Order params:', { side: clobSide, price: roundedPrice, shares, makerAmt, takerAmt, negRisk: isNegRisk, tickSize, exchange: exchangeAddr, maker: orderStruct.maker, signer: orderStruct.signer });
+    console.log('[qt-trade] Order params:', { side: clobSide, price: roundedPrice, shares: finalShares, makerAmt, takerAmt, negRisk: isNegRisk, tickSize, exchange: exchangeAddr, maker: orderStruct.maker, signer: orderStruct.signer });
     const requestBody = JSON.stringify({
       order: {
         salt: Number(orderStruct.salt),
@@ -19082,7 +19139,7 @@ async function confirmTrade() {
       return;
     }
 
-    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
+    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + finalShares.toFixed(2) + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
     console.log('[qt-trade] Order success:', data);
     closeTradeModal();
     setTimeout(() => loadPolymarketPositions(true), 2000);
