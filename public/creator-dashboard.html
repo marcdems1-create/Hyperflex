@@ -18800,26 +18800,22 @@ async function confirmTrade() {
   const proxyAddress = localStorage.getItem('hf_poly_wallet');
 
   if (!apiKey || !apiSecret || !apiPassphrase) {
-    // Auto-derive CLOB API keys if wallet is connected but keys not yet derived
+    // Auto-derive CLOB API keys and immediately retry — no second click needed
     if (window._connectedWallet && window.ethereum) {
-      errEl.textContent = 'Deriving trading keys — please sign the wallet prompt...';
-      errEl.style.color = 'var(--gold)';
-      errEl.style.display = 'block';
       btn.disabled = true;
       btn.textContent = 'Enabling trading...';
+      errEl.textContent = 'Getting fresh trading keys — sign in MetaMask...';
+      errEl.style.color = 'var(--gold)';
+      errEl.style.display = 'block';
       try {
         await derivePolymarketApiKey();
-        // Check if keys were derived successfully
         const newKey = localStorage.getItem('poly_api_key');
-        const newSecret = localStorage.getItem('poly_api_secret');
-        const newPass = localStorage.getItem('poly_api_passphrase');
-        if (newKey && newSecret && newPass) {
+        if (newKey) {
           errEl.style.display = 'none';
           errEl.style.color = '';
           btn.disabled = false;
-          btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
-          showToast('Trading enabled! Try your order again.', 'success');
-          return;
+          // Immediately retry the trade — don't make user click again
+          return confirmTrade();
         }
       } catch(e) {
         console.warn('[auto-derive]', e.message);
@@ -19119,9 +19115,26 @@ async function confirmTrade() {
         localStorage.removeItem('hf_clob_api_key');
         localStorage.removeItem('hf_clob_api_secret');
         localStorage.removeItem('hf_clob_api_passphrase');
-        localStorage.removeItem('poly_eoa_address');
-        updateWalletUI();
-        errEl.textContent = 'API key expired. Click Confirm Trade again to get fresh keys.';
+        // Auto-derive fresh keys and retry the trade immediately
+        if (window._connectedWallet && window.ethereum) {
+          btn.textContent = 'Refreshing keys...';
+          errEl.textContent = 'Keys expired — refreshing automatically...';
+          errEl.style.color = 'var(--gold)';
+          errEl.style.display = 'block';
+          try {
+            await derivePolymarketApiKey();
+            const freshKey = localStorage.getItem('poly_api_key');
+            if (freshKey) {
+              errEl.style.display = 'none';
+              errEl.style.color = '';
+              btn.disabled = false;
+              return confirmTrade(); // retry with fresh keys
+            }
+          } catch (deriveErr) {
+            console.warn('[auto-derive on 401]', deriveErr.message);
+          }
+        }
+        errEl.textContent = 'API keys expired. Connect MetaMask and try again.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
         errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
       } else if (res.status === 400 && errStr.includes('tick size')) {
