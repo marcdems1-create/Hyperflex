@@ -30804,7 +30804,8 @@ app.post('/api/bridge/relay-quote', async (req, res) => {
       destinationCurrency: destCurrency,
       amount: String(amount),
       tradeType: 'EXACT_INPUT',
-      recipient: toAddress
+      recipient: toAddress,
+      usePermit: true
     };
 
     // Add integrator fee: 50 BPS (0.5%) — same as LI.FI fee
