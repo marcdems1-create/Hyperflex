@@ -3858,18 +3858,75 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var cfErrMsg = cfData.error || cfData.message || JSON.stringify(cfData);
     tradeDebug('CF proxy failed', cfRes.status + ': ' + cfErrMsg);
 
-    // If CF proxy returned a CLOB error (not network), return it directly
+    // If CF proxy returned a geo-restriction or CLOB error, try server proxy before giving up
     if (cfRes.status >= 400 && cfRes.status < 500) {
-      return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
+      var isGeoBlocked = cfErrMsg.indexOf('restricted') !== -1 || cfErrMsg.indexOf('region') !== -1 || cfErrMsg.indexOf('geo') !== -1;
+      if (!isGeoBlocked) {
+        // Non-geo CLOB error — return directly (bad order, expired keys, etc.)
+        return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
+      }
+      tradeDebug('CF proxy geo-blocked, trying Railway server proxy…');
     }
 
   } catch (cfErr) {
-    // CORS or network error on CF proxy — fall back to browser-direct
-    tradeDebug('CF proxy THREW', cfErr.message + ' — trying browser-direct fallback');
+    // CORS or network error on CF proxy — fall through to server proxy
+    tradeDebug('CF proxy THREW', cfErr.message + ' — trying server proxy fallback');
   }
 
-  // FALLBACK: Submit directly from browser to Polymarket CLOB
-  // (only works for non-geo-restricted users — most users should be served by CF proxy above)
+  // SERVER PROXY: Route through Railway server (US-based IP) to bypass geo-restrictions
+  try {
+    var serverHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'POLY_ADDRESS': eoaAddress,
+      'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase,
+      'POLY_TIMESTAMP': ts,
+      'POLY_SIGNATURE': hmacSig
+    };
+    for (var bk3 in builderHeaders) {
+      if (builderHeaders.hasOwnProperty(bk3)) serverHeaders[bk3] = builderHeaders[bk3];
+    }
+
+    tradeDebug('submitting via Railway server proxy', '/api/polymarket/order');
+    var serverRes = await fetch('/api/polymarket/order', {
+      method: 'POST',
+      headers: serverHeaders,
+      body: requestBody
+    });
+
+    var serverText = await serverRes.text().catch(function() { return ''; });
+    var serverData;
+    try { serverData = JSON.parse(serverText); } catch (e) { serverData = { _raw: serverText }; }
+    tradeDebug('server proxy ' + serverRes.status, serverText.substring(0, 500));
+
+    if (serverRes.ok) return serverData;
+
+    if (serverRes.status === 401) {
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      updateTradingUI();
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (serverData.error || serverData.message || 'Unauthorized') };
+    }
+
+    var serverErrMsg = serverData.error || serverData.message || JSON.stringify(serverData);
+    // If server proxy also geo-blocked, fall through to direct
+    var serverGeoBlocked = serverErrMsg.indexOf('restricted') !== -1 || serverErrMsg.indexOf('region') !== -1;
+    if (!serverGeoBlocked) {
+      return { _error: true, _errorMsg: 'CLOB ' + serverRes.status + ': ' + serverErrMsg };
+    }
+    tradeDebug('server proxy also restricted — trying browser-direct as last resort');
+  } catch (serverErr) {
+    tradeDebug('server proxy THREW', serverErr.message + ' — trying browser-direct');
+  }
+
+  // LAST RESORT: Submit directly from browser to Polymarket CLOB
+  // (only works for non-geo-restricted users)
   try {
     var directHeaders = {
       'Content-Type': 'application/json',

@@ -31001,6 +31001,53 @@ app.get('/api/bridge/relay-status', async (req, res) => {
   }
 });
 
+// POST /api/polymarket/order — server-side CLOB order proxy
+// Routes signed orders through Railway (US IP) to bypass geo-restrictions.
+// The order is already signed client-side — we just forward it.
+app.post('/api/polymarket/order', async (req, res) => {
+  try {
+    const orderBody = JSON.stringify(req.body);
+
+    // Forward all Poly auth + builder headers
+    const clobHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    const headerNames = [
+      'poly_address', 'poly_api_key', 'poly_passphrase', 'poly_timestamp', 'poly_signature',
+      'poly_builder_api_key', 'poly_builder_passphrase', 'poly_builder_timestamp', 'poly_builder_signature'
+    ];
+    for (const h of headerNames) {
+      // Express lowercases header names; Polymarket expects uppercase
+      const val = req.headers[h];
+      if (val) clobHeaders[h.toUpperCase()] = val;
+    }
+
+    console.log('[clob-proxy] forwarding order, maker:', (req.body.order && req.body.order.maker || '').slice(0, 10));
+
+    const r = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: clobHeaders,
+      body: orderBody,
+    });
+
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { data = { _raw: text.slice(0, 300) }; }
+
+    if (!r.ok) {
+      console.warn('[clob-proxy] CLOB', r.status, text.slice(0, 300));
+    } else {
+      console.log('[clob-proxy] OK:', text.slice(0, 200));
+    }
+
+    res.status(r.status).json(data);
+  } catch (err) {
+    console.error('[clob-proxy] Error:', err.message);
+    res.status(502).json({ error: 'Proxy error: ' + err.message });
+  }
+});
+
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {

@@ -19025,13 +19025,42 @@ async function confirmTrade() {
     }
 
     console.log('[qt-trade] Submitting via CF edge proxy:', CF_PROXY);
-    const res = await fetch(CF_PROXY, {
+    let res = await fetch(CF_PROXY, {
       method: 'POST',
       headers: proxyHeaders,
       body: requestBody
     });
 
-    const data = await res.json().catch(() => ({}));
+    let data = await res.json().catch(() => ({}));
+
+    // If CF proxy returns geo-restriction, try Railway server proxy
+    if (!res.ok) {
+      const cfErrStr = JSON.stringify(data).toLowerCase();
+      const isGeoBlocked = cfErrStr.includes('restricted') || cfErrStr.includes('region') || cfErrStr.includes('geo');
+      if (isGeoBlocked) {
+        console.log('[qt-trade] CF proxy geo-blocked, trying Railway server proxy…');
+        try {
+          const serverRes = await fetch('/api/polymarket/order', {
+            method: 'POST',
+            headers: proxyHeaders,
+            body: requestBody
+          });
+          const serverData = await serverRes.json().catch(() => ({}));
+          if (serverRes.ok) {
+            showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
+            console.log('[qt-trade] Order success via server proxy:', serverData);
+            closeTradeModal();
+            setTimeout(() => loadPolymarketPositions(true), 2000);
+            return;
+          }
+          // Use server proxy error instead
+          data = serverData;
+          res = serverRes;
+        } catch (serverErr) {
+          console.warn('[qt-trade] Server proxy error:', serverErr.message);
+        }
+      }
+    }
 
     if (!res.ok) {
       console.error('[qt-trade] CLOB error:', res.status, JSON.stringify(data));
