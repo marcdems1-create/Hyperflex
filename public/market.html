@@ -2455,8 +2455,11 @@ async function checkTradingSetup() {
 
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
+  if (_enableRunning) { console.log('[setup] enableTrading already running — skipping'); return false; }
+  _enableRunning = true;
   if (!window.ethereum) {
     showTradeStatus('Install MetaMask to trade', 'error');
+    _enableRunning = false;
     return false;
   }
   var cta = document.getElementById('tradeCta');
@@ -2465,10 +2468,9 @@ async function enableTrading() {
   cta.textContent = 'Connecting wallet...';
 
   try {
-    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts || !accounts.length) throw new Error('No accounts');
-
-    // Switch to Polygon
+    // Use HFXWallet.getSigner() — deduped, only one eth_requestAccounts in flight at a time.
+    // This prevents -32002 "request already pending" on mobile MetaMask when enableTrading
+    // and executeTrade race.
     cta.textContent = 'Switching to Polygon...';
     try {
       await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
@@ -2481,10 +2483,12 @@ async function enableTrading() {
       }
     }
 
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    var signer = await provider.getSigner();
-    var address = await signer.getAddress();
-    HFXWallet.adoptSigner(provider, signer, address);
+    // After chain switch, invalidate cached signer (chain changed) and get fresh one
+    HFXWallet.invalidate();
+    var walletCtx = await HFXWallet.getSigner();
+    var provider = walletCtx.provider;
+    var signer = walletCtx.signer;
+    var address = walletCtx.address;
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
@@ -2654,15 +2658,20 @@ async function enableTrading() {
     updateCtaButton();
     // Run full trading setup check (deploy, approval, balance)
     checkTradingSetup();
+    _enableRunning = false;
     return true;
   } catch (e) {
-    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+    if (HFXWallet.is32002Error(e)) {
+      HFXWallet.invalidate();
+      showTradeStatus('Another wallet request is pending. Open MetaMask, dismiss any popups, then try again.', 'error');
+    } else if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       showTradeStatus('Signature rejected', 'error');
     } else {
       showTradeStatus('Failed: ' + (e.message || 'Unknown error'), 'error');
     }
     cta.disabled = false;
     cta.textContent = origText;
+    _enableRunning = false;
     return false;
   }
 }
@@ -2735,22 +2744,27 @@ function updateTradingUI() {
   }
 }
 
+// Re-entry guards — prevent overlapping wallet RPC calls that cause -32002
+var _setupRunning = false;
+var _enableRunning = false;
+
 // Sequential setup: Deploy Proxy → CLOB Auth → Approve USDC → then trade
 async function runFullSetup() {
+  if (_setupRunning) { console.log('[setup] runFullSetup already running — skipping'); return false; }
+  _setupRunning = true;
   var cta = document.getElementById('tradeCta');
   if (cta) { cta.disabled = true; cta.textContent = 'Setting up...'; }
 
   if (!window.ethereum) {
     showTradeStatus('Install MetaMask to trade', 'error');
     if (cta) { cta.disabled = false; updateCtaButton(); }
+    _setupRunning = false;
     return false;
   }
 
-  // Connect MetaMask first to get EOA
+  // Connect MetaMask via HFXWallet (deduped — only one eth_requestAccounts in flight)
   try {
-    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts || !accounts.length) throw new Error('No accounts');
-    // Switch to Polygon
+    // Ensure Polygon chain first (executeTrade already checked, but standalone callers may not have)
     try {
       await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
     } catch (switchErr) {
@@ -2761,18 +2775,22 @@ async function runFullSetup() {
         });
       }
     }
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    var signer = await provider.getSigner();
-    var eoaAddress = await signer.getAddress();
-    HFXWallet.adoptSigner(provider, signer, eoaAddress);
+    var walletCtx = await HFXWallet.getSigner();
+    var provider = walletCtx.provider;
+    var signer = walletCtx.signer;
+    var eoaAddress = walletCtx.address;
     localStorage.setItem('poly_eoa_address', eoaAddress);
   } catch (e) {
-    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+    if (HFXWallet.is32002Error(e)) {
+      HFXWallet.invalidate();
+      showTradeStatus('Another wallet request is pending. Open MetaMask and dismiss any popups, then try again.', 'error');
+    } else if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       showTradeStatus('MetaMask connection rejected', 'error');
     } else {
       showTradeStatus('MetaMask error: ' + (e.message || 'Unknown'), 'error');
     }
     if (cta) { cta.disabled = false; updateTradingUI(); }
+    _setupRunning = false;
     return false;
   }
 
@@ -2805,6 +2823,7 @@ async function runFullSetup() {
     setSetupStep(1, 'error', 'Proxy Wallet \u2014 contract call failed');
     showTradeStatus('Could not resolve proxy address. Make sure MetaMask is on Polygon.', 'error');
     if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+    _setupRunning = false;
     return false;
   }
 
@@ -2821,11 +2840,13 @@ async function runFullSetup() {
     var deploySuccess = false;
     try {
       // Safe factory exposes createProxy(address user) — deterministic, one-time deploy
-      var signer = await HFXWallet.getSigner();
+      // Use the already-cached signer from earlier in this function (avoids extra eth_requestAccounts)
+      var deployCtx = await HFXWallet.getSigner();
+      var deploySigner = deployCtx.signer;
       var factoryWrite = new ethers.Contract(SAFE_FACTORY_ADDRESS, [
         'function createProxy(address user) returns (address)',
         'function proxy(address user) returns (address)'
-      ], signer);
+      ], deploySigner);
 
       // Try createProxy first, fall back to proxy() if it doesn't exist
       var tx;
@@ -2856,12 +2877,14 @@ async function runFullSetup() {
         setSetupStep(1, 'error', 'Proxy Wallet — deploy rejected');
         showTradeStatus('You rejected the deployment transaction. Click "Set Up Trading" to try again.', 'error');
         if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+        _setupRunning = false;
         return false;
       }
       if (deployErr.message && /insufficient funds/i.test(deployErr.message)) {
         setSetupStep(1, 'error', 'Proxy Wallet — need MATIC for gas');
         showTradeStatus('Your MetaMask needs a tiny amount of MATIC for gas (~$0.01). Add some to continue.', 'error');
         if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+        _setupRunning = false;
         return false;
       }
       // Generic fallback to polymarket.com
@@ -2871,6 +2894,7 @@ async function runFullSetup() {
       setSetupStep(1, 'error', 'Proxy Wallet — deployment failed');
       showTradeStatus('Could not deploy your wallet from here. Visit polymarket.com → Enable Trading, then come back.', 'error');
       if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      _setupRunning = false;
       return false;
     }
   }
@@ -2883,6 +2907,7 @@ async function runFullSetup() {
     if (!enabled || !isTradingEnabled()) {
       setSetupStep(2, 'error', 'Enable Trading (CLOB Auth)');
       if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      _setupRunning = false;
       return false;
     }
   }
@@ -2896,6 +2921,7 @@ async function runFullSetup() {
     var approved = await approveTokens();
     if (!approved) {
       if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      _setupRunning = false;
       return false;
     }
   }
@@ -2907,6 +2933,7 @@ async function runFullSetup() {
   updateCtaButton();
   updateTradingUI();
   fetchTradeBalance();
+  _setupRunning = false;
   return true;
 }
 
