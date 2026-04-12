@@ -2703,23 +2703,9 @@ var _tradeDebugLog = [];
 function tradeDebug(label, data) {
   var entry = '[' + new Date().toLocaleTimeString() + '] ' + label + ': ' + (typeof data === 'object' ? JSON.stringify(data, null, 0).substring(0, 500) : String(data));
   _tradeDebugLog.push(entry);
+  if (_tradeDebugLog.length > 50) _tradeDebugLog.shift();
   console.log('[TRADE DEBUG]', label, data);
-  var panel = document.getElementById('tradeDebugPanel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'tradeDebugPanel';
-    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:11px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
-    var close = document.createElement('button');
-    close.textContent = '✕ Close Debug';
-    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px';
-    close.onclick = function() { panel.style.display = 'none'; };
-    panel.appendChild(close);
-    document.body.appendChild(panel);
-  }
-  panel.style.display = 'block';
-  // Show last 15 entries
-  var txt = _tradeDebugLog.slice(-15).join('\n');
-  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
+  // Debug panel only visible when ?debug=1 is in URL (dev use only)
 }
 
 function updateTradingUI() {
