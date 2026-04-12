@@ -16445,7 +16445,7 @@ function shareRecordOnX() {
 }
 
 // ── POSITION GROUPING ────────────────────────────────────────────────────
-var _posGroupCollapsed = new Set(); // persists across re-renders
+var _posGroupExpanded = new Set(); // tracks which groups user has expanded (default = collapsed)
 
 function getPositionGroupKey(p) {
   // Primary: Polymarket eventSlug (guaranteed same-event grouping)
@@ -16489,7 +16489,7 @@ function renderPositionGroup(opts) {
   var pnlColor = aggPnl >= 0 ? '#00e68a' : '#ff6b6b';
   var pnlStr = (aggPnl >= 0 ? '+' : '-') + '$' + Math.abs(aggPnl).toFixed(2);
   var pnlPctStr = aggCost > 0 ? ('(' + (aggPnlPct >= 0 ? '+' : '') + aggPnlPct.toFixed(1) + '%)') : '';
-  var isCollapsed = _posGroupCollapsed.has(gk);
+  var isCollapsed = !_posGroupExpanded.has(gk);
   // Nearest expiry for sorting
   var nearestExpiry = '';
   members.forEach(function(p) { if (p.end_date && (!nearestExpiry || p.end_date < nearestExpiry)) nearestExpiry = p.end_date; });
@@ -16532,15 +16532,17 @@ function togglePosGroup(headerEl) {
   var body = group.querySelector('.pos-group-body');
   var chevron = headerEl.querySelector('.pos-group-chevron');
   if (!body) return;
-  var isCollapsed = _posGroupCollapsed.has(key);
-  if (isCollapsed) {
-    _posGroupCollapsed.delete(key);
-    body.style.display = '';
-    if (chevron) chevron.style.transform = 'rotate(0deg)';
-  } else {
-    _posGroupCollapsed.add(key);
+  var isExpanded = _posGroupExpanded.has(key);
+  if (isExpanded) {
+    // Collapse it
+    _posGroupExpanded.delete(key);
     body.style.display = 'none';
     if (chevron) chevron.style.transform = 'rotate(-90deg)';
+  } else {
+    // Expand it
+    _posGroupExpanded.add(key);
+    body.style.display = '';
+    if (chevron) chevron.style.transform = 'rotate(0deg)';
   }
 }
 
