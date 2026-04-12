@@ -38,6 +38,79 @@
 
   function _esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
+  // ── Deposit history (localStorage) ──
+  var HISTORY_KEY = 'hfx_deposit_history';
+  var MAX_HISTORY = 50;
+
+  function _saveDeposit(entry) {
+    // entry: { amount, txHash, type, chain, timestamp }
+    try {
+      var hist = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      hist.unshift({
+        amount: entry.amount || 0,
+        txHash: entry.txHash || null,
+        type: entry.type || 'deposit', // 'deposit' | 'gasless' | 'bridge'
+        chain: entry.chain || 'Polygon',
+        timestamp: entry.timestamp || Date.now()
+      });
+      if (hist.length > MAX_HISTORY) hist = hist.slice(0, MAX_HISTORY);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+    } catch (e) { /* localStorage full or private browsing */ }
+  }
+
+  function _getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
+  }
+
+  function _explorerUrl(txHash, chain) {
+    if (!txHash) return null;
+    var explorers = {
+      'Polygon': 'https://polygonscan.com/tx/',
+      'Arbitrum': 'https://arbiscan.io/tx/',
+      'Base': 'https://basescan.org/tx/',
+      'Optimism': 'https://optimistic.etherscan.io/tx/',
+      'Ethereum': 'https://etherscan.io/tx/',
+      'BNB Chain': 'https://bscscan.com/tx/'
+    };
+    return (explorers[chain] || 'https://polygonscan.com/tx/') + txHash;
+  }
+
+  function _renderHistory() {
+    var hist = _getHistory();
+    if (hist.length === 0) {
+      return '<div style="text-align:center;padding:32px 16px">' +
+        '<div style="font-size:32px;margin-bottom:8px;opacity:0.3">📜</div>' +
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#8888a0">No deposits yet</div>' +
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#555;margin-top:4px">Your deposit and bridge history will appear here</div>' +
+      '</div>';
+    }
+    var rows = '';
+    for (var i = 0; i < Math.min(hist.length, 20); i++) {
+      var h = hist[i];
+      var dt = new Date(h.timestamp);
+      var dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      var typeIcon = h.type === 'bridge' ? '🌉' : h.type === 'gasless' ? '✨' : '💸';
+      var typeLabel = h.type === 'bridge' ? 'Bridge' : h.type === 'gasless' ? 'Gasless' : 'Deposit';
+      var txLink = h.txHash ? '<a href="' + _esc(_explorerUrl(h.txHash, h.chain)) + '" target="_blank" rel="noopener" style="color:#4d9fff;text-decoration:none;font-size:10px" title="' + _esc(h.txHash) + '">' + _esc(h.txHash.slice(0, 8)) + '…' + _esc(h.txHash.slice(-6)) + ' ↗</a>' : '<span style="color:#555;font-size:10px">pending</span>';
+      rows += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #1e1e2a">' +
+        '<div style="font-size:16px;width:24px;text-align:center">' + typeIcon + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">' +
+            '<span style="font-weight:700;color:#f0f0f5;font-size:13px">$' + (h.amount || 0).toFixed(2) + '</span>' +
+            '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;padding:2px 5px;background:rgba(255,255,255,0.04);border:1px solid #1e1e2a;border-radius:3px;color:#8888a0">' + typeLabel + '</span>' +
+            (h.chain && h.chain !== 'Polygon' ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:#f59e0b">' + _esc(h.chain) + ' → Polygon</span>' : '') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#555">' + _esc(dateStr) + '</span>' +
+            txLink +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+    return '<div style="max-height:320px;overflow-y:auto;padding-right:4px">' + rows + '</div>' +
+      (hist.length > 20 ? '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#555;margin-top:8px">Showing 20 of ' + hist.length + '</div>' : '');
+  }
+
   async function _getPublicProvider() {
     if (!window.ethers) throw new Error('ethers.js not loaded');
     for (var i = 0; i < POLYGON_RPCS.length; i++) {
@@ -195,6 +268,7 @@
         tabBtn('exchange', 'Exchange', '🏦') +
         tabBtn('card', 'Card/Bank', '💳') +
         tabBtn('bridge', 'Bridge', '🌉') +
+        tabBtn('history', 'History', '📜') +
       '</div>';
 
     var bodyHtml;
@@ -481,6 +555,8 @@
             '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#8888a0;line-height:1.6;text-align:center">Prefer an external UI? <a href="https://jumper.exchange/?toChain=137&toToken=' + USDC_ADDRESS + '&toAddress=' + encodeURIComponent(proxyAddr) + '" target="_blank" rel="noopener" style="color:#4d9fff">Open in Jumper ↗</a></div>' +
           '</div>';
       }
+    } else if (currentTab === 'history') {
+      bodyHtml = _renderHistory();
     }
 
     return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:14px;padding:22px;max-width:500px;width:100%;color:#f0f0f5;max-height:92vh;overflow-y:auto">' +
@@ -640,6 +716,7 @@
       await tx.wait();
 
       var newProxyBal = await _usdcBalance(_state.proxy);
+      _saveDeposit({ amount: amount, txHash: tx.hash, type: 'deposit', chain: 'Polygon' });
       overlay.innerHTML = _frame({
         success: true,
         amount: amount,
@@ -786,6 +863,7 @@
       // Small delay so the user sees the confirming state (tx already confirmed at this point)
       setTimeout(async function() {
         var newProxyBal = await _usdcBalance(_state.proxy);
+        _saveDeposit({ amount: amount, txHash: data.tx_hash, type: 'gasless', chain: 'Polygon' });
         overlay.innerHTML = _frame({
           success: true,
           amount: amount,
@@ -1195,13 +1273,16 @@
         if (status === 'DONE') {
           // Fetch new proxy balance to show
           var newBal = await _usdcBalance(_state.proxy);
+          var lifiTxHash = (data.receiving && data.receiving.txHash) || txHash;
+          var lifiChain = _bridgeChainName(_state.bridgeFromChain);
+          _saveDeposit({ amount: _state.bridgeAmount || 0, txHash: lifiTxHash, type: 'bridge', chain: lifiChain });
           var overlay = document.getElementById('hfxDepositOverlay');
           if (overlay) {
             overlay.innerHTML = _frame({
               success: true,
               amount: _state.bridgeAmount || 0,
               newProxyBalance: newBal != null ? newBal : 0,
-              txHash: (data.receiving && data.receiving.txHash) || txHash,
+              txHash: lifiTxHash,
               bridged: true
             });
           }
@@ -1463,6 +1544,8 @@
           _usdcBalance(_state.proxy).then(function(newBal) {
             if (newBal != null && newBal > startBal + 0.01) {
               // Balance increased — funds arrived
+              var relayChain = _bridgeChainName(_state.bridgeFromChain);
+              _saveDeposit({ amount: expectedAmount, txHash: null, type: 'bridge', chain: relayChain });
               var overlayDone = document.getElementById('hfxDepositOverlay');
               if (overlayDone) overlayDone.innerHTML = _frame({
                 success: true, amount: expectedAmount,
@@ -1527,12 +1610,16 @@
 
         if (status === 'success' || status === 'complete' || status === 'completed') {
           var newBal = await _usdcBalance(_state.proxy);
+          var relayTxHash = (data.txHashes && data.txHashes[0]) || (data.inTxHashes && data.inTxHashes[0]) || (data.outTxHashes && data.outTxHashes[0]) || null;
+          var relayChainName = _bridgeChainName(_state.bridgeFromChain);
+          _saveDeposit({ amount: _state.bridgeAmount || 0, txHash: relayTxHash, type: 'bridge', chain: relayChainName });
           var overlay = document.getElementById('hfxDepositOverlay');
           if (overlay) {
             overlay.innerHTML = _frame({
               success: true,
               amount: _state.bridgeAmount || 0,
               newProxyBalance: newBal != null ? newBal : 0,
+              txHash: relayTxHash,
               bridged: true,
               gasless: true
             });
