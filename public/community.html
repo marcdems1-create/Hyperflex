@@ -3478,26 +3478,30 @@ function toggleResolved() {
 }
 
 // ── TRADING RECORD ────────────────────────────────────────────
-// Fetches live from Polymarket data API — no import needed, works instantly
 async function loadTradingRecord() {
-  // Get wallet: creator's stored wallet → look up by creator ID → viewer's wallet
   var eoa = window._creatorWallet;
 
-  // If no stored wallet, try to find it via server lookup
+  // Try server lookup by creator ID
   if (!eoa && community && community.creator_id) {
     try {
-      var walletRes = await fetch('/api/creator-wallet/' + encodeURIComponent(community.creator_id));
-      if (walletRes.ok) {
-        var walletData = await walletRes.json();
-        if (walletData.eoa) {
-          eoa = walletData.eoa.toLowerCase();
-          window._creatorWallet = eoa;
-        }
-      }
+      var wr = await fetch('/api/creator-wallet/' + encodeURIComponent(community.creator_id));
+      if (wr.ok) { var wd = await wr.json(); if (wd.eoa) eoa = wd.eoa.toLowerCase(); }
     } catch(e) {}
   }
 
-  // Last resort: use the viewer's own wallet
+  // If viewer IS the creator, use their own wallet + save it to DB
+  if (!eoa && currentUser && community && currentUser.id === community.creator_id) {
+    eoa = localStorage.getItem('poly_eoa_address');
+    if (eoa) {
+      // Save to DB so future visitors can see it
+      try {
+        var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+        if (token) fetch('/api/user/wallets', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ polymarket_address: eoa }) }).catch(function(){});
+      } catch(e) {}
+    }
+  }
+
+  // Last resort for own profile
   if (!eoa) eoa = localStorage.getItem('poly_eoa_address');
   if (!eoa) return;
 
@@ -3506,90 +3510,86 @@ async function loadTradingRecord() {
   section.style.display = 'block';
 
   try {
-    // Auto-backfill from Polymarket on first load (silent, non-blocking)
-    // This pulls the user's full Polymarket history into our trades table
-    fetch('/api/trades/backfill', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eoa_address: eoa })
-    }).catch(function() {});
+    // Fetch FULL trading history from /api/trader/:address/profile
+    // This endpoint pulls from Polymarket data API + computes all stats
+    var profileRes = await fetch('/api/trader/' + encodeURIComponent(eoa) + '/profile');
+    var profile = profileRes.ok ? await profileRes.json() : null;
 
-    // Fetch from our trades table (includes backfilled + new trades)
-    var data = { trades: [], stats: {}, pnl_chart: [] };
-    try {
-      var r = await fetch('/api/trades/' + encodeURIComponent(eoa));
-      if (r.ok) data = await r.json();
-    } catch(e) {}
+    // Build trades list from Polymarket positions
+    var trades = [];
+    var stats = {};
 
-    var trades = data.trades || [];
-    var stats = data.stats || {};
-    var chart = data.pnl_chart || [];
+    if (profile && profile.polymarket) {
+      var poly = profile.polymarket;
+      var allPositions = [].concat(poly.open_positions || [], poly.won_positions || []);
 
-    // If our table has nothing yet (backfill still running), fetch live from Polymarket
+      trades = allPositions.map(function(p) {
+        var size = parseFloat(p.shares || p.size) || 0;
+        var cost = parseFloat(p.cost_basis || p.initialValue) || 0;
+        var val = parseFloat(p.cash_value || p.currentValue) || 0;
+        var pnlVal = parseFloat(p.pnl || p.cashPnl) || (val - cost);
+        var pnlPct = cost > 0 ? (pnlVal / cost) * 100 : 0;
+        var curPrice = parseFloat(p.current_price || p.curPrice) || 0;
+        var avgPrice = cost > 0 && size > 0 ? cost / size : curPrice;
+        var isResolved = p.resolved || p.market_resolved || false;
+        var won = isResolved && pnlVal > 0;
+        return {
+          side: (p.side || p.outcome || 'YES').toUpperCase(),
+          market_question: p.question || p.title || '',
+          market_slug: p.slug || null,
+          icon: p.icon || null,
+          shares: size,
+          entry_price_cents: Math.round(avgPrice * 100),
+          current_price_cents: Math.round(curPrice * 100),
+          amount_usd: cost,
+          current_value: val,
+          pnl: pnlVal,
+          pnl_percent: pnlPct,
+          status: isResolved ? (won ? 'won' : 'lost') : 'open',
+          end_date: p.end_date || null,
+          platform: 'polymarket'
+        };
+      });
+
+      // Compute stats
+      var openArr = trades.filter(function(t) { return t.status === 'open'; });
+      var winsArr = trades.filter(function(t) { return t.status === 'won'; });
+      var lossArr = trades.filter(function(t) { return t.status === 'lost'; });
+      var resolvedCount = winsArr.length + lossArr.length;
+      var totalInv = trades.reduce(function(s, t) { return s + (parseFloat(t.amount_usd) || 0); }, 0);
+      var totalPnl = trades.reduce(function(s, t) { return s + (parseFloat(t.pnl) || 0); }, 0);
+      stats = {
+        total_trades: trades.length,
+        open_positions: openArr.length,
+        wins: winsArr.length,
+        losses: lossArr.length,
+        win_rate: resolvedCount > 0 ? Math.round((winsArr.length / resolvedCount) * 100) : null,
+        total_invested: totalInv,
+        total_pnl: totalPnl,
+        roi: totalInv > 0 ? (totalPnl / totalInv) * 100 : 0,
+        avg_trade_size: trades.length > 0 ? totalInv / trades.length : 0,
+        total_value: poly.open_value || 0,
+        realized_pnl: poly.realized_pnl || 0
+      };
+    }
+
+    // Also check local trades table
     if (trades.length === 0) {
       try {
-        // Resolve proxy first
-        var proxyRes = await fetch('/api/proxy/deployed?address=' + encodeURIComponent(eoa));
-        var proxyCheck = proxyRes.ok ? await proxyRes.json() : null;
-
-        // Try fetching positions with EOA directly (some endpoints accept it)
-        // Then try with proxy
-        var addresses = [eoa];
-        if (proxyCheck && proxyCheck.proxy) addresses.push(proxyCheck.proxy);
-
-        for (var ai = 0; ai < addresses.length && trades.length === 0; ai++) {
-          try {
-            var posRes = await fetch('/api/polymarket/positions/' + encodeURIComponent(addresses[ai]));
-            if (posRes.ok) {
-              var posData = await posRes.json();
-              var positions = posData.positions || (Array.isArray(posData) ? posData : []);
-              trades = positions.map(function(p) {
-                var size = parseFloat(p.shares || p.size) || 0;
-                var avg = parseFloat(p.avgPrice || p.average_price || p.cost_basis / size) || 0;
-                var cur = parseFloat(p.current_price || p.curPrice) || avg;
-                var cost = parseFloat(p.cost_basis) || (size * avg);
-                var pnlVal = parseFloat(p.pnl || p.cashPnl) || 0;
-                return {
-                  side: (p.side || p.outcome || 'YES').toUpperCase(),
-                  market_question: p.question || p.title || '',
-                  market_slug: p.slug || null,
-                  shares: size,
-                  entry_price_cents: Math.round(avg * 100),
-                  amount_usd: cost,
-                  pnl: pnlVal,
-                  pnl_percent: cost > 0 ? (pnlVal / cost) * 100 : 0,
-                  status: pnlVal > 0 ? 'won' : pnlVal < 0 ? 'lost' : 'open',
-                  created_at: null,
-                  icon: p.icon || null
-                };
-              });
-            }
-          } catch(e2) {}
+        var lr = await fetch('/api/trades/' + encodeURIComponent(eoa));
+        if (lr.ok) {
+          var localData = await lr.json();
+          trades = localData.trades || [];
+          stats = localData.stats || {};
         }
-      } catch(e3) {}
-
-      // Recompute stats from live positions
-      if (trades.length > 0) {
-        var openCount = trades.filter(function(t) { return t.status === 'open'; }).length;
-        var winsArr = trades.filter(function(t) { return t.status === 'won'; });
-        var lossArr = trades.filter(function(t) { return t.status === 'lost'; });
-        var resolvedCount = winsArr.length + lossArr.length;
-        var totalInv = trades.reduce(function(s, t) { return s + (parseFloat(t.amount_usd) || 0); }, 0);
-        var totalP = trades.reduce(function(s, t) { return s + (parseFloat(t.pnl) || 0); }, 0);
-        stats = {
-          total_trades: trades.length, wins: winsArr.length, losses: lossArr.length,
-          open_positions: openCount,
-          win_rate: resolvedCount > 0 ? Math.round((winsArr.length / resolvedCount) * 100) : null,
-          total_invested: totalInv, total_pnl: totalP,
-          roi: totalInv > 0 ? (totalP / totalInv) * 100 : 0,
-          avg_trade_size: trades.length > 0 ? totalInv / trades.length : 0
-        };
-      }
+      } catch(e) {}
     }
+
+    var chart = [];
 
     if (trades.length === 0) {
       var tradeList = document.getElementById('tradeList');
-      if (tradeList) tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center"><div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">No Trading Activity Yet</div><div style="font-size:12px;color:#8888a0;line-height:1.6">Place a trade on any <a href="/alpha-live" style="color:#c9920d">market</a> to start building your track record.</div></div>';
+      if (tradeList) tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center"><div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">No Trading Activity</div><div style="font-size:12px;color:#8888a0;line-height:1.6">Place a trade on any <a href="/alpha-live" style="color:#c9920d">market</a> to start building your track record.</div></div>';
       return;
     }
 
