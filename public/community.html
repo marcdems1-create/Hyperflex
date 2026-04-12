@@ -2660,11 +2660,11 @@ function renderPage(data) {
   document.getElementById('statPointsLabel').textContent = 'currency';
   document.getElementById('amountUnit').textContent   = 'pts';
 
-  // Show logged-in user's Flex Points balance in the pill
+  // Show CREATOR's Flex Points balance (not viewer's)
   try {
-    var fpToken = localStorage.getItem('hf_token');
-    if (fpToken) {
-      fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + fpToken } })
+    var creatorId = c.creator_id;
+    if (creatorId) {
+      fetch('/api/flex-points/user/' + encodeURIComponent(creatorId))
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(fp) {
           if (fp && fp.total_points != null) {
@@ -3480,8 +3480,25 @@ function toggleResolved() {
 // ── TRADING RECORD ────────────────────────────────────────────
 // Fetches live from Polymarket data API — no import needed, works instantly
 async function loadTradingRecord() {
-  // Get wallet: creator's stored wallet → viewer's wallet
-  var eoa = window._creatorWallet || localStorage.getItem('poly_eoa_address');
+  // Get wallet: creator's stored wallet → look up by creator ID → viewer's wallet
+  var eoa = window._creatorWallet;
+
+  // If no stored wallet, try to find it via server lookup
+  if (!eoa && community && community.creator_id) {
+    try {
+      var walletRes = await fetch('/api/creator-wallet/' + encodeURIComponent(community.creator_id));
+      if (walletRes.ok) {
+        var walletData = await walletRes.json();
+        if (walletData.eoa) {
+          eoa = walletData.eoa.toLowerCase();
+          window._creatorWallet = eoa;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Last resort: use the viewer's own wallet
+  if (!eoa) eoa = localStorage.getItem('poly_eoa_address');
   if (!eoa) return;
 
   var section = document.getElementById('tradingRecordSection');

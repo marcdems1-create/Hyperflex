@@ -25100,6 +25100,87 @@ app.post('/api/trades/backfill', async (req, res) => {
 });
 
 // Earn FLEX points endpoint — called after successful CLOB trade
+// GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
+app.get('/api/flex-points/user/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    let row = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT total_points, trade_count FROM flex_points WHERE user_id = $1', [userId]);
+      row = rows[0] || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points').select('total_points, trade_count').eq('user_id', userId).maybeSingle();
+      row = data;
+    }
+    res.json({ total_points: row ? row.total_points : 0, trade_count: row ? row.trade_count : 0 });
+  } catch (err) {
+    res.json({ total_points: 0, trade_count: 0 });
+  }
+});
+
+// GET /api/creator-wallet/:userId — find a creator's Polymarket wallet from all sources
+app.get('/api/creator-wallet/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+
+    let eoa = null;
+
+    // Source 1: users.polymarket_address
+    try {
+      if (pool) {
+        const rows = await dbQuery('SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]);
+        if (rows[0] && rows[0].polymarket_address) eoa = rows[0].polymarket_address.toLowerCase();
+      } else {
+        const { data } = await supabase.from('users').select('polymarket_address').eq('id', userId).maybeSingle();
+        if (data && data.polymarket_address) eoa = data.polymarket_address.toLowerCase();
+      }
+    } catch(e) {}
+
+    // Source 2: creator_settings.polymarket_address
+    if (!eoa) {
+      try {
+        if (pool) {
+          const rows = await dbQuery('SELECT polymarket_address FROM creator_settings WHERE creator_id = $1 LIMIT 1', [userId]);
+          if (rows[0] && rows[0].polymarket_address) eoa = rows[0].polymarket_address.toLowerCase();
+        } else {
+          const { data } = await supabase.from('creator_settings').select('polymarket_address').eq('creator_id', userId).maybeSingle();
+          if (data && data.polymarket_address) eoa = data.polymarket_address.toLowerCase();
+        }
+      } catch(e) {}
+    }
+
+    // Source 3: polymarket_trades — check if any trades are recorded for this user
+    if (!eoa) {
+      try {
+        // Look up by matching the user's display name or finding trades via the users table
+        if (pool) {
+          const rows = await dbQuery('SELECT DISTINCT eoa_address FROM polymarket_trades WHERE eoa_address IN (SELECT LOWER(polymarket_address) FROM users WHERE id = $1) LIMIT 1', [userId]);
+          if (rows[0]) eoa = rows[0].eoa_address;
+        }
+      } catch(e) {}
+    }
+
+    // Source 4: cached_positions — check if any positions exist
+    if (!eoa) {
+      try {
+        if (pool) {
+          const rows = await dbQuery("SELECT wallet_address FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket' LIMIT 1", [userId]);
+          if (rows[0] && rows[0].wallet_address) eoa = rows[0].wallet_address.toLowerCase();
+        } else {
+          const { data } = await supabase.from('cached_positions').select('wallet_address').eq('user_id', userId).eq('platform', 'polymarket').limit(1).maybeSingle();
+          if (data && data.wallet_address) eoa = data.wallet_address.toLowerCase();
+        }
+      } catch(e) {}
+    }
+
+    res.json({ eoa: eoa || null, userId });
+  } catch (err) {
+    res.json({ eoa: null, error: err.message });
+  }
+});
+
 app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
   try {
     const userId = req.userId;
