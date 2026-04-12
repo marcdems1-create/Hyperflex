@@ -30315,10 +30315,14 @@ app.get('/admin/relayer', (req, res) => {
 // Arbitrum USDC). As a fallback, we retry with symbol-based lookup — LI.FI
 // accepts 'USDC', 'USDC.e', etc. as the fromToken/toToken and resolves them
 // internally. This has better coverage than hex addresses.
+// LI.FI API key — register at https://li.fi to get higher rate limits and
+// avoid deny-list issues. Set LIFI_API_KEY env var in Railway once registered.
+const LIFI_API_KEY = process.env.LIFI_API_KEY || '';
+
 async function _lifiQuote(params) {
-  const r = await fetch('https://li.quest/v1/quote?' + params.toString(), {
-    headers: { 'Accept': 'application/json' }
-  });
+  const headers = { 'Accept': 'application/json' };
+  if (LIFI_API_KEY) headers['x-lifi-api-key'] = LIFI_API_KEY;
+  const r = await fetch('https://li.quest/v1/quote?' + params.toString(), { headers });
   let data;
   try { data = await r.json(); } catch (e) { data = { error: 'invalid json from li.fi' }; }
   return { ok: r.ok, status: r.status, data };
@@ -30448,8 +30452,10 @@ app.get('/api/bridge/status', async (req, res) => {
     if (fromChain) params.set('fromChain', String(fromChain));
     if (toChain) params.set('toChain', String(toChain));
     if (bridge) params.set('bridge', String(bridge));
+    const statusHeaders = { 'Accept': 'application/json' };
+    if (LIFI_API_KEY) statusHeaders['x-lifi-api-key'] = LIFI_API_KEY;
     const r = await fetch('https://li.quest/v1/status?' + params.toString(), {
-      headers: { 'Accept': 'application/json' }
+      headers: statusHeaders
     });
     const data = await r.json();
     if (!r.ok) {
@@ -30471,7 +30477,9 @@ app.get('/api/bridge/chains', async (req, res) => {
     if (_bridgeChainsCache && (Date.now() - _bridgeChainsCache.ts < 60 * 60 * 1000)) {
       return res.json(_bridgeChainsCache.data);
     }
-    const r = await fetch('https://li.quest/v1/chains', { headers: { 'Accept': 'application/json' } });
+    const chainsHeaders = { 'Accept': 'application/json' };
+    if (LIFI_API_KEY) chainsHeaders['x-lifi-api-key'] = LIFI_API_KEY;
+    const r = await fetch('https://li.quest/v1/chains', { headers: chainsHeaders });
     const data = await r.json();
     _bridgeChainsCache = { ts: Date.now(), data: data };
     res.json(data);
