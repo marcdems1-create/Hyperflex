@@ -3664,6 +3664,32 @@ async function executeTrade() {
       }
     } catch (e) { /* silent */ }
 
+    // Record trade to profile track record (fire-and-forget)
+    try {
+      var tradeMarket = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || _market || {};
+      var orderId = data && (data.orderID || data.order_id || data.id) || null;
+      fetch('/api/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eoa_address: eoaAddress,
+          proxy_address: proxyAddress,
+          market_slug: _market && _market.slug ? _market.slug : (window.location.pathname.split('/market/')[1] || ''),
+          market_question: tradeMarket.question || tradeMarket.groupItemTitle || (_market && _market.question) || '',
+          condition_id: tradeMarket.conditionId || (_market && _market.conditionId) || '',
+          token_id: tokenId,
+          side: sideLabel,
+          trade_mode: _tradeMode || 'buy',
+          order_type: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC',
+          amount_usd: amount,
+          shares: shares,
+          price_cents: price,
+          potential_payout: shares,
+          order_id: orderId
+        })
+      }).catch(function() {});
+    } catch (e) { /* silent */ }
+
     // Hedge chain: if this was leg 1 of a hedge pair, navigate to leg 2
     try {
       var hp = new URLSearchParams(window.location.search);

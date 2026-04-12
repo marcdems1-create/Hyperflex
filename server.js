@@ -24742,6 +24742,111 @@ app.get('/api/flex-points', requireAuth, async (req, res) => {
   }
 });
 
+// ── POLYMARKET TRADE RECORDING ──────────────────────────────────────────────
+// Records every trade placed through HYPERFLEX for profile track records.
+
+// POST /api/trades — record a successful trade
+app.post('/api/trades', async (req, res) => {
+  try {
+    const { eoa_address, proxy_address, market_slug, market_question, condition_id,
+            token_id, side, trade_mode, order_type, amount_usd, shares, price_cents,
+            potential_payout, order_id } = req.body;
+
+    if (!eoa_address || !side || !amount_usd) {
+      return res.status(400).json({ error: 'eoa_address, side, and amount_usd required' });
+    }
+
+    const { data, error } = await supabase.from('polymarket_trades').insert({
+      eoa_address: (eoa_address || '').toLowerCase(),
+      proxy_address: (proxy_address || '').toLowerCase(),
+      market_slug: market_slug || null,
+      market_question: (market_question || '').slice(0, 500),
+      condition_id: condition_id || null,
+      token_id: token_id || null,
+      side: side.toUpperCase(),
+      trade_mode: trade_mode || 'buy',
+      order_type: order_type || 'GTC',
+      amount_usd: parseFloat(amount_usd) || 0,
+      shares: parseFloat(shares) || 0,
+      price_cents: parseInt(price_cents) || 0,
+      potential_payout: parseFloat(potential_payout) || 0,
+      order_id: order_id || null
+    }).select('id').single();
+
+    if (error) {
+      // Table might not exist yet — log but don't fail the trade
+      console.warn('[trades] insert error:', error.message);
+      return res.json({ recorded: false, error: error.message });
+    }
+
+    console.log(`[trades] Recorded: ${side} ${amount_usd} on ${(market_slug || 'unknown').slice(0, 30)}`);
+    res.json({ recorded: true, trade_id: data.id });
+  } catch (err) {
+    console.warn('[trades] error:', err.message);
+    res.json({ recorded: false, error: err.message });
+  }
+});
+
+// GET /api/trades/:address — fetch trade history + stats for a wallet
+app.get('/api/trades/:address', async (req, res) => {
+  try {
+    const address = (req.params.address || '').toLowerCase();
+    if (!address || !address.startsWith('0x')) {
+      return res.status(400).json({ error: 'Valid address required' });
+    }
+
+    // Fetch all trades for this address
+    const { data: trades, error } = await supabase
+      .from('polymarket_trades')
+      .select('*')
+      .eq('eoa_address', address)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      console.warn('[trades] fetch error:', error.message);
+      return res.json({ trades: [], stats: {} });
+    }
+
+    // Compute stats
+    const total = trades.length;
+    const resolved = trades.filter(t => t.outcome);
+    const wins = resolved.filter(t => t.outcome === 'won').length;
+    const losses = resolved.filter(t => t.outcome === 'lost').length;
+    const winRate = resolved.length > 0 ? Math.round((wins / resolved.length) * 100) : null;
+    const totalInvested = trades.reduce((sum, t) => sum + (parseFloat(t.amount_usd) || 0), 0);
+    const totalPnl = resolved.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
+    const avgTradeSize = total > 0 ? totalInvested / total : 0;
+    const biggestWin = resolved.filter(t => t.pnl > 0).sort((a, b) => b.pnl - a.pnl)[0] || null;
+
+    // Active positions (unresolved trades)
+    const active = trades.filter(t => !t.outcome);
+
+    res.json({
+      trades: trades.slice(0, 50), // last 50 for display
+      stats: {
+        total_trades: total,
+        resolved: resolved.length,
+        wins,
+        losses,
+        win_rate: winRate,
+        total_invested: Math.round(totalInvested * 100) / 100,
+        total_pnl: Math.round(totalPnl * 100) / 100,
+        avg_trade_size: Math.round(avgTradeSize * 100) / 100,
+        active_positions: active.length,
+        biggest_win: biggestWin ? {
+          question: biggestWin.market_question,
+          pnl: biggestWin.pnl,
+          side: biggestWin.side
+        } : null
+      }
+    });
+  } catch (err) {
+    console.error('[trades]', err.message);
+    res.json({ trades: [], stats: {} });
+  }
+});
+
 // Earn FLEX points endpoint — called after successful CLOB trade
 app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
   try {

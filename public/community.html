@@ -2110,6 +2110,15 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
     <div style="font-family:var(--mono);font-size:11px;color:#7a7870"><span id="challengeCount">0</span>/3 markets predicted this week</div>
   </div>
 
+  <!-- Trading Record -->
+  <div id="tradingRecordSection" style="display:none;margin-bottom:40px">
+    <div class="section-label">Trading Record</div>
+    <!-- Stats bar -->
+    <div id="tradeStatsBar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:16px"></div>
+    <!-- Trade list -->
+    <div id="tradeList" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.01)"></div>
+  </div>
+
   <!-- Leaderboard -->
   <div id="leaderboardSection" class="leaderboard-wrap" style="display:none">
     <div class="section-label">Leaderboard</div>
@@ -2434,6 +2443,7 @@ async function loadCommunity() {
     // never takes down the entire page
     safeLoad(() => renderRewards(allRewards), 'rewards');
     safeLoad(() => loadLeaderboard(), 'leaderboard');
+    safeLoad(() => loadTradingRecord(), 'trading-record');
     if (currentUser) safeLoad(() => loadWeeklyChallenge(), 'challenge');
     safeLoad(() => loadCrowdWisdom(), 'crowd-wisdom');
     safeLoad(() => loadPredictorScores(), 'predictor-scores');
@@ -3448,6 +3458,100 @@ function toggleResolved() {
   document.getElementById('resolvedGrid').style.display = resolvedVisible ? 'grid' : 'none';
   document.getElementById('resolvedToggle').textContent = resolvedVisible ? '▼ hide' : '▶ show';
 }
+
+// ── TRADING RECORD ────────────────────────────────────────────
+async function loadTradingRecord() {
+  // Get EOA address — either current user's or creator's connected wallet
+  var eoa = localStorage.getItem('poly_eoa_address');
+  // Also check if the community creator has a connected wallet
+  if (!eoa && community && community.polymarket_address) {
+    eoa = community.polymarket_address;
+  }
+  if (!eoa) return; // no wallet connected, nothing to show
+
+  try {
+    var r = await fetch('/api/trades/' + encodeURIComponent(eoa));
+    if (!r.ok) return;
+    var data = await r.json();
+    var trades = data.trades || [];
+    var stats = data.stats || {};
+
+    if (trades.length === 0 && !stats.total_trades) return; // no trades yet
+
+    var section = document.getElementById('tradingRecordSection');
+    if (!section) return;
+    section.style.display = 'block';
+
+    // ── Stats bar ──
+    var statsBar = document.getElementById('tradeStatsBar');
+    if (statsBar) {
+      var statItems = [
+        { label: 'Trades', value: stats.total_trades || 0, color: '#f0f0f5' },
+        { label: 'Win Rate', value: stats.win_rate != null ? stats.win_rate + '%' : '—', color: stats.win_rate >= 50 ? '#00e68a' : stats.win_rate != null ? '#ff4d6a' : '#8888a0' },
+        { label: 'Total P&L', value: stats.total_pnl != null ? (stats.total_pnl >= 0 ? '+' : '') + '$' + stats.total_pnl.toFixed(2) : '—', color: (stats.total_pnl || 0) >= 0 ? '#00e68a' : '#ff4d6a' },
+        { label: 'Invested', value: '$' + (stats.total_invested || 0).toFixed(0), color: '#f0f0f5' },
+        { label: 'Active', value: stats.active_positions || 0, color: '#4d9fff' },
+        { label: 'Avg Size', value: '$' + (stats.avg_trade_size || 0).toFixed(0), color: '#8888a0' }
+      ];
+      statsBar.innerHTML = statItems.map(function(s) {
+        return '<div style="padding:12px 10px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;text-align:center">' +
+          '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + s.color + '">' + s.value + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:.08em;margin-top:4px">' + s.label + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // ── Trade list ──
+    var tradeList = document.getElementById('tradeList');
+    if (tradeList && trades.length > 0) {
+      var header = '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:10px 16px;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8888a0;border-bottom:1px solid var(--border)">' +
+        '<div>Market</div><div style="text-align:right">Entry</div><div style="text-align:right">Amount</div></div>';
+
+      var rows = trades.map(function(t) {
+        var sideColor = t.side === 'YES' ? '#00e68a' : '#ff4d6a';
+        var sideBg = t.side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
+        var outcomeHtml = '';
+        if (t.outcome === 'won') outcomeHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(0,230,138,0.12);color:#00e68a;margin-left:6px">WON</span>';
+        else if (t.outcome === 'lost') outcomeHtml = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(255,77,106,0.12);color:#ff4d6a;margin-left:6px">LOST</span>';
+        var question = (t.market_question || 'Unknown market');
+        if (question.length > 60) question = question.slice(0, 58) + '…';
+        var ago = _timeAgo(t.created_at);
+        var href = t.market_slug ? '/market/' + t.market_slug : '#';
+
+        return '<a href="' + href + '" style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.03);text-decoration:none;color:var(--text);transition:background .1s;align-items:center" onmouseover="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseout="this.style.background=\'\'">' +
+          '<div style="min-width:0">' +
+            '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(question) + outcomeHtml + '</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;margin-top:3px">' +
+              '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + '">' + t.side + '</span>' +
+              '<span style="font-family:var(--mono);font-size:10px;color:#8888a0">' + (t.shares ? parseFloat(t.shares).toFixed(1) + ' shares' : '') + '</span>' +
+              '<span style="font-family:var(--mono);font-size:10px;color:#8888a0">· ' + ago + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);text-align:right">' + (t.price_cents || '—') + '¢</div>' +
+          '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);text-align:right">$' + (parseFloat(t.amount_usd) || 0).toFixed(0) + '</div>' +
+        '</a>';
+      }).join('');
+
+      tradeList.innerHTML = header + rows;
+    } else if (tradeList) {
+      tradeList.innerHTML = '<div style="padding:24px;text-align:center;color:#8888a0;font-size:13px">No trades recorded yet. Place a trade on any market to start building your track record.</div>';
+    }
+  } catch (e) {
+    console.warn('[trading-record] load failed:', e.message);
+  }
+}
+
+function _timeAgo(dateStr) {
+  if (!dateStr) return '';
+  var diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function _esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 // ── LEADERBOARD ───────────────────────────────────────────────
 let lbPeriod = 'all';
