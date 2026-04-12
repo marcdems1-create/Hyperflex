@@ -2902,18 +2902,26 @@ body.nav-open .sidebar-backdrop {
 @media (max-width: 699px) {
   .pos-table-row {
     display: grid !important;
-    grid-template-columns: minmax(0, 1fr) minmax(0, max-content) !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
     grid-template-areas:
       "market value"
       "sell sell" !important;
-    column-gap: 10px !important;
+    column-gap: 8px !important;
     row-gap: 6px !important;
-    align-items: center !important;
+    align-items: start !important;
+    padding: 10px 12px !important;
   }
   .pos-table-row > div:nth-child(1) {
     grid-area: market;
     min-width: 0 !important;
     overflow: hidden !important;
+  }
+  /* Force title text to truncate on mobile */
+  .pos-table-row > div:nth-child(1) > div > div:first-child {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
   }
   .pos-table-row > div:nth-child(2),
   .pos-table-row > div:nth-child(3),
@@ -2922,7 +2930,8 @@ body.nav-open .sidebar-backdrop {
     grid-area: value;
     text-align: right !important;
     min-width: 0 !important;
-    max-width: 140px !important;
+    max-width: 110px !important;
+    flex-shrink: 0 !important;
     overflow: hidden !important;
   }
   .pos-table-row > div:nth-child(5) > div {
@@ -2968,8 +2977,27 @@ body.nav-open .sidebar-backdrop {
 .pos-group-body { }
 .pos-group-body .pos-table-row { padding-left: 32px !important; }
 @media (max-width: 699px) {
-  .pos-group-header { grid-template-columns: 1fr max-content 40px !important; }
+  .pos-group-header {
+    grid-template-columns: minmax(0, 1fr) auto 32px !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+  .pos-group-header > div:nth-child(1) {
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
   .pos-group-header > div:nth-child(2) { display: none; }
+  .pos-group-header > div:nth-child(3) {
+    min-width: 0 !important;
+    max-width: 120px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+  .pos-group-header > div:nth-child(3) > div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
   .pos-group-body .pos-table-row { padding-left: 16px !important; }
 }
 
