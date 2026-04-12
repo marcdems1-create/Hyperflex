@@ -30655,6 +30655,7 @@ app.get('/api/bridge/chains', async (req, res) => {
 // RELAY.LINK GASLESS BRIDGE — user signs a permit, Relay's solver pays gas
 // ══════════════════════════════════════════════════════════════════════════════
 const RELAY_API_KEY = process.env.RELAY_API_KEY || '';
+const RELAY_FEE_RECIPIENT = process.env.RELAY_FEE_RECIPIENT || ''; // wallet to receive app fees
 
 // USDC addresses per chain (native USDC that supports EIP-3009 permits)
 const RELAY_USDC = {
@@ -30700,6 +30701,12 @@ app.post('/api/bridge/relay-quote', async (req, res) => {
       tradeType: 'EXACT_INPUT',
       recipient: toAddress
     };
+
+    // Add integrator fee: 50 BPS (0.5%) — same as LI.FI fee
+    // Requires RELAY_FEE_RECIPIENT env var set to your wallet address
+    if (RELAY_FEE_RECIPIENT) {
+      body.appFees = [{ recipient: RELAY_FEE_RECIPIENT, fee: '50' }]; // 50 basis points
+    }
 
     const r = await fetch('https://api.relay.link/quote/v2', {
       method: 'POST',
