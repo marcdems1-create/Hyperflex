@@ -30534,6 +30534,57 @@ app.get('/api/proxy/deployed', async (req, res) => {
   }
 });
 
+// POST /api/proxy/deploy — deploy a Polymarket proxy wallet via relayer (server-side, no CORS)
+// Tries Polymarket's relayer first, which deploys gaslessly for the user.
+app.post('/api/proxy/deploy', async (req, res) => {
+  try {
+    const { address } = req.body;
+    if (!address) return res.status(400).json({ error: 'address required' });
+
+    // First check if already deployed (avoid unnecessary deploy calls)
+    try {
+      const checkRes = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(address));
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.deployed) {
+          return res.json({ deployed: true, already: true });
+        }
+      }
+    } catch (e) {}
+
+    // Try Polymarket relayer deploy endpoint
+    // The relayer accepts POST with the EOA address and deploys the Safe proxy
+    const deployEndpoints = [
+      'https://relayer-v2.polymarket.com/create-proxy',
+      'https://relayer-v2.polymarket.com/deploy'
+    ];
+
+    for (const endpoint of deployEndpoints) {
+      try {
+        console.log('[proxy/deploy] Trying', endpoint, 'for', address.slice(0, 10));
+        const r = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, owner: address })
+        });
+        const data = await r.json().catch(() => ({}));
+        console.log('[proxy/deploy]', endpoint, r.status, data);
+        if (r.ok) {
+          return res.json({ deployed: true, success: true, source: endpoint, data });
+        }
+      } catch (e) {
+        console.warn('[proxy/deploy]', endpoint, 'failed:', e.message);
+      }
+    }
+
+    // If relayer doesn't work, return instructions for on-chain deploy
+    res.json({ deployed: false, success: false, fallback: 'on-chain' });
+  } catch (err) {
+    console.error('[proxy/deploy]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/bridge/status — check cross-chain transfer status
 // Query: txHash, fromChain, toChain (+ optional bridge name)
 app.get('/api/bridge/status', async (req, res) => {
