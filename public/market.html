@@ -3795,7 +3795,8 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
   } catch (directErr) {
     tradeDebug('direct THREW', directErr.message);
-    return { _error: true, _errorMsg: 'Could not submit order — please try again' };
+    // If both CF proxy AND direct failed, it's likely a network or geo-restriction issue
+    return { _error: true, _errorMsg: 'Could not reach Polymarket — check your connection and try again. If this persists, try a VPN.' };
   }
 }
 
