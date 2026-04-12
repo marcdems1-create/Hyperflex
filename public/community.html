@@ -3464,24 +3464,56 @@ function toggleResolved() {
 
 // ── TRADING RECORD ────────────────────────────────────────────
 async function loadTradingRecord() {
-  // Use the community CREATOR's wallet — this is their trading record page
-  // Falls back to the viewer's wallet if creator has no wallet connected
+  // Show trading record for whoever has a wallet connected:
+  // 1. Creator's wallet (from API) — shows their track record to all visitors
+  // 2. Viewer's own wallet — shows the logged-in user their own record
   var eoa = window._creatorWallet || localStorage.getItem('poly_eoa_address');
-  if (!eoa) return;
+  // Always show the section even without a wallet — it explains the feature
+  var section = document.getElementById('tradingRecordSection');
+  if (!section) return;
+  section.style.display = 'block';
+
+  if (!eoa) {
+    var tradeList = document.getElementById('tradeList');
+    if (tradeList) {
+      tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center">' +
+        '<div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div>' +
+        '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Trading Record</div>' +
+        '<div style="font-size:12px;color:#8888a0;line-height:1.6">Connect a Polymarket wallet to track trades and build a verified track record with win rate, P&L, and performance stats.</div>' +
+      '</div>';
+    }
+    return;
+  }
 
   try {
-    var r = await fetch('/api/trades/' + encodeURIComponent(eoa));
-    if (!r.ok) return;
-    var data = await r.json();
+    var data = { trades: [], stats: {}, pnl_chart: [] };
+    try {
+      var r = await fetch('/api/trades/' + encodeURIComponent(eoa));
+      if (r.ok) data = await r.json();
+    } catch (fetchErr) { console.warn('[trading-record] API error:', fetchErr.message); }
     var trades = data.trades || [];
     var stats = data.stats || {};
     var chart = data.pnl_chart || [];
 
-    if (!stats.total_trades) return;
-
     var section = document.getElementById('tradingRecordSection');
     if (!section) return;
     section.style.display = 'block';
+
+    // If no trades recorded yet, show empty state with wallet address
+    if (!stats.total_trades) {
+      var statsBar = document.getElementById('tradeStatsBar');
+      if (statsBar) statsBar.innerHTML = '';
+      var tradeList = document.getElementById('tradeList');
+      if (tradeList) {
+        tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center">' +
+          '<div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div>' +
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Trading Record</div>' +
+          '<div style="font-size:12px;color:#8888a0;line-height:1.6;margin-bottom:16px">Trades placed through HYPERFLEX will appear here with full P&L tracking, win rate, and performance stats.</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:#666;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:inline-block">' + eoa.slice(0,6) + '…' + eoa.slice(-4) + '</div>' +
+        '</div>';
+      }
+      return;
+    }
 
     // ── Stats grid ──
     var statsBar = document.getElementById('tradeStatsBar');
