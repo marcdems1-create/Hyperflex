@@ -2660,6 +2660,21 @@ function renderPage(data) {
   document.getElementById('statPointsLabel').textContent = 'currency';
   document.getElementById('amountUnit').textContent   = 'pts';
 
+  // Show logged-in user's Flex Points balance in the pill
+  try {
+    var fpToken = localStorage.getItem('hf_token');
+    if (fpToken) {
+      fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + fpToken } })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(fp) {
+          if (fp && fp.total_points != null) {
+            document.getElementById('statPoints').textContent = fp.total_points.toLocaleString();
+            document.getElementById('statPointsLabel').textContent = c.custom_points_name || 'Flex Points';
+          }
+        }).catch(function() {});
+    }
+  } catch(e) {}
+
   // Watermark
   if (c.plan === 'platinum') {
     const p = document.getElementById('poweredBy');
