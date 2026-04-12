@@ -3508,7 +3508,8 @@ async function loadTradingRecord() {
         tradeList.innerHTML = '<div style="padding:32px 20px;text-align:center">' +
           '<div style="font-size:32px;margin-bottom:10px;opacity:0.4">📊</div>' +
           '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Trading Record</div>' +
-          '<div style="font-size:12px;color:#8888a0;line-height:1.6;margin-bottom:16px">Trades placed through HYPERFLEX will appear here with full P&L tracking, win rate, and performance stats.</div>' +
+          '<div style="font-size:12px;color:#8888a0;line-height:1.6;margin-bottom:16px">Import your Polymarket trading history to build a verified track record.</div>' +
+          '<button onclick="backfillTrades()" id="backfillBtn" style="background:#a855f7;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;min-height:40px;margin-bottom:12px">📥 Import Polymarket Trades</button>' +
           '<div style="font-family:var(--mono);font-size:11px;color:#666;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:inline-block">' + eoa.slice(0,6) + '…' + eoa.slice(-4) + '</div>' +
         '</div>';
       }
@@ -3647,6 +3648,31 @@ async function loadTradingRecord() {
     }
   } catch (e) {
     console.warn('[trading-record] load failed:', e.message);
+  }
+}
+
+async function backfillTrades() {
+  var btn = document.getElementById('backfillBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+  var eoa = window._creatorWallet || localStorage.getItem('poly_eoa_address');
+  if (!eoa) { if (btn) btn.textContent = 'No wallet connected'; return; }
+  try {
+    var r = await fetch('/api/trades/backfill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eoa_address: eoa })
+    });
+    var data = await r.json();
+    if (data.imported > 0) {
+      if (btn) btn.textContent = '✅ Imported ' + data.imported + ' trades!';
+      setTimeout(function() { loadTradingRecord(); }, 1000);
+    } else if (data.error) {
+      if (btn) { btn.textContent = 'Error: ' + data.error.slice(0, 40); btn.disabled = false; }
+    } else {
+      if (btn) { btn.textContent = 'No trades found on Polymarket'; btn.disabled = false; }
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = 'Failed — try again'; btn.disabled = false; }
   }
 }
 

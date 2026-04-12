@@ -25006,6 +25006,138 @@ app.get('/api/trades/:address', async (req, res) => {
   }
 });
 
+// POST /api/trades/backfill — import historical trades from Polymarket data API
+// Uses the proxy wallet address to fetch positions and convert them to trade records
+app.post('/api/trades/backfill', async (req, res) => {
+  try {
+    const { eoa_address } = req.body;
+    if (!eoa_address) return res.status(400).json({ error: 'eoa_address required' });
+    const eoa = eoa_address.toLowerCase();
+
+    // Compute proxy address
+    let proxy = null;
+    try {
+      const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+      for (const rpc of rpcs) {
+        try {
+          const r = await fetch(rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data: '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x','').padStart(64,'0') }, 'latest'], id: 1 })
+          });
+          const data = await r.json();
+          if (data.result && data.result !== '0x') {
+            proxy = '0x' + data.result.slice(-40);
+            break;
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+
+    if (!proxy) {
+      return res.status(400).json({ error: 'Could not resolve proxy wallet' });
+    }
+
+    // Fetch positions from Polymarket data API
+    const [openRes, wonRes] = await Promise.allSettled([
+      fetch(`https://data-api.polymarket.com/positions?user=${proxy.toLowerCase()}&limit=200&sortBy=CURRENT&winning=false`, { headers: { Accept: 'application/json' } }),
+      fetch(`https://data-api.polymarket.com/positions?user=${proxy.toLowerCase()}&limit=200&sortBy=CURRENT&winning=true`, { headers: { Accept: 'application/json' } })
+    ]);
+
+    let openPos = [];
+    let wonPos = [];
+    if (openRes.status === 'fulfilled' && openRes.value.ok) {
+      openPos = await openRes.value.json();
+      if (!Array.isArray(openPos)) openPos = [];
+    }
+    if (wonRes.status === 'fulfilled' && wonRes.value.ok) {
+      wonPos = await wonRes.value.json();
+      if (!Array.isArray(wonPos)) wonPos = [];
+    }
+
+    const allPos = [...openPos, ...wonPos];
+    if (!allPos.length) {
+      return res.json({ imported: 0, message: 'No positions found on Polymarket for proxy ' + proxy.slice(0, 10) });
+    }
+
+    // Check which positions we already have
+    const { data: existing } = await supabase
+      .from('polymarket_trades')
+      .select('condition_id, side')
+      .eq('eoa_address', eoa);
+    const existingSet = new Set((existing || []).map(e => e.condition_id + '_' + e.side));
+
+    let imported = 0;
+    for (const pos of allPos) {
+      // Skip if already recorded
+      const condId = (pos.conditionId || pos.condition_id || '').toLowerCase();
+      const side = (pos.outcome || pos.side || 'YES').toUpperCase();
+      if (!condId || existingSet.has(condId + '_' + side)) continue;
+
+      const size = parseFloat(pos.size) || 0;
+      if (size <= 0) continue;
+
+      const avgPrice = parseFloat(pos.avgPrice) || parseFloat(pos.average_price) || 0;
+      const currentPrice = parseFloat(pos.curPrice) || parseFloat(pos.current_price) || avgPrice;
+      const costBasis = size * avgPrice;
+      const currentValue = size * currentPrice;
+      const cashPnl = parseFloat(pos.cashPnl) || parseFloat(pos.pnl) || (currentValue - costBasis);
+
+      // Determine status
+      let status = 'open';
+      let closeReason = null;
+      let exitPrice = null;
+      if (pos.resolved || pos.market_resolved) {
+        const won = (parseFloat(pos.cashPnl) || 0) > 0 || pos.winning === true;
+        status = won ? 'won' : 'lost';
+        closeReason = won ? 'resolved_win' : 'resolved_loss';
+        exitPrice = won ? 1.0 : 0.0;
+      }
+
+      // Find market slug from our screener cache if possible
+      let slug = null;
+      let question = pos.title || pos.question || pos.market || '';
+      try {
+        if (pos.slug || pos.market_slug) slug = pos.slug || pos.market_slug;
+      } catch(e) {}
+
+      const { error } = await supabase.from('polymarket_trades').insert({
+        eoa_address: eoa,
+        proxy_address: proxy.toLowerCase(),
+        market_slug: slug,
+        market_question: question.slice(0, 500),
+        condition_id: condId,
+        token_id: pos.asset || pos.token_id || null,
+        side: side,
+        trade_mode: 'buy',
+        order_type: 'GTC',
+        entry_price: avgPrice,
+        entry_price_cents: Math.round(avgPrice * 100),
+        amount_usd: Math.round(costBasis * 100) / 100,
+        shares: size,
+        market_price_at_entry: avgPrice,
+        status: status,
+        exit_price: exitPrice,
+        exit_amount_usd: status !== 'open' ? (status === 'won' ? Math.round(size * 100) / 100 : 0) : null,
+        pnl: status !== 'open' ? Math.round(cashPnl * 100) / 100 : null,
+        pnl_percent: costBasis > 0 && status !== 'open' ? Math.round((cashPnl / costBasis) * 10000) / 100 : null,
+        closed_at: status !== 'open' ? new Date().toISOString() : null,
+        close_reason: closeReason,
+        created_at: pos.created_at || pos.timestamp || new Date().toISOString()
+      });
+
+      if (!error) imported++;
+      else console.warn('[backfill] insert error:', error.message);
+    }
+
+    console.log(`[trades/backfill] Imported ${imported} positions for ${eoa.slice(0, 10)} (proxy: ${proxy.slice(0, 10)})`);
+    res.json({ imported, total_found: allPos.length, proxy });
+  } catch (err) {
+    console.error('[trades/backfill]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Earn FLEX points endpoint — called after successful CLOB trade
 app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
   try {
