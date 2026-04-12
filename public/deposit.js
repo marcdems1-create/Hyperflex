@@ -1286,61 +1286,91 @@
       var signer = await provider.getSigner();
 
       // Process each step from Relay
+      // Relay step format: { kind: 'signature'|'transaction', items: [{ status, data: { sign, post } }] }
       var requestId = null;
       for (var si = 0; si < steps.length; si++) {
         var step = steps[si];
         var items = step.items || [];
+        console.log('[relay] step', si, 'kind:', step.kind, 'items:', items.length, JSON.stringify(step).slice(0, 500));
 
         for (var ii = 0; ii < items.length; ii++) {
           var item = items[ii];
+          console.log('[relay] item', ii, 'keys:', Object.keys(item), JSON.stringify(item).slice(0, 500));
 
-          if (step.kind === 'signature' || item.data) {
+          // Relay nests sign data at item.data.sign or item.data directly
+          var signData = (item.data && item.data.sign) ? item.data.sign : item.data;
+          var postData = (item.data && item.data.post) ? item.data.post : item.postData;
+
+          if (step.kind === 'signature') {
             // ── Signature step (gasless permit) ──
             _state.bridgePollMessage = 'Sign in wallet…';
             _state.bridgeSubMessage = 'Approve USDC transfer (no gas needed)';
             var overlaySign = document.getElementById('hfxDepositOverlay');
             if (overlaySign) overlaySign.innerHTML = _frame(_state);
 
-            var signData = item.data;
             var signature;
+            console.log('[relay] signData keys:', signData ? Object.keys(signData) : 'null');
 
-            if (signData && signData.domain && signData.types && signData.message) {
+            if (signData && signData.domain && signData.types) {
               // EIP-712 typed data signing
               var types = Object.assign({}, signData.types);
               delete types.EIP712Domain; // ethers adds this automatically
-              signature = await signer.signTypedData(signData.domain, types, signData.message);
+
+              // Find the primary type value — could be signData.message, signData.value, or signData.primaryType
+              var msgValue = signData.message || signData.value || {};
+
+              // If types is empty after removing EIP712Domain, check if primaryType is set
+              var typeKeys = Object.keys(types);
+              if (typeKeys.length === 0 && signData.primaryType) {
+                // Reconstruct types from the raw sign data
+                console.warn('[relay] types empty after removing EIP712Domain, using raw eth_signTypedData_v4');
+                var rawTypedData = JSON.stringify({
+                  domain: signData.domain,
+                  types: signData.types,
+                  primaryType: signData.primaryType,
+                  message: msgValue
+                });
+                signature = await window.ethereum.request({
+                  method: 'eth_signTypedData_v4',
+                  params: [await signer.getAddress(), rawTypedData]
+                });
+              } else if (typeKeys.length > 0) {
+                signature = await signer.signTypedData(signData.domain, types, msgValue);
+              } else {
+                throw new Error('No valid types found in sign data');
+              }
             } else if (signData && signData.signatureKind === 'eip191') {
-              // Personal sign
               signature = await signer.signMessage(signData.message || signData);
             } else if (typeof signData === 'string') {
               signature = await signer.signMessage(signData);
             } else {
-              // Try as typed data
-              var sd = signData || {};
-              var sdTypes = Object.assign({}, sd.types || {});
-              delete sdTypes.EIP712Domain;
-              signature = await signer.signTypedData(sd.domain || {}, sdTypes, sd.message || sd.value || {});
+              // Last resort: try raw eth_signTypedData_v4 with the full data
+              console.warn('[relay] unknown sign format, trying raw eth_signTypedData_v4');
+              var rawData = typeof signData === 'object' ? JSON.stringify(signData) : String(signData);
+              signature = await window.ethereum.request({
+                method: 'eth_signTypedData_v4',
+                params: [await signer.getAddress(), rawData]
+              });
             }
 
-            // POST the signature back to Relay
-            if (item.postData && item.postData.endpoint) {
-              var postUrl = item.postData.endpoint;
-              // Append signature as query param if needed
-              if (postUrl.indexOf('?') === -1) postUrl += '?signature=' + encodeURIComponent(signature);
-              else postUrl += '&signature=' + encodeURIComponent(signature);
+            console.log('[relay] signature obtained:', signature ? signature.slice(0, 20) + '…' : 'null');
 
-              var postBody = item.postData.body ? JSON.parse(JSON.stringify(item.postData.body)) : {};
+            // POST the signature back to Relay
+            if (postData && postData.endpoint) {
+              var postUrl = postData.endpoint;
+              var postBody = postData.body ? JSON.parse(JSON.stringify(postData.body)) : {};
               postBody.signature = signature;
 
+              console.log('[relay] posting to:', postUrl);
               var postRes = await fetch(postUrl, {
-                method: item.postData.method || 'POST',
+                method: postData.method || 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(postBody)
               });
 
               var postResult;
               try { postResult = await postRes.json(); } catch (e) { postResult = {}; }
-              console.log('[relay] step', si, 'item', ii, 'posted:', postResult);
+              console.log('[relay] post result:', JSON.stringify(postResult).slice(0, 300));
 
               // Extract requestId for status polling
               if (postResult.requestId) requestId = postResult.requestId;
@@ -1348,22 +1378,38 @@
             }
 
           } else if (step.kind === 'transaction') {
-            // ── Transaction step (rare for gasless, but handle it) ──
+            // ── Transaction step ──
             _state.bridgePollMessage = 'Confirm transaction…';
             _state.bridgeSubMessage = 'Your wallet will ask to sign';
             var overlayTx = document.getElementById('hfxDepositOverlay');
             if (overlayTx) overlayTx.innerHTML = _frame(_state);
 
-            var txData = item.data || item;
+            var txData = (item.data && item.data.to) ? item.data : (signData && signData.to ? signData : item);
             var tx = await signer.sendTransaction({
               to: txData.to,
               data: txData.data || '0x',
               value: txData.value || '0',
-              gasLimit: txData.gasLimit || undefined
+              gasLimit: txData.gasLimit || txData.gas || undefined
             });
             await tx.wait(1);
             console.log('[relay] tx step confirmed:', tx.hash);
             if (!requestId) requestId = tx.hash;
+
+            // Check for post-tx callback
+            if (postData && postData.endpoint) {
+              var txPostBody = postData.body ? JSON.parse(JSON.stringify(postData.body)) : {};
+              txPostBody.txHash = tx.hash;
+              try {
+                var txPostRes = await fetch(postData.endpoint, {
+                  method: postData.method || 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(txPostBody)
+                });
+                var txPostResult = await txPostRes.json();
+                if (txPostResult.requestId) requestId = txPostResult.requestId;
+                if (txPostResult.id) requestId = txPostResult.id;
+              } catch (e) { console.warn('[relay] post-tx callback failed:', e.message); }
+            }
           }
         }
       }
