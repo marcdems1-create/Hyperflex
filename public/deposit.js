@@ -1438,24 +1438,50 @@
       if (!requestId && _state.bridgeQuote.protocol) {
         requestId = _state.bridgeQuote.protocol.requestId || _state.bridgeQuote.protocol.orderId;
       }
+      // Also check top-level quote fields
+      if (!requestId && _state.bridgeQuote.requestId) requestId = _state.bridgeQuote.requestId;
+      if (!requestId && _state.bridgeQuote.id) requestId = _state.bridgeQuote.id;
+      // Check nested details
+      if (!requestId && _state.bridgeQuote.details && _state.bridgeQuote.details.requestId) requestId = _state.bridgeQuote.details.requestId;
+      console.log('[relay] final requestId:', requestId);
 
       if (!requestId) {
-        // No requestId — show optimistic success after a delay
+        // No requestId — poll proxy balance until it changes
+        var startBal = _state.proxyBalance || 0;
+        var expectedAmount = _state.bridgeAmount || 0;
         _state.bridgeStep = 'polling';
         _state.bridgePollMessage = 'Bridge submitted…';
-        _state.bridgeSubMessage = 'Waiting for Relay to process';
+        _state.bridgeSubMessage = 'Waiting for funds to arrive on Polygon';
         var overlayOpt = document.getElementById('hfxDepositOverlay');
         if (overlayOpt) overlayOpt.innerHTML = _frame(_state);
-        // Check proxy balance after 30s
-        setTimeout(async function() {
-          var newBal = await _usdcBalance(_state.proxy);
-          var overlayDone = document.getElementById('hfxDepositOverlay');
-          if (overlayDone) overlayDone.innerHTML = _frame({
-            success: true, amount: _state.bridgeAmount || 0,
-            newProxyBalance: newBal != null ? newBal : 0, bridged: true
+
+        // Poll balance every 5s for up to 2 min — only show success when balance actually increases
+        var balPolls = 0;
+        var maxBalPolls = 24;
+        function pollBalance() {
+          balPolls++;
+          _usdcBalance(_state.proxy).then(function(newBal) {
+            if (newBal != null && newBal > startBal + 0.01) {
+              // Balance increased — funds arrived
+              var overlayDone = document.getElementById('hfxDepositOverlay');
+              if (overlayDone) overlayDone.innerHTML = _frame({
+                success: true, amount: expectedAmount,
+                newProxyBalance: newBal, bridged: true, gasless: true
+              });
+              try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
+              try { window.dispatchEvent(new CustomEvent('hfx_deposit_success', { detail: { amount: expectedAmount, bridged: true } })); } catch (e) {}
+            } else if (balPolls < maxBalPolls) {
+              setTimeout(pollBalance, 5000);
+            } else {
+              // 2 min timeout — show pending message, not false success
+              var overlayTimeout = document.getElementById('hfxDepositOverlay');
+              if (overlayTimeout) overlayTimeout.innerHTML = _frame({ error: 'Bridge is still processing. Your USDC should arrive on Polygon within a few minutes — check your dashboard balance shortly.' });
+            }
+          }).catch(function() {
+            if (balPolls < maxBalPolls) setTimeout(pollBalance, 5000);
           });
-          try { if (typeof window.fetchTradeBalance === 'function') window.fetchTradeBalance(); } catch (e) {}
-        }, 30000);
+        }
+        setTimeout(pollBalance, 5000);
         return;
       }
 

@@ -3105,7 +3105,7 @@ body.nav-open .sidebar-backdrop {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
 <script src="/wallet.js?v=1"></script>
-<script src="/deposit.js?v=24"></script>
+<script src="/deposit.js?v=25"></script>
 <script>
 // Local hfxOpenDeposit helper (race-safe) — creator-dashboard doesn't
 // include nav.js so we can't rely on the global helper defined there.
@@ -18222,6 +18222,30 @@ if (typeof HFXWallet !== 'undefined' && HFXWallet.onWalletSwitched) {
 }
 // Backup: also listen to the DOM event in case the module loads after HFXWallet
 window.addEventListener('hfx_wallet_switched', function(e) { hfxDashHandleWalletSwitch(e.detail); });
+
+// ── Refresh dashboard balance after any deposit/bridge completes ──
+window.addEventListener('hfx_deposit_success', function(e) {
+  console.log('[dashboard] deposit success event received:', e.detail);
+  // Clear cached balance so fetchWalletBalance re-reads from chain
+  window._walletBalanceUSDC = null;
+  // Re-fetch after short delay (give chain time to index)
+  setTimeout(function() {
+    if (window._walletProvider && window._connectedWallet) {
+      fetchWalletBalance(window._walletProvider, window._connectedWallet);
+    }
+  }, 2000);
+  // Also refresh again after 10s for slower bridges
+  setTimeout(function() {
+    if (window._walletProvider && window._connectedWallet) {
+      window._walletBalanceUSDC = null;
+      fetchWalletBalance(window._walletProvider, window._connectedWallet);
+    }
+  }, 10000);
+  // Reload positions too (new USDC balance affects portfolio display)
+  setTimeout(function() {
+    try { loadPolymarketPositions(true); } catch (e2) {}
+  }, 5000);
+});
 
 // Run initial sync on page load to catch any switches that happened before
 // this tab was opened (e.g. user switched in MetaMask while on another site).
