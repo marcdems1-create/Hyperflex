@@ -30499,6 +30499,41 @@ app.get('/api/bridge/balance', async (req, res) => {
   }
 });
 
+// GET /api/proxy/deployed — check if a Polymarket proxy is deployed (server-side, no CORS)
+app.get('/api/proxy/deployed', async (req, res) => {
+  try {
+    const { address } = req.query;
+    if (!address) return res.status(400).json({ error: 'address required' });
+    // Try Polymarket relayer first
+    try {
+      const r = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(address));
+      if (r.ok) {
+        const data = await r.json();
+        return res.json({ deployed: data.deployed === true, source: 'relayer' });
+      }
+    } catch (e) {}
+    // Fallback: eth_getCode on Polygon
+    const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
+    for (const rpc of rpcs) {
+      try {
+        const r = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getCode', params: [address, 'latest'], id: 1 })
+        });
+        const data = await r.json();
+        if (data.result) {
+          const deployed = data.result !== '0x' && data.result.length > 2;
+          return res.json({ deployed, source: 'rpc' });
+        }
+      } catch (e) {}
+    }
+    res.json({ deployed: false, source: 'unknown' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/bridge/status — check cross-chain transfer status
 // Query: txHash, fromChain, toChain (+ optional bridge name)
 app.get('/api/bridge/status', async (req, res) => {

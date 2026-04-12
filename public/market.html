@@ -2266,16 +2266,25 @@ function setSetupStep(stepNum, state, extraText) {
 async function checkProxyDeployed(proxyAddr) {
   proxyAddr = proxyAddr || localStorage.getItem('hf_poly_wallet');
   if (!proxyAddr) return false;
-  // Primary: Polymarket relayer API (public, no auth, no chain connection needed)
+  // Primary: our server endpoint (proxies relayer + eth_getCode, no CORS issues)
   try {
-    var res = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + proxyAddr);
+    var res = await fetch('/api/proxy/deployed?address=' + encodeURIComponent(proxyAddr));
     if (res.ok) {
       var data = await res.json();
-      console.log('[setup] Relayer deployed check:', proxyAddr.slice(0, 10), data.deployed);
+      console.log('[setup] Server deploy check:', proxyAddr.slice(0, 10), data.deployed, '(' + data.source + ')');
       return data.deployed === true;
     }
-  } catch (e) { console.log('[setup] Relayer check failed, trying eth_getCode:', e.message); }
-  // Fallback: on-chain eth_getCode via public RPC
+  } catch (e) { console.log('[setup] Server deploy check failed:', e.message); }
+  // Fallback: direct Polymarket relayer API
+  try {
+    var res2 = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + proxyAddr);
+    if (res2.ok) {
+      var data2 = await res2.json();
+      console.log('[setup] Relayer deployed check:', proxyAddr.slice(0, 10), data2.deployed);
+      return data2.deployed === true;
+    }
+  } catch (e) { console.log('[setup] Relayer check failed:', e.message); }
+  // Last resort: on-chain eth_getCode via public RPC
   try {
     var provider = await getPublicProvider();
     var code = await provider.getCode(proxyAddr);
@@ -2829,6 +2838,17 @@ async function runFullSetup() {
 
   // Check if proxy is deployed on-chain
   var deployed = await checkProxyDeployed(proxyAddr);
+  // If deploy check fails but proxy has a balance, it MUST be deployed
+  // (you can't have a balance at an undeployed Safe proxy)
+  if (!deployed) {
+    try {
+      var proxyBal = await fetchUsdcBalance(proxyAddr);
+      if (proxyBal != null && proxyBal > 0) {
+        console.log('[setup] Deploy check returned false but proxy has $' + proxyBal.toFixed(2) + ' — must be deployed');
+        deployed = true;
+      }
+    } catch (e) {}
+  }
   if (deployed) {
     setSetupStep(1, 'done', 'Proxy Wallet');
   } else {
