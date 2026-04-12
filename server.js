@@ -31128,14 +31128,28 @@ app.get('/api/bridge/relay-status', async (req, res) => {
   }
 });
 
+// GET /api/polymarket/geocheck — check if Railway's IP is geo-blocked by Polymarket
+app.get('/api/polymarket/geocheck', async (req, res) => {
+  try {
+    const r = await fetch('https://polymarket.com/api/geoblock');
+    const data = await r.json();
+    console.log('[geocheck] Polymarket sees Railway as:', JSON.stringify(data));
+    res.json({ railway_geoblock: data, client_ip: req.headers['x-forwarded-for'] || req.ip });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/polymarket/order — server-side CLOB order proxy
 // Routes signed orders through Railway (US IP) to bypass geo-restrictions.
 // The order is already signed client-side — we just forward it.
+// CRITICAL: Do NOT forward X-Forwarded-For or any geo-identifying headers —
+// the CLOB must see Railway's server IP, not the end user's IP.
 app.post('/api/polymarket/order', async (req, res) => {
   try {
     const orderBody = JSON.stringify(req.body);
 
-    // Forward all Poly auth + builder headers
+    // Only forward Poly auth + builder headers — nothing else
     const clobHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -31145,12 +31159,16 @@ app.post('/api/polymarket/order', async (req, res) => {
       'poly_builder_api_key', 'poly_builder_passphrase', 'poly_builder_timestamp', 'poly_builder_signature'
     ];
     for (const h of headerNames) {
-      // Express lowercases header names; Polymarket expects uppercase
       const val = req.headers[h];
       if (val) clobHeaders[h.toUpperCase()] = val;
     }
 
-    console.log('[clob-proxy] forwarding order, maker:', (req.body.order && req.body.order.maker || '').slice(0, 10));
+    // Log what we're sending for debugging
+    const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
+    const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    console.log('[clob-proxy] forwarding order | client_ip:', clientIp,
+      '| maker:', (req.body.order && req.body.order.maker || '').slice(0, 10),
+      '| auth_headers:', fwdHeaders.join(','));
 
     const r = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
