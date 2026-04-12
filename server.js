@@ -8686,12 +8686,15 @@ app.get('/api/community/:slug', async (req, res) => {
       // Include creator's Polymarket wallet for trading record display
       creator_wallet: await (async () => {
         try {
+          // Check creator_settings first (set during derive-api-key)
+          if (settings.polymarket_address) return settings.polymarket_address.toLowerCase();
+          // Fall back to users table
           if (pool) {
             const rows = await dbQuery('SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [settings.creator_id]);
-            return (rows[0] && rows[0].polymarket_address) || null;
+            return (rows[0] && rows[0].polymarket_address) ? rows[0].polymarket_address.toLowerCase() : null;
           } else {
             const { data } = await supabase.from('users').select('polymarket_address').eq('id', settings.creator_id).maybeSingle();
-            return (data && data.polymarket_address) || null;
+            return (data && data.polymarket_address) ? data.polymarket_address.toLowerCase() : null;
           }
         } catch (e) { return null; }
       })(),
@@ -30194,11 +30197,17 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
 
     console.log(`[polymarket derive-api-key] FINAL: user=${req.userId} address=${address.slice(0,8)}... proxy=${proxyAddress || 'NONE'} apiKey=${(finalApiKey||'').slice(0,8)}... keysVerified=${keysVerified} freshKeysCreated=${freshKeysCreated}`);
 
-    // Save proxy address to user profile if we got one
-    if (proxyAddress && req.userId && pool) {
+    // Save BOTH EOA and proxy to user profile
+    if (req.userId) {
       try {
-        await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [proxyAddress.toLowerCase(), req.userId, '']);
-        await dbQuery('UPDATE creator_settings SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [proxyAddress.toLowerCase(), req.userId, '']);
+        const eoaLower = address.toLowerCase();
+        if (pool) {
+          await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [eoaLower, req.userId, '']);
+          await dbQuery('UPDATE creator_settings SET polymarket_address = $1 WHERE creator_id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [eoaLower, req.userId, '']);
+        } else {
+          await supabase.from('users').update({ polymarket_address: eoaLower }).eq('id', req.userId).is('polymarket_address', null);
+          await supabase.from('creator_settings').update({ polymarket_address: eoaLower }).eq('creator_id', req.userId).is('polymarket_address', null);
+        }
       } catch(e) { /* silent */ }
     }
 
