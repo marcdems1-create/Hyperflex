@@ -3669,7 +3669,7 @@ async function executeTrade() {
         fetch('/api/flex-points/earn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + hfToken },
-          body: JSON.stringify({ amount_usd: amount, source: 'polymarket_trade' })
+          body: JSON.stringify({ amount_usd: amount, source: 'polymarket_trade', eoa_address: eoaAddress })
         }).then(function(r) { return r.ok ? r.json() : null; }).then(function(fp) {
           if (fp && fp.points_earned > 0) {
             var flexEl = document.getElementById('flexPointsBadge');

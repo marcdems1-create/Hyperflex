@@ -25119,6 +25119,32 @@ app.get('/api/flex-points/user/:userId', async (req, res) => {
   }
 });
 
+// POST /api/admin/set-wallet — manually set a user's Polymarket wallet (admin only)
+app.post('/api/admin/set-wallet', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret || req.headers['x-admin-secret'] !== adminSecret) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  try {
+    const { slug, eoa_address } = req.body;
+    if (!slug || !eoa_address) return res.status(400).json({ error: 'slug and eoa_address required' });
+    const eoaLower = eoa_address.toLowerCase();
+
+    if (pool) {
+      await dbQuery('UPDATE creator_settings SET polymarket_address = $1 WHERE slug = $2', [eoaLower, slug]);
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1', [slug]);
+      if (rows[0]) await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2', [eoaLower, rows[0].creator_id]);
+    } else {
+      await supabase.from('creator_settings').update({ polymarket_address: eoaLower }).eq('slug', slug);
+      const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+      if (data) await supabase.from('users').update({ polymarket_address: eoaLower }).eq('id', data.creator_id);
+    }
+    res.json({ success: true, slug, eoa_address: eoaLower });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/creator-wallet/:userId — find a creator's Polymarket wallet from all sources
 app.get('/api/creator-wallet/:userId', async (req, res) => {
   try {
@@ -25186,9 +25212,23 @@ app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
     const userId = req.userId;
     if (!userId) return res.json({ points_earned: 0, error: 'Not logged in' });
 
-    const { amount_usd, source } = req.body;
+    const { amount_usd, source, eoa_address } = req.body;
     const tradeUsd = parseFloat(amount_usd) || 1;
     const src = source || 'polymarket_trade';
+
+    // Save wallet address to user profile if provided (critical for trading record)
+    if (eoa_address && /^0x[0-9a-fA-F]{40}$/.test(eoa_address)) {
+      try {
+        const eoaLower = eoa_address.toLowerCase();
+        if (pool) {
+          await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = \'\')', [eoaLower, userId]);
+          await dbQuery('UPDATE creator_settings SET polymarket_address = $1 WHERE creator_id = $2 AND (polymarket_address IS NULL OR polymarket_address = \'\')', [eoaLower, userId]);
+        } else {
+          await supabase.from('users').update({ polymarket_address: eoaLower }).eq('id', userId).is('polymarket_address', null);
+          await supabase.from('creator_settings').update({ polymarket_address: eoaLower }).eq('creator_id', userId).is('polymarket_address', null);
+        }
+      } catch(e) { /* silent */ }
+    }
 
     const earned = await awardFlexPoints(userId, tradeUsd, src);
 
