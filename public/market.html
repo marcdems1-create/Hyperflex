@@ -2944,8 +2944,45 @@ function fireConfetti() {
 
 var _tradeRetrying = false;
 
+// Trade-in-flight lock — prevents the wallet-switch handler from clearing
+// API keys while a trade is mid-flight. Set at the start of executeTrade,
+// cleared in finally. While true, hfxHandleWalletSwitch defers execution
+// until the trade completes (success OR failure).
+var _tradeInFlight = false;
+var _pendingWalletSwitch = null;
+
 async function executeTrade() {
   var cta = document.getElementById('tradeCta');
+
+  // ── Early mobile-friendly chain check — fail fast if not on Polygon ──
+  // This runs BEFORE any wallet prompts or RPC calls, so slow mobile users
+  // don't waste 10 seconds of setup only to hit "wrong chain" at the end.
+  if (window.ethereum) {
+    try {
+      var currentChain = await window.ethereum.request({ method: 'eth_chainId' });
+      if (currentChain !== '0x89') {
+        showTradeStatus('Switch MetaMask to Polygon to trade. Tap Buy again after switching.', 'error');
+        try {
+          await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+              });
+            } catch (addErr) { /* fall through */ }
+          }
+        }
+        return;
+      }
+    } catch (chainErr) { /* if eth_chainId fails, proceed and let later checks catch it */ }
+  }
+
+  // Set the trade-in-flight lock so wallet-switch events don't stomp on
+  // API keys mid-trade. Must be paired with `_tradeInFlight = false` in finally.
+  _tradeInFlight = true;
+  _pendingWalletSwitch = null;
 
   // Check if full setup is needed (no keys, no proxy, not approved)
   var proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
@@ -3358,9 +3395,33 @@ async function executeTrade() {
     };
 
     // Step 3: Sign the order in MetaMask
-    showTradeStatus('Sign the order in MetaMask \u2192', 'info');
+    // Mobile-specific: be extra explicit about the state so users see progress
+    // even if they can't open DevTools. On mobile MetaMask, they'll background
+    // HYPERFLEX to approve, then return — showTradeStatus persists across that.
+    showTradeStatus('Check MetaMask → sign the order', 'info');
     cta.textContent = 'Sign in wallet...';
-    var orderSignature = await signer.signTypedData(orderDomain, orderTypes, orderStruct);
+    console.log('[trade] about to call signTypedData', { exchange: exchangeAddr, negRisk: isNegRisk, amount: amount, side: _tradeSide });
+    var _signStartTs = Date.now();
+    var orderSignature;
+    try {
+      orderSignature = await signer.signTypedData(orderDomain, orderTypes, orderStruct);
+    } catch (signErr) {
+      // Specific handling for mobile signature failures — these are the top
+      // frustration point and need their own error messages
+      console.error('[trade] signTypedData failed after', (Date.now() - _signStartTs), 'ms:', signErr && signErr.message);
+      if (signErr && (signErr.code === 'ACTION_REJECTED' || signErr.code === 4001)) {
+        showTradeStatus('Signature rejected. Tap Buy again when ready.', 'error');
+      } else if (HFXWallet.is32002Error(signErr)) {
+        HFXWallet.invalidate();
+        showTradeStatus('Another wallet request is pending. Open MetaMask, dismiss any pending popups, then try again.', 'error');
+      } else if (signErr && signErr.message && /user denied/i.test(signErr.message)) {
+        showTradeStatus('You denied the signature in MetaMask.', 'error');
+      } else {
+        showTradeStatus('Wallet signing failed: ' + (((signErr && signErr.message) || 'unknown').slice(0, 120)), 'error');
+      }
+      throw signErr;
+    }
+    console.log('[trade] signTypedData OK in', (Date.now() - _signStartTs), 'ms');
     tradeDebug('order signed', { sig: orderSignature.slice(0,20) + '...', maker: orderStruct.maker.slice(0,10), signer: orderStruct.signer.slice(0,10), token: orderStruct.tokenId.slice(0,15) + '...', makerAmt: orderStruct.makerAmount, takerAmt: orderStruct.takerAmount, exchange: exchangeAddr.slice(0,10), negRisk: isNegRisk });
 
     // Step 4: Submit to CLOB
@@ -3523,6 +3584,13 @@ async function executeTrade() {
     cta.disabled = false;
     updateCtaButton();
     _tradeRetrying = false;
+    _tradeInFlight = false;
+    // If a wallet-switch event was deferred during the trade, run it now
+    if (_pendingWalletSwitch) {
+      var deferred = _pendingWalletSwitch;
+      _pendingWalletSwitch = null;
+      setTimeout(function() { hfxHandleWalletSwitch(deferred); }, 500);
+    }
   }
 }
 
@@ -4329,6 +4397,18 @@ setTimeout(function() { checkTradingSetup(); }, 500);
 async function hfxHandleWalletSwitch(detail) {
   var oldEoa = detail && detail.oldEoa;
   var newEoa = detail && detail.newEoa;
+
+  // ── Critical: do NOT clear keys during an active trade ──
+  // If a trade is mid-flight, the polling wallet-sync may detect a false
+  // switch (or a real one that the user will resolve after the trade)
+  // and wipe API keys mid-submission, causing CLOB 401 errors. Defer
+  // the switch handler until the trade finishes.
+  if (_tradeInFlight) {
+    console.log('[market] wallet switch deferred (trade in flight):', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
+    _pendingWalletSwitch = detail;
+    return;
+  }
+
   console.log('[market] wallet switched:', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
 
   // Clear all stale data

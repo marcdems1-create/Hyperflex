@@ -208,10 +208,18 @@
   // Poll on visibility change — catches the case where user switches their
   // active account in MetaMask while HYPERFLEX is in a background tab, then
   // returns to HYPERFLEX. Also triggers on window focus as a backup.
+  //
+  // CRITICAL: do NOT poll while a trade is in flight. On mobile, the user
+  // backgrounds HYPERFLEX to approve the tx in the MetaMask app, then returns.
+  // The focus event would fire eth_accounts → fire a spurious switch event →
+  // clear API keys mid-trade. Pages can set window._tradeInFlight = true to
+  // suppress the polling during critical operations.
   var _lastSyncTs = 0;
   function _maybeSyncOnFocus() {
     // Throttle to once per 500ms to avoid firing on minor focus blips
     if (Date.now() - _lastSyncTs < 500) return;
+    // Skip polling during active trades — the page handler manages state
+    if (global._tradeInFlight) return;
     _lastSyncTs = Date.now();
     syncCurrentAccount();
   }
