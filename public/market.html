@@ -3809,28 +3809,60 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     tradeDebug('builder-sign ERROR', bsErr.message + ' — submitting without builder attribution');
   }
 
-  // PRIMARY: Cloudflare Worker edge proxy — runs at 300+ CF locations, never geo-blocked.
-  // This is the primary path because browser-direct gets geo-blocked for many users.
-  var CF_PROXY = 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order';
+  // PRIMARY: Railway server proxy — US-based IP, never geo-blocked.
+  var orderHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'POLY_ADDRESS': eoaAddress,
+    'POLY_API_KEY': apiKey,
+    'POLY_PASSPHRASE': apiPassphrase,
+    'POLY_TIMESTAMP': ts,
+    'POLY_SIGNATURE': hmacSig
+  };
+  for (var bk in builderHeaders) {
+    if (builderHeaders.hasOwnProperty(bk)) orderHeaders[bk] = builderHeaders[bk];
+  }
+
   try {
-    var cfHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'POLY_ADDRESS': eoaAddress,
-      'POLY_API_KEY': apiKey,
-      'POLY_PASSPHRASE': apiPassphrase,
-      'POLY_TIMESTAMP': ts,
-      'POLY_SIGNATURE': hmacSig
-    };
-    // Merge builder headers for fee attribution
-    for (var bk in builderHeaders) {
-      if (builderHeaders.hasOwnProperty(bk)) cfHeaders[bk] = builderHeaders[bk];
+    tradeDebug('submitting via server proxy (primary)', '/api/polymarket/order');
+    var res = await fetch('/api/polymarket/order', {
+      method: 'POST',
+      headers: orderHeaders,
+      body: requestBody
+    });
+
+    var resText = await res.text().catch(function() { return ''; });
+    var resData;
+    try { resData = JSON.parse(resText); } catch (e) { resData = { _raw: resText }; }
+    tradeDebug('server proxy ' + res.status, resText.substring(0, 500));
+
+    if (res.ok) return resData;
+
+    if (res.status === 401) {
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      updateTradingUI();
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (resData.error || resData.message || 'Unauthorized') };
     }
 
-    tradeDebug('submitting via CF edge proxy (primary)', CF_PROXY);
-    var cfRes = await fetch(CF_PROXY, {
+    var errMsg = resData.error || resData.message || JSON.stringify(resData);
+    return { _error: true, _errorMsg: 'CLOB ' + res.status + ': ' + errMsg };
+
+  } catch (serverErr) {
+    tradeDebug('server proxy THREW', serverErr.message + ' — trying CF Worker fallback');
+  }
+
+  // FALLBACK: Cloudflare Worker edge proxy (if Railway is down)
+  try {
+    tradeDebug('submitting via CF edge proxy (fallback)', 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order');
+    var cfRes = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
       method: 'POST',
-      headers: cfHeaders,
+      headers: orderHeaders,
       body: requestBody
     });
 
@@ -3838,11 +3870,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var cfData;
     try { cfData = JSON.parse(cfText); } catch (e) { cfData = { _raw: cfText }; }
     tradeDebug('CF proxy ' + cfRes.status, cfText.substring(0, 500));
-    console.log('[trade] CF proxy response ' + cfRes.status + ':', cfText);
 
     if (cfRes.ok) return cfData;
 
-    // Handle 401 — expired keys
     if (cfRes.status === 401) {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
@@ -3856,123 +3886,11 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     }
 
     var cfErrMsg = cfData.error || cfData.message || JSON.stringify(cfData);
-    tradeDebug('CF proxy failed', cfRes.status + ': ' + cfErrMsg);
-
-    // If CF proxy returned a geo-restriction or CLOB error, try server proxy before giving up
-    if (cfRes.status >= 400 && cfRes.status < 500) {
-      var isGeoBlocked = cfErrMsg.indexOf('restricted') !== -1 || cfErrMsg.indexOf('region') !== -1 || cfErrMsg.indexOf('geo') !== -1;
-      if (!isGeoBlocked) {
-        // Non-geo CLOB error — return directly (bad order, expired keys, etc.)
-        return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
-      }
-      tradeDebug('CF proxy geo-blocked, trying Railway server proxy…');
-    }
+    return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
 
   } catch (cfErr) {
-    // CORS or network error on CF proxy — fall through to server proxy
-    tradeDebug('CF proxy THREW', cfErr.message + ' — trying server proxy fallback');
-  }
-
-  // SERVER PROXY: Route through Railway server (US-based IP) to bypass geo-restrictions
-  try {
-    var serverHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'POLY_ADDRESS': eoaAddress,
-      'POLY_API_KEY': apiKey,
-      'POLY_PASSPHRASE': apiPassphrase,
-      'POLY_TIMESTAMP': ts,
-      'POLY_SIGNATURE': hmacSig
-    };
-    for (var bk3 in builderHeaders) {
-      if (builderHeaders.hasOwnProperty(bk3)) serverHeaders[bk3] = builderHeaders[bk3];
-    }
-
-    tradeDebug('submitting via Railway server proxy', '/api/polymarket/order');
-    var serverRes = await fetch('/api/polymarket/order', {
-      method: 'POST',
-      headers: serverHeaders,
-      body: requestBody
-    });
-
-    var serverText = await serverRes.text().catch(function() { return ''; });
-    var serverData;
-    try { serverData = JSON.parse(serverText); } catch (e) { serverData = { _raw: serverText }; }
-    tradeDebug('server proxy ' + serverRes.status, serverText.substring(0, 500));
-
-    if (serverRes.ok) return serverData;
-
-    if (serverRes.status === 401) {
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB 401: ' + (serverData.error || serverData.message || 'Unauthorized') };
-    }
-
-    var serverErrMsg = serverData.error || serverData.message || JSON.stringify(serverData);
-    // If server proxy also geo-blocked, fall through to direct
-    var serverGeoBlocked = serverErrMsg.indexOf('restricted') !== -1 || serverErrMsg.indexOf('region') !== -1;
-    if (!serverGeoBlocked) {
-      return { _error: true, _errorMsg: 'CLOB ' + serverRes.status + ': ' + serverErrMsg };
-    }
-    tradeDebug('server proxy also restricted — trying browser-direct as last resort');
-  } catch (serverErr) {
-    tradeDebug('server proxy THREW', serverErr.message + ' — trying browser-direct');
-  }
-
-  // LAST RESORT: Submit directly from browser to Polymarket CLOB
-  // (only works for non-geo-restricted users)
-  try {
-    var directHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'POLY_ADDRESS': eoaAddress,
-      'POLY_API_KEY': apiKey,
-      'POLY_PASSPHRASE': apiPassphrase,
-      'POLY_TIMESTAMP': ts,
-      'POLY_SIGNATURE': hmacSig
-    };
-    for (var bk2 in builderHeaders) {
-      if (builderHeaders.hasOwnProperty(bk2)) directHeaders[bk2] = builderHeaders[bk2];
-    }
-
-    tradeDebug('submitting directly to CLOB (fallback)', 'https://clob.polymarket.com/order');
-    var directRes = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: directHeaders,
-      body: requestBody
-    });
-
-    var directText = await directRes.text().catch(function() { return ''; });
-    var directData;
-    try { directData = JSON.parse(directText); } catch (e) { directData = { _raw: directText }; }
-    tradeDebug('direct ' + directRes.status, directText.substring(0, 500));
-
-    if (directRes.ok) return directData;
-
-    if (directRes.status === 401) {
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB 401: ' + (directData.error || directData.message || 'Unauthorized') };
-    }
-
-    var directErrMsg = directData.error || directData.message || JSON.stringify(directData);
-    return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
-  } catch (directErr) {
-    tradeDebug('direct THREW', directErr.message);
-    // If both CF proxy AND direct failed, it's likely a network or geo-restriction issue
-    return { _error: true, _errorMsg: 'Could not reach Polymarket — check your connection and try again. If this persists, try a VPN.' };
+    tradeDebug('CF proxy THREW', cfErr.message);
+    return { _error: true, _errorMsg: 'Could not reach Polymarket — check your connection and try again.' };
   }
 }
 

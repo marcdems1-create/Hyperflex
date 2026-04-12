@@ -19009,8 +19009,7 @@ async function confirmTrade() {
       console.warn('[qt-trade] builder-sign error:', bsErr.message);
     }
 
-    // Submit via Cloudflare Worker edge proxy (300+ edge locations, never geo-blocked)
-    const CF_PROXY = 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order';
+    // PRIMARY: Railway server proxy — US-based IP, never geo-blocked
     const proxyHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -19024,41 +19023,32 @@ async function confirmTrade() {
       if (builderHeaders.hasOwnProperty(bk)) proxyHeaders[bk] = builderHeaders[bk];
     }
 
-    console.log('[qt-trade] Submitting via CF edge proxy:', CF_PROXY);
-    let res = await fetch(CF_PROXY, {
-      method: 'POST',
-      headers: proxyHeaders,
-      body: requestBody
-    });
-
-    let data = await res.json().catch(() => ({}));
-
-    // If CF proxy returns geo-restriction, try Railway server proxy
-    if (!res.ok) {
-      const cfErrStr = JSON.stringify(data).toLowerCase();
-      const isGeoBlocked = cfErrStr.includes('restricted') || cfErrStr.includes('region') || cfErrStr.includes('geo');
-      if (isGeoBlocked) {
-        console.log('[qt-trade] CF proxy geo-blocked, trying Railway server proxy…');
-        try {
-          const serverRes = await fetch('/api/polymarket/order', {
-            method: 'POST',
-            headers: proxyHeaders,
-            body: requestBody
-          });
-          const serverData = await serverRes.json().catch(() => ({}));
-          if (serverRes.ok) {
-            showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
-            console.log('[qt-trade] Order success via server proxy:', serverData);
-            closeTradeModal();
-            setTimeout(() => loadPolymarketPositions(true), 2000);
-            return;
-          }
-          // Use server proxy error instead
-          data = serverData;
-          res = serverRes;
-        } catch (serverErr) {
-          console.warn('[qt-trade] Server proxy error:', serverErr.message);
-        }
+    console.log('[qt-trade] Submitting via server proxy (primary)');
+    let res, data;
+    try {
+      res = await fetch('/api/polymarket/order', {
+        method: 'POST',
+        headers: proxyHeaders,
+        body: requestBody
+      });
+      data = await res.json().catch(() => ({}));
+      console.log('[qt-trade] Server proxy:', res.status, JSON.stringify(data).slice(0, 300));
+    } catch (serverErr) {
+      // Server down — fall back to CF Worker
+      console.warn('[qt-trade] Server proxy failed:', serverErr.message, '— trying CF Worker');
+      try {
+        res = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
+          method: 'POST',
+          headers: proxyHeaders,
+          body: requestBody
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (cfErr) {
+        errEl.textContent = 'Could not reach Polymarket — check your connection and try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Trade';
+        return;
       }
     }
 
