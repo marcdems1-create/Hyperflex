@@ -18883,8 +18883,10 @@ async function confirmTrade() {
     const rounding = tickRounding[tickSize] || tickRounding[0.01];
     function roundDown(val, decimals) { const f = Math.pow(10, decimals); return Math.floor(val * f) / f; }
 
-    // For FOK (market) orders, walk the orderbook to find the worst fill price
-    // Without this, FOK fails with "order couldn't be fully filled" on thin books
+    // For FOK (market) orders, walk the orderbook to find the worst fill price.
+    // FOK = Fill-or-Kill: must fill the ENTIRE order at ≤ limit price, or cancel.
+    // The limit price must be the worst price the order would touch when walking the book.
+    // Add slippage buffer (1 extra tick) to handle book changes between read and submit.
     let walkPrice = price;
     const isMarketOrder = (_tradeModalData._orderType || 'FOK') !== 'GTC';
     if (isMarketOrder && tokenId) {
@@ -18893,43 +18895,62 @@ async function confirmTrade() {
         const bookRes = await fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(tokenId));
         if (bookRes.ok) {
           const bookData = await bookRes.json();
-          let levels, fillPrice = null;
+          let fillPrice = null;
+          const sellShares = price > 0 ? roundDown(amount / price, rounding.sizeDec) : 0;
+
           if (clobSide === 'BUY') {
-            levels = (bookData.asks || []).slice().sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+            // Walk asks (cheapest first) until we've spent enough USD
+            const asks = (bookData.asks || []).slice().sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
             let spent = 0;
-            for (const lvl of levels) {
+            console.log('[qt-trade] Book walk BUY: need $' + amount + ', asks:', asks.length);
+            for (const lvl of asks) {
               const lp = parseFloat(lvl.price), ls = parseFloat(lvl.size);
-              if (spent + lp * ls >= amount) { fillPrice = lp; break; }
               spent += lp * ls;
+              if (spent >= amount) { fillPrice = lp; break; }
             }
           } else {
-            levels = (bookData.bids || []).slice().sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
-            let sharesLeft = shares;
-            for (const lvl of levels) {
+            // Walk bids (highest first) until we've matched enough shares
+            const bids = (bookData.bids || []).slice().sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+            let sharesLeft = sellShares;
+            console.log('[qt-trade] Book walk SELL: need ' + sellShares + ' shares, bids:', bids.length,
+              bids.length > 0 ? '| best bid: ' + bids[0].price + ' × ' + bids[0].size : '| NO BIDS');
+            for (const lvl of bids) {
               const bp = parseFloat(lvl.price), bs = parseFloat(lvl.size);
               if (sharesLeft <= bs) { fillPrice = bp; break; }
               sharesLeft -= bs;
             }
           }
+
           if (fillPrice == null) {
-            errEl.textContent = 'Not enough liquidity to fill this order — try a smaller amount or switch to Limit order.';
+            const totalBidSize = (bookData.bids || []).reduce((s, l) => s + parseFloat(l.size), 0);
+            const totalAskSize = (bookData.asks || []).reduce((s, l) => s + parseFloat(l.size), 0);
+            const side = clobSide === 'SELL' ? 'bid' : 'ask';
+            const available = clobSide === 'SELL' ? totalBidSize.toFixed(1) : totalAskSize.toFixed(1);
+            const needed = clobSide === 'SELL' ? sellShares : amount;
+            errEl.innerHTML = 'Not enough ' + side + ' liquidity (available: ' + available + ', need: ' +
+              (typeof needed === 'number' ? needed.toFixed(2) : needed) +
+              ').<br>Try a smaller amount or <button onclick="toggleOrderType();this.parentElement.style.display=\'none\'" ' +
+              'style="margin-top:6px;padding:6px 14px;background:var(--gold);color:#000;border:none;border-radius:6px;' +
+              'font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Switch to Limit order →</button>';
             errEl.style.display = 'block';
             btn.disabled = false; btn.textContent = 'Confirm Trade';
             return;
           }
-          // Round to tick — for SELL round DOWN (accept worse price), for BUY round UP
+
+          // Add slippage buffer: for SELL go 1 tick lower, for BUY go 1 tick higher
+          // This protects against the book shifting between our read and submit
           let bumped;
           if (clobSide === 'SELL') {
-            bumped = Math.floor(fillPrice / tickSize + 1e-9) * tickSize;
+            bumped = Math.floor(fillPrice / tickSize + 1e-9) * tickSize - tickSize; // 1 tick worse
           } else {
-            bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize;
+            bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize + tickSize; // 1 tick worse
           }
           if (bumped <= 0) bumped = tickSize;
           if (bumped >= 1) bumped = 1 - tickSize;
           walkPrice = parseFloat(bumped.toFixed(rounding.priceDec));
-          if (walkPrice !== price) {
-            console.log('[qt-trade] Book walk: user price ' + (price * 100).toFixed(1) + '¢ → fill price ' + (walkPrice * 100).toFixed(1) + '¢');
-          }
+          console.log('[qt-trade] Book walk: fill @ ' + (fillPrice * 100).toFixed(1) + '¢ → limit ' + (walkPrice * 100).toFixed(1) + '¢ (1 tick slippage)');
+        } else {
+          console.warn('[qt-trade] Book fetch failed:', bookRes.status, '— using user price');
         }
       } catch (bookErr) {
         console.warn('[qt-trade] Book walk failed:', bookErr.message, '— using user price');
@@ -18946,28 +18967,47 @@ async function confirmTrade() {
       return;
     }
 
-    // Recalculate shares with the walked price for proper amounts
-    const finalShares = roundedPrice > 0 ? amount / roundedPrice : 0;
+    // SDK-matching amount calculation (from @polymarket/clob-client getMarketOrderRawAmounts)
+    // BUY market order: "amount" = USD to spend. rawMakerAmt = USD, rawTakerAmt = shares = USD/price
+    // SELL market order: "amount" = shares to sell. rawMakerAmt = shares, rawTakerAmt = USD = shares*price
+    function roundUp(val, decimals) { const f = Math.pow(10, decimals); return Math.ceil(val * f) / f; }
+    function decimalPlaces(v) { const s = v.toString(); const i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; }
 
-    // Build order amounts (6 decimal places = USDC decimals)
     const DECIMALS = 1000000;
     let makerAmt, takerAmt, sideInt;
+    let finalShares; // for display only
+
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: maker provides USDC, taker provides tokens
-      // makerAmount = USDC to spend = shares * price
-      // takerAmount = tokens to receive = shares
-      const rawMaker = roundDown(finalShares * roundedPrice, rounding.amountDec);
-      const rawTaker = roundDown(finalShares, rounding.sizeDec);
-      makerAmt = Math.round(rawMaker * DECIMALS).toString();
-      takerAmt = Math.round(rawTaker * DECIMALS).toString();
+      // BUY: amount = USD to spend (from user input)
+      const rawMakerAmt = roundDown(amount, rounding.sizeDec); // USDC, 2 decimals
+      let rawTakerAmt = rawMakerAmt / roundedPrice; // shares
+      if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+        rawTakerAmt = roundUp(rawTakerAmt, rounding.amountDec + 4);
+        if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+          rawTakerAmt = roundDown(rawTakerAmt, rounding.amountDec);
+        }
+      }
+      finalShares = rawTakerAmt;
+      makerAmt = Math.round(rawMakerAmt * DECIMALS).toString();
+      takerAmt = Math.round(rawTakerAmt * DECIMALS).toString();
     } else {
       sideInt = 1;
-      // SELL: maker provides tokens, taker provides USDC
-      const rawMaker = roundDown(finalShares, rounding.sizeDec);
-      const rawTaker = roundDown(finalShares * roundedPrice, rounding.amountDec);
-      makerAmt = Math.round(rawMaker * DECIMALS).toString();
-      takerAmt = Math.round(rawTaker * DECIMALS).toString();
+      // SELL: amount = shares to sell (derived from USD / original price, NOT walked price)
+      // Use the original price to convert USD→shares so the share count matches what
+      // the book walk validated. The walked price is only the limit/worst-fill price.
+      const sellShares = price > 0 ? amount / price : 0;
+      const rawMakerAmt = roundDown(sellShares, rounding.sizeDec); // shares, 2 decimals
+      let rawTakerAmt = rawMakerAmt * roundedPrice; // USDC we expect back
+      if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+        rawTakerAmt = roundUp(rawTakerAmt, rounding.amountDec + 4);
+        if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+          rawTakerAmt = roundDown(rawTakerAmt, rounding.amountDec);
+        }
+      }
+      finalShares = rawMakerAmt;
+      makerAmt = Math.round(rawMakerAmt * DECIMALS).toString();
+      takerAmt = Math.round(rawTakerAmt * DECIMALS).toString();
     }
 
     // Random salt — must fit in JS safe integer for JSON serialization
