@@ -578,6 +578,21 @@ function urlBase64ToUint8Array(base64String) {
   </div>
 </div>
 
+<!-- TOP MOVERS — Whales with biggest capital deployment -->
+<div id="topMoversSection" style="padding:0 24px 24px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="font-size:20px">🔥</span>
+    <h3 style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text);margin:0">Top Movers</h3>
+    <span style="font-family:var(--sans);font-size:11px;color:var(--accent-blue);padding:3px 8px;border:1px solid rgba(77,159,255,.2);border-radius:4px;background:rgba(77,159,255,.06)">LIVE</span>
+  </div>
+  <p style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+    Whales ranked by total deployed capital. The bigger the book, the higher the conviction. Click any whale to see their full portfolio.
+  </p>
+  <div id="topMoversGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">
+    <div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════ -->
 <!-- WHALE INTELLIGENCE — Consensus signals + Portfolios     -->
 <!-- The real value prop: not "mirror trades" (too slow),    -->
@@ -2087,6 +2102,7 @@ async function loadData() {
     try { applyFilters(); } catch(e) { console.error('[whale-watch] applyFilters failed:', e); }
     try { renderSmartVsDumb(); } catch(e) { console.error('[whale-watch] smartVsDumb failed:', e); }
     try { renderMispricings(); } catch(e) { console.error('[whale-watch] mispricings failed:', e); }
+    try { renderTopMovers(); } catch(e) { console.error('[whale-watch] topMovers failed:', e); }
 
     document.getElementById('loadingState').style.display = 'none';
   } catch (err) {
@@ -2455,6 +2471,75 @@ function renderMispricings() {
       '</div>' +
     '</div>';
   }).join('');
+}
+
+// ── TOP MOVERS ──
+function renderTopMovers() {
+  var grid = document.getElementById('topMoversGrid');
+  if (!grid || !_whaleData || !_whaleData.whales) return;
+
+  // Aggregate by trader
+  var traderMap = {};
+  _whaleData.whales.forEach(function(w) {
+    var name = w.trader || 'Unknown';
+    if (!traderMap[name]) traderMap[name] = { name: name, pnl: w.pnl || 0, rank: w.rank || 99, totalCapital: 0, positions: 0, markets: [], yesCap: 0, noCap: 0 };
+    var size = parseFloat(w.size || w.current_value || 0);
+    traderMap[name].totalCapital += size;
+    traderMap[name].positions++;
+    if (traderMap[name].markets.length < 3) traderMap[name].markets.push({ q: (w.market || '').substring(0, 45), side: w.side, size: size });
+    if ((w.side || '').toLowerCase() === 'yes') traderMap[name].yesCap += size;
+    else traderMap[name].noCap += size;
+  });
+
+  var movers = Object.values(traderMap).sort(function(a, b) { return b.totalCapital - a.totalCapital; }).slice(0, 10);
+
+  if (!movers.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px">No whale data available.</div>';
+    return;
+  }
+
+  function fmtK(n) { return n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + n.toFixed(0); }
+
+  grid.innerHTML = movers.map(function(m, idx) {
+    var bias = m.totalCapital > 0 ? Math.round((m.yesCap / m.totalCapital) * 100) : 50;
+    var biasLabel = bias > 60 ? 'Bullish' : bias < 40 ? 'Bearish' : 'Mixed';
+    var biasColor = bias > 60 ? '#00e68a' : bias < 40 ? '#ff6b6b' : '#f59e0b';
+    var rankBadge = idx < 3 ? ['rank-gold', 'rank-silver', 'rank-bronze'][idx] : 'rank-default';
+
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer" onclick="openWhaleProfile(\'' + m.name.replace(/'/g, "\\'") + '\')">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+        '<span class="rank-badge ' + rankBadge + '">' + (idx + 1) + '</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + m.name + '</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">' + m.positions + ' positions · Rank #' + m.rank + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-family:var(--mono);font-size:16px;font-weight:800;color:var(--text)">' + fmtK(m.totalCapital) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:' + biasColor + ';font-weight:700">' + biasLabel + ' (' + bias + '% YES)</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:4px;height:4px;border-radius:2px;overflow:hidden;margin-bottom:8px">' +
+        '<div style="width:' + bias + '%;background:#00e68a;border-radius:2px"></div>' +
+        '<div style="width:' + (100 - bias) + '%;background:#ff6b6b;border-radius:2px"></div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:3px">' +
+        m.markets.map(function(pos) {
+          var sideColor = (pos.side || '').toLowerCase() === 'yes' ? '#00e68a' : '#ff6b6b';
+          return '<div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted)">' +
+            '<span style="color:' + sideColor + ';font-weight:700;min-width:24px">' + (pos.side || '?') + '</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + pos.q + '</span>' +
+            '<span style="color:var(--text-soft)">' + fmtK(pos.size) + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openWhaleProfile(name) {
+  // If whale profile modal exists, use it; otherwise link to search
+  if (typeof showWhaleProfileModal === 'function') showWhaleProfileModal(name);
+  else window.open('/whales?trader=' + encodeURIComponent(name), '_self');
 }
 </script>
 

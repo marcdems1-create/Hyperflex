@@ -812,7 +812,17 @@ const dataEngine = require('./lib/data-engine');
 dataEngine.init({ pool, fetch: _nodeFetch, supabase: null });
 
 // Mount /api/v1/ routes
-require('./lib/data-api-routes')(app, dataEngine);
+require('./lib/data-api-routes')(app, dataEngine, {
+  getWhaleCache: () => _whaleWatchCache
+});
+
+// ── ANOMALY ENGINE (Phase 2) — Statistical anomaly detection ─────────────
+const anomalyEngine = require('./lib/anomaly-engine');
+anomalyEngine.init({
+  pool,
+  getScreenerCache: () => _screenerCache,
+  getDataEngine: () => dataEngine
+});
 
 // Refresh data engine every 90 seconds (matches existing screener cadence)
 setInterval(() => {
@@ -10063,7 +10073,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage'
 ]);
 
 // GET /my — private member dashboard
@@ -21237,6 +21247,7 @@ app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
+app.get('/arbitrage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arbitrage.html')));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 

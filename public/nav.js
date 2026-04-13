@@ -326,6 +326,7 @@
     { href: '/signals', label: 'Signals' },
     { href: '/screener', label: 'Screener' },
     { href: '/whales', label: 'Market Intel' },
+    { href: '/arbitrage', label: 'Arbitrage', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/predictors', label: 'Predictors' }
   ];
@@ -618,6 +619,7 @@
       { name: 'Ecosystem', desc: 'Prediction market ecosystem', href: '/ecosystem', icon: '🌐' },
       { name: 'Features', desc: 'All HYPERFLEX features & tools', href: '/features', icon: '✨' },
       { name: 'Alpha Terminal', desc: 'Live edges ranked by Edge Score', href: '/alpha', icon: '⚡' },
+      { name: 'Arbitrage', desc: 'Cross-platform price spreads', href: '/arbitrage', icon: '⚖️' },
       { name: 'Home', desc: 'Live market activity & intelligence', href: '/', icon: '🏠' },
       { name: 'Rewards', desc: 'Earn from referrals', href: '/rewards', icon: '💰' },
       { name: 'Data', desc: 'Market data & analytics', href: '/data', icon: '📈' },

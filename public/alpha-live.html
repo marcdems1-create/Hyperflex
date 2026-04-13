@@ -151,6 +151,20 @@
   .loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px}
   .err{color:var(--red);text-align:center;padding:80px 20px;font-size:13px}
 
+  /* Anomaly bar */
+  .anomaly-bar-inner{display:flex;gap:8px;overflow-x:auto;padding:2px 0;scrollbar-width:none;-ms-overflow-style:none}
+  .anomaly-bar-inner::-webkit-scrollbar{display:none}
+  .anomaly-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap;border:1px solid;transition:all .15s;cursor:pointer;text-decoration:none;color:inherit;flex-shrink:0}
+  .anomaly-pill:hover{transform:translateY(-1px);filter:brightness(1.1)}
+  .anomaly-pill.critical{background:rgba(255,77,106,0.08);border-color:rgba(255,77,106,0.3);color:var(--red)}
+  .anomaly-pill.high{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);color:var(--amber)}
+  .anomaly-pill.medium{background:rgba(77,159,255,0.06);border-color:rgba(77,159,255,0.2);color:var(--blue)}
+  .anomaly-pill .anomaly-icon{font-size:14px}
+  .anomaly-pill .anomaly-score{font-family:var(--mono);font-size:11px;opacity:0.7}
+  .anomaly-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .anomaly-header .label{font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.12em}
+  .anomaly-header .count{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
   .footnote{padding:20px 0 60px;font-size:11px;color:var(--soft);border-top:1px solid var(--border);margin-top:20px;text-align:center}
   .footnote em{color:var(--green);font-style:normal}
 
@@ -194,6 +208,9 @@
       <button class="ctrl" onclick="load(currentN)">↻ Refresh</button>
     </div>
   </div>
+
+  <!-- Anomaly alerts bar -->
+  <div id="anomaly-bar" style="display:none;margin-bottom:16px"></div>
 
   <div class="edge-grid" id="grid">
     <div class="loading">Loading live alpha…</div>
@@ -432,6 +449,44 @@ async function load(n){
 
 load(10);
 _refreshTimer=setInterval(()=>load(currentN),90000);
+
+// ── Anomaly detection bar ──
+var _anomalyIcons={volume_spike:'📊',price_velocity:'⚡',whale_cluster:'🐋',correlation_break:'⚖️'};
+
+function loadAnomalies(){
+  fetch('/api/v1/anomalies?severity=medium&limit=12')
+    .then(function(r){return r.json()})
+    .then(function(data){
+      var bar=document.getElementById('anomaly-bar');
+      var items=(data.anomalies||[]);
+      if(!items.length){bar.style.display='none';return;}
+      bar.style.display='block';
+      var total=data.total||items.length;
+      var critCount=(data.by_severity&&data.by_severity.critical)||0;
+      var highCount=(data.by_severity&&data.by_severity.high)||0;
+      bar.innerHTML='<div class="anomaly-header">'+
+        '<span class="label">'+(critCount>0?'🚨':'⚠️')+' Anomalies Detected</span>'+
+        '<span class="count">'+total+' active'+(critCount?' · '+critCount+' critical':'')+'</span>'+
+      '</div>'+
+      '<div class="anomaly-bar-inner">'+
+        items.map(function(a){
+          var icon=_anomalyIcons[a.type]||'⚠️';
+          var href=a.slug?'/market/'+a.slug:'#';
+          return '<a class="anomaly-pill '+a.severity+'" href="'+href+'" title="'+esc(a.description)+'">'+
+            '<span class="anomaly-icon">'+icon+'</span>'+
+            '<span>'+esc(truncate(a.title,40))+'</span>'+
+            '<span class="anomaly-score">'+a.score+'</span>'+
+          '</a>';
+        }).join('')+
+      '</div>';
+    })
+    .catch(function(){});
+}
+
+function truncate(s,n){return s&&s.length>n?s.slice(0,n)+'…':s||'';}
+
+loadAnomalies();
+setInterval(loadAnomalies,90000);
 </script>
 </body>
 </html>
