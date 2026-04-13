@@ -10073,7 +10073,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed'
 ]);
 
 // GET /my — private member dashboard
@@ -38939,6 +38939,437 @@ app.get('/api/pyth/history/:feed', async (req, res) => {
     current: _pythPriceCache.prices[feed] || null,
   });
 });
+
+// ════════════════════════════════════════════════════════════
+// SOCIAL PREDICTIONS — the core content unit
+// ════════════════════════════════════════════════════════════
+
+// POST /api/social/predictions — create a prediction
+app.post('/api/social/predictions', requireAuth, async (req, res) => {
+  try {
+    const { platform, market_slug, condition_id, market_title, market_url,
+            side, entry_price, amount_usd, show_size, thesis, trade_id } = req.body;
+
+    if (!market_slug || !market_title || !side || entry_price == null) {
+      return res.status(400).json({ error: 'market_slug, market_title, side, entry_price required' });
+    }
+    if (!['YES','NO'].includes(side.toUpperCase())) {
+      return res.status(400).json({ error: 'side must be YES or NO' });
+    }
+    if (thesis && thesis.length > 2000) {
+      return res.status(400).json({ error: 'Thesis must be under 2000 characters' });
+    }
+
+    // Rate limit: max 10 predictions per day for free users
+    const today = new Date().toISOString().slice(0, 10);
+    const { count } = await supabase
+      .from('social_predictions')
+      .select('id', { count: 'exact', head: true })
+      .eq('author_id', req.userId)
+      .gte('created_at', today + 'T00:00:00Z');
+    if (count >= 10) {
+      return res.status(429).json({ error: 'Max 10 predictions per day' });
+    }
+
+    const { data, error } = await supabase
+      .from('social_predictions')
+      .insert({
+        author_id: req.userId,
+        platform: platform || 'polymarket',
+        market_slug,
+        condition_id: condition_id || null,
+        market_title,
+        market_url: market_url || null,
+        side: side.toUpperCase(),
+        entry_price: parseFloat(entry_price),
+        amount_usd: amount_usd ? parseFloat(amount_usd) : null,
+        show_size: show_size || false,
+        thesis: thesis || null,
+        trade_id: trade_id || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Fire notifications to followers (non-blocking)
+    supabase
+      .from('predictor_follows')
+      .select('follower_id')
+      .eq('following_id', req.userId)
+      .then(({ data: followers }) => {
+        if (!followers || !followers.length) return;
+        const notifs = followers.map(f => ({
+          user_id: f.follower_id,
+          type: 'new_prediction',
+          title: 'New prediction',
+          body: `${side.toUpperCase()} on "${market_title.slice(0, 60)}"`,
+          community_slug: market_slug,
+        }));
+        supabase.from('notifications').insert(notifs).then(() => {});
+      });
+
+    res.json({ prediction: data });
+  } catch (e) {
+    console.error('[social/predictions] POST error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/predictions/:id — single prediction with comments
+app.get('/api/social/predictions/:id', optionalAuth, async (req, res) => {
+  try {
+    const { data: pred, error } = await supabase
+      .from('social_predictions')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !pred) return res.status(404).json({ error: 'Not found' });
+
+    // Get author info
+    const { data: author } = await supabase
+      .from('users')
+      .select('id, display_name, polymarket_address')
+      .eq('id', pred.author_id)
+      .single();
+
+    // Get comments
+    const { data: comments } = await supabase
+      .from('social_comments')
+      .select('*')
+      .eq('prediction_id', pred.id)
+      .order('created_at', { ascending: true })
+      .limit(100);
+
+    // Get comment author names
+    const commentAuthorIds = [...new Set((comments || []).map(c => c.author_id))];
+    let commentAuthors = {};
+    if (commentAuthorIds.length) {
+      const { data: authors } = await supabase
+        .from('users')
+        .select('id, display_name')
+        .in('id', commentAuthorIds);
+      if (authors) authors.forEach(a => { commentAuthors[a.id] = a.display_name; });
+    }
+
+    // Get current user's reactions
+    let myReactions = {};
+    if (req.userId) {
+      const { data: reactions } = await supabase
+        .from('social_reactions')
+        .select('target_type, target_id, reaction_type')
+        .eq('user_id', req.userId)
+        .in('target_id', [pred.id, ...(comments || []).map(c => c.id)]);
+      if (reactions) reactions.forEach(r => { myReactions[r.target_id] = r.reaction_type; });
+    }
+
+    res.json({
+      prediction: { ...pred, author },
+      comments: (comments || []).map(c => ({
+        ...c,
+        author_name: commentAuthors[c.author_id] || 'Anonymous',
+        my_reaction: myReactions[c.id] || null,
+      })),
+      my_reaction: myReactions[pred.id] || null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/predictions/market/:slug — all predictions on a market
+app.get('/api/social/predictions/market/:slug', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('social_predictions')
+      .select('*')
+      .eq('market_slug', req.params.slug)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+
+    // Get author names
+    const authorIds = [...new Set((data || []).map(p => p.author_id))];
+    let authors = {};
+    if (authorIds.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, display_name')
+        .in('id', authorIds);
+      if (users) users.forEach(u => { authors[u.id] = u.display_name; });
+    }
+
+    res.json({
+      predictions: (data || []).map(p => ({
+        ...p,
+        author_name: authors[p.author_id] || 'Anonymous',
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/feed — personalized feed (predictions from followed users)
+app.get('/api/social/feed', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 50);
+    const before = req.query.before || null; // cursor-based pagination
+
+    let query;
+
+    if (req.userId) {
+      // Get followed user IDs
+      const { data: follows } = await supabase
+        .from('predictor_follows')
+        .select('following_id')
+        .eq('follower_id', req.userId);
+
+      const followedIds = (follows || []).map(f => f.following_id);
+      // Include own predictions + followed users
+      followedIds.push(req.userId);
+
+      query = supabase
+        .from('social_predictions')
+        .select('*')
+        .in('author_id', followedIds);
+    } else {
+      // Public: show trending (most reacted in last 7 days)
+      query = supabase
+        .from('social_predictions')
+        .select('*')
+        .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+    }
+
+    if (before) query = query.lt('created_at', before);
+    query = query.order('created_at', { ascending: false }).limit(limit);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Get author info
+    const authorIds = [...new Set((data || []).map(p => p.author_id))];
+    let authors = {};
+    if (authorIds.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, display_name, polymarket_address')
+        .in('id', authorIds);
+      if (users) users.forEach(u => { authors[u.id] = u; });
+    }
+
+    // Get current user's reactions
+    let myReactions = {};
+    if (req.userId && data && data.length) {
+      const { data: reactions } = await supabase
+        .from('social_reactions')
+        .select('target_id, reaction_type')
+        .eq('user_id', req.userId)
+        .eq('target_type', 'prediction')
+        .in('target_id', data.map(p => p.id));
+      if (reactions) reactions.forEach(r => { myReactions[r.target_id] = r.reaction_type; });
+    }
+
+    res.json({
+      predictions: (data || []).map(p => ({
+        ...p,
+        author: authors[p.author_id] || { display_name: 'Anonymous' },
+        my_reaction: myReactions[p.id] || null,
+      })),
+      next_cursor: data && data.length === limit ? data[data.length - 1].created_at : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/feed/trending — public trending predictions
+app.get('/api/social/feed/trending', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const { data, error } = await supabase
+      .from('social_predictions')
+      .select('*')
+      .eq('status', 'active')
+      .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+      .order('reaction_count', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+
+    const authorIds = [...new Set((data || []).map(p => p.author_id))];
+    let authors = {};
+    if (authorIds.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, display_name, polymarket_address')
+        .in('id', authorIds);
+      if (users) users.forEach(u => { authors[u.id] = u; });
+    }
+
+    res.json({
+      predictions: (data || []).map(p => ({
+        ...p,
+        author: authors[p.author_id] || { display_name: 'Anonymous' },
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/social/comments — post comment on a prediction
+app.post('/api/social/comments', requireAuth, async (req, res) => {
+  try {
+    const { prediction_id, parent_id, body } = req.body;
+    if (!prediction_id || !body || !body.trim()) {
+      return res.status(400).json({ error: 'prediction_id and body required' });
+    }
+    if (body.length > 1000) {
+      return res.status(400).json({ error: 'Comment must be under 1000 characters' });
+    }
+
+    const { data, error } = await supabase
+      .from('social_comments')
+      .insert({
+        author_id: req.userId,
+        prediction_id,
+        parent_id: parent_id || null,
+        body: body.trim(),
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Increment comment count (non-blocking)
+    supabase.rpc('increment_field', {
+      table_name: 'social_predictions',
+      field_name: 'comment_count',
+      row_id: prediction_id,
+    }).then(() => {}).catch(() => {
+      // Fallback: manual increment
+      supabase.from('social_predictions').select('comment_count').eq('id', prediction_id).single()
+        .then(({ data: p }) => {
+          if (p) supabase.from('social_predictions').update({ comment_count: (p.comment_count || 0) + 1 }).eq('id', prediction_id).then(() => {});
+        });
+    });
+
+    // Notify prediction author (non-blocking)
+    supabase.from('social_predictions').select('author_id, market_title').eq('id', prediction_id).single()
+      .then(({ data: pred }) => {
+        if (pred && pred.author_id !== req.userId) {
+          supabase.from('notifications').insert({
+            user_id: pred.author_id,
+            type: 'prediction_comment',
+            title: 'New comment on your prediction',
+            body: body.trim().slice(0, 100),
+          }).then(() => {});
+        }
+      });
+
+    // Get author name
+    const { data: author } = await supabase.from('users').select('display_name').eq('id', req.userId).single();
+
+    res.json({ comment: { ...data, author_name: author?.display_name || 'Anonymous' } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/social/reactions — react to a prediction or comment
+app.post('/api/social/reactions', requireAuth, async (req, res) => {
+  try {
+    const { target_type, target_id, reaction_type } = req.body;
+    if (!target_type || !target_id) {
+      return res.status(400).json({ error: 'target_type and target_id required' });
+    }
+    if (!['prediction', 'comment'].includes(target_type)) {
+      return res.status(400).json({ error: 'target_type must be prediction or comment' });
+    }
+    const rType = reaction_type || 'agree';
+    if (!['agree', 'disagree', 'fire'].includes(rType)) {
+      return res.status(400).json({ error: 'reaction_type must be agree, disagree, or fire' });
+    }
+
+    // Check if already reacted — toggle off
+    const { data: existing } = await supabase
+      .from('social_reactions')
+      .select('reaction_type')
+      .eq('user_id', req.userId)
+      .eq('target_type', target_type)
+      .eq('target_id', target_id)
+      .maybeSingle();
+
+    if (existing) {
+      // Remove reaction
+      await supabase.from('social_reactions')
+        .delete()
+        .eq('user_id', req.userId)
+        .eq('target_type', target_type)
+        .eq('target_id', target_id);
+
+      // Decrement counter
+      const table = target_type === 'prediction' ? 'social_predictions' : 'social_comments';
+      const { data: row } = await supabase.from(table).select('reaction_count').eq('id', target_id).single();
+      if (row) await supabase.from(table).update({ reaction_count: Math.max(0, (row.reaction_count || 0) - 1) }).eq('id', target_id);
+
+      return res.json({ reacted: false, reaction_type: null });
+    }
+
+    // Insert reaction
+    const { error } = await supabase.from('social_reactions').insert({
+      user_id: req.userId,
+      target_type,
+      target_id,
+      reaction_type: rType,
+    });
+    if (error) throw error;
+
+    // Increment counter
+    const table = target_type === 'prediction' ? 'social_predictions' : 'social_comments';
+    const { data: row } = await supabase.from(table).select('reaction_count').eq('id', target_id).single();
+    if (row) await supabase.from(table).update({ reaction_count: (row.reaction_count || 0) + 1 }).eq('id', target_id);
+
+    res.json({ reacted: true, reaction_type: rType });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/user/:userId/predictions — a user's prediction history
+app.get('/api/social/user/:userId/predictions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const { data, error } = await supabase
+      .from('social_predictions')
+      .select('*')
+      .eq('author_id', req.params.userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+
+    // Compute stats
+    const all = data || [];
+    const resolved = all.filter(p => p.status === 'resolved_win' || p.status === 'resolved_loss');
+    const wins = resolved.filter(p => p.status === 'resolved_win').length;
+
+    res.json({
+      predictions: all,
+      stats: {
+        total: all.length,
+        active: all.filter(p => p.status === 'active').length,
+        resolved: resolved.length,
+        wins,
+        win_rate: resolved.length > 0 ? Math.round(wins / resolved.length * 100) : null,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Serve feed page
+app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

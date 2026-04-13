@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Prediction Feed</title>
+<meta name="description" content="See what the best prediction market traders are betting on. Verified predictions with real money, real P&L, real track records.">
+<meta property="og:title" content="HYPERFLEX Prediction Feed">
+<meta property="og:description" content="The social feed for prediction markets. Verified predictions backed by real money.">
+<meta property="og:url" content="https://hyperflex.network/feed">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#0e0e15;--paper-2:#16161f;--paper-3:#1e1e2a;
+    --ink:#f0f0f5;--dim:#8888a0;--soft:#aaaabe;--border:#1e1e2a;
+    --green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;--gold:#c9920d;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .feed-layout{max-width:680px;margin:0 auto;padding:80px 16px 40px}
+
+  /* Header */
+  .feed-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px}
+  .feed-title{font-size:24px;font-weight:800;letter-spacing:-0.02em}
+  .feed-tabs{display:flex;gap:4px;background:var(--paper-2);border-radius:8px;padding:3px}
+  .feed-tab{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--dim);transition:all .15s}
+  .feed-tab.active{background:var(--paper-3);color:var(--ink)}
+  .feed-tab:hover:not(.active){color:var(--soft)}
+
+  /* Post prediction CTA */
+  .post-cta{display:flex;align-items:center;gap:12px;padding:16px;background:var(--paper-2);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;cursor:pointer;transition:border-color .15s}
+  .post-cta:hover{border-color:var(--gold)}
+  .post-cta-avatar{width:36px;height:36px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .post-cta-text{flex:1;color:var(--dim);font-size:14px}
+  .post-cta-btn{padding:6px 16px;border-radius:6px;background:var(--gold);color:#000;font-size:12px;font-weight:700;border:none;cursor:pointer;white-space:nowrap}
+  .post-cta-btn:hover{background:#e8a914}
+
+  /* Prediction card */
+  .pred-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .15s}
+  .pred-card:hover{border-color:rgba(255,255,255,0.1)}
+  .pred-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .pred-avatar{width:32px;height:32px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--gold);flex-shrink:0}
+  .pred-meta{flex:1;min-width:0}
+  .pred-author{font-size:13px;font-weight:600;color:var(--ink)}
+  .pred-author:hover{color:var(--gold)}
+  .pred-time{font-size:11px;color:var(--dim);margin-left:6px}
+  .pred-side{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0}
+  .pred-side.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-side.no{background:rgba(255,77,106,0.12);color:var(--red)}
+
+  .pred-market{display:block;font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;line-height:1.35}
+  .pred-market:hover{color:var(--gold);text-decoration:none}
+  .pred-price{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:8px}
+  .pred-price span{color:var(--ink);font-weight:600}
+
+  .pred-thesis{font-size:13px;line-height:1.5;color:var(--soft);margin-bottom:12px;white-space:pre-wrap;word-break:break-word}
+
+  /* Status badge for resolved */
+  .pred-status{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-bottom:8px}
+  .pred-status.win{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-status.loss{background:rgba(255,77,106,0.12);color:var(--red)}
+
+  /* Actions bar */
+  .pred-actions{display:flex;align-items:center;gap:16px;padding-top:10px;border-top:1px solid var(--border)}
+  .pred-action{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--dim);cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;transition:all .12s}
+  .pred-action:hover{background:rgba(255,255,255,0.04);color:var(--ink)}
+  .pred-action.active-agree{color:var(--green)}
+  .pred-action.active-disagree{color:var(--red)}
+  .pred-action.active-fire{color:var(--amber)}
+  .pred-action svg{width:16px;height:16px}
+
+  /* Comments inline */
+  .pred-comments{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .pred-comment{display:flex;gap:8px;padding:6px 0}
+  .pred-comment-avatar{width:24px;height:24px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--dim);flex-shrink:0}
+  .pred-comment-body{flex:1;font-size:12px;color:var(--soft);line-height:1.4}
+  .pred-comment-author{font-weight:600;color:var(--ink);margin-right:4px}
+  .pred-comment-time{font-size:10px;color:var(--dim);margin-left:4px}
+  .comment-input-wrap{display:flex;gap:8px;margin-top:8px}
+  .comment-input{flex:1;background:var(--paper-3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--ink);font-family:var(--sans);font-size:12px;outline:none;resize:none}
+  .comment-input:focus{border-color:var(--gold)}
+  .comment-submit{padding:8px 14px;border-radius:8px;background:var(--gold);color:#000;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0}
+
+  /* Empty state */
+  .feed-empty{text-align:center;padding:60px 20px}
+  .feed-empty-icon{font-size:48px;margin-bottom:16px}
+  .feed-empty-title{font-size:18px;font-weight:700;margin-bottom:8px}
+  .feed-empty-sub{font-size:13px;color:var(--dim);margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto}
+  .feed-empty-btn{display:inline-block;padding:10px 24px;background:var(--gold);color:#000;font-weight:700;font-size:13px;border-radius:8px;border:none;cursor:pointer}
+
+  /* Post prediction modal */
+  .post-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
+  .post-modal-overlay.open{display:flex}
+  .post-modal{background:var(--paper-2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px}
+  .post-modal-title{font-size:18px;font-weight:800;margin-bottom:16px}
+  .post-field{margin-bottom:14px}
+  .post-label{display:block;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+  .post-input{width:100%;background:var(--paper-3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--ink);font-family:var(--sans);font-size:13px;outline:none}
+  .post-input:focus{border-color:var(--gold)}
+  .post-textarea{width:100%;background:var(--paper-3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--ink);font-family:var(--sans);font-size:13px;outline:none;resize:vertical;min-height:80px}
+  .post-textarea:focus{border-color:var(--gold)}
+  .post-side-toggle{display:flex;gap:8px;margin-bottom:14px}
+  .post-side-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--paper-3);color:var(--dim);font-weight:700;font-size:14px;cursor:pointer;transition:all .12s}
+  .post-side-btn.selected-yes{background:rgba(0,230,138,0.15);border-color:var(--green);color:var(--green)}
+  .post-side-btn.selected-no{background:rgba(255,77,106,0.15);border-color:var(--red);color:var(--red)}
+  .post-actions{display:flex;gap:10px;margin-top:18px}
+  .post-cancel{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--dim);font-weight:600;font-size:13px;cursor:pointer}
+  .post-submit{flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;font-size:13px;cursor:pointer}
+  .post-submit:disabled{opacity:0.4;cursor:not-allowed}
+
+  /* Loading spinner */
+  .feed-loading{text-align:center;padding:40px;color:var(--dim);font-size:13px}
+
+  /* Load more */
+  .load-more-btn{display:block;width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;margin-top:8px;transition:all .15s}
+  .load-more-btn:hover{border-color:var(--gold);color:var(--ink)}
+
+  @media(max-width:480px){
+    .feed-layout{padding:70px 10px 30px}
+    .feed-header{flex-direction:column;align-items:flex-start}
+    .pred-card{padding:12px}
+  }
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=13"></script>
+
+<div class="feed-layout">
+  <div class="feed-header">
+    <div class="feed-title">Prediction Feed</div>
+    <div class="feed-tabs">
+      <button class="feed-tab active" id="tabFollowing" onclick="switchTab('following')">Following</button>
+      <button class="feed-tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
+    </div>
+  </div>
+
+  <!-- Post prediction CTA -->
+  <div class="post-cta" id="postCta" onclick="openPostModal()">
+    <div class="post-cta-avatar" id="postAvatar">?</div>
+    <div class="post-cta-text">Share your prediction...</div>
+    <button class="post-cta-btn">Predict</button>
+  </div>
+
+  <!-- Feed items -->
+  <div id="feedContainer">
+    <div class="feed-loading" id="feedLoading">Loading predictions...</div>
+  </div>
+
+  <button class="load-more-btn" id="loadMoreBtn" style="display:none" onclick="loadMore()">Load more</button>
+</div>
+
+<!-- Post Prediction Modal -->
+<div class="post-modal-overlay" id="postModal">
+  <div class="post-modal">
+    <div class="post-modal-title">Post a Prediction</div>
+    <div class="post-field">
+      <label class="post-label">Market</label>
+      <input class="post-input" id="postMarketTitle" placeholder="e.g. Will Bitcoin hit $100K by July 2026?">
+    </div>
+    <div class="post-field">
+      <label class="post-label">Market slug (from URL)</label>
+      <input class="post-input" id="postMarketSlug" placeholder="e.g. will-bitcoin-hit-100k" style="font-family:var(--mono);font-size:12px">
+    </div>
+    <div class="post-field">
+      <label class="post-label">Your prediction</label>
+      <div class="post-side-toggle">
+        <button class="post-side-btn" id="postSideYes" onclick="selectSide('YES')">YES</button>
+        <button class="post-side-btn" id="postSideNo" onclick="selectSide('NO')">NO</button>
+      </div>
+    </div>
+    <div class="post-field">
+      <label class="post-label">Entry price</label>
+      <input class="post-input" id="postPrice" type="number" step="0.01" min="0.01" max="0.99" placeholder="0.65" style="font-family:var(--mono)">
+    </div>
+    <div class="post-field">
+      <label class="post-label">Thesis (why?)</label>
+      <textarea class="post-textarea" id="postThesis" placeholder="Why are you making this prediction? What's your edge?" maxlength="2000"></textarea>
+    </div>
+    <div class="post-actions">
+      <button class="post-cancel" onclick="closePostModal()">Cancel</button>
+      <button class="post-submit" id="postSubmitBtn" onclick="submitPrediction()">Post Prediction</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var API = window.location.origin;
+var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+var currentTab = 'following';
+var nextCursor = null;
+var feedData = [];
+var _postSide = null;
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function timeAgo(d) {
+  var s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  if (s < 86400) return Math.floor(s/3600) + 'h';
+  return Math.floor(s/86400) + 'd';
+}
+
+function authHeaders() {
+  var h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+
+// ── Feed Loading ──
+async function loadFeed(append) {
+  if (!append) {
+    document.getElementById('feedContainer').innerHTML = '<div class="feed-loading">Loading predictions...</div>';
+    nextCursor = null;
+    feedData = [];
+  }
+
+  var url = currentTab === 'trending'
+    ? API + '/api/social/feed/trending?limit=20'
+    : API + '/api/social/feed?limit=20' + (nextCursor ? '&before=' + encodeURIComponent(nextCursor) : '');
+
+  try {
+    var r = await fetch(url, { headers: authHeaders() });
+    var data = await r.json();
+    var preds = data.predictions || [];
+    nextCursor = data.next_cursor || null;
+
+    if (!append) feedData = preds;
+    else feedData = feedData.concat(preds);
+
+    renderFeed();
+    document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
+  } catch (e) {
+    document.getElementById('feedContainer').innerHTML =
+      '<div class="feed-empty"><div class="feed-empty-icon">:/</div><div class="feed-empty-title">Couldn\'t load feed</div><div class="feed-empty-sub">' + escHtml(e.message) + '</div></div>';
+  }
+}
+
+function loadMore() { loadFeed(true); }
+
+function renderFeed() {
+  var container = document.getElementById('feedContainer');
+  if (!feedData.length) {
+    var isFollowing = currentTab === 'following';
+    container.innerHTML =
+      '<div class="feed-empty">' +
+        '<div class="feed-empty-icon">' + (isFollowing ? '👀' : '🔥') + '</div>' +
+        '<div class="feed-empty-title">' + (isFollowing ? 'Your feed is empty' : 'No trending predictions yet') + '</div>' +
+        '<div class="feed-empty-sub">' + (isFollowing
+          ? 'Follow traders on the <a href="/predictors">Predictors</a> page to see their predictions here. Or post your own!'
+          : 'Be the first to share a prediction and start the conversation.') + '</div>' +
+        '<button class="feed-empty-btn" onclick="openPostModal()">Post a Prediction</button>' +
+      '</div>';
+    return;
+  }
+
+  container.innerHTML = feedData.map(function(p) { return renderPredictionCard(p); }).join('');
+}
+
+function renderPredictionCard(p) {
+  var author = p.author || {};
+  var authorName = escHtml(author.display_name || 'Anonymous');
+  var initial = (author.display_name || '?')[0].toUpperCase();
+  var sideClass = p.side === 'YES' ? 'yes' : 'no';
+  var priceDisplay = (parseFloat(p.entry_price) * 100).toFixed(0) + '\u00a2';
+
+  var statusHtml = '';
+  if (p.status === 'resolved_win') {
+    var pnlStr = p.pnl != null ? ' (+$' + parseFloat(p.pnl).toFixed(2) + ')' : '';
+    statusHtml = '<div class="pred-status win">Won' + escHtml(pnlStr) + '</div>';
+  } else if (p.status === 'resolved_loss') {
+    var pnlStr2 = p.pnl != null ? ' (-$' + Math.abs(parseFloat(p.pnl)).toFixed(2) + ')' : '';
+    statusHtml = '<div class="pred-status loss">Lost' + escHtml(pnlStr2) + '</div>';
+  } else if (p.status === 'closed') {
+    statusHtml = '<div class="pred-status" style="background:rgba(255,255,255,0.06);color:var(--dim)">Closed</div>';
+  }
+
+  var thesisHtml = p.thesis
+    ? '<div class="pred-thesis">' + escHtml(p.thesis) + '</div>'
+    : '';
+
+  var sizeHtml = p.show_size && p.amount_usd
+    ? ' &middot; <span>$' + parseFloat(p.amount_usd).toFixed(2) + '</span>'
+    : '';
+
+  var myReaction = p.my_reaction || '';
+  var agreeClass = myReaction === 'agree' ? ' active-agree' : '';
+  var disagreeClass = myReaction === 'disagree' ? ' active-disagree' : '';
+  var fireClass = myReaction === 'fire' ? ' active-fire' : '';
+
+  return '<div class="pred-card" id="pred-' + p.id + '">' +
+    '<div class="pred-head">' +
+      '<div class="pred-avatar">' + escHtml(initial) + '</div>' +
+      '<div class="pred-meta">' +
+        '<a href="/m/' + (author.id || '') + '" class="pred-author">' + authorName + '</a>' +
+        '<span class="pred-time">' + timeAgo(p.created_at) + '</span>' +
+      '</div>' +
+      '<div class="pred-side ' + sideClass + '">' + p.side + '</div>' +
+    '</div>' +
+    '<a href="/market/' + escHtml(p.market_slug) + '" class="pred-market">' + escHtml(p.market_title) + '</a>' +
+    '<div class="pred-price">Entry: <span>' + priceDisplay + '</span>' + sizeHtml + '</div>' +
+    statusHtml +
+    thesisHtml +
+    '<div class="pred-actions">' +
+      '<button class="pred-action' + agreeClass + '" onclick="react(\'' + p.id + '\',\'agree\')" title="Agree">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-6 0v4"/><path d="M18 9H5a2 2 0 00-2 2v9a2 2 0 002 2h13a2 2 0 002-2v-9a2 2 0 00-2-2z"/></svg>' +
+        '<span>' + (p.reaction_count || 0) + '</span>' +
+      '</button>' +
+      '<button class="pred-action' + disagreeClass + '" onclick="react(\'' + p.id + '\',\'disagree\')" title="Disagree">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15V19a3 3 0 006 0v-4"/><path d="M6 15h13a2 2 0 002-2V4a2 2 0 00-2-2H6a2 2 0 00-2 2v9a2 2 0 002 2z"/></svg>' +
+      '</button>' +
+      '<button class="pred-action' + fireClass + '" onclick="react(\'' + p.id + '\',\'fire\')" title="Fire">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4-3 8-7 8-12a8 8 0 00-16 0c0 5 4 9 8 12z"/></svg>' +
+      '</button>' +
+      '<button class="pred-action" onclick="toggleComments(\'' + p.id + '\')" title="Comments">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>' +
+        '<span>' + (p.comment_count || 0) + '</span>' +
+      '</button>' +
+      '<button class="pred-action" onclick="sharePrediction(\'' + p.id + '\')" title="Share">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<div class="pred-comments" id="comments-' + p.id + '" style="display:none"></div>' +
+  '</div>';
+}
+
+// ── Tabs ──
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
+  document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
+  loadFeed(false);
+}
+
+// ── Reactions ──
+async function react(predId, type) {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  try {
+    var r = await fetch(API + '/api/social/reactions', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ target_type: 'prediction', target_id: predId, reaction_type: type })
+    });
+    var data = await r.json();
+    // Update local state and re-render the card
+    var pred = feedData.find(function(p) { return p.id === predId; });
+    if (pred) {
+      if (data.reacted) {
+        pred.my_reaction = type;
+        pred.reaction_count = (pred.reaction_count || 0) + 1;
+      } else {
+        pred.my_reaction = null;
+        pred.reaction_count = Math.max(0, (pred.reaction_count || 0) - 1);
+      }
+      var el = document.getElementById('pred-' + predId);
+      if (el) el.outerHTML = renderPredictionCard(pred);
+    }
+  } catch (e) { console.error('Reaction error:', e); }
+}
+
+// ── Comments ──
+async function toggleComments(predId) {
+  var el = document.getElementById('comments-' + predId);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  el.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:8px 0">Loading comments...</div>';
+
+  try {
+    var r = await fetch(API + '/api/social/predictions/' + predId, { headers: authHeaders() });
+    var data = await r.json();
+    var comments = data.comments || [];
+
+    var html = '';
+    if (comments.length) {
+      html = comments.map(function(c) {
+        var initial = (c.author_name || '?')[0].toUpperCase();
+        return '<div class="pred-comment">' +
+          '<div class="pred-comment-avatar">' + escHtml(initial) + '</div>' +
+          '<div class="pred-comment-body">' +
+            '<span class="pred-comment-author">' + escHtml(c.author_name) + '</span>' +
+            escHtml(c.body) +
+            '<span class="pred-comment-time">' + timeAgo(c.created_at) + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    } else {
+      html = '<div style="font-size:12px;color:var(--dim);padding:8px 0">No comments yet</div>';
+    }
+
+    // Add comment input
+    html += '<div class="comment-input-wrap">' +
+      '<textarea class="comment-input" id="commentInput-' + predId + '" placeholder="Add a comment..." rows="1"></textarea>' +
+      '<button class="comment-submit" onclick="postComment(\'' + predId + '\')">Post</button>' +
+    '</div>';
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--red);padding:8px 0">Error loading comments</div>';
+  }
+}
+
+async function postComment(predId) {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  var input = document.getElementById('commentInput-' + predId);
+  if (!input || !input.value.trim()) return;
+
+  var body = input.value.trim();
+  input.disabled = true;
+
+  try {
+    await fetch(API + '/api/social/comments', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ prediction_id: predId, body: body })
+    });
+    // Update count
+    var pred = feedData.find(function(p) { return p.id === predId; });
+    if (pred) pred.comment_count = (pred.comment_count || 0) + 1;
+    // Reload comments
+    toggleComments(predId);
+    setTimeout(function() { toggleComments(predId); }, 50);
+  } catch (e) {
+    input.disabled = false;
+    alert('Error posting comment');
+  }
+}
+
+// ── Share ──
+function sharePrediction(predId) {
+  var pred = feedData.find(function(p) { return p.id === predId; });
+  if (!pred) return;
+  var url = 'https://hyperflex.network/market/' + pred.market_slug;
+  var text = pred.side + ' on "' + pred.market_title + '" at ' + (parseFloat(pred.entry_price)*100).toFixed(0) + '\u00a2';
+  if (pred.thesis) text += ' \u2014 ' + pred.thesis.slice(0, 120);
+  text += '\n\nvia @hyperflexio';
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank');
+}
+
+// ── Post Prediction Modal ──
+function openPostModal() {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  document.getElementById('postModal').classList.add('open');
+}
+function closePostModal() {
+  document.getElementById('postModal').classList.remove('open');
+}
+function selectSide(side) {
+  _postSide = side;
+  document.getElementById('postSideYes').className = 'post-side-btn' + (side === 'YES' ? ' selected-yes' : '');
+  document.getElementById('postSideNo').className = 'post-side-btn' + (side === 'NO' ? ' selected-no' : '');
+}
+
+async function submitPrediction() {
+  var title = document.getElementById('postMarketTitle').value.trim();
+  var slug = document.getElementById('postMarketSlug').value.trim();
+  var price = parseFloat(document.getElementById('postPrice').value);
+  var thesis = document.getElementById('postThesis').value.trim();
+
+  if (!title) return alert('Enter a market title');
+  if (!slug) return alert('Enter the market slug from the URL');
+  if (!_postSide) return alert('Select YES or NO');
+  if (!price || price < 0.01 || price > 0.99) return alert('Enter a valid entry price (0.01 - 0.99)');
+
+  var btn = document.getElementById('postSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+
+  try {
+    var r = await fetch(API + '/api/social/predictions', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        platform: 'polymarket',
+        market_slug: slug,
+        market_title: title,
+        side: _postSide,
+        entry_price: price,
+        thesis: thesis || null,
+      })
+    });
+    var data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to post');
+
+    closePostModal();
+    // Clear form
+    document.getElementById('postMarketTitle').value = '';
+    document.getElementById('postMarketSlug').value = '';
+    document.getElementById('postPrice').value = '';
+    document.getElementById('postThesis').value = '';
+    _postSide = null;
+    selectSide(null);
+
+    // Reload feed
+    loadFeed(false);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Post Prediction';
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('postModal').addEventListener('click', function(e) {
+  if (e.target === this) closePostModal();
+});
+
+// ── Init ──
+(function() {
+  // Set avatar initial
+  try {
+    var t = token.split('.')[1];
+    var payload = JSON.parse(atob(t));
+    var name = payload.display_name || payload.email || '';
+    if (name) document.getElementById('postAvatar').textContent = name[0].toUpperCase();
+  } catch(e) {}
+
+  loadFeed(false);
+})();
+</script>
+</body>
+</html>

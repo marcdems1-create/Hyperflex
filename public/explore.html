@@ -2312,6 +2312,42 @@ function activityCard(a) {
     </div>`;
   }
 
+  if (a.type === 'social_prediction') {
+    const isYes = (a.side || 'YES') === 'YES';
+    const sideTag = isYes
+      ? `<span class="ac-tag ac-tag-yes">YES</span>`
+      : `<span class="ac-tag ac-tag-no">NO</span>`;
+    const priceStr = a.entry_price ? Math.round(a.entry_price * 100) + '\u00a2' : '';
+    const dest = a.market_slug ? `/market/${escHtml(a.market_slug)}` : '/feed';
+    const thesisSnippet = a.thesis ? `<div style="font-size:12px;color:var(--soft);margin-top:6px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(a.thesis.slice(0,200))}</div>` : '';
+    const statusBadge = a.status === 'resolved_win' ? '<span style="font-size:11px;font-weight:700;color:#22c55e;margin-left:6px">Won</span>'
+      : a.status === 'resolved_loss' ? '<span style="font-size:11px;font-weight:700;color:#ef4444;margin-left:6px">Lost</span>' : '';
+    return `<div class="activity-card" style="cursor:pointer;border-left:3px solid #c9920d" onclick="window.location.href='${dest}'">
+      <div class="ac-avatar" style="background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);font-size:16px;display:flex;align-items:center;justify-content:center">💬</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <a href="/m/${escHtml(a.user_id || '')}" style="color:var(--text);font-weight:700;text-decoration:none">${escHtml(a.user || 'Anonymous')}</a>
+          <span class="ac-action">predicted <strong style="color:${isYes ? '#22c55e' : '#ef4444'}">${a.side}</strong></span>
+          ${statusBadge}
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card" style="cursor:pointer">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:rgba(201,146,13,0.12);color:#c9920d;border:1px solid rgba(201,146,13,0.3)">Prediction</span>
+            <div class="ac-question">${escHtml(a.market_title || a.question || '')}</div>
+          </div>
+        </div>
+        ${thesisSnippet}
+        <div class="ac-footer">
+          ${sideTag}
+          ${priceStr ? `<span class="ac-stat" style="font-family:var(--mono)">${priceStr}</span>` : ''}
+          <span class="ac-stat">${a.reaction_count || 0} reactions &middot; ${a.comment_count || 0} comments</span>
+          <a href="/feed" style="margin-left:auto;font-size:11px;color:var(--gold);font-family:var(--mono);text-decoration:none;font-weight:700">View Feed →</a>
+        </div>
+      </div>
+    </div>`;
+  }
+
   return '';
 }
 
