@@ -191,9 +191,9 @@ function render(){
   if(d.polymarket&&d.polymarket.active)badgesHtml+='<span class="badge badge-poly">POLY</span>';
   if(d.has_hfx_account)badgesHtml+='<span class="badge badge-hfx">HFX</span>';
 
-  // Follow button
+  // Follow button — always show (server auto-creates profile for any active trader)
   var followHtml='';
-  if(d.has_hfx_account&&d.hfx_user_id){
+  if(d.hfx_user_id){
     followHtml='<button class="follow-btn" id="followBtn" onclick="toggleFollow()">+ Follow</button>';
   }
 
@@ -274,7 +274,7 @@ function render(){
   drawPnlChart();
 
   // Check follow state
-  if(d.has_hfx_account&&d.hfx_user_id)checkFollowState();
+  if(d.hfx_user_id)checkFollowState();
 }
 
 function copyAddr(){
@@ -385,13 +385,12 @@ async function toggleFollow(){
   if(!btn||!_data||!_data.hfx_user_id)return;
   var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
   if(!token){showToast('Sign in to follow');return}
-  var isFollowing=btn.classList.contains('active');
-  var endpoint='/api/predictors/'+_data.hfx_user_id+'/'+(isFollowing?'unfollow':'follow');
   try{
-    var r=await fetch(endpoint,{method:isFollowing?'DELETE':'POST',headers:{Authorization:'Bearer '+token}});
+    var r=await fetch('/api/predictors/'+_data.hfx_user_id+'/follow',{method:'POST',headers:{Authorization:'Bearer '+token}});
     if(r.ok){
-      btn.classList.toggle('active');
-      btn.textContent=isFollowing?'+ Follow':'Following \u2713';
+      var d=await r.json();
+      if(d.following){btn.classList.add('active');btn.textContent='Following \u2713';}
+      else{btn.classList.remove('active');btn.textContent='+ Follow';}
     }
   }catch(e){}
 }
@@ -401,7 +400,17 @@ async function checkFollowState(){
   if(!token||!_data||!_data.hfx_user_id)return;
   try{
     var r=await fetch('/api/predictors/'+_data.hfx_user_id+'/follow-status',{headers:{Authorization:'Bearer '+token}});
-    if(r.ok){var d=await r.json();if(d.following){var btn=document.getElementById('followBtn');if(btn){btn.classList.add('active');btn.textContent='Following \u2713';}}}
+    if(r.ok){
+      var d=await r.json();
+      var btn=document.getElementById('followBtn');
+      if(!btn)return;
+      if(d.is_following){btn.classList.add('active');btn.textContent='Following \u2713';}
+      if(d.follower_count>0){
+        var countEl=document.getElementById('followerCount');
+        if(!countEl){countEl=document.createElement('span');countEl.id='followerCount';countEl.style.cssText='font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:8px';btn.parentNode.insertBefore(countEl,btn.nextSibling)}
+        countEl.textContent=d.follower_count+' follower'+(d.follower_count!==1?'s':'');
+      }
+    }
   }catch(e){}
 }
 

@@ -11003,13 +11003,20 @@ app.get('/api/trader/:address/profile', async (req, res) => {
       fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'userFills', user: addrLower, startTime: Date.now() - 30 * 24 * 60 * 60 * 1000 }) }),
       (async () => {
         try {
+          // Check creator_settings first
           if (pool) {
-            const rows = await dbQuery("SELECT user_id FROM creator_settings WHERE LOWER(polymarket_address) = $1 LIMIT 1", [addrLower]);
-            return rows[0] || null;
+            const csRows = await dbQuery("SELECT user_id FROM creator_settings WHERE LOWER(polymarket_address) = $1 LIMIT 1", [addrLower]);
+            if (csRows[0]) return { user_id: csRows[0].user_id, source: 'creator' };
+            // Check users table (whale profiles + regular users)
+            const uRows = await dbQuery("SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1", [addrLower]);
+            if (uRows[0]) return { user_id: uRows[0].id, source: 'user' };
           } else {
-            const { data } = await supabase.from('creator_settings').select('user_id').ilike('polymarket_address', addrLower).maybeSingle();
-            return data;
+            const { data: csData } = await supabase.from('creator_settings').select('user_id').ilike('polymarket_address', addrLower).maybeSingle();
+            if (csData) return { user_id: csData.user_id, source: 'creator' };
+            const { data: uData } = await supabase.from('users').select('id').ilike('polymarket_address', addrLower).maybeSingle();
+            if (uData) return { user_id: uData.id, source: 'user' };
           }
+          return null;
         } catch(e) { return null; }
       })()
     ]);
@@ -11124,8 +11131,20 @@ app.get('/api/trader/:address/profile', async (req, res) => {
       }
     } catch(e) { console.warn('[trader-profile] hl parse:', e.message); }
 
-    // ── HFX account check ──
-    const hfxUser = hfxRes.status === 'fulfilled' ? hfxRes.value : null;
+    // ── HFX account check — also auto-create profile for followability ──
+    let hfxUser = hfxRes.status === 'fulfilled' ? hfxRes.value : null;
+
+    // If no existing profile but trader has Polymarket activity, auto-create one
+    if (!hfxUser && polyData.active && pool) {
+      try {
+        const shortName = addrLower.slice(0, 6) + '...' + addrLower.slice(-4);
+        const autoId = await ensureWhaleProfile(addrLower, shortName, null, Math.round((polyData.open_pnl + polyData.realized_pnl) * 100) / 100);
+        if (autoId) hfxUser = { user_id: autoId, source: 'auto' };
+      } catch(e) { /* non-blocking */ }
+    }
+
+    // Normalize hfx_user_id from the result
+    const hfxUserId = hfxUser ? (hfxUser.user_id || hfxUser.id || null) : null;
 
     // ── Build summary ──
     const platforms = [];
@@ -11137,8 +11156,8 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 
     const result = {
       address: addrLower,
-      has_hfx_account: !!hfxUser,
-      hfx_user_id: hfxUser ? hfxUser.user_id : null,
+      has_hfx_account: !!hfxUserId,
+      hfx_user_id: hfxUserId,
       platforms,
       polymarket: polyData,
       hyperliquid: hlData,
@@ -14930,6 +14949,11 @@ app.get('/health', (req, res) => {
     boot_time: _healthTimestamps.boot
   });
 });
+
+// ── Social pages (must be before /:slug catch-all) ──
+app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
+app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
@@ -39960,11 +39984,6 @@ app.get('/api/social/search', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
-// Serve pages
-app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
-app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
-app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
