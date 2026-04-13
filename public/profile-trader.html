@@ -389,10 +389,8 @@
       document.getElementById('platform-tag-poly').style.display = 'inline-flex';
     }
 
-    // Follow button
-    if (_currentUser && _currentUser.id !== d.user_id) {
-      document.getElementById('hero-actions').style.display = 'flex';
-    }
+    // Follow button — always show (non-logged-in users get sign-in prompt on click)
+    document.getElementById('hero-actions').style.display = 'flex';
 
     // P&L
     const pnlEl = document.getElementById('total-pnl');
@@ -595,12 +593,14 @@
   };
 
   window.toggleFollow = function() {
-    if (!_currentUser || !_profileData) return;
+    if (!_currentUser) { alert('Sign in to follow traders'); return; }
+    if (!_profileData) return;
     const btn = document.getElementById('btn-follow');
     _isFollowing = !_isFollowing;
     btn.textContent = _isFollowing ? 'Following' : 'Follow';
     btn.classList.toggle('following', _isFollowing);
-    fetch('/api/predictor-follow/' + _profileData.user_id, {
+    const followId = _profileData.user_id || _profileData.wallet || username;
+    fetch('/api/predictors/' + encodeURIComponent(followId) + '/follow', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') },
     }).catch(() => {});
