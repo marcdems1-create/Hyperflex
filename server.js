@@ -10073,7 +10073,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group'
 ]);
 
 // GET /my — private member dashboard
@@ -12057,7 +12057,7 @@ app.get('/api/member/:userId', async (req, res) => {
     let userData, positionsData;
     if (pool) {
       const [userRows, posRows] = await Promise.all([
-        dbQuery('SELECT id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count FROM users WHERE id = $1 LIMIT 1', [userId]),
         dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
@@ -12066,7 +12066,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -39368,8 +39368,603 @@ app.get('/api/social/user/:userId/predictions', async (req, res) => {
   }
 });
 
-// Serve feed page
+// ════════════════════════════════════════════════════════════
+// SOCIAL PROFILES — username, bio, wallet verification, stats
+// ════════════════════════════════════════════════════════════
+
+// PUT /api/user/profile — update social profile fields
+app.put('/api/user/profile', requireAuth, async (req, res) => {
+  try {
+    const { username, bio, banner_url } = req.body;
+    const updates = {};
+
+    if (username !== undefined) {
+      const clean = String(username).toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+      if (clean.length < 3) return res.status(400).json({ error: 'Username must be 3+ characters (a-z, 0-9, _)' });
+      // Check uniqueness
+      const existing = await dbQuery('SELECT id FROM users WHERE username = $1 AND id != $2', [clean, req.userId]);
+      if (existing.length) return res.status(409).json({ error: 'Username already taken' });
+      updates.username = clean;
+    }
+    if (bio !== undefined) updates.bio = String(bio || '').slice(0, 280);
+    if (banner_url !== undefined) updates.banner_url = banner_url || null;
+
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
+
+    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`).join(', ');
+    const vals = Object.values(updates);
+    await dbQuery(`UPDATE users SET ${setClauses} WHERE id = $1`, [req.userId, ...vals]);
+
+    res.json({ ok: true, ...updates });
+  } catch (e) {
+    console.error('[profile] PUT error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/user/:userId/social-profile — full public profile with prediction stats
+app.get('/api/user/:userId/social-profile', optionalAuth, async (req, res) => {
+  try {
+    const uid = req.params.userId;
+    const rows = await dbQuery(
+      `SELECT id, display_name, username, bio, banner_url, avatar_url,
+              polymarket_address, wallet_verified, is_whale, whale_rank, whale_pnl,
+              total_predictions, prediction_win_rate, brier_score, prediction_pnl,
+              follower_count, following_count, created_at
+       FROM users WHERE id = $1`, [uid]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    const user = rows[0];
+
+    // Recent predictions
+    const preds = await dbQuery(
+      `SELECT id, market_title, side, entry_price, status, thesis, reaction_count, comment_count, created_at
+       FROM social_predictions WHERE author_id = $1 ORDER BY created_at DESC LIMIT 10`, [uid]
+    ).catch(() => []);
+
+    // Follow status
+    let is_following = false;
+    if (req.userId && req.userId !== uid) {
+      const fRows = await dbQuery(
+        'SELECT 1 FROM predictor_follows WHERE follower_id = $1 AND following_id = $2', [req.userId, uid]
+      );
+      is_following = fRows.length > 0;
+    }
+
+    // Badges
+    const badges = [];
+    if (user.wallet_verified) badges.push('verified');
+    if (user.is_whale) badges.push('whale');
+    if ((user.prediction_win_rate || 0) >= 70 && (user.total_predictions || 0) >= 10) badges.push('sharp');
+
+    res.json({
+      profile: { ...user, badges },
+      predictions: preds,
+      is_following,
+      is_own: req.userId === uid,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// WALLET VERIFICATION — prove wallet ownership via signed message
+// ════════════════════════════════════════════════════════════
+
+const _walletChallenges = new Map(); // userId → { message, nonce, address, expiresAt }
+
+app.post('/api/wallet/challenge', requireAuth, async (req, res) => {
+  try {
+    const { address } = req.body;
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return res.status(400).json({ error: 'Valid Ethereum address required' });
+    }
+    const nonce = require('crypto').randomUUID();
+    const message = `Verify wallet ownership for HYPERFLEX\nAddress: ${address}\nUser: ${req.userId}\nNonce: ${nonce}\nTimestamp: ${Date.now()}`;
+
+    _walletChallenges.set(req.userId, {
+      message, nonce, address: address.toLowerCase(),
+      expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
+    });
+
+    // Clean expired challenges periodically
+    if (_walletChallenges.size > 1000) {
+      const now = Date.now();
+      for (const [k, v] of _walletChallenges) { if (v.expiresAt < now) _walletChallenges.delete(k); }
+    }
+
+    res.json({ message, nonce });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/wallet/verify', requireAuth, async (req, res) => {
+  try {
+    const { signature } = req.body;
+    if (!signature) return res.status(400).json({ error: 'Signature required' });
+
+    const challenge = _walletChallenges.get(req.userId);
+    if (!challenge) return res.status(400).json({ error: 'No pending challenge. Request one first.' });
+    if (Date.now() > challenge.expiresAt) {
+      _walletChallenges.delete(req.userId);
+      return res.status(400).json({ error: 'Challenge expired. Request a new one.' });
+    }
+
+    // Recover signer address from signature
+    const { ethers } = require('ethers');
+    const recovered = ethers.verifyMessage(challenge.message, signature).toLowerCase();
+
+    if (recovered !== challenge.address) {
+      return res.status(400).json({ error: 'Signature does not match the claimed address' });
+    }
+
+    // Verification passed — update user
+    await dbQuery(
+      `UPDATE users SET polymarket_address = $1, wallet_verified = true, wallet_verified_at = NOW() WHERE id = $2`,
+      [challenge.address, req.userId]
+    );
+
+    _walletChallenges.delete(req.userId);
+
+    res.json({ verified: true, address: challenge.address });
+  } catch (e) {
+    console.error('[wallet/verify] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// PREDICTION AUTO-RESOLUTION — resolve predictions when markets settle
+// ════════════════════════════════════════════════════════════
+
+async function resolveOpenPredictions() {
+  try {
+    const openPreds = await dbQuery(
+      `SELECT id, author_id, market_slug, condition_id, side, entry_price, amount_usd
+       FROM social_predictions WHERE status = 'active' AND market_slug IS NOT NULL LIMIT 200`
+    ).catch(() => []);
+    if (!openPreds.length) return;
+
+    // Check screener cache for resolved markets
+    const cache = global._screenerCache || [];
+    const resolvedSlugs = new Map();
+    cache.forEach(m => {
+      if (m.resolved || m.end_date_iso) {
+        const endDate = new Date(m.end_date_iso || 0);
+        if (endDate < new Date()) resolvedSlugs.set(m.slug || m.market_slug, m);
+      }
+    });
+
+    let resolved = 0;
+    for (const pred of openPreds) {
+      const market = resolvedSlugs.get(pred.market_slug);
+      if (!market) continue;
+
+      // Determine outcome from market resolution
+      const outcomePrice = market.outcome === 'YES' ? 1 : market.outcome === 'NO' ? 0 : null;
+      if (outcomePrice === null) continue;
+
+      const won = (pred.side === 'YES' && outcomePrice === 1) || (pred.side === 'NO' && outcomePrice === 0);
+      const status = won ? 'resolved_win' : 'resolved_loss';
+      const exitPrice = outcomePrice;
+      const pnl = pred.amount_usd ? (won ? pred.amount_usd * (1 / pred.entry_price - 1) : -pred.amount_usd) : null;
+
+      await dbQuery(
+        `UPDATE social_predictions SET status = $1, exit_price = $2, pnl = $3, resolved_at = NOW(), updated_at = NOW()
+         WHERE id = $4`, [status, exitPrice, pnl, pred.id]
+      );
+
+      // Update user stats
+      await recomputeUserPredictionStats(pred.author_id);
+
+      // Notify
+      const emoji = won ? '🏆' : '📉';
+      pushNotification(pred.author_id, 'prediction_resolved',
+        `${emoji} Prediction ${won ? 'won' : 'lost'}`,
+        `Your ${pred.side} call resolved`, null, null);
+
+      resolved++;
+    }
+    if (resolved > 0) console.log(`[social] Resolved ${resolved} predictions`);
+  } catch (e) {
+    console.error('[social] resolveOpenPredictions error:', e.message);
+  }
+}
+
+async function recomputeUserPredictionStats(userId) {
+  try {
+    const rows = await dbQuery(
+      `SELECT status, entry_price, pnl FROM social_predictions WHERE author_id = $1 AND status IN ('resolved_win', 'resolved_loss')`,
+      [userId]
+    );
+    if (!rows.length) return;
+
+    const wins = rows.filter(r => r.status === 'resolved_win').length;
+    const total = rows.length;
+    const winRate = Math.round(wins / total * 100);
+    const totalPnl = rows.reduce((sum, r) => sum + (parseFloat(r.pnl) || 0), 0);
+
+    // Brier score: 1/N * SUM((predicted_prob - outcome)^2)
+    let brierSum = 0;
+    rows.forEach(r => {
+      const predicted = parseFloat(r.entry_price) || 0.5;
+      const outcome = r.status === 'resolved_win' ? 1 : 0;
+      brierSum += Math.pow(predicted - outcome, 2);
+    });
+    const brier = Math.round((brierSum / total) * 10000) / 10000;
+
+    const allPreds = await dbQuery('SELECT COUNT(*) as c FROM social_predictions WHERE author_id = $1', [userId]);
+
+    await dbQuery(
+      `UPDATE users SET total_predictions = $1, prediction_win_rate = $2, brier_score = $3, prediction_pnl = $4 WHERE id = $5`,
+      [parseInt(allPreds[0]?.c) || 0, winRate, brier, totalPnl, userId]
+    );
+  } catch (e) {
+    console.error('[social] recomputeStats error:', e.message);
+  }
+}
+
+// Run prediction resolution every 30 minutes
+setInterval(() => safeCron('resolveOpenPredictions', resolveOpenPredictions), 30 * 60 * 1000);
+
+// ════════════════════════════════════════════════════════════
+// PREDICTION GROUPS — private/public groups for traders
+// ════════════════════════════════════════════════════════════
+
+// POST /api/groups — create a group
+app.post('/api/groups', requireAuth, async (req, res) => {
+  try {
+    const { name, description, is_private } = req.body;
+    if (!name || name.length < 2) return res.status(400).json({ error: 'Group name required (2+ chars)' });
+
+    const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+    if (!slug) return res.status(400).json({ error: 'Invalid name' });
+
+    // Check slug uniqueness
+    const existing = await dbQuery('SELECT id FROM prediction_groups WHERE slug = $1', [slug]);
+    if (existing.length) return res.status(409).json({ error: 'Group name already taken' });
+
+    const rows = await dbQuery(
+      `INSERT INTO prediction_groups (name, slug, description, owner_id, is_private, member_count)
+       VALUES ($1, $2, $3, $4, $5, 1) RETURNING *`,
+      [name.slice(0, 80), slug, (description || '').slice(0, 500), req.userId, is_private !== false]
+    );
+
+    // Auto-add owner as member
+    await dbQuery(
+      `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'owner')`,
+      [rows[0].id, req.userId]
+    );
+
+    res.json({ group: rows[0] });
+  } catch (e) {
+    console.error('[groups] POST error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/groups/:slug — group detail with members + feed
+app.get('/api/groups/:slug', optionalAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT * FROM prediction_groups WHERE slug = $1', [req.params.slug]);
+    if (!rows.length) return res.status(404).json({ error: 'Group not found' });
+    const group = rows[0];
+
+    if (group.is_private && req.userId) {
+      const membership = await dbQuery(
+        'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2', [group.id, req.userId]
+      );
+      if (!membership.length) return res.status(403).json({ error: 'Private group — join required' });
+    } else if (group.is_private) {
+      return res.status(403).json({ error: 'Private group — login required' });
+    }
+
+    // Members (top 20)
+    const members = await dbQuery(
+      `SELECT gm.user_id, gm.role, gm.joined_at, u.display_name, u.username, u.avatar_url
+       FROM group_members gm LEFT JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id = $1 ORDER BY gm.joined_at LIMIT 20`, [group.id]
+    );
+
+    // Recent shared takes
+    const takes = await dbQuery(
+      `SELECT gt.created_at as shared_at, gt.shared_by, sp.*
+       FROM group_takes gt JOIN social_predictions sp ON sp.id = gt.take_id
+       WHERE gt.group_id = $1 ORDER BY gt.created_at DESC LIMIT 30`, [group.id]
+    );
+
+    // Owner info
+    const owner = await dbQuery('SELECT display_name, username FROM users WHERE id = $1', [group.owner_id]);
+
+    let is_member = false, my_role = null;
+    if (req.userId) {
+      const m = members.find(m => m.user_id === req.userId);
+      if (m) { is_member = true; my_role = m.role; }
+    }
+
+    res.json({
+      group: { ...group, owner_name: owner[0]?.display_name || 'Unknown' },
+      members, takes, is_member, my_role,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/groups/:slug/join — join a group
+app.post('/api/groups/:slug/join', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT id, is_private FROM prediction_groups WHERE slug = $1', [req.params.slug]);
+    if (!rows.length) return res.status(404).json({ error: 'Group not found' });
+    const group = rows[0];
+
+    // Check if already member
+    const existing = await dbQuery(
+      'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2', [group.id, req.userId]
+    );
+    if (existing.length) return res.json({ ok: true, already_member: true });
+
+    await dbQuery('INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, $3)', [group.id, req.userId, 'member']);
+    await dbQuery('UPDATE prediction_groups SET member_count = member_count + 1 WHERE id = $1', [group.id]);
+
+    res.json({ ok: true, joined: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/groups/:slug/leave — leave a group
+app.delete('/api/groups/:slug/leave', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT id, owner_id FROM prediction_groups WHERE slug = $1', [req.params.slug]);
+    if (!rows.length) return res.status(404).json({ error: 'Group not found' });
+    if (rows[0].owner_id === req.userId) return res.status(400).json({ error: 'Owner cannot leave. Transfer ownership first.' });
+
+    await dbQuery('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [rows[0].id, req.userId]);
+    await dbQuery('UPDATE prediction_groups SET member_count = GREATEST(member_count - 1, 0) WHERE id = $1', [rows[0].id]);
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/groups/:slug/share — share a prediction to a group
+app.post('/api/groups/:slug/share', requireAuth, async (req, res) => {
+  try {
+    const { take_id } = req.body;
+    if (!take_id) return res.status(400).json({ error: 'take_id required' });
+
+    const rows = await dbQuery('SELECT id FROM prediction_groups WHERE slug = $1', [req.params.slug]);
+    if (!rows.length) return res.status(404).json({ error: 'Group not found' });
+    const groupId = rows[0].id;
+
+    // Verify membership
+    const membership = await dbQuery(
+      'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, req.userId]
+    );
+    if (!membership.length) return res.status(403).json({ error: 'Must be a group member' });
+
+    // Check for duplicate
+    const dup = await dbQuery('SELECT 1 FROM group_takes WHERE group_id = $1 AND take_id = $2', [groupId, take_id]);
+    if (dup.length) return res.json({ ok: true, already_shared: true });
+
+    await dbQuery(
+      'INSERT INTO group_takes (group_id, take_id, shared_by) VALUES ($1, $2, $3)',
+      [groupId, take_id, req.userId]
+    );
+
+    res.json({ ok: true, shared: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/groups/:slug/leaderboard — internal group leaderboard
+app.get('/api/groups/:slug/leaderboard', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT id FROM prediction_groups WHERE slug = $1', [req.params.slug]);
+    if (!rows.length) return res.status(404).json({ error: 'Group not found' });
+    const groupId = rows[0].id;
+
+    const leaderboard = await dbQuery(
+      `SELECT gm.user_id, u.display_name, u.username, u.avatar_url,
+              u.total_predictions, u.prediction_win_rate, u.brier_score, u.prediction_pnl
+       FROM group_members gm LEFT JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id = $1
+       ORDER BY u.prediction_pnl DESC NULLS LAST LIMIT 50`, [groupId]
+    );
+
+    res.json({ leaderboard });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/user/groups — list groups the user belongs to
+app.get('/api/user/groups', requireAuth, async (req, res) => {
+  try {
+    const groups = await dbQuery(
+      `SELECT pg.*, gm.role, gm.joined_at
+       FROM group_members gm JOIN prediction_groups pg ON pg.id = gm.group_id
+       WHERE gm.user_id = $1 ORDER BY gm.joined_at DESC`, [req.userId]
+    );
+    res.json({ groups });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// LEADERBOARD SNAPSHOTS — periodic rankings by category
+// ════════════════════════════════════════════════════════════
+
+async function computeLeaderboardSnapshots() {
+  try {
+    const categories = ['all', 'crypto', 'politics', 'sports'];
+    const periods = ['weekly', 'monthly', 'alltime'];
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const category of categories) {
+      for (const period of periods) {
+        let dateFilter = '';
+        if (period === 'weekly') dateFilter = "AND sp.resolved_at >= NOW() - INTERVAL '7 days'";
+        else if (period === 'monthly') dateFilter = "AND sp.resolved_at >= NOW() - INTERVAL '30 days'";
+
+        let catFilter = '';
+        if (category !== 'all') {
+          catFilter = `AND LOWER(sp.market_title) ~* '${category === 'crypto' ? 'crypto|bitcoin|ethereum|btc|eth|token|defi|blockchain' :
+            category === 'politics' ? 'president|election|congress|senate|trump|biden|vote|political|democrat|republican' :
+            'nba|nfl|mlb|soccer|football|basketball|tennis|sports|game|match|championship'}'`;
+        }
+
+        const rankings = await dbQuery(`
+          SELECT sp.author_id as user_id, u.display_name, u.username, u.avatar_url,
+                 COUNT(*) as total,
+                 COUNT(*) FILTER (WHERE sp.status = 'resolved_win') as wins,
+                 ROUND(COUNT(*) FILTER (WHERE sp.status = 'resolved_win')::NUMERIC / NULLIF(COUNT(*), 0) * 100) as win_rate,
+                 COALESCE(SUM(sp.pnl), 0) as pnl
+          FROM social_predictions sp
+          JOIN users u ON u.id = sp.author_id
+          WHERE sp.status IN ('resolved_win', 'resolved_loss')
+          ${dateFilter} ${catFilter}
+          GROUP BY sp.author_id, u.display_name, u.username, u.avatar_url
+          HAVING COUNT(*) >= 3
+          ORDER BY win_rate DESC, pnl DESC
+          LIMIT 100
+        `);
+
+        // Add rank + brier score
+        const ranked = rankings.map((r, i) => ({ ...r, rank: i + 1 }));
+
+        await dbQuery(
+          `INSERT INTO leaderboard_snapshots (period, category, snapshot_date, rankings)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (period, category, snapshot_date) DO UPDATE SET rankings = $4, created_at = NOW()`,
+          [period, category, today, JSON.stringify(ranked)]
+        );
+      }
+    }
+    console.log('[social] Leaderboard snapshots computed');
+  } catch (e) {
+    console.error('[social] leaderboard snapshot error:', e.message);
+  }
+}
+
+// GET /api/leaderboard/snapshots — query precomputed leaderboards
+app.get('/api/leaderboard/snapshots', async (req, res) => {
+  try {
+    const period = req.query.period || 'alltime';
+    const category = req.query.category || 'all';
+
+    const rows = await dbQuery(
+      `SELECT rankings, snapshot_date FROM leaderboard_snapshots
+       WHERE period = $1 AND category = $2
+       ORDER BY snapshot_date DESC LIMIT 1`, [period, category]
+    );
+
+    res.json({
+      period, category,
+      snapshot_date: rows[0]?.snapshot_date || null,
+      rankings: rows[0]?.rankings || [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Run leaderboard snapshots daily at midnight (offset to avoid :00)
+setInterval(() => {
+  const now = new Date();
+  if (now.getUTCHours() === 0 && now.getUTCMinutes() < 35) {
+    safeCron('leaderboardSnapshots', computeLeaderboardSnapshots);
+  }
+}, 30 * 60 * 1000);
+
+// ════════════════════════════════════════════════════════════
+// MARKET DISCUSSION PAGES — every market gets a discussion
+// ════════════════════════════════════════════════════════════
+
+// GET /api/discuss/:slug — market discussion data (predictions + comments + stats)
+app.get('/api/discuss/:slug', optionalAuth, async (req, res) => {
+  try {
+    const slug = req.params.slug;
+
+    // Market data from screener cache
+    const cache = global._screenerCache || [];
+    const market = cache.find(m => (m.slug || m.market_slug) === slug);
+
+    // Predictions on this market
+    const predictions = await dbQuery(
+      `SELECT sp.*, u.display_name, u.username, u.avatar_url, u.wallet_verified
+       FROM social_predictions sp LEFT JOIN users u ON u.id = sp.author_id
+       WHERE sp.market_slug = $1 ORDER BY sp.reaction_count DESC, sp.created_at DESC LIMIT 50`, [slug]
+    ).catch(() => []);
+
+    // Comments (from global discussion, not community-specific)
+    const comments = await dbQuery(
+      `SELECT mc.*, u.display_name FROM market_comments mc
+       LEFT JOIN users u ON u.id::text = mc.user_id::text
+       WHERE mc.market_id = $1 OR mc.creator_slug = 'global'
+       ORDER BY mc.created_at DESC LIMIT 50`, [slug]
+    ).catch(() => []);
+
+    // Participant count
+    const pCount = await dbQuery(
+      `SELECT COUNT(DISTINCT author_id) as c FROM social_predictions WHERE market_slug = $1`, [slug]
+    ).catch(() => [{ c: 0 }]);
+
+    res.json({
+      market: market || { slug, question: slug },
+      predictions,
+      comments,
+      participant_count: parseInt(pCount[0]?.c) || 0,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// UNIFIED SEARCH — users, predictions, markets, groups
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/social/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 2) return res.json({ users: [], predictions: [], groups: [] });
+    const pattern = `%${q}%`;
+
+    const [users, predictions, groups] = await Promise.all([
+      dbQuery(
+        `SELECT id, display_name, username, avatar_url, wallet_verified, total_predictions, prediction_win_rate
+         FROM users WHERE (display_name ILIKE $1 OR username ILIKE $1) AND display_name IS NOT NULL
+         ORDER BY follower_count DESC NULLS LAST LIMIT 12`, [pattern]
+      ).catch(() => []),
+      dbQuery(
+        `SELECT id, author_id, market_title, side, entry_price, status, thesis, reaction_count, created_at
+         FROM social_predictions WHERE market_title ILIKE $1 OR thesis ILIKE $1
+         ORDER BY created_at DESC LIMIT 12`, [pattern]
+      ).catch(() => []),
+      dbQuery(
+        `SELECT id, name, slug, description, member_count, is_private, created_at
+         FROM prediction_groups WHERE name ILIKE $1 OR slug ILIKE $1
+         ORDER BY member_count DESC LIMIT 12`, [pattern]
+      ).catch(() => []),
+    ]);
+
+    res.json({ users, predictions, groups });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Serve pages
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
+app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

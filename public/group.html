@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Group — HYPERFLEX</title>
+<meta name="description" content="Private prediction groups on HYPERFLEX. Trade together, compete on leaderboards, share your best calls.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#0e0e15;--paper-2:#16161f;--paper-3:#1e1e2a;
+    --ink:#f0f0f5;--dim:#8888a0;--soft:#aaaabe;--border:#1e1e2a;
+    --green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;--gold:#c9920d;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(14,14,21,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;gap:16px}
+  .nav-logo{font-family:var(--sans);font-weight:900;font-size:16px;letter-spacing:-0.03em;color:var(--ink)}.nav-logo span{color:var(--gold)}
+  .nav-links{display:flex;gap:8px;margin-left:auto}
+  .nav-links a{font-size:12px;font-weight:600;color:var(--dim);padding:6px 12px;border-radius:6px;text-decoration:none;transition:all .15s}
+  .nav-links a:hover{color:var(--ink);background:rgba(255,255,255,0.04)}
+
+  .layout{max-width:760px;margin:0 auto;padding:72px 16px 40px}
+
+  .group-hero{background:var(--paper-2);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px}
+  .group-name{font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:4px}
+  .group-desc{font-size:13px;color:var(--soft);line-height:1.5;margin-bottom:12px}
+  .group-meta{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .group-stat{font-size:12px;color:var(--dim)}.group-stat strong{color:var(--ink);font-family:var(--mono)}
+  .group-badge{padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700}
+  .group-badge.private{background:rgba(168,85,247,0.12);color:var(--purple)}
+  .group-badge.public{background:rgba(0,230,138,0.12);color:var(--green)}
+  .join-btn{padding:8px 20px;border-radius:8px;background:var(--gold);color:#000;font-size:13px;font-weight:700;border:none;cursor:pointer;margin-left:auto}
+  .join-btn:hover{background:#e8a914}
+  .join-btn.joined{background:var(--paper-3);color:var(--dim);border:1px solid var(--border)}
+  .leave-btn{padding:8px 20px;border-radius:8px;background:none;color:var(--red);border:1px solid rgba(255,77,106,0.3);font-size:13px;font-weight:600;cursor:pointer}
+
+  .tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--paper-2);border-radius:8px;padding:3px;width:fit-content}
+  .tab{padding:7px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--dim);transition:all .15s}
+  .tab.active{background:var(--paper-3);color:var(--ink)}
+  .tab:hover:not(.active){color:var(--soft)}
+
+  .section{display:none}.section.active{display:block}
+
+  .pred-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .15s}
+  .pred-card:hover{border-color:rgba(255,255,255,0.08)}
+  .pred-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .pred-avatar{width:30px;height:30px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--gold);flex-shrink:0}
+  .pred-author{font-size:13px;font-weight:600}
+  .pred-time{font-size:11px;color:var(--dim)}
+  .pred-side{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:auto}
+  .pred-side.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-side.no{background:rgba(255,77,106,0.12);color:var(--red)}
+  .pred-thesis{font-size:13px;line-height:1.5;color:var(--soft);margin-bottom:8px}
+  .pred-price{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .pred-price span{color:var(--ink);font-weight:600}
+
+  .member-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+  .member-row:last-child{border-bottom:none}
+  .member-avatar{width:32px;height:32px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--gold);flex-shrink:0}
+  .member-name{font-size:13px;font-weight:600}
+  .member-role{font-size:11px;color:var(--dim);background:var(--paper-3);padding:2px 8px;border-radius:4px;margin-left:auto}
+
+  .lb-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+  .lb-rank{width:24px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--dim);text-align:center;flex-shrink:0}
+  .lb-stats{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--dim)}
+  .lb-stats strong{color:var(--ink);font-family:var(--mono)}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--dim)}
+  .empty-state h3{font-size:16px;color:var(--ink);margin-bottom:6px}
+
+  .private-gate{text-align:center;padding:60px 20px;color:var(--dim)}
+  .private-gate h2{font-size:20px;color:var(--ink);margin-bottom:8px}
+  .private-gate p{font-size:14px;margin-bottom:20px}
+
+  @media(max-width:520px){.layout{padding:64px 12px 30px}.group-name{font-size:18px}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/feed">Feed</a>
+    <a href="/predictors">Predictors</a>
+    <a href="/explore">Explore</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <div class="group-hero" id="groupHero">
+    <div class="group-name" id="groupName">Loading...</div>
+    <div class="group-desc" id="groupDesc"></div>
+    <div class="group-meta" id="groupMeta"></div>
+  </div>
+
+  <div id="privateGate" class="private-gate" style="display:none">
+    <h2>Private Group</h2>
+    <p>This group is invite-only. Request access to see predictions and discussions.</p>
+  </div>
+
+  <div id="groupContent" style="display:none">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('feed')">Feed</button>
+      <button class="tab" onclick="switchTab('members')">Members</button>
+      <button class="tab" onclick="switchTab('leaderboard')">Leaderboard</button>
+    </div>
+
+    <div class="section active" id="sec-feed">
+      <div id="feedList"></div>
+    </div>
+    <div class="section" id="sec-members">
+      <div id="memberList"></div>
+    </div>
+    <div class="section" id="sec-leaderboard">
+      <div id="lbList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const slug = window.location.pathname.replace('/group/','');
+let _groupData = null;
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.className = 'tab' + (['feed','members','leaderboard'][i] === tab ? ' active' : '');
+  });
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const sec = document.getElementById('sec-' + tab);
+  if (sec) sec.classList.add('active');
+  if (tab === 'leaderboard' && _groupData) loadLeaderboard();
+}
+
+async function loadGroup() {
+  try {
+    const token = localStorage.getItem('hf_token');
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+    const r = await fetch('/api/groups/' + encodeURIComponent(slug), { headers });
+
+    if (r.status === 403) {
+      document.getElementById('groupName').textContent = 'Private Group';
+      document.getElementById('privateGate').style.display = 'block';
+      return;
+    }
+    if (!r.ok) { document.getElementById('groupName').textContent = 'Group not found'; return; }
+
+    const d = await r.json();
+    _groupData = d;
+    const g = d.group;
+
+    document.getElementById('groupName').textContent = g.name;
+    document.getElementById('groupDesc').textContent = g.description || '';
+    document.title = g.name + ' — HYPERFLEX Group';
+
+    let metaHtml = `<span class="group-badge ${g.is_private ? 'private' : 'public'}">${g.is_private ? '🔒 Private' : '🌐 Public'}</span>`;
+    metaHtml += `<span class="group-stat">Members <strong>${g.member_count}</strong></span>`;
+    metaHtml += `<span class="group-stat">Owner <strong>${esc(g.owner_name)}</strong></span>`;
+
+    if (d.is_member) {
+      metaHtml += `<button class="join-btn joined" disabled>Joined</button>`;
+      if (d.my_role !== 'owner') metaHtml += `<button class="leave-btn" onclick="leaveGroup()">Leave</button>`;
+    } else if (token) {
+      metaHtml += `<button class="join-btn" onclick="joinGroup()">Join Group</button>`;
+    }
+    document.getElementById('groupMeta').innerHTML = metaHtml;
+
+    document.getElementById('groupContent').style.display = 'block';
+
+    // Feed
+    if (!d.takes?.length) {
+      document.getElementById('feedList').innerHTML = '<div class="empty-state"><h3>No predictions shared yet</h3><p>Members can share their predictions to the group feed.</p></div>';
+    } else {
+      document.getElementById('feedList').innerHTML = d.takes.map(p => {
+        const isYes = p.side === 'YES';
+        return `<div class="pred-card">
+          <div class="pred-head">
+            <div class="pred-avatar">${(p.display_name||p.author_name||'?')[0].toUpperCase()}</div>
+            <div>
+              <span class="pred-author">${esc(p.display_name||p.author_name||'Anonymous')}</span>
+              <div class="pred-time">${timeAgo(p.shared_at || p.created_at)}</div>
+            </div>
+            <span class="pred-side ${isYes?'yes':'no'}">${p.side}</span>
+          </div>
+          <a href="/discuss/${esc(p.market_slug||'')}" style="font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;display:block;margin-bottom:6px">${esc(p.market_title)}</a>
+          ${p.thesis ? `<div class="pred-thesis">${esc(p.thesis)}</div>` : ''}
+          <div class="pred-price">Entry <span>${Math.round((p.entry_price||0)*100)}¢</span></div>
+        </div>`;
+      }).join('');
+    }
+
+    // Members
+    document.getElementById('memberList').innerHTML = d.members.map(m =>
+      `<div class="member-row">
+        <div class="member-avatar">${(m.display_name||'?')[0].toUpperCase()}</div>
+        <div>
+          <a href="/m/${esc(m.user_id)}" class="member-name" style="color:var(--ink);text-decoration:none">${esc(m.display_name||m.username||'Anonymous')}</a>
+        </div>
+        <span class="member-role">${m.role}</span>
+      </div>`
+    ).join('');
+
+  } catch (e) { console.error('Failed to load group:', e); }
+}
+
+async function joinGroup() {
+  const token = localStorage.getItem('hf_token');
+  if (!token) { alert('Sign in first'); return; }
+  await fetch('/api/groups/' + encodeURIComponent(slug) + '/join', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token }
+  });
+  loadGroup();
+}
+
+async function leaveGroup() {
+  if (!confirm('Leave this group?')) return;
+  const token = localStorage.getItem('hf_token');
+  await fetch('/api/groups/' + encodeURIComponent(slug) + '/leave', {
+    method: 'DELETE', headers: { Authorization: 'Bearer ' + token }
+  });
+  loadGroup();
+}
+
+async function loadLeaderboard() {
+  try {
+    const r = await fetch('/api/groups/' + encodeURIComponent(slug) + '/leaderboard');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.leaderboard?.length) {
+      document.getElementById('lbList').innerHTML = '<div class="empty-state"><h3>No rankings yet</h3><p>Members need resolved predictions to appear on the leaderboard.</p></div>';
+      return;
+    }
+    document.getElementById('lbList').innerHTML = d.leaderboard.map((m, i) =>
+      `<div class="lb-row">
+        <span class="lb-rank">${i+1}</span>
+        <div class="member-avatar">${(m.display_name||'?')[0].toUpperCase()}</div>
+        <a href="/m/${esc(m.user_id)}" style="font-size:13px;font-weight:600;color:var(--ink);text-decoration:none">${esc(m.display_name||m.username||'Anonymous')}</a>
+        <div class="lb-stats">
+          <span>Win rate <strong>${m.prediction_win_rate||0}%</strong></span>
+          <span>P&L <strong style="color:${(m.prediction_pnl||0)>=0?'var(--green)':'var(--red)'}">$${(m.prediction_pnl||0).toFixed(0)}</strong></span>
+          <span>Calls <strong>${m.total_predictions||0}</strong></span>
+        </div>
+      </div>`
+    ).join('');
+  } catch (e) { console.error('Leaderboard error:', e); }
+}
+
+loadGroup();
+</script>
+</body>
+</html>

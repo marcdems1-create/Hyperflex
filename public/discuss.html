@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Discussion — HYPERFLEX</title>
+<meta name="description" content="Discuss prediction markets with verified traders. See who's betting what and why.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#0e0e15;--paper-2:#16161f;--paper-3:#1e1e2a;
+    --ink:#f0f0f5;--dim:#8888a0;--soft:#aaaabe;--border:#1e1e2a;
+    --green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;--gold:#c9920d;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100vh}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(14,14,21,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;gap:16px}
+  .nav-logo{font-family:var(--sans);font-weight:900;font-size:16px;letter-spacing:-0.03em;color:var(--ink)}
+  .nav-logo span{color:var(--gold)}
+  .nav-links{display:flex;gap:8px;margin-left:auto}
+  .nav-links a{font-size:12px;font-weight:600;color:var(--dim);padding:6px 12px;border-radius:6px;text-decoration:none;transition:all .15s}
+  .nav-links a:hover{color:var(--ink);background:rgba(255,255,255,0.04)}
+
+  .layout{max-width:720px;margin:0 auto;padding:72px 16px 40px}
+
+  .market-hero{background:var(--paper-2);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px}
+  .market-question{font-size:20px;font-weight:800;line-height:1.3;letter-spacing:-0.02em;margin-bottom:12px}
+  .market-stats{display:flex;gap:16px;flex-wrap:wrap}
+  .market-stat{font-size:12px;color:var(--dim)}
+  .market-stat strong{color:var(--ink);font-family:var(--mono)}
+  .market-prices{display:flex;gap:8px;margin-top:12px}
+  .price-pill{padding:6px 14px;border-radius:8px;font-size:14px;font-weight:700;font-family:var(--mono)}
+  .price-pill.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .price-pill.no{background:rgba(255,77,106,0.12);color:var(--red)}
+
+  .section-title{font-size:16px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .section-count{font-size:12px;font-weight:600;color:var(--dim);background:var(--paper-3);padding:2px 8px;border-radius:10px}
+
+  .post-compose{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start}
+  .post-compose textarea{flex:1;background:none;border:none;color:var(--ink);font-family:var(--sans);font-size:13px;resize:none;outline:none;min-height:42px}
+  .post-compose textarea::placeholder{color:var(--dim)}
+  .post-btn{padding:8px 16px;border-radius:8px;background:var(--gold);color:#000;font-size:12px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;align-self:flex-end}
+  .post-btn:hover{background:#e8a914}
+  .post-btn:disabled{opacity:.4;cursor:not-allowed}
+  .side-select{display:flex;gap:4px;margin-bottom:8px}
+  .side-btn{padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;border:1px solid var(--border);background:none;color:var(--dim);cursor:pointer;transition:all .12s}
+  .side-btn.active-yes{background:rgba(0,230,138,0.15);color:var(--green);border-color:rgba(0,230,138,0.3)}
+  .side-btn.active-no{background:rgba(255,77,106,0.15);color:var(--red);border-color:rgba(255,77,106,0.3)}
+
+  .pred-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .15s}
+  .pred-card:hover{border-color:rgba(255,255,255,0.08)}
+  .pred-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .pred-avatar{width:30px;height:30px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--gold);flex-shrink:0}
+  .pred-author{font-size:13px;font-weight:600}
+  .pred-time{font-size:11px;color:var(--dim)}
+  .verified-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--green);background:rgba(0,230,138,0.1);padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px}
+  .pred-side{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:auto}
+  .pred-side.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-side.no{background:rgba(255,77,106,0.12);color:var(--red)}
+  .pred-thesis{font-size:13px;line-height:1.5;color:var(--soft);margin-bottom:8px}
+  .pred-price{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:8px}
+  .pred-price span{color:var(--ink);font-weight:600}
+  .pred-status{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-bottom:6px}
+  .pred-status.win{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-status.loss{background:rgba(255,77,106,0.12);color:var(--red)}
+  .pred-actions{display:flex;gap:12px;padding-top:8px;border-top:1px solid var(--border)}
+  .pred-action{font-size:12px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;background:none;border:none;padding:4px 8px;border-radius:6px;transition:all .12s}
+  .pred-action:hover{background:rgba(255,255,255,0.04);color:var(--ink)}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--dim)}
+  .empty-state h3{font-size:16px;color:var(--ink);margin-bottom:6px}
+  .empty-state p{font-size:13px;line-height:1.5}
+
+  .comment-card{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+  .comment-card:last-child{border-bottom:none}
+  .comment-name{font-size:12px;font-weight:600;color:var(--ink)}
+  .comment-body{font-size:13px;color:var(--soft);line-height:1.4;margin-top:2px}
+  .comment-time{font-size:11px;color:var(--dim);margin-top:2px}
+
+  @media(max-width:520px){
+    .layout{padding:64px 12px 30px}
+    .market-question{font-size:17px}
+    .market-stats{gap:10px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/feed">Feed</a>
+    <a href="/predictors">Predictors</a>
+    <a href="/explore">Explore</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <div class="market-hero" id="marketHero">
+    <div class="market-question" id="marketQuestion">Loading...</div>
+    <div class="market-stats" id="marketStats"></div>
+    <div class="market-prices" id="marketPrices"></div>
+  </div>
+
+  <!-- Post prediction -->
+  <div class="post-compose" id="postCompose" style="display:none">
+    <div style="flex:1">
+      <div class="side-select">
+        <button class="side-btn" onclick="selectSide('YES')" id="sideYes">YES</button>
+        <button class="side-btn" onclick="selectSide('NO')" id="sideNo">NO</button>
+      </div>
+      <textarea id="thesisInput" placeholder="Share your thesis — why are you making this call?" rows="2" maxlength="2000"></textarea>
+    </div>
+    <button class="post-btn" id="postBtn" onclick="postPrediction()" disabled>Post</button>
+  </div>
+
+  <div class="section-title">Predictions <span class="section-count" id="predCount">0</span></div>
+  <div id="predList"></div>
+
+  <div style="margin-top:24px">
+    <div class="section-title">Discussion <span class="section-count" id="commentCount">0</span></div>
+    <div id="commentList"></div>
+  </div>
+</div>
+
+<script>
+const slug = window.location.pathname.replace('/discuss/','');
+let selectedSide = null;
+let _market = null;
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function selectSide(side) {
+  selectedSide = side;
+  document.getElementById('sideYes').className = 'side-btn' + (side === 'YES' ? ' active-yes' : '');
+  document.getElementById('sideNo').className = 'side-btn' + (side === 'NO' ? ' active-no' : '');
+  document.getElementById('postBtn').disabled = false;
+}
+
+async function postPrediction() {
+  if (!selectedSide) return;
+  const token = localStorage.getItem('hf_token');
+  if (!token) { alert('Sign in to post predictions'); return; }
+  const thesis = document.getElementById('thesisInput').value.trim();
+  const btn = document.getElementById('postBtn');
+  btn.disabled = true; btn.textContent = 'Posting...';
+  try {
+    const r = await fetch('/api/social/predictions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        platform: 'polymarket', market_slug: slug,
+        market_title: _market?.question || slug,
+        side: selectedSide,
+        entry_price: selectedSide === 'YES' ? (_market?.yes_price || 0.5) : (_market?.no_price || 0.5),
+        thesis: thesis || null,
+      })
+    });
+    if (r.ok) {
+      document.getElementById('thesisInput').value = '';
+      selectedSide = null;
+      document.getElementById('sideYes').className = 'side-btn';
+      document.getElementById('sideNo').className = 'side-btn';
+      loadData();
+    } else {
+      const e = await r.json().catch(() => ({}));
+      alert(e.error || 'Failed to post');
+    }
+  } catch (e) { alert('Network error'); }
+  btn.disabled = false; btn.textContent = 'Post';
+}
+
+async function loadData() {
+  try {
+    const r = await fetch('/api/discuss/' + encodeURIComponent(slug));
+    if (!r.ok) return;
+    const d = await r.json();
+    _market = d.market;
+
+    // Hero
+    document.getElementById('marketQuestion').textContent = d.market?.question || slug;
+    document.title = (d.market?.question || slug) + ' — Discussion — HYPERFLEX';
+
+    const yesPrice = d.market?.yes_price || d.market?.outcomePrices?.[0];
+    const noPrice = d.market?.no_price || d.market?.outcomePrices?.[1];
+    let statsHtml = '';
+    if (d.market?.volume) statsHtml += `<span class="market-stat">Volume <strong>$${(d.market.volume/1e6).toFixed(1)}M</strong></span>`;
+    statsHtml += `<span class="market-stat">Predictors <strong>${d.participant_count}</strong></span>`;
+    if (d.market?.end_date_iso) statsHtml += `<span class="market-stat">Ends <strong>${new Date(d.market.end_date_iso).toLocaleDateString()}</strong></span>`;
+    document.getElementById('marketStats').innerHTML = statsHtml;
+
+    let pricesHtml = '';
+    if (yesPrice) pricesHtml += `<span class="price-pill yes">YES ${Math.round(yesPrice * 100)}¢</span>`;
+    if (noPrice) pricesHtml += `<span class="price-pill no">NO ${Math.round(noPrice * 100)}¢</span>`;
+    document.getElementById('marketPrices').innerHTML = pricesHtml;
+
+    // Show compose if logged in
+    if (localStorage.getItem('hf_token')) document.getElementById('postCompose').style.display = 'flex';
+
+    // Predictions
+    document.getElementById('predCount').textContent = d.predictions?.length || 0;
+    if (!d.predictions?.length) {
+      document.getElementById('predList').innerHTML = '<div class="empty-state"><h3>No predictions yet</h3><p>Be the first to share your take on this market.</p></div>';
+    } else {
+      document.getElementById('predList').innerHTML = d.predictions.map(p => {
+        const isYes = p.side === 'YES';
+        const statusHtml = p.status === 'resolved_win' ? '<div class="pred-status win">Won</div>' :
+                           p.status === 'resolved_loss' ? '<div class="pred-status loss">Lost</div>' : '';
+        const verifiedHtml = p.wallet_verified ? '<span class="verified-badge">✓ Verified</span>' : '';
+        return `<div class="pred-card">
+          <div class="pred-head">
+            <div class="pred-avatar">${(p.display_name||'?')[0].toUpperCase()}</div>
+            <div>
+              <a href="/m/${esc(p.author_id)}" class="pred-author">${esc(p.display_name||'Anonymous')}</a>${verifiedHtml}
+              <div class="pred-time">${timeAgo(p.created_at)}</div>
+            </div>
+            <span class="pred-side ${isYes?'yes':'no'}">${p.side}</span>
+          </div>
+          ${statusHtml}
+          <div class="pred-price">Entry <span>${Math.round((p.entry_price||0)*100)}¢</span></div>
+          ${p.thesis ? `<div class="pred-thesis">${esc(p.thesis)}</div>` : ''}
+          <div class="pred-actions">
+            <button class="pred-action" onclick="reactPred('${p.id}','agree')">👍 ${p.reaction_count||0}</button>
+            <button class="pred-action">💬 ${p.comment_count||0}</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // Comments
+    document.getElementById('commentCount').textContent = d.comments?.length || 0;
+    if (!d.comments?.length) {
+      document.getElementById('commentList').innerHTML = '<div class="empty-state"><p>No comments yet.</p></div>';
+    } else {
+      document.getElementById('commentList').innerHTML = d.comments.map(c =>
+        `<div class="comment-card">
+          <div>
+            <span class="comment-name">${esc(c.display_name||c.user_name||'Anonymous')}</span>
+            <div class="comment-body">${esc(c.body||c.content||'')}</div>
+            <div class="comment-time">${timeAgo(c.created_at)}</div>
+          </div>
+        </div>`
+      ).join('');
+    }
+  } catch (e) { console.error('Failed to load discussion:', e); }
+}
+
+async function reactPred(predId, type) {
+  const token = localStorage.getItem('hf_token');
+  if (!token) { alert('Sign in to react'); return; }
+  await fetch('/api/social/reactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ target_type: 'prediction', target_id: predId, reaction_type: type })
+  });
+  loadData();
+}
+
+loadData();
+</script>
+</body>
+</html>
