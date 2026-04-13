@@ -65,9 +65,7 @@ INSERT INTO external_influencers (name, platform, handle, bio, is_active) VALUES
   -- Requested traders
   ('NotSoEasyMoney',      'x', 'NotSoEasyMoney',    'Prediction market trader',                                 true),
   ('Tradermayne',         'x', 'Tradermayne',        'Active Polymarket trader',                                true),
-  -- CSPTRADING.eth: X handles cannot contain periods — stored without the dot.
-  -- Bearer-token sweep will confirm actual handle ID on first run.
-  ('CSPTRADING',          'x', 'CSPTRADINGeth',     'Polymarket trader (known as CSPTRADING.eth)',             true),
+  ('CSPTRADING',          'x', 'csp_trading',        'Polymarket trader (known as CSPTRADING.eth)',             true),
   ('massieforky',         'x', 'massieforky',        'Prediction market & political commentary account',        true)
 ON CONFLICT (platform, handle) DO NOTHING;
 

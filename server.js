@@ -14305,7 +14305,7 @@ const POLITICIAN_HANDLES = new Set([
   'PatrickMcHenry','ByronDonalds','SenWarren','AOC','BernieSanders',
   'realDonaldTrump','elonmusk','VivekGRamaswamy','SenTedCruz','mattgaetz',
   'RobertKennedyJr','TulsiGabbard','RepMTG','Jim_Jordan','GovRonDeSantis',
-  'massieforky',
+  'massieforky','csp_trading',
 ]);
 const _influencerFetchCache = new Map(); // platform+id → last fetch ts (rate-gate)
 
