@@ -807,6 +807,25 @@ if (pool) {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
 
+// ── DATA ENGINE (Phase 1) — Unified market data pipeline ─────────────────
+const dataEngine = require('./lib/data-engine');
+dataEngine.init({ pool, fetch: _nodeFetch, supabase: null });
+
+// Mount /api/v1/ routes
+require('./lib/data-api-routes')(app, dataEngine);
+
+// Refresh data engine every 90 seconds (matches existing screener cadence)
+setInterval(() => {
+  dataEngine.refreshAll().catch(e => _logError('data-engine/cron', e));
+}, 90 * 1000);
+
+// Initial warm-up after 10s (let other services boot first)
+setTimeout(() => {
+  dataEngine.refreshAll()
+    .then(r => console.log(`[data-engine] Initial warm: ${r.markets.length} markets, ${r.crossRefs.length} cross-refs`))
+    .catch(e => console.warn('[data-engine] Initial warm failed:', e.message));
+}, 10000);
+
 // ── API ACCESS TIERS ──────────────────────────────────────────────────────
 // All endpoints free — no tier gating
 
