@@ -3149,7 +3149,7 @@ window.hfxOpenDeposit = function() {
         <div style="min-width:0;flex:1">
           <div class="community-name" id="sidebarCommunityName" style="margin-bottom:2px">Loading...</div>
           <div class="community-url-row" style="margin-bottom:0">
-            <div class="community-url" id="sidebarCommunityUrl"></div>
+            <a class="community-url" id="sidebarCommunityUrl" href="#" target="_blank" style="text-decoration:none;color:inherit;cursor:pointer" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='inherit'"></a>
             <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
           </div>
         </div>
@@ -6708,7 +6708,11 @@ function renderDashboard(data) {
       ? _rawName.slice(0, 6) + '…' + _rawName.slice(-4)
       : _rawName;
   } catch(e) {}
-  try { document.getElementById('sidebarCommunityUrl').textContent = 'hyperflex.network/' + (creator.slug || ''); } catch(e) {}
+  try {
+    var urlEl = document.getElementById('sidebarCommunityUrl');
+    urlEl.textContent = 'hyperflex.network/' + (creator.slug || '');
+    urlEl.href = '/' + (creator.slug || '');
+  } catch(e) {}
   try { document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + (creator.slug || ''); } catch(e) {}
 
   if (data.challenge_progress) try { renderChallengeStatus(data.challenge_progress); } catch(e) {}
