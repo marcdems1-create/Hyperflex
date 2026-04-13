@@ -12680,55 +12680,66 @@ async function fetchInfluencerTweets() {
 
   try {
     // Get active influencers
-    const influencers = await dbQuery('SELECT id, x_handle, display_name, user_id, category FROM influencers WHERE is_active = true ORDER BY follower_count DESC NULLS LAST LIMIT 20');
+    const influencers = await dbQuery('SELECT id, x_handle, display_name, user_id, avatar_url, category FROM influencers WHERE is_active = true ORDER BY follower_count DESC NULLS LAST LIMIT 20');
     if (!influencers.length) return;
 
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
     let imported = 0;
+    const NITTER_INSTANCES = ['nitter.net', 'nitter.privacydev.net', 'nitter.poast.org'];
 
     for (const inf of influencers) {
       try {
-        // Try Twitter syndication API (public, no auth)
-        const timelineUrl = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${inf.x_handle}`;
-        const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 8000);
-        const resp = await fetch(timelineUrl, {
-          signal: ctrl.signal,
-          headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }
-        }).finally(() => clearTimeout(tid));
+        let tweetTexts = [];
 
-        if (!resp.ok) continue;
-        const html = await resp.text();
-
-        // Extract tweet texts from the syndication HTML
-        // Tweets appear as data attributes or in <p> tags within tweet containers
-        const tweetTexts = [];
-        const tweetRegex = /data-tweet-id="(\d+)"[^>]*>[\s\S]*?<p[^>]*class="[^"]*timeline-Tweet-text[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
-        let match;
-        while ((match = tweetRegex.exec(html)) !== null) {
-          const tweetId = match[1];
-          const rawText = match[2].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
-          if (rawText.length > 20) tweetTexts.push({ id: tweetId, text: rawText });
+        // Try Nitter RSS feeds (multiple instances)
+        for (const instance of NITTER_INSTANCES) {
+          if (tweetTexts.length) break;
+          try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 6000);
+            const rssUrl = `https://${instance}/${inf.x_handle}/rss`;
+            const resp = await fetch(rssUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } }).finally(() => clearTimeout(tid));
+            if (!resp.ok) continue;
+            const xml = await resp.text();
+            // Parse RSS items: <item><title>...</title><description>...</description><link>...</link></item>
+            const itemRegex = /<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/gi;
+            let m;
+            while ((m = itemRegex.exec(xml)) !== null) {
+              const text = m[2].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+              const link = m[3].trim();
+              const tweetId = link.match(/status\/(\d+)/)?.[1] || null;
+              if (text.length > 20) tweetTexts.push({ id: tweetId, text, url: link });
+            }
+          } catch (e) { /* nitter instance failed, try next */ }
         }
 
-        // Fallback: try extracting from simpler patterns
+        // Fallback: try Twitter syndication
         if (!tweetTexts.length) {
-          const simpleRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
-          while ((match = simpleRegex.exec(html)) !== null) {
-            const text = match[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
-            if (text.length > 30 && text.length < 500 && !text.includes('Twitter') && !text.includes('Sign up')) {
-              tweetTexts.push({ id: null, text });
+          try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 6000);
+            const resp = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${inf.x_handle}`, {
+              signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }
+            }).finally(() => clearTimeout(tid));
+            if (resp.ok) {
+              const html = await resp.text();
+              const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+              let m;
+              while ((m = pRegex.exec(html)) !== null) {
+                const text = m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+                if (text.length > 30 && text.length < 500 && !/twitter|sign up|log in/i.test(text)) tweetTexts.push({ id: null, text, url: null });
+              }
             }
-          }
+          } catch (e) { /* syndication failed */ }
         }
 
         if (!tweetTexts.length) continue;
 
-        // Filter for prediction-relevant content
-        for (const tw of tweetTexts.slice(0, 3)) {
+        // Filter for prediction-relevant content and require market match
+        for (const tw of tweetTexts.slice(0, 5)) {
           if (!isPredictionRelevant(tw.text)) continue;
 
-          // Dedupe: check if we already imported similar text
+          // Dedupe
           const textPrefix = tw.text.substring(0, 80);
           const dupe = await dbQuery(
             "SELECT id FROM takes WHERE source = 'influencer' AND user_id = $1 AND LEFT(thesis, 80) = $2 LIMIT 1",
@@ -12736,7 +12747,7 @@ async function fetchInfluencerTweets() {
           ).catch(() => []);
           if (dupe.length) continue;
 
-          // Auto-match to Polymarket market
+          // Match to Polymarket market — REQUIRED (no match = skip)
           let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
           if (_screenerCache && _screenerCache.data) {
             const tweetLower = tw.text.toLowerCase();
@@ -12756,28 +12767,25 @@ async function fetchInfluencerTweets() {
             }
           }
 
-          if (!matchedQuestion) matchedQuestion = tw.text.substring(0, 200);
+          // No market match = skip this tweet (every take must link to a real market)
+          if (!matchedSlug) continue;
 
-          // Infer side
           const textLower = tw.text.toLowerCase();
           const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(textLower) ? 'YES' : 'NO';
-
-          const tweetUrl = tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null;
+          const tweetUrl = tw.url || (tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null);
           const thesis = tw.text + (tweetUrl ? '\n\n' + tweetUrl : '');
+          const avatar = inf.avatar_url || `https://unavatar.io/x/${inf.x_handle}`;
 
           await dbQuery(
-            `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, thesis, source)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'influencer')`,
-            [inf.user_id, inf.display_name || ('@' + inf.x_handle), matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
+            `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, thesis, source)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'influencer')`,
+            [inf.user_id, inf.display_name || ('@' + inf.x_handle), avatar, matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
           ).catch(e => console.warn('[influencer-import]', e.message));
           imported++;
         }
 
-        // Small delay between influencers to be polite
         await new Promise(r => setTimeout(r, 1500));
-      } catch (e) {
-        // Syndication failed for this influencer — try oembed fallback silently
-      }
+      } catch (e) { /* skip this influencer */ }
     }
 
     if (imported > 0) console.log(`[influencer-fetch] Auto-imported ${imported} tweets as takes`);
@@ -14428,10 +14436,22 @@ app.get('/api/takes/feed', optionalAuth, async (req, res) => {
       }
     }
 
+    // Comment counts
+    const allTakeIds = rows.map(r => r.id);
+    let commentCounts = {};
+    if (allTakeIds.length) {
+      const ccRows = await dbQuery(
+        'SELECT take_id, COUNT(*)::int as cnt FROM take_comments WHERE take_id = ANY($1) GROUP BY take_id',
+        [allTakeIds]
+      ).catch(() => []);
+      for (const r of ccRows) commentCounts[r.take_id] = parseInt(r.cnt);
+    }
+
     const takes = rows.map(r => ({
       ...r,
       my_reaction: myReactions[r.id] || null,
       quote_count: quoteCounts[r.id] || 0,
+      comment_count: commentCounts[r.id] || 0,
       parent_take: r.parent_take_id ? (parentTakes[r.parent_take_id] || null) : null,
       flex_score: r.user_id ? (flexScores[r.user_id] ?? null) : null,
     }));
@@ -14477,6 +14497,49 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
     console.error('[takes] delete error:', err.message);
     res.status(500).json({ error: 'Failed to delete take' });
   }
+});
+
+// ── TAKE COMMENTS ───────────────────────────────────────────────────────────
+
+// Ensure table
+(async () => {
+  if (!pool) return;
+  await dbQuery(`CREATE TABLE IF NOT EXISTS take_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    take_id UUID NOT NULL,
+    user_id TEXT NOT NULL,
+    display_name TEXT,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`).catch(() => {});
+  await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_comments_take ON take_comments(take_id, created_at DESC)').catch(() => {});
+})();
+
+// GET /api/takes/:id/comments
+app.get('/api/takes/:id/comments', async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      'SELECT * FROM take_comments WHERE take_id = $1 ORDER BY created_at ASC LIMIT 50',
+      [req.params.id]
+    );
+    res.json({ comments: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/takes/:id/comments
+app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
+  try {
+    const { body } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Comment text required' });
+    // Get user display name
+    const userRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
+    const displayName = userRows[0]?.display_name || 'Anonymous';
+    const rows = await dbQuery(
+      'INSERT INTO take_comments (take_id, user_id, display_name, body) VALUES ($1, $2, $3, $4) RETURNING *',
+      [req.params.id, req.userId, displayName, String(body).trim().slice(0, 500)]
+    );
+    res.json({ ok: true, comment: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────

@@ -65,6 +65,15 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;background:rgba(10,10,15,0.9
 .ab.ag.on{color:var(--green)}
 .ab.dg.on{color:var(--red)}
 .ab .ic{font-size:15px}
+.cmt-section{border-top:1px solid var(--border);padding-top:8px}
+.cmt-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto}
+.cmt-item{display:flex;gap:6px;font-size:12px}
+.cmt-item .cn{font-weight:700;color:var(--text);flex-shrink:0}
+.cmt-item .cb{color:var(--text-soft);flex:1;word-break:break-word}
+.cmt-item .ct2{font-size:10px;color:var(--dim);flex-shrink:0}
+.cmt-input{flex:1;padding:7px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--sans);font-size:12px;outline:none}
+.cmt-input:focus{border-color:rgba(201,146,13,.4)}
+.cmt-post{font-family:var(--mono);font-size:10px;font-weight:700;color:#000;background:var(--gold);border:none;border-radius:6px;padding:7px 14px;cursor:pointer;white-space:nowrap}
 .empty{text-align:center;padding:48px 20px;color:var(--muted)}
 .empty .ei{font-size:36px;margin-bottom:10px}
 .ld-txt{text-align:center;padding:20px;font-size:12px;color:var(--muted)}
@@ -199,10 +208,20 @@ function rt(t){
   var ml='';if(t.question&&t.market_slug){var mh='/market/'+t.market_slug;ml='<a class="ml" href="'+mh+'" target="_blank"><div class="mq">'+e(t.question)+'</div><span class="sd '+sc+'">'+(t.side||'').toUpperCase()+'</span>'+(t.entry_price?'<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">'+Math.round(t.entry_price*100)+'\u00a2</span>':'')+'</a>'}
   var tx=t.thesis?'<div class="tx">'+e(t.thesis)+'</div>':'';
   var ao=t.my_reaction==='agree'?' on':'',do2=t.my_reaction==='disagree'?' on':'';
+  var cc=t.comment_count||0;
   return'<div class="tk" id="k-'+t.id+'">'+av+'<div class="tb"><div class="th">'+nm+bg+'<span class="tt">'+ta(t.created_at)+'</span></div>'+ml+tx+
     '<div class="ta"><button class="ab ag'+ao+'" onclick="rx(\''+t.id+'\',\'agree\',this)"><span class="ic">\u2191</span><span class="ct">'+(t.agree_count||0)+'</span></button>'+
     '<button class="ab dg'+do2+'" onclick="rx(\''+t.id+'\',\'disagree\',this)"><span class="ic">\u2193</span><span class="ct">'+(t.disagree_count||0)+'</span></button>'+
-    '<button class="ab" onclick="sh(\''+t.id+'\')"><span class="ic">\u2197</span></button></div></div></div>';
+    '<button class="ab cmt" onclick="toggleCmt(\''+t.id+'\')"><span class="ic">\uD83D\uDCAC</span><span class="ct">'+cc+'</span></button>'+
+    '<button class="ab" onclick="sh(\''+t.id+'\')"><span class="ic">\u2197</span></button></div>'+
+    '<div class="cmt-section" id="cmt-'+t.id+'" style="display:none;margin-top:8px">'+
+      '<div class="cmt-list" id="cl-'+t.id+'"></div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px">'+
+        '<input type="text" class="cmt-input" id="ci-'+t.id+'" placeholder="Add a comment..." maxlength="500" onkeydown="if(event.key===\'Enter\')postCmt(\''+t.id+'\')">'+
+        '<button class="cmt-post" onclick="postCmt(\''+t.id+'\')">Post</button>'+
+      '</div>'+
+    '</div>'+
+  '</div></div>';
 }
 
 function rx(id,type,btn){var t=tk();if(!t){alert('Sign in to react');return}
@@ -212,6 +231,36 @@ function rx(id,type,btn){var t=tk();if(!t){alert('Sign in to react');return}
     if(btn.classList.contains('on'))btn.classList.remove('on');else{if(ag)ag.classList.remove('on');if(dg)dg.classList.remove('on');btn.classList.add('on')}
     if(ag)ag.querySelector('.ct').textContent=d.agree_count||0;if(dg)dg.querySelector('.ct').textContent=d.disagree_count||0;
   }).catch(function(){});}
+
+function toggleCmt(id){
+  var sec=document.getElementById('cmt-'+id);if(!sec)return;
+  var open=sec.style.display!=='none';
+  sec.style.display=open?'none':'block';
+  if(!open)loadCmt(id);
+}
+function loadCmt(id){
+  var list=document.getElementById('cl-'+id);if(!list)return;
+  list.innerHTML='<div style="font-size:11px;color:var(--dim)">Loading...</div>';
+  fetch('/api/takes/'+id+'/comments').then(function(r){return r.ok?r.json():{comments:[]}}).then(function(d){
+    var cmts=d.comments||[];
+    if(!cmts.length){list.innerHTML='<div style="font-size:11px;color:var(--dim)">No comments yet</div>';return}
+    list.innerHTML=cmts.map(function(c){
+      return'<div class="cmt-item"><span class="cn">'+e(c.display_name||'Anon')+'</span><span class="cb">'+e(c.body)+'</span><span class="ct2">'+ta(c.created_at)+'</span></div>';
+    }).join('');
+  }).catch(function(){list.innerHTML='<div style="color:var(--red);font-size:11px">Failed</div>'});
+}
+function postCmt(id){
+  var t=tk();if(!t){alert('Sign in to comment');return}
+  var input=document.getElementById('ci-'+id);if(!input)return;
+  var body=input.value.trim();if(!body)return;
+  fetch('/api/takes/'+id+'/comments',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify({body:body})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(d.ok){input.value='';loadCmt(id);
+      var countEl=document.querySelector('#k-'+id+' .cmt .ct');
+      if(countEl)countEl.textContent=parseInt(countEl.textContent||0)+1;
+    }
+  }).catch(function(){});
+}
 
 function sh(id){var c=document.getElementById('k-'+id);if(!c)return;var q=c.querySelector('.mq');
   window.open('https://x.com/intent/tweet?text='+encodeURIComponent((q?q.textContent:'Check out this take')+'\n\nhyperflex.network/feed'),'_blank');}
