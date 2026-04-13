@@ -25119,6 +25119,48 @@ app.get('/api/flex-points/user/:userId', async (req, res) => {
   }
 });
 
+// GET /api/community/:slug/follow-stats — follower/following counts for a creator
+app.get('/api/community/:slug/follow-stats', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    // Get creator_id
+    let creatorId = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creatorId = rows[0] && rows[0].creator_id;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+      creatorId = data && data.creator_id;
+    }
+    if (!creatorId) return res.json({ followers: 0, following: 0 });
+
+    let followers = 0, following = 0;
+    try {
+      if (pool) {
+        const fRows = await dbQuery('SELECT COUNT(*)::int as c FROM creator_follows WHERE creator_slug = $1', [slug]);
+        followers = fRows[0] ? fRows[0].c : 0;
+        // Also count predictor follows
+        const pRows = await dbQuery('SELECT COUNT(*)::int as c FROM predictor_follows WHERE followed_id = $1', [creatorId]);
+        followers += pRows[0] ? pRows[0].c : 0;
+        // Following count
+        const gRows = await dbQuery('SELECT COUNT(*)::int as c FROM predictor_follows WHERE follower_id = $1', [creatorId]);
+        following = gRows[0] ? gRows[0].c : 0;
+      } else {
+        const { count: fc } = await supabase.from('creator_follows').select('id', { count: 'exact', head: true }).eq('creator_slug', slug);
+        followers = fc || 0;
+        const { count: pfc } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('followed_id', creatorId);
+        followers += pfc || 0;
+        const { count: gc } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('follower_id', creatorId);
+        following = gc || 0;
+      }
+    } catch(e) { /* tables may not exist */ }
+
+    res.json({ followers, following });
+  } catch (err) {
+    res.json({ followers: 0, following: 0 });
+  }
+});
+
 // POST /api/admin/set-wallet — manually set a user's Polymarket wallet (admin only)
 app.post('/api/admin/set-wallet', async (req, res) => {
   const adminSecret = process.env.ADMIN_SECRET;

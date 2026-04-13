@@ -1892,7 +1892,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
       <div class="hero-logo-placeholder" id="heroLogoPlaceholder">HF</div>
       <img id="heroLogoImg" class="hero-logo" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('heroLogoPlaceholder').style.display='flex'"/>
       <div class="hero-title-block">
-        <div class="hero-eyebrow"><span class="hero-live-dot"></span>Prediction Market</div>
+        <div class="hero-eyebrow"><span class="hero-live-dot"></span>Trader Profile</div>
         <div class="hero-name" id="heroTitle">Loading…</div>
       </div>
     </div>
@@ -1901,8 +1901,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
     <p class="hero-desc" id="heroDesc">Make predictions, earn points, climb the leaderboard.</p>
     <div id="socialRow" class="social-row" style="display:none"></div>
     <div class="hero-mini-stats">
-      <div class="hero-mini-stat"><strong id="statMarkets">—</strong> open markets</div>
-      <div class="hero-mini-stat"><strong id="statTraders">—</strong> predictors</div>
+      <div class="hero-mini-stat" id="statFollowersPill" style="display:none"><strong id="statFollowers">0</strong> followers</div>
+      <div class="hero-mini-stat" id="statFollowingPill" style="display:none"><strong id="statFollowing">0</strong> following</div>
       <div class="hero-mini-stat gold"><strong id="statPoints">—</strong> <span id="statPointsLabel">pts</span></div>
       <button class="hero-mini-stat leaderboard-jump-pill" onclick="document.getElementById('leaderboardSection').scrollIntoView({behavior:'smooth',block:'start'})">🏆 Leaderboard</button>
       <button id="heroFollowBtn" class="hero-mini-stat" onclick="currentUser ? followCommunity() : openAuth('register')" style="display:none;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:var(--green);font-weight:700;cursor:pointer">🔔 Follow</button>
@@ -2602,7 +2602,7 @@ function renderPage(data) {
   document.getElementById('headerCommunityName').textContent = c.display_name;
   document.getElementById('heroTitle').textContent = c.display_name;
   document.getElementById('heroDesc').textContent  = c.community_description ||
-    `Make predictions on ${c.display_name}'s markets. Earn ${c.custom_points_name || 'Flex Points'} and top the leaderboard.`;
+    `${c.display_name}'s prediction market profile. Track record, positions, and performance.`;
 
   // Logo
   const logoInitials = (c.display_name || 'HF').split(/\s+/).slice(0,2).map(w => w[0].toUpperCase()).join('');
@@ -2656,11 +2656,29 @@ function renderPage(data) {
   const active   = markets.filter(m => !m.resolved && !m.archived && !(m.expiry_date && new Date(m.expiry_date) < now));
   const resolved = markets.filter(m =>  m.resolved);
 
-  document.getElementById('statMarkets').textContent  = active.length;
-  document.getElementById('statTraders').textContent  = (data.member_count || 0).toLocaleString();
   document.getElementById('statPoints').textContent   = c.custom_points_name || 'Flex Points';
   document.getElementById('statPointsLabel').textContent = 'currency';
   document.getElementById('amountUnit').textContent   = 'pts';
+
+  // Load follower/following counts
+  try {
+    if (c.creator_id) {
+      fetch('/api/community/' + slug + '/follow-stats')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(fs) {
+          if (fs) {
+            if (fs.followers >= 0) {
+              document.getElementById('statFollowers').textContent = fs.followers;
+              document.getElementById('statFollowersPill').style.display = '';
+            }
+            if (fs.following >= 0) {
+              document.getElementById('statFollowing').textContent = fs.following;
+              document.getElementById('statFollowingPill').style.display = '';
+            }
+          }
+        }).catch(function() {});
+    }
+  } catch(e) {}
 
   // Show CREATOR's Flex Points balance (not viewer's)
   try {
@@ -3121,8 +3139,8 @@ function renderFilteredMarkets() {
                cta: `<button class="empty-cta empty-cta-ghost" onclick="setFilter('all')">View all markets</button>` },
       mine:  { icon: '🎯', title: 'You haven\'t predicted yet', sub: 'Your active bets will appear here. Jump in — pick a market and make your call.',
                cta: `<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">Browse markets to predict</button>` },
-      all:   { icon: '📊', title: 'No open markets yet', sub: 'This community\'s prediction markets haven\'t launched yet. Check back soon or explore other communities.',
-               cta: `<a href="/" class="empty-cta empty-cta-gold">Explore communities</a>` }
+      all:   { icon: '📊', title: 'No community markets yet', sub: 'This trader hasn\'t created any community prediction markets. Check their Trading Record below for their Polymarket track record.',
+               cta: `` }
     };
     const m = msgs[currentFilter] || msgs.all;
     // If filtering by category and empty, show a category-specific message
