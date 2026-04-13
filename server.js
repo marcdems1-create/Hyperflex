@@ -15125,6 +15125,297 @@ app.get('/api/data/influencer-sentiment', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── INFLUENCER SOCIAL LAYER — reactions, comments, follows ──────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/influencer-feed/posts/:id/react — agree/disagree/fire toggle
+app.post('/api/influencer-feed/posts/:id/react', requireAuth, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const { reaction } = req.body;
+    if (!['agree','disagree','fire'].includes(reaction)) return res.status(400).json({ error: 'Invalid reaction' });
+    const userId = req.userId;
+
+    // Check if already reacted
+    let existing = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, reaction FROM influencer_post_reactions WHERE post_id=$1 AND user_id=$2', [postId, userId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('influencer_post_reactions').select('id, reaction').eq('post_id', postId).eq('user_id', userId).maybeSingle();
+      existing = data;
+    }
+
+    if (existing) {
+      if (existing.reaction === reaction) {
+        // Toggle off — remove reaction
+        if (pool) await dbQuery('DELETE FROM influencer_post_reactions WHERE id=$1', [existing.id]);
+        else await supabase.from('influencer_post_reactions').delete().eq('id', existing.id);
+        // Decrement counter
+        const col = reaction + '_count';
+        if (pool) await dbQuery(`UPDATE influencer_posts SET ${col} = GREATEST(0, ${col} - 1) WHERE id=$1`, [postId]);
+        return res.json({ reacted: false, reaction: null });
+      } else {
+        // Switch reaction
+        const oldCol = existing.reaction + '_count';
+        const newCol = reaction + '_count';
+        if (pool) {
+          await dbQuery('UPDATE influencer_post_reactions SET reaction=$1 WHERE id=$2', [reaction, existing.id]);
+          await dbQuery(`UPDATE influencer_posts SET ${oldCol} = GREATEST(0, ${oldCol} - 1), ${newCol} = ${newCol} + 1 WHERE id=$1`, [postId]);
+        } else {
+          await supabase.from('influencer_post_reactions').update({ reaction }).eq('id', existing.id);
+        }
+        return res.json({ reacted: true, reaction, switched: true });
+      }
+    }
+
+    // New reaction
+    if (pool) {
+      await dbQuery('INSERT INTO influencer_post_reactions (post_id, user_id, reaction) VALUES ($1,$2,$3)', [postId, userId, reaction]);
+      const col = reaction + '_count';
+      await dbQuery(`UPDATE influencer_posts SET ${col} = ${col} + 1 WHERE id=$1`, [postId]);
+    } else {
+      await supabase.from('influencer_post_reactions').insert([{ post_id: postId, user_id: userId, reaction }]);
+    }
+    res.json({ reacted: true, reaction });
+  } catch (err) {
+    console.error('[influencer-react]', err.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// GET /api/influencer-feed/posts/:id/comments — list comments
+app.get('/api/influencer-feed/posts/:id/comments', async (req, res) => {
+  try {
+    const postId = req.params.id;
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(
+        `SELECT c.*, u.display_name AS author_name
+         FROM influencer_post_comments c
+         LEFT JOIN users u ON u.id = c.author_id
+         WHERE c.post_id=$1
+         ORDER BY c.created_at ASC LIMIT 100`, [postId]
+      );
+    } else {
+      const { data } = await supabase.from('influencer_post_comments').select('*, users(display_name)').eq('post_id', postId).order('created_at').limit(100);
+      rows = (data || []).map(c => ({ ...c, author_name: c.users?.display_name }));
+    }
+    res.json({ comments: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/influencer-feed/posts/:id/comment — add comment
+app.post('/api/influencer-feed/posts/:id/comment', requireAuth, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const { body } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Comment body required' });
+    const text = body.trim().slice(0, 1000);
+    const userId = req.userId;
+
+    if (pool) {
+      await dbQuery('INSERT INTO influencer_post_comments (post_id, author_id, body) VALUES ($1,$2,$3)', [postId, userId, text]);
+      await dbQuery('UPDATE influencer_posts SET comment_count = comment_count + 1 WHERE id=$1', [postId]);
+    } else {
+      await supabase.from('influencer_post_comments').insert([{ post_id: postId, author_id: userId, body: text }]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/influencers/:id/follow — toggle follow
+app.post('/api/influencers/:id/follow', requireAuth, async (req, res) => {
+  try {
+    const influencerId = req.params.id;
+    const userId = req.userId;
+
+    let existing = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM influencer_follows WHERE user_id=$1 AND influencer_id=$2', [userId, influencerId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('influencer_follows').select('id').eq('user_id', userId).eq('influencer_id', influencerId).maybeSingle();
+      existing = data;
+    }
+
+    if (existing) {
+      if (pool) await dbQuery('DELETE FROM influencer_follows WHERE id=$1', [existing.id]);
+      else await supabase.from('influencer_follows').delete().eq('id', existing.id);
+      // Decrement follower count
+      try { if (pool) await dbQuery('UPDATE external_influencers SET follower_count = GREATEST(0, follower_count - 1) WHERE id=$1', [influencerId]); } catch {}
+      return res.json({ following: false });
+    }
+
+    if (pool) await dbQuery('INSERT INTO influencer_follows (user_id, influencer_id) VALUES ($1,$2)', [userId, influencerId]);
+    else await supabase.from('influencer_follows').insert([{ user_id: userId, influencer_id: influencerId }]);
+    try { if (pool) await dbQuery('UPDATE external_influencers SET follower_count = follower_count + 1 WHERE id=$1', [influencerId]); } catch {}
+    res.json({ following: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/influencer-feed/following — list influencer IDs the user follows
+app.get('/api/influencer-feed/following', requireAuth, async (req, res) => {
+  try {
+    let ids = [];
+    if (pool) {
+      const rows = await dbQuery('SELECT influencer_id FROM influencer_follows WHERE user_id=$1', [req.userId]);
+      ids = rows.map(r => r.influencer_id);
+    } else {
+      const { data } = await supabase.from('influencer_follows').select('influencer_id').eq('user_id', req.userId);
+      ids = (data || []).map(r => r.influencer_id);
+    }
+    res.json({ following: ids });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/influencer-feed/unified — merged feed (influencer posts + user takes)
+// The "For You" tab — combines both content types, sorted by recency
+app.get('/api/influencer-feed/unified', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '30'), 50);
+    const before = req.query.before || null;
+    const tab = req.query.tab || 'foryou'; // foryou, following, trending
+    const category = req.query.category || null;
+    const userId = req.userId || null;
+
+    let posts = [];
+
+    if (tab === 'following' && userId) {
+      // Only posts from followed influencers
+      if (pool) {
+        const conditions = ['p.published_at IS NOT NULL'];
+        const params = [];
+        if (before) { params.push(before); conditions.push(`p.published_at < $${params.length}`); }
+        if (category) { params.push(category); conditions.push(`(p.category = $${params.length} OR i.platform = $${params.length})`); }
+        params.push(userId);
+        params.push(limit);
+        posts = await dbQuery(
+          `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,
+                  i.avatar_url AS influencer_avatar, i.platform AS influencer_platform,
+                  i.known_accuracy, i.follower_count AS influencer_followers,
+                  i.id AS influencer_db_id,
+                  'influencer' AS post_type
+           FROM influencer_posts p
+           JOIN external_influencers i ON i.id = p.influencer_id
+           WHERE p.influencer_id IN (SELECT influencer_id FROM influencer_follows WHERE user_id=$${params.length - 1})
+             AND ${conditions.join(' AND ')}
+           ORDER BY p.published_at DESC
+           LIMIT $${params.length}`, params
+        );
+      }
+    } else if (tab === 'trending') {
+      // Top posts by engagement in last 48h
+      if (pool) {
+        const conditions = ["p.published_at > NOW() - INTERVAL '48 hours'"];
+        const params = [];
+        if (category) { params.push(category); conditions.push(`(p.category = $${params.length} OR i.platform = $${params.length})`); }
+        params.push(limit);
+        posts = await dbQuery(
+          `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,
+                  i.avatar_url AS influencer_avatar, i.platform AS influencer_platform,
+                  i.known_accuracy, i.follower_count AS influencer_followers,
+                  i.id AS influencer_db_id,
+                  'influencer' AS post_type,
+                  (p.agree_count + p.disagree_count + p.comment_count + p.fire_count) AS engagement
+           FROM influencer_posts p
+           JOIN external_influencers i ON i.id = p.influencer_id
+           WHERE ${conditions.join(' AND ')}
+           ORDER BY engagement DESC, p.published_at DESC
+           LIMIT $${params.length}`, params
+        );
+      }
+    } else {
+      // For You — all influencer posts, newest first
+      if (pool) {
+        const conditions = ['p.published_at IS NOT NULL'];
+        const params = [];
+        if (before) { params.push(before); conditions.push(`p.published_at < $${params.length}`); }
+        if (category) { params.push(category); conditions.push(`(p.category = $${params.length} OR i.platform = $${params.length})`); }
+        params.push(limit);
+        posts = await dbQuery(
+          `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,
+                  i.avatar_url AS influencer_avatar, i.platform AS influencer_platform,
+                  i.known_accuracy, i.follower_count AS influencer_followers,
+                  i.id AS influencer_db_id,
+                  'influencer' AS post_type
+           FROM influencer_posts p
+           JOIN external_influencers i ON i.id = p.influencer_id
+           WHERE ${conditions.join(' AND ')}
+           ORDER BY p.published_at DESC
+           LIMIT $${params.length}`, params
+        );
+      }
+    }
+
+    // Fetch user's reactions on these posts (if authed)
+    if (userId && posts.length) {
+      try {
+        const postIds = posts.map(p => p.id);
+        let reactions = [];
+        if (pool) {
+          reactions = await dbQuery('SELECT post_id, reaction FROM influencer_post_reactions WHERE user_id=$1 AND post_id = ANY($2)', [userId, postIds]);
+        }
+        const reactionMap = {};
+        for (const r of reactions) reactionMap[r.post_id] = r.reaction;
+        for (const p of posts) p.my_reaction = reactionMap[p.id] || null;
+      } catch {}
+    }
+
+    // Fetch user's follow state for these influencers
+    if (userId && posts.length) {
+      try {
+        const infIds = [...new Set(posts.map(p => p.influencer_db_id).filter(Boolean))];
+        let follows = [];
+        if (pool && infIds.length) {
+          follows = await dbQuery('SELECT influencer_id FROM influencer_follows WHERE user_id=$1 AND influencer_id = ANY($2)', [userId, infIds]);
+        }
+        const followSet = new Set(follows.map(f => f.influencer_id));
+        for (const p of posts) p.is_following = followSet.has(p.influencer_db_id);
+      } catch {}
+    }
+
+    const nextCursor = posts.length >= limit ? posts[posts.length - 1].published_at : null;
+    res.json({ posts, next_cursor: nextCursor, count: posts.length });
+  } catch (err) {
+    console.error('[influencer-unified]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/influencer-feed/featured — featured influencers for sidebar
+app.get('/api/influencer-feed/featured', async (req, res) => {
+  try {
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(
+        `SELECT i.*, COUNT(p.id) AS post_count
+         FROM external_influencers i
+         LEFT JOIN influencer_posts p ON p.influencer_id = i.id
+         WHERE i.is_active = true
+         GROUP BY i.id
+         ORDER BY i.follower_count DESC, post_count DESC
+         LIMIT 10`
+      );
+    } else {
+      const { data } = await supabase.from('external_influencers').select('*').eq('is_active', true).order('follower_count', { ascending: false }).limit(10);
+      rows = data || [];
+    }
+    res.json({ influencers: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── STREAK WARNING EMAILS ─────────────────────────────────────────────────────
 // Daily at 6pm UTC — sends "Your X-win streak ends tonight" to users who:
 //   • have a current consecutive win streak ≥ 3
