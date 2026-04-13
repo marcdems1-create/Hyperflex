@@ -1199,6 +1199,15 @@
         <div class="card-title">Active Influencers</div>
         <div id="influencerList" style="font-size:12px;color:var(--dim)">Click Refresh to load</div>
       </div>
+
+      <!-- Recent takes (deletable) -->
+      <div class="analytics-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="card-title">Recent Takes in Feed</div>
+          <button onclick="loadRecentTakes()" style="font-size:10px;background:rgba(201,146,13,0.12);color:var(--amber);border:none;border-radius:4px;padding:4px 10px;cursor:pointer">Load</button>
+        </div>
+        <div id="recentTakesList" style="font-size:12px;color:var(--dim)">Click Load to see takes</div>
+      </div>
     </div>
 
   </main>
@@ -1323,7 +1332,7 @@ function showAdminTab(tab) {
   if (tab === 'flex') loadFlexPoints();
   if (tab === 'financials') loadFinancials();
   if (tab === 'builder') loadBuilderFees();
-  if (tab === 'influencers') loadInfluencers();
+  if (tab === 'influencers') { loadInfluencers(); loadRecentTakes(); }
 }
 
 // -- Outreach --
@@ -2527,7 +2536,8 @@ async function loadInfluencers() {
           '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-size:11px">'+fc+'</td>' +
           '<td style="padding:6px 8px;font-size:11px;color:var(--dim)">'+(inf.category||'—')+'</td>' +
           '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--amber)">'+(inf.take_count||0)+'</td>' +
-          '<td style="padding:6px 8px"><button onclick="quickImport(\''+inf.x_handle+'\')" style="font-size:10px;background:rgba(168,85,247,0.12);color:#a855f7;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Import</button></td>' +
+          '<td style="padding:6px 8px;white-space:nowrap"><button onclick="quickImport(\''+inf.x_handle+'\')" style="font-size:10px;background:rgba(168,85,247,0.12);color:#a855f7;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;margin-right:4px">Import</button>' +
+          '<button onclick="deleteInfluencer(\''+inf.x_handle+'\')" style="font-size:10px;background:rgba(255,77,106,0.12);color:#ff4d6a;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Delete</button></td>' +
           '</tr>';
       }).join('') +
       '</tbody></table>';
@@ -2584,6 +2594,55 @@ async function importTweet() {
       loadInfluencers();
     } else { msg.textContent=data.error; msg.style.color='var(--red)'; }
   } catch(e) { msg.textContent=e.message; msg.style.color='var(--red)'; }
+}
+
+async function deleteInfluencer(handle) {
+  if (!confirm('Delete @'+handle+' and all their imported takes?')) return;
+  try {
+    var res = await fetch('/api/admin/influencers/'+encodeURIComponent(handle), {
+      method: 'DELETE', headers: { 'x-admin-secret': adminSecret }
+    });
+    var data = await res.json();
+    if (data.ok) { loadInfluencers(); loadRecentTakes(); }
+  } catch(e) { alert(e.message); }
+}
+
+async function deleteTake(takeId) {
+  try {
+    var res = await fetch('/api/admin/takes/'+takeId, {
+      method: 'DELETE', headers: { 'x-admin-secret': adminSecret }
+    });
+    var data = await res.json();
+    if (data.ok) {
+      var el = document.getElementById('take-row-'+takeId);
+      if (el) el.remove();
+    }
+  } catch(e) { alert(e.message); }
+}
+
+async function loadRecentTakes() {
+  var container = document.getElementById('recentTakesList');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);padding:8px">Loading...</div>';
+  try {
+    var res = await fetch('/api/takes/feed?mode=foryou&limit=20');
+    var data = await res.json();
+    var takes = data.takes || [];
+    if (!takes.length) { container.innerHTML = '<div style="color:var(--dim);padding:12px">No takes in feed</div>'; return; }
+    container.innerHTML = takes.map(function(t) {
+      var badge = t.source === 'influencer' ? '<span style="color:#1d9bf0;font-size:9px;font-weight:700">\uD835\uDD4F</span>' :
+        t.source === 'whale' ? '<span style="color:#a855f7;font-size:9px;font-weight:700">\uD83D\uDC33</span>' :
+        t.source === 'consensus' ? '<span style="color:#f59e0b;font-size:9px;font-weight:700">\uD83E\uDD1D</span>' : '';
+      var sideColor = (t.side||'').toUpperCase()==='YES' ? '#00e68a' : '#ff4d6a';
+      return '<div id="take-row-'+t.id+'" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,30,42,0.3)">' +
+        '<span style="font-size:11px;font-weight:700;color:var(--text);min-width:80px">'+badge+' '+(t.display_name||'?').substring(0,12)+'</span>' +
+        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:'+sideColor+'">'+(t.side||'')+'</span>' +
+        '<span style="flex:1;font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(t.question||t.thesis||'').substring(0,60)+'</span>' +
+        '<span style="font-family:var(--mono);font-size:9px;color:var(--dim)">\u2191'+(t.agree_count||0)+' \u2193'+(t.disagree_count||0)+'</span>' +
+        '<button onclick="deleteTake(\''+t.id+'\')" style="font-size:9px;background:rgba(255,77,106,0.12);color:#ff4d6a;border:none;border-radius:3px;padding:2px 6px;cursor:pointer">\u2715</button>' +
+        '</div>';
+    }).join('');
+  } catch(e) { container.innerHTML = '<div style="color:var(--red)">'+e.message+'</div>'; }
 }
 
 function quickImport(handle) {

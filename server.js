@@ -12266,6 +12266,11 @@ async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, fol
   const cached = _influencerCache.get(handle);
   if (cached) return cached;
 
+  // Auto-fetch avatar from unavatar.io if not provided (free, no auth)
+  if (!avatarUrl) {
+    avatarUrl = `https://unavatar.io/x/${handle}`;
+  }
+
   try {
     // Check if influencer record exists
     const existing = await dbQuery('SELECT id, user_id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [handle]);
@@ -12341,11 +12346,30 @@ app.post('/api/admin/influencers', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/influencers/:handle — deactivate an influencer
+// DELETE /api/admin/influencers/:handle — remove an influencer and their takes
 app.delete('/api/admin/influencers/:handle', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    await dbQuery('UPDATE influencers SET is_active = false WHERE LOWER(x_handle) = $1', [req.params.handle.toLowerCase()]);
+    const handle = req.params.handle.toLowerCase().replace(/^@/, '');
+    // Get user_id to delete their takes too
+    const inf = await dbQuery('SELECT user_id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [handle]);
+    if (inf.length && inf[0].user_id) {
+      await dbQuery("DELETE FROM takes WHERE user_id = $1 AND source = 'influencer'", [inf[0].user_id]).catch(() => {});
+    }
+    await dbQuery('DELETE FROM influencers WHERE LOWER(x_handle) = $1', [handle]);
+    _influencerCache.delete(handle);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/takes/:id — admin delete any take
+app.delete('/api/admin/takes/:id', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await dbQuery('DELETE FROM take_reactions WHERE take_id = $1', [req.params.id]).catch(() => {});
+    await dbQuery('DELETE FROM takes WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
