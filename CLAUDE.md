@@ -794,6 +794,8 @@ git status   # verify files are dirty
 42. `supabase_migration_platform_referrals.sql` ← referral_code + referred_by on users, platform_referrals table
 43. `supabase_migration_login_streak.sql` ← login_streak, last_login_date, streak_multiplier on users
 44. `supabase_migration_normalized_snapshots.sql` ← normalized_snapshots + cross_market_refs + api_keys tables for data engine
+45. `supabase_migration_influencer_feed.sql` ← external_influencers + influencer_posts tables, seed data for 30+ influencers
+46. `supabase_migration_influencer_social.sql` ← influencer_post_reactions + influencer_post_comments + influencer_follows + engagement counters
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
