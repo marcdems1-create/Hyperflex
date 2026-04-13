@@ -18962,7 +18962,7 @@ async function confirmTrade() {
       errEl.textContent = 'Could not get valid trading keys. Try refreshing the page.';
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Confirm Trade';
+      btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
       _confirmTradeRetryCount = 0;
       return;
     }
@@ -18988,7 +18988,7 @@ async function confirmTrade() {
       } catch(e) {
         console.warn('[auto-derive]', e.message);
       }
-      errEl.textContent = 'Sign in MetaMask popup, then click Confirm Trade.';
+      errEl.textContent = 'Sign in MetaMask popup, then click the trade button.';
       errEl.style.color = '#ff6b6b';
       btn.disabled = false;
       btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
@@ -19014,7 +19014,7 @@ async function confirmTrade() {
         errEl.textContent = 'MetaMask required to sign orders';
         errEl.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = 'Confirm Trade';
+        btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
         return;
       }
     }
@@ -19080,7 +19080,7 @@ async function confirmTrade() {
               'style="margin-top:6px;padding:6px 14px;background:var(--gold);color:#000;border:none;border-radius:6px;' +
               'font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Switch to Limit order →</button>';
             errEl.style.display = 'block';
-            btn.disabled = false; btn.textContent = 'Confirm Trade';
+            btn.disabled = false; btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
             return;
           }
 
@@ -19110,7 +19110,7 @@ async function confirmTrade() {
     if (roundedPrice <= 0 || roundedPrice >= 1) {
       errEl.textContent = 'Invalid price: ' + (price * 100).toFixed(1) + '¢';
       errEl.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Confirm Trade';
+      btn.disabled = false; btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
       return;
     }
 
@@ -19358,7 +19358,7 @@ async function confirmTrade() {
           errEl.textContent = 'Could not reach Polymarket — check your connection and try again.';
           errEl.style.display = 'block';
           btn.disabled = false;
-          btn.textContent = 'Confirm Trade';
+          btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
           return;
         }
       }
@@ -19379,7 +19379,7 @@ async function confirmTrade() {
           errEl.textContent = 'Keys keep expiring. Try refreshing the page or reconnecting MetaMask.';
           errEl.style.display = 'block';
           btn.disabled = false;
-          btn.textContent = 'Confirm Trade';
+          btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
           _confirmTradeRetryCount = 0;
           return;
         }
@@ -19405,11 +19405,13 @@ async function confirmTrade() {
             console.warn('[auto-derive on 401]', deriveErr.message);
           }
           btn.disabled = false;
-          btn.textContent = 'Confirm Trade';
+          btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
         }
-        errEl.textContent = 'API keys expired — sign in MetaMask popup, then click Confirm Trade.';
+        errEl.textContent = 'API keys expired — sign in MetaMask popup, then click the trade button.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
-        errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
+        errEl.textContent = clobSide === 'SELL'
+          ? 'Insufficient share balance — you may not hold enough shares of this outcome to sell.'
+          : 'Insufficient USDC balance on Polymarket. Deposit funds first.';
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
       } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
@@ -19421,7 +19423,7 @@ async function confirmTrade() {
       }
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Confirm Trade';
+      btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
       return;
     }
 
@@ -19476,7 +19478,7 @@ async function confirmTrade() {
     }
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Confirm Trade';
+    btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
     console.error('[qt-trade] Error:', e);
   }
 }
