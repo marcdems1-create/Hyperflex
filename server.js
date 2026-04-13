@@ -12398,18 +12398,23 @@ app.post('/api/admin/import-tweet', async (req, res) => {
     let inferredSide = side ? side.toUpperCase() : null;
 
     if (!matchedSlug && _screenerCache && _screenerCache.data) {
-      // Simple keyword matching against screener cache
+      // Smart market matching — use significant words only, require high overlap with question
+      const STOPWORDS = new Set(['the','and','that','this','with','for','are','was','were','will','has','have','had','not','but','from','they','been','can','would','could','should','about','into','than','then','them','their','there','which','when','what','where','who','how','its','our','your','all','any','some','more','also','just','only','very','much','many','most','other','each','both','such','here','over','after','before','under','between','through','being','those','these','does','did','doing','done','made','make','like','even','back','come','take','want','give','look','know','think','need','still','going','while','never','first','last','every','same','another']);
       const tweetLower = tweet_text.toLowerCase();
+      const tweetWords = [...new Set(tweetLower.split(/\s+/).filter(w => w.length >= 4 && !STOPWORDS.has(w)))];
       let bestMatch = null;
       let bestScore = 0;
 
       for (const m of _screenerCache.data) {
         const qLower = (m.question || '').toLowerCase();
-        // Score by number of shared words (3+ letter words)
-        const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
-        const matchScore = tweetWords.filter(w => qLower.includes(w)).length;
-        if (matchScore > bestScore && matchScore >= 2) {
-          bestScore = matchScore;
+        const qWords = qLower.split(/\s+/).filter(w => w.length >= 4 && !STOPWORDS.has(w));
+        if (!qWords.length) continue;
+        // Count how many question words appear in the tweet
+        const hits = qWords.filter(w => tweetLower.includes(w)).length;
+        // Require at least 50% of the question's significant words to match
+        const ratio = hits / qWords.length;
+        if (ratio > bestScore && ratio >= 0.5 && hits >= 3) {
+          bestScore = ratio;
           bestMatch = m;
         }
       }
@@ -12421,9 +12426,11 @@ app.post('/api/admin/import-tweet', async (req, res) => {
       }
     }
 
-    // If no market matched, use the tweet text as the question
+    // If no market matched, use first sentence of tweet as the question
     if (!matchedQuestion) {
-      matchedQuestion = tweet_text.length > 200 ? tweet_text.substring(0, 200) + '...' : tweet_text;
+      // Extract first sentence or first 150 chars
+      const firstSentence = tweet_text.match(/^[^.!?]+[.!?]/);
+      matchedQuestion = firstSentence ? firstSentence[0].trim() : (tweet_text.length > 150 ? tweet_text.substring(0, 150) + '...' : tweet_text);
     }
 
     // Infer side from tweet text if not provided
@@ -12490,9 +12497,11 @@ app.post('/api/admin/import-tweet-batch', async (req, res) => {
           let bestMatch = null, bestScore = 0;
           for (const m of _screenerCache.data) {
             const qLower = (m.question || '').toLowerCase();
-            const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
-            const score = tweetWords.filter(w => qLower.includes(w)).length;
-            if (score > bestScore && score >= 2) { bestScore = score; bestMatch = m; }
+            const qWords = qLower.split(/\s+/).filter(w => w.length >= 4);
+            if (!qWords.length) continue;
+            const hits = qWords.filter(w => tweetLower.includes(w)).length;
+            const ratio = hits / qWords.length;
+            if (ratio > bestScore && ratio >= 0.5 && hits >= 3) { bestScore = ratio; bestMatch = m; }
           }
           if (bestMatch) {
             matchedSlug = bestMatch.slug || bestMatch.event_slug;
@@ -12677,9 +12686,11 @@ async function fetchInfluencerTweets() {
             let bestMatch = null, bestScore = 0;
             for (const m of _screenerCache.data) {
               const qLower = (m.question || '').toLowerCase();
-              const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
-              const score = tweetWords.filter(w => qLower.includes(w)).length;
-              if (score > bestScore && score >= 2) { bestScore = score; bestMatch = m; }
+              const qWords = qLower.split(/\s+/).filter(w => w.length >= 4);
+              if (!qWords.length) continue;
+              const hits = qWords.filter(w => tweetLower.includes(w)).length;
+              const ratio = hits / qWords.length;
+              if (ratio > bestScore && ratio >= 0.5 && hits >= 3) { bestScore = ratio; bestMatch = m; }
             }
             if (bestMatch) {
               matchedSlug = bestMatch.slug || bestMatch.event_slug;
