@@ -3540,20 +3540,34 @@ async function loadTradingRecord() {
   var proxy = eoa;
   try { var pr = await fetch('/api/proxy/deployed?address=' + encodeURIComponent(eoa)); if (pr.ok) { var pd = await pr.json(); if (pd.proxy) proxy = pd.proxy; } } catch(e) {}
 
-  // 3. Fetch positions from Polymarket (proxy address)
+  // 3. Fetch from ALL sources in parallel
   var positions = [];
+  var localTrades = [];
+
   try {
-    var r = await fetch('/api/polymarket/positions/' + encodeURIComponent(proxy));
-    if (r.ok) { var d = await r.json(); positions = d.positions || []; }
+    var [polyRes, localRes] = await Promise.all([
+      // Source A: Polymarket data API (via proxy address)
+      fetch('/api/polymarket/positions/' + encodeURIComponent(proxy)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      // Source B: Our polymarket_trades table (trades placed through HYPERFLEX)
+      fetch('/api/trades/' + encodeURIComponent(eoa)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+    ]);
+
+    if (polyRes && polyRes.positions) positions = polyRes.positions;
+    if (localRes && localRes.trades) localTrades = localRes.trades;
+
+    // Also try EOA if proxy returned nothing from Polymarket
+    if (!positions.length && proxy !== eoa) {
+      try { var r2 = await fetch('/api/polymarket/positions/' + encodeURIComponent(eoa)); if (r2.ok) { var d2 = await r2.json(); positions = d2.positions || []; } } catch(e) {}
+    }
   } catch(e) {}
-  // Also try EOA if proxy returned nothing
-  if (!positions.length && proxy !== eoa) {
-    try { var r2 = await fetch('/api/polymarket/positions/' + encodeURIComponent(eoa)); if (r2.ok) { var d2 = await r2.json(); positions = d2.positions || []; } } catch(e) {}
+
+  // If BOTH sources empty, show message
+  if (!positions.length && !localTrades.length) {
+    if (tradeList) tradeList.innerHTML = '<div style="padding:24px;text-align:center;color:#8888a0;font-size:12px">No trading activity found yet.</div>';
+    return;
   }
 
-  if (!positions.length) { if (tradeList) tradeList.innerHTML = '<div style="padding:24px;text-align:center;color:#8888a0;font-size:12px">No Polymarket positions found for this wallet.</div>'; return; }
-
-  // 4. Map to trade objects
+  // 4. Build unified trade list — Polymarket positions + local trades
   var trades = positions.map(function(p) {
     var size = parseFloat(p.shares || p.size) || 0;
     var cost = parseFloat(p.cost_basis || p.initialValue) || 0;
@@ -3563,6 +3577,30 @@ async function loadTradingRecord() {
     var curPrice = parseFloat(p.current_price || p.curPrice) || 0;
     var avgPrice = size > 0 && cost > 0 ? cost / size : curPrice;
     return { side: (p.side || p.outcome || 'YES').toUpperCase(), question: p.question || p.title || '', icon: p.icon || null, shares: size, avgPrice: avgPrice, curPrice: curPrice, cost: cost, value: val, pnl: pnl, pnlPct: pnlPct };
+  });
+
+  // Merge local trades that aren't already in Polymarket data (by question text)
+  var seenQuestions = {};
+  trades.forEach(function(t) { seenQuestions[(t.question || '').toLowerCase()] = true; });
+  localTrades.forEach(function(lt) {
+    var q = (lt.market_question || '').toLowerCase();
+    if (!seenQuestions[q]) {
+      trades.push({
+        side: (lt.side || 'YES').toUpperCase(),
+        question: lt.market_question || '',
+        icon: null,
+        shares: parseFloat(lt.shares) || 0,
+        avgPrice: (parseFloat(lt.entry_price_cents) || 0) / 100,
+        curPrice: (parseFloat(lt.entry_price_cents) || 0) / 100,
+        cost: parseFloat(lt.amount_usd) || 0,
+        value: parseFloat(lt.amount_usd) || 0,
+        pnl: parseFloat(lt.pnl) || 0,
+        pnlPct: parseFloat(lt.pnl_percent) || 0,
+        created_at: lt.created_at,
+        status: lt.status || 'open'
+      });
+      seenQuestions[q] = true;
+    }
   });
 
   // 5. Compute stats
