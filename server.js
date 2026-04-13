@@ -3183,6 +3183,8 @@ async function settleMarkets() {
     // Email bettors about the outcome (fire-and-forget)
     const creatorSlug = await getCreatorSlugForMarket(market);
     sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
+    // Score takes for this market (fire-and-forget)
+    scoreTakesForMarket(market.question, outcome ? 'YES' : 'NO', null).catch(() => {});
   }
   } catch (err) {
     console.error('[settle] Error:', err.message);
@@ -7495,6 +7497,8 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
       const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', req.creator.id) .maybeSingle();
     }
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
+    // Score takes for this market (fire-and-forget)
+    scoreTakesForMarket(market.question, outcome, null).catch(() => {});
 
     // In-app notifications for each bettor
     if (positions && positions.length > 0) {
@@ -12075,6 +12079,33 @@ app.get('/api/member/:userId', async (req, res) => {
         resolved_at:    p.markets.resolved_at,
       }));
 
+    // Takes stats + recent takes
+    let takeStats = { total: 0, correct: 0, incorrect: 0, accuracy: 0, total_agrees: 0 };
+    let recentTakes = [];
+    if (pool) {
+      try {
+        const [countRows, recentRows] = await Promise.all([
+          dbQuery(`SELECT
+            COUNT(*)::int as total,
+            COUNT(*) FILTER (WHERE is_correct = true)::int as correct,
+            COUNT(*) FILTER (WHERE is_correct = false)::int as incorrect,
+            COALESCE(SUM(agree_count), 0)::int as total_agrees
+            FROM takes WHERE user_id = $1 AND source = 'user'`, [userId]),
+          dbQuery(`SELECT id, question, side, entry_price, thesis, agree_count, disagree_count, is_correct, created_at, market_slug
+            FROM takes WHERE user_id = $1 AND source = 'user' ORDER BY created_at DESC LIMIT 10`, [userId]),
+        ]);
+        if (countRows[0]) {
+          takeStats.total = countRows[0].total;
+          takeStats.correct = countRows[0].correct;
+          takeStats.incorrect = countRows[0].incorrect;
+          takeStats.total_agrees = countRows[0].total_agrees;
+          const resolved = takeStats.correct + takeStats.incorrect;
+          takeStats.accuracy = resolved > 0 ? Math.round((takeStats.correct / resolved) * 100) : 0;
+        }
+        recentTakes = recentRows;
+      } catch (e) { /* takes table may not exist yet */ }
+    }
+
     res.json({
       user: {
         id:           userData.id,
@@ -12090,6 +12121,8 @@ app.get('/api/member/:userId', async (req, res) => {
         total_won: Math.round(totalWon / 100),
         streak,
       },
+      take_stats: takeStats,
+      recent_takes: recentTakes,
       communities: slugs.slice(0, 12).map(s => communityMap[s] || { slug: s, display_name: s, primary_color: '#c9920d' }),
       recent_wins: recentWins,
     });
@@ -13300,9 +13333,11 @@ app.post('/api/takes', requireAuth, async (req, res) => {
     }
 
     // If quote-predicting, validate parent exists
+    let parentTake = null;
     if (parent_take_id) {
-      const parentRows = await dbQuery('SELECT id FROM takes WHERE id = $1', [parent_take_id]);
+      const parentRows = await dbQuery('SELECT id, user_id, question FROM takes WHERE id = $1', [parent_take_id]);
       if (!parentRows.length) return res.status(404).json({ error: 'Parent take not found' });
+      parentTake = parentRows[0];
     }
 
     const rows = await dbQuery(
@@ -13315,6 +13350,18 @@ app.post('/api/takes', requireAuth, async (req, res) => {
        thesis ? String(thesis).slice(0, 500) : null,
        sharpScore, parent_take_id || null]
     );
+
+    // Notify parent take author of quote-predict
+    if (parentTake && parentTake.user_id && parentTake.user_id !== req.userId) {
+      const shortQ = (parentTake.question || '').substring(0, 50);
+      pushNotification(
+        parentTake.user_id, 'take_quoted',
+        `\u21A9 ${displayName} counter-predicted your take`,
+        `They went ${String(side).toUpperCase()} on "${shortQ}"`,
+        null, null
+      );
+    }
+
     res.json({ ok: true, take: rows[0] });
   } catch (err) {
     console.error('[takes] POST error:', err.message);
@@ -13332,14 +13379,16 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
     }
 
     // Check if take exists
-    const takeRows = await dbQuery('SELECT id, agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
+    const takeRows = await dbQuery('SELECT id, user_id, question, agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
     if (!takeRows.length) return res.status(404).json({ error: 'Take not found' });
+    const take = takeRows[0];
 
     // Check for existing reaction
     const existing = await dbQuery(
       'SELECT id, reaction FROM take_reactions WHERE take_id = $1 AND user_id = $2', [takeId, req.userId]
     );
 
+    let isNewReaction = false;
     if (existing.length) {
       if (existing[0].reaction === reaction) {
         // Same reaction = toggle off (unreact)
@@ -13352,6 +13401,7 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
         const oldCol = existing[0].reaction === 'agree' ? 'agree_count' : 'disagree_count';
         const newCol = reaction === 'agree' ? 'agree_count' : 'disagree_count';
         await dbQuery(`UPDATE takes SET ${oldCol} = GREATEST(${oldCol} - 1, 0), ${newCol} = ${newCol} + 1 WHERE id = $1`, [takeId]);
+        isNewReaction = true;
       }
     } else {
       // New reaction
@@ -13361,6 +13411,23 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
       );
       const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
       await dbQuery(`UPDATE takes SET ${col} = ${col} + 1 WHERE id = $1`, [takeId]);
+      isNewReaction = true;
+    }
+
+    // Notify take author of new reactions (don't notify yourself)
+    if (isNewReaction && take.user_id && take.user_id !== req.userId) {
+      // Get reactor's name
+      const reactorRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
+      const reactorName = reactorRows[0]?.display_name || 'Someone';
+      const emoji = reaction === 'agree' ? '\u2191' : '\u2193';
+      const verb = reaction === 'agree' ? 'agreed with' : 'disagreed with';
+      const shortQ = (take.question || '').substring(0, 50);
+      pushNotification(
+        take.user_id, 'take_reaction',
+        `${emoji} ${reactorName} ${verb} your take`,
+        `"${shortQ}"`,
+        null, null
+      );
     }
 
     // Return updated counts
@@ -16647,6 +16714,47 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
 
 // Send resolution emails to all bettors on a market.
 // market      — markets row (must include .question)
+// ── Score takes when a market resolves ──
+// Marks every take on this market as correct or incorrect based on outcome.
+// Also fires notifications for correct takes.
+async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
+  if (!pool) return;
+  try {
+    const upperOutcome = (outcome || '').toUpperCase();
+    // Find takes matching this market by slug or question text
+    let takes = [];
+    if (marketSlug) {
+      takes = await dbQuery('SELECT id, user_id, side, display_name FROM takes WHERE market_slug = $1 AND is_correct IS NULL', [marketSlug]);
+    }
+    if (!takes.length && marketQuestion) {
+      takes = await dbQuery('SELECT id, user_id, side, display_name FROM takes WHERE LOWER(question) = LOWER($1) AND is_correct IS NULL', [marketQuestion]);
+    }
+    if (!takes.length) return;
+
+    let scored = 0;
+    for (const take of takes) {
+      const isCorrect = take.side.toUpperCase() === upperOutcome;
+      await dbQuery(
+        'UPDATE takes SET is_correct = $1, resolved_at = now() WHERE id = $2',
+        [isCorrect, take.id]
+      );
+      scored++;
+
+      // Notify user if their take was correct
+      if (isCorrect && take.user_id) {
+        pushNotification(
+          take.user_id,
+          'take_correct',
+          '🎯 Your take was right!',
+          `Your ${take.side} call on "${(marketQuestion || '').substring(0, 50)}" resolved ${upperOutcome}. Your track record just got stronger.`,
+          null, null
+        );
+      }
+    }
+    if (scored > 0) console.log(`[takes] Scored ${scored} takes for "${(marketQuestion || '').substring(0, 40)}" → ${upperOutcome}`);
+  } catch (e) { console.warn('[takes] scoreTakesForMarket error:', e.message); }
+}
+
 // outcome     — 'YES' | 'NO'
 // creatorSlug — slug string, used to build community URL + sender name
 // resolutionNote — optional creator note (string | null)

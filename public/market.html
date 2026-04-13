@@ -329,6 +329,17 @@ canvas{display:block;width:100%!important}
         <div class="dist-legend" id="distLegend"></div>
       </div>
 
+      <!-- Community Takes -->
+      <div class="mkt-comments" id="mktTakesSection" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0">Takes <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="takeCount"></span></h3>
+          <button onclick="openMarketTakeModal()" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:6px;padding:5px 12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.5)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.2)'">Post Take</button>
+        </div>
+        <div id="marketTakesList" style="display:flex;flex-direction:column;gap:0">
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet — share your prediction</div>
+        </div>
+      </div>
+
       <!-- Comments -->
       <div class="mkt-comments" id="mktCommentsSection">
         <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
@@ -5225,6 +5236,104 @@ function updateAlertBell() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// MARKET TAKES — community predictions for this market
+// ══════════════════════════════════════════════════════════════════════════════
+
+function loadMarketTakes() {
+  var mktSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
+  if (!mktSlug) return;
+  var token = localStorage.getItem('hf_token') || '';
+  var headers = { Accept: 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
+  fetch('/api/takes/market/' + encodeURIComponent(mktSlug), { headers: headers })
+    .then(function(r) { return r.ok ? r.json() : { takes: [] }; })
+    .then(function(data) {
+      var takes = data.takes || [];
+      var countEl = document.getElementById('takeCount');
+      if (countEl) countEl.textContent = takes.length ? '(' + takes.length + ')' : '';
+      var container = document.getElementById('marketTakesList');
+      if (!container) return;
+      if (!takes.length) {
+        container.innerHTML = '<div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet \u2014 share your prediction</div>';
+        return;
+      }
+      container.innerHTML = takes.slice(0, 10).map(function(t) {
+        var isWhale = t.source === 'whale';
+        var isConsensus = t.source === 'consensus';
+        var sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+        var sideBg = (t.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
+        var badge = isWhale ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:1px 5px;border-radius:3px;margin-left:4px">WHALE</span>'
+          : isConsensus ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,0.12);padding:1px 5px;border-radius:3px;margin-left:4px">CONSENSUS</span>' : '';
+        var correct = t.is_correct === true ? ' <span style="color:#00e68a;font-size:10px">\u2713 correct</span>'
+          : t.is_correct === false ? ' <span style="color:#ff4d6a;font-size:10px">\u2717 wrong</span>' : '';
+        var agreeActive = t.my_reaction === 'agree' ? 'color:#00e68a;' : '';
+        var disagreeActive = t.my_reaction === 'disagree' ? 'color:#ff4d6a;' : '';
+        return '<div style="padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.6);display:flex;gap:10px;align-items:flex-start">' +
+          '<div style="width:28px;height:28px;border-radius:50%;background:' + (isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : isConsensus ? 'linear-gradient(135deg,#f59e0b,#d97706)' : '#c9920d') + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:' + (isWhale ? '#fff' : '#000') + ';flex-shrink:0">' +
+            (isWhale ? '\uD83D\uDC33' : (t.display_name || 'A').charAt(0).toUpperCase()) + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">' +
+              '<span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(t.display_name || 'Anonymous') + '</span>' +
+              badge +
+              '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + ';background:' + sideBg + ';padding:2px 7px;border-radius:4px">' + (t.side || '').toUpperCase() + '</span>' +
+              (t.entry_price ? '<span style="font-family:var(--mono);font-size:10px;color:var(--soft)">' + Math.round(t.entry_price * 100) + '\u00a2</span>' : '') +
+              correct +
+              '<span style="font-size:10px;color:var(--dim);margin-left:auto">' + timeAgo(t.created_at) + '</span>' +
+            '</div>' +
+            (t.thesis ? '<div style="font-size:12px;color:var(--soft);margin-top:3px;line-height:1.4">' + escHtml(t.thesis) + '</div>' : '') +
+            '<div style="display:flex;gap:12px;margin-top:5px">' +
+              '<button onclick="reactMarketTake(\'' + t.id + '\',\'agree\',this)" style="font-family:var(--mono);font-size:10px;background:none;border:none;cursor:pointer;padding:2px 0;' + agreeActive + 'color:var(--dim)">\u2191 ' + (t.agree_count || 0) + '</button>' +
+              '<button onclick="reactMarketTake(\'' + t.id + '\',\'disagree\',this)" style="font-family:var(--mono);font-size:10px;background:none;border:none;cursor:pointer;padding:2px 0;' + disagreeActive + 'color:var(--dim)">\u2193 ' + (t.disagree_count || 0) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    })
+    .catch(function() {});
+}
+
+function reactMarketTake(takeId, reaction, btn) {
+  var token = localStorage.getItem('hf_token') || '';
+  if (!token) { alert('Sign in to react'); return; }
+  fetch('/api/takes/' + takeId + '/react', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ reaction: reaction })
+  }).then(function(r) { return r.json(); }).then(function() {
+    loadMarketTakes(); // Reload to refresh counts
+  }).catch(function() {});
+}
+
+function openMarketTakeModal() {
+  var token = localStorage.getItem('hf_token') || '';
+  if (!token) { alert('Sign in to post a take'); return; }
+  var thesis = prompt('What\'s your thesis on this market? (optional)');
+  if (thesis === null) return; // cancelled
+  var side = confirm('Are you bullish? (OK = YES, Cancel = NO)') ? 'YES' : 'NO';
+  var mktSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
+  var question = (_market && _market.question) || '';
+  var conditionId = (_market && _market.conditionId) || '';
+
+  fetch('/api/takes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({
+      market_slug: mktSlug,
+      condition_id: conditionId,
+      question: question,
+      side: side,
+      thesis: thesis.trim() || null
+    })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.ok) loadMarketTakes();
+  }).catch(function() {});
+}
+
+// Load takes when page loads (after market data is available)
+setTimeout(function() { loadMarketTakes(); }, 2000);
+
 // POST-TRADE TAKE PROMPT
 // ══════════════════════════════════════════════════════════════════════════════
 

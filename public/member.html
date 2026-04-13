@@ -207,7 +207,7 @@ async function load() {
     }
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
-    const { user, stats, communities, recent_wins } = data;
+    const { user, stats, communities, recent_wins, take_stats, recent_takes } = data;
 
     const winPct = stats.settled_predictions > 0 ? Math.round((stats.wins / stats.settled_predictions) * 100) : 0;
     const avgColor = winPct >= 70 ? '#c9920d' : winPct >= 55 ? '#22c55e' : winPct >= 40 ? '#60a5fa' : '#ef4444';
@@ -330,6 +330,39 @@ async function load() {
           <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px">🐦 Share</button>
         </div>
       </div>
+
+      ${(take_stats && take_stats.total > 0) ? `
+      <div class="section">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px">
+          Takes
+          <span style="font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted)">${take_stats.total} total</span>
+          ${take_stats.accuracy > 0 ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};padding:2px 8px;border-radius:4px">${take_stats.accuracy}% accuracy</span>` : ''}
+          ${take_stats.total_agrees > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${take_stats.total_agrees} agrees</span>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          ${(recent_takes || []).slice(0, 8).map(t => {
+            const sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+            const sideBg = (t.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
+            const correct = t.is_correct === true ? '<span style="color:#00e68a;font-size:10px;margin-left:4px">✓</span>'
+              : t.is_correct === false ? '<span style="color:#ff4d6a;font-size:10px;margin-left:4px">✗</span>' : '';
+            const href = t.market_slug ? '/market/' + t.market_slug : '#';
+            return `<a href="${href}" style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.5);text-decoration:none;transition:background .1s" ${href !== '#' ? '' : ''}>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.question || ''}</div>
+                ${t.thesis ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.thesis}</div>` : ''}
+                <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${(t.side || '').toUpperCase()}</span>
+                  ${t.entry_price ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                  <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">↑${t.agree_count || 0} ↓${t.disagree_count || 0}</span>
+                  ${correct}
+                  <span style="font-size:10px;color:var(--dim);margin-left:auto">${timeAgo(t.created_at)}</span>
+                </div>
+              </div>
+            </a>`;
+          }).join('')}
+        </div>
+        <a href="/explore" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:12px;text-decoration:none">View all takes →</a>
+      </div>` : ''}
 
       ${recent_wins.length ? `
       <div class="section">
