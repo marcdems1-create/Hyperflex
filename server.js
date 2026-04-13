@@ -14292,14 +14292,44 @@ cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight 
 // The aggregated sentiment per market feeds the B2B data API.
 // ══════════════════════════════════════════════════════════════════════════════
 
-const POLY_KEYWORDS = ['polymarket','prediction market','predicting','odds on','probability of','betting on','yes shares','no shares'];
+const POLY_KEYWORDS = [
+  'polymarket','prediction market','predicting','odds on','probability of',
+  'betting on','yes shares','no shares','kalshi','manifold','metaculus',
+  'markets are showing','market says','market gives','market puts','contracts',
+  'odds say','betting markets','political betting','market odds',
+  'forecast','forecasting','probability','percent chance',
+];
+// For politician accounts we also catch broader political signal tweets
+const POLITICIAN_HANDLES = new Set([
+  'ThomasMassie','RandPaul','WarrenDavidson','TomEmmer','SenLummis',
+  'PatrickMcHenry','ByronDonalds','SenWarren','AOC','BernieSanders',
+  'realDonaldTrump','elonmusk','VivekGRamaswamy','SenTedCruz','mattgaetz',
+  'RobertKennedyJr','TulsiGabbard','RepMTG','Jim_Jordan','GovRonDeSantis',
+  'massieforky',
+]);
 const _influencerFetchCache = new Map(); // platform+id → last fetch ts (rate-gate)
 
-// Returns true if text is probably about a Polymarket-relevant prediction
-function _isPolyContent(text) {
+// Returns true if text is probably about a Polymarket-relevant prediction.
+// For politicians, any substantive policy/political tweet is worth capturing —
+// Claude will decide if it maps to a live market.
+function _isPolyContent(text, handle) {
   if (!text) return false;
   const t = text.toLowerCase();
-  return POLY_KEYWORDS.some(kw => t.includes(kw));
+  if (POLY_KEYWORDS.some(kw => t.includes(kw))) return true;
+  // For known politician accounts, also capture political/policy tweets
+  // (bills, elections, appointments, major policy announcements)
+  if (handle && POLITICIAN_HANDLES.has(handle)) {
+    const politicalKw = [
+      'congress','senate','vote','election','legislation','bill','act','law',
+      'president','administration','policy','government','federal','supreme court',
+      'tariff','inflation','economy','spending','deficit','budget','debt',
+      'war','military','ceasefire','sanction','nato','deal','treaty',
+      'resign','impeach','investigation','indictment','arrest','conviction',
+      'approval rating','poll','survey','majority','minority',
+    ];
+    return politicalKw.some(kw => t.includes(kw));
+  }
+  return false;
 }
 
 // ── X/Twitter: resolve handle → numeric user ID (cached in DB platform_id) ──
@@ -14577,7 +14607,7 @@ async function monitorPolymarketInfluencers() {
       }
       const tweets = await _fetchXTimeline(userId, bearerToken);
       rawPosts = tweets
-        .filter(t => _isPolyContent(t.text))
+        .filter(t => _isPolyContent(t.text, inf.handle))
         .map(t => ({
           platform:     'x',
           external_id:  t.id,

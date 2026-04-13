@@ -49,29 +49,68 @@ CREATE INDEX IF NOT EXISTS influencer_posts_market_idx     ON influencer_posts(m
 CREATE INDEX IF NOT EXISTS influencer_posts_take_idx       ON influencer_posts(take_id);
 
 -- ── Seed: known Polymarket influencers ──────────────────────────────────────
--- X/Twitter — accounts that regularly post Polymarket analysis
+
+-- X/Twitter — traders & analysts
 INSERT INTO external_influencers (name, platform, handle, bio, is_active) VALUES
-  ('Polymarket',          'x', 'Polymarket',       'Official Polymarket account',                        true),
-  ('Nate Silver',         'x', 'NateSilver538',    'Forecaster, author of The Signal and the Noise',     true),
-  ('Manifold Markets',    'x', 'ManifoldMarkets',  'Prediction market platform',                         true),
-  ('Zoltu',               'x', 'Zoltu',            'Crypto & prediction market trader',                  true),
-  ('Matthew Yglesias',    'x', 'mattyglesias',     'Journalist, frequent prediction market bettor',      true),
-  ('Scott Alexander',     'x', 'slatestarcodex',   'ACX author, prominent forecaster',                   true),
-  ('Kalshi',              'x', 'Kalshi',            'CFTC-regulated prediction market',                   true),
-  ('Metaculus',           'x', 'metaculus',         'Prediction platform & forecasting community',        true),
-  ('Robin Hanson',        'x', 'robinhanson',       'Economist, prediction market pioneer',               true),
-  ('Philip Tetlock',      'x', 'PTetlock',          'Superforecasting researcher',                        true)
+  ('Polymarket',          'x', 'Polymarket',        'Official Polymarket account',                              true),
+  ('Nate Silver',         'x', 'NateSilver538',     'Forecaster, author of The Signal and the Noise',           true),
+  ('Manifold Markets',    'x', 'ManifoldMarkets',   'Prediction market platform',                               true),
+  ('Metaculus',           'x', 'metaculus',          'Prediction platform & forecasting community',              true),
+  ('Robin Hanson',        'x', 'robinhanson',        'Economist, prediction market pioneer',                    true),
+  ('Philip Tetlock',      'x', 'PTetlock',           'Superforecasting researcher',                             true),
+  ('Matthew Yglesias',    'x', 'mattyglesias',      'Journalist, frequent prediction market bettor',            true),
+  ('Scott Alexander',     'x', 'slatestarcodex',    'ACX author, prominent forecaster',                        true),
+  ('Zoltu',               'x', 'Zoltu',             'Crypto & prediction market trader',                       true),
+  ('Kalshi',              'x', 'Kalshi',             'CFTC-regulated prediction market',                        true),
+  -- Requested traders
+  ('NotSoEasyMoney',      'x', 'NotSoEasyMoney',    'Prediction market trader',                                 true),
+  ('Tradermayne',         'x', 'Tradermayne',        'Active Polymarket trader',                                true),
+  -- CSPTRADING.eth: X handles cannot contain periods — stored without the dot.
+  -- Bearer-token sweep will confirm actual handle ID on first run.
+  ('CSPTRADING',          'x', 'CSPTRADINGeth',     'Polymarket trader (known as CSPTRADING.eth)',             true),
+  ('massieforky',         'x', 'massieforky',        'Prediction market & political commentary account',        true)
+ON CONFLICT (platform, handle) DO NOTHING;
+
+-- X/Twitter — politicians who actively discuss prediction markets
+-- Mix of pro-market (libertarian/crypto wing) and critics (both generate signal).
+-- The system filters their tweets for prediction-market keywords before processing.
+INSERT INTO external_influencers (name, platform, handle, bio, is_active) VALUES
+  -- Libertarian / pro-deregulation (explicitly supportive of prediction markets)
+  ('Rep. Thomas Massie',     'x', 'ThomasMassie',   'KY-4 congressman, libertarian, vocal prediction market supporter',          true),
+  ('Sen. Rand Paul',         'x', 'RandPaul',        'KY senator, libertarian, free-market advocate',                            true),
+  ('Rep. Warren Davidson',   'x', 'WarrenDavidson',  'OH-8, crypto & fintech-friendly congressman',                              true),
+  ('Rep. Tom Emmer',         'x', 'TomEmmer',        'House Majority Whip, pro-crypto, prediction market adjacent',              true),
+  ('Sen. Cynthia Lummis',    'x', 'SenLummis',       'WY senator, Bitcoin Senator, pro-prediction markets',                     true),
+  ('Rep. Patrick McHenry',   'x', 'PatrickMcHenry',  'House Financial Services Chair, fintech & prediction market regulation',  true),
+  ('Rep. Byron Donalds',     'x', 'ByronDonalds',    'FL-19, crypto-friendly Republican',                                       true),
+  -- Vocal critics (still tweet about them, generate strong signal when they do)
+  ('Sen. Elizabeth Warren',  'x', 'SenWarren',       'MA senator, frequent critic of prediction markets & crypto',               true),
+  ('Rep. Alexandria Ocasio-Cortez','x','AOC',         'NY-14, has tweeted about prediction market concerns',                    true),
+  ('Sen. Bernie Sanders',    'x', 'BernieSanders',   'VT senator, critic of speculative markets',                               true),
+  -- High-signal political figures whose Polymarket odds are widely discussed
+  ('Donald Trump',           'x', 'realDonaldTrump', 'POTUS45/47 — most-traded Polymarket subject, tweets about his odds',      true),
+  ('Elon Musk',              'x', 'elonmusk',         'Twitter/X owner, frequently cites Polymarket odds in tweets',            true),
+  ('Vivek Ramaswamy',        'x', 'VivekGRamaswamy', 'Has cited prediction market odds during political campaigns',             true),
+  ('Sen. Ted Cruz',          'x', 'SenTedCruz',       'TX senator, has referenced prediction market signals',                   true),
+  ('Rep. Matt Gaetz',        'x', 'mattgaetz',        'FL congressman, referenced Polymarket during political battles',         true),
+  ('RFK Jr.',                'x', 'RobertKennedyJr', 'Mentioned prediction market odds during 2024 campaign',                   true),
+  ('Tulsi Gabbard',          'x', 'TulsiGabbard',     'Dir. of National Intelligence, mentioned prediction markets',            true),
+  ('Marjorie Taylor Greene', 'x', 'RepMTG',           'GA-14, tweets about political prediction markets',                      true),
+  ('Rep. Jim Jordan',        'x', 'Jim_Jordan',       'House Judiciary Chair, political prediction market subject',             true),
+  ('Gov. Ron DeSantis',      'x', 'GovRonDeSantis',  'FL governor, Polymarket-tracked political figure',                       true)
 ON CONFLICT (platform, handle) DO NOTHING;
 
 -- YouTube — channels covering Polymarket/prediction markets
 INSERT INTO external_influencers (name, platform, handle, platform_id, bio, is_active) VALUES
-  ('Forecasting Research Institute', 'youtube', 'ForecastingRI',    'UCXgfHLbSXDLZFBCOoFqTOOQ', 'Forecasting research & prediction market analysis',   true),
-  ('Good Judgment',                  'youtube', 'GoodJudgment',     'UCpGFCE9y9U-8fLjJD5kH3Mg', 'Superforecasting organization',                       true)
+  ('Forecasting Research Institute', 'youtube', 'ForecastingRI',  'UCXgfHLbSXDLZFBCOoFqTOOQ', 'Forecasting research & prediction market analysis', true),
+  ('Good Judgment',                  'youtube', 'GoodJudgment',   'UCpGFCE9y9U-8fLjJD5kH3Mg', 'Superforecasting organization',                     true)
 ON CONFLICT (platform, handle) DO NOTHING;
 
 -- Reddit — top prediction market subreddits (handle = subreddit name)
 INSERT INTO external_influencers (name, platform, handle, bio, is_active) VALUES
-  ('r/Polymarket',          'reddit', 'Polymarket',          'Polymarket trading community',             true),
-  ('r/predictionmarkets',   'reddit', 'predictionmarkets',   'Prediction market discussion',             true),
-  ('r/metaculus',           'reddit', 'metaculus',           'Metaculus forecasting community',          true)
+  ('r/Polymarket',          'reddit', 'Polymarket',        'Polymarket trading community',      true),
+  ('r/predictionmarkets',   'reddit', 'predictionmarkets', 'Prediction market discussion',      true),
+  ('r/metaculus',           'reddit', 'metaculus',         'Metaculus forecasting community',   true),
+  ('r/politics',            'reddit', 'politics',          'US politics — high prediction market overlap', true),
+  ('r/poker',               'reddit', 'poker',             'Poker/gambling community, prediction market crossover', true)
 ON CONFLICT (platform, handle) DO NOTHING;
