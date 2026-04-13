@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HYPERFLEX — The Feed</title>
-<meta name="description" content="See what the top prediction market influencers are saying. Politicians, traders, analysts — every prediction scored, every track record verified.">
-<meta property="og:title" content="HYPERFLEX Feed — Prediction Market Intelligence">
-<meta property="og:description" content="The social feed for prediction markets. Influencer predictions backed by real money, real P&L.">
+<title>HYPERFLEX — Prediction Feed</title>
+<meta name="description" content="See what the best prediction market traders are betting on. Verified predictions with real money, real P&L, real track records.">
+<meta property="og:title" content="HYPERFLEX Prediction Feed">
+<meta property="og:description" content="The social feed for prediction markets. Verified predictions backed by real money.">
 <meta property="og:url" content="https://hyperflex.network/feed">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -22,126 +22,81 @@
   a{color:var(--blue);text-decoration:none}
   a:hover{text-decoration:underline}
 
-  .feed-page{display:flex;max-width:1100px;margin:0 auto;padding:80px 16px 40px;gap:24px}
-  .feed-main{flex:1;min-width:0;max-width:680px}
-  .feed-sidebar{width:300px;flex-shrink:0}
+  .feed-layout{max-width:680px;margin:0 auto;padding:80px 16px 40px}
 
   /* Header */
-  .feed-header{margin-bottom:20px}
-  .feed-title{font-size:26px;font-weight:900;letter-spacing:-0.03em;margin-bottom:16px}
-  .feed-title span{color:var(--gold)}
-  .feed-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:0}
-  .feed-tab{padding:12px 20px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--dim);transition:all .15s;border-bottom:2px solid transparent;margin-bottom:-1px}
-  .feed-tab.active{color:var(--ink);border-bottom-color:var(--gold)}
+  .feed-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px}
+  .feed-title{font-size:24px;font-weight:800;letter-spacing:-0.02em}
+  .feed-tabs{display:flex;gap:4px;background:var(--paper-2);border-radius:8px;padding:3px}
+  .feed-tab{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--dim);transition:all .15s}
+  .feed-tab.active{background:var(--paper-3);color:var(--ink)}
   .feed-tab:hover:not(.active){color:var(--soft)}
 
-  /* Category filter pills */
-  .feed-cats{display:flex;gap:6px;padding:12px 0;overflow-x:auto;scrollbar-width:none}
-  .feed-cats::-webkit-scrollbar{display:none}
-  .cat-pill{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border);background:none;color:var(--dim);cursor:pointer;white-space:nowrap;transition:all .12s}
-  .cat-pill.active{background:var(--gold);color:#000;border-color:var(--gold)}
-  .cat-pill:hover:not(.active){border-color:var(--soft);color:var(--soft)}
-
   /* Post prediction CTA */
-  .post-cta{display:flex;align-items:center;gap:12px;padding:16px;background:var(--paper-2);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;cursor:pointer;transition:border-color .15s}
+  .post-cta{display:flex;align-items:center;gap:12px;padding:16px;background:var(--paper-2);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;cursor:pointer;transition:border-color .15s}
   .post-cta:hover{border-color:var(--gold)}
-  .post-cta-avatar{width:36px;height:36px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:var(--gold);font-weight:700}
+  .post-cta-avatar{width:36px;height:36px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
   .post-cta-text{flex:1;color:var(--dim);font-size:14px}
-  .post-cta-btn{padding:8px 18px;border-radius:20px;background:var(--gold);color:#000;font-size:12px;font-weight:700;border:none;cursor:pointer;white-space:nowrap}
+  .post-cta-btn{padding:6px 16px;border-radius:6px;background:var(--gold);color:#000;font-size:12px;font-weight:700;border:none;cursor:pointer;white-space:nowrap}
+  .post-cta-btn:hover{background:#e8a914}
 
-  /* Influencer post card — Twitter style */
-  .inf-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .15s}
-  .inf-card:hover{border-color:rgba(255,255,255,0.08)}
-  .inf-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
-  .inf-avatar{width:40px;height:40px;border-radius:50%;background:var(--paper-3);flex-shrink:0;object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--gold);overflow:hidden}
-  .inf-avatar img{width:100%;height:100%;object-fit:cover}
-  .inf-info{flex:1;min-width:0}
-  .inf-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .inf-name{font-size:14px;font-weight:700;color:var(--ink)}
-  .inf-handle{font-size:12px;color:var(--dim);font-family:var(--mono)}
-  .inf-badge{padding:2px 6px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
-  .inf-badge.trader{background:rgba(0,230,138,0.12);color:var(--green)}
-  .inf-badge.politician{background:rgba(168,85,247,0.12);color:var(--purple)}
-  .inf-badge.analyst{background:rgba(77,159,255,0.12);color:var(--blue)}
-  .inf-badge.crypto{background:rgba(245,158,11,0.12);color:var(--amber)}
-  .inf-badge.whale{background:rgba(96,165,250,0.12);color:#60a5fa}
-  .inf-source{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);margin-top:2px}
-  .inf-source a{color:var(--dim);font-size:11px}
-  .inf-source a:hover{color:var(--blue)}
-  .inf-follow-btn{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid var(--gold);background:none;color:var(--gold);cursor:pointer;transition:all .12s;flex-shrink:0}
-  .inf-follow-btn:hover{background:rgba(201,146,13,0.15)}
-  .inf-follow-btn.following{background:var(--gold);color:#000}
+  /* Prediction card */
+  .pred-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .15s}
+  .pred-card:hover{border-color:rgba(255,255,255,0.1)}
+  .pred-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .pred-avatar{width:32px;height:32px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--gold);flex-shrink:0}
+  .pred-meta{flex:1;min-width:0}
+  .pred-author{font-size:13px;font-weight:600;color:var(--ink)}
+  .pred-author:hover{color:var(--gold)}
+  .pred-time{font-size:11px;color:var(--dim);margin-left:6px}
+  .pred-side{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0}
+  .pred-side.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-side.no{background:rgba(255,77,106,0.12);color:var(--red)}
 
-  /* Post content */
-  .inf-content{font-size:14px;line-height:1.55;color:var(--soft);margin-bottom:12px;white-space:pre-wrap;word-break:break-word}
+  .pred-market{display:block;font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;line-height:1.35}
+  .pred-market:hover{color:var(--gold);text-decoration:none}
+  .pred-price{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:8px}
+  .pred-price span{color:var(--ink);font-weight:600}
 
-  /* Market signal card */
-  .inf-signal{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--paper-3);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;transition:border-color .12s;cursor:pointer;text-decoration:none}
-  .inf-signal:hover{border-color:var(--gold);text-decoration:none}
-  .inf-signal-side{padding:4px 10px;border-radius:5px;font-size:12px;font-weight:800;letter-spacing:0.04em;flex-shrink:0}
-  .inf-signal-side.yes{background:rgba(0,230,138,0.15);color:var(--green)}
-  .inf-signal-side.no{background:rgba(255,77,106,0.15);color:var(--red)}
-  .inf-signal-market{flex:1;font-size:13px;font-weight:600;color:var(--ink);line-height:1.3;min-width:0;overflow:hidden;text-overflow:ellipsis}
-  .inf-signal-price{font-family:var(--mono);font-size:12px;color:var(--dim);flex-shrink:0}
-  .inf-signal-trade{padding:6px 14px;border-radius:6px;background:var(--gold);color:#000;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;white-space:nowrap}
-  .inf-signal-trade:hover{background:#e8a914}
+  .pred-thesis{font-size:13px;line-height:1.5;color:var(--soft);margin-bottom:12px;white-space:pre-wrap;word-break:break-word}
 
-  /* Accuracy badge */
-  .inf-accuracy{display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px}
-  .inf-accuracy.good{background:rgba(0,230,138,0.12);color:var(--green)}
-  .inf-accuracy.mid{background:rgba(245,158,11,0.12);color:var(--amber)}
-  .inf-accuracy.low{background:rgba(255,77,106,0.12);color:var(--red)}
+  /* Status badge for resolved */
+  .pred-status{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-bottom:8px}
+  .pred-status.win{background:rgba(0,230,138,0.12);color:var(--green)}
+  .pred-status.loss{background:rgba(255,77,106,0.12);color:var(--red)}
 
   /* Actions bar */
-  .inf-actions{display:flex;align-items:center;gap:4px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.04)}
-  .inf-action{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--dim);cursor:pointer;border:none;background:none;padding:6px 10px;border-radius:8px;transition:all .12s;min-height:32px}
-  .inf-action:hover{background:rgba(255,255,255,0.04);color:var(--ink)}
-  .inf-action.active-agree{color:var(--green);background:rgba(0,230,138,0.08)}
-  .inf-action.active-disagree{color:var(--red);background:rgba(255,77,106,0.08)}
-  .inf-action.active-fire{color:var(--amber);background:rgba(245,158,11,0.08)}
-  .inf-action svg{width:16px;height:16px;flex-shrink:0}
+  .pred-actions{display:flex;align-items:center;gap:16px;padding-top:10px;border-top:1px solid var(--border)}
+  .pred-action{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--dim);cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;transition:all .12s}
+  .pred-action:hover{background:rgba(255,255,255,0.04);color:var(--ink)}
+  .pred-action.active-agree{color:var(--green)}
+  .pred-action.active-disagree{color:var(--red)}
+  .pred-action.active-fire{color:var(--amber)}
+  .pred-action svg{width:16px;height:16px}
 
-  /* Comments */
-  .inf-comments{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.04)}
-  .inf-comment{display:flex;gap:8px;padding:6px 0}
-  .inf-comment-avatar{width:24px;height:24px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--dim);flex-shrink:0}
-  .inf-comment-body{flex:1;font-size:12px;color:var(--soft);line-height:1.4}
-  .inf-comment-author{font-weight:700;color:var(--ink);margin-right:4px}
-  .inf-comment-time{font-size:10px;color:var(--dim);margin-left:4px}
+  /* Comments inline */
+  .pred-comments{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .pred-comment{display:flex;gap:8px;padding:6px 0}
+  .pred-comment-avatar{width:24px;height:24px;border-radius:50%;background:var(--paper-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--dim);flex-shrink:0}
+  .pred-comment-body{flex:1;font-size:12px;color:var(--soft);line-height:1.4}
+  .pred-comment-author{font-weight:600;color:var(--ink);margin-right:4px}
+  .pred-comment-time{font-size:10px;color:var(--dim);margin-left:4px}
   .comment-input-wrap{display:flex;gap:8px;margin-top:8px}
-  .comment-input{flex:1;background:var(--paper-3);border:1px solid var(--border);border-radius:20px;padding:8px 14px;color:var(--ink);font-family:var(--sans);font-size:12px;outline:none;resize:none}
+  .comment-input{flex:1;background:var(--paper-3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--ink);font-family:var(--sans);font-size:12px;outline:none;resize:none}
   .comment-input:focus{border-color:var(--gold)}
-  .comment-submit{padding:8px 16px;border-radius:20px;background:var(--gold);color:#000;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0}
-
-  /* Sidebar cards */
-  .sidebar-card{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
-  .sidebar-title{font-size:14px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-  .sidebar-inf{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
-  .sidebar-inf:last-child{border-bottom:none}
-  .sidebar-inf-avatar{width:32px;height:32px;border-radius:50%;background:var(--paper-3);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--gold)}
-  .sidebar-inf-avatar img{width:100%;height:100%;object-fit:cover}
-  .sidebar-inf-info{flex:1;min-width:0}
-  .sidebar-inf-name{font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sidebar-inf-meta{font-size:10px;color:var(--dim);font-family:var(--mono)}
-  .sidebar-follow-btn{padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid var(--gold);background:none;color:var(--gold);cursor:pointer;flex-shrink:0;transition:all .12s}
-  .sidebar-follow-btn:hover{background:rgba(201,146,13,0.15)}
-  .sidebar-follow-btn.following{background:var(--gold);color:#000}
+  .comment-submit{padding:8px 14px;border-radius:8px;background:var(--gold);color:#000;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0}
 
   /* Empty state */
   .feed-empty{text-align:center;padding:60px 20px}
   .feed-empty-icon{font-size:48px;margin-bottom:16px}
   .feed-empty-title{font-size:18px;font-weight:700;margin-bottom:8px}
-  .feed-empty-sub{font-size:13px;color:var(--dim);margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto;line-height:1.5}
-  .feed-empty-btn{display:inline-block;padding:10px 24px;background:var(--gold);color:#000;font-weight:700;font-size:13px;border-radius:20px;border:none;cursor:pointer}
+  .feed-empty-sub{font-size:13px;color:var(--dim);margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto}
+  .feed-empty-btn{display:inline-block;padding:10px 24px;background:var(--gold);color:#000;font-weight:700;font-size:13px;border-radius:8px;border:none;cursor:pointer}
 
-  .feed-loading{text-align:center;padding:40px;color:var(--dim);font-size:13px}
-  .load-more-btn{display:block;width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;margin-top:8px;transition:all .15s}
-  .load-more-btn:hover{border-color:var(--gold);color:var(--ink)}
-
-  /* Post modal */
-  .post-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:80px 16px 16px}
+  /* Post prediction modal */
+  .post-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
   .post-modal-overlay.open{display:flex}
-  .post-modal{background:var(--paper-2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;padding:24px}
+  .post-modal{background:var(--paper-2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px}
   .post-modal-title{font-size:18px;font-weight:800;margin-bottom:16px}
   .post-field{margin-bottom:14px}
   .post-label{display:block;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
@@ -149,80 +104,55 @@
   .post-input:focus{border-color:var(--gold)}
   .post-textarea{width:100%;background:var(--paper-3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--ink);font-family:var(--sans);font-size:13px;outline:none;resize:vertical;min-height:80px}
   .post-textarea:focus{border-color:var(--gold)}
-  .post-side-toggle{display:flex;gap:8px}
+  .post-side-toggle{display:flex;gap:8px;margin-bottom:14px}
   .post-side-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--paper-3);color:var(--dim);font-weight:700;font-size:14px;cursor:pointer;transition:all .12s}
   .post-side-btn.selected-yes{background:rgba(0,230,138,0.15);border-color:var(--green);color:var(--green)}
   .post-side-btn.selected-no{background:rgba(255,77,106,0.15);border-color:var(--red);color:var(--red)}
   .post-actions{display:flex;gap:10px;margin-top:18px}
-  .post-cancel{flex:1;padding:10px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--dim);font-weight:600;font-size:13px;cursor:pointer}
-  .post-submit{flex:1;padding:10px;border-radius:20px;border:none;background:var(--gold);color:#000;font-weight:700;font-size:13px;cursor:pointer}
+  .post-cancel{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--dim);font-weight:600;font-size:13px;cursor:pointer}
+  .post-submit{flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;font-size:13px;cursor:pointer}
   .post-submit:disabled{opacity:0.4;cursor:not-allowed}
 
-  @media(max-width:900px){
-    .feed-sidebar{display:none}
-  }
+  /* Loading spinner */
+  .feed-loading{text-align:center;padding:40px;color:var(--dim);font-size:13px}
+
+  /* Load more */
+  .load-more-btn{display:block;width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;margin-top:8px;transition:all .15s}
+  .load-more-btn:hover{border-color:var(--gold);color:var(--ink)}
+
   @media(max-width:480px){
-    .feed-page{padding:70px 10px 30px}
-    .feed-tab{padding:10px 14px;font-size:12px}
-    .inf-card{padding:12px}
-    .inf-signal{flex-wrap:wrap}
+    .feed-layout{padding:70px 10px 30px}
+    .feed-header{flex-direction:column;align-items:flex-start}
+    .pred-card{padding:12px}
   }
 </style>
 </head>
 <body>
 <div id="nav-root"></div>
-<script src="/nav.js?v=14"></script>
+<script src="/nav.js?v=13"></script>
 
-<div class="feed-page">
-  <!-- Main feed column -->
-  <div class="feed-main">
-    <div class="feed-header">
-      <div class="feed-title">The <span>Feed</span></div>
-      <div class="feed-tabs">
-        <button class="feed-tab active" id="tabForYou" onclick="switchTab('foryou')">For You</button>
-        <button class="feed-tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
-        <button class="feed-tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
-      </div>
-    </div>
-
-    <!-- Category pills -->
-    <div class="feed-cats" id="feedCats">
-      <button class="cat-pill active" onclick="filterCat(null,this)">All</button>
-      <button class="cat-pill" onclick="filterCat('x',this)">X / Twitter</button>
-      <button class="cat-pill" onclick="filterCat('reddit',this)">Reddit</button>
-      <button class="cat-pill" onclick="filterCat('youtube',this)">YouTube</button>
-      <button class="cat-pill" onclick="filterCat('substack',this)">Substack</button>
-    </div>
-
-    <!-- Post prediction CTA -->
-    <div class="post-cta" id="postCta" onclick="openPostModal()">
-      <div class="post-cta-avatar" id="postAvatar">?</div>
-      <div class="post-cta-text">What's your prediction?</div>
-      <button class="post-cta-btn">Post</button>
-    </div>
-
-    <!-- Feed items -->
-    <div id="feedContainer">
-      <div class="feed-loading" id="feedLoading">Loading feed...</div>
-    </div>
-
-    <button class="load-more-btn" id="loadMoreBtn" style="display:none" onclick="loadMore()">Show more</button>
-  </div>
-
-  <!-- Sidebar -->
-  <div class="feed-sidebar">
-    <div class="sidebar-card" id="sidebarInfluencers">
-      <div class="sidebar-title">Top Voices</div>
-      <div id="sidebarInfList" style="font-size:12px;color:var(--dim)">Loading...</div>
-    </div>
-    <div class="sidebar-card">
-      <div class="sidebar-title">About</div>
-      <p style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:10px">
-        The prediction market social feed. See what politicians, traders, and analysts are saying about live markets. Agree or disagree — build your track record.
-      </p>
-      <a href="/predictors" style="font-size:12px;font-weight:600;color:var(--gold)">See top predictors &rarr;</a>
+<div class="feed-layout">
+  <div class="feed-header">
+    <div class="feed-title">Prediction Feed</div>
+    <div class="feed-tabs">
+      <button class="feed-tab active" id="tabFollowing" onclick="switchTab('following')">Following</button>
+      <button class="feed-tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
     </div>
   </div>
+
+  <!-- Post prediction CTA -->
+  <div class="post-cta" id="postCta" onclick="openPostModal()">
+    <div class="post-cta-avatar" id="postAvatar">?</div>
+    <div class="post-cta-text">Share your prediction...</div>
+    <button class="post-cta-btn">Predict</button>
+  </div>
+
+  <!-- Feed items -->
+  <div id="feedContainer">
+    <div class="feed-loading" id="feedLoading">Loading predictions...</div>
+  </div>
+
+  <button class="load-more-btn" id="loadMoreBtn" style="display:none" onclick="loadMore()">Load more</button>
 </div>
 
 <!-- Post Prediction Modal -->
@@ -254,7 +184,7 @@
     </div>
     <div class="post-actions">
       <button class="post-cancel" onclick="closePostModal()">Cancel</button>
-      <button class="post-submit" id="postSubmitBtn" onclick="submitPrediction()">Post</button>
+      <button class="post-submit" id="postSubmitBtn" onclick="submitPrediction()">Post Prediction</button>
     </div>
   </div>
 </div>
@@ -262,23 +192,19 @@
 <script>
 var API = window.location.origin;
 var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
-var currentTab = 'foryou';
-var currentCat = null;
+var currentTab = 'following';
 var nextCursor = null;
 var feedData = [];
 var _postSide = null;
-var _followedInfSet = new Set();
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function timeAgo(d) {
-  if (!d) return '';
   var s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
   if (s < 60) return s + 's';
   if (s < 3600) return Math.floor(s/60) + 'm';
   if (s < 86400) return Math.floor(s/3600) + 'h';
-  if (s < 604800) return Math.floor(s/86400) + 'd';
-  return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  return Math.floor(s/86400) + 'd';
 }
 
 function authHeaders() {
@@ -287,44 +213,26 @@ function authHeaders() {
   return h;
 }
 
-function platformIcon(p) {
-  if (p === 'x') return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
-  if (p === 'reddit') return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 13.5c0 1.38-2.01 2.5-4.5 2.5s-4.5-1.12-4.5-2.5"/><circle cx="9" cy="11" r="1.5"/><circle cx="15" cy="11" r="1.5"/></svg>';
-  if (p === 'youtube') return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23 9.71a8.5 8.5 0 00-.91-4.13 2.92 2.92 0 00-1.72-1A78.36 78.36 0 0012 4.27a78.45 78.45 0 00-8.34.3 2.87 2.87 0 00-1.46.74c-.9.83-1 2.25-1.1 3.45a48.29 48.29 0 000 6.48 9.55 9.55 0 00.3 2 3.14 3.14 0 00.71 1.36 2.86 2.86 0 001.49.78 45.18 45.18 0 006.5.33c3.5.05 6.57 0 10.2-.46a2.86 2.86 0 001.44-.77 2.89 2.89 0 00.67-1.39 9.55 9.55 0 00.3-2V9.71zM9.74 14.85V8.66l5.92 3.11c-1.66.88-3.96 2.1-5.92 3.08z"/></svg>';
-  if (p === 'substack') return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/></svg>';
-  return '';
-}
-
-function badgeClass(cat) {
-  if (!cat) return 'trader';
-  var c = cat.toLowerCase();
-  if (c.includes('polit')) return 'politician';
-  if (c.includes('crypto')) return 'crypto';
-  if (c.includes('analyst') || c.includes('forecast')) return 'analyst';
-  if (c.includes('whale')) return 'whale';
-  return 'trader';
-}
-
 // ── Feed Loading ──
 async function loadFeed(append) {
   if (!append) {
-    document.getElementById('feedContainer').innerHTML = '<div class="feed-loading">Loading feed...</div>';
+    document.getElementById('feedContainer').innerHTML = '<div class="feed-loading">Loading predictions...</div>';
     nextCursor = null;
     feedData = [];
   }
 
-  var url = API + '/api/influencer-feed/unified?tab=' + currentTab + '&limit=25';
-  if (nextCursor) url += '&before=' + encodeURIComponent(nextCursor);
-  if (currentCat) url += '&category=' + encodeURIComponent(currentCat);
+  var url = currentTab === 'trending'
+    ? API + '/api/social/feed/trending?limit=20'
+    : API + '/api/social/feed?limit=20' + (nextCursor ? '&before=' + encodeURIComponent(nextCursor) : '');
 
   try {
     var r = await fetch(url, { headers: authHeaders() });
     var data = await r.json();
-    var posts = data.posts || [];
+    var preds = data.predictions || [];
     nextCursor = data.next_cursor || null;
 
-    if (!append) feedData = posts;
-    else feedData = feedData.concat(posts);
+    if (!append) feedData = preds;
+    else feedData = feedData.concat(preds);
 
     renderFeed();
     document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
@@ -339,190 +247,126 @@ function loadMore() { loadFeed(true); }
 function renderFeed() {
   var container = document.getElementById('feedContainer');
   if (!feedData.length) {
-    var msgs = {
-      foryou: { icon: '📡', title: 'Feed is warming up', sub: 'Influencer posts from X, Reddit, YouTube and Substack will appear here as they\'re ingested. Check back soon!' },
-      following: { icon: '👀', title: 'Follow some voices', sub: 'Follow influencers from the sidebar to see their posts here. Or explore the For You tab.' },
-      trending: { icon: '🔥', title: 'No trending posts yet', sub: 'Posts with high engagement will surface here. Start reacting to boost them!' }
-    };
-    var m = msgs[currentTab] || msgs.foryou;
+    var isFollowing = currentTab === 'following';
     container.innerHTML =
       '<div class="feed-empty">' +
-        '<div class="feed-empty-icon">' + m.icon + '</div>' +
-        '<div class="feed-empty-title">' + m.title + '</div>' +
-        '<div class="feed-empty-sub">' + m.sub + '</div>' +
+        '<div class="feed-empty-icon">' + (isFollowing ? '👀' : '🔥') + '</div>' +
+        '<div class="feed-empty-title">' + (isFollowing ? 'Your feed is empty' : 'No trending predictions yet') + '</div>' +
+        '<div class="feed-empty-sub">' + (isFollowing
+          ? 'Follow traders on the <a href="/predictors">Predictors</a> page to see their predictions here. Or post your own!'
+          : 'Be the first to share a prediction and start the conversation.') + '</div>' +
+        '<button class="feed-empty-btn" onclick="openPostModal()">Post a Prediction</button>' +
       '</div>';
     return;
   }
 
-  container.innerHTML = feedData.map(function(p) { return renderInfluencerCard(p); }).join('');
+  container.innerHTML = feedData.map(function(p) { return renderPredictionCard(p); }).join('');
 }
 
-function renderInfluencerCard(p) {
-  var name = escHtml(p.influencer_name || 'Unknown');
-  var handle = escHtml(p.influencer_handle || '');
-  var platform = p.influencer_platform || p.platform || 'x';
-  var initial = (p.influencer_name || '?')[0].toUpperCase();
-  var avatarUrl = p.influencer_avatar || p.avatar_url || '';
-  var avatarHtml = avatarUrl
-    ? '<img src="' + escHtml(avatarUrl) + '" alt="" onerror="this.parentElement.textContent=\'' + escHtml(initial) + '\'">'
-    : escHtml(initial);
+function renderPredictionCard(p) {
+  var author = p.author || {};
+  var authorName = escHtml(author.display_name || 'Anonymous');
+  var initial = (author.display_name || '?')[0].toUpperCase();
+  var sideClass = p.side === 'YES' ? 'yes' : 'no';
+  var priceDisplay = (parseFloat(p.entry_price) * 100).toFixed(0) + '\u00a2';
 
-  // Follow button
-  var infId = p.influencer_db_id || '';
-  var isFollowing = p.is_following || _followedInfSet.has(infId);
-  var followHtml = infId
-    ? '<button class="inf-follow-btn' + (isFollowing ? ' following' : '') + '" onclick="event.stopPropagation();toggleFollowInf(\'' + escHtml(infId) + '\',this)">' + (isFollowing ? 'Following' : 'Follow') + '</button>'
-    : '';
-
-  // Category badge
-  var cat = p.category || (POLITICIAN_HANDLES.has(handle) ? 'politician' : 'trader');
-  var bc = badgeClass(cat);
-  var badgeHtml = '<span class="inf-badge ' + bc + '">' + escHtml(cat) + '</span>';
-
-  // Accuracy badge
-  var accHtml = '';
-  if (p.known_accuracy != null && p.known_accuracy > 0) {
-    var acc = parseFloat(p.known_accuracy);
-    var accClass = acc >= 65 ? 'good' : acc >= 50 ? 'mid' : 'low';
-    accHtml = ' <span class="inf-accuracy ' + accClass + '">' + acc.toFixed(0) + '% acc</span>';
+  var statusHtml = '';
+  if (p.status === 'resolved_win') {
+    var pnlStr = p.pnl != null ? ' (+$' + parseFloat(p.pnl).toFixed(2) + ')' : '';
+    statusHtml = '<div class="pred-status win">Won' + escHtml(pnlStr) + '</div>';
+  } else if (p.status === 'resolved_loss') {
+    var pnlStr2 = p.pnl != null ? ' (-$' + Math.abs(parseFloat(p.pnl)).toFixed(2) + ')' : '';
+    statusHtml = '<div class="pred-status loss">Lost' + escHtml(pnlStr2) + '</div>';
+  } else if (p.status === 'closed') {
+    statusHtml = '<div class="pred-status" style="background:rgba(255,255,255,0.06);color:var(--dim)">Closed</div>';
   }
 
-  // Source link
-  var sourceUrl = p.content_url || p.source_url || '';
-  var sourceHtml = '<div class="inf-source">' + platformIcon(platform) + ' <span>via ' + escHtml(platform) + '</span>';
-  if (sourceUrl) sourceHtml += ' · <a href="' + escHtml(sourceUrl) + '" target="_blank" rel="noopener">view original</a>';
-  sourceHtml += ' · ' + timeAgo(p.published_at) + '</div>';
-
-  // Content text
-  var content = p.content_text || p.content || '';
-  var contentHtml = content
-    ? '<div class="inf-content">' + escHtml(content.slice(0, 600)) + (content.length > 600 ? '...' : '') + '</div>'
+  var thesisHtml = p.thesis
+    ? '<div class="pred-thesis">' + escHtml(p.thesis) + '</div>'
     : '';
 
-  // Market signal card (if matched to a Polymarket market)
-  var signalHtml = '';
-  if (p.market_slug && p.market_question) {
-    var sideClass = p.predicted_side === 'YES' ? 'yes' : p.predicted_side === 'NO' ? 'no' : '';
-    var sideLabel = p.predicted_side || '?';
-    var priceStr = p.entry_price ? (parseFloat(p.entry_price) * 100).toFixed(0) + '\u00a2' : '';
-    signalHtml = '<a class="inf-signal" href="/market/' + escHtml(p.market_slug) + '">' +
-      (sideClass ? '<div class="inf-signal-side ' + sideClass + '">' + sideLabel + '</div>' : '') +
-      '<div class="inf-signal-market">' + escHtml(p.market_question) + '</div>' +
-      (priceStr ? '<div class="inf-signal-price">@ ' + priceStr + '</div>' : '') +
-      '<button class="inf-signal-trade" onclick="event.preventDefault();event.stopPropagation();window.open(\'/market/' + escHtml(p.market_slug) + '\',\'_blank\')">Trade</button>' +
-    '</a>';
-  }
+  var sizeHtml = p.show_size && p.amount_usd
+    ? ' &middot; <span>$' + parseFloat(p.amount_usd).toFixed(2) + '</span>'
+    : '';
 
-  // Reactions
-  var myR = p.my_reaction || '';
-  var agreeC = myR === 'agree' ? ' active-agree' : '';
-  var disagreeC = myR === 'disagree' ? ' active-disagree' : '';
-  var fireC = myR === 'fire' ? ' active-fire' : '';
-  var agreeN = p.agree_count || 0;
-  var disagreeN = p.disagree_count || 0;
-  var fireN = p.fire_count || 0;
-  var commentN = p.comment_count || 0;
+  var myReaction = p.my_reaction || '';
+  var agreeClass = myReaction === 'agree' ? ' active-agree' : '';
+  var disagreeClass = myReaction === 'disagree' ? ' active-disagree' : '';
+  var fireClass = myReaction === 'fire' ? ' active-fire' : '';
 
-  return '<div class="inf-card" id="inf-' + p.id + '">' +
-    '<div class="inf-head">' +
-      '<div class="inf-avatar">' + avatarHtml + '</div>' +
-      '<div class="inf-info">' +
-        '<div class="inf-name-row">' +
-          '<span class="inf-name">' + name + '</span>' +
-          '<span class="inf-handle">@' + handle + '</span>' +
-          badgeHtml + accHtml +
-        '</div>' +
-        sourceHtml +
+  return '<div class="pred-card" id="pred-' + p.id + '">' +
+    '<div class="pred-head">' +
+      '<div class="pred-avatar">' + escHtml(initial) + '</div>' +
+      '<div class="pred-meta">' +
+        '<a href="/m/' + (author.id || '') + '" class="pred-author">' + authorName + '</a>' +
+        '<span class="pred-time">' + timeAgo(p.created_at) + '</span>' +
       '</div>' +
-      followHtml +
+      '<div class="pred-side ' + sideClass + '">' + p.side + '</div>' +
     '</div>' +
-    contentHtml +
-    signalHtml +
-    '<div class="inf-actions">' +
-      '<button class="inf-action' + agreeC + '" onclick="reactInf(\'' + p.id + '\',\'agree\')" title="Agree with this prediction">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 10v12"/><path d="M15 5.88L14 10h5.83a2 2 0 011.92 2.56l-2.33 8A2 2 0 0117.5 22H4a2 2 0 01-2-2v-8a2 2 0 012-2h2.76a2 2 0 001.79-1.11L12 2h0a3.13 3.13 0 013 3.88z"/></svg>' +
-        '<span>' + (agreeN > 0 ? agreeN : '') + '</span>' +
+    '<a href="/market/' + escHtml(p.market_slug) + '" class="pred-market">' + escHtml(p.market_title) + '</a>' +
+    '<div class="pred-price">Entry: <span>' + priceDisplay + '</span>' + sizeHtml + '</div>' +
+    statusHtml +
+    thesisHtml +
+    '<div class="pred-actions">' +
+      '<button class="pred-action' + agreeClass + '" onclick="react(\'' + p.id + '\',\'agree\')" title="Agree">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-6 0v4"/><path d="M18 9H5a2 2 0 00-2 2v9a2 2 0 002 2h13a2 2 0 002-2v-9a2 2 0 00-2-2z"/></svg>' +
+        '<span>' + (p.reaction_count || 0) + '</span>' +
       '</button>' +
-      '<button class="inf-action' + disagreeC + '" onclick="reactInf(\'' + p.id + '\',\'disagree\')" title="Disagree">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 14V2"/><path d="M9 18.12L10 14H4.17a2 2 0 01-1.92-2.56l2.33-8A2 2 0 016.5 2H20a2 2 0 012 2v8a2 2 0 01-2 2h-2.76a2 2 0 00-1.79 1.11L12 22h0a3.13 3.13 0 01-3-3.88z"/></svg>' +
-        '<span>' + (disagreeN > 0 ? disagreeN : '') + '</span>' +
+      '<button class="pred-action' + disagreeClass + '" onclick="react(\'' + p.id + '\',\'disagree\')" title="Disagree">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15V19a3 3 0 006 0v-4"/><path d="M6 15h13a2 2 0 002-2V4a2 2 0 00-2-2H6a2 2 0 00-2 2v9a2 2 0 002 2z"/></svg>' +
       '</button>' +
-      '<button class="inf-action' + fireC + '" onclick="reactInf(\'' + p.id + '\',\'fire\')" title="Fire take">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c-4.97 0-9-2.69-9-6v-2c0-4.97 4.03-9 9-9 1 0 2 .5 2 2s-1 2.5-1 4c0 2.21 1.79 4 4 4 .5 0 1-.06 1.5-.17C19.76 17.61 17 22 12 22z"/></svg>' +
-        '<span>' + (fireN > 0 ? fireN : '') + '</span>' +
+      '<button class="pred-action' + fireClass + '" onclick="react(\'' + p.id + '\',\'fire\')" title="Fire">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4-3 8-7 8-12a8 8 0 00-16 0c0 5 4 9 8 12z"/></svg>' +
       '</button>' +
-      '<button class="inf-action" onclick="toggleInfComments(\'' + p.id + '\')" title="Comments">' +
+      '<button class="pred-action" onclick="toggleComments(\'' + p.id + '\')" title="Comments">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>' +
-        '<span>' + (commentN > 0 ? commentN : '') + '</span>' +
+        '<span>' + (p.comment_count || 0) + '</span>' +
       '</button>' +
-      '<button class="inf-action" onclick="shareInf(\'' + p.id + '\')" title="Share">' +
+      '<button class="pred-action" onclick="sharePrediction(\'' + p.id + '\')" title="Share">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>' +
       '</button>' +
     '</div>' +
-    '<div class="inf-comments" id="comments-' + p.id + '" style="display:none"></div>' +
+    '<div class="pred-comments" id="comments-' + p.id + '" style="display:none"></div>' +
   '</div>';
 }
-
-// Known politician handles for badge assignment
-var POLITICIAN_HANDLES = new Set([
-  'ThomasMassie','RandPaul','WarrenDavidson','TomEmmer','SenLummis',
-  'PatrickMcHenry','ByronDonalds','SenWarren','AOC','BernieSanders',
-  'realDonaldTrump','elonmusk','VivekGRamaswamy','SenTedCruz','mattgaetz',
-  'RobertKennedyJr','TulsiGabbard','RepMTG','Jim_Jordan','GovRonDeSantis'
-]);
 
 // ── Tabs ──
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.feed-tab').forEach(function(t) { t.classList.remove('active'); });
-  var el = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
-  if (el) el.classList.add('active');
-  // Map tabForYou -> tabForyou fix
-  if (tab === 'foryou') document.getElementById('tabForYou').classList.add('active');
-  loadFeed(false);
-}
-
-// ── Category filter ──
-function filterCat(cat, btn) {
-  currentCat = cat;
-  document.querySelectorAll('.cat-pill').forEach(function(p) { p.classList.remove('active'); });
-  if (btn) btn.classList.add('active');
+  document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
+  document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
   loadFeed(false);
 }
 
 // ── Reactions ──
-async function reactInf(postId, type) {
+async function react(predId, type) {
   if (!token) { window.location.href = '/creator/login'; return; }
   try {
-    var r = await fetch(API + '/api/influencer-feed/posts/' + postId + '/react', {
+    var r = await fetch(API + '/api/social/reactions', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ reaction: type })
+      body: JSON.stringify({ target_type: 'prediction', target_id: predId, reaction_type: type })
     });
     var data = await r.json();
-    var p = feedData.find(function(x) { return x.id === postId; });
-    if (p) {
+    // Update local state and re-render the card
+    var pred = feedData.find(function(p) { return p.id === predId; });
+    if (pred) {
       if (data.reacted) {
-        // If switched, decrement old
-        if (data.switched && p.my_reaction) {
-          var oldKey = p.my_reaction + '_count';
-          p[oldKey] = Math.max(0, (p[oldKey] || 0) - 1);
-        }
-        p.my_reaction = type;
-        p[type + '_count'] = (p[type + '_count'] || 0) + 1;
+        pred.my_reaction = type;
+        pred.reaction_count = (pred.reaction_count || 0) + 1;
       } else {
-        p.my_reaction = null;
-        p[type + '_count'] = Math.max(0, (p[type + '_count'] || 0) - 1);
+        pred.my_reaction = null;
+        pred.reaction_count = Math.max(0, (pred.reaction_count || 0) - 1);
       }
-      var el = document.getElementById('inf-' + postId);
-      if (el) el.outerHTML = renderInfluencerCard(p);
+      var el = document.getElementById('pred-' + predId);
+      if (el) el.outerHTML = renderPredictionCard(pred);
     }
   } catch (e) { console.error('Reaction error:', e); }
 }
 
 // ── Comments ──
-async function toggleInfComments(postId) {
-  var el = document.getElementById('comments-' + postId);
+async function toggleComments(predId) {
+  var el = document.getElementById('comments-' + predId);
   if (!el) return;
   if (el.style.display !== 'none') { el.style.display = 'none'; return; }
 
@@ -530,7 +374,7 @@ async function toggleInfComments(postId) {
   el.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:8px 0">Loading comments...</div>';
 
   try {
-    var r = await fetch(API + '/api/influencer-feed/posts/' + postId + '/comments', { headers: authHeaders() });
+    var r = await fetch(API + '/api/social/predictions/' + predId, { headers: authHeaders() });
     var data = await r.json();
     var comments = data.comments || [];
 
@@ -538,22 +382,23 @@ async function toggleInfComments(postId) {
     if (comments.length) {
       html = comments.map(function(c) {
         var initial = (c.author_name || '?')[0].toUpperCase();
-        return '<div class="inf-comment">' +
-          '<div class="inf-comment-avatar">' + escHtml(initial) + '</div>' +
-          '<div class="inf-comment-body">' +
-            '<span class="inf-comment-author">' + escHtml(c.author_name || 'Anon') + '</span>' +
+        return '<div class="pred-comment">' +
+          '<div class="pred-comment-avatar">' + escHtml(initial) + '</div>' +
+          '<div class="pred-comment-body">' +
+            '<span class="pred-comment-author">' + escHtml(c.author_name) + '</span>' +
             escHtml(c.body) +
-            '<span class="inf-comment-time">' + timeAgo(c.created_at) + '</span>' +
+            '<span class="pred-comment-time">' + timeAgo(c.created_at) + '</span>' +
           '</div>' +
         '</div>';
       }).join('');
     } else {
-      html = '<div style="font-size:12px;color:var(--dim);padding:8px 0">No comments yet. Be first!</div>';
+      html = '<div style="font-size:12px;color:var(--dim);padding:8px 0">No comments yet</div>';
     }
 
+    // Add comment input
     html += '<div class="comment-input-wrap">' +
-      '<textarea class="comment-input" id="commentInput-' + postId + '" placeholder="Add a comment..." rows="1"></textarea>' +
-      '<button class="comment-submit" onclick="postInfComment(\'' + postId + '\')">Reply</button>' +
+      '<textarea class="comment-input" id="commentInput-' + predId + '" placeholder="Add a comment..." rows="1"></textarea>' +
+      '<button class="comment-submit" onclick="postComment(\'' + predId + '\')">Post</button>' +
     '</div>';
 
     el.innerHTML = html;
@@ -562,73 +407,40 @@ async function toggleInfComments(postId) {
   }
 }
 
-async function postInfComment(postId) {
+async function postComment(predId) {
   if (!token) { window.location.href = '/creator/login'; return; }
-  var input = document.getElementById('commentInput-' + postId);
+  var input = document.getElementById('commentInput-' + predId);
   if (!input || !input.value.trim()) return;
 
   var body = input.value.trim();
   input.disabled = true;
 
   try {
-    await fetch(API + '/api/influencer-feed/posts/' + postId + '/comment', {
+    await fetch(API + '/api/social/comments', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ body: body })
+      body: JSON.stringify({ prediction_id: predId, body: body })
     });
-    var p = feedData.find(function(x) { return x.id === postId; });
-    if (p) p.comment_count = (p.comment_count || 0) + 1;
+    // Update count
+    var pred = feedData.find(function(p) { return p.id === predId; });
+    if (pred) pred.comment_count = (pred.comment_count || 0) + 1;
     // Reload comments
-    var el = document.getElementById('comments-' + postId);
-    if (el) el.style.display = 'none';
-    toggleInfComments(postId);
+    toggleComments(predId);
+    setTimeout(function() { toggleComments(predId); }, 50);
   } catch (e) {
     input.disabled = false;
+    alert('Error posting comment');
   }
-}
-
-// ── Follow Influencer ──
-async function toggleFollowInf(infId, btn) {
-  if (!token) { window.location.href = '/creator/login'; return; }
-  btn.disabled = true;
-  try {
-    var r = await fetch(API + '/api/influencers/' + infId + '/follow', {
-      method: 'POST',
-      headers: authHeaders()
-    });
-    var data = await r.json();
-    if (data.following) {
-      _followedInfSet.add(infId);
-      btn.textContent = 'Following';
-      btn.classList.add('following');
-    } else {
-      _followedInfSet.delete(infId);
-      btn.textContent = 'Follow';
-      btn.classList.remove('following');
-    }
-    // Update all follow buttons for this influencer
-    document.querySelectorAll('[onclick*="toggleFollowInf(\'' + infId + '\'"]').forEach(function(b) {
-      if (b !== btn) {
-        b.textContent = data.following ? 'Following' : 'Follow';
-        b.classList.toggle('following', data.following);
-      }
-    });
-  } catch (e) { console.error('Follow error:', e); }
-  btn.disabled = false;
 }
 
 // ── Share ──
-function shareInf(postId) {
-  var p = feedData.find(function(x) { return x.id === postId; });
-  if (!p) return;
-  var text = '';
-  if (p.market_question && p.predicted_side) {
-    text = p.influencer_name + ' says ' + p.predicted_side + ' on "' + p.market_question + '"';
-  } else {
-    text = p.influencer_name + ': ' + (p.content_text || '').slice(0, 200);
-  }
+function sharePrediction(predId) {
+  var pred = feedData.find(function(p) { return p.id === predId; });
+  if (!pred) return;
+  var url = 'https://hyperflex.network/market/' + pred.market_slug;
+  var text = pred.side + ' on "' + pred.market_title + '" at ' + (parseFloat(pred.entry_price)*100).toFixed(0) + '\u00a2';
+  if (pred.thesis) text += ' \u2014 ' + pred.thesis.slice(0, 120);
   text += '\n\nvia @hyperflexio';
-  var url = p.market_slug ? 'https://hyperflex.network/market/' + p.market_slug : 'https://hyperflex.network/feed';
   window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank');
 }
 
@@ -678,66 +490,32 @@ async function submitPrediction() {
     if (!r.ok) throw new Error(data.error || 'Failed to post');
 
     closePostModal();
+    // Clear form
     document.getElementById('postMarketTitle').value = '';
     document.getElementById('postMarketSlug').value = '';
     document.getElementById('postPrice').value = '';
     document.getElementById('postThesis').value = '';
     _postSide = null;
     selectSide(null);
+
+    // Reload feed
     loadFeed(false);
   } catch (e) {
     alert('Error: ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Post';
+    btn.textContent = 'Post Prediction';
   }
 }
 
+// Close modal on overlay click
 document.getElementById('postModal').addEventListener('click', function(e) {
   if (e.target === this) closePostModal();
 });
 
-// ── Sidebar: Load Featured Influencers ──
-async function loadSidebarInfluencers() {
-  try {
-    var r = await fetch(API + '/api/influencer-feed/featured');
-    var data = await r.json();
-    var infs = data.influencers || [];
-    var el = document.getElementById('sidebarInfList');
-    if (!infs.length) { el.innerHTML = '<span style="color:var(--dim)">No influencers yet</span>'; return; }
-
-    // Load follow states
-    if (token) {
-      try {
-        var fr = await fetch(API + '/api/influencer-feed/following', { headers: authHeaders() });
-        var fd = await fr.json();
-        (fd.following || []).forEach(function(id) { _followedInfSet.add(id); });
-      } catch {}
-    }
-
-    el.innerHTML = infs.slice(0, 8).map(function(inf) {
-      var initial = (inf.name || '?')[0].toUpperCase();
-      var avatarHtml = inf.avatar_url
-        ? '<img src="' + escHtml(inf.avatar_url) + '" alt="" onerror="this.parentElement.textContent=\'' + escHtml(initial) + '\'">'
-        : escHtml(initial);
-      var isFollowing = _followedInfSet.has(inf.id);
-      var postCount = inf.post_count || 0;
-      return '<div class="sidebar-inf">' +
-        '<div class="sidebar-inf-avatar">' + avatarHtml + '</div>' +
-        '<div class="sidebar-inf-info">' +
-          '<div class="sidebar-inf-name">' + escHtml(inf.name) + '</div>' +
-          '<div class="sidebar-inf-meta">@' + escHtml(inf.handle) + ' · ' + postCount + ' posts</div>' +
-        '</div>' +
-        '<button class="sidebar-follow-btn' + (isFollowing ? ' following' : '') + '" onclick="toggleFollowInf(\'' + inf.id + '\',this)">' + (isFollowing ? 'Following' : 'Follow') + '</button>' +
-      '</div>';
-    }).join('');
-  } catch (e) {
-    document.getElementById('sidebarInfList').innerHTML = '<span style="color:var(--dim)">Failed to load</span>';
-  }
-}
-
 // ── Init ──
 (function() {
+  // Set avatar initial
   try {
     var t = token.split('.')[1];
     var payload = JSON.parse(atob(t));
@@ -746,7 +524,6 @@ async function loadSidebarInfluencers() {
   } catch(e) {}
 
   loadFeed(false);
-  loadSidebarInfluencers();
 })();
 </script>
 </body>
