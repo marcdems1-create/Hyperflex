@@ -12395,9 +12395,123 @@ app.delete('/api/admin/takes/:id', async (req, res) => {
   }
 });
 
-// POST /api/admin/import-tweet — import a tweet as an influencer take
+// POST /api/admin/import-url — paste JUST a tweet URL, auto-fetch everything
+// The tweet text is stored permanently — even if they delete it
+app.post('/api/admin/import-url', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    let { url, side } = req.body;
+    if (!url) return res.status(400).json({ error: 'Tweet URL required' });
+
+    // Extract handle from URL: https://x.com/USERNAME/status/123 or https://twitter.com/USERNAME/status/123
+    const urlMatch = url.match(/(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]+)\/status\/(\d+)/);
+    if (!urlMatch) return res.status(400).json({ error: 'Invalid tweet URL — must be x.com/user/status/id' });
+    const handle = urlMatch[1].toLowerCase();
+    const tweetId = urlMatch[2];
+
+    // Fetch tweet text via publish.twitter.com/oembed (public, no auth)
+    const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const oembedRes = await fetch(oembedUrl, {
+      signal: ctrl.signal, headers: { 'User-Agent': 'Hyperflex/1.0', Accept: 'application/json' }
+    }).finally(() => clearTimeout(tid));
+
+    if (!oembedRes.ok) return res.status(502).json({ error: 'Could not fetch tweet — oembed returned ' + oembedRes.status });
+    const oembed = await oembedRes.json();
+
+    // Extract text from oembed HTML
+    const rawHtml = oembed.html || '';
+    const tweetText = rawHtml.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+    const authorName = oembed.author_name || handle;
+
+    if (!tweetText || tweetText.length < 10) return res.status(400).json({ error: 'Could not extract tweet text' });
+
+    // Ensure influencer profile
+    const profile = await ensureInfluencerProfile(handle, authorName, `https://unavatar.io/x/${handle}`, null, null, null);
+    const userId = profile?.userId || null;
+
+    // Match to Polymarket market
+    let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
+
+    // Local screener cache
+    if (_screenerCache && _screenerCache.data) {
+      const STOPWORDS = new Set(['the','and','that','this','with','for','are','was','were','will','has','have','had','not','but','from','they','been','can','would','could','should','about','into','than','then','them','their','there','which','when','what','where','who','how','its','our','your','all','any','some','more','also','just','only','very','much','many','most','other','each','both','such']);
+      const tweetLower = tweetText.toLowerCase();
+      let bestMatch = null, bestScore = 0;
+      for (const m of _screenerCache.data) {
+        const qLower = (m.question || '').toLowerCase();
+        const qWords = qLower.split(/\s+/).filter(w => w.length >= 4 && !STOPWORDS.has(w));
+        if (!qWords.length) continue;
+        const hits = qWords.filter(w => tweetLower.includes(w)).length;
+        const ratio = hits / qWords.length;
+        if (ratio > bestScore && ratio >= 0.5 && hits >= 3) { bestScore = ratio; bestMatch = m; }
+      }
+      if (bestMatch) {
+        matchedSlug = bestMatch.slug || bestMatch.event_slug;
+        matchedQuestion = bestMatch.question;
+        matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
+      }
+    }
+
+    // Gamma API fallback
+    if (!matchedSlug) {
+      try {
+        const searchTerms = tweetText.split(/\s+/).filter(w => w.length >= 4).slice(0, 5).join(' ');
+        if (searchTerms) {
+          const gc = new AbortController();
+          const gt = setTimeout(() => gc.abort(), 5000);
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=3&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+            signal: gc.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+          }).finally(() => clearTimeout(gt));
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const top = (Array.isArray(gData) ? gData : [])[0];
+            if (top) {
+              matchedSlug = (top.events?.[0]?.slug) || top.slug || null;
+              matchedQuestion = top.question || top.title;
+              matchedConditionId = top.conditionId || null;
+            }
+          }
+        }
+      } catch (e) { /* gamma fallback failed */ }
+    }
+
+    // Infer side
+    const inferredSide = side ? side.toUpperCase() : (/\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill\b|\bgoing to\b|\bbet on\b/i.test(tweetText.toLowerCase()) ? 'YES' : 'NO');
+
+    // Dedupe by tweet URL
+    const dupe = await dbQuery("SELECT id FROM takes WHERE thesis LIKE $1 LIMIT 1", ['%' + url + '%']).catch(() => []);
+    if (dupe.length) return res.status(409).json({ error: 'Tweet already imported', take_id: dupe[0].id });
+
+    // Store permanently — thesis contains full tweet text + URL
+    const thesis = tweetText + '\n\n' + url;
+    const avatar = `https://unavatar.io/x/${handle}`;
+
+    const rows = await dbQuery(
+      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, thesis, source, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'influencer', NOW()) RETURNING id`,
+      [userId, authorName, avatar, matchedSlug, matchedConditionId, matchedQuestion || tweetText.substring(0, 150), inferredSide, thesis]
+    );
+
+    res.json({
+      ok: true,
+      take_id: rows[0]?.id,
+      author: authorName,
+      handle: handle,
+      text_preview: tweetText.substring(0, 100),
+      matched_market: matchedSlug ? { slug: matchedSlug, question: matchedQuestion } : null,
+      side: inferredSide,
+      permanent: true // stored forever, even if tweet is deleted
+    });
+  } catch (err) {
+    console.error('[import-url]', err.message);
+    res.status(500).json({ error: 'Failed to import: ' + err.message });
+  }
+});
+
+// POST /api/admin/import-tweet — import a tweet as an influencer take (manual text)
 // Body: { x_handle, tweet_text, tweet_url, side (optional), market_slug (optional) }
-// If side not provided, AI infers it. If market_slug not provided, auto-matches from screener.
 app.post('/api/admin/import-tweet', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {

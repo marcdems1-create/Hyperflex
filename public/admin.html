@@ -1122,6 +1122,22 @@
         <button class="refresh-btn" onclick="loadInfluencers()">Refresh</button>
       </div>
 
+      <!-- Quick URL import — just paste a tweet URL -->
+      <div style="background:linear-gradient(135deg,rgba(0,230,138,0.04),rgba(201,146,13,0.04));border:1px solid rgba(0,230,138,0.2);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--green);margin-bottom:4px;font-family:var(--mono)">Quick Import — Paste Tweet URL</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:10px">Auto-fetches text, matches to Polymarket market, stores permanently. Content is preserved even if tweet is deleted.</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="filter-input" id="quickUrl" placeholder="https://x.com/user/status/123..." style="flex:1;margin:0" onkeydown="if(event.key==='Enter')quickUrlImport()">
+          <select class="filter-input" id="quickSide" style="width:80px;margin:0;background:var(--surface);color:var(--text);border:1px solid var(--border)">
+            <option value="">Auto</option>
+            <option value="YES">YES</option>
+            <option value="NO">NO</option>
+          </select>
+          <button onclick="quickUrlImport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 18px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Import</button>
+        </div>
+        <div id="quickUrlMsg" style="font-size:11px;margin-top:8px;display:none"></div>
+      </div>
+
       <!-- Add influencer form -->
       <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px">
         <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;font-family:var(--mono)">Add Influencer</div>
@@ -2594,6 +2610,33 @@ async function importTweet() {
       loadInfluencers();
     } else { msg.textContent=data.error; msg.style.color='var(--red)'; }
   } catch(e) { msg.textContent=e.message; msg.style.color='var(--red)'; }
+}
+
+async function quickUrlImport() {
+  var url = document.getElementById('quickUrl').value.trim();
+  var side = document.getElementById('quickSide').value;
+  var msg = document.getElementById('quickUrlMsg');
+  if (!url) { msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Paste a tweet URL'; return; }
+  msg.style.display='block'; msg.style.color='var(--dim)'; msg.textContent='Fetching tweet...';
+  try {
+    var res = await fetch('/api/admin/import-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ url: url, side: side || null })
+    });
+    var data = await res.json();
+    if (data.ok) {
+      msg.style.color='var(--green)';
+      msg.textContent = '\u2713 Imported @' + data.handle + ': "' + (data.text_preview || '').substring(0, 50) + '..."' +
+        (data.matched_market ? ' \u2192 matched "' + data.matched_market.question.substring(0, 40) + '..."' : ' (no market match)') +
+        ' | ' + data.side + ' | Stored permanently';
+      document.getElementById('quickUrl').value = '';
+      loadRecentTakes();
+      loadInfluencers();
+    } else {
+      msg.style.color='var(--red)'; msg.textContent = data.error || 'Failed';
+    }
+  } catch(e) { msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent = e.message; }
 }
 
 async function deleteInfluencer(handle) {
