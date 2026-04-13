@@ -946,6 +946,82 @@ nav {
 .briefing-fg-label { font-size: 11px; font-weight: 600; }
 .briefing-link { font-family: var(--mono); font-size: 11px; color: var(--gold); text-decoration: none; font-weight: 700; }
 .briefing-link:hover { text-decoration: underline; }
+
+/* ═══ TAKES FEED ═══ */
+.takes-section { margin-bottom: 16px; }
+.takes-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+.takes-tab { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px; user-select: none; }
+.takes-tab:hover { color: var(--text-soft); }
+.takes-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.takes-compose { display: flex; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(22,22,31,0.4); }
+.takes-compose-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 700; color: #000; flex-shrink: 0; }
+.takes-compose-input { flex: 1; background: transparent; border: none; color: var(--text); font-family: var(--sans); font-size: 14px; resize: none; outline: none; min-height: 38px; line-height: 1.4; }
+.takes-compose-input::placeholder { color: var(--dim); }
+.takes-compose-btn { align-self: flex-end; font-family: var(--mono); font-size: 11px; font-weight: 700; color: #000; background: var(--gold); border: none; border-radius: 20px; padding: 7px 18px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.takes-compose-btn:hover { background: #daa520; transform: translateY(-1px); }
+.takes-compose-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+.takes-compose-market { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.takes-compose-market-pill { font-family: var(--mono); font-size: 10px; color: var(--accent-blue); background: var(--accent-blue-dim); padding: 3px 8px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+/* Take card */
+.take-card { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: default; }
+.take-card:hover { background: rgba(255,255,255,0.015); }
+.take-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: #000; flex-shrink: 0; }
+.take-avatar.whale { background: linear-gradient(135deg, #a855f7, #6d28d9); color: #fff; }
+.take-avatar.consensus { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; }
+.take-avatar.user { background: var(--gold); color: #000; }
+.take-body { flex: 1; min-width: 0; }
+.take-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.take-author { font-size: 13px; font-weight: 700; color: var(--text); }
+.take-source-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.take-source-badge.whale { background: var(--accent-purple-dim); color: var(--accent-purple); }
+.take-source-badge.consensus { background: var(--accent-amber-dim); color: var(--accent-amber); }
+.take-source-badge.user { display: none; }
+.take-sharp { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--accent-green); background: var(--accent-green-dim); padding: 2px 6px; border-radius: 4px; }
+.take-time { font-size: 11px; color: var(--dim); margin-left: auto; }
+.take-market-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 12px; background: rgba(22,22,31,0.8); border: 1px solid var(--border); border-radius: 10px; text-decoration: none; transition: all 0.15s; max-width: 100%; }
+.take-market-link:hover { border-color: var(--border-hover); background: rgba(30,30,42,0.8); }
+.take-market-q { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.take-side-pill { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 6px; flex-shrink: 0; }
+.take-side-pill.yes { background: var(--accent-green-dim); color: var(--accent-green); }
+.take-side-pill.no { background: var(--accent-red-dim); color: var(--accent-red); }
+.take-price { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--text-soft); flex-shrink: 0; }
+.take-thesis { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin-top: 6px; word-break: break-word; }
+.take-actions { display: flex; align-items: center; gap: 0; margin-top: 10px; }
+.take-action-btn { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--muted); background: none; border: none; padding: 5px 14px 5px 0; cursor: pointer; transition: all 0.15s; border-radius: 6px; }
+.take-action-btn:hover { color: var(--text-soft); }
+.take-action-btn.agree.active { color: var(--accent-green); }
+.take-action-btn.disagree.active { color: var(--accent-red); }
+.take-action-btn .icon { font-size: 15px; }
+.take-amount { font-family: var(--mono); font-size: 11px; color: var(--accent-amber); font-weight: 600; margin-top: 2px; }
+
+/* Quote take (nested) */
+.take-quote { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,0.2); }
+.take-quote .take-header { margin-bottom: 4px; }
+.take-quote .take-market-q { font-size: 12px; }
+
+/* Take compose modal overlay */
+.take-compose-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; align-items: flex-start; justify-content: center; padding-top: 15vh; }
+.take-compose-overlay.open { display: flex; }
+.take-compose-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 560px; padding: 20px; }
+.take-compose-modal h3 { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); margin-bottom: 14px; }
+.take-compose-modal textarea { width: 100%; min-height: 80px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: var(--sans); font-size: 14px; padding: 12px; resize: vertical; outline: none; }
+.take-compose-modal textarea:focus { border-color: var(--gold); }
+.take-compose-modal .compose-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.take-compose-modal .side-btn { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; transition: all 0.15s; }
+.take-compose-modal .side-btn.yes { color: var(--accent-green); }
+.take-compose-modal .side-btn.yes.selected { background: var(--accent-green-dim); border-color: var(--accent-green); }
+.take-compose-modal .side-btn.no { color: var(--accent-red); }
+.take-compose-modal .side-btn.no.selected { background: var(--accent-red-dim); border-color: var(--accent-red); }
+.take-compose-modal .compose-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.take-compose-modal .compose-cancel { font-family: var(--mono); font-size: 11px; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+.take-compose-modal .compose-submit { font-family: var(--mono); font-size: 11px; font-weight: 700; color: #000; background: var(--gold); border: none; border-radius: 8px; padding: 8px 20px; cursor: pointer; }
+.take-compose-modal .compose-submit:disabled { opacity: 0.4; }
+
+.takes-empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+.takes-empty .icon { font-size: 32px; margin-bottom: 8px; }
+.takes-empty .msg { font-size: 13px; }
+.takes-loading { text-align: center; padding: 20px; font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -1300,6 +1376,54 @@ nav {
           </div>
         </div>
         <div><a href="/data" class="briefing-link">Read full briefing →</a></div>
+      </div>
+    </div>
+
+    <!-- ═══ TAKES FEED — social prediction layer ═══ -->
+    <div class="takes-section" id="takes-section">
+      <div class="takes-tabs">
+        <div class="takes-tab active" onclick="switchTakesTab('foryou')" id="takes-tab-foryou">For You</div>
+        <div class="takes-tab" onclick="switchTakesTab('following')" id="takes-tab-following">Following</div>
+        <div class="takes-tab" onclick="switchTakesTab('trending')" id="takes-tab-trending">Trending</div>
+      </div>
+
+      <!-- Compose bar -->
+      <div class="takes-compose" id="takes-compose-bar">
+        <div class="takes-compose-avatar" id="takes-compose-avatar">?</div>
+        <div style="flex:1;cursor:text" onclick="openComposeModal()">
+          <span class="takes-compose-input" style="color:var(--dim);pointer-events:none">What's your take?</span>
+        </div>
+        <button class="takes-compose-btn" onclick="openComposeModal()">Post</button>
+      </div>
+
+      <!-- Feed container -->
+      <div id="takes-feed-container">
+        <div class="takes-loading">Loading takes...</div>
+      </div>
+
+      <!-- Load more -->
+      <div id="takes-load-more" style="display:none;text-align:center;padding:16px">
+        <button onclick="loadMoreTakes()" style="font-family:var(--mono);font-size:11px;color:var(--gold);background:transparent;border:1px solid rgba(201,146,13,0.3);border-radius:8px;padding:8px 24px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">Load more</button>
+      </div>
+    </div>
+
+    <!-- Compose Modal -->
+    <div class="take-compose-overlay" id="compose-overlay" onclick="if(event.target===this)closeComposeModal()">
+      <div class="take-compose-modal">
+        <h3>Post Your Take</h3>
+        <input type="text" id="compose-market-search" placeholder="Search for a market..." style="width:100%;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;margin-bottom:8px;outline:none" oninput="searchComposeMarkets(this.value)">
+        <div id="compose-market-results" style="max-height:140px;overflow-y:auto;margin-bottom:12px"></div>
+        <div id="compose-selected-market" style="display:none;margin-bottom:12px"></div>
+        <div class="compose-row" id="compose-side-row" style="display:none">
+          <button class="side-btn yes" onclick="selectComposeSide('YES')">YES</button>
+          <button class="side-btn no" onclick="selectComposeSide('NO')">NO</button>
+        </div>
+        <textarea id="compose-thesis" placeholder="What's your thesis? (optional)" maxlength="500"></textarea>
+        <div style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px"><span id="compose-char-count">0</span>/500</div>
+        <div class="compose-actions">
+          <button class="compose-cancel" onclick="closeComposeModal()">Cancel</button>
+          <button class="compose-submit" id="compose-submit-btn" onclick="submitTake()" disabled>Post Take</button>
+        </div>
       </div>
     </div>
 
@@ -3262,6 +3386,381 @@ async function handleExploreCopyCta() {
     }
   }catch(e){}
 })();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAKES FEED — social prediction layer
+// ══════════════════════════════════════════════════════════════════════════════
+
+var _takesMode = 'foryou';
+var _takesCursor = null;
+var _takesLoading = false;
+var _composeSelectedMarket = null;
+var _composeSide = null;
+
+function switchTakesTab(mode) {
+  _takesMode = mode;
+  _takesCursor = null;
+  document.querySelectorAll('.takes-tab').forEach(function(t){ t.classList.remove('active'); });
+  var tabEl = document.getElementById('takes-tab-' + mode);
+  if (tabEl) tabEl.classList.add('active');
+  // Hide compose on Following tab (you write takes, you don't compose in following)
+  var composeBar = document.getElementById('takes-compose-bar');
+  if (composeBar) composeBar.style.display = mode === 'following' ? 'none' : 'flex';
+  loadTakesFeed(false);
+}
+
+function getToken() {
+  return localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+}
+
+function loadTakesFeed(append) {
+  if (_takesLoading) return;
+  _takesLoading = true;
+  var container = document.getElementById('takes-feed-container');
+  if (!append) container.innerHTML = '<div class="takes-loading">Loading takes...</div>';
+
+  var url;
+  if (_takesMode === 'trending') {
+    url = '/api/takes/trending?limit=30' + (_takesCursor ? '&offset=' + _takesCursor : '');
+  } else {
+    url = '/api/takes/feed?mode=' + _takesMode + '&limit=30' + (_takesCursor ? '&cursor=' + encodeURIComponent(_takesCursor) : '');
+  }
+
+  var headers = { Accept: 'application/json' };
+  var token = getToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
+  fetch(url, { headers: headers })
+    .then(function(r){ return r.ok ? r.json() : { takes: [] }; })
+    .then(function(data) {
+      var takes = data.takes || [];
+      if (!append) container.innerHTML = '';
+
+      if (!takes.length && !append) {
+        container.innerHTML = '<div class="takes-empty">' +
+          '<div class="icon">' + (_takesMode === 'following' ? '\uD83D\uDC65' : '\uD83D\uDCA1') + '</div>' +
+          '<div class="msg">' + (_takesMode === 'following'
+            ? 'Follow predictors to see their takes here'
+            : 'No takes yet — be the first to post your prediction') + '</div>' +
+          '</div>';
+        document.getElementById('takes-load-more').style.display = 'none';
+        _takesLoading = false;
+        return;
+      }
+
+      for (var i = 0; i < takes.length; i++) {
+        container.insertAdjacentHTML('beforeend', renderTakeCard(takes[i]));
+      }
+
+      // Update cursor for pagination
+      if (_takesMode === 'trending') {
+        _takesCursor = takes.length;
+      } else {
+        _takesCursor = data.cursor || null;
+      }
+      document.getElementById('takes-load-more').style.display = takes.length >= 20 ? 'block' : 'none';
+      _takesLoading = false;
+    })
+    .catch(function() {
+      if (!append) container.innerHTML = '<div class="takes-empty"><div class="msg">Failed to load feed</div></div>';
+      _takesLoading = false;
+    });
+}
+
+function loadMoreTakes() { loadTakesFeed(true); }
+
+function renderTakeCard(t) {
+  var isWhale = t.source === 'whale';
+  var isConsensus = t.source === 'consensus';
+  var avatarClass = isWhale ? 'whale' : isConsensus ? 'consensus' : 'user';
+  var initials = getInitials(t.display_name || 'Anonymous');
+  var avatarIcon = isWhale ? '\uD83D\uDC33' : isConsensus ? '\uD83E\uDD1D' : initials;
+  var sideClass = (t.side || '').toUpperCase() === 'YES' ? 'yes' : 'no';
+  var priceDisplay = t.entry_price ? Math.round(t.entry_price * 100) + '\u00A2' : '';
+  var amountDisplay = t.amount ? (t.amount >= 1000000 ? '$' + (t.amount/1000000).toFixed(1) + 'M' : t.amount >= 1000 ? '$' + Math.round(t.amount/1000) + 'K' : '$' + Math.round(t.amount)) : '';
+
+  var marketLink = '';
+  if (t.question) {
+    var href = t.market_slug ? '/market/' + t.market_slug : '#';
+    marketLink = '<a class="take-market-link" href="' + href + '" ' + (href === '#' ? '' : 'target="_blank"') + '>' +
+      '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
+      '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
+      (priceDisplay ? '<span class="take-price">' + priceDisplay + '</span>' : '') +
+      '</a>';
+  }
+
+  var thesis = t.thesis ? '<div class="take-thesis">' + escHtml(t.thesis) + '</div>' : '';
+  var amount = amountDisplay ? '<div class="take-amount">' + amountDisplay + ' position</div>' : '';
+
+  var agreeActive = t.my_reaction === 'agree' ? ' active' : '';
+  var disagreeActive = t.my_reaction === 'disagree' ? ' active' : '';
+  var quoteCount = t.quote_count || 0;
+
+  // Source badge
+  var badge = '';
+  if (isWhale) badge = '<span class="take-source-badge whale">WHALE</span>';
+  else if (isConsensus) badge = '<span class="take-source-badge consensus">CONSENSUS</span>';
+
+  // Sharp score
+  var sharp = t.sharp_score ? '<span class="take-sharp">' + Math.round(t.sharp_score) + ' Sharp</span>' : '';
+
+  // Quote-predict parent
+  var quotedTake = '';
+  if (t.parent_take) {
+    var pt = t.parent_take;
+    var ptSide = (pt.side || '').toUpperCase() === 'YES' ? 'yes' : 'no';
+    quotedTake = '<div class="take-quote">' +
+      '<div class="take-header"><span class="take-author">' + escHtml(pt.display_name || 'Anonymous') + '</span>' +
+      '<span class="take-side-pill ' + ptSide + '" style="font-size:9px;padding:2px 6px">' + (pt.side || '').toUpperCase() + '</span></div>' +
+      '<div class="take-market-q">' + escHtml(pt.question || '') + '</div>' +
+      (pt.thesis ? '<div class="take-thesis" style="font-size:12px">' + escHtml(pt.thesis) + '</div>' : '') +
+      '</div>';
+  }
+
+  return '<div class="take-card" id="take-' + t.id + '">' +
+    '<div class="take-avatar ' + avatarClass + '">' + avatarIcon + '</div>' +
+    '<div class="take-body">' +
+      '<div class="take-header">' +
+        '<span class="take-author">' + escHtml(t.display_name || 'Anonymous') + '</span>' +
+        badge + sharp +
+        '<span class="take-time">' + timeAgo(t.created_at) + '</span>' +
+      '</div>' +
+      marketLink + thesis + amount + quotedTake +
+      '<div class="take-actions">' +
+        '<button class="take-action-btn agree' + agreeActive + '" onclick="reactToTake(\'' + t.id + '\',\'agree\',this)">' +
+          '<span class="icon">\u2191</span> <span class="count">' + (t.agree_count || 0) + '</span></button>' +
+        '<button class="take-action-btn disagree' + disagreeActive + '" onclick="reactToTake(\'' + t.id + '\',\'disagree\',this)">' +
+          '<span class="icon">\u2193</span> <span class="count">' + (t.disagree_count || 0) + '</span></button>' +
+        '<button class="take-action-btn quote" onclick="openQuotePredictModal(\'' + t.id + '\')" title="Quote-predict">' +
+          '<span class="icon">\u21A9</span> <span class="count">' + (quoteCount || '') + '</span></button>' +
+        '<button class="take-action-btn share" onclick="shareTake(\'' + t.id + '\')" title="Share">' +
+          '<span class="icon">\u2197</span></button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function reactToTake(takeId, reaction, btn) {
+  var token = getToken();
+  if (!token) { alert('Sign in to react'); return; }
+  fetch('/api/takes/' + takeId + '/react', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ reaction: reaction })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (!data.ok) return;
+    var card = document.getElementById('take-' + takeId);
+    if (!card) return;
+    var agreeBtn = card.querySelector('.take-action-btn.agree');
+    var disagreeBtn = card.querySelector('.take-action-btn.disagree');
+    // Toggle active states
+    if (btn.classList.contains('active')) {
+      btn.classList.remove('active');
+    } else {
+      if (agreeBtn) agreeBtn.classList.remove('active');
+      if (disagreeBtn) disagreeBtn.classList.remove('active');
+      btn.classList.add('active');
+    }
+    // Update counts
+    if (agreeBtn) agreeBtn.querySelector('.count').textContent = data.agree_count || 0;
+    if (disagreeBtn) disagreeBtn.querySelector('.count').textContent = data.disagree_count || 0;
+  })
+  .catch(function(){});
+}
+
+function shareTake(takeId) {
+  var card = document.getElementById('take-' + takeId);
+  if (!card) return;
+  var q = card.querySelector('.take-market-q');
+  var text = q ? q.textContent : 'Check out this prediction take on HYPERFLEX';
+  var url = 'https://hyperflex.network/explore';
+  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text + '\n\n' + url), '_blank');
+}
+
+// ── Compose modal ──
+function openComposeModal(parentTakeId) {
+  var token = getToken();
+  if (!token) { alert('Sign in to post a take'); return; }
+  _composeSelectedMarket = null;
+  _composeSide = null;
+  document.getElementById('compose-market-search').value = '';
+  document.getElementById('compose-market-results').innerHTML = '';
+  document.getElementById('compose-selected-market').style.display = 'none';
+  document.getElementById('compose-side-row').style.display = 'none';
+  document.getElementById('compose-thesis').value = '';
+  document.getElementById('compose-char-count').textContent = '0';
+  document.getElementById('compose-submit-btn').disabled = true;
+  document.getElementById('compose-overlay').classList.add('open');
+  // If quote-predicting, pre-set parent
+  if (parentTakeId) {
+    document.getElementById('compose-overlay').dataset.parentTakeId = parentTakeId;
+  } else {
+    delete document.getElementById('compose-overlay').dataset.parentTakeId;
+  }
+  document.getElementById('compose-market-search').focus();
+}
+
+function closeComposeModal() {
+  document.getElementById('compose-overlay').classList.remove('open');
+}
+
+function openQuotePredictModal(parentTakeId) {
+  openComposeModal(parentTakeId);
+}
+
+var _composeSearchTimeout;
+function searchComposeMarkets(query) {
+  clearTimeout(_composeSearchTimeout);
+  if (!query || query.length < 2) {
+    document.getElementById('compose-market-results').innerHTML = '';
+    return;
+  }
+  _composeSearchTimeout = setTimeout(function() {
+    fetch('/api/screener?limit=8')
+      .then(function(r){ return r.ok ? r.json() : { data: [] }; })
+      .then(function(data) {
+        var markets = (data.data || []).filter(function(m) {
+          return (m.question || '').toLowerCase().includes(query.toLowerCase());
+        }).slice(0, 6);
+        var container = document.getElementById('compose-market-results');
+        if (!markets.length) {
+          container.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px">No markets found</div>';
+          return;
+        }
+        container.innerHTML = markets.map(function(m) {
+          var yesPct = m.yes_price ? Math.round(m.yes_price * 100) : '?';
+          return '<div style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s" ' +
+            'onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'" ' +
+            'onclick="selectComposeMarket(' + JSON.stringify(JSON.stringify({slug:m.slug||m.event_slug,question:m.question,condition_id:m.market_id||m.condition_id,yes_price:m.yes_price})) + ')">' +
+            '<div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3">' + escHtml(m.question || '') + '</div>' +
+            '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + yesPct + '% YES</div>' +
+          '</div>';
+        }).join('');
+      })
+      .catch(function(){});
+  }, 200);
+}
+
+function selectComposeMarket(jsonStr) {
+  var m = JSON.parse(jsonStr);
+  _composeSelectedMarket = m;
+  document.getElementById('compose-market-results').innerHTML = '';
+  document.getElementById('compose-market-search').style.display = 'none';
+  document.getElementById('compose-selected-market').style.display = 'block';
+  document.getElementById('compose-selected-market').innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px">' +
+      '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text)">' + escHtml(m.question) + '</div>' +
+      '<button onclick="clearComposeMarket()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">\u00D7</button>' +
+    '</div>';
+  document.getElementById('compose-side-row').style.display = 'flex';
+  updateComposeSubmit();
+}
+
+function clearComposeMarket() {
+  _composeSelectedMarket = null;
+  _composeSide = null;
+  document.getElementById('compose-market-search').style.display = 'block';
+  document.getElementById('compose-market-search').value = '';
+  document.getElementById('compose-selected-market').style.display = 'none';
+  document.getElementById('compose-side-row').style.display = 'none';
+  document.querySelectorAll('#compose-side-row .side-btn').forEach(function(b){ b.classList.remove('selected'); });
+  updateComposeSubmit();
+}
+
+function selectComposeSide(side) {
+  _composeSide = side;
+  document.querySelectorAll('#compose-side-row .side-btn').forEach(function(b){ b.classList.remove('selected'); });
+  var cls = side === 'YES' ? 'yes' : 'no';
+  document.querySelector('#compose-side-row .side-btn.' + cls).classList.add('selected');
+  updateComposeSubmit();
+}
+
+function updateComposeSubmit() {
+  var hasMarket = !!_composeSelectedMarket;
+  var hasSide = !!_composeSide;
+  document.getElementById('compose-submit-btn').disabled = !(hasMarket && hasSide);
+}
+
+// Character counter
+document.getElementById('compose-thesis').addEventListener('input', function() {
+  document.getElementById('compose-char-count').textContent = this.value.length;
+});
+
+function submitTake() {
+  var token = getToken();
+  if (!token) return;
+  var btn = document.getElementById('compose-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+
+  var parentTakeId = document.getElementById('compose-overlay').dataset.parentTakeId || null;
+  var thesis = document.getElementById('compose-thesis').value.trim();
+
+  var body = {
+    market_slug: _composeSelectedMarket ? _composeSelectedMarket.slug : null,
+    condition_id: _composeSelectedMarket ? _composeSelectedMarket.condition_id : null,
+    question: _composeSelectedMarket ? _composeSelectedMarket.question : '',
+    side: _composeSide || 'YES',
+    entry_price: _composeSelectedMarket ? _composeSelectedMarket.yes_price : null,
+    thesis: thesis || null,
+    parent_take_id: parentTakeId
+  };
+
+  fetch('/api/takes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      closeComposeModal();
+      // Refresh feed to show new take at top
+      _takesCursor = null;
+      loadTakesFeed(false);
+    } else {
+      alert(data.error || 'Failed to post');
+      btn.disabled = false;
+      btn.textContent = 'Post Take';
+    }
+  })
+  .catch(function() {
+    alert('Network error');
+    btn.disabled = false;
+    btn.textContent = 'Post Take';
+  });
+}
+
+// ── Init takes feed ──
+(function initTakes() {
+  // Set compose avatar from user data
+  try {
+    var token = getToken();
+    if (token) {
+      fetch('/api/user/me', { headers: { Authorization: 'Bearer ' + token } })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(u) {
+          if (u && u.display_name) {
+            var avatar = document.getElementById('takes-compose-avatar');
+            if (avatar) avatar.textContent = getInitials(u.display_name);
+          }
+        }).catch(function(){});
+    }
+  } catch(e) {}
+  // Load feed
+  loadTakesFeed(false);
+  // Poll for new takes every 45 seconds
+  setInterval(function() {
+    if (_takesMode === 'foryou' && !_takesLoading) {
+      // Soft refresh — reload without clearing
+      _takesCursor = null;
+      loadTakesFeed(false);
+    }
+  }, 45000);
+})();
+
 </script>
 </body>
 </html>

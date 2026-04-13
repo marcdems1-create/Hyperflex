@@ -13235,6 +13235,341 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TAKES — social prediction layer
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Ensure takes + take_reactions tables exist (idempotent)
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`CREATE TABLE IF NOT EXISTS takes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      wallet_address TEXT,
+      display_name TEXT,
+      avatar_url TEXT,
+      market_slug TEXT,
+      condition_id TEXT,
+      question TEXT NOT NULL,
+      side TEXT NOT NULL,
+      entry_price NUMERIC,
+      amount NUMERIC,
+      thesis TEXT,
+      source TEXT NOT NULL DEFAULT 'user',
+      sharp_score NUMERIC,
+      parent_take_id UUID REFERENCES takes(id) ON DELETE SET NULL,
+      agree_count INTEGER NOT NULL DEFAULT 0,
+      disagree_count INTEGER NOT NULL DEFAULT 0,
+      is_correct BOOLEAN,
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    await dbQuery(`CREATE TABLE IF NOT EXISTS take_reactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      take_id UUID NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reaction TEXT NOT NULL CHECK (reaction IN ('agree', 'disagree')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(take_id, user_id)
+    )`);
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_created_at ON takes(created_at DESC)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_source ON takes(source)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_market_slug ON takes(market_slug)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_user_id ON takes(user_id)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_parent ON takes(parent_take_id)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_reactions_take_id ON take_reactions(take_id)').catch(() => {});
+    console.log('[takes] Tables ensured');
+  } catch (e) { console.warn('[takes] table init:', e.message); }
+})();
+
+// POST /api/takes — create a take (user prediction with optional thesis)
+app.post('/api/takes', requireAuth, async (req, res) => {
+  try {
+    const { market_slug, condition_id, question, side, entry_price, amount, thesis, parent_take_id } = req.body;
+    if (!question || !side) return res.status(400).json({ error: 'question and side are required' });
+
+    // Get user info for denormalized display
+    let displayName = 'Anonymous', avatarUrl = null, sharpScore = null;
+    if (pool) {
+      const userRows = await dbQuery('SELECT display_name, avatar_url FROM users WHERE id = $1', [req.userId]);
+      if (userRows.length) {
+        displayName = userRows[0].display_name || 'Anonymous';
+        avatarUrl = userRows[0].avatar_url || null;
+      }
+    }
+
+    // If quote-predicting, validate parent exists
+    if (parent_take_id) {
+      const parentRows = await dbQuery('SELECT id FROM takes WHERE id = $1', [parent_take_id]);
+      if (!parentRows.length) return res.status(404).json({ error: 'Parent take not found' });
+    }
+
+    const rows = await dbQuery(
+      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, amount, thesis, source, sharp_score, parent_take_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'user',$11,$12) RETURNING *`,
+      [req.userId, displayName, avatarUrl, market_slug || null, condition_id || null,
+       String(question).slice(0, 500), String(side).toUpperCase().slice(0, 20),
+       entry_price != null ? parseFloat(entry_price) : null,
+       amount != null ? parseFloat(amount) : null,
+       thesis ? String(thesis).slice(0, 500) : null,
+       sharpScore, parent_take_id || null]
+    );
+    res.json({ ok: true, take: rows[0] });
+  } catch (err) {
+    console.error('[takes] POST error:', err.message);
+    res.status(500).json({ error: 'Failed to create take' });
+  }
+});
+
+// POST /api/takes/:id/react — agree or disagree with a take
+app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
+  try {
+    const takeId = req.params.id;
+    const { reaction } = req.body;
+    if (!reaction || !['agree', 'disagree'].includes(reaction)) {
+      return res.status(400).json({ error: 'reaction must be "agree" or "disagree"' });
+    }
+
+    // Check if take exists
+    const takeRows = await dbQuery('SELECT id, agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
+    if (!takeRows.length) return res.status(404).json({ error: 'Take not found' });
+
+    // Check for existing reaction
+    const existing = await dbQuery(
+      'SELECT id, reaction FROM take_reactions WHERE take_id = $1 AND user_id = $2', [takeId, req.userId]
+    );
+
+    if (existing.length) {
+      if (existing[0].reaction === reaction) {
+        // Same reaction = toggle off (unreact)
+        await dbQuery('DELETE FROM take_reactions WHERE id = $1', [existing[0].id]);
+        const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        await dbQuery(`UPDATE takes SET ${col} = GREATEST(${col} - 1, 0) WHERE id = $1`, [takeId]);
+      } else {
+        // Switch reaction
+        await dbQuery('UPDATE take_reactions SET reaction = $1 WHERE id = $2', [reaction, existing[0].id]);
+        const oldCol = existing[0].reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        const newCol = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        await dbQuery(`UPDATE takes SET ${oldCol} = GREATEST(${oldCol} - 1, 0), ${newCol} = ${newCol} + 1 WHERE id = $1`, [takeId]);
+      }
+    } else {
+      // New reaction
+      await dbQuery(
+        'INSERT INTO take_reactions (take_id, user_id, reaction) VALUES ($1, $2, $3)',
+        [takeId, req.userId, reaction]
+      );
+      const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+      await dbQuery(`UPDATE takes SET ${col} = ${col} + 1 WHERE id = $1`, [takeId]);
+    }
+
+    // Return updated counts
+    const updated = await dbQuery('SELECT agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
+    res.json({ ok: true, agree_count: updated[0]?.agree_count || 0, disagree_count: updated[0]?.disagree_count || 0 });
+  } catch (err) {
+    console.error('[takes] react error:', err.message);
+    res.status(500).json({ error: 'Failed to react' });
+  }
+});
+
+// GET /api/takes/trending — hot takes ranked by engagement + recency + sharp score
+app.get('/api/takes/trending', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const offset = parseInt(req.query.offset) || 0;
+    const category = req.query.category; // optional filter
+
+    // Trending score: (agree + disagree) * recency_decay * (1 + sharp_score/100)
+    // Recency decay: 1 / (1 + hours_old/12)
+    let sql = `SELECT t.*,
+      (t.agree_count + t.disagree_count) *
+      (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
+      (1.0 + COALESCE(t.sharp_score, 0) / 100.0) AS trending_score
+      FROM takes t
+      WHERE t.created_at > now() - interval '7 days'`;
+    const params = [];
+    let paramIdx = 1;
+
+    if (category) {
+      sql += ` AND LOWER(t.question) ~ $${paramIdx}`;
+      // Map category to regex pattern
+      const categoryPatterns = {
+        crypto: 'bitcoin|btc|ethereum|eth|solana|crypto|defi|token',
+        politics: 'trump|biden|election|congress|senate|president|war\\b|military',
+        sports: 'nba|nfl|mlb|nhl|ufc|soccer|football|basketball',
+        finance: 'fed\\b|interest|inflation|stock|s&p|oil|gold|economy|tariff',
+        entertainment: 'movie|oscar|grammy|music|ai\\b|tech|apple|google|tesla',
+      };
+      params.push(categoryPatterns[category] || category);
+      paramIdx++;
+    }
+
+    sql += ` ORDER BY trending_score DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+    params.push(limit, offset);
+
+    const rows = await dbQuery(sql, params);
+
+    // Attach user's own reactions if authed
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const takeIds = rows.map(r => r.id);
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, takeIds]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+
+    // Attach quote counts
+    const takeIds = rows.map(r => r.id);
+    let quoteCounts = {};
+    if (takeIds.length) {
+      const qcRows = await dbQuery(
+        'SELECT parent_take_id, COUNT(*) as cnt FROM takes WHERE parent_take_id = ANY($1) GROUP BY parent_take_id',
+        [takeIds]
+      );
+      for (const r of qcRows) quoteCounts[r.parent_take_id] = parseInt(r.cnt);
+    }
+
+    const takes = rows.map(r => ({
+      ...r,
+      my_reaction: myReactions[r.id] || null,
+      quote_count: quoteCounts[r.id] || 0,
+    }));
+
+    res.json({ takes });
+  } catch (err) {
+    console.error('[takes] trending error:', err.message);
+    res.status(500).json({ error: 'Failed to load trending takes' });
+  }
+});
+
+// GET /api/takes/feed — main social feed (For You / Following)
+app.get('/api/takes/feed', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const cursor = req.query.cursor; // ISO timestamp for pagination
+    const mode = req.query.mode || 'foryou'; // 'foryou' | 'following'
+
+    let sql, params;
+
+    if (mode === 'following' && req.userId) {
+      // Only takes from people the user follows
+      sql = `SELECT t.* FROM takes t
+        INNER JOIN predictor_follows pf ON pf.following_id = t.user_id AND pf.follower_id = $1
+        WHERE 1=1`;
+      params = [req.userId];
+      let paramIdx = 2;
+      if (cursor) {
+        sql += ` AND t.created_at < $${paramIdx}`;
+        params.push(cursor);
+        paramIdx++;
+      }
+      sql += ` ORDER BY t.created_at DESC LIMIT $${paramIdx}`;
+      params.push(limit);
+    } else {
+      // "For You" — algorithmic: recency + engagement + sharp_score + source variety
+      sql = `SELECT t.*,
+        (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
+        (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
+        (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
+        CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
+        CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END
+        AS feed_score
+        FROM takes t WHERE 1=1`;
+      params = [];
+      let paramIdx = 1;
+      if (cursor) {
+        sql += ` AND t.created_at < $${paramIdx}`;
+        params.push(cursor);
+        paramIdx++;
+      }
+      sql += ` ORDER BY feed_score DESC, t.created_at DESC LIMIT $${paramIdx}`;
+      params.push(limit);
+    }
+
+    const rows = await dbQuery(sql, params);
+
+    // Attach user's reactions
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const takeIds = rows.map(r => r.id);
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, takeIds]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+
+    // Attach quote counts + parent take data for quote-predicts
+    const takeIds = rows.map(r => r.id);
+    let quoteCounts = {};
+    if (takeIds.length) {
+      const qcRows = await dbQuery(
+        'SELECT parent_take_id, COUNT(*) as cnt FROM takes WHERE parent_take_id = ANY($1) GROUP BY parent_take_id',
+        [takeIds]
+      );
+      for (const r of qcRows) quoteCounts[r.parent_take_id] = parseInt(r.cnt);
+    }
+
+    // Fetch parent takes for any quote-predicts
+    const parentIds = [...new Set(rows.filter(r => r.parent_take_id).map(r => r.parent_take_id))];
+    let parentTakes = {};
+    if (parentIds.length) {
+      const pRows = await dbQuery('SELECT * FROM takes WHERE id = ANY($1)', [parentIds]);
+      for (const r of pRows) parentTakes[r.id] = r;
+    }
+
+    const takes = rows.map(r => ({
+      ...r,
+      my_reaction: myReactions[r.id] || null,
+      quote_count: quoteCounts[r.id] || 0,
+      parent_take: r.parent_take_id ? (parentTakes[r.parent_take_id] || null) : null,
+    }));
+
+    res.json({ takes, cursor: rows.length ? rows[rows.length - 1].created_at : null });
+  } catch (err) {
+    console.error('[takes] feed error:', err.message);
+    res.status(500).json({ error: 'Failed to load feed' });
+  }
+});
+
+// GET /api/takes/market/:slug — takes for a specific market
+app.get('/api/takes/market/:slug', optionalAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      'SELECT * FROM takes WHERE market_slug = $1 ORDER BY (agree_count + disagree_count) DESC, created_at DESC LIMIT 50',
+      [req.params.slug]
+    );
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, rows.map(r => r.id)]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+    res.json({ takes: rows.map(r => ({ ...r, my_reaction: myReactions[r.id] || null })) });
+  } catch (err) {
+    console.error('[takes] market error:', err.message);
+    res.status(500).json({ error: 'Failed to load market takes' });
+  }
+});
+
+// DELETE /api/takes/:id — delete own take
+app.delete('/api/takes/:id', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT user_id FROM takes WHERE id = $1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Take not found' });
+    if (rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Not your take' });
+    await dbQuery('DELETE FROM takes WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[takes] delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete take' });
+  }
+});
+
 // ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────
 async function syncAllUserPositions() {
   console.log('[auto-sync] Starting position sync for all connected users');
@@ -19544,6 +19879,47 @@ async function fetchWhalePositions() {
       if (biggestMove && biggestMove.size >= 10000) tweetWhaleAlert(biggestMove).catch(() => {});
     }
 
+    // ── Synthesize whale takes from large trades ($50k+ opens/increases) ──
+    if (_newEvtCount > 0 && pool) {
+      (async () => {
+        try {
+          const bigTrades = _whaleTradeStream.filter(e =>
+            e.ts === now && (e.action === 'opened' || e.action === 'increased') && (e.size || 0) >= 50000
+          );
+          for (const evt of bigTrades.slice(0, 5)) {
+            // Dedupe: skip if we already have a whale take for this market+trader in last 3 hours
+            const existing = await dbQuery(
+              `SELECT id FROM takes WHERE source = 'whale' AND question = $1 AND display_name = $2
+               AND created_at > now() - interval '3 hours' LIMIT 1`,
+              [evt.question, evt.trader_name || 'Whale']
+            ).catch(() => []);
+            if (existing.length) continue;
+
+            const sizeStr = evt.size_display || ('$' + Math.round(evt.size / 1000) + 'K');
+            const pricePct = evt.price ? Math.round(evt.price * 100) + '¢' : '';
+            const actionVerb = evt.action === 'opened' ? 'opened a new' : 'increased their';
+            const thesis = `${evt.trader_name || 'Whale'} (rank #${evt.trader_rank || '?'}) ${actionVerb} ${sizeStr} ${(evt.side || 'YES').toUpperCase()} position${pricePct ? ' at ' + pricePct : ''}.`;
+
+            await dbQuery(
+              `INSERT INTO takes (display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'whale')`,
+              [
+                evt.trader_name || 'Whale #' + (evt.trader_rank || '?'),
+                null,
+                evt.slug || null,
+                evt.condition_id || null,
+                evt.question || 'Unknown market',
+                (evt.side || 'YES').toUpperCase(),
+                evt.price || null,
+                evt.size || null,
+                thesis
+              ]
+            ).catch(e => console.warn('[takes] whale synthesis error:', e.message));
+          }
+        } catch (e) { console.warn('[takes] whale batch error:', e.message); }
+      })();
+    }
+
     // ── Whale alert notifications: notify subscribed users of trader moves ──
     if (_newEvtCount > 0) {
       (async () => {
@@ -19960,10 +20336,35 @@ async function fetchWhalePositions() {
             );
             console.log(`[whale-consensus] NEW: ${sig.whale_count} whales ${sig.side} on "${sig.market.substring(0, 60)}" ($${Math.round(sig.total_capital/1000)}k)`);
 
-            // Push notification to users subscribed to whale intelligence
-            // (for v1, we notify any user with email_notify_whale_consensus = true,
-            // or we can just log it to the activity feed. For now, skip broadcast —
-            // users see signals on the whales dashboard instead.)
+            // ── Synthesize whale consensus take for the social feed ──
+            try {
+              // Dedupe: don't create a take for the same market+side within 6 hours
+              const recentTake = await dbQuery(
+                `SELECT id FROM takes WHERE source = 'consensus' AND question = $1 AND side = $2
+                 AND created_at > now() - interval '6 hours' LIMIT 1`,
+                [sig.market, sig.side.toUpperCase()]
+              );
+              if (!recentTake.length) {
+                const capitalDisplay = sig.total_capital >= 1000000
+                  ? '$' + (sig.total_capital / 1000000).toFixed(1) + 'M'
+                  : '$' + Math.round(sig.total_capital / 1000) + 'K';
+                await dbQuery(
+                  `INSERT INTO takes (display_name, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'consensus')`,
+                  [
+                    sig.whale_count + ' Whales',
+                    sig.slug || null,
+                    sig.condition_id || null,
+                    sig.market,
+                    sig.side.toUpperCase(),
+                    sig.avg_price,
+                    sig.total_capital,
+                    `${sig.whale_count} whale wallets are aligned ${sig.side.toUpperCase()} with ${capitalDisplay} total capital. Average entry: ${sig.avg_price ? (sig.avg_price * 100).toFixed(0) + '¢' : 'unknown'}.`
+                  ]
+                );
+                console.log(`[takes] Synthesized consensus take: ${sig.whale_count} whales ${sig.side} "${sig.market.substring(0, 40)}"`);
+              }
+            } catch (takeErr) { console.warn('[takes] consensus synthesis error:', takeErr.message); }
           }
         } catch (sigErr) { console.warn('[whale-consensus] per-sig error:', sigErr.message); }
       }

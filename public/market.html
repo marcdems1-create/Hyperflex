@@ -3641,6 +3641,20 @@ async function executeTrade() {
       }
     } catch (e) { /* silent */ }
 
+    // ── Post-trade take prompt — "Share your take" ──
+    try {
+      var hfTakeToken = localStorage.getItem('hf_token');
+      if (hfTakeToken) {
+        var takeMarketSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
+        var takeQuestion = (_market && _market.question) || document.querySelector('.market-title')?.textContent || '';
+        var takeConditionId = (_market && _market.conditionId) || '';
+        // Show take prompt after a 1.5s delay so the success message is visible first
+        setTimeout(function() {
+          showTakePrompt(takeMarketSlug, takeQuestion, takeConditionId, sideLabel, price, amount, hfTakeToken);
+        }, 1500);
+      }
+    } catch (takeErr) { /* silent */ }
+
     // Hedge chain: if this was leg 1 of a hedge pair, navigate to leg 2
     try {
       var hp = new URLSearchParams(window.location.search);
@@ -5208,6 +5222,107 @@ function updateAlertBell() {
     }
   })
   .catch(function() {});
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST-TRADE TAKE PROMPT
+// ══════════════════════════════════════════════════════════════════════════════
+
+function showTakePrompt(marketSlug, question, conditionId, side, price, amount, token) {
+  // Don't show if already showing
+  if (document.getElementById('take-prompt-bar')) return;
+
+  var bar = document.createElement('div');
+  bar.id = 'take-prompt-bar';
+  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,21,0.97);backdrop-filter:blur(12px);border-top:1px solid rgba(201,146,13,0.3);padding:14px 20px;z-index:1002;display:flex;align-items:center;gap:12px;animation:slideUp .3s ease';
+
+  var sideColor = side === 'YES' ? '#00e68a' : '#ff4d6a';
+  var sideBg = side === 'YES' ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)';
+
+  bar.innerHTML =
+    '<style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>' +
+    '<div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:' + sideBg + ';display:flex;align-items:center;justify-content:center;font-size:18px">' +
+      (side === 'YES' ? '\u2191' : '\u2193') +
+    '</div>' +
+    '<div style="flex:1;min-width:0">' +
+      '<div style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#e8e6f0">Share your take</div>' +
+      '<div style="font-family:Inter,sans-serif;font-size:11px;color:#6b6880;margin-top:1px">Tell the community why you went ' +
+        '<span style="color:' + sideColor + ';font-weight:700">' + side + '</span> at ' + price + '\u00a2</div>' +
+    '</div>' +
+    '<input type="text" id="take-thesis-input" placeholder="My thesis... (optional)" maxlength="280" ' +
+      'style="flex:1;min-width:120px;max-width:300px;padding:8px 12px;background:rgba(22,22,31,0.8);border:1px solid rgba(30,30,42,1);border-radius:8px;color:#e8e6f0;font-family:Inter,sans-serif;font-size:12px;outline:none" ' +
+      'onfocus="this.style.borderColor=\'rgba(201,146,13,0.5)\'" onblur="this.style.borderColor=\'rgba(30,30,42,1)\'">' +
+    '<button id="take-post-btn" onclick="postTakeFromTrade()" ' +
+      'style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:#000;background:#c9920d;border:none;border-radius:8px;padding:8px 18px;cursor:pointer;white-space:nowrap;transition:all .15s" ' +
+      'onmouseover="this.style.background=\'#daa520\'" onmouseout="this.style.background=\'#c9920d\'">Post</button>' +
+    '<button onclick="dismissTakePrompt()" style="background:none;border:none;color:#6b6880;cursor:pointer;font-size:18px;padding:4px 8px">\u00D7</button>';
+
+  document.body.appendChild(bar);
+
+  // Store trade data for the post
+  window._pendingTakeData = {
+    market_slug: marketSlug,
+    condition_id: conditionId,
+    question: question,
+    side: side,
+    entry_price: price / 100,
+    amount: amount,
+    token: token
+  };
+
+  // Auto-dismiss after 30 seconds
+  setTimeout(function() { dismissTakePrompt(); }, 30000);
+
+  // Enter key posts
+  document.getElementById('take-thesis-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') postTakeFromTrade();
+  });
+}
+
+function postTakeFromTrade() {
+  var d = window._pendingTakeData;
+  if (!d) return;
+  var btn = document.getElementById('take-post-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
+
+  var thesis = (document.getElementById('take-thesis-input') || {}).value || '';
+
+  fetch('/api/takes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + d.token },
+    body: JSON.stringify({
+      market_slug: d.market_slug,
+      condition_id: d.condition_id,
+      question: d.question,
+      side: d.side,
+      entry_price: d.entry_price,
+      amount: d.amount,
+      thesis: thesis.trim() || null
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      var bar = document.getElementById('take-prompt-bar');
+      if (bar) {
+        bar.innerHTML =
+          '<div style="flex:1;text-align:center;font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#00e68a">' +
+          '\u2705 Take posted! <a href="/explore" style="color:#c9920d;text-decoration:underline">View feed \u2192</a></div>';
+        setTimeout(function() { dismissTakePrompt(); }, 3000);
+      }
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+    }
+  })
+  .catch(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+  });
+}
+
+function dismissTakePrompt() {
+  var bar = document.getElementById('take-prompt-bar');
+  if (bar) bar.remove();
+  window._pendingTakeData = null;
 }
 </script>
 </body>
