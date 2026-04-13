@@ -14259,6 +14259,73 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/takes/search-markets?q= — search real Polymarket markets for the compose modal
+app.get('/api/takes/search-markets', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim().toLowerCase();
+    if (!q || q.length < 2) return res.json({ markets: [] });
+
+    let results = [];
+
+    // 1. Search screener cache first (fast, local)
+    if (_screenerCache && _screenerCache.data) {
+      const words = q.split(/\s+/).filter(w => w.length >= 2);
+      for (const m of _screenerCache.data) {
+        const qLower = (m.question || '').toLowerCase();
+        const hits = words.filter(w => qLower.includes(w)).length;
+        if (hits === words.length || (hits >= 1 && words.length === 1)) {
+          results.push({
+            slug: m.slug || m.event_slug,
+            question: m.question,
+            condition_id: m.market_id || m.condition_id,
+            yes_price: m.yes_price,
+            volume: m.volume24hr || m.volume,
+            end_date: m.end_date || m.endDate,
+            _score: hits
+          });
+        }
+      }
+      results.sort((a, b) => (b._score || 0) - (a._score || 0) || (b.volume || 0) - (a.volume || 0));
+    }
+
+    // 2. If not enough local results, search Polymarket Gamma API directly
+    if (results.length < 5) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 6000);
+        const gammaRes = await fetch(
+          `https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false&search=${encodeURIComponent(q)}`,
+          { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+        ).finally(() => clearTimeout(tid));
+        if (gammaRes.ok) {
+          const gammaData = await gammaRes.json();
+          const existing = new Set(results.map(r => (r.question || '').toLowerCase()));
+          for (const m of (Array.isArray(gammaData) ? gammaData : [])) {
+            if (existing.has((m.question || '').toLowerCase())) continue;
+            let yesPct = null;
+            try {
+              const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+              if (Array.isArray(prices) && prices[0] != null) yesPct = parseFloat(prices[0]);
+            } catch {}
+            results.push({
+              slug: (m.events && m.events[0] && m.events[0].slug) || m.slug || null,
+              question: m.question || m.title,
+              condition_id: m.conditionId || null,
+              yes_price: yesPct,
+              volume: parseFloat(m.volume) || 0,
+              end_date: m.endDate || null,
+            });
+          }
+        }
+      } catch (e) { /* gamma search failed, use local results */ }
+    }
+
+    res.json({ markets: results.slice(0, 10) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/takes/hot — most controversial takes for landing page
 app.get('/api/takes/hot', async (req, res) => {
   try {
