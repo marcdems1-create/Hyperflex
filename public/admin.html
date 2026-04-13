@@ -681,6 +681,7 @@
       <button class="admin-tab" id="tabBtnRewards" onclick="showAdminTab('rewards')">Rewards</button>
       <button class="admin-tab" id="tabBtnFinancials" onclick="showAdminTab('financials')">Financials</button>
       <button class="admin-tab" id="tabBtnBuilder" onclick="showAdminTab('builder')">Builder Fees</button>
+      <button class="admin-tab" id="tabBtnInfluencers" onclick="showAdminTab('influencers')">📣 Influencers</button>
     </div>
 
     <!-- Creators tab -->
@@ -1114,6 +1115,92 @@
       </div>
     </div>
 
+    <!-- Influencers tab -->
+    <div id="adminTabInfluencers" style="display:none">
+      <div class="section-header" style="margin-bottom:16px">
+        <div class="section-title">📣 Influencer Feed Import</div>
+        <button class="refresh-btn" onclick="loadInfluencers()">Refresh</button>
+      </div>
+
+      <!-- Add influencer form -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;font-family:var(--mono)">Add Influencer</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">X Handle</label>
+            <input class="filter-input" id="infHandle" placeholder="@elonmusk" style="width:140px;margin:0">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Display Name</label>
+            <input class="filter-input" id="infName" placeholder="Elon Musk" style="width:160px;margin:0">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Avatar URL</label>
+            <input class="filter-input" id="infAvatar" placeholder="https://pbs.twimg.com/..." style="width:220px;margin:0">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Followers</label>
+            <input class="filter-input" id="infFollowers" placeholder="1000000" type="number" style="width:100px;margin:0">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Category</label>
+            <select class="filter-input" id="infCategory" style="width:120px;margin:0;background:var(--surface);color:var(--text);border:1px solid var(--border)">
+              <option value="politics">Politics</option>
+              <option value="crypto">Crypto</option>
+              <option value="sports">Sports</option>
+              <option value="finance">Finance</option>
+              <option value="general" selected>General</option>
+            </select>
+          </div>
+          <button onclick="addInfluencer()" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Add</button>
+        </div>
+        <div id="infAddMsg" style="font-size:11px;color:var(--green);margin-top:8px;display:none"></div>
+      </div>
+
+      <!-- Import tweet form -->
+      <div style="background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a855f7;margin-bottom:10px;font-family:var(--mono)">Import Tweet → Take</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div>
+              <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">X Handle</label>
+              <input class="filter-input" id="tweetHandle" placeholder="@GCRClassic" style="width:140px;margin:0">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Display Name (optional)</label>
+              <input class="filter-input" id="tweetDisplayName" placeholder="" style="width:140px;margin:0">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Side (optional)</label>
+              <select class="filter-input" id="tweetSide" style="width:80px;margin:0;background:var(--surface);color:var(--text);border:1px solid var(--border)">
+                <option value="">Auto</option>
+                <option value="YES">YES</option>
+                <option value="NO">NO</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Tweet URL (optional)</label>
+              <input class="filter-input" id="tweetUrl" placeholder="https://x.com/..." style="width:240px;margin:0">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--dim);display:block;margin-bottom:2px">Tweet Text</label>
+            <textarea id="tweetText" placeholder="Paste the tweet text here..." style="width:100%;min-height:60px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--sans);font-size:12px;padding:8px;resize:vertical"></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="importTweet()" style="background:#a855f7;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:11px;font-weight:700;cursor:pointer">Import as Take</button>
+            <span id="tweetImportMsg" style="font-size:11px;color:var(--dim);align-self:center"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Influencer list -->
+      <div class="analytics-card">
+        <div class="card-title">Active Influencers</div>
+        <div id="influencerList" style="font-size:12px;color:var(--dim)">Click Refresh to load</div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1220,7 +1307,7 @@ async function loadCreators() {
 }
 
 // -- Admin tabs --
-const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials','builder'];
+const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials','builder','influencers'];
 
 function showAdminTab(tab) {
   ALL_TABS.forEach(t => {
@@ -1236,6 +1323,7 @@ function showAdminTab(tab) {
   if (tab === 'flex') loadFlexPoints();
   if (tab === 'financials') loadFinancials();
   if (tab === 'builder') loadBuilderFees();
+  if (tab === 'influencers') loadInfluencers();
 }
 
 // -- Outreach --
@@ -2411,6 +2499,100 @@ async function loadBuilderFees(force) {
     loadCreators();
   }
 })();
+
+// ── Influencer Management ──
+async function loadInfluencers() {
+  const list = document.getElementById('influencerList');
+  if (!list) return;
+  list.innerHTML = '<div style="color:var(--dim);padding:8px">Loading...</div>';
+  try {
+    const res = await fetch('/api/admin/influencers', { headers: { 'x-admin-secret': adminSecret } });
+    const data = await res.json();
+    const infs = data.influencers || [];
+    if (!infs.length) { list.innerHTML = '<div style="color:var(--dim);padding:12px">No influencers added yet</div>'; return; }
+    list.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>' +
+      '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--dim)">Handle</th>' +
+      '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--dim)">Name</th>' +
+      '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--dim)">Followers</th>' +
+      '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--dim)">Category</th>' +
+      '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--dim)">Takes</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border)"></th>' +
+      '</tr></thead><tbody>' +
+      infs.map(function(inf) {
+        var fc = inf.follower_count ? (inf.follower_count >= 1000000 ? (inf.follower_count/1000000).toFixed(1)+'M' : inf.follower_count >= 1000 ? Math.round(inf.follower_count/1000)+'K' : inf.follower_count) : '—';
+        var avatar = inf.avatar_url ? '<img src="'+inf.avatar_url+'" style="width:20px;height:20px;border-radius:50%;margin-right:6px;vertical-align:middle">' : '';
+        return '<tr style="border-bottom:1px solid rgba(30,30,42,0.3)">' +
+          '<td style="padding:6px 8px;font-family:var(--mono);font-size:11px;color:#4d9fff">'+avatar+'@'+(inf.x_handle||'')+'</td>' +
+          '<td style="padding:6px 8px;font-size:12px">'+(inf.display_name||'—')+'</td>' +
+          '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-size:11px">'+fc+'</td>' +
+          '<td style="padding:6px 8px;font-size:11px;color:var(--dim)">'+(inf.category||'—')+'</td>' +
+          '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--amber)">'+(inf.take_count||0)+'</td>' +
+          '<td style="padding:6px 8px"><button onclick="quickImport(\''+inf.x_handle+'\')" style="font-size:10px;background:rgba(168,85,247,0.12);color:#a855f7;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Import</button></td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch (e) { list.innerHTML = '<div style="color:var(--red);padding:8px">Error: '+e.message+'</div>'; }
+}
+
+async function addInfluencer() {
+  var handle = document.getElementById('infHandle').value.trim();
+  var name = document.getElementById('infName').value.trim();
+  var avatar = document.getElementById('infAvatar').value.trim();
+  var followers = document.getElementById('infFollowers').value.trim();
+  var category = document.getElementById('infCategory').value;
+  var msg = document.getElementById('infAddMsg');
+  if (!handle) { msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Handle required'; return; }
+  try {
+    var res = await fetch('/api/admin/influencers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ x_handle: handle, display_name: name||null, avatar_url: avatar||null, follower_count: followers||null, category: category })
+    });
+    var data = await res.json();
+    if (data.ok) {
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Added @'+handle;
+      document.getElementById('infHandle').value='';
+      document.getElementById('infName').value='';
+      document.getElementById('infAvatar').value='';
+      document.getElementById('infFollowers').value='';
+      loadInfluencers();
+    } else { msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent=data.error; }
+  } catch(e) { msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent=e.message; }
+}
+
+async function importTweet() {
+  var handle = document.getElementById('tweetHandle').value.trim();
+  var text = document.getElementById('tweetText').value.trim();
+  var url = document.getElementById('tweetUrl').value.trim();
+  var side = document.getElementById('tweetSide').value;
+  var displayName = document.getElementById('tweetDisplayName').value.trim();
+  var msg = document.getElementById('tweetImportMsg');
+  if (!handle||!text) { msg.textContent='Handle + text required'; msg.style.color='var(--red)'; return; }
+  msg.textContent='Importing...'; msg.style.color='var(--dim)';
+  try {
+    var res = await fetch('/api/admin/import-tweet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ x_handle: handle, tweet_text: text, tweet_url: url||null, side: side||null, display_name: displayName||null })
+    });
+    var data = await res.json();
+    if (data.ok) {
+      msg.textContent='✓ Imported' + (data.matched_market ? ' → matched "'+data.matched_market.question.substring(0,40)+'..."' : ' (no market match)');
+      msg.style.color='var(--green)';
+      document.getElementById('tweetText').value='';
+      document.getElementById('tweetUrl').value='';
+      loadInfluencers();
+    } else { msg.textContent=data.error; msg.style.color='var(--red)'; }
+  } catch(e) { msg.textContent=e.message; msg.style.color='var(--red)'; }
+}
+
+function quickImport(handle) {
+  document.getElementById('tweetHandle').value = '@'+handle;
+  document.getElementById('tweetText').focus();
+  showAdminTab('influencers');
+  // Scroll to import form
+  document.getElementById('tweetText').scrollIntoView({ behavior: 'smooth' });
+}
 </script>
 </body>
 </html>

@@ -12231,6 +12231,290 @@ app.get('/api/whale-profiles', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// INFLUENCER SYSTEM — import X/Twitter prediction content into the takes feed
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Ensure influencers table
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`CREATE TABLE IF NOT EXISTS influencers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      x_handle TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      avatar_url TEXT,
+      bio TEXT,
+      follower_count INTEGER,
+      category TEXT DEFAULT 'general',
+      user_id UUID REFERENCES users(id),
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`);
+    console.log('[influencers] Table ensured');
+  } catch (e) { console.warn('[influencers] table init:', e.message); }
+})();
+
+// Cache: x_handle → { userId, influencerId }
+const _influencerCache = new Map();
+
+// Ensure a user profile exists for an influencer (like ensureWhaleProfile)
+async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, followerCount, category) {
+  if (!pool || !xHandle) return null;
+  const handle = xHandle.toLowerCase().replace(/^@/, '');
+
+  const cached = _influencerCache.get(handle);
+  if (cached) return cached;
+
+  try {
+    // Check if influencer record exists
+    const existing = await dbQuery('SELECT id, user_id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [handle]);
+
+    if (existing.length && existing[0].user_id) {
+      // Update stats
+      await dbQuery(
+        'UPDATE influencers SET display_name = COALESCE($1, display_name), avatar_url = COALESCE($2, avatar_url), follower_count = COALESCE($3, follower_count) WHERE id = $4',
+        [displayName, avatarUrl, followerCount, existing[0].id]
+      ).catch(() => {});
+      _influencerCache.set(handle, { userId: existing[0].user_id, influencerId: existing[0].id });
+      return _influencerCache.get(handle);
+    }
+
+    // Create user record for this influencer
+    const userDisplayName = displayName || ('@' + handle);
+    const userRows = await dbQuery(
+      `INSERT INTO users (display_name, x_username, password_hash, created_at)
+       VALUES ($1, $2, $3, NOW()) RETURNING id`,
+      [userDisplayName, handle, 'influencer_profile_' + Date.now()]
+    );
+    if (!userRows.length) return null;
+    const userId = userRows[0].id;
+
+    // Create or update influencer record
+    if (existing.length) {
+      await dbQuery('UPDATE influencers SET user_id = $1, display_name = $2, avatar_url = $3, bio = $4, follower_count = $5, category = $6 WHERE id = $7',
+        [userId, displayName, avatarUrl, bio, followerCount, category, existing[0].id]);
+      _influencerCache.set(handle, { userId, influencerId: existing[0].id });
+    } else {
+      const infRows = await dbQuery(
+        `INSERT INTO influencers (x_handle, display_name, avatar_url, bio, follower_count, category, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [handle, displayName, avatarUrl, bio, followerCount, category || 'general', userId]
+      );
+      _influencerCache.set(handle, { userId, influencerId: infRows[0]?.id });
+    }
+
+    console.log(`[influencer] Created profile for @${handle}`);
+    return _influencerCache.get(handle);
+  } catch (e) {
+    console.warn('[influencer] ensureProfile error:', e.message);
+    return null;
+  }
+}
+
+// GET /api/admin/influencers — list all influencers
+app.get('/api/admin/influencers', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const rows = await dbQuery(`SELECT i.*,
+      (SELECT COUNT(*)::int FROM takes t WHERE t.user_id = i.user_id AND t.source = 'influencer') as take_count
+      FROM influencers i ORDER BY i.follower_count DESC NULLS LAST, i.created_at DESC`);
+    res.json({ influencers: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/influencers — add a new influencer
+app.post('/api/admin/influencers', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { x_handle, display_name, avatar_url, bio, follower_count, category } = req.body;
+    if (!x_handle) return res.status(400).json({ error: 'x_handle required' });
+
+    const profile = await ensureInfluencerProfile(x_handle, display_name, avatar_url, bio, follower_count ? parseInt(follower_count) : null, category);
+    if (!profile) return res.status(500).json({ error: 'Failed to create influencer profile' });
+
+    res.json({ ok: true, ...profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/influencers/:handle — deactivate an influencer
+app.delete('/api/admin/influencers/:handle', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await dbQuery('UPDATE influencers SET is_active = false WHERE LOWER(x_handle) = $1', [req.params.handle.toLowerCase()]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/import-tweet — import a tweet as an influencer take
+// Body: { x_handle, tweet_text, tweet_url, side (optional), market_slug (optional) }
+// If side not provided, AI infers it. If market_slug not provided, auto-matches from screener.
+app.post('/api/admin/import-tweet', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    let { x_handle, display_name, avatar_url, tweet_text, tweet_url, side, market_slug, market_question } = req.body;
+    if (!x_handle || !tweet_text) return res.status(400).json({ error: 'x_handle and tweet_text required' });
+
+    const handle = x_handle.toLowerCase().replace(/^@/, '');
+
+    // Ensure influencer profile exists
+    const profile = await ensureInfluencerProfile(handle, display_name, avatar_url, null, null, null);
+    const userId = profile?.userId || null;
+
+    // Auto-match to Polymarket market if not specified
+    let matchedSlug = market_slug || null;
+    let matchedQuestion = market_question || null;
+    let matchedConditionId = null;
+    let inferredSide = side ? side.toUpperCase() : null;
+
+    if (!matchedSlug && _screenerCache && _screenerCache.data) {
+      // Simple keyword matching against screener cache
+      const tweetLower = tweet_text.toLowerCase();
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const m of _screenerCache.data) {
+        const qLower = (m.question || '').toLowerCase();
+        // Score by number of shared words (3+ letter words)
+        const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
+        const matchScore = tweetWords.filter(w => qLower.includes(w)).length;
+        if (matchScore > bestScore && matchScore >= 2) {
+          bestScore = matchScore;
+          bestMatch = m;
+        }
+      }
+
+      if (bestMatch) {
+        matchedSlug = bestMatch.slug || bestMatch.event_slug;
+        matchedQuestion = bestMatch.question;
+        matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
+      }
+    }
+
+    // If no market matched, use the tweet text as the question
+    if (!matchedQuestion) {
+      matchedQuestion = tweet_text.length > 200 ? tweet_text.substring(0, 200) + '...' : tweet_text;
+    }
+
+    // Infer side from tweet text if not provided
+    if (!inferredSide) {
+      const textLower = tweet_text.toLowerCase();
+      // Simple heuristic: bullish/bearish keywords
+      const bullish = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b|\b100%\b/i.test(textLower);
+      const bearish = /\bno\b|\bsell\b|\bshort\b|\bbearish\b|\bwon't\b|\bnot going\b|\bdisagree\b|\b0%\b|\bfade\b/i.test(textLower);
+      inferredSide = bullish ? 'YES' : bearish ? 'NO' : 'YES';
+    }
+
+    // Get influencer display name
+    let infDisplayName = display_name;
+    if (!infDisplayName) {
+      const infRow = await dbQuery('SELECT display_name FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [handle]).catch(() => []);
+      infDisplayName = infRow[0]?.display_name || ('@' + handle);
+    }
+
+    // Dedupe: don't import same tweet URL twice
+    if (tweet_url) {
+      const dupe = await dbQuery(
+        "SELECT id FROM takes WHERE source = 'influencer' AND thesis LIKE $1 LIMIT 1",
+        ['%' + tweet_url + '%']
+      ).catch(() => []);
+      if (dupe.length) return res.status(409).json({ error: 'Tweet already imported', take_id: dupe[0].id });
+    }
+
+    // Create the take
+    const thesis = tweet_text + (tweet_url ? '\n\n' + tweet_url : '');
+    const rows = await dbQuery(
+      `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, thesis, source, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'influencer', NOW()) RETURNING *`,
+      [userId, infDisplayName, matchedSlug, matchedConditionId, matchedQuestion, inferredSide, thesis]
+    );
+
+    res.json({ ok: true, take: rows[0], matched_market: matchedSlug ? { slug: matchedSlug, question: matchedQuestion } : null });
+  } catch (err) {
+    console.error('[import-tweet]', err.message);
+    res.status(500).json({ error: 'Failed to import tweet' });
+  }
+});
+
+// POST /api/admin/import-tweet-batch — import multiple tweets at once
+app.post('/api/admin/import-tweet-batch', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { tweets } = req.body; // Array of { x_handle, tweet_text, tweet_url, side?, display_name?, avatar_url? }
+    if (!Array.isArray(tweets) || !tweets.length) return res.status(400).json({ error: 'tweets array required' });
+
+    const results = [];
+    for (const tw of tweets.slice(0, 20)) {
+      try {
+        // Reuse the single import logic by calling the handler internally
+        const handle = (tw.x_handle || '').toLowerCase().replace(/^@/, '');
+        if (!handle || !tw.tweet_text) { results.push({ handle, error: 'missing data' }); continue; }
+
+        const profile = await ensureInfluencerProfile(handle, tw.display_name, tw.avatar_url, null, null, null);
+        const userId = profile?.userId || null;
+
+        // Auto-match
+        let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
+        if (_screenerCache && _screenerCache.data) {
+          const tweetLower = tw.tweet_text.toLowerCase();
+          let bestMatch = null, bestScore = 0;
+          for (const m of _screenerCache.data) {
+            const qLower = (m.question || '').toLowerCase();
+            const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
+            const score = tweetWords.filter(w => qLower.includes(w)).length;
+            if (score > bestScore && score >= 2) { bestScore = score; bestMatch = m; }
+          }
+          if (bestMatch) {
+            matchedSlug = bestMatch.slug || bestMatch.event_slug;
+            matchedQuestion = bestMatch.question;
+            matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
+          }
+        }
+        if (!matchedQuestion) matchedQuestion = tw.tweet_text.substring(0, 200);
+
+        const textLower = tw.tweet_text.toLowerCase();
+        const side = tw.side ? tw.side.toUpperCase() : (/\byes\b|\bbuy\b|\blong\b|\bbullish\b/i.test(textLower) ? 'YES' : 'NO');
+
+        const thesis = tw.tweet_text + (tw.tweet_url ? '\n\n' + tw.tweet_url : '');
+        const infName = tw.display_name || profile?.displayName || ('@' + handle);
+
+        await dbQuery(
+          `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, thesis, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'influencer')`,
+          [userId, infName, matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
+        );
+        results.push({ handle, ok: true, matched: matchedSlug || null });
+      } catch (e) { results.push({ handle: tw.x_handle, error: e.message }); }
+    }
+    res.json({ ok: true, imported: results.filter(r => r.ok).length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/influencers — public list of influencers for discovery
+app.get('/api/influencers', async (req, res) => {
+  try {
+    if (!pool) return res.json({ influencers: [] });
+    const rows = await dbQuery(
+      `SELECT i.x_handle, i.display_name, i.avatar_url, i.bio, i.follower_count, i.category, i.user_id,
+        (SELECT COUNT(*)::int FROM takes t WHERE t.user_id = i.user_id AND t.source = 'influencer') as take_count,
+        (SELECT COALESCE(SUM(t.agree_count), 0)::int FROM takes t WHERE t.user_id = i.user_id) as total_agrees
+       FROM influencers i WHERE i.is_active = true
+       ORDER BY i.follower_count DESC NULLS LAST LIMIT 50`
+    );
+    res.json({ influencers: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/nominate — save a creator nomination
 app.post('/api/nominate', async (req, res) => {
   try {

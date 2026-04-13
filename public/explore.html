@@ -969,6 +969,7 @@ nav {
 .take-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: #000; flex-shrink: 0; }
 .take-avatar.whale { background: linear-gradient(135deg, #a855f7, #6d28d9); color: #fff; }
 .take-avatar.consensus { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; }
+.take-avatar.influencer { background: linear-gradient(135deg, #1d9bf0, #0a66c2); color: #fff; font-weight: 900; }
 .take-avatar.user { background: var(--gold); color: #000; }
 .take-body { flex: 1; min-width: 0; }
 .take-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -976,6 +977,7 @@ nav {
 .take-source-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
 .take-source-badge.whale { background: var(--accent-purple-dim); color: var(--accent-purple); }
 .take-source-badge.consensus { background: var(--accent-amber-dim); color: var(--accent-amber); }
+.take-source-badge.influencer { background: rgba(29,155,240,0.12); color: #1d9bf0; }
 .take-source-badge.user { display: none; }
 .take-sharp { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--accent-green); background: var(--accent-green-dim); padding: 2px 6px; border-radius: 4px; }
 .take-time { font-size: 11px; color: var(--dim); margin-left: auto; }
@@ -3566,9 +3568,10 @@ function _reltime(ts) {
 function renderTakeCard(t) {
   var isWhale = t.source === 'whale';
   var isConsensus = t.source === 'consensus';
-  var avatarClass = isWhale ? 'whale' : isConsensus ? 'consensus' : 'user';
+  var isInfluencer = t.source === 'influencer';
+  var avatarClass = isInfluencer ? 'influencer' : isWhale ? 'whale' : isConsensus ? 'consensus' : 'user';
   var initials = getInitials(t.display_name || 'Anonymous');
-  var avatarIcon = isWhale ? '\uD83D\uDC33' : isConsensus ? '\uD83E\uDD1D' : initials;
+  var avatarIcon = isWhale ? '\uD83D\uDC33' : isConsensus ? '\uD83E\uDD1D' : isInfluencer ? '\uD835\uDD4F' : initials;
   var sideClass = (t.side || '').toUpperCase() === 'YES' ? 'yes' : 'no';
   var priceDisplay = t.entry_price ? Math.round(t.entry_price * 100) + '\u00A2' : '';
   var amountDisplay = t.amount ? (t.amount >= 1000000 ? '$' + (t.amount/1000000).toFixed(1) + 'M' : t.amount >= 1000 ? '$' + Math.round(t.amount/1000) + 'K' : '$' + Math.round(t.amount)) : '';
@@ -3594,7 +3597,8 @@ function renderTakeCard(t) {
 
   // Source badge
   var badge = '';
-  if (isWhale) badge = '<span class="take-source-badge whale">WHALE</span>';
+  if (isInfluencer) badge = '<span class="take-source-badge influencer">\uD835\uDD4F INFLUENCER</span>';
+  else if (isWhale) badge = '<span class="take-source-badge whale">WHALE</span>';
   else if (isConsensus) badge = '<span class="take-source-badge consensus">CONSENSUS</span>';
 
   // Sharp score
