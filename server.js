@@ -14240,6 +14240,29 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/takes/hot — most controversial takes for landing page
+app.get('/api/takes/hot', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+    if (!pool) return res.json({ takes: [] });
+    // Controversial = highest total reactions, boosted by balance between agree/disagree
+    const rows = await dbQuery(
+      `SELECT t.* FROM takes t
+       WHERE t.created_at > now() - interval '7 days'
+       AND (t.agree_count + t.disagree_count) >= 0
+       ORDER BY
+         (t.agree_count + t.disagree_count) *
+         (1.0 + LEAST(t.agree_count, t.disagree_count)::float / GREATEST(t.agree_count + t.disagree_count, 1)) *
+         (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400.0))
+       DESC LIMIT $1`,
+      [limit]
+    );
+    res.json({ takes: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/takes/feed — main social feed (For You / Following)
 app.get('/api/takes/feed', optionalAuth, async (req, res) => {
   try {
@@ -14316,11 +14339,28 @@ app.get('/api/takes/feed', optionalAuth, async (req, res) => {
       for (const r of pRows) parentTakes[r.id] = r;
     }
 
+    // Compute Flex Score per author (correct / resolved takes)
+    const authorIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+    let flexScores = {};
+    if (authorIds.length) {
+      const fsRows = await dbQuery(
+        `SELECT user_id,
+          COUNT(*) FILTER (WHERE is_correct IS NOT NULL)::int as resolved,
+          COUNT(*) FILTER (WHERE is_correct = true)::int as correct
+         FROM takes WHERE user_id = ANY($1) GROUP BY user_id`,
+        [authorIds]
+      ).catch(() => []);
+      for (const r of fsRows) {
+        flexScores[r.user_id] = r.resolved > 0 ? Math.round((r.correct / r.resolved) * 100) : null;
+      }
+    }
+
     const takes = rows.map(r => ({
       ...r,
       my_reaction: myReactions[r.id] || null,
       quote_count: quoteCounts[r.id] || 0,
       parent_take: r.parent_take_id ? (parentTakes[r.parent_take_id] || null) : null,
+      flex_score: r.user_id ? (flexScores[r.user_id] ?? null) : null,
     }));
 
     res.json({ takes, cursor: rows.length ? rows[rows.length - 1].created_at : null });

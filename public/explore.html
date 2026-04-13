@@ -1381,8 +1381,15 @@ nav {
       </div>
     </div>
 
-    <!-- ═══ TAKES FEED — social prediction layer ═══ -->
+    <!-- ═══ FLEX FEED ═══ -->
     <div class="takes-section" id="takes-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:16px;font-weight:900;color:var(--gold);letter-spacing:-0.5px">FLEX FEED</span>
+          <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
+        </div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Predict. Prove. Flex.</span>
+      </div>
       <div class="takes-tabs">
         <div class="takes-tab active" onclick="switchTakesTab('foryou')" id="takes-tab-foryou">For You</div>
         <div class="takes-tab" onclick="switchTakesTab('following')" id="takes-tab-following">Following</div>
@@ -3602,6 +3609,13 @@ function renderTakeCard(t) {
   else if (isConsensus) badge = '<span class="take-source-badge consensus">CONSENSUS</span>';
 
   // Sharp score
+  // Flex Score badge (win rate on resolved takes)
+  var flexBadge = '';
+  if (t.flex_score != null && t.flex_score > 0) {
+    var flexColor = t.flex_score >= 70 ? 'var(--gold)' : t.flex_score >= 55 ? 'var(--accent-green)' : t.flex_score >= 40 ? 'var(--accent-blue)' : 'var(--accent-red)';
+    var flexBg = t.flex_score >= 70 ? 'var(--gold-dim)' : t.flex_score >= 55 ? 'var(--accent-green-dim)' : t.flex_score >= 40 ? 'var(--accent-blue-dim)' : 'var(--accent-red-dim)';
+    flexBadge = '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + flexColor + ';background:' + flexBg + ';padding:2px 6px;border-radius:4px">' + t.flex_score + '% FLEX</span>';
+  }
   var sharp = t.sharp_score ? '<span class="take-sharp">' + Math.round(t.sharp_score) + ' Sharp</span>' : '';
 
   // Quote-predict parent
@@ -3633,7 +3647,7 @@ function renderTakeCard(t) {
     '<div class="take-body">' +
       '<div class="take-header">' +
         authorHtml +
-        badge + sharp + correctBadge +
+        badge + flexBadge + sharp + correctBadge +
         '<span class="take-time">' + timeAgo(t.created_at) + '</span>' +
       '</div>' +
       marketLink + thesis + amount + quotedTake +
