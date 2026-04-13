@@ -71,6 +71,8 @@
   .roi-pill{font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(0,230,138,0.12);color:var(--green)}
   .roi-pill.mid{background:rgba(245,158,11,0.12);color:var(--amber)}
   .roi-pill.low{background:rgba(136,136,160,0.12);color:var(--dim)}
+  .true-arb-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(0,230,138,0.18);color:var(--green);border:1px solid rgba(0,230,138,0.35);text-transform:uppercase;letter-spacing:0.08em;animation:pulse 2s infinite}
+  .fee-note{font-family:var(--mono);font-size:10px;color:var(--soft);margin-top:3px}
 
   /* Question */
   .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
@@ -147,7 +149,8 @@
     <div class="hero-stats">
       <div class="hero-stat"><div class="n" id="s-count">—</div><div class="l">Arb Opportunities</div></div>
       <div class="hero-stat"><div class="n green" id="s-spread">—</div><div class="l">Avg Spread</div></div>
-      <div class="hero-stat"><div class="n" id="s-best">—</div><div class="l">Best ROI</div></div>
+      <div class="hero-stat"><div class="n" id="s-best">—</div><div class="l">Best Net ROI</div></div>
+      <div class="hero-stat"><div class="n" id="s-truearb" style="color:var(--green)">—</div><div class="l">True Arb</div></div>
       <div class="hero-stat"><div class="n" id="s-pairs">—</div><div class="l">Platform Pairs</div></div>
     </div>
   </div>
@@ -271,7 +274,7 @@ function render() {
 
   grid.innerHTML = filtered.map(function(opp) {
     var tier = spreadTier(opp.spread);
-    var cardClass = tier === 'high' ? 'high-spread' : tier === 'mid' ? 'mid-spread' : '';
+    var cardClass = (opp.true_arb ? 'high-spread' : tier === 'high' ? 'high-spread' : tier === 'mid' ? 'mid-spread' : '');
 
     var buySource = opp.buy_on;
     var sellSource = opp.sell_on;
@@ -291,22 +294,46 @@ function render() {
 
     var title = opp.title_a || opp.question || 'Unknown Market';
 
+    // Use net_roi (fee-adjusted) when available, fall back to gross arb_roi
+    var displayRoi = opp.net_roi != null ? opp.net_roi : opp.arb_roi;
+    var roiTier = displayRoi >= 10 ? '' : displayRoi >= 5 ? 'mid' : 'low';
+
+    // Fee note (only when Kalshi fee was applied)
+    var feeNote = (opp.kalshi_fee_pct != null && opp.kalshi_fee_pct > 0)
+      ? '<div class="fee-note">Kalshi fee est. ' + opp.kalshi_fee_pct + '¢ · net ROI</div>'
+      : '';
+
+    // True arb profit line
+    var trueArbLine = opp.true_arb
+      ? '<div style="margin-bottom:10px;padding:8px 12px;border-radius:8px;background:rgba(0,230,138,0.07);border:1px solid rgba(0,230,138,0.2);font-size:12px;color:var(--green);font-weight:600">' +
+          '⚡ Risk-free arb: buy both sides for $' + (opp.true_arb_profit_pct != null ? (100 - opp.true_arb_profit_pct) / 100 : '?') + ', guaranteed $1 payout' +
+          (opp.true_arb_profit_pct != null ? ' · +' + opp.true_arb_profit_pct + '¢ profit' : '') +
+        '</div>'
+      : '';
+
     return '<div class="arb-card ' + cardClass + '">' +
       '<div class="card-top">' +
         '<div class="spread-badge"><div class="n ' + tier + '">' + opp.spread_pct + '%</div><div class="l">Spread</div></div>' +
-        '<div class="roi-pill ' + (opp.arb_roi >= 10 ? '' : opp.arb_roi >= 5 ? 'mid' : 'low') + '">+' + opp.arb_roi + '% ROI</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">' +
+          '<div class="roi-pill ' + roiTier + '">+' + displayRoi + '% ROI</div>' +
+          (opp.true_arb ? '<div class="true-arb-badge">True Arb</div>' : '') +
+        '</div>' +
       '</div>' +
       '<div class="card-q">' + escHtml(title) + '</div>' +
+      trueArbLine +
       '<div class="platform-row">' +
         '<div class="plat-side buy">' +
           '<div class="plat-label"><span class="name">' + platformLabel(buySource) + '</span><span class="action buy">BUY YES</span></div>' +
           '<div class="plat-price buy-price">' + fmtPct(buyPrice) + '</div>' +
+          (opp.kalshi_yes_bid != null && buySource === 'kalshi' ? '<div class="plat-vol">bid ' + fmtPct(opp.kalshi_yes_bid) + ' / ask ' + (opp.kalshi_yes_ask != null ? fmtPct(opp.kalshi_yes_ask) : '—') + '</div>' : '') +
         '</div>' +
         '<div class="plat-side sell">' +
           '<div class="plat-label"><span class="name">' + platformLabel(sellSource) + '</span><span class="action sell">SELL YES</span></div>' +
           '<div class="plat-price sell-price">' + fmtPct(sellPrice) + '</div>' +
+          (opp.kalshi_yes_bid != null && sellSource === 'kalshi' ? '<div class="plat-vol">bid ' + fmtPct(opp.kalshi_yes_bid) + ' / ask ' + (opp.kalshi_yes_ask != null ? fmtPct(opp.kalshi_yes_ask) : '—') + '</div>' : '') +
         '</div>' +
       '</div>' +
+      feeNote +
       '<div class="spread-visual">' +
         '<span style="font-size:11px;color:var(--soft);font-weight:600">SPREAD</span>' +
         '<div class="spread-bar"><div class="spread-fill ' + tier + '" style="width:' + Math.min(opp.spread_pct * 4, 100) + '%"></div></div>' +
@@ -336,8 +363,12 @@ function updateHero(data) {
   document.getElementById('s-count').textContent = opps.length;
   document.getElementById('s-spread').textContent = data.avg_spread ? Math.round(data.avg_spread * 100) + '%' : '0%';
 
-  var bestRoi = opps.length > 0 ? Math.max.apply(null, opps.map(function(o) { return o.arb_roi || 0; })) : 0;
+  var bestRoi = data.best_net_roi || (opps.length > 0 ? Math.max.apply(null, opps.map(function(o) { return o.net_roi || o.arb_roi || 0; })) : 0);
   document.getElementById('s-best').textContent = bestRoi > 0 ? '+' + bestRoi + '%' : '—';
+
+  var trueArbCount = data.true_arb_count != null ? data.true_arb_count : opps.filter(function(o) { return o.true_arb; }).length;
+  var el = document.getElementById('s-truearb');
+  if (el) el.textContent = trueArbCount > 0 ? trueArbCount : '0';
 
   var pairs = new Set();
   opps.forEach(function(o) {

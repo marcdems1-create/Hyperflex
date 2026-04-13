@@ -23932,6 +23932,46 @@ function filterScreenerResults(markets, query) {
 // ── ARBITRAGE SCANNER — cross-platform price discrepancies ────────────────
 let _arbCache = null;
 let _arbScannerCache = null; // separate cache for the scanner endpoint (different format from legacy cron)
+let _arbV1Cache = null;      // v1 endpoint cache (richer: orderbook prices + true arb detection)
+
+// ── Fingerprint helpers for arb market matching (module-level, shared) ──────
+const _ARB_STOPWORDS = new Set(['will','the','before','after','from','this','that','with','have','been','does','would','should','could','about','into','than','them','then','what','when','where','which','their','there','these','those','other','some','more','very','just','only','also','most','next','each','both','during','being','between','defined','member','2024','2025','2026','2027','2028','2029']);
+const _ARB_SEMANTIC = {
+  'impeach':  ['impeach','impeached','impeachment','removed from office'],
+  'win':      ['win','winner','champion','victory','championship','take'],
+  'price':    ['price','hit','above','below','reach','exceed','fall'],
+  'election': ['election','elected','vote','nominee','nomination','presidential'],
+  'rate':     ['rate','rates','cut','hike','basis points','fomc'],
+  'ceasefire':['ceasefire','peace','truce','war ends','conflict ends'],
+  'resign':   ['resign','resignation','step down','leave office','out as'],
+};
+function _arbFingerprint(text) {
+  const t = (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
+  const words = t.split(/\s+/).filter(w => w.length > 2 && !_ARB_STOPWORDS.has(w));
+  const normalized = new Set();
+  for (const w of words) {
+    let mapped = false;
+    for (const [group, variants] of Object.entries(_ARB_SEMANTIC)) {
+      if (variants.some(v => w.includes(v) || v.includes(w))) {
+        normalized.add('~' + group);
+        mapped = true;
+        break;
+      }
+    }
+    if (!mapped) normalized.add(w);
+  }
+  return [...normalized];
+}
+function _arbMatchScore(qA, qB) {
+  const fpA = _arbFingerprint(qA);
+  const fpB = _arbFingerprint(qB);
+  const shared = fpA.filter(w => fpB.includes(w));
+  const hasEntity = shared.some(w => !w.startsWith('~') && w.length > 3);
+  const score = shared.length / Math.max(fpA.length, fpB.length, 1);
+  return { score, hasEntity, sharedCount: shared.length };
+}
+// Kalshi taker fee formula: 0.07 × P × (1−P) per contract
+function _kalshiFee(price) { return 0.07 * price * (1 - price); }
 
 app.get('/api/arbitrage', async (req, res) => {
   try {
@@ -24052,6 +24092,235 @@ app.get('/api/arbitrage', async (req, res) => {
     console.error('[arbitrage]', err.message);
     if (_arbScannerCache) return res.json(_arbScannerCache.data);
     res.status(500).json({ error: 'Failed to compute arbitrage', detail: err.message });
+  }
+});
+
+// ── V1 ARBITRAGE — live orderbook prices + true arb detection + fee-adj ROI ──
+// This is the primary endpoint. /api/arbitrage is the legacy fallback.
+app.get('/api/v1/arbitrage', async (req, res) => {
+  const minSpread = Math.max(0, parseFloat(req.query.min_spread || '0.01'));
+  const limit = Math.min(Math.max(1, parseInt(req.query.limit || '30')), 100);
+
+  if (_arbV1Cache && Date.now() - _arbV1Cache.ts < 5 * 60 * 1000) {
+    return res.json(_arbV1Cache.data);
+  }
+
+  try {
+    // ── 1. Polymarket: pull from screener cache (has live CLOB mid + best_bid/ask) ──
+    const polyMarkets = [];
+    if (_screenerCache && Array.isArray(_screenerCache.data)) {
+      for (const m of _screenerCache.data) {
+        if (!m.yes_price || m.yes_price <= 0.05 || m.yes_price >= 0.95) continue;
+        if (!m.volume || m.volume < 10000) continue;
+        polyMarkets.push({
+          question:     m.question || '',
+          yes_price:    m.yes_price,    // CLOB mid
+          yes_bid:      m.best_bid  ?? null,
+          yes_ask:      m.best_ask  ?? null,
+          volume:       m.volume    || 0,
+          slug:         m.slug      || '',
+          condition_id: m.condition_id || '',
+        });
+      }
+    }
+    if (polyMarkets.length === 0) {
+      return res.json({ opportunities: [], total_found: 0, true_arb_count: 0, avg_spread: 0, updated_at: new Date().toISOString() });
+    }
+
+    // ── 2. Kalshi: paginated events cache (10-min TTL) ──
+    let kalshiEvents = [];
+    try { kalshiEvents = await getKalshiEvents(); } catch(e) {}
+
+    // ── 3. Build Kalshi market list with initial prices from event data ──
+    const kalshiMarkets = [];
+    for (const evt of kalshiEvents) {
+      const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
+      for (const m of mkts) {
+        const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null;
+        const yesAsk    = m.yes_ask_dollars   != null ? parseFloat(m.yes_ask_dollars)   : null;
+        const yesBid    = m.yes_bid_dollars   != null ? parseFloat(m.yes_bid_dollars)   : null;
+        // Mid: prefer bid/ask midpoint, fallback to ask or last price
+        const yesMid = (yesBid != null && yesAsk != null) ? (yesBid + yesAsk) / 2
+                     : yesAsk ?? lastPrice;
+        if (yesMid == null || yesMid <= 0.05 || yesMid >= 0.95) continue;
+        const ticker = m.ticker || m.event_ticker || '';
+        kalshiMarkets.push({
+          question:        (evt.title || m.title || '').trim(),
+          yes_mid:         yesMid,
+          yes_bid:         yesBid,
+          yes_ask:         yesAsk,
+          volume:          parseFloat(m.volume_fp || m.volume || 0),
+          ticker,
+          event_ticker:    m.event_ticker || ticker,
+          needs_orderbook: (yesBid == null || yesAsk == null) && !!ticker,
+        });
+      }
+    }
+
+    // ── 4. Enrich top Kalshi markets with live orderbook bid/ask ──
+    // Kalshi orderbook: yes_dollars = YES bids, no_dollars = NO bids
+    // A YES bid at X means someone will buy YES at X  → that's the YES bid
+    // A NO bid at Y means someone will buy NO at Y   → YES ask = 1 - Y
+    const toFetch = kalshiMarkets.filter(m => m.needs_orderbook).slice(0, 25);
+    if (toFetch.length > 0) {
+      await Promise.allSettled(toFetch.map(async (m) => {
+        try {
+          const ctrl = new AbortController();
+          const tid  = setTimeout(() => ctrl.abort(), 6000);
+          const r = await _nodeFetch(
+            `https://api.elections.kalshi.com/trade-api/v2/markets/${m.ticker}/orderbook`,
+            { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }, signal: ctrl.signal }
+          ).finally(() => clearTimeout(tid));
+          if (!r.ok) return;
+          const ob   = await r.json();
+          const book = ob.orderbook_fp || ob.orderbook || {};
+          // Arrays sorted descending by price by Kalshi API
+          const yesBids = book.yes_dollars || book.yes || [];
+          const noBids  = book.no_dollars  || book.no  || [];
+          const bestYesBid = yesBids.length > 0 ? parseFloat(yesBids[0][0]) : null;
+          const bestNoBid  = noBids.length  > 0 ? parseFloat(noBids[0][0])  : null;
+          // YES ask = 1 − best NO bid (crossing the NO side lets you buy YES)
+          const computedYesAsk = bestNoBid != null ? parseFloat((1 - bestNoBid).toFixed(4)) : null;
+          const mid = (bestYesBid != null && computedYesAsk != null)
+            ? (bestYesBid + computedYesAsk) / 2
+            : bestYesBid ?? computedYesAsk;
+          if (mid != null && mid > 0.03 && mid < 0.97) {
+            m.yes_bid = bestYesBid;
+            m.yes_ask = computedYesAsk;
+            m.yes_mid = mid;
+          }
+        } catch { /* orderbook fetch failure is non-fatal */ }
+      }));
+    }
+
+    // Filter to valid price range after enrichment
+    const kalshiValid = kalshiMarkets.filter(m => m.yes_mid > 0.05 && m.yes_mid < 0.95);
+
+    // ── 5. Match Polymarket ↔ Kalshi via fingerprint (semantic entity overlap) ──
+    const usedKalshi = new Set();
+    const opportunities = [];
+
+    for (const pm of polyMarkets) {
+      if (!pm.question) continue;
+      let bestMatch = null, bestIdx = -1, bestScore = 0;
+
+      for (let ki = 0; ki < kalshiValid.length; ki++) {
+        if (usedKalshi.has(ki)) continue;
+        const { score, hasEntity, sharedCount } = _arbMatchScore(pm.question, kalshiValid[ki].question);
+        if (score > bestScore && sharedCount >= 2 && hasEntity) {
+          bestScore = score;
+          bestIdx = ki;
+          bestMatch = kalshiValid[ki];
+        }
+      }
+      if (!bestMatch || bestScore < 0.30) continue;
+
+      const km = bestMatch;
+      const polyMid   = pm.yes_price;
+      const kalshiMid = km.yes_mid;
+      const spread    = Math.abs(polyMid - kalshiMid);
+      if (spread < minSpread) continue;
+
+      // ── Price-spread direction ──
+      const buyPlatform  = polyMid < kalshiMid ? 'polymarket' : 'kalshi';
+      const sellPlatform = buyPlatform === 'polymarket' ? 'kalshi' : 'polymarket';
+      const buyPrice     = Math.min(polyMid, kalshiMid);
+      const sellPrice    = Math.max(polyMid, kalshiMid);
+      const grossRoi     = buyPrice > 0 ? Math.round((spread / buyPrice) * 100) : 0;
+
+      // Kalshi fee on the Kalshi leg (fee = 0.07 × P × (1-P) on winning contracts)
+      const kalshiLegPrice = buyPlatform === 'kalshi' ? buyPrice : sellPrice;
+      const feeAmt         = _kalshiFee(kalshiLegPrice);
+      const netSpread      = Math.max(0, spread - feeAmt);
+      const netRoi         = buyPrice > 0 ? Math.round((netSpread / buyPrice) * 100) : 0;
+
+      // ── True arb check — buying both sides totals < $1 ──
+      // Use best available prices (orderbook ask if available, else mid)
+      const polyYesAsk  = pm.yes_ask  ?? polyMid;
+      const polyNoAsk   = pm.yes_bid  != null ? parseFloat((1 - pm.yes_bid).toFixed(4)) : (1 - polyMid);
+      const kalshiYesAsk = km.yes_ask ?? kalshiMid;
+      const kalshiNoAsk  = km.yes_bid != null ? parseFloat((1 - km.yes_bid).toFixed(4)) : (1 - kalshiMid);
+
+      // Dir 1: YES on Poly + NO on Kalshi
+      const costDir1 = polyYesAsk + kalshiNoAsk;
+      // Dir 2: NO on Poly + YES on Kalshi
+      const costDir2 = polyNoAsk  + kalshiYesAsk;
+      const bestArbCost = Math.min(costDir1, costDir2);
+      // Apply Kalshi fee to the Kalshi leg in the arb
+      const trueArbFee  = _kalshiFee(bestArbCost < 1 ? (costDir1 <= costDir2 ? kalshiNoAsk : kalshiYesAsk) : 0);
+      const trueArb     = bestArbCost < 0.98; // 2% buffer for slippage/execution
+      const trueArbProfit = trueArb
+        ? Math.round((1 - bestArbCost - trueArbFee) * 100)
+        : null;
+
+      // ── Category ──
+      const q = (pm.question).toLowerCase();
+      const category = /bitcoin|btc|eth(ereum)?|crypto|solana|defi|token|blockchain/.test(q) ? 'crypto'
+        : /fed\b|interest rate|inflation|recession|stock|nasdaq|economy|tariff|treasury/.test(q) ? 'finance'
+        : /trump|biden|democrat|republican|election|congress|senate|president|pope|war\b|military/.test(q) ? 'politics'
+        : /nba|nfl|mlb|ufc|championship|playoff|series|soccer|tennis|golf/.test(q) ? 'sports'
+        : /oscar|emmy|grammy|movie|music|celebrity|streaming/.test(q) ? 'entertainment'
+        : 'other';
+
+      // Kalshi link: strip trailing -NNN from event ticker for cleaner URL
+      const kalshiUrlTicker = (km.event_ticker || km.ticker || '').replace(/-\d+$/, '').toLowerCase();
+
+      usedKalshi.add(bestIdx);
+      opportunities.push({
+        title_a:            pm.question,
+        source_a:           'polymarket',
+        source_b:           'kalshi',
+        price_a:            parseFloat(polyMid.toFixed(3)),
+        price_b:            parseFloat(kalshiMid.toFixed(3)),
+        spread:             parseFloat(spread.toFixed(3)),
+        spread_pct:         Math.round(spread * 100),
+        buy_on:             buyPlatform,
+        sell_on:            sellPlatform,
+        buy_price:          parseFloat(buyPrice.toFixed(3)),
+        sell_price:         parseFloat(sellPrice.toFixed(3)),
+        arb_roi:            grossRoi,
+        net_roi:            netRoi,
+        confidence:         Math.round(bestScore * 100),
+        category,
+        hfx_id_a:           'polymarket:' + (pm.slug || ''),
+        hfx_id_b:           'kalshi:' + kalshiUrlTicker,
+        poly_volume:        pm.volume,
+        kalshi_volume:      km.volume,
+        true_arb:           trueArb,
+        true_arb_profit_pct: trueArbProfit,
+        kalshi_fee_pct:     Math.round(feeAmt * 100),
+        kalshi_yes_bid:     km.yes_bid  != null ? parseFloat(km.yes_bid.toFixed(3))  : null,
+        kalshi_yes_ask:     km.yes_ask  != null ? parseFloat(km.yes_ask.toFixed(3))  : null,
+        poly_yes_bid:       pm.yes_bid  != null ? parseFloat(pm.yes_bid.toFixed(3))  : null,
+        poly_yes_ask:       pm.yes_ask  != null ? parseFloat(pm.yes_ask.toFixed(3))  : null,
+      });
+    }
+
+    // Sort: true arb first (by profit), then by spread
+    opportunities.sort((a, b) => {
+      if (a.true_arb !== b.true_arb) return b.true_arb ? 1 : -1;
+      if (a.true_arb && b.true_arb) return (b.true_arb_profit_pct || 0) - (a.true_arb_profit_pct || 0);
+      return b.spread - a.spread;
+    });
+
+    const limited = opportunities.slice(0, limit);
+    const result = {
+      opportunities:   limited,
+      total_found:     opportunities.length,
+      true_arb_count:  opportunities.filter(o => o.true_arb).length,
+      avg_spread:      opportunities.length > 0
+        ? parseFloat((opportunities.reduce((s, o) => s + o.spread, 0) / opportunities.length).toFixed(3))
+        : 0,
+      best_net_roi:    limited.length > 0 ? Math.max(...limited.map(o => o.net_roi || 0)) : 0,
+      updated_at:      new Date().toISOString(),
+    };
+
+    _arbV1Cache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[arb-v1]', err.message);
+    if (_arbV1Cache) return res.json(_arbV1Cache.data);
+    res.status(500).json({ error: 'Failed to compute v1 arbitrage', detail: err.message });
   }
 });
 
