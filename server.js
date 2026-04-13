@@ -3202,6 +3202,8 @@ async function settleMarkets() {
     // Email bettors about the outcome (fire-and-forget)
     const creatorSlug = await getCreatorSlugForMarket(market);
     sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
+    // Score takes for this market (fire-and-forget)
+    scoreTakesForMarket(market.question, outcome ? 'YES' : 'NO', null).catch(() => {});
   }
   } catch (err) {
     console.error('[settle] Error:', err.message);
@@ -7514,6 +7516,8 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
       const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', req.creator.id) .maybeSingle();
     }
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
+    // Score takes for this market (fire-and-forget)
+    scoreTakesForMarket(market.question, outcome, null).catch(() => {});
 
     // In-app notifications for each bettor
     if (positions && positions.length > 0) {
@@ -12043,7 +12047,7 @@ app.get('/api/member/:userId', async (req, res) => {
     let userData, positionsData;
     if (pool) {
       const [userRows, posRows] = await Promise.all([
-        dbQuery('SELECT id, display_name, created_at FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]),
         dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
@@ -12052,7 +12056,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, created_at').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -12112,11 +12116,42 @@ app.get('/api/member/:userId', async (req, res) => {
         resolved_at:    p.markets.resolved_at,
       }));
 
+    // Takes stats + recent takes
+    let takeStats = { total: 0, correct: 0, incorrect: 0, accuracy: 0, total_agrees: 0 };
+    let recentTakes = [];
+    if (pool) {
+      try {
+        const [countRows, recentRows] = await Promise.all([
+          dbQuery(`SELECT
+            COUNT(*)::int as total,
+            COUNT(*) FILTER (WHERE is_correct = true)::int as correct,
+            COUNT(*) FILTER (WHERE is_correct = false)::int as incorrect,
+            COALESCE(SUM(agree_count), 0)::int as total_agrees
+            FROM takes WHERE user_id = $1 AND source = 'user'`, [userId]),
+          dbQuery(`SELECT id, question, side, entry_price, thesis, agree_count, disagree_count, is_correct, created_at, market_slug
+            FROM takes WHERE user_id = $1 AND source = 'user' ORDER BY created_at DESC LIMIT 10`, [userId]),
+        ]);
+        if (countRows[0]) {
+          takeStats.total = countRows[0].total;
+          takeStats.correct = countRows[0].correct;
+          takeStats.incorrect = countRows[0].incorrect;
+          takeStats.total_agrees = countRows[0].total_agrees;
+          const resolved = takeStats.correct + takeStats.incorrect;
+          takeStats.accuracy = resolved > 0 ? Math.round((takeStats.correct / resolved) * 100) : 0;
+        }
+        recentTakes = recentRows;
+      } catch (e) { /* takes table may not exist yet */ }
+    }
+
     res.json({
       user: {
         id:           userData.id,
         display_name: userData.display_name || 'Anonymous',
         member_since: userData.created_at,
+        is_whale:     userData.is_whale || false,
+        whale_rank:   userData.whale_rank || null,
+        whale_pnl:    userData.whale_pnl != null ? parseFloat(userData.whale_pnl) : null,
+        polymarket_address: userData.polymarket_address || null,
       },
       stats: {
         total_predictions:  positions.length,
@@ -12127,12 +12162,56 @@ app.get('/api/member/:userId', async (req, res) => {
         total_won: Math.round(totalWon / 100),
         streak,
       },
+      take_stats: takeStats,
+      recent_takes: recentTakes,
       communities: slugs.slice(0, 12).map(s => communityMap[s] || { slug: s, display_name: s, primary_color: '#c9920d' }),
       recent_wins: recentWins,
     });
   } catch (err) {
     console.error('[member profile]', err);
     res.status(500).json({ error: 'Failed to load member profile' });
+  }
+});
+
+// GET /api/whale-profiles — whale leaderboard for discovery
+app.get('/api/whale-profiles', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 50);
+    if (!pool) return res.json({ whales: [] });
+
+    const rows = await dbQuery(
+      `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.created_at,
+        COUNT(t.id)::int as take_count,
+        COUNT(t.id) FILTER (WHERE t.is_correct = true)::int as correct_takes,
+        COUNT(t.id) FILTER (WHERE t.is_correct = false)::int as incorrect_takes,
+        COALESCE(SUM(t.agree_count), 0)::int as total_agrees
+       FROM users u
+       LEFT JOIN takes t ON t.user_id = u.id AND t.source IN ('whale', 'consensus')
+       WHERE u.is_whale = true
+       GROUP BY u.id
+       ORDER BY u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
+       LIMIT $1`,
+      [limit]
+    );
+
+    const whales = rows.map(r => ({
+      id: r.id,
+      display_name: r.display_name,
+      polymarket_address: r.polymarket_address,
+      whale_rank: r.whale_rank,
+      whale_pnl: r.whale_pnl != null ? parseFloat(r.whale_pnl) : null,
+      take_count: r.take_count,
+      correct_takes: r.correct_takes,
+      accuracy: (r.correct_takes + r.incorrect_takes) > 0
+        ? Math.round((r.correct_takes / (r.correct_takes + r.incorrect_takes)) * 100) : null,
+      total_agrees: r.total_agrees,
+      profile_url: '/m/' + r.id,
+    }));
+
+    res.json({ whales });
+  } catch (err) {
+    console.error('[whale-profiles]', err.message);
+    res.status(500).json({ error: 'Failed to load whale profiles' });
   }
 });
 
@@ -13269,6 +13348,437 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[share-position]', err.message);
     res.status(500).json({ error: 'Failed to share position' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAKES — social prediction layer
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Ensure takes + take_reactions tables exist (idempotent)
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`CREATE TABLE IF NOT EXISTS takes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      wallet_address TEXT,
+      display_name TEXT,
+      avatar_url TEXT,
+      market_slug TEXT,
+      condition_id TEXT,
+      question TEXT NOT NULL,
+      side TEXT NOT NULL,
+      entry_price NUMERIC,
+      amount NUMERIC,
+      thesis TEXT,
+      source TEXT NOT NULL DEFAULT 'user',
+      sharp_score NUMERIC,
+      parent_take_id UUID REFERENCES takes(id) ON DELETE SET NULL,
+      agree_count INTEGER NOT NULL DEFAULT 0,
+      disagree_count INTEGER NOT NULL DEFAULT 0,
+      is_correct BOOLEAN,
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    await dbQuery(`CREATE TABLE IF NOT EXISTS take_reactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      take_id UUID NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reaction TEXT NOT NULL CHECK (reaction IN ('agree', 'disagree')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(take_id, user_id)
+    )`);
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_created_at ON takes(created_at DESC)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_source ON takes(source)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_market_slug ON takes(market_slug)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_user_id ON takes(user_id)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_parent ON takes(parent_take_id)').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_reactions_take_id ON take_reactions(take_id)').catch(() => {});
+    console.log('[takes] Tables ensured');
+    // Ensure whale profile columns
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_whale BOOLEAN DEFAULT false').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_rank INTEGER').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_pnl NUMERIC').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_is_whale ON users(is_whale) WHERE is_whale = true').catch(() => {});
+  } catch (e) { console.warn('[takes] table init:', e.message); }
+})();
+
+// ── Whale profile cache: polymarket_address → user id ──
+const _whaleUserCache = new Map(); // wallet_address → { userId, displayName }
+
+// ensureWhaleProfile: create or update a user record for a Polymarket whale wallet.
+// Returns the user id so takes can be linked to profiles.
+async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
+  if (!pool || !walletAddress) return null;
+  const addrLower = walletAddress.toLowerCase();
+
+  // Check cache first
+  const cached = _whaleUserCache.get(addrLower);
+  if (cached) return cached.userId;
+
+  try {
+    // Look up existing user by polymarket_address
+    const existing = await dbQuery(
+      'SELECT id, display_name FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1',
+      [addrLower]
+    );
+
+    if (existing.length) {
+      // Update rank/pnl/whale flag
+      const displayName = traderName || existing[0].display_name;
+      await dbQuery(
+        'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
+        [rank || null, pnl || null, displayName, existing[0].id]
+      ).catch(() => {});
+      _whaleUserCache.set(addrLower, { userId: existing[0].id, displayName });
+      return existing[0].id;
+    }
+
+    // Create new whale user
+    const displayName = traderName || (addrLower.slice(0, 6) + '...' + addrLower.slice(-4));
+    const rows = await dbQuery(
+      `INSERT INTO users (display_name, polymarket_address, password_hash, is_whale, whale_rank, whale_pnl, created_at)
+       VALUES ($1, $2, $3, true, $4, $5, NOW()) RETURNING id`,
+      [displayName, addrLower, 'whale_profile_' + Date.now(), rank || null, pnl || null]
+    );
+    if (rows.length) {
+      _whaleUserCache.set(addrLower, { userId: rows[0].id, displayName });
+      console.log(`[whale-profile] Created profile for ${displayName} (${addrLower.slice(0, 8)}...)`);
+      return rows[0].id;
+    }
+  } catch (e) {
+    // Could be duplicate key if concurrent insert — try lookup again
+    try {
+      const retry = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addrLower]);
+      if (retry.length) {
+        _whaleUserCache.set(addrLower, { userId: retry[0].id, displayName: traderName || addrLower.slice(0, 10) });
+        return retry[0].id;
+      }
+    } catch {}
+    console.warn('[whale-profile] Error:', e.message);
+  }
+  return null;
+}
+
+// POST /api/takes — create a take (user prediction with optional thesis)
+app.post('/api/takes', requireAuth, async (req, res) => {
+  try {
+    const { market_slug, condition_id, question, side, entry_price, amount, thesis, parent_take_id } = req.body;
+    if (!question || !side) return res.status(400).json({ error: 'question and side are required' });
+
+    // Get user info for denormalized display
+    let displayName = 'Anonymous', avatarUrl = null, sharpScore = null;
+    if (pool) {
+      const userRows = await dbQuery('SELECT display_name, avatar_url FROM users WHERE id = $1', [req.userId]);
+      if (userRows.length) {
+        displayName = userRows[0].display_name || 'Anonymous';
+        avatarUrl = userRows[0].avatar_url || null;
+      }
+    }
+
+    // If quote-predicting, validate parent exists
+    let parentTake = null;
+    if (parent_take_id) {
+      const parentRows = await dbQuery('SELECT id, user_id, question FROM takes WHERE id = $1', [parent_take_id]);
+      if (!parentRows.length) return res.status(404).json({ error: 'Parent take not found' });
+      parentTake = parentRows[0];
+    }
+
+    const rows = await dbQuery(
+      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, amount, thesis, source, sharp_score, parent_take_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'user',$11,$12) RETURNING *`,
+      [req.userId, displayName, avatarUrl, market_slug || null, condition_id || null,
+       String(question).slice(0, 500), String(side).toUpperCase().slice(0, 20),
+       entry_price != null ? parseFloat(entry_price) : null,
+       amount != null ? parseFloat(amount) : null,
+       thesis ? String(thesis).slice(0, 500) : null,
+       sharpScore, parent_take_id || null]
+    );
+
+    // Notify parent take author of quote-predict
+    if (parentTake && parentTake.user_id && parentTake.user_id !== req.userId) {
+      const shortQ = (parentTake.question || '').substring(0, 50);
+      pushNotification(
+        parentTake.user_id, 'take_quoted',
+        `\u21A9 ${displayName} counter-predicted your take`,
+        `They went ${String(side).toUpperCase()} on "${shortQ}"`,
+        null, null
+      );
+    }
+
+    res.json({ ok: true, take: rows[0] });
+  } catch (err) {
+    console.error('[takes] POST error:', err.message);
+    res.status(500).json({ error: 'Failed to create take' });
+  }
+});
+
+// POST /api/takes/:id/react — agree or disagree with a take
+app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
+  try {
+    const takeId = req.params.id;
+    const { reaction } = req.body;
+    if (!reaction || !['agree', 'disagree'].includes(reaction)) {
+      return res.status(400).json({ error: 'reaction must be "agree" or "disagree"' });
+    }
+
+    // Check if take exists
+    const takeRows = await dbQuery('SELECT id, user_id, question, agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
+    if (!takeRows.length) return res.status(404).json({ error: 'Take not found' });
+    const take = takeRows[0];
+
+    // Check for existing reaction
+    const existing = await dbQuery(
+      'SELECT id, reaction FROM take_reactions WHERE take_id = $1 AND user_id = $2', [takeId, req.userId]
+    );
+
+    let isNewReaction = false;
+    if (existing.length) {
+      if (existing[0].reaction === reaction) {
+        // Same reaction = toggle off (unreact)
+        await dbQuery('DELETE FROM take_reactions WHERE id = $1', [existing[0].id]);
+        const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        await dbQuery(`UPDATE takes SET ${col} = GREATEST(${col} - 1, 0) WHERE id = $1`, [takeId]);
+      } else {
+        // Switch reaction
+        await dbQuery('UPDATE take_reactions SET reaction = $1 WHERE id = $2', [reaction, existing[0].id]);
+        const oldCol = existing[0].reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        const newCol = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        await dbQuery(`UPDATE takes SET ${oldCol} = GREATEST(${oldCol} - 1, 0), ${newCol} = ${newCol} + 1 WHERE id = $1`, [takeId]);
+        isNewReaction = true;
+      }
+    } else {
+      // New reaction
+      await dbQuery(
+        'INSERT INTO take_reactions (take_id, user_id, reaction) VALUES ($1, $2, $3)',
+        [takeId, req.userId, reaction]
+      );
+      const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+      await dbQuery(`UPDATE takes SET ${col} = ${col} + 1 WHERE id = $1`, [takeId]);
+      isNewReaction = true;
+    }
+
+    // Notify take author of new reactions (don't notify yourself)
+    if (isNewReaction && take.user_id && take.user_id !== req.userId) {
+      // Get reactor's name
+      const reactorRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
+      const reactorName = reactorRows[0]?.display_name || 'Someone';
+      const emoji = reaction === 'agree' ? '\u2191' : '\u2193';
+      const verb = reaction === 'agree' ? 'agreed with' : 'disagreed with';
+      const shortQ = (take.question || '').substring(0, 50);
+      pushNotification(
+        take.user_id, 'take_reaction',
+        `${emoji} ${reactorName} ${verb} your take`,
+        `"${shortQ}"`,
+        null, null
+      );
+    }
+
+    // Return updated counts
+    const updated = await dbQuery('SELECT agree_count, disagree_count FROM takes WHERE id = $1', [takeId]);
+    res.json({ ok: true, agree_count: updated[0]?.agree_count || 0, disagree_count: updated[0]?.disagree_count || 0 });
+  } catch (err) {
+    console.error('[takes] react error:', err.message);
+    res.status(500).json({ error: 'Failed to react' });
+  }
+});
+
+// GET /api/takes/trending — hot takes ranked by engagement + recency + sharp score
+app.get('/api/takes/trending', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const offset = parseInt(req.query.offset) || 0;
+    const category = req.query.category; // optional filter
+
+    // Trending score: (agree + disagree) * recency_decay * (1 + sharp_score/100)
+    // Recency decay: 1 / (1 + hours_old/12)
+    let sql = `SELECT t.*,
+      (t.agree_count + t.disagree_count) *
+      (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
+      (1.0 + COALESCE(t.sharp_score, 0) / 100.0) AS trending_score
+      FROM takes t
+      WHERE t.created_at > now() - interval '7 days'`;
+    const params = [];
+    let paramIdx = 1;
+
+    if (category) {
+      sql += ` AND LOWER(t.question) ~ $${paramIdx}`;
+      // Map category to regex pattern
+      const categoryPatterns = {
+        crypto: 'bitcoin|btc|ethereum|eth|solana|crypto|defi|token',
+        politics: 'trump|biden|election|congress|senate|president|war\\b|military',
+        sports: 'nba|nfl|mlb|nhl|ufc|soccer|football|basketball',
+        finance: 'fed\\b|interest|inflation|stock|s&p|oil|gold|economy|tariff',
+        entertainment: 'movie|oscar|grammy|music|ai\\b|tech|apple|google|tesla',
+      };
+      params.push(categoryPatterns[category] || category);
+      paramIdx++;
+    }
+
+    sql += ` ORDER BY trending_score DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+    params.push(limit, offset);
+
+    const rows = await dbQuery(sql, params);
+
+    // Attach user's own reactions if authed
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const takeIds = rows.map(r => r.id);
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, takeIds]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+
+    // Attach quote counts
+    const takeIds = rows.map(r => r.id);
+    let quoteCounts = {};
+    if (takeIds.length) {
+      const qcRows = await dbQuery(
+        'SELECT parent_take_id, COUNT(*) as cnt FROM takes WHERE parent_take_id = ANY($1) GROUP BY parent_take_id',
+        [takeIds]
+      );
+      for (const r of qcRows) quoteCounts[r.parent_take_id] = parseInt(r.cnt);
+    }
+
+    const takes = rows.map(r => ({
+      ...r,
+      my_reaction: myReactions[r.id] || null,
+      quote_count: quoteCounts[r.id] || 0,
+    }));
+
+    res.json({ takes });
+  } catch (err) {
+    console.error('[takes] trending error:', err.message);
+    res.status(500).json({ error: 'Failed to load trending takes' });
+  }
+});
+
+// GET /api/takes/feed — main social feed (For You / Following)
+app.get('/api/takes/feed', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const cursor = req.query.cursor; // ISO timestamp for pagination
+    const mode = req.query.mode || 'foryou'; // 'foryou' | 'following'
+
+    let sql, params;
+
+    if (mode === 'following' && req.userId) {
+      // Only takes from people the user follows
+      sql = `SELECT t.* FROM takes t
+        INNER JOIN predictor_follows pf ON pf.following_id = t.user_id AND pf.follower_id = $1
+        WHERE 1=1`;
+      params = [req.userId];
+      let paramIdx = 2;
+      if (cursor) {
+        sql += ` AND t.created_at < $${paramIdx}`;
+        params.push(cursor);
+        paramIdx++;
+      }
+      sql += ` ORDER BY t.created_at DESC LIMIT $${paramIdx}`;
+      params.push(limit);
+    } else {
+      // "For You" — algorithmic: recency + engagement + sharp_score + source variety
+      sql = `SELECT t.*,
+        (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
+        (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
+        (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
+        CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
+        CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END
+        AS feed_score
+        FROM takes t WHERE 1=1`;
+      params = [];
+      let paramIdx = 1;
+      if (cursor) {
+        sql += ` AND t.created_at < $${paramIdx}`;
+        params.push(cursor);
+        paramIdx++;
+      }
+      sql += ` ORDER BY feed_score DESC, t.created_at DESC LIMIT $${paramIdx}`;
+      params.push(limit);
+    }
+
+    const rows = await dbQuery(sql, params);
+
+    // Attach user's reactions
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const takeIds = rows.map(r => r.id);
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, takeIds]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+
+    // Attach quote counts + parent take data for quote-predicts
+    const takeIds = rows.map(r => r.id);
+    let quoteCounts = {};
+    if (takeIds.length) {
+      const qcRows = await dbQuery(
+        'SELECT parent_take_id, COUNT(*) as cnt FROM takes WHERE parent_take_id = ANY($1) GROUP BY parent_take_id',
+        [takeIds]
+      );
+      for (const r of qcRows) quoteCounts[r.parent_take_id] = parseInt(r.cnt);
+    }
+
+    // Fetch parent takes for any quote-predicts
+    const parentIds = [...new Set(rows.filter(r => r.parent_take_id).map(r => r.parent_take_id))];
+    let parentTakes = {};
+    if (parentIds.length) {
+      const pRows = await dbQuery('SELECT * FROM takes WHERE id = ANY($1)', [parentIds]);
+      for (const r of pRows) parentTakes[r.id] = r;
+    }
+
+    const takes = rows.map(r => ({
+      ...r,
+      my_reaction: myReactions[r.id] || null,
+      quote_count: quoteCounts[r.id] || 0,
+      parent_take: r.parent_take_id ? (parentTakes[r.parent_take_id] || null) : null,
+    }));
+
+    res.json({ takes, cursor: rows.length ? rows[rows.length - 1].created_at : null });
+  } catch (err) {
+    console.error('[takes] feed error:', err.message);
+    res.status(500).json({ error: 'Failed to load feed' });
+  }
+});
+
+// GET /api/takes/market/:slug — takes for a specific market
+app.get('/api/takes/market/:slug', optionalAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      'SELECT * FROM takes WHERE market_slug = $1 ORDER BY (agree_count + disagree_count) DESC, created_at DESC LIMIT 50',
+      [req.params.slug]
+    );
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const reactionRows = await dbQuery(
+        'SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)',
+        [req.userId, rows.map(r => r.id)]
+      );
+      for (const r of reactionRows) myReactions[r.take_id] = r.reaction;
+    }
+    res.json({ takes: rows.map(r => ({ ...r, my_reaction: myReactions[r.id] || null })) });
+  } catch (err) {
+    console.error('[takes] market error:', err.message);
+    res.status(500).json({ error: 'Failed to load market takes' });
+  }
+});
+
+// DELETE /api/takes/:id — delete own take
+app.delete('/api/takes/:id', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT user_id FROM takes WHERE id = $1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Take not found' });
+    if (rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Not your take' });
+    await dbQuery('DELETE FROM takes WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[takes] delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete take' });
   }
 });
 
@@ -16349,6 +16859,47 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
 
 // Send resolution emails to all bettors on a market.
 // market      — markets row (must include .question)
+// ── Score takes when a market resolves ──
+// Marks every take on this market as correct or incorrect based on outcome.
+// Also fires notifications for correct takes.
+async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
+  if (!pool) return;
+  try {
+    const upperOutcome = (outcome || '').toUpperCase();
+    // Find takes matching this market by slug or question text
+    let takes = [];
+    if (marketSlug) {
+      takes = await dbQuery('SELECT id, user_id, side, display_name FROM takes WHERE market_slug = $1 AND is_correct IS NULL', [marketSlug]);
+    }
+    if (!takes.length && marketQuestion) {
+      takes = await dbQuery('SELECT id, user_id, side, display_name FROM takes WHERE LOWER(question) = LOWER($1) AND is_correct IS NULL', [marketQuestion]);
+    }
+    if (!takes.length) return;
+
+    let scored = 0;
+    for (const take of takes) {
+      const isCorrect = take.side.toUpperCase() === upperOutcome;
+      await dbQuery(
+        'UPDATE takes SET is_correct = $1, resolved_at = now() WHERE id = $2',
+        [isCorrect, take.id]
+      );
+      scored++;
+
+      // Notify user if their take was correct
+      if (isCorrect && take.user_id) {
+        pushNotification(
+          take.user_id,
+          'take_correct',
+          '🎯 Your take was right!',
+          `Your ${take.side} call on "${(marketQuestion || '').substring(0, 50)}" resolved ${upperOutcome}. Your track record just got stronger.`,
+          null, null
+        );
+      }
+    }
+    if (scored > 0) console.log(`[takes] Scored ${scored} takes for "${(marketQuestion || '').substring(0, 40)}" → ${upperOutcome}`);
+  } catch (e) { console.warn('[takes] scoreTakesForMarket error:', e.message); }
+}
+
 // outcome     — 'YES' | 'NO'
 // creatorSlug — slug string, used to build community URL + sender name
 // resolutionNote — optional creator note (string | null)
@@ -19324,6 +19875,15 @@ async function fetchWhalePositions() {
   // Only track profitable whales — the top 0.5% who actually make money
   const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 50);
 
+  // ── Ensure whale profiles exist for all tracked traders (fire-and-forget) ──
+  if (pool) {
+    (async () => {
+      for (const t of traders.slice(0, 30)) {
+        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl).catch(() => null);
+      }
+    })().catch(() => {});
+  }
+
   // 2. Fetch positions with concurrency limit (batches of 10, 500ms delay)
   const BATCH_SIZE = 10;
   const BATCH_DELAY = 500;
@@ -19537,6 +20097,59 @@ async function fetchWhalePositions() {
     if (_newEvtCount > 0) {
       const biggestMove = _whaleTradeStream.filter(e => e.ts === now).sort((a, b) => (b.size || 0) - (a.size || 0))[0];
       if (biggestMove && biggestMove.size >= 10000) tweetWhaleAlert(biggestMove).catch(() => {});
+    }
+
+    // ── Synthesize whale takes from large trades ($50k+ opens/increases) ──
+    if (_newEvtCount > 0 && pool) {
+      (async () => {
+        try {
+          const bigTrades = _whaleTradeStream.filter(e =>
+            e.ts === now && (e.action === 'opened' || e.action === 'increased') && (e.size || 0) >= 50000
+          );
+          for (const evt of bigTrades.slice(0, 5)) {
+            // Dedupe: skip if we already have a whale take for this market+trader in last 3 hours
+            const existing = await dbQuery(
+              `SELECT id FROM takes WHERE source = 'whale' AND question = $1 AND display_name = $2
+               AND created_at > now() - interval '3 hours' LIMIT 1`,
+              [evt.question, evt.trader_name || 'Whale']
+            ).catch(() => []);
+            if (existing.length) continue;
+
+            // Find the wallet address for this trader from the snapshot
+            let traderWallet = null;
+            for (const [w, positions] of newSnapshot.entries()) {
+              if (positions.some(p => p.trader === evt.trader_name)) { traderWallet = w; break; }
+            }
+
+            // Ensure whale has a user profile
+            const whaleUserId = await ensureWhaleProfile(
+              traderWallet, evt.trader_name, evt.trader_rank, evt.trader_pnl
+            );
+
+            const sizeStr = evt.size_display || ('$' + Math.round(evt.size / 1000) + 'K');
+            const pricePct = evt.price ? Math.round(evt.price * 100) + '¢' : '';
+            const actionVerb = evt.action === 'opened' ? 'opened a new' : 'increased their';
+            const thesis = `${evt.trader_name || 'Whale'} (rank #${evt.trader_rank || '?'}) ${actionVerb} ${sizeStr} ${(evt.side || 'YES').toUpperCase()} position${pricePct ? ' at ' + pricePct : ''}.`;
+
+            await dbQuery(
+              `INSERT INTO takes (user_id, display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'whale')`,
+              [
+                whaleUserId,
+                evt.trader_name || 'Whale #' + (evt.trader_rank || '?'),
+                traderWallet || null,
+                evt.slug || null,
+                evt.condition_id || null,
+                evt.question || 'Unknown market',
+                (evt.side || 'YES').toUpperCase(),
+                evt.price || null,
+                evt.size || null,
+                thesis
+              ]
+            ).catch(e => console.warn('[takes] whale synthesis error:', e.message));
+          }
+        } catch (e) { console.warn('[takes] whale batch error:', e.message); }
+      })();
     }
 
     // ── Whale alert notifications: notify subscribed users of trader moves ──
@@ -19955,10 +20568,35 @@ async function fetchWhalePositions() {
             );
             console.log(`[whale-consensus] NEW: ${sig.whale_count} whales ${sig.side} on "${sig.market.substring(0, 60)}" ($${Math.round(sig.total_capital/1000)}k)`);
 
-            // Push notification to users subscribed to whale intelligence
-            // (for v1, we notify any user with email_notify_whale_consensus = true,
-            // or we can just log it to the activity feed. For now, skip broadcast —
-            // users see signals on the whales dashboard instead.)
+            // ── Synthesize whale consensus take for the social feed ──
+            try {
+              // Dedupe: don't create a take for the same market+side within 6 hours
+              const recentTake = await dbQuery(
+                `SELECT id FROM takes WHERE source = 'consensus' AND question = $1 AND side = $2
+                 AND created_at > now() - interval '6 hours' LIMIT 1`,
+                [sig.market, sig.side.toUpperCase()]
+              );
+              if (!recentTake.length) {
+                const capitalDisplay = sig.total_capital >= 1000000
+                  ? '$' + (sig.total_capital / 1000000).toFixed(1) + 'M'
+                  : '$' + Math.round(sig.total_capital / 1000) + 'K';
+                await dbQuery(
+                  `INSERT INTO takes (display_name, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'consensus')`,
+                  [
+                    sig.whale_count + ' Whales',
+                    sig.slug || null,
+                    sig.condition_id || null,
+                    sig.market,
+                    sig.side.toUpperCase(),
+                    sig.avg_price,
+                    sig.total_capital,
+                    `${sig.whale_count} whale wallets are aligned ${sig.side.toUpperCase()} with ${capitalDisplay} total capital. Average entry: ${sig.avg_price ? (sig.avg_price * 100).toFixed(0) + '¢' : 'unknown'}.`
+                  ]
+                );
+                console.log(`[takes] Synthesized consensus take: ${sig.whale_count} whales ${sig.side} "${sig.market.substring(0, 40)}"`);
+              }
+            } catch (takeErr) { console.warn('[takes] consensus synthesis error:', takeErr.message); }
           }
         } catch (sigErr) { console.warn('[whale-consensus] per-sig error:', sigErr.message); }
       }
