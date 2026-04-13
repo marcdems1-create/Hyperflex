@@ -122,6 +122,22 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
   #trophyCard button { margin-left: 0 !important; width: 100%; min-height: 44px; }
   #trophyQuestion { font-size: 14px !important; }
 }
+/* Social profile enhancements */
+.hero-username { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.hero-bio { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin: 8px 0 6px; max-width: 420px; }
+.badge-verified { background: rgba(0,230,138,0.1); color: #22c55e; border: 1px solid rgba(0,230,138,0.3); }
+.badge-whale-social { background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
+.verify-wallet-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid rgba(0,230,138,0.3); color: #22c55e; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 11px; font-weight: 700; transition: background 0.15s; margin-top: 4px; }
+.verify-wallet-btn:hover { background: rgba(0,230,138,0.08); }
+.social-pred-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; transition: border-color 0.18s; }
+.social-pred-card:hover { border-color: rgba(201,146,13,0.3); }
+.social-pred-thesis { font-size: 12px; color: var(--text-soft); line-height: 1.4; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.social-pred-status { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-block; margin-right: 6px; }
+.social-pred-status.active { background: rgba(77,159,255,0.12); color: #4d9fff; }
+.social-pred-status.resolved_win { background: rgba(34,197,94,0.12); color: #22c55e; }
+.social-pred-status.resolved_loss { background: rgba(239,68,68,0.12); color: #ef4444; }
+.bio-edit-area { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 50px; margin: 6px 0; }
+.bio-save-btn { background: var(--gold); color: #141412; border: none; border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
 /* CTA */
 .cta-card { background: linear-gradient(135deg, #1d1b13 0%, #1a1a17 100%); border: 1px solid rgba(201,146,13,0.25); border-radius: 12px; padding: 20px 22px; text-align: center; margin-top: 32px; }
 .cta-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
@@ -294,7 +310,10 @@ async function load() {
           ` : `
             ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
           `}
+          ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
+          ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
           <div class="hero-badges">
+            ${user.wallet_verified ? '<span class="badge badge-verified">✓ Verified Wallet</span>' : ''}
             ${tierBadge(stats.win_rate, stats.streak)}
             <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
           </div>
@@ -351,6 +370,29 @@ async function load() {
           <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
           <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
           <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px">🐦 Share</button>
+        </div>
+      </div>
+
+      <div id="socialPredictions" style="display:none" class="section">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px">
+          Social Predictions
+          <span id="socialPredCount" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></span>
+        </div>
+        <div id="socialPredList"></div>
+      </div>
+
+      <div id="ownerTools" style="display:none;margin-bottom:20px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="verify-wallet-btn" style="display:none">🔗 Verify Wallet</button>
+          <button id="editBioBtn" onclick="toggleBioEdit()" style="background:none;border:1px solid var(--border);color:var(--text-soft);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s">✏️ Edit Bio</button>
+        </div>
+        <div id="bioEditArea" style="display:none">
+          <textarea id="bioInput" class="bio-edit-area" maxlength="280" placeholder="Write a short bio (280 chars max)"></textarea>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onclick="saveBio()" class="bio-save-btn">Save</button>
+            <button onclick="toggleBioEdit()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">Cancel</button>
+            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+          </div>
         </div>
       </div>
 
@@ -682,6 +724,168 @@ function shareProfileOnX() {
   const text = `I'm tracking predictions across Polymarket & Kalshi on HYPERFLEX — follow my calls: hyperflex.network/m/${window._profileUserId}`;
   window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
 }
+
+// ── SOCIAL PREDICTIONS ──────────────────────────────────────────────────────
+async function loadSocialPredictions(profileUserId) {
+  try {
+    const r = await fetch(`/api/social/user/${profileUserId}/predictions?limit=10`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.predictions?.length) return;
+
+    const section = document.getElementById('socialPredictions');
+    if (section) section.style.display = 'block';
+    document.getElementById('socialPredCount').textContent = `${d.stats?.total || d.predictions.length} total · ${d.stats?.win_rate != null ? d.stats.win_rate + '% win rate' : ''}`;
+
+    document.getElementById('socialPredList').innerHTML = d.predictions.map(p => {
+      const sideColor = p.side === 'YES' ? '#22c55e' : '#ef4444';
+      const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+      const statusClass = p.status || 'active';
+      const statusLabel = statusClass === 'resolved_win' ? 'Won' : statusClass === 'resolved_loss' ? 'Lost' : statusClass === 'active' ? 'Active' : 'Closed';
+      return `<div class="social-pred-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="social-pred-status ${statusClass}">${statusLabel}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${p.side}</span>
+          ${p.entry_price ? `<span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)">${Math.round(p.entry_price * 100)}¢</span>` : ''}
+          ${p.pnl != null ? `<span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${p.pnl >= 0 ? '#22c55e' : '#ef4444'}">${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(0)}</span>` : ''}
+          <span style="font-size:10px;color:var(--muted);margin-left:auto">${timeAgo(p.created_at)}</span>
+        </div>
+        <a href="/discuss/${p.market_slug || ''}" style="font-size:13px;font-weight:600;color:var(--text);text-decoration:none;line-height:1.3;display:block">${p.market_title || ''}</a>
+        ${p.thesis ? `<div class="social-pred-thesis">${p.thesis.replace(/</g,'&lt;')}</div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted)">
+          <span>👍 ${p.reaction_count || 0}</span>
+          <span>💬 ${p.comment_count || 0}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) { console.warn('[social-predictions]', e); }
+}
+
+// ── WALLET VERIFICATION ─────────────────────────────────────────────────────
+async function startWalletVerify() {
+  const btn = document.getElementById('verifyWalletBtn');
+  if (!btn) return;
+  if (!window.ethereum) { alert('MetaMask or a Web3 wallet is required'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const address = accounts[0];
+
+    btn.textContent = 'Getting challenge...';
+    const token = localStorage.getItem('hf_token');
+    const cr = await fetch('/api/wallet/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ address })
+    });
+    if (!cr.ok) { const e = await cr.json(); throw new Error(e.error || 'Challenge failed'); }
+    const { message } = await cr.json();
+
+    btn.textContent = 'Sign in wallet...';
+    const signature = await window.ethereum.request({
+      method: 'personal_sign',
+      params: [message, address]
+    });
+
+    btn.textContent = 'Verifying...';
+    const vr = await fetch('/api/wallet/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ signature })
+    });
+    if (!vr.ok) { const e = await vr.json(); throw new Error(e.error || 'Verification failed'); }
+
+    btn.textContent = '✓ Verified!';
+    btn.style.borderColor = '#22c55e';
+    btn.style.color = '#22c55e';
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    btn.textContent = '🔗 Verify Wallet';
+    btn.disabled = false;
+    if (e.code !== 4001) alert(e.message || 'Verification failed');
+  }
+}
+
+// ── BIO EDIT ────────────────────────────────────────────────────────────────
+let _bioEditOpen = false;
+function toggleBioEdit() {
+  _bioEditOpen = !_bioEditOpen;
+  const area = document.getElementById('bioEditArea');
+  if (area) area.style.display = _bioEditOpen ? 'block' : 'none';
+  if (_bioEditOpen) {
+    const bioEl = document.querySelector('.hero-bio');
+    const input = document.getElementById('bioInput');
+    if (input && bioEl) input.value = bioEl.textContent.trim();
+    if (input) {
+      input.focus();
+      updateBioCount();
+      input.addEventListener('input', updateBioCount);
+    }
+  }
+}
+
+function updateBioCount() {
+  const input = document.getElementById('bioInput');
+  const count = document.getElementById('bioCharCount');
+  if (input && count) count.textContent = `${input.value.length}/280`;
+}
+
+async function saveBio() {
+  const input = document.getElementById('bioInput');
+  if (!input) return;
+  const bio = input.value.trim();
+  const token = localStorage.getItem('hf_token');
+  try {
+    const r = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ bio })
+    });
+    if (r.ok) {
+      toggleBioEdit();
+      location.reload();
+    } else {
+      const e = await r.json();
+      alert(e.error || 'Failed to save');
+    }
+  } catch (e) { alert('Network error'); }
+}
+
+// ── SHOW OWNER TOOLS ────────────────────────────────────────────────────────
+function showOwnerTools(profileUserId, walletVerified) {
+  const token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId !== profileUserId) return;
+
+    const tools = document.getElementById('ownerTools');
+    if (tools) tools.style.display = 'block';
+
+    if (!walletVerified) {
+      const vBtn = document.getElementById('verifyWalletBtn');
+      if (vBtn) vBtn.style.display = 'inline-flex';
+    }
+  } catch {}
+}
+
+// Wire up social predictions + owner tools after main load
+const _origLoad = load;
+load = async function() {
+  await _origLoad();
+  loadSocialPredictions(userId);
+  // Check if owner should see tools
+  try {
+    const r = await fetch(`${API}/api/member/${userId}`);
+    if (r.ok) {
+      const d = await r.json();
+      showOwnerTools(userId, d.user?.wallet_verified);
+    }
+  } catch {}
+};
 </script>
 </body>
 </html>

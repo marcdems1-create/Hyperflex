@@ -328,7 +328,8 @@
     { href: '/whales', label: 'Market Intel' },
     { href: '/arbitrage', label: 'Arbitrage', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
-    { href: '/predictors', label: 'Predictors' }
+    { href: '/predictors', label: 'Predictors' },
+    { href: '/feed', label: '💬 Feed', gold: true }
   ];
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
