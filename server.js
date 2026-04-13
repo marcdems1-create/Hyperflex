@@ -11373,25 +11373,31 @@ async function fetchPolymarketLeaderboard(period) {
   if (!resp.ok) throw new Error(`Polymarket API returned ${resp.status}`);
   const traders = await resp.json();
   if (!Array.isArray(traders) || traders.length === 0) throw new Error('Empty Polymarket leaderboard response');
-  return traders.map((t, i) => {
-    const pnl = parseFloat(t.pnl) || 0;
-    const vol = parseFloat(t.vol) || parseFloat(t.volume) || 0;
-    const sharpScore = Math.min(100, Math.round(
-      50 +
-      (pnl > 100000 ? 30 : pnl > 10000 ? 20 : pnl > 1000 ? 10 : 0) +
-      (vol > 100000 ? 15 : vol > 10000 ? 10 : 0)
-    ));
-    return {
-      rank: i + 1,
-      display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || `Trader #${i+1}`; })(),
-      total_pnl: Math.round(pnl),
-      volume: Math.round(vol),
-      wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
-      win_rate: 0,
-      sharp_score: sharpScore,
-      platforms: ['POLY']
-    };
-  });
+  return traders
+    .map((t) => {
+      const pnl = parseFloat(t.pnl) || 0;
+      const vol = parseFloat(t.vol) || parseFloat(t.volume) || 0;
+      const roi = vol > 0 ? (pnl / vol) * 100 : 0;
+      // ROI-weighted Sharp Score: rewards profitability over volume
+      const roiPts = roi > 20 ? 40 : roi > 10 ? 30 : roi > 5 ? 20 : roi > 0 ? 10 : 0;
+      const pnlPts = pnl > 100000 ? 25 : pnl > 10000 ? 15 : pnl > 1000 ? 8 : 0;
+      const volPts = vol > 500000 ? 20 : vol > 100000 ? 15 : vol > 10000 ? 8 : 0;
+      const profitBonus = roi > 0 ? 10 : 0;
+      const sharpScore = Math.max(0, Math.min(99, Math.round(roiPts + pnlPts + volPts + profitBonus)));
+      return {
+        display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || 'Trader'; })(),
+        total_pnl: Math.round(pnl),
+        volume: Math.round(vol),
+        roi: Math.round(roi * 10) / 10,
+        wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
+        win_rate: 0,
+        sharp_score: sharpScore,
+        platforms: ['POLY'],
+        _profitable: pnl > 0 && roi >= 1,
+      };
+    })
+    .sort((a, b) => b.sharp_score - a.sharp_score || b.total_pnl - a.total_pnl)
+    .map((t, i) => ({ ...t, rank: i + 1 }));
 }
 
 async function fetchHFXCommunityLeaderboard(p) {
