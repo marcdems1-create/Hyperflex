@@ -588,10 +588,11 @@ function renderAll(){
     return s+(r.volume||Math.abs(r.total_pnl||0));
   },0);
   document.getElementById('heroStat').innerHTML='<strong>'+formatMoney(totalCapital)+'</strong> tracked across <strong>'+data.length+'</strong> traders';
-  // Only profitable traders in Top Performers — compute ROI client-side
+  // Only profitable traders in Top Performers — use server _profitable flag or compute client-side
   var profitable=data.filter(function(r){
-    var pnl=r.total_pnl||r.pnl||0;
-    var vol=r.volume||r.account_value||1;
+    if(typeof r._profitable==='boolean')return r._profitable;
+    var pnl=r.total_pnl!=null?r.total_pnl:(r.pnl!=null?r.pnl:0);
+    var vol=r.volume!=null&&r.volume>0?r.volume:(r.account_value||1);
     var roi=vol>0?(pnl/vol)*100:0;
     return pnl>0&&roi>=1;
   });
@@ -637,6 +638,7 @@ function renderPodium(topN){
       '</div>'+
       '<div class="podium-actions">'+
         '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-btn">&#x1F4CB; Copy Trades</a>'+
+        '<button class="follow-btn" id="follow-'+escHtml(r.user_id||r.wallet||'')+'" onclick="event.stopPropagation();toggleFollow(\''+escHtml(r.user_id||r.wallet||'')+'\',this)" style="font-size:11px;padding:5px 14px;border-radius:6px;border:1px solid rgba(201,146,13,0.3);background:none;color:#c9920d;cursor:pointer;font-weight:600">Follow</button>'+
         '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="podium-link">Profile</a>'+
       '</div>'+
     '</div>';
@@ -731,50 +733,58 @@ function showStickyBar(){
   var userId=null;
   try{var payload=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));userId=payload.userId||payload.id||payload.sub}catch(e){}
 
-  // Find user in leaderboard data
-  var userEntry=null;
-  var userRank=null;
-  if(userId&&lbData.length){
-    for(var i=0;i<lbData.length;i++){
-      if(lbData[i].user_id===userId||lbData[i].wallet===userId){userEntry=lbData[i];userRank=i+1;break}
-    }
-  }
-
   // Style the bar gold for signed-in users
   bar.style.background='linear-gradient(135deg,rgba(201,146,13,0.12),rgba(14,14,21,0.95))';
   bar.style.borderTop='1px solid rgba(201,146,13,0.3)';
 
-  if(userEntry){
-    var pnl=userEntry.total_pnl||0;
-    var vol=userEntry.volume||0;
-    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
-    var pnlColor=pnl>=0?'#00e68a':'#ff4d6a';
-    document.getElementById('barContent').innerHTML=
-      '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">🏆 #'+userRank+'</span>'+
-      '<span class="bar-stat" style="color:var(--ink);font-weight:700">'+escHtml(userEntry.display_name||'You')+'</span>'+
-      '<span class="bar-stat" style="color:'+pnlColor+';font-weight:700">'+formatPnl(pnl)+'</span>'+
-      '<span class="bar-stat">ROI <strong style="color:'+pnlColor+'">'+(pnl>=0?'+':'')+roi+'%</strong></span>'+
-      '<span class="bar-stat">Sharp <strong style="color:#c9920d">'+(userEntry.sharp_score||0)+'</strong></span>';
-    bar.querySelector('.bar-link').href='/creator/dashboard';
-    bar.querySelector('.bar-link').textContent='Dashboard →';
-  }else{
-    // Fetch user's score from API
-    fetch('/api/predictors/me/score',{headers:{Authorization:'Bearer '+token}})
-      .then(function(r){return r.ok?r.json():null})
-      .then(function(d){
-        if(d&&d.score!=null){
-          document.getElementById('barContent').innerHTML=
-            '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Score: '+d.score+'</span>'+
-            '<span class="bar-stat" style="color:var(--soft)">'+d.win_rate+'% win rate · '+d.total+' predictions</span>';
-        }else{
-          document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
+  // Fetch user's connected wallet, then match against leaderboard
+  fetch('/api/user/wallets',{headers:{Authorization:'Bearer '+token}})
+    .then(function(r){return r.ok?r.json():{}})
+    .then(function(w){
+      var userWallet=(w.polymarket_address||'').toLowerCase();
+      var userEntry=null;var userRank=null;
+      if(lbData.length){
+        for(var i=0;i<lbData.length;i++){
+          var match=false;
+          if(userId&&(lbData[i].user_id===userId))match=true;
+          if(userWallet&&lbData[i].wallet&&lbData[i].wallet.toLowerCase()===userWallet)match=true;
+          if(match){userEntry=lbData[i];userRank=i+1;break}
         }
-      }).catch(function(){
-        document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
-      });
-    bar.querySelector('.bar-link').href='/creator/dashboard';
-    bar.querySelector('.bar-link').textContent='Go to Dashboard';
-  }
+      }
+      if(userEntry){
+        var pnl=userEntry.total_pnl||0;
+        var vol=userEntry.volume||0;
+        var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
+        var pnlColor=pnl>=0?'#00e68a':'#ff4d6a';
+        document.getElementById('barContent').innerHTML=
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">🏆 #'+userRank+'</span>'+
+          '<span class="bar-stat" style="color:var(--ink);font-weight:700">'+escHtml(userEntry.display_name||'You')+'</span>'+
+          '<span class="bar-stat" style="color:'+pnlColor+';font-weight:700">'+formatPnl(pnl)+'</span>'+
+          '<span class="bar-stat">ROI <strong style="color:'+pnlColor+'">'+(pnl>=0?'+':'')+roi+'%</strong></span>'+
+          '<span class="bar-stat">Sharp <strong style="color:#c9920d">'+(userEntry.sharp_score||0)+'</strong></span>';
+        bar.querySelector('.bar-link').href='/creator/dashboard';
+        bar.querySelector('.bar-link').textContent='Dashboard →';
+      }else{
+        // No leaderboard match — show HFX stats
+        fetch('/api/predictors/me/score',{headers:{Authorization:'Bearer '+token}})
+          .then(function(r){return r.ok?r.json():null})
+          .then(function(d){
+            if(d&&d.sharp_score){
+              document.getElementById('barContent').innerHTML=
+                '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Sharp: '+d.sharp_score+'</span>'+
+                '<span class="bar-stat" style="color:var(--soft)">'+Math.round(d.win_rate*100)+'% win rate · '+d.total_predictions+' predictions</span>';
+            }else{
+              document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
+            }
+          }).catch(function(){
+            document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
+          });
+        bar.querySelector('.bar-link').href='/creator/dashboard';
+        bar.querySelector('.bar-link').textContent='Go to Dashboard';
+      }
+    }).catch(function(){
+      document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
+    });
   setTimeout(function(){bar.classList.add('visible')},800);
 }
 
