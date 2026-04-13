@@ -12445,9 +12445,32 @@ app.post('/api/admin/import-tweet', async (req, res) => {
       }
     }
 
-    // If no market matched, use first sentence of tweet as the question
+    // If no local match, try Gamma API search
+    if (!matchedSlug) {
+      try {
+        // Extract key terms for search (first 5 significant words)
+        const searchTerms = tweet_text.split(/\s+/).filter(w => w.length >= 4).slice(0, 5).join(' ');
+        if (searchTerms) {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 5000);
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=5&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+            signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+          }).finally(() => clearTimeout(tid));
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const top = (Array.isArray(gData) ? gData : [])[0];
+            if (top) {
+              matchedSlug = (top.events && top.events[0] && top.events[0].slug) || top.slug || null;
+              matchedQuestion = top.question || top.title;
+              matchedConditionId = top.conditionId || null;
+            }
+          }
+        }
+      } catch (e) { /* gamma fallback failed */ }
+    }
+
+    // If still no match, use first sentence — but it won't have a tradeable market link
     if (!matchedQuestion) {
-      // Extract first sentence or first 150 chars
       const firstSentence = tweet_text.match(/^[^.!?]+[.!?]/);
       matchedQuestion = firstSentence ? firstSentence[0].trim() : (tweet_text.length > 150 ? tweet_text.substring(0, 150) + '...' : tweet_text);
     }

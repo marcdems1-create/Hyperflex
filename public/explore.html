@@ -3584,13 +3584,18 @@ function renderTakeCard(t) {
   var amountDisplay = t.amount ? (t.amount >= 1000000 ? '$' + (t.amount/1000000).toFixed(1) + 'M' : t.amount >= 1000 ? '$' + Math.round(t.amount/1000) + 'K' : '$' + Math.round(t.amount)) : '';
 
   var marketLink = '';
-  if (t.question) {
-    var href = t.market_slug ? '/market/' + t.market_slug : 'https://polymarket.com/search?query=' + encodeURIComponent((t.question || '').substring(0, 60));
-    marketLink = '<a class="take-market-link" href="' + href + '" ' + (href === '#' ? '' : 'target="_blank"') + '>' +
+  if (t.question && t.market_slug) {
+    var href = '/market/' + t.market_slug;
+    marketLink = '<a class="take-market-link" href="' + href + '" target="_blank">' +
       '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
       '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
       (priceDisplay ? '<span class="take-price">' + priceDisplay + '</span>' : '') +
       '</a>';
+  } else if (t.question) {
+    marketLink = '<div class="take-market-link" style="cursor:default">' +
+      '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
+      '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
+      '</div>';
   }
 
   var thesis = t.thesis ? '<div class="take-thesis">' + escHtml(t.thesis) + '</div>' : '';
