@@ -12515,6 +12515,204 @@ app.get('/api/influencers', async (req, res) => {
   }
 });
 
+// ── INFLUENCER SEED + AUTO-FETCH SYSTEM ─────────────────────────────────────
+
+// Seed list: top prediction market voices across categories
+const INFLUENCER_SEED = [
+  // Crypto / Prediction Markets
+  { handle: 'GCRClassic', name: 'GCR', category: 'crypto', followers: 400000 },
+  { handle: 'polyaboratory', name: 'Polyaboratory', category: 'crypto', followers: 50000 },
+  { handle: 'DylanLeClair_', name: 'Dylan LeClair', category: 'crypto', followers: 250000 },
+  { handle: 'Zhusu', name: 'Zhu Su', category: 'crypto', followers: 500000 },
+  { handle: 'CryptoHayes', name: 'Arthur Hayes', category: 'crypto', followers: 600000 },
+  { handle: 'inversebrah', name: 'inversebrah', category: 'crypto', followers: 300000 },
+  { handle: 'DegenSpartan', name: 'Degen Spartan', category: 'crypto', followers: 200000 },
+  { handle: 'coaborist', name: 'The Coaborist', category: 'crypto', followers: 100000 },
+  // Politics
+  { handle: 'realDonaldTrump', name: 'Donald Trump', category: 'politics', followers: 90000000 },
+  { handle: 'elikiefficiency', name: 'Eli', category: 'politics', followers: 80000 },
+  { handle: 'NateSilver538', name: 'Nate Silver', category: 'politics', followers: 3000000 },
+  { handle: 'Nate_Cohn', name: 'Nate Cohn', category: 'politics', followers: 400000 },
+  { handle: 'PredictIt', name: 'PredictIt', category: 'politics', followers: 50000 },
+  { handle: 'ElliotMorris', name: 'Elliot Morris', category: 'politics', followers: 200000 },
+  // Finance / Macro
+  { handle: 'unusual_whales', name: 'Unusual Whales', category: 'finance', followers: 1000000 },
+  { handle: 'WallStJesus', name: 'Wall St Jesus', category: 'finance', followers: 300000 },
+  { handle: 'TikTokInvestors', name: 'TikTok Investors', category: 'finance', followers: 500000 },
+  { handle: 'jimcramer', name: 'Jim Cramer', category: 'finance', followers: 2000000 },
+  { handle: 'elerianm', name: 'Mohamed El-Erian', category: 'finance', followers: 800000 },
+  // Sports
+  { handle: 'BetMGM', name: 'BetMGM', category: 'sports', followers: 400000 },
+  { handle: 'ActionNetworkHQ', name: 'Action Network', category: 'sports', followers: 600000 },
+  { handle: 'ESPNBet', name: 'ESPN BET', category: 'sports', followers: 200000 },
+  { handle: 'OddsChecker', name: 'OddsChecker', category: 'sports', followers: 300000 },
+  { handle: 'PickDawgz', name: 'PickDawgz', category: 'sports', followers: 150000 },
+  // General / Commentary
+  { handle: 'Polymarket', name: 'Polymarket', category: 'crypto', followers: 400000 },
+  { handle: 'kalaborahq', name: 'Kalshi', category: 'finance', followers: 100000 },
+  { handle: 'elikiefficiency', name: 'Eli', category: 'politics', followers: 80000 },
+  { handle: 'staboralotto', name: 'Star Lottery', category: 'general', followers: 50000 },
+  { handle: 'PeterSchiff', name: 'Peter Schiff', category: 'finance', followers: 1000000 },
+  { handle: 'balaborajis', name: 'Balaji', category: 'crypto', followers: 900000 },
+];
+
+// Seed influencers on boot (fire-and-forget, idempotent)
+(async () => {
+  if (!pool) return;
+  // Wait for table to be created
+  await new Promise(r => setTimeout(r, 3000));
+  try {
+    let seeded = 0;
+    for (const inf of INFLUENCER_SEED) {
+      try {
+        const existing = await dbQuery('SELECT id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [inf.handle.toLowerCase()]);
+        if (existing.length) continue;
+        await ensureInfluencerProfile(inf.handle, inf.name, null, null, inf.followers, inf.category);
+        seeded++;
+      } catch (e) { /* skip dupes */ }
+    }
+    if (seeded > 0) console.log(`[influencer-seed] Seeded ${seeded} influencer profiles`);
+  } catch (e) { console.warn('[influencer-seed]', e.message); }
+})();
+
+// ── Auto-fetch influencer tweets via public Twitter endpoints ──
+// Uses publish.twitter.com/oembed (no auth required) + syndication API
+// Cron: every 30 minutes
+
+let _lastInfluencerFetch = 0;
+const INFLUENCER_FETCH_INTERVAL = 30 * 60 * 1000; // 30 min
+
+async function fetchInfluencerTweets() {
+  if (!pool) return;
+  const now = Date.now();
+  if (now - _lastInfluencerFetch < INFLUENCER_FETCH_INTERVAL) return;
+  _lastInfluencerFetch = now;
+
+  try {
+    // Get active influencers
+    const influencers = await dbQuery('SELECT id, x_handle, display_name, user_id, category FROM influencers WHERE is_active = true ORDER BY follower_count DESC NULLS LAST LIMIT 20');
+    if (!influencers.length) return;
+
+    console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
+    let imported = 0;
+
+    for (const inf of influencers) {
+      try {
+        // Try Twitter syndication API (public, no auth)
+        const timelineUrl = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${inf.x_handle}`;
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 8000);
+        const resp = await fetch(timelineUrl, {
+          signal: ctrl.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }
+        }).finally(() => clearTimeout(tid));
+
+        if (!resp.ok) continue;
+        const html = await resp.text();
+
+        // Extract tweet texts from the syndication HTML
+        // Tweets appear as data attributes or in <p> tags within tweet containers
+        const tweetTexts = [];
+        const tweetRegex = /data-tweet-id="(\d+)"[^>]*>[\s\S]*?<p[^>]*class="[^"]*timeline-Tweet-text[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+        let match;
+        while ((match = tweetRegex.exec(html)) !== null) {
+          const tweetId = match[1];
+          const rawText = match[2].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+          if (rawText.length > 20) tweetTexts.push({ id: tweetId, text: rawText });
+        }
+
+        // Fallback: try extracting from simpler patterns
+        if (!tweetTexts.length) {
+          const simpleRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+          while ((match = simpleRegex.exec(html)) !== null) {
+            const text = match[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+            if (text.length > 30 && text.length < 500 && !text.includes('Twitter') && !text.includes('Sign up')) {
+              tweetTexts.push({ id: null, text });
+            }
+          }
+        }
+
+        if (!tweetTexts.length) continue;
+
+        // Filter for prediction-relevant content
+        for (const tw of tweetTexts.slice(0, 3)) {
+          if (!isPredictionRelevant(tw.text)) continue;
+
+          // Dedupe: check if we already imported similar text
+          const textPrefix = tw.text.substring(0, 80);
+          const dupe = await dbQuery(
+            "SELECT id FROM takes WHERE source = 'influencer' AND user_id = $1 AND LEFT(thesis, 80) = $2 LIMIT 1",
+            [inf.user_id, textPrefix]
+          ).catch(() => []);
+          if (dupe.length) continue;
+
+          // Auto-match to Polymarket market
+          let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
+          if (_screenerCache && _screenerCache.data) {
+            const tweetLower = tw.text.toLowerCase();
+            let bestMatch = null, bestScore = 0;
+            for (const m of _screenerCache.data) {
+              const qLower = (m.question || '').toLowerCase();
+              const tweetWords = tweetLower.split(/\s+/).filter(w => w.length >= 3);
+              const score = tweetWords.filter(w => qLower.includes(w)).length;
+              if (score > bestScore && score >= 2) { bestScore = score; bestMatch = m; }
+            }
+            if (bestMatch) {
+              matchedSlug = bestMatch.slug || bestMatch.event_slug;
+              matchedQuestion = bestMatch.question;
+              matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
+            }
+          }
+
+          if (!matchedQuestion) matchedQuestion = tw.text.substring(0, 200);
+
+          // Infer side
+          const textLower = tw.text.toLowerCase();
+          const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(textLower) ? 'YES' : 'NO';
+
+          const tweetUrl = tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null;
+          const thesis = tw.text + (tweetUrl ? '\n\n' + tweetUrl : '');
+
+          await dbQuery(
+            `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, thesis, source)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'influencer')`,
+            [inf.user_id, inf.display_name || ('@' + inf.x_handle), matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
+          ).catch(e => console.warn('[influencer-import]', e.message));
+          imported++;
+        }
+
+        // Small delay between influencers to be polite
+        await new Promise(r => setTimeout(r, 1500));
+      } catch (e) {
+        // Syndication failed for this influencer — try oembed fallback silently
+      }
+    }
+
+    if (imported > 0) console.log(`[influencer-fetch] Auto-imported ${imported} tweets as takes`);
+  } catch (e) { console.warn('[influencer-fetch] Error:', e.message); }
+}
+
+// Prediction relevance filter: is this tweet about a prediction/market/bet?
+function isPredictionRelevant(text) {
+  if (!text || text.length < 20) return false;
+  const lower = text.toLowerCase();
+  // Must contain at least one prediction signal word
+  const predictionWords = /\bpredict|\bbet\b|\bwager|\bfavor|\bodds\b|\bprobab|\bforecast|\bexpect|\bwill win|\bwon't win|\bgoing to|\bnot going|\bbullish|\bbearish|\blong\b|\bshort\b|\bbuy\b|\bsell\b|\byes\b|\bno\b|\bover\b|\bunder\b|\bspread|\b%\s*chance|\blikely|\bunlikely|\binevitable|\bimpossible|\bcalling it|\bmy take|\bhottest take|\bbold call|\btrade\b|\bmarket\b|\bpolymarket|\bkalshi|\belection|\bwinner|\bloser|\bchampion/i;
+  if (!predictionWords.test(lower)) return false;
+  // Filter out retweets, replies, ads
+  if (lower.startsWith('rt @')) return false;
+  if (lower.startsWith('@')) return false; // replies
+  if (/\bsponsored\b|\bad\b|\bpromo\b|\bgiveaway\b|\bairdrop\b/i.test(lower)) return false;
+  return true;
+}
+
+// Cron: fetch influencer tweets every 30 minutes
+cron.schedule('*/30 * * * *', () => {
+  fetchInfluencerTweets().catch(e => console.warn('[influencer-cron]', e.message));
+});
+// Also run on boot after a delay
+setTimeout(() => fetchInfluencerTweets().catch(() => {}), 60000);
+
 // POST /api/nominate — save a creator nomination
 app.post('/api/nominate', async (req, res) => {
   try {
