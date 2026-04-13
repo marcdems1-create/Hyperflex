@@ -12800,12 +12800,51 @@ async function fetchInfluencerTweets() {
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
     let imported = 0;
     const NITTER_INSTANCES = ['nitter.net', 'nitter.privacydev.net', 'nitter.poast.org'];
+    const xBearerToken = process.env.X_BEARER_TOKEN;
 
     for (const inf of influencers) {
       try {
         let tweetTexts = [];
 
-        // Try Nitter RSS feeds (multiple instances)
+        // METHOD 1: X API v2 (best, requires Bearer token)
+        if (xBearerToken && !tweetTexts.length) {
+          try {
+            // First get user ID from handle
+            const userCtrl = new AbortController();
+            const userTid = setTimeout(() => userCtrl.abort(), 6000);
+            const userRes = await fetch(`https://api.x.com/2/users/by/username/${inf.x_handle}`, {
+              signal: userCtrl.signal,
+              headers: { Authorization: `Bearer ${xBearerToken}`, 'User-Agent': 'Hyperflex/1.0' }
+            }).finally(() => clearTimeout(userTid));
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              const xUserId = userData.data?.id;
+              if (xUserId) {
+                // Fetch recent tweets
+                const twCtrl = new AbortController();
+                const twTid = setTimeout(() => twCtrl.abort(), 6000);
+                const twRes = await fetch(`https://api.x.com/2/users/${xUserId}/tweets?max_results=10&tweet.fields=created_at,text`, {
+                  signal: twCtrl.signal,
+                  headers: { Authorization: `Bearer ${xBearerToken}`, 'User-Agent': 'Hyperflex/1.0' }
+                }).finally(() => clearTimeout(twTid));
+                if (twRes.ok) {
+                  const twData = await twRes.json();
+                  for (const tw of (twData.data || [])) {
+                    if (tw.text && tw.text.length > 20 && !tw.text.startsWith('RT @')) {
+                      tweetTexts.push({ id: tw.id, text: tw.text, url: `https://x.com/${inf.x_handle}/status/${tw.id}` });
+                    }
+                  }
+                } else if (twRes.status === 429) {
+                  console.warn('[influencer-fetch] X API rate limited — falling back to Nitter');
+                }
+              }
+            } else if (userRes.status === 401) {
+              console.warn('[influencer-fetch] X API 401 — Bearer token invalid');
+            }
+          } catch (e) { /* X API failed, try fallbacks */ }
+        }
+
+        // METHOD 2: Nitter RSS (fallback, no auth needed)
         for (const instance of NITTER_INSTANCES) {
           if (tweetTexts.length) break;
           try {

@@ -432,17 +432,13 @@ body::before {
           <!-- In-app browser detection -->
           <div id="inAppWarning" style="display:none;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);border-radius:10px;padding:14px 18px;margin-bottom:16px;text-align:center">
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Google sign-in isn't available in this browser</div>
-            <div style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.5">You're in an in-app browser. Use X sign-in below, or copy this link and open it in Chrome or Safari.</div>
+            <div style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.5">You're in an in-app browser. Copy this link and open it in Chrome or Safari for the best experience.</div>
             <button onclick="navigator.clipboard.writeText(window.location.href).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy link',2000)})" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">Copy link</button>
           </div>
           <!-- OAuth -->
           <a href="/auth/oauth?provider=google" class="oauth-btn" id="googleOauthBtn">
             <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.08 7.08 0 0 0 2.18-5.05z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.4 4.4 0 0 1-2.7.94 4.43 4.43 0 0 1-4.15-3.06H1.83v2.07A7 7 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.13 10.59a4.33 4.33 0 0 1 0-2.82V5.7H1.83a7 7 0 0 0 0 6.42l2.3-1.78z"/><path fill="#EA4335" d="M8.98 4.58c1.2 0 2.27.41 3.11 1.23l2.33-2.33A6.8 6.8 0 0 0 8.98 1a7 7 0 0 0-6.15 3.56L4.13 5.7a4.35 4.35 0 0 1 4.85-2.12z"/></svg>
             Continue with Google
-          </a>
-          <a href="/auth/oauth?provider=x" class="oauth-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            Continue with X
           </a>
           <!-- Wallet Connect Button -->
           <button id="walletConnectBtn" onclick="connectWallet()" class="oauth-btn" style="display:none;background:rgba(245,133,60,0.1);border-color:rgba(245,133,60,0.3)">
@@ -514,14 +510,17 @@ body::before {
 
               // If first time (no email), show email prompt
               if (data.needs_email) {
-                status.innerHTML = '<div style="margin-bottom:12px">Wallet connected! Add your email for alerts:</div>' +
-                  '<input id="walletEmailInput" type="email" placeholder="you@example.com" style="width:100%;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:8px">' +
-                  '<div style="display:flex;gap:8px">' +
-                    '<button onclick="saveWalletEmail()" style="flex:1;padding:10px;background:var(--gold);color:var(--ink);border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:var(--sans);font-size:12px">Save email</button>' +
-                    '<button onclick="window.location.href=\'/creator/dashboard\'" style="padding:10px 16px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--dim);cursor:pointer;font-family:var(--mono);font-size:11px">Skip</button>' +
-                  '</div>';
+                status.style.color = 'var(--text)';
+                status.innerHTML = '<div style="text-align:center;padding:8px 0">' +
+                  '<div style="font-size:24px;margin-bottom:8px">\u2705</div>' +
+                  '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">You\'re in!</div>' +
+                  '<div style="font-size:12px;color:var(--dim);margin-bottom:16px">Add your email to get alerts when your predictions resolve.</div>' +
+                  '<input id="walletEmailInput" type="email" placeholder="you@example.com" style="width:100%;padding:12px 14px;background:var(--paper,#0a0a0f);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;box-sizing:border-box" onkeydown="if(event.key===\'Enter\')saveWalletEmail()">' +
+                  '<button onclick="saveWalletEmail()" style="width:100%;padding:12px;background:var(--gold,#c9920d);color:#000;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:var(--sans);font-size:14px;margin-bottom:8px">Save email</button>' +
+                  '<button onclick="window.location.href=\'/feed\'" style="width:100%;padding:10px;background:transparent;border:none;color:var(--dim);cursor:pointer;font-family:var(--sans);font-size:12px">Skip for now \u2192</button>' +
+                '</div>';
               } else {
-                window.location.href = '/creator/dashboard';
+                window.location.href = '/feed';
               }
             } catch(e) {
               console.error('[wallet-auth]', e);
