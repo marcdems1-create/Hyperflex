@@ -196,7 +196,7 @@ function rt(t){
   if(t.is_correct===true)bg+='<span class="bg bg-ok">\u2713 CORRECT</span>';
   else if(t.is_correct===false)bg+='<span class="bg bg-no">\u2717 WRONG</span>';
   var sc=(t.side||'').toUpperCase()==='YES'?'sy':'sn';
-  var ml='';if(t.question){var mh=t.market_slug?'/market/'+t.market_slug:'#';ml='<a class="ml" href="'+mh+'" '+(mh==='#'?'':'target="_blank"')+'><div class="mq">'+e(t.question)+'</div><span class="sd '+sc+'">'+(t.side||'').toUpperCase()+'</span>'+(t.entry_price?'<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">'+Math.round(t.entry_price*100)+'\u00a2</span>':'')+'</a>'}
+  var ml='';if(t.question){var mh=t.market_slug?'/market/'+t.market_slug:'https://polymarket.com/search?query='+encodeURIComponent(t.question.substring(0,60));ml='<a class="ml" href="'+mh+'" target="_blank"><div class="mq">'+e(t.question)+'</div><span class="sd '+sc+'">'+(t.side||'').toUpperCase()+'</span>'+(t.entry_price?'<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">'+Math.round(t.entry_price*100)+'\u00a2</span>':'')+'</a>'}
   var tx=t.thesis?'<div class="tx">'+e(t.thesis)+'</div>':'';
   var ao=t.my_reaction==='agree'?' on':'',do2=t.my_reaction==='disagree'?' on':'';
   return'<div class="tk" id="k-'+t.id+'">'+av+'<div class="tb"><div class="th">'+nm+bg+'<span class="tt">'+ta(t.created_at)+'</span></div>'+ml+tx+

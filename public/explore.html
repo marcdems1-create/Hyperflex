@@ -3585,7 +3585,7 @@ function renderTakeCard(t) {
 
   var marketLink = '';
   if (t.question) {
-    var href = t.market_slug ? '/market/' + t.market_slug : '#';
+    var href = t.market_slug ? '/market/' + t.market_slug : 'https://polymarket.com/search?query=' + encodeURIComponent((t.question || '').substring(0, 60));
     marketLink = '<a class="take-market-link" href="' + href + '" ' + (href === '#' ? '' : 'target="_blank"') + '>' +
       '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
       '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
