@@ -1550,6 +1550,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
     justify-items: start;
   }
   .hero-mini-stat { font-size: 11px; }
+  #heroStatsGrid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+  #heroStatsGrid > div > div:first-child { font-size: 24px !important; }
   .leaderboard-jump-pill {
     grid-column: 1 / -1;
     justify-self: stretch;
@@ -1910,6 +1912,42 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
     </div>
   </div>
 </section>
+
+<!-- Trader Stats Hero — the shareable showcase -->
+<div id="traderStatsHero" style="display:none;max-width:680px;margin:0 auto 24px;padding:0 16px">
+  <div style="background:linear-gradient(135deg,rgba(0,230,138,0.03),rgba(168,85,247,0.03));border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden">
+    <!-- Verified badge -->
+    <div style="position:absolute;top:12px;right:14px;font-family:var(--mono);font-size:9px;font-weight:700;color:#00e68a;text-transform:uppercase;letter-spacing:1.5px;display:flex;align-items:center;gap:4px">
+      <span style="width:6px;height:6px;background:#00e68a;border-radius:50%;display:inline-block"></span> On-chain verified
+    </div>
+    <!-- Main stats row -->
+    <div id="heroStatsGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px">
+      <div style="text-align:center">
+        <div id="heroWinRate" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#00e68a;line-height:1">—</div>
+        <div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-top:4px">Win Rate</div>
+      </div>
+      <div style="text-align:center">
+        <div id="heroPnl" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#00e68a;line-height:1">—</div>
+        <div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-top:4px">Total P&L</div>
+      </div>
+      <div style="text-align:center">
+        <div id="heroTrades" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f0f0f5;line-height:1">0</div>
+        <div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-top:4px">Trades</div>
+      </div>
+      <div style="text-align:center">
+        <div id="heroRoi" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f0f0f5;line-height:1">—</div>
+        <div style="font-family:var(--mono);font-size:10px;color:#8888a0;text-transform:uppercase;letter-spacing:1px;margin-top:4px">ROI</div>
+      </div>
+    </div>
+    <!-- Best call callout -->
+    <div id="heroBestCall" style="display:none;padding:10px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.12);border-radius:10px;display:flex;align-items:center;gap:10px">
+    </div>
+    <!-- Share button -->
+    <div style="text-align:center;margin-top:14px">
+      <button onclick="shareTraderProfile()" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'">Share Profile on 𝕏</button>
+    </div>
+  </div>
+</div>
 
 <!-- Market Carousel — replaces old stats row -->
 <div class="carousel-section" id="carouselSection" style="display:none">
@@ -3603,6 +3641,9 @@ async function loadTradingRecord() {
     }
   });
 
+  // Update the hero stats card
+  updateHeroStats(trades);
+
   // 5. Compute stats
   var profitable = trades.filter(function(t) { return t.pnl > 0; });
   var losing = trades.filter(function(t) { return t.pnl < 0; });
@@ -3678,6 +3719,54 @@ async function backfillTrades() {
   } catch (e) {
     if (btn) { btn.textContent = 'Failed — try again'; btn.disabled = false; }
   }
+}
+
+// Populate the hero stats card from trading record data
+function updateHeroStats(trades) {
+  var hero = document.getElementById('traderStatsHero');
+  if (!hero || !trades || !trades.length) return;
+  hero.style.display = 'block';
+
+  var profitable = trades.filter(function(t) { return (t.pnl || 0) > 0; });
+  var totalCost = trades.reduce(function(s,t) { return s + (t.cost || 0); }, 0);
+  var totalPnl = trades.reduce(function(s,t) { return s + (t.pnl || 0); }, 0);
+  var winRate = trades.length > 0 ? Math.round((profitable.length / trades.length) * 100) : 0;
+  var roi = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+
+  function fD(v) { return Math.abs(v) >= 1000 ? '$' + (v/1000).toFixed(1) + 'K' : '$' + Math.abs(v).toFixed(0); }
+
+  var wrEl = document.getElementById('heroWinRate');
+  var pnlEl = document.getElementById('heroPnl');
+  var tradesEl = document.getElementById('heroTrades');
+  var roiEl = document.getElementById('heroRoi');
+
+  if (wrEl) { wrEl.textContent = winRate + '%'; wrEl.style.color = winRate >= 55 ? '#00e68a' : winRate >= 40 ? '#f59e0b' : '#ff4d6a'; }
+  if (pnlEl) { pnlEl.textContent = (totalPnl >= 0 ? '+' : '-') + fD(Math.abs(totalPnl)); pnlEl.style.color = totalPnl >= 0 ? '#00e68a' : '#ff4d6a'; }
+  if (tradesEl) tradesEl.textContent = trades.length;
+  if (roiEl) { roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(0) + '%'; roiEl.style.color = roi >= 0 ? '#00e68a' : '#ff4d6a'; }
+
+  // Best call
+  var best = trades.filter(function(t) { return (t.pnl || 0) > 0; }).sort(function(a,b) { return (b.pnl || 0) - (a.pnl || 0); })[0];
+  if (best) {
+    var bestEl = document.getElementById('heroBestCall');
+    var q = (best.question || '').length > 45 ? best.question.slice(0,43) + '…' : best.question;
+    if (bestEl) {
+      bestEl.style.display = 'flex';
+      bestEl.innerHTML = '<span style="font-size:16px">🏆</span><div style="flex:1;min-width:0"><div style="font-family:var(--mono);font-size:9px;color:#8888a0;text-transform:uppercase;letter-spacing:1px">Best Call</div><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(q) + '</div></div><div style="font-family:var(--mono);font-size:16px;font-weight:800;color:#00e68a">+$' + (best.pnl || 0).toFixed(2) + '</div>';
+    }
+  }
+}
+
+function shareTraderProfile() {
+  var name = community ? community.display_name : 'Trader';
+  var wrEl = document.getElementById('heroWinRate');
+  var pnlEl = document.getElementById('heroPnl');
+  var wr = wrEl ? wrEl.textContent : '';
+  var pnl = pnlEl ? pnlEl.textContent : '';
+  var tradesEl = document.getElementById('heroTrades');
+  var trades = tradesEl ? tradesEl.textContent : '0';
+  var text = encodeURIComponent(name + '\'s verified trading record on @HyperFlexApp:\n\n🎯 Win Rate: ' + wr + '\n💰 P&L: ' + pnl + '\n📊 ' + trades + ' trades tracked\n\nVerify it → hyperflex.network/' + (community ? community.slug : ''));
+  window.open('https://twitter.com/intent/tweet?text=' + text, '_blank');
 }
 
 function _timeAgo(dateStr) {
