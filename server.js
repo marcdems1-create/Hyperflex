@@ -37379,8 +37379,15 @@ cron.schedule('0 18 * * *', safeCron('rewardsTweet', ...));
 DISABLED — account flagged */
 
 // ══════════════════════════════════════════════════════════════════════
-// REPLY-TO-ENGAGEMENT BOT — find prediction market tweets and reply with data
+// REPLY BOT REMOVED — got account suspended. DO NOT re-enable.
 // ══════════════════════════════════════════════════════════════════════
+
+// REPLY BOT REMOVED — got account suspended
+// (deleted ~400 lines of reply bot code)
+
+// ════════════════════════════════════════════════════════════
+// [placeholder — see real ACCURACY TRACKING below]
+// ════════════════════════════════════════════════════════════
 const _replyLog = [];
 const _replyDraftQueue = [];
 let _replyDraftId = 0;
@@ -37759,9 +37766,10 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
 });
 
 // Reply engagement bot — reply-only mode, max 8/day, degen tone
-cron.schedule('15 */3 * * *', safeCron('replyBot', searchAndDraftReplies));
-setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
-console.log('[boot] Reply engagement bot ENABLED (reply-only, max 8/day, link every 3-4)');
+// REPLY BOT DISABLED — got account suspended. DO NOT re-enable.
+// cron.schedule('15 */3 * * *', safeCron('replyBot', searchAndDraftReplies));
+// setTimeout(() => searchAndDraftReplies().catch(() => {}), 120000);
+console.log('[boot] Reply engagement bot DISABLED (account suspended)');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
