@@ -12813,6 +12813,92 @@ cron.schedule('*/30 * * * *', () => {
 // Also run on boot after a delay
 setTimeout(() => fetchInfluencerTweets().catch(() => {}), 60000);
 
+// ── MARKET-FIRST INFLUENCER TAKES ──────────────────────────────────────────
+// Flipped approach: scan Polymarket markets → match to influencer categories → create takes.
+// Guarantees feed content even when X scraping fails.
+async function generateInfluencerTakesFromMarkets() {
+  if (!pool || !_screenerCache || !_screenerCache.data) return;
+  try {
+    const influencers = await dbQuery(
+      'SELECT id, x_handle, display_name, user_id, avatar_url, category FROM influencers WHERE is_active = true AND user_id IS NOT NULL'
+    );
+    if (!influencers.length) return;
+
+    // Group influencers by category
+    const byCategory = {};
+    for (const inf of influencers) {
+      const cat = (inf.category || 'general').toLowerCase();
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(inf);
+    }
+
+    // Category → market keyword mapping
+    const catKeywords = {
+      crypto: /bitcoin|btc|ethereum|eth|solana|crypto|defi|token|blockchain|nft/i,
+      politics: /trump|biden|election|president|congress|senate|democrat|republican|vance|governor|political/i,
+      finance: /fed\b|interest rate|inflation|recession|stock|s&p|nasdaq|tariff|economy|oil\b|gold\b/i,
+      sports: /nba|nfl|mlb|nhl|ufc|soccer|football|basketball|hockey|champion|playoff|world cup/i,
+      general: /./i,
+    };
+
+    // Get top markets by volume
+    const topMarkets = _screenerCache.data
+      .filter(m => m.slug && m.question && (m.volume24hr || m.volume || 0) >= 10000)
+      .sort((a, b) => (b.volume24hr || b.volume || 0) - (a.volume24hr || a.volume || 0))
+      .slice(0, 30);
+
+    let created = 0;
+    for (const mkt of topMarkets) {
+      const qLower = (mkt.question || '').toLowerCase();
+      // Determine market category
+      let mktCat = 'general';
+      for (const [cat, regex] of Object.entries(catKeywords)) {
+        if (cat !== 'general' && regex.test(qLower)) { mktCat = cat; break; }
+      }
+
+      // Pick an influencer from matching category (or general)
+      const candidates = byCategory[mktCat] || byCategory['general'] || [];
+      if (!candidates.length) continue;
+      const inf = candidates[Math.floor(Math.random() * candidates.length)];
+
+      // Dedupe: skip if this influencer already has a take on this market
+      const existing = await dbQuery(
+        "SELECT id FROM takes WHERE user_id = $1 AND market_slug = $2 AND source = 'influencer' LIMIT 1",
+        [inf.user_id, mkt.slug]
+      ).catch(() => []);
+      if (existing.length) continue;
+
+      // Cap: max 2 takes per influencer per cycle
+      const infTakeCount = await dbQuery(
+        "SELECT COUNT(*)::int as cnt FROM takes WHERE user_id = $1 AND source = 'influencer' AND created_at > now() - interval '6 hours'",
+        [inf.user_id]
+      ).catch(() => [{ cnt: 0 }]);
+      if ((infTakeCount[0]?.cnt || 0) >= 2) continue;
+
+      // Determine side from market odds (lean towards the likely outcome for influencer takes)
+      const yesPrice = parseFloat(mkt.yes_price) || 0.5;
+      const side = yesPrice >= 0.5 ? 'YES' : 'NO';
+      const pct = Math.round((side === 'YES' ? yesPrice : 1 - yesPrice) * 100);
+
+      const avatar = inf.avatar_url || `https://unavatar.io/x/${inf.x_handle}`;
+
+      await dbQuery(
+        `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, thesis, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'influencer')`,
+        [inf.user_id, inf.display_name, avatar, mkt.slug, mkt.market_id || mkt.condition_id, mkt.question, side, yesPrice,
+         `${inf.display_name} is watching this market at ${pct}% ${side}.`]
+      ).catch(e => console.warn('[influencer-market-take]', e.message));
+      created++;
+      if (created >= 10) break; // cap per cycle
+    }
+    if (created > 0) console.log(`[influencer-market-takes] Generated ${created} takes from top markets`);
+  } catch (e) { console.warn('[influencer-market-takes]', e.message); }
+}
+
+// Run market-first takes on boot (after screener warms) and every hour
+setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
+cron.schedule('0 * * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
+
 // POST /api/nominate — save a creator nomination
 app.post('/api/nominate', async (req, res) => {
   try {
