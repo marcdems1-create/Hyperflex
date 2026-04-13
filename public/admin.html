@@ -680,6 +680,7 @@
       <button class="admin-tab" id="tabBtnOutreach" onclick="showAdminTab('outreach')">Outreach</button>
       <button class="admin-tab" id="tabBtnRewards" onclick="showAdminTab('rewards')">Rewards</button>
       <button class="admin-tab" id="tabBtnFinancials" onclick="showAdminTab('financials')">Financials</button>
+      <button class="admin-tab" id="tabBtnBuilder" onclick="showAdminTab('builder')">Builder Fees</button>
     </div>
 
     <!-- Creators tab -->
@@ -1043,6 +1044,76 @@
       </div>
     </div>
 
+    <!-- Builder Fees tab -->
+    <div id="adminTabBuilder" style="display:none">
+      <div class="section-header" style="margin-bottom:20px">
+        <div class="section-title">Builder Fee Revenue</div>
+        <button onclick="loadBuilderFees(true)" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer">Refresh</button>
+      </div>
+
+      <div class="fin-grid">
+        <div class="fin-card">
+          <div class="fin-val" style="color:var(--amber)" id="bfTotalFees">&mdash;</div>
+          <div class="fin-lbl">Total Fees Earned</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-val" style="color:var(--text)" id="bfTotalVolume">&mdash;</div>
+          <div class="fin-lbl">Total Volume Routed</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-val" style="color:var(--green)" id="bfTotalTrades">&mdash;</div>
+          <div class="fin-lbl">Total Trades</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-val" style="color:var(--blue)" id="bfFeeRate">&mdash;</div>
+          <div class="fin-lbl">Effective Fee Rate</div>
+        </div>
+      </div>
+
+      <div class="analytics-card" style="margin-top:16px">
+        <div class="card-title">Daily Breakdown</div>
+        <div class="table-wrap" style="border:none">
+          <div class="table-msg" id="bfDailyMsg">Click to load builder fee data</div>
+          <table id="bfDailyTable" style="display:none;min-width:auto">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th style="text-align:right">Volume</th>
+                <th style="text-align:right">Fees</th>
+                <th style="text-align:center">Trades</th>
+              </tr>
+            </thead>
+            <tbody id="bfDailyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="analytics-card" style="margin-top:16px">
+        <div class="card-title">Recent Trades</div>
+        <div class="table-wrap" style="border:none">
+          <div class="table-msg" id="bfTradesMsg"></div>
+          <table id="bfTradesTable" style="display:none;min-width:auto">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Side</th>
+                <th style="text-align:right">Size</th>
+                <th style="text-align:right">Fee</th>
+                <th>Maker</th>
+                <th>TX</th>
+              </tr>
+            </thead>
+            <tbody id="bfTradesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="analytics-card" style="margin-top:16px">
+        <div class="card-title">Builder-Sign Health</div>
+        <div class="table-msg" id="bfSignHealth">Loading...</div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1149,7 +1220,7 @@ async function loadCreators() {
 }
 
 // -- Admin tabs --
-const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials'];
+const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials','builder'];
 
 function showAdminTab(tab) {
   ALL_TABS.forEach(t => {
@@ -1164,6 +1235,7 @@ function showAdminTab(tab) {
   if (tab === 'analytics') loadAnalytics();
   if (tab === 'flex') loadFlexPoints();
   if (tab === 'financials') loadFinancials();
+  if (tab === 'builder') loadBuilderFees();
 }
 
 // -- Outreach --
@@ -2162,6 +2234,171 @@ async function loadFinancials() {
     }
   } catch (e) {
     document.getElementById('finRewardsHistMsg').textContent = 'Error: ' + e.message;
+  }
+}
+
+// -- Builder Fees --
+var _builderFeesLoaded = false;
+async function loadBuilderFees(force) {
+  if (_builderFeesLoaded && !force) return;
+  _builderFeesLoaded = true;
+
+  const bfDailyMsg   = document.getElementById('bfDailyMsg');
+  const bfDailyTable = document.getElementById('bfDailyTable');
+  const bfTradesMsg  = document.getElementById('bfTradesMsg');
+  const bfTradesTable= document.getElementById('bfTradesTable');
+  const bfSignHealth = document.getElementById('bfSignHealth');
+
+  bfDailyMsg.textContent = 'Loading builder fee data…';
+  bfDailyMsg.style.display = 'block';
+  bfDailyTable.style.display = 'none';
+  bfTradesMsg.textContent = 'Loading…';
+  bfTradesMsg.style.display = 'block';
+  bfTradesTable.style.display = 'none';
+  bfSignHealth.textContent = 'Loading…';
+
+  // Fetch builder fees + sign health in parallel
+  const freshParam = force ? '&fresh=1' : '';
+  const [feesRes, signRes] = await Promise.allSettled([
+    fetch(API + '/api/admin/builder-fees?secret=' + encodeURIComponent(adminSecret) + freshParam),
+    fetch(API + '/api/admin/builder-sign-stats?secret=' + encodeURIComponent(adminSecret))
+  ]);
+
+  // ── Builder Fees ──
+  if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
+    try {
+      const data = await feesRes.value.json();
+      const s = data.summary || {};
+
+      // Summary cards
+      document.getElementById('bfTotalFees').textContent   = '$' + (s.totalFeesUsdc || 0).toFixed(4);
+      document.getElementById('bfTotalVolume').textContent  = '$' + Number(s.totalVolumeUsdc || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('bfTotalTrades').textContent  = String(s.totalTrades || 0);
+      document.getElementById('bfFeeRate').textContent      = s.feeRate || '0%';
+
+      // Daily breakdown
+      const daily = data.dailyBreakdown || [];
+      if (daily.length) {
+        document.getElementById('bfDailyBody').innerHTML = daily.map(d => `
+          <tr>
+            <td style="font-family:var(--mono);font-size:12px">${escHtml(d.day)}</td>
+            <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text)">$${Number(d.volume).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--amber)">$${Number(d.fees).toFixed(4)}</td>
+            <td style="text-align:center;font-family:var(--mono);font-size:12px">${d.trades}</td>
+          </tr>`).join('');
+        bfDailyMsg.style.display = 'none';
+        bfDailyTable.style.display = 'table';
+      } else {
+        bfDailyMsg.textContent = 'No daily data yet — trades will appear here once builder fees are earned.';
+      }
+
+      // Recent trades
+      const trades = data.recentTrades || [];
+      if (trades.length) {
+        document.getElementById('bfTradesBody').innerHTML = trades.map(t => {
+          const sideColor = (t.side||'').toUpperCase() === 'BUY' ? 'var(--green)' : 'var(--red)';
+          const timeStr = t.matchTime ? new Date(t.matchTime).toLocaleString() : '—';
+          const txLink = t.txHash
+            ? `<a href="https://polygonscan.com/tx/${escHtml(t.txHash)}" target="_blank" style="color:var(--blue);font-size:11px">View</a>`
+            : '—';
+          return `<tr>
+            <td style="font-family:var(--mono);font-size:11px;color:var(--dim)">${timeStr}</td>
+            <td style="font-weight:700;color:${sideColor};font-size:12px">${(t.side||'').toUpperCase()}</td>
+            <td style="text-align:right;font-family:var(--mono);font-size:12px">$${t.sizeUsdc}</td>
+            <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--amber)">$${t.feeUsdc}</td>
+            <td style="font-family:var(--mono);font-size:11px;color:var(--dim)">${escHtml(t.maker||'')}</td>
+            <td>${txLink}</td>
+          </tr>`;
+        }).join('');
+        bfTradesMsg.style.display = 'none';
+        bfTradesTable.style.display = 'table';
+      } else {
+        bfTradesMsg.textContent = 'No trades found yet.';
+      }
+    } catch (e) {
+      bfDailyMsg.textContent = 'Error parsing builder fee data: ' + e.message;
+      bfTradesMsg.textContent = '';
+    }
+  } else {
+    const errText = feesRes.status === 'fulfilled'
+      ? await feesRes.value.text().catch(() => 'Unknown error')
+      : feesRes.reason;
+    bfDailyMsg.textContent = 'Failed to load builder fees: ' + errText;
+    bfTradesMsg.textContent = '';
+    document.getElementById('bfTotalFees').textContent   = 'Error';
+    document.getElementById('bfTotalVolume').textContent  = '—';
+    document.getElementById('bfTotalTrades').textContent  = '—';
+    document.getElementById('bfFeeRate').textContent      = '—';
+  }
+
+  // ── Builder-Sign Health ──
+  if (signRes.status === 'fulfilled' && signRes.value.ok) {
+    try {
+      const h = await signRes.value.json();
+      const total = h.total || 0;
+      const success = h.success || 0;
+      const failures = h.failures || 0;
+      const rate = h.failure_rate_pct || 0;
+
+      const healthColor = failures === 0 ? 'var(--green)' : rate > 10 ? 'var(--red)' : 'var(--amber)';
+      const statusLabel = failures === 0 ? '✅ Healthy' : rate > 10 ? '🔴 High failure rate' : '⚠️ Some failures';
+
+      let html = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px">
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:20px;font-weight:800;color:${healthColor}">${statusLabel}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:4px">Status</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700">${total}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:4px">Total Requests</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--green)">${success}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:4px">Successful</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${failures > 0 ? 'var(--red)' : 'var(--dim)'}">${failures}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:4px">Failures</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${rate > 10 ? 'var(--red)' : rate > 0 ? 'var(--amber)' : 'var(--dim)'}">${rate.toFixed(1)}%</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:4px">Failure Rate</div>
+          </div>
+        </div>`;
+
+      // Failure breakdown if any
+      if (failures > 0) {
+        html += `<div style="font-size:12px;color:var(--dim);margin-bottom:8px">
+          Failure breakdown: <span style="color:var(--text)">${h.failures_503 || 0}</span> creds missing (503) ·
+          <span style="color:var(--text)">${h.failures_400 || 0}</span> bad request (400) ·
+          <span style="color:var(--text)">${h.failures_500 || 0}</span> HMAC/server (500)</div>`;
+
+        // Last failures
+        const lastFails = (h.last_failures || []).slice(-5).reverse();
+        if (lastFails.length) {
+          html += `<div style="font-size:11px;font-weight:700;color:var(--text);margin:8px 0 4px">Recent Failures</div>`;
+          html += lastFails.map(f => `<div style="font-size:11px;color:var(--dim);padding:4px 0;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--mono);color:var(--text)">${new Date(f.ts).toLocaleString()}</span> —
+            Status <span style="color:var(--red)">${f.status}</span> —
+            ${escHtml((f.error || '').slice(0, 80))}
+          </div>`).join('');
+        }
+      }
+
+      // Metadata
+      html += `<div style="font-size:11px;color:var(--dim);margin-top:12px">
+        Tracking since: ${h.tracked_since ? new Date(h.tracked_since).toLocaleString() : '—'}
+        ${h.last_success_at ? ' · Last success: ' + new Date(h.last_success_at).toLocaleString() : ''}
+        ${h.last_failure_at ? ' · Last failure: ' + new Date(h.last_failure_at).toLocaleString() : ''}
+      </div>`;
+
+      bfSignHealth.innerHTML = html;
+    } catch (e) {
+      bfSignHealth.textContent = 'Error parsing sign health data: ' + e.message;
+    }
+  } else {
+    bfSignHealth.textContent = 'Could not load builder-sign health data.';
   }
 }
 

@@ -31413,6 +31413,158 @@ app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
   });
 });
 
+// GET /api/admin/builder-fees — fetch builder trade data from Polymarket CLOB
+// Shows all trades attributed to our builder, with fee totals.
+let _builderFeesCache = null;
+let _builderFeesCacheAt = 0;
+app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
+  const now = Date.now();
+  // Cache for 5 minutes
+  if (_builderFeesCache && now - _builderFeesCacheAt < 5 * 60 * 1000 && !req.query.fresh) {
+    return res.json(_builderFeesCache);
+  }
+
+  const builderKey = process.env.POLY_BUILDER_API_KEY;
+  const builderSecret = process.env.POLY_BUILDER_SECRET;
+  const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  if (!builderKey || !builderSecret || !builderPassphrase) {
+    return res.status(503).json({ error: 'Builder credentials not configured' });
+  }
+
+  try {
+    // Build HMAC for builder auth
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const message = ts + 'GET' + '/builder/trades';
+    const secretBuf = Buffer.from(builderSecret, 'base64');
+    const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_');
+
+    // Fetch all builder trades (paginate if needed)
+    let allTrades = [];
+    let cursor = '';
+    let pages = 0;
+    const maxPages = 10; // safety limit
+
+    do {
+      const url = 'https://clob.polymarket.com/builder/trades' + (cursor ? '?next_cursor=' + encodeURIComponent(cursor) : '');
+      // Re-sign for each page since timestamp may differ
+      const pageTs = Math.floor(Date.now() / 1000).toString();
+      const pagePath = '/builder/trades' + (cursor ? '?next_cursor=' + encodeURIComponent(cursor) : '');
+      const pageMsg = pageTs + 'GET' + pagePath;
+      const pageSig = crypto.createHmac('sha256', secretBuf).update(pageMsg).digest('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_');
+
+      const r = await fetch(url, {
+        headers: {
+          'POLY_BUILDER_API_KEY': builderKey,
+          'POLY_BUILDER_TIMESTAMP': pageTs,
+          'POLY_BUILDER_PASSPHRASE': builderPassphrase,
+          'POLY_BUILDER_SIGNATURE': pageSig
+        }
+      });
+
+      if (!r.ok) {
+        const errText = await r.text().catch(() => '');
+        console.warn('[builder-fees] CLOB returned', r.status, errText.slice(0, 200));
+        if (allTrades.length === 0) {
+          return res.status(r.status).json({ error: 'CLOB error: ' + r.status, detail: errText.slice(0, 200) });
+        }
+        break; // Return what we have
+      }
+
+      const data = await r.json();
+      const trades = data.trades || data.data || [];
+      allTrades = allTrades.concat(trades);
+      cursor = data.next_cursor || '';
+      pages++;
+
+      // Stop if no more pages or we hit the same cursor
+      if (!cursor || cursor === 'LTE=' || trades.length === 0) break;
+    } while (pages < maxPages);
+
+    // Aggregate stats
+    let totalVolumeUsdc = 0, totalFeesUsdc = 0, totalTrades = 0;
+    let byDay = {}, byMarket = {};
+    const recentTrades = [];
+
+    for (const t of allTrades) {
+      const vol = parseFloat(t.sizeUsdc || t.size_usdc || 0);
+      const fee = parseFloat(t.feeUsdc || t.fee_usdc || 0);
+      totalVolumeUsdc += vol;
+      totalFeesUsdc += fee;
+      totalTrades++;
+
+      // Group by day
+      const day = (t.matchTime || t.match_time || t.createdAt || '').slice(0, 10);
+      if (day) {
+        if (!byDay[day]) byDay[day] = { volume: 0, fees: 0, trades: 0 };
+        byDay[day].volume += vol;
+        byDay[day].fees += fee;
+        byDay[day].trades++;
+      }
+
+      // Group by market
+      const mkt = t.market || 'unknown';
+      if (!byMarket[mkt]) byMarket[mkt] = { volume: 0, fees: 0, trades: 0, outcome: t.outcome || '' };
+      byMarket[mkt].volume += vol;
+      byMarket[mkt].fees += fee;
+      byMarket[mkt].trades++;
+
+      // Keep last 20 trades for display
+      if (recentTrades.length < 20) {
+        recentTrades.push({
+          id: t.id,
+          side: t.side,
+          size: t.size,
+          sizeUsdc: vol.toFixed(2),
+          feeUsdc: fee.toFixed(4),
+          price: t.price,
+          outcome: t.outcome,
+          market: mkt,
+          maker: t.maker ? t.maker.slice(0, 10) : '',
+          matchTime: t.matchTime || t.match_time || '',
+          txHash: t.transactionHash || t.transaction_hash || ''
+        });
+      }
+    }
+
+    // Sort daily breakdown
+    const dailyBreakdown = Object.entries(byDay)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 30)
+      .map(([day, d]) => ({ day, ...d, volume: Math.round(d.volume * 100) / 100, fees: Math.round(d.fees * 10000) / 10000 }));
+
+    // Top markets by volume
+    const topMarkets = Object.entries(byMarket)
+      .sort((a, b) => b[1].volume - a[1].volume)
+      .slice(0, 10)
+      .map(([id, m]) => ({ conditionId: id.slice(0, 12) + '...', ...m, volume: Math.round(m.volume * 100) / 100, fees: Math.round(m.fees * 10000) / 10000 }));
+
+    const result = {
+      summary: {
+        totalTrades,
+        totalVolumeUsdc: Math.round(totalVolumeUsdc * 100) / 100,
+        totalFeesUsdc: Math.round(totalFeesUsdc * 10000) / 10000,
+        avgFeePerTrade: totalTrades > 0 ? Math.round(totalFeesUsdc / totalTrades * 10000) / 10000 : 0,
+        feeRate: totalVolumeUsdc > 0 ? Math.round(totalFeesUsdc / totalVolumeUsdc * 10000) / 100 + '%' : '0%',
+        pages
+      },
+      dailyBreakdown,
+      topMarkets,
+      recentTrades,
+      cachedAt: new Date().toISOString()
+    };
+
+    _builderFeesCache = result;
+    _builderFeesCacheAt = now;
+    res.json(result);
+
+  } catch (err) {
+    console.error('[builder-fees] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // ALPHA SIGNALS — aggregated trading signals from all data sources
 // ════════════════════════════════════════════════════════════
