@@ -14284,6 +14284,533 @@ async function sendPredictorSpotlightEmail() {
 }
 cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight cron triggered'); sendPredictorSpotlightEmail().catch(err => console.error('[spotlight] Cron error:', err.message)); });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── POLYMARKET INFLUENCER FEED ────────────────────────────────────────────────
+// Monitors X/Twitter, YouTube, and Reddit for top prediction-market voices.
+// New posts are enriched via Claude (prediction direction + market match) and
+// auto-posted as "influencer" source takes on the social feed.
+// The aggregated sentiment per market feeds the B2B data API.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const POLY_KEYWORDS = ['polymarket','prediction market','predicting','odds on','probability of','betting on','yes shares','no shares'];
+const _influencerFetchCache = new Map(); // platform+id → last fetch ts (rate-gate)
+
+// Returns true if text is probably about a Polymarket-relevant prediction
+function _isPolyContent(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return POLY_KEYWORDS.some(kw => t.includes(kw));
+}
+
+// ── X/Twitter: resolve handle → numeric user ID (cached in DB platform_id) ──
+async function _resolveXUserId(handle, bearerToken) {
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 8000);
+    const r = await _nodeFetch(
+      `https://api.twitter.com/2/users/by/username/${handle}?user.fields=profile_image_url,public_metrics,description`,
+      { headers: { Authorization: `Bearer ${bearerToken}` }, signal: ctrl.signal }
+    ).finally(() => clearTimeout(tid));
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.data || null; // { id, name, username, profile_image_url, public_metrics }
+  } catch { return null; }
+}
+
+// ── X/Twitter: fetch recent tweets for a user ID ──────────────────────────────
+async function _fetchXTimeline(userId, bearerToken, sinceId) {
+  try {
+    const params = new URLSearchParams({
+      max_results: '20',
+      exclude: 'retweets,replies',
+      'tweet.fields': 'created_at,text,entities',
+    });
+    if (sinceId) params.set('since_id', sinceId);
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 10000);
+    const r = await _nodeFetch(
+      `https://api.twitter.com/2/users/${userId}/tweets?${params}`,
+      { headers: { Authorization: `Bearer ${bearerToken}` }, signal: ctrl.signal }
+    ).finally(() => clearTimeout(tid));
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d.data || [];
+  } catch { return []; }
+}
+
+// ── YouTube: channel RSS feed (no API key needed) ────────────────────────────
+async function _fetchYouTubeChannelRSS(channelId) {
+  const url = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 8000);
+    const xml = await _nodeFetch(url, {
+      headers: { 'User-Agent': 'HyperflexBot/1.0' }, signal: ctrl.signal
+    }).then(r => r.ok ? r.text() : '').finally(() => clearTimeout(tid));
+    if (!xml) return [];
+    // Parse YouTube Atom feed entries
+    const entries = [];
+    const entryRx = /<entry>([\s\S]*?)<\/entry>/g;
+    let m;
+    while ((m = entryRx.exec(xml)) !== null) {
+      const block = m[1];
+      const videoId = (block.match(/<yt:videoId>([^<]+)<\/yt:videoId>/) || [])[1];
+      const title   = (block.match(/<title>([^<]+)<\/title>/)           || [])[1];
+      const link    = (block.match(/<link rel="alternate" href="([^"]+)"/) || [])[1];
+      const pubDate = (block.match(/<published>([^<]+)<\/published>/)    || [])[1];
+      const desc    = (block.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || '';
+      if (videoId && title) entries.push({ videoId, title, link: link || `https://youtu.be/${videoId}`, pubDate, desc: desc.slice(0, 500) });
+    }
+    return entries.slice(0, 10); // newest 10
+  } catch { return []; }
+}
+
+// ── Reddit: fetch new posts from a subreddit ─────────────────────────────────
+async function _fetchRedditNew(subreddit) {
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 8000);
+    const r = await _nodeFetch(
+      `https://www.reddit.com/r/${subreddit}/new.json?limit=25`,
+      { headers: { 'User-Agent': 'HyperflexBot/1.0' }, signal: ctrl.signal }
+    ).finally(() => clearTimeout(tid));
+    if (!r.ok) return [];
+    const d = await r.json();
+    return ((d.data || {}).children || [])
+      .map(c => c.data)
+      .filter(p => !p.stickied && p.score > 0)
+      .map(p => ({
+        id:       p.id,
+        title:    p.title,
+        selftext: (p.selftext || '').slice(0, 400),
+        url:      `https://reddit.com${p.permalink}`,
+        score:    p.score,
+        created:  new Date(p.created_utc * 1000).toISOString(),
+      }));
+  } catch { return []; }
+}
+
+// ── Claude: extract prediction direction + match to a live market ──────────────
+// Returns { market_slug, market_question, predicted_side, confidence_pct } or null
+async function _extractInfluencerPrediction(postText, influencerName) {
+  if (!postText || postText.length < 20) return null;
+  // Build context from screener cache (live Polymarket markets)
+  const markets = (_screenerCache && _screenerCache.data || [])
+    .slice(0, 40)
+    .map(m => `• ${m.question} [${m.slug}] YES=${Math.round((m.yes_price||0.5)*100)}%`)
+    .join('\n');
+  if (!markets) return null;
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{
+        role: 'user',
+        content: `You are analyzing a social media post from a prediction market influencer to extract their prediction.
+
+POST from "${influencerName}":
+"${postText.slice(0, 600)}"
+
+LIVE POLYMARKET MARKETS (question [slug] YES%):
+${markets}
+
+If this post makes a clear prediction on one of the above markets, respond with JSON only:
+{"market_slug":"slug","market_question":"full question","predicted_side":"YES or NO","confidence_pct":0-100,"reasoning":"1 sentence"}
+
+If the post makes no clear prediction on a listed market, respond with: {"no_match":true}
+Respond with JSON only, no other text.`
+      }]
+    });
+    const raw = (resp.content[0]?.text || '').trim();
+    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || 'null');
+    if (!json || json.no_match || !json.market_slug || !json.predicted_side) return null;
+    if (json.confidence_pct < 55) return null; // only act on clear predictions
+    return json;
+  } catch { return null; }
+}
+
+// ── Core: check if an external_id is already stored ──────────────────────────
+async function _influencerPostExists(platform, externalId) {
+  try {
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM influencer_posts WHERE platform=$1 AND external_id=$2 LIMIT 1', [platform, externalId]);
+      return rows.length > 0;
+    } else {
+      const { data } = await supabase.from('influencer_posts').select('id').eq('platform', platform).eq('external_id', externalId).limit(1);
+      return (data || []).length > 0;
+    }
+  } catch { return false; }
+}
+
+// ── Persist a new influencer post + optionally create a take ─────────────────
+async function _saveInfluencerPost(influencer, post, prediction) {
+  try {
+    const row = {
+      influencer_id:   influencer.id,
+      platform:        post.platform,
+      external_id:     post.external_id,
+      content_url:     post.url,
+      content_text:    post.text,
+      published_at:    post.published_at,
+      market_slug:     prediction?.market_slug     || null,
+      market_question: prediction?.market_question || null,
+      predicted_side:  prediction?.predicted_side  || null,
+      match_confidence:prediction?.confidence_pct  || null,
+    };
+    let postId = null;
+    if (pool) {
+      const ins = await dbQuery(
+        `INSERT INTO influencer_posts (influencer_id,platform,external_id,content_url,content_text,published_at,market_slug,market_question,predicted_side,match_confidence)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (platform,external_id) DO NOTHING RETURNING id`,
+        [row.influencer_id, row.platform, row.external_id, row.content_url, row.content_text,
+         row.published_at, row.market_slug, row.market_question, row.predicted_side, row.match_confidence]
+      );
+      postId = ins[0]?.id || null;
+    } else {
+      const { data } = await supabase.from('influencer_posts').insert([row]).select('id');
+      postId = data?.[0]?.id || null;
+    }
+
+    // Create a take in the social feed when we have a clear prediction match
+    if (postId && prediction && prediction.market_slug && prediction.predicted_side) {
+      // Find or create a system user for this influencer
+      let influencerUserId = null;
+      try {
+        if (pool) {
+          const uRows = await dbQuery(`SELECT id FROM users WHERE username=$1 LIMIT 1`, [`inf_${influencer.platform}_${influencer.handle}`]);
+          if (uRows.length > 0) {
+            influencerUserId = uRows[0].id;
+          } else {
+            const uIns = await dbQuery(
+              `INSERT INTO users (username, display_name, avatar_url, is_system)
+               VALUES ($1,$2,$3,true) ON CONFLICT (username) DO UPDATE SET display_name=EXCLUDED.display_name RETURNING id`,
+              [`inf_${influencer.platform}_${influencer.handle}`, influencer.name, influencer.avatar_url || null]
+            );
+            influencerUserId = uIns[0]?.id;
+          }
+        }
+      } catch {}
+
+      if (influencerUserId) {
+        const market = (_screenerCache?.data || []).find(m => m.slug === prediction.market_slug);
+        const entryPrice = market ? (prediction.predicted_side === 'YES' ? (market.yes_price || 0.5) : (1 - (market.yes_price || 0.5))) : 0.5;
+        const thesis = `${influencer.name} on ${influencer.platform.toUpperCase()}: "${(post.text || '').slice(0, 240)}" — [View original](${post.url})`;
+        const takeRow = {
+          user_id:      influencerUserId,
+          market_slug:  prediction.market_slug,
+          question:     prediction.market_question,
+          side:         prediction.predicted_side,
+          entry_price:  entryPrice,
+          thesis,
+          source:       'influencer',
+          agree_count:  0,
+          disagree_count: 0,
+        };
+        try {
+          if (pool) {
+            const tIns = await dbQuery(
+              `INSERT INTO takes (user_id,market_slug,question,side,entry_price,thesis,source,agree_count,disagree_count)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+              [takeRow.user_id, takeRow.market_slug, takeRow.question, takeRow.side,
+               takeRow.entry_price, takeRow.thesis, takeRow.source, 0, 0]
+            );
+            const takeId = tIns[0]?.id;
+            if (takeId) await dbQuery('UPDATE influencer_posts SET take_id=$1 WHERE id=$2', [takeId, postId]);
+          }
+        } catch (takeErr) { console.warn('[influencer] take insert error:', takeErr.message); }
+      }
+    }
+  } catch (err) {
+    console.warn('[influencer] save post error:', err.message);
+  }
+}
+
+// ── Main monitoring function ──────────────────────────────────────────────────
+async function monitorPolymarketInfluencers() {
+  console.log('[influencer] Starting influencer monitoring sweep');
+  const bearerToken = process.env.X_BEARER_TOKEN;
+
+  // Load active influencers from DB
+  let influencers = [];
+  try {
+    if (pool) {
+      influencers = await dbQuery('SELECT * FROM external_influencers WHERE is_active=true', []);
+    } else {
+      const { data } = await supabase.from('external_influencers').select('*').eq('is_active', true);
+      influencers = data || [];
+    }
+  } catch (err) {
+    console.warn('[influencer] Could not load influencers (table may not exist yet):', err.message);
+    return;
+  }
+
+  let newPostCount = 0;
+  let newTakeCount = 0;
+
+  for (const inf of influencers) {
+    // Rate gate: skip if fetched within last 25 minutes
+    const cacheKey = `${inf.platform}:${inf.handle}`;
+    const lastFetch = _influencerFetchCache.get(cacheKey) || 0;
+    if (Date.now() - lastFetch < 25 * 60 * 1000) continue;
+    _influencerFetchCache.set(cacheKey, Date.now());
+
+    let rawPosts = [];
+
+    // ── X/Twitter ──────────────────────────────────────────────────────────
+    if (inf.platform === 'x') {
+      if (!bearerToken) continue;
+      // Resolve user ID if not cached
+      let userId = inf.platform_id;
+      if (!userId) {
+        const userData = await _resolveXUserId(inf.handle, bearerToken);
+        if (!userData) continue;
+        userId = userData.id;
+        // Update platform_id + avatar in DB (fire-and-forget)
+        try {
+          if (pool) {
+            await dbQuery(
+              'UPDATE external_influencers SET platform_id=$1, avatar_url=COALESCE(avatar_url,$2), follower_count=$3 WHERE id=$4',
+              [userId, userData.profile_image_url || null, userData.public_metrics?.followers_count || 0, inf.id]
+            );
+          }
+        } catch {}
+      }
+      const tweets = await _fetchXTimeline(userId, bearerToken);
+      rawPosts = tweets
+        .filter(t => _isPolyContent(t.text))
+        .map(t => ({
+          platform:     'x',
+          external_id:  t.id,
+          url:          `https://x.com/${inf.handle}/status/${t.id}`,
+          text:         t.text,
+          published_at: t.created_at || new Date().toISOString(),
+        }));
+    }
+
+    // ── YouTube ────────────────────────────────────────────────────────────
+    else if (inf.platform === 'youtube') {
+      const channelId = inf.platform_id || inf.handle;
+      const videos = await _fetchYouTubeChannelRSS(channelId);
+      rawPosts = videos
+        .filter(v => _isPolyContent(v.title + ' ' + v.desc))
+        .map(v => ({
+          platform:     'youtube',
+          external_id:  v.videoId,
+          url:          v.link,
+          text:         `${v.title}\n${v.desc}`,
+          published_at: v.pubDate || new Date().toISOString(),
+        }));
+    }
+
+    // ── Reddit ─────────────────────────────────────────────────────────────
+    else if (inf.platform === 'reddit') {
+      const posts = await _fetchRedditNew(inf.handle);
+      // All posts in r/Polymarket are relevant; filter others
+      const alwaysRelevant = inf.handle.toLowerCase() === 'polymarket';
+      rawPosts = posts
+        .filter(p => alwaysRelevant || _isPolyContent(p.title + ' ' + p.selftext))
+        .map(p => ({
+          platform:     'reddit',
+          external_id:  p.id,
+          url:          p.url,
+          text:         p.title + (p.selftext ? '\n' + p.selftext : ''),
+          published_at: p.created,
+        }));
+    }
+
+    // ── Substack ───────────────────────────────────────────────────────────
+    else if (inf.platform === 'substack') {
+      const items = await fetchRSSFeed(`https://${inf.handle}.substack.com/feed`);
+      rawPosts = items
+        .filter(i => _isPolyContent(i.title))
+        .map(i => ({
+          platform:     'substack',
+          external_id:  i.link,
+          url:          i.link,
+          text:         i.title,
+          published_at: new Date().toISOString(),
+        }));
+    }
+
+    // ── Process new posts ──────────────────────────────────────────────────
+    for (const post of rawPosts.slice(0, 5)) { // max 5 per influencer per sweep
+      const exists = await _influencerPostExists(post.platform, post.external_id);
+      if (exists) continue;
+
+      // Claude enrichment (only if screener cache is warm)
+      const prediction = (_screenerCache?.data?.length > 10)
+        ? await _extractInfluencerPrediction(post.text, inf.name)
+        : null;
+
+      await _saveInfluencerPost(inf, post, prediction);
+      newPostCount++;
+      if (prediction) newTakeCount++;
+
+      // Small delay between Claude calls to avoid rate limits
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // Update last_fetched timestamp
+    try {
+      if (pool) await dbQuery('UPDATE external_influencers SET last_fetched=NOW() WHERE id=$1', [inf.id]);
+    } catch {}
+  }
+
+  console.log(`[influencer] Sweep complete — ${newPostCount} new posts, ${newTakeCount} auto-takes created`);
+}
+
+// Run every 30 minutes
+cron.schedule('*/30 * * * *', () => {
+  monitorPolymarketInfluencers().catch(err => console.error('[influencer] Cron error:', err.message));
+});
+
+// ── API: list influencers with stats ─────────────────────────────────────────
+app.get('/api/influencers', async (req, res) => {
+  try {
+    const platform = req.query.platform || null;
+    let rows = [];
+    if (pool) {
+      const clause = platform ? 'WHERE platform=$1 AND is_active=true' : 'WHERE is_active=true';
+      const params = platform ? [platform] : [];
+      rows = await dbQuery(
+        `SELECT i.*, COUNT(p.id) AS post_count,
+                COUNT(p.take_id) AS take_count,
+                MAX(p.published_at) AS last_post_at
+         FROM external_influencers i
+         LEFT JOIN influencer_posts p ON p.influencer_id = i.id
+         ${clause}
+         GROUP BY i.id ORDER BY post_count DESC LIMIT 50`, params
+      );
+    } else {
+      const q = supabase.from('external_influencers').select('*').eq('is_active', true);
+      if (platform) q.eq('platform', platform);
+      const { data } = await q.limit(50);
+      rows = data || [];
+    }
+    res.json({ influencers: rows, updated_at: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API: recent influencer posts (public feed) ────────────────────────────────
+app.get('/api/influencer-feed', async (req, res) => {
+  try {
+    const limit   = Math.min(parseInt(req.query.limit   || '30'), 100);
+    const platform = req.query.platform || null;
+    const marketSlug = req.query.market_slug || null;
+    let rows = [];
+    if (pool) {
+      const conditions = ['p.published_at IS NOT NULL'];
+      const params = [];
+      if (platform)   { params.push(platform);   conditions.push(`p.platform=$${params.length}`); }
+      if (marketSlug) { params.push(marketSlug); conditions.push(`p.market_slug=$${params.length}`); }
+      params.push(limit);
+      rows = await dbQuery(
+        `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,
+                i.avatar_url AS influencer_avatar, i.platform AS influencer_platform,
+                i.known_accuracy, i.follower_count
+         FROM influencer_posts p
+         JOIN external_influencers i ON i.id = p.influencer_id
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY p.published_at DESC
+         LIMIT $${params.length}`,
+        params
+      );
+    } else {
+      let q = supabase.from('influencer_posts').select('*, external_influencers(name,handle,avatar_url,platform,known_accuracy,follower_count)').order('published_at', { ascending: false }).limit(limit);
+      if (platform)   q = q.eq('platform', platform);
+      if (marketSlug) q = q.eq('market_slug', marketSlug);
+      const { data } = await q;
+      rows = data || [];
+    }
+    res.json({ posts: rows, count: rows.length, updated_at: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── B2B API: influencer sentiment per market ─────────────────────────────────
+// This is the proprietary signal: what do the top voices say about each market?
+// Designed for hedge fund / quant desk subscription ($500-2000/mo tier).
+app.get('/api/data/influencer-sentiment', async (req, res) => {
+  try {
+    const marketSlug = req.query.market_slug;
+    const days = Math.min(parseInt(req.query.days || '7'), 30);
+    if (!marketSlug) {
+      // Return aggregated sentiment across all markets (last N days)
+      let rows = [];
+      if (pool) {
+        rows = await dbQuery(
+          `SELECT market_slug, market_question,
+                  COUNT(*) AS signal_count,
+                  SUM(CASE WHEN predicted_side='YES' THEN 1 ELSE 0 END) AS yes_signals,
+                  SUM(CASE WHEN predicted_side='NO'  THEN 1 ELSE 0 END) AS no_signals,
+                  AVG(match_confidence) AS avg_confidence,
+                  MAX(published_at) AS latest_signal
+           FROM influencer_posts
+           WHERE market_slug IS NOT NULL
+             AND published_at > NOW() - ($1 || ' days')::INTERVAL
+           GROUP BY market_slug, market_question
+           HAVING COUNT(*) >= 2
+           ORDER BY signal_count DESC, latest_signal DESC
+           LIMIT 30`, [days]
+        );
+      }
+      return res.json({
+        markets: rows,
+        days,
+        generated_at: new Date().toISOString(),
+        data_note: 'Influencer sentiment derived from X, YouTube, and Reddit — Polymarket-only sources',
+      });
+    }
+
+    // Single market: full signal breakdown
+    let posts = [];
+    if (pool) {
+      posts = await dbQuery(
+        `SELECT p.*, i.name AS influencer_name, i.handle, i.platform,
+                i.known_accuracy, i.follower_count, i.avatar_url
+         FROM influencer_posts p
+         JOIN external_influencers i ON i.id = p.influencer_id
+         WHERE p.market_slug=$1
+           AND p.published_at > NOW() - ($2 || ' days')::INTERVAL
+         ORDER BY p.published_at DESC`, [marketSlug, days]
+      );
+    }
+    const yesSignals = posts.filter(p => p.predicted_side === 'YES');
+    const noSignals  = posts.filter(p => p.predicted_side === 'NO');
+    const sentiment  = posts.length > 0
+      ? Math.round((yesSignals.length / posts.length) * 100)
+      : null;
+
+    // Weighted sentiment (weight by follower_count if available)
+    let weightedSentiment = null;
+    const weightedPosts = posts.filter(p => p.follower_count > 0);
+    if (weightedPosts.length > 0) {
+      const totalWeight = weightedPosts.reduce((s, p) => s + (p.follower_count || 1), 0);
+      const yesWeight   = yesSignals.filter(p => p.follower_count > 0).reduce((s, p) => s + (p.follower_count || 1), 0);
+      weightedSentiment = Math.round((yesWeight / totalWeight) * 100);
+    }
+
+    res.json({
+      market_slug:          marketSlug,
+      signal_count:         posts.length,
+      yes_signals:          yesSignals.length,
+      no_signals:           noSignals.length,
+      sentiment_yes_pct:    sentiment,
+      weighted_yes_pct:     weightedSentiment,
+      avg_confidence:       posts.length > 0 ? Math.round(posts.reduce((s, p) => s + (p.match_confidence || 0), 0) / posts.length) : null,
+      posts,
+      days,
+      generated_at:         new Date().toISOString(),
+      data_note:            'Influencer sentiment derived from X, YouTube, and Reddit — Polymarket-only sources',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── STREAK WARNING EMAILS ─────────────────────────────────────────────────────
 // Daily at 6pm UTC — sends "Your X-win streak ends tonight" to users who:
 //   • have a current consecutive win streak ≥ 3
