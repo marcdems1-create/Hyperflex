@@ -3618,9 +3618,12 @@ function renderTakeCard(t) {
   }
 
   var profileHref = t.user_id ? '/m/' + t.user_id : null;
+  var avatarInner = t.avatar_url
+    ? '<img src="' + escHtml(t.avatar_url) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + avatarIcon + '\'">'
+    : avatarIcon;
   var avatarHtml = profileHref
-    ? '<a href="' + profileHref + '" class="take-avatar ' + avatarClass + '" style="text-decoration:none">' + avatarIcon + '</a>'
-    : '<div class="take-avatar ' + avatarClass + '">' + avatarIcon + '</div>';
+    ? '<a href="' + profileHref + '" class="take-avatar ' + avatarClass + '" style="text-decoration:none;overflow:hidden">' + avatarInner + '</a>'
+    : '<div class="take-avatar ' + avatarClass + '" style="overflow:hidden">' + avatarInner + '</div>';
   var authorHtml = profileHref
     ? '<a href="' + profileHref + '" class="take-author" style="text-decoration:none;color:var(--text)">' + escHtml(t.display_name || 'Anonymous') + '</a>'
     : '<span class="take-author">' + escHtml(t.display_name || 'Anonymous') + '</span>';

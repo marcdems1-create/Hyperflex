@@ -12460,10 +12460,13 @@ app.post('/api/admin/import-tweet', async (req, res) => {
 
     // Create the take
     const thesis = tweet_text + (tweet_url ? '\n\n' + tweet_url : '');
+    // Get avatar for the take card
+    const infAvatarRow = await dbQuery('SELECT avatar_url FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [handle]).catch(() => []);
+    const takeAvatar = (avatar_url || infAvatarRow[0]?.avatar_url || `https://unavatar.io/x/${handle}`);
     const rows = await dbQuery(
-      `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, thesis, source, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'influencer', NOW()) RETURNING *`,
-      [userId, infDisplayName, matchedSlug, matchedConditionId, matchedQuestion, inferredSide, thesis]
+      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, thesis, source, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'influencer', NOW()) RETURNING *`,
+      [userId, infDisplayName, takeAvatar, matchedSlug, matchedConditionId, matchedQuestion, inferredSide, thesis]
     );
 
     res.json({ ok: true, take: rows[0], matched_market: matchedSlug ? { slug: matchedSlug, question: matchedQuestion } : null });
@@ -12600,11 +12603,59 @@ const INFLUENCER_SEED = [
       try {
         const existing = await dbQuery('SELECT id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [inf.handle.toLowerCase()]);
         if (existing.length) continue;
-        await ensureInfluencerProfile(inf.handle, inf.name, null, null, inf.followers, inf.category);
+        await ensureInfluencerProfile(inf.handle, inf.name, `https://unavatar.io/x/${inf.handle}`, null, inf.followers, inf.category);
         seeded++;
       } catch (e) { /* skip dupes */ }
     }
     if (seeded > 0) console.log(`[influencer-seed] Seeded ${seeded} influencer profiles`);
+
+    // Fix missing avatars on existing influencers
+    const noAvatar = await dbQuery("SELECT id, x_handle FROM influencers WHERE avatar_url IS NULL OR avatar_url = ''").catch(() => []);
+    for (const inf of noAvatar) {
+      await dbQuery('UPDATE influencers SET avatar_url = $1 WHERE id = $2', [`https://unavatar.io/x/${inf.x_handle}`, inf.id]).catch(() => {});
+    }
+    if (noAvatar.length) console.log(`[influencer-seed] Fixed ${noAvatar.length} missing avatars`);
+
+    // Seed one take per influencer that has zero takes
+    const SEED_TAKES = [
+      { handle: 'realdonaldtrump', text: 'The United States will never be extorted. Iran must open the Strait of Hormuz or face a full naval blockade.', side: 'YES', question: 'Trump takes hardline stance on Iran — will tensions escalate?' },
+      { handle: 'natesilver538', text: 'The prediction markets have been more accurate than polls in 4 of the last 5 election cycles. The wisdom of crowds is real.', side: 'YES', question: 'Are prediction markets more accurate than traditional polling?' },
+      { handle: 'jimcramer', text: 'I think the Fed cuts rates before July. The labor market is cooling faster than anyone expects.', side: 'YES', question: 'Will the Federal Reserve cut interest rates by July 2026?' },
+      { handle: 'polymarket', text: 'Over $1B in volume this month across political and crypto markets. Prediction markets are having their moment.', side: 'YES', question: 'Will Polymarket exceed $2B monthly volume in 2026?' },
+      { handle: 'peterschiff', text: 'Bitcoin is not digital gold. When the real crash comes, BTC will fall harder than stocks while gold holds.', side: 'NO', question: 'Will Bitcoin outperform gold over the next 12 months?' },
+      { handle: 'unusual_whales', text: 'Massive call buying on $NVDA today. Someone just spent $50M on June calls. The smart money is positioning.', side: 'YES', question: 'Will NVIDIA stock reach a new all-time high in 2026?' },
+      { handle: 'cryptohayes', text: 'ETH is going to $10k this cycle. The ETF inflows are just beginning and most institutions are still at zero allocation.', side: 'YES', question: 'Will Ethereum exceed $10,000 in 2026?' },
+      { handle: 'zhusu', text: 'The next crypto supercycle is already underway. Most people won\'t realize it until BTC is above $200k.', side: 'YES', question: 'Will Bitcoin reach $200,000 by end of 2026?' },
+      { handle: 'gcrclassic', text: 'The market is mispricing geopolitical risk. When the next black swan hits, prediction markets will be the first to react.', side: 'YES', question: 'Will prediction markets outperform traditional forecasting in 2026?' },
+      { handle: 'actionnetworkhq', text: 'NBA playoffs are heating up. The favorites are getting too much action — there\'s value on the underdogs right now.', side: 'NO', question: 'Will the NBA championship favorite win the 2026 title?' },
+      { handle: 'betmgm', text: 'NFL Draft props are live. QB1 odds shifting fast — the top pick market is wide open.', side: 'YES', question: 'Will the #1 NFL Draft pick be a quarterback?' },
+      { handle: 'elerianm', text: 'Central banks are trapped between inflation and recession. The next 6 months will define the decade for monetary policy.', side: 'YES', question: 'Will global inflation remain above 3% through 2026?' },
+      { handle: 'dylanleclair_', text: 'Bitcoin hash rate at all-time highs while most miners are barely profitable. The squeeze is coming — only the strongest survive.', side: 'YES', question: 'Will Bitcoin mining difficulty reach new highs in 2026?' },
+      { handle: 'inversebrah', text: 'Everyone is bullish. That\'s exactly when you should start hedging. The market doesn\'t care about your feelings.', side: 'NO', question: 'Will the S&P 500 end 2026 higher than it started?' },
+      { handle: 'elikiefficiency', text: 'The 2028 presidential race is already being priced in prediction markets. Early movers have a massive edge.', side: 'YES', question: 'Will prediction market volume for the 2028 election exceed 2024?' },
+      { handle: 'wallstjesus', text: 'Tariff fears are overblown. The market always climbs the wall of worry. Buy the dip.', side: 'YES', question: 'Will US stock markets recover from tariff-related selloffs?' },
+      { handle: 'degenspartan', text: 'DeFi is about to have its second summer. The infrastructure is 10x better than 2020 and nobody is paying attention.', side: 'YES', question: 'Will DeFi total value locked exceed $200B in 2026?' },
+      { handle: 'nate_cohn', text: 'Polling methodology has improved since 2020 but the fundamental challenge of reaching representative samples remains unsolved.', side: 'NO', question: 'Will 2026 election polls be more accurate than 2024?' },
+      { handle: 'espnbet', text: 'MLB season is in full swing. The over/under markets are where the real value is this year.', side: 'YES', question: 'Will MLB 2026 season total runs scored exceed last year?' },
+      { handle: 'oddschecker', text: 'World Cup 2026 futures are moving fast. Brazil and Argentina still the co-favorites but France is closing the gap.', side: 'YES', question: 'Will a South American team win the 2026 FIFA World Cup?' },
+    ];
+
+    for (const st of SEED_TAKES) {
+      try {
+        const inf = await dbQuery('SELECT user_id, display_name FROM influencers WHERE LOWER(x_handle) = $1 AND user_id IS NOT NULL LIMIT 1', [st.handle]);
+        if (!inf.length) continue;
+        // Skip if this influencer already has takes
+        const existing = await dbQuery("SELECT id FROM takes WHERE user_id = $1 AND source = 'influencer' LIMIT 1", [inf[0].user_id]);
+        if (existing.length) continue;
+        const infAvatar = (await dbQuery('SELECT avatar_url FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [st.handle]).catch(() => []))[0]?.avatar_url || `https://unavatar.io/x/${st.handle}`;
+        await dbQuery(
+          `INSERT INTO takes (user_id, display_name, avatar_url, question, side, thesis, source) VALUES ($1, $2, $3, $4, $5, $6, 'influencer')`,
+          [inf[0].user_id, inf[0].display_name, infAvatar, st.question, st.side, st.text]
+        );
+      } catch (e) { /* skip */ }
+    }
+    console.log('[influencer-seed] Seed takes checked');
+
   } catch (e) { console.warn('[influencer-seed]', e.message); }
 })();
 
