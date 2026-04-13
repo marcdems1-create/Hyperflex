@@ -36962,11 +36962,6 @@ app.get('/api/debug/kalshi-series', async (req, res) => {
   }
 });
 
-// 404 catch-all — must be last route
-app.use((req, res) => {
-  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
-});
-
 // Auto-migrate: create all tables on fresh DB, add missing columns on existing DB
 if (pool) {
   (async () => {
@@ -39964,6 +39959,11 @@ app.get('/api/social/search', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// 404 catch-all — MUST be the very last route
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
 const PORT = process.env.PORT || 3000;
