@@ -3491,6 +3491,8 @@ function renderTakeCard(t) {
 
   var thesis = t.thesis ? '<div class="take-thesis">' + escHtml(t.thesis) + '</div>' : '';
   var amount = amountDisplay ? '<div class="take-amount">' + amountDisplay + ' position</div>' : '';
+  var correctBadge = t.is_correct === true ? '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">\u2713 CORRECT</span>'
+    : t.is_correct === false ? '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--accent-red);background:var(--accent-red-dim);padding:2px 6px;border-radius:4px">\u2717 WRONG</span>' : '';
 
   var agreeActive = t.my_reaction === 'agree' ? ' active' : '';
   var disagreeActive = t.my_reaction === 'disagree' ? ' active' : '';
@@ -3517,12 +3519,20 @@ function renderTakeCard(t) {
       '</div>';
   }
 
+  var profileHref = t.user_id ? '/m/' + t.user_id : null;
+  var avatarHtml = profileHref
+    ? '<a href="' + profileHref + '" class="take-avatar ' + avatarClass + '" style="text-decoration:none">' + avatarIcon + '</a>'
+    : '<div class="take-avatar ' + avatarClass + '">' + avatarIcon + '</div>';
+  var authorHtml = profileHref
+    ? '<a href="' + profileHref + '" class="take-author" style="text-decoration:none;color:var(--text)">' + escHtml(t.display_name || 'Anonymous') + '</a>'
+    : '<span class="take-author">' + escHtml(t.display_name || 'Anonymous') + '</span>';
+
   return '<div class="take-card" id="take-' + t.id + '">' +
-    '<div class="take-avatar ' + avatarClass + '">' + avatarIcon + '</div>' +
+    avatarHtml +
     '<div class="take-body">' +
       '<div class="take-header">' +
-        '<span class="take-author">' + escHtml(t.display_name || 'Anonymous') + '</span>' +
-        badge + sharp +
+        authorHtml +
+        badge + sharp + correctBadge +
         '<span class="take-time">' + timeAgo(t.created_at) + '</span>' +
       '</div>' +
       marketLink + thesis + amount + quotedTake +

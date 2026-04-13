@@ -12010,7 +12010,7 @@ app.get('/api/member/:userId', async (req, res) => {
     let userData, positionsData;
     if (pool) {
       const [userRows, posRows] = await Promise.all([
-        dbQuery('SELECT id, display_name, created_at FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]),
         dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
@@ -12019,7 +12019,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, created_at').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, created_at, is_whale, whale_rank, whale_pnl, polymarket_address').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -12111,6 +12111,10 @@ app.get('/api/member/:userId', async (req, res) => {
         id:           userData.id,
         display_name: userData.display_name || 'Anonymous',
         member_since: userData.created_at,
+        is_whale:     userData.is_whale || false,
+        whale_rank:   userData.whale_rank || null,
+        whale_pnl:    userData.whale_pnl != null ? parseFloat(userData.whale_pnl) : null,
+        polymarket_address: userData.polymarket_address || null,
       },
       stats: {
         total_predictions:  positions.length,
@@ -12129,6 +12133,48 @@ app.get('/api/member/:userId', async (req, res) => {
   } catch (err) {
     console.error('[member profile]', err);
     res.status(500).json({ error: 'Failed to load member profile' });
+  }
+});
+
+// GET /api/whale-profiles — whale leaderboard for discovery
+app.get('/api/whale-profiles', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 50);
+    if (!pool) return res.json({ whales: [] });
+
+    const rows = await dbQuery(
+      `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.created_at,
+        COUNT(t.id)::int as take_count,
+        COUNT(t.id) FILTER (WHERE t.is_correct = true)::int as correct_takes,
+        COUNT(t.id) FILTER (WHERE t.is_correct = false)::int as incorrect_takes,
+        COALESCE(SUM(t.agree_count), 0)::int as total_agrees
+       FROM users u
+       LEFT JOIN takes t ON t.user_id = u.id AND t.source IN ('whale', 'consensus')
+       WHERE u.is_whale = true
+       GROUP BY u.id
+       ORDER BY u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
+       LIMIT $1`,
+      [limit]
+    );
+
+    const whales = rows.map(r => ({
+      id: r.id,
+      display_name: r.display_name,
+      polymarket_address: r.polymarket_address,
+      whale_rank: r.whale_rank,
+      whale_pnl: r.whale_pnl != null ? parseFloat(r.whale_pnl) : null,
+      take_count: r.take_count,
+      correct_takes: r.correct_takes,
+      accuracy: (r.correct_takes + r.incorrect_takes) > 0
+        ? Math.round((r.correct_takes / (r.correct_takes + r.incorrect_takes)) * 100) : null,
+      total_agrees: r.total_agrees,
+      profile_url: '/m/' + r.id,
+    }));
+
+    res.json({ whales });
+  } catch (err) {
+    console.error('[whale-profiles]', err.message);
+    res.status(500).json({ error: 'Failed to load whale profiles' });
   }
 });
 
@@ -13313,8 +13359,70 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_parent ON takes(parent_take_id)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_reactions_take_id ON take_reactions(take_id)').catch(() => {});
     console.log('[takes] Tables ensured');
+    // Ensure whale profile columns
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_whale BOOLEAN DEFAULT false').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_rank INTEGER').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_pnl NUMERIC').catch(() => {});
+    await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_is_whale ON users(is_whale) WHERE is_whale = true').catch(() => {});
   } catch (e) { console.warn('[takes] table init:', e.message); }
 })();
+
+// ── Whale profile cache: polymarket_address → user id ──
+const _whaleUserCache = new Map(); // wallet_address → { userId, displayName }
+
+// ensureWhaleProfile: create or update a user record for a Polymarket whale wallet.
+// Returns the user id so takes can be linked to profiles.
+async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
+  if (!pool || !walletAddress) return null;
+  const addrLower = walletAddress.toLowerCase();
+
+  // Check cache first
+  const cached = _whaleUserCache.get(addrLower);
+  if (cached) return cached.userId;
+
+  try {
+    // Look up existing user by polymarket_address
+    const existing = await dbQuery(
+      'SELECT id, display_name FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1',
+      [addrLower]
+    );
+
+    if (existing.length) {
+      // Update rank/pnl/whale flag
+      const displayName = traderName || existing[0].display_name;
+      await dbQuery(
+        'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
+        [rank || null, pnl || null, displayName, existing[0].id]
+      ).catch(() => {});
+      _whaleUserCache.set(addrLower, { userId: existing[0].id, displayName });
+      return existing[0].id;
+    }
+
+    // Create new whale user
+    const displayName = traderName || (addrLower.slice(0, 6) + '...' + addrLower.slice(-4));
+    const rows = await dbQuery(
+      `INSERT INTO users (display_name, polymarket_address, password_hash, is_whale, whale_rank, whale_pnl, created_at)
+       VALUES ($1, $2, $3, true, $4, $5, NOW()) RETURNING id`,
+      [displayName, addrLower, 'whale_profile_' + Date.now(), rank || null, pnl || null]
+    );
+    if (rows.length) {
+      _whaleUserCache.set(addrLower, { userId: rows[0].id, displayName });
+      console.log(`[whale-profile] Created profile for ${displayName} (${addrLower.slice(0, 8)}...)`);
+      return rows[0].id;
+    }
+  } catch (e) {
+    // Could be duplicate key if concurrent insert — try lookup again
+    try {
+      const retry = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addrLower]);
+      if (retry.length) {
+        _whaleUserCache.set(addrLower, { userId: retry[0].id, displayName: traderName || addrLower.slice(0, 10) });
+        return retry[0].id;
+      }
+    } catch {}
+    console.warn('[whale-profile] Error:', e.message);
+  }
+  return null;
+}
 
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
@@ -19772,6 +19880,15 @@ async function fetchWhalePositions() {
   // Only track profitable whales — the top 0.5% who actually make money
   const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 50);
 
+  // ── Ensure whale profiles exist for all tracked traders (fire-and-forget) ──
+  if (pool) {
+    (async () => {
+      for (const t of traders.slice(0, 30)) {
+        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl).catch(() => null);
+      }
+    })().catch(() => {});
+  }
+
   // 2. Fetch positions with concurrency limit (batches of 10, 500ms delay)
   const BATCH_SIZE = 10;
   const BATCH_DELAY = 500;
@@ -20003,17 +20120,29 @@ async function fetchWhalePositions() {
             ).catch(() => []);
             if (existing.length) continue;
 
+            // Find the wallet address for this trader from the snapshot
+            let traderWallet = null;
+            for (const [w, positions] of newSnapshot.entries()) {
+              if (positions.some(p => p.trader === evt.trader_name)) { traderWallet = w; break; }
+            }
+
+            // Ensure whale has a user profile
+            const whaleUserId = await ensureWhaleProfile(
+              traderWallet, evt.trader_name, evt.trader_rank, evt.trader_pnl
+            );
+
             const sizeStr = evt.size_display || ('$' + Math.round(evt.size / 1000) + 'K');
             const pricePct = evt.price ? Math.round(evt.price * 100) + '¢' : '';
             const actionVerb = evt.action === 'opened' ? 'opened a new' : 'increased their';
             const thesis = `${evt.trader_name || 'Whale'} (rank #${evt.trader_rank || '?'}) ${actionVerb} ${sizeStr} ${(evt.side || 'YES').toUpperCase()} position${pricePct ? ' at ' + pricePct : ''}.`;
 
             await dbQuery(
-              `INSERT INTO takes (display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'whale')`,
+              `INSERT INTO takes (user_id, display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'whale')`,
               [
+                whaleUserId,
                 evt.trader_name || 'Whale #' + (evt.trader_rank || '?'),
-                null,
+                traderWallet || null,
                 evt.slug || null,
                 evt.condition_id || null,
                 evt.question || 'Unknown market',

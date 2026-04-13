@@ -265,12 +265,35 @@ async function load() {
         </div>
       </div>` : '';
 
+    // Whale-specific data
+    const isWhale = user.is_whale || false;
+    const whaleRank = user.whale_rank;
+    const whalePnl = user.whale_pnl;
+    const walletAddr = user.polymarket_address || '';
+    const shortWallet = walletAddr ? (walletAddr.slice(0, 6) + '...' + walletAddr.slice(-4)) : '';
+    const pnlDisplay = whalePnl != null ? (whalePnl >= 0 ? '+$' + (whalePnl >= 1000000 ? (whalePnl/1000000).toFixed(1) + 'M' : whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl)) : '-$' + Math.abs(whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl))) : null;
+    const whaleAvatarBg = isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : avatarBg;
+    const whaleAvatarColor = isWhale ? '#fff' : avgColor;
+
     page.innerHTML = `
       <div class="hero">
-        <div class="avatar" style="background:${avatarBg};color:${avgColor};border-color:${avgColor}44">${initials}</div>
+        <div class="avatar" style="background:${whaleAvatarBg};color:${whaleAvatarColor};border-color:${isWhale ? '#a855f744' : avgColor + '44'}">${isWhale ? '🐋' : initials}</div>
         <div class="hero-info">
           <div class="hero-name">${user.display_name}</div>
-          ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
+          ${isWhale ? `
+            <div style="display:flex;align-items:center;gap:8px;margin:4px 0 2px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:3px 10px;border-radius:100px;letter-spacing:0.5px">POLYMARKET WHALE</span>
+              ${whaleRank ? `<span style="font-family:var(--mono);font-size:10px;color:var(--gold);font-weight:700">Rank #${whaleRank}</span>` : ''}
+              ${pnlDisplay ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${whalePnl >= 0 ? '#00e68a' : '#ff4d6a'}">${pnlDisplay} PnL</span>` : ''}
+            </div>
+            ${walletAddr ? `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 4px;display:flex;align-items:center;gap:6px">
+              <span>${shortWallet}</span>
+              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" style="font-family:var(--mono);font-size:9px;color:var(--dim);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer">Copy</button>
+              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" style="font-family:var(--mono);font-size:9px;color:var(--accent-blue);text-decoration:none">Polygonscan ↗</a>
+            </div>` : ''}
+          ` : `
+            ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
+          `}
           <div class="hero-badges">
             ${tierBadge(stats.win_rate, stats.streak)}
             <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
