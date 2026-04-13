@@ -896,9 +896,10 @@ function switchOutcome(index) {
     var yp = emPrices[0] ? parseFloat(emPrices[0]) : 0.5;
     if (!yp || isNaN(yp) || yp <= 0 || yp >= 1) yp = 0.5;
     var np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
-    if (!np || isNaN(np) || np <= 0 || np >= 1) np = 1 - yp;
+    if (isNaN(np) || np < 0 || np >= 1) np = 1 - yp;
+    if (np < 0) np = 0;
     document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '¢';
-    document.getElementById('noPrice').textContent = Math.round(np * 100) + '¢';
+    document.getElementById('noPrice').textContent = (np > 0 && np < 0.01) ? '<1¢' : Math.round(np * 100) + '¢';
     // Update trade widget title to this outcome's question
     var title = em.question || em.groupItemTitle || '';
     document.getElementById('tradeTitle').textContent = title.substring(0, 50);
@@ -4539,12 +4540,30 @@ async function runCrystalBall() {
     });
     if (!r.ok) throw new Error('Analysis failed');
     var data = await r.json();
-    var analysis = data.analysis || data.text || 'No analysis available.';
-    // Render with basic HTML formatting
-    var html = analysis
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n\n/g, '<br><br>')
-      .replace(/\n/g, '<br>');
+    if (data.error) throw new Error(data.error);
+    var a = data.analysis || data;
+    var html = '';
+    if (typeof a === 'object' && a.headline) {
+      html += '<div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;line-height:1.3">' + (a.headline || '').replace(/</g,'&lt;') + '</div>';
+      html += '<div style="font-size:12px;color:var(--soft);line-height:1.6;margin-bottom:10px">' + (a.key_finding || '').replace(/</g,'&lt;') + '</div>';
+      if (a.trade_suggestion) {
+        var tsColor = a.trade_suggestion.side === 'NO' ? '#ff4d6a' : '#00e68a';
+        html += '<div style="padding:8px 12px;border-radius:8px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);margin-bottom:8px">';
+        html += '<div style="font-size:11px;font-weight:700;color:#c9920d;margin-bottom:4px">TRADE SUGGESTION</div>';
+        html += '<div style="font-size:12px;color:var(--soft)"><strong style="color:' + tsColor + '">' + (a.trade_suggestion.side || '') + '</strong> — ' + (a.trade_suggestion.reasoning || '').replace(/</g,'&lt;').substring(0,200) + '</div>';
+        html += '</div>';
+      }
+      if (a.factors) {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+        Object.entries(a.factors).forEach(function(kv) {
+          html += '<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:var(--paper-3,#1e1e2a);color:var(--dim,#8888a0);font-family:var(--mono)">' + kv[0].replace(/_/g,' ') + ': ' + kv[1] + '</span>';
+        });
+        html += '</div>';
+      }
+    } else {
+      var text = typeof a === 'string' ? a : JSON.stringify(a);
+      html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    }
     content.innerHTML = '<div style="font-size:12px;color:var(--soft);line-height:1.7">' + html + '</div>' +
       '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
         '<a href="/crystal-ball" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none">Full Crystal Ball &rarr;</a>' +
@@ -5406,26 +5425,66 @@ function reactMarketTake(takeId, reaction, btn) {
 function openMarketTakeModal() {
   var token = localStorage.getItem('hf_token') || '';
   if (!token) { alert('Sign in to post a take'); return; }
-  var thesis = prompt('What\'s your thesis on this market? (optional)');
-  if (thesis === null) return; // cancelled
-  var side = confirm('Are you bullish? (OK = YES, Cancel = NO)') ? 'YES' : 'NO';
+  if (document.getElementById('takeModal')) return;
+
   var mktSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
   var question = (_market && _market.question) || '';
   var conditionId = (_market && _market.conditionId) || '';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'takeModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px)';
+  overlay.innerHTML =
+    '<div style="background:#16161f;border:1px solid #1e1e2a;border-radius:16px;width:90%;max-width:440px;padding:24px;font-family:Inter,sans-serif">' +
+      '<div style="font-size:18px;font-weight:800;color:#f0f0f5;margin-bottom:4px">Share Your Prediction</div>' +
+      '<div style="font-size:12px;color:#8888a0;margin-bottom:16px;line-height:1.4">' + (question || mktSlug).replace(/</g,'&lt;').substring(0, 100) + '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+        '<button id="takeSideYes" onclick="document.getElementById(\'takeSideYes\').className=\'tks-active-yes\';document.getElementById(\'takeSideNo\').className=\'tks-btn\';window._takeSide=\'YES\'" class="tks-btn" style="flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:1px solid #1e1e2a;background:none;color:#8888a0;transition:all .12s">YES</button>' +
+        '<button id="takeSideNo" onclick="document.getElementById(\'takeSideNo\').className=\'tks-active-no\';document.getElementById(\'takeSideYes\').className=\'tks-btn\';window._takeSide=\'NO\'" class="tks-btn" style="flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:1px solid #1e1e2a;background:none;color:#8888a0;transition:all .12s">NO</button>' +
+      '</div>' +
+      '<style>.tks-btn{flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:1px solid #1e1e2a;background:none;color:#8888a0}.tks-active-yes{flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:1px solid rgba(0,230,138,0.4);background:rgba(0,230,138,0.12);color:#00e68a}.tks-active-no{flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:1px solid rgba(255,77,106,0.4);background:rgba(255,77,106,0.12);color:#ff4d6a}</style>' +
+      '<textarea id="takeThesisInput" style="width:100%;background:#0e0e15;border:1px solid #1e1e2a;border-radius:8px;padding:10px 12px;color:#f0f0f5;font-family:Inter,sans-serif;font-size:13px;outline:none;resize:vertical;min-height:70px;margin-bottom:14px" placeholder="Why are you making this call? (optional)" maxlength="500"></textarea>' +
+      '<div style="display:flex;gap:10px">' +
+        '<button onclick="document.getElementById(\'takeModal\').remove()" style="flex:1;padding:10px;border-radius:8px;border:1px solid #1e1e2a;background:none;color:#8888a0;font-weight:600;font-size:13px;cursor:pointer">Cancel</button>' +
+        '<button id="takeSubmitBtn" onclick="submitMarketTake()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#c9920d;color:#000;font-weight:700;font-size:13px;cursor:pointer">Post Take</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  window._takeSide = null;
+  window._takeMarketData = { slug: mktSlug, question: question, conditionId: conditionId };
+}
+
+function submitMarketTake() {
+  if (!window._takeSide) { alert('Pick YES or NO'); return; }
+  var d = window._takeMarketData;
+  var token = localStorage.getItem('hf_token') || '';
+  var thesis = (document.getElementById('takeThesisInput') || {}).value || '';
+  var btn = document.getElementById('takeSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
 
   fetch('/api/takes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({
-      market_slug: mktSlug,
-      condition_id: conditionId,
-      question: question,
-      side: side,
+      market_slug: d.slug,
+      condition_id: d.conditionId,
+      question: d.question,
+      side: window._takeSide,
       thesis: thesis.trim() || null
     })
   }).then(function(r) { return r.json(); }).then(function(data) {
-    if (data.ok) loadMarketTakes();
-  }).catch(function() {});
+    if (data.ok) {
+      var modal = document.getElementById('takeModal');
+      if (modal) modal.remove();
+      loadMarketTakes();
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Post Take'; }
+    }
+  }).catch(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Post Take'; }
+  });
 }
 
 // Load takes when page loads (after market data is available)
