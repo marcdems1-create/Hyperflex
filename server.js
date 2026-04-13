@@ -12247,7 +12247,7 @@ app.get('/api/whale-profiles', async (req, res) => {
       bio TEXT,
       follower_count INTEGER,
       category TEXT DEFAULT 'general',
-      user_id UUID REFERENCES users(id),
+      user_id TEXT,
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMPTZ DEFAULT now()
     )`);
@@ -13661,7 +13661,7 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
   try {
     await dbQuery(`CREATE TABLE IF NOT EXISTS takes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      user_id TEXT,
       wallet_address TEXT,
       display_name TEXT,
       avatar_url TEXT,
@@ -13674,7 +13674,7 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
       thesis TEXT,
       source TEXT NOT NULL DEFAULT 'user',
       sharp_score NUMERIC,
-      parent_take_id UUID REFERENCES takes(id) ON DELETE SET NULL,
+      parent_take_id UUID,
       agree_count INTEGER NOT NULL DEFAULT 0,
       disagree_count INTEGER NOT NULL DEFAULT 0,
       is_correct BOOLEAN,
@@ -13683,8 +13683,8 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     )`);
     await dbQuery(`CREATE TABLE IF NOT EXISTS take_reactions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      take_id UUID NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      take_id UUID NOT NULL,
+      user_id TEXT NOT NULL,
       reaction TEXT NOT NULL CHECK (reaction IN ('agree', 'disagree')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(take_id, user_id)
