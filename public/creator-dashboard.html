@@ -17234,7 +17234,7 @@ function updateAllPositionsTab() {
         claimBanner = '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.20);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
           '<div><span style="font-family:var(--sans);font-size:13px;font-weight:700;color:#00e68a">' + claimable.length + ' position' + (claimable.length>1?'s':'') + ' ready to claim</span>' +
           (claimTotal > 0 ? '<span style="font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:8px">≈ $' + claimTotal.toFixed(2) + ' USDC</span>' : '') + '</div>' +
-          '<button onclick="redeemAllPositions()" style="background:#00e68a;color:#0a0a0f;border:none;border-radius:8px;padding:8px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:36px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">Claim All →</button></div>';
+          '<button id="claimAllBtn" onclick="redeemAllPositions()" style="background:#00e68a;color:#0a0a0f;border:none;border-radius:8px;padding:8px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:36px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">Claim All →</button></div>';
       }
       if (contentEl) contentEl.innerHTML = claimBanner + resolved.map(p => renderResolvedCard(p)).join('');
     } else {
@@ -19591,6 +19591,9 @@ async function redeemPosition(posDataJson, opts) {
 
 // Redeem ALL settled positions sequentially
 async function redeemAllPositions() {
+  const claimBtn = document.getElementById('claimAllBtn');
+  function setBtn(text, color) { if (claimBtn) { claimBtn.textContent = text; claimBtn.style.background = color || '#00e68a'; } }
+
   if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return; }
   const allPositions = window._polyPositionsData || [];
   const redeemable = allPositions.filter(p => p.redeemable && parseFloat(p.shares) > 0);
@@ -19602,11 +19605,14 @@ async function redeemAllPositions() {
 
   if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: ~$' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.01 POL per position.\n\nYou\'ll need to approve ' + redeemable.length + ' transaction(s) in MetaMask.')) return;
 
+  if (claimBtn) { claimBtn.disabled = true; }
+  setBtn('Checking...', '#888');
+
   let success = 0, failed = 0, failReason = '';
   for (let i = 0; i < redeemable.length; i++) {
     const pos = redeemable[i];
     const label = (pos.question || 'Position').substring(0, 40);
-    showToast('Claiming ' + (i + 1) + '/' + redeemable.length + ': ' + label + '...', 'info', 10000);
+    setBtn('Claiming ' + (i + 1) + '/' + redeemable.length + '...', '#f59e0b');
     try {
       const result = await redeemPosition(pos, { skipConfirm: true });
       if (result && result.ok) {
@@ -19625,7 +19631,10 @@ async function redeemAllPositions() {
     }
   }
 
+  if (claimBtn) { claimBtn.disabled = false; }
+
   if (success > 0) {
+    setBtn('Claimed!', '#00e68a');
     showTradeCelebration({
       side: 'SELL',
       shares: redeemable.reduce((s, p) => s + parseFloat(p.shares || 0), 0),
@@ -19640,17 +19649,19 @@ async function redeemAllPositions() {
     }, 3000);
     setTimeout(() => loadPolymarketPositions(true), 8000);
   } else {
-    // Show specific failure reason
+    // Show specific failure reason — keep it visible on the button AND as alert
     var reasonMsg = 'Claim failed';
-    if (failReason === 'no_condition_id') reasonMsg = 'Position is missing its condition ID. Try claiming on polymarket.com directly.';
-    else if (failReason === 'no_pol') reasonMsg = 'You need POL (Polygon gas token) in your wallet to pay for the claim transaction. Send ~0.05 POL to your wallet address.';
-    else if (failReason === 'no_wallet') reasonMsg = 'Connect your MetaMask wallet first.';
-    else if (failReason === 'no_proxy') reasonMsg = 'Proxy wallet not found. Reconnect your wallet.';
-    else if (failReason === 'not_redeemable') reasonMsg = 'Position is not redeemable yet — the market may not have settled.';
-    else if (failReason === 'rejected') reasonMsg = 'Transaction was rejected in MetaMask.';
-    else if (failReason === 'reverted') reasonMsg = 'Transaction reverted on-chain. The position may have already been claimed.';
-    else if (failReason === 'cancelled') reasonMsg = 'Claim cancelled.';
-    showToast(reasonMsg, 'error', 6000);
+    if (failReason === 'no_condition_id') { reasonMsg = 'Missing condition ID — claim on polymarket.com'; setBtn('No condition ID', '#ff4d6a'); }
+    else if (failReason === 'no_pol') { reasonMsg = 'You need POL for gas. Send ~0.05 POL to your MetaMask wallet to cover the claim transaction.'; setBtn('Need POL for gas', '#ff4d6a'); }
+    else if (failReason === 'no_wallet') { reasonMsg = 'Connect your MetaMask wallet first.'; setBtn('Connect wallet', '#ff4d6a'); }
+    else if (failReason === 'no_proxy') { reasonMsg = 'Proxy wallet not found. Reconnect your wallet.'; setBtn('Reconnect wallet', '#ff4d6a'); }
+    else if (failReason === 'not_redeemable') { reasonMsg = 'Market hasn\'t settled yet.'; setBtn('Not settled yet', '#ff4d6a'); }
+    else if (failReason === 'rejected') { reasonMsg = 'Transaction rejected in MetaMask.'; setBtn('Claim All →', '#00e68a'); }
+    else if (failReason === 'reverted') { reasonMsg = 'Transaction reverted — may already be claimed.'; setBtn('Already claimed?', '#ff4d6a'); }
+    else if (failReason === 'cancelled') { setBtn('Claim All →', '#00e68a'); return; } // silent cancel
+    else { setBtn('Failed — retry', '#ff4d6a'); }
+    // Use alert() for critical errors so it can't be missed
+    alert(reasonMsg);
   }
 }
 
