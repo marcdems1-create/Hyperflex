@@ -1,32 +1,140 @@
 # HYPERFLEX — Claude Session Memory
 
 > This file is auto-read by Claude at the start of every session. Keep it updated.
-> Full details in HYPERFLEX_Brief.md. Read that too.
+> Full details in HYPERFLEX_Complete_Brief.md. Read that too.
 
 ---
 
 ## What This Project Is
 
-**HYPERFLEX** is the **Bloomberg terminal for Polymarket traders** — alpha you can act on in the next 5 minutes. Live edges (whale clusters, orderbook depth, momentum, time-decay mispricings, freshness stamps) routed through our builder so every trade earns the fee.
+**HYPERFLEX** is the **social media of prediction markets** — the place where traders post takes, build track records, follow the smartest predictors, and act on edge. Think Twitter for predictions, where every take is scored when the market resolves, and your track record is your reputation.
 
-**Primary hook:** The Alpha Terminal at `/alpha-live`. Live Polymarket edges ranked by **Edge Score** computed from 8 independent signals (whale + capital + volume + depth + momentum + decay + expiry + divergence). All cards link to internal `/market/:slug` so traders never leave the funnel. Powered by the unified `buildAlphaList()` engine in `server.js`.
+**The moat is the social graph.** Whale signals and alpha terminals are commoditized — anyone with a Claude API key can build a screener. What can't be cloned overnight is a network of predictors with verified track records, social connections, and engagement history. That's what we're building.
 
-**Landing page (`/`)** is now an intelligence briefing layout (NOT the old aggregator pitch):
+**Primary surfaces:**
+- **Takes Feed** at `/explore` — the front door. For You / Following / Trending tabs. Whale takes auto-synthesized from on-chain activity. User takes with thesis, agree/disagree reactions, quote-predicts.
+- **Alpha Terminal** at `/alpha-live` — live Polymarket edges ranked by Edge Score (8 signals). The Bloomberg layer underneath the social product.
+- **Whale Profiles** at `/m/:userId` — auto-created for every top-50 Polymarket whale. Purple badge, rank, PnL, wallet address, linked takes.
+- **Market Pages** at `/market/:slug` — Polymarket trading with Community Takes section, post-trade "Share your take" prompt.
+
+**Landing page (`/`)** is an intelligence briefing layout:
 - Hero: "Prediction market intelligence" + Read AI brief / See market intel CTAs
 - Intelligence Briefing panels: RIGHT NOW · LAST HOUR (whale feed) · TODAY'S WATCHLIST
-- Live Stats Ticker
-- Live Data Cards: Top Crystal Ball / Fear & Greed / Expiring Markets
-- Email capture → Product sections → Pricing → Footer
+- Live Stats Ticker + Live Data Cards
+- Email capture → Product sections → Footer
 
-**Target user:** Active Polymarket traders chasing edge. Whale-watchers, sharps, anyone who wants pre-trade alpha rather than post-trade vanity stats.
-
-**Business model:** **100% FREE.** Pricing section literally reads "100% Free. No Limits." Every feature, every signal, every tool. The entire Pro/Premium tier UI is gone. Revenue = Polymarket builder fees on every trade routed through `/market/:slug`.
-
-**DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist on `creator_settings` for legacy data — DO NOT touch them, but they're no longer used to gate any feature.
+**Target user:** Active Polymarket traders who want to post takes, build reputation, and see what sharps think. Whale-watchers who follow whale profiles. Crypto/finance creators proving their track record.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
 **Stack:** Node.js + Express + Supabase + Anthropic SDK. All frontend is plain HTML/CSS in `public/`.
+
+---
+
+## Strategy & Revenue
+
+### Revenue Streams (prioritized)
+
+1. **Polymarket Builder Fees** (LIVE) — every trade placed through `/market/:slug` earns builder fees. The social layer drives users to market pages → trades → revenue. This is the primary revenue engine today.
+
+2. **Data API for Hedge Funds** (NEXT) — sell programmatic access to our enriched data:
+   - Whale flow data: real-time position changes across top 50 traders
+   - Consensus signals: when 3+ whales align on a market
+   - Edge scores: our proprietary 8-signal scoring model
+   - Historical accuracy: verified signal performance over time
+   - Pricing: $500-2000/mo per API key, rate-limited by tier
+   - Target customers: crypto hedge funds, quant desks, prop trading firms
+
+3. **Grants & Ecosystem Funding** — apply to prediction market ecosystem grants:
+   - Polymarket builder/ecosystem grants (we already earn builder fees)
+   - Ethereum Foundation grants (prediction market infrastructure)
+   - Crypto VC ecosystem funds (social + prediction market intersection)
+   - The social layer + verified track record data is the unique angle for grant applications
+
+4. **Premium Tiers** (existing infrastructure, not yet enforced):
+   - Pro ($29/mo): API access, advanced analytics, faster auto-sync
+   - Premium ($99/mo): full API, all features, priority
+   - Currently everything is free to drive adoption. Gate later when network effects compound.
+
+### Social Media Attack Plan
+
+**Phase 1 — Content Engine (NOW)**
+The feed must never be empty. Whale activity IS content from day one:
+- $50k+ whale trades → auto-generated takes with position size, entry, thesis
+- 3+ whale consensus → consensus takes showing aligned capital
+- Both linked to whale profiles users can follow
+- Result: social feed has real content before any human users post
+
+**Phase 2 — Engagement Loops**
+Every interaction creates a notification that brings users back:
+- "X agreed with your take" → user returns to see who
+- "X counter-predicted your take" → user returns to defend their position
+- "Your take on ETH was RIGHT" → dopamine hit, user posts more
+- "Whale #3 just made a new take" → followers check the feed
+- Take of the Day email → daily re-engagement
+
+**Phase 3 — Reputation as Moat**
+Track record becomes the thing nobody can replicate:
+- Every take scored on resolution (CORRECT / WRONG badge permanent)
+- Predictor tiers: Oracle (70%+) / Sharp (60%+) / Solid (50%+) / Speculator
+- "Top 50 on HYPERFLEX" becomes a credential people put in their X bio
+- Whale profiles accumulate years of on-chain prediction history
+- After 6 months: thousands of scored predictions, social graph, reputation data — unchlonable
+
+**Phase 4 — Network Effects**
+The social graph compounds:
+- Prediction threads (take → counter-take → resolution)
+- Quote-predict as engagement mechanic (like quote-tweet for predictions)
+- Share cards for X/Twitter with take + track record
+- DMs between predictors
+- The feed becomes what people open every morning
+
+### Why This Wins
+
+Every prediction market tool on Twitter right now is a **terminal** — a dashboard of data you look at and leave. Terminals don't have network effects. A competitor can replicate your screener in a weekend.
+
+Social products compound. Every take posted is content. Every follow is a connection. Every resolution scored is reputation banked. The alpha terminal becomes a **feature** inside the social product, not the product itself.
+
+---
+
+## The Social Stack (built April 2026)
+
+### Takes System
+- `takes` table: user_id, market_slug, condition_id, question, side, entry_price, amount, thesis, source ('user'/'whale'/'consensus'), parent_take_id (quote-predicts), agree_count, disagree_count, is_correct, resolved_at
+- `take_reactions` table: take_id, user_id, reaction ('agree'/'disagree'), unique per user per take
+- `scoreTakesForMarket()`: fires on market resolution, marks all matching takes correct/incorrect
+- Notifications: reaction alerts, quote-predict alerts, "your take was right" celebration
+
+### Whale Profiles
+- `ensureWhaleProfile()`: auto-creates user records for whale wallets with rank, PnL, wallet address
+- Top 30 whales get profiles on every leaderboard fetch (~5 min cycle)
+- Whale takes linked via user_id → profiles show take history
+- `GET /api/whale-profiles`: whale discovery endpoint with take stats
+- `is_whale`, `whale_rank`, `whale_pnl` columns on users table
+
+### Feed Endpoints
+- `GET /api/takes/feed?mode=foryou|following` — algorithmic feed (recency × engagement × sharp score)
+- `GET /api/takes/trending` — hot takes by trending score with category filter
+- `GET /api/takes/market/:slug` — takes for a specific market
+- `POST /api/takes` — create a take (auth required)
+- `POST /api/takes/:id/react` — agree/disagree toggle
+- `DELETE /api/takes/:id` — delete own take
+
+### Migrations
+- #44: `supabase_migration_takes.sql` — takes + take_reactions tables
+- #45: `supabase_migration_whale_profiles.sql` — is_whale, whale_rank, whale_pnl on users
+
+---
+
+## Business Model
+
+**100% FREE for users.** Every feature, every signal, every tool. Revenue comes from:
+1. Polymarket builder fees on every trade routed through `/market/:slug`
+2. Data API subscriptions for hedge funds / institutions (planned)
+3. Grant funding from prediction market ecosystems (planned)
+4. Premium tier SaaS for power users (infrastructure exists, not enforced yet)
+
+**DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist on `creator_settings` for legacy data — DO NOT touch them, but they're no longer used to gate any feature.
 
 ---
 
@@ -147,7 +255,7 @@
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
-6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
+6. **Social-first mindset:** The social feed and take system is the primary value prop. The alpha terminal and whale tracker are the data backbone underneath. When building new features, ask: "Does this make the social loop stickier?" (post take → reactions → reputation → followers → more takes)
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
 8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
 9. **Always read https://docs.polymarket.com/builders/overview before making CLOB trading changes.**
@@ -809,6 +917,37 @@ git status   # verify files are dirty
 - Full-page onboarding with all 3 platforms (Polymarket/Kalshi/Manifold)
 - Progress bar, green checkmarks on connect, multi-connect flow
 - CTA upgrades after first connection
+
+---
+
+## Session 14 (April 13, 2026) — Social Media Pivot
+
+**The pivot:** HYPERFLEX is no longer a terminal. It's the social media of prediction markets. Whale signals are commoditized — the moat is the social graph + verified track records.
+
+**Takes system** (commit `6a85728`):
+- `takes` + `take_reactions` tables, 6 API endpoints
+- Whale take synthesis: $50k+ trades and consensus signals auto-generate takes
+- explore.html: Takes feed with For You / Following / Trending tabs, compose modal, agree/disagree/quote-predict
+- market.html: post-trade "Share your take" bottom bar with thesis input
+
+**Resolution scoring + notifications** (commit `bd7b41b`):
+- `scoreTakesForMarket()`: marks takes correct/incorrect on market resolution
+- Notification hooks: reactions notify author, quote-predicts notify parent, correct takes get celebration
+- market.html: Community Takes section above comments
+- member.html: Takes section on profiles with accuracy stats
+
+**Whale profiles** (commit `1c809bc`):
+- `ensureWhaleProfile()`: auto-creates user records for whale wallets
+- Top 30 whales get profiles on every leaderboard fetch
+- member.html: purple WHALE badge, rank, PnL, wallet address with Polygonscan link
+- explore.html: take authors link to profiles, correctness badges on resolved takes
+- `GET /api/whale-profiles`: whale discovery endpoint
+
+**Strategy docs updated:**
+- `HYPERFLEX_Complete_Brief.md` rewritten for social media vision
+- `CLAUDE.md` updated with strategy, revenue plan, social attack plan
+
+**New migrations:** #44 `supabase_migration_takes.sql`, #45 `supabase_migration_whale_profiles.sql`
 
 ---
 
