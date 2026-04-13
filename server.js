@@ -14931,6 +14931,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ── Social pages (must be before /:slug catch-all) ──
+app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
+app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
+
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (RESERVED_SLUGS.has(slug) || slug.includes('.')) return next();
@@ -39960,11 +39965,6 @@ app.get('/api/social/search', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
-// Serve pages
-app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
-app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
-app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
