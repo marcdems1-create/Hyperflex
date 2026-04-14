@@ -3212,18 +3212,9 @@ window.hfxOpenDeposit = function() {
         <span class="nav-icon">⚖️</span><span class="nav-label">Resolve</span>
         <span class="nav-badge" id="resolveBadge" style="display:none">0</span>
       </a>
-      <!-- Collapsed "More" section -->
-      <a class="nav-item nav-more-toggle" onclick="toggleMoreNav()" id="navMoreToggle">
-        <span class="nav-icon">›</span><span class="nav-label">More</span>
+      <a class="nav-item" onclick="showTab('share')">
+        <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
       </a>
-      <div id="navMoreSection" class="nav-more-section" style="display:none">
-        <a class="nav-item" onclick="showTab('share')">
-          <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
-        </a>
-        <a class="nav-item" onclick="showTab('settings')">
-          <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
-        </a>
-      </div>
       <div class="nav-section-label" style="margin-top:8px">Account</div>
       <a class="nav-item" onclick="showTab('account')">
         <span class="nav-icon">👤</span><span class="nav-label">Account</span>
@@ -3780,84 +3771,78 @@ window.hfxOpenDeposit = function() {
 
       <!-- Share Tab -->
       <div id="tab-share" style="display:none">
+
+        <!-- Your Predictor Profile -->
         <div class="section">
           <div class="share-section">
-            <div class="share-title">📣 Share Your Community</div>
+            <div class="share-title">🧠 Your Predictor Profile</div>
             <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
-              Drop these links wherever your audience hangs out — Reddit, Discord, Twitter, your newsletter.
+              Your public profile shows your Flex Score, win rate, and every prediction you've made — verified on-chain. Share it to build credibility.
             </p>
-            <div class="share-btns">
-              <button class="share-btn" onclick="copyLink()">📋 Copy community link</button>
-              <button class="share-btn" onclick="shareTwitter()">🐦 Share on X/Twitter</button>
-              <button class="share-btn" onclick="shareReddit()">👾 Post to Reddit</button>
-              <button class="share-btn" onclick="copyEmbed()">💻 Copy embed code</button>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+              <input id="profileShareLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px" value="Loading…"/>
+              <button class="btn-primary" style="font-size:12px;padding:9px 16px;white-space:nowrap" onclick="copyProfileLink()">📋 Copy</button>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="share-btn" onclick="shareProfileOnX()">𝕏 Share on X</button>
+              <button class="share-btn" onclick="window.open(document.getElementById('profileShareLink').value,'_blank')">👁 View Profile</button>
             </div>
           </div>
         </div>
+
+        <!-- Share a Win -->
         <div class="section">
           <div class="share-section">
-            <div class="share-title">📝 Ready-to-Post Templates</div>
-            <div id="shareTemplates"></div>
+            <div class="share-title">🏆 Share a Correct Call</div>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+              Every prediction you get right earns a permanent <strong style="color:#22c55e">CORRECT</strong> badge on your profile. Share your best calls to grow your following.
+            </p>
+            <div id="shareWinList" style="display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:13px;color:var(--dim);padding:16px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;text-align:center">
+                Post a prediction from My Positions — your correct calls will appear here when markets resolve.
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Creator referral -->
+
+        <!-- Invite Traders -->
         <div class="section">
           <div class="share-section">
-            <div class="share-title">🤝 Refer a Creator — Earn Free Pro</div>
+            <div class="share-title">🤝 Invite Traders</div>
             <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
-              Know another creator who'd love this? Send them your referral link. When they sign up and publish their first market, you both get <strong style="color:var(--text)">1 month of Pro free</strong>.
+              Every trader you bring in strengthens the network. Share your invite link — the more predictors posting, the more the feed is worth following.
             </p>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-              <input id="creatorRefLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px" value="Loading…"/>
-              <button class="btn-primary" style="font-size:12px;padding:9px 16px;white-space:nowrap" onclick="copyCreatorRefLink()">📋 Copy</button>
+              <input id="traderInviteLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px" value="Loading…"/>
+              <button class="btn-primary" style="font-size:12px;padding:9px 16px;white-space:nowrap" onclick="copyTraderInviteLink()">📋 Copy</button>
             </div>
             <div style="display:flex;gap:20px;flex-wrap:wrap">
               <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:14px 18px;flex:1;min-width:120px;text-align:center">
-                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)" id="refCreatorCount">—</div>
-                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Creators referred</div>
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)" id="refTraderCount">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Traders invited</div>
               </div>
               <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:14px 18px;flex:1;min-width:120px;text-align:center">
-                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:#00e68a" id="refCreatorEarned">—</div>
-                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Months earned</div>
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:#a855f7" id="refTraderFollowers">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Followers gained</div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Sponsor Kit — Pro/Premium only -->
-        <div class="section" id="sponsorKitSection" style="display:none">
-          <div class="share-section">
-            <div class="share-title">📄 Sponsor Media Kit</div>
-            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
-              A branded 3-page PDF with your community's live stats — ready to send to brands and sponsors. Shows member count, weekly active traders, total predictions, top categories, and example sponsored market formats.
-            </p>
-            <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;flex-wrap:wrap">
-              <div style="flex:1;min-width:200px">
-                <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Your community stats, formatted for brands</div>
-                <div style="font-size:12px;color:var(--dim)">Cover page · Audience overview · Sponsorship options — auto-generated from your live data</div>
-              </div>
-              <button id="downloadKitBtn" onclick="downloadSponsorKit()" class="btn-primary" style="white-space:nowrap;padding:10px 20px;font-size:13px">
-                ⬇ Download Sponsor Kit
-              </button>
-            </div>
-          </div>
-        </div>
-
+        <!-- Ready-to-post copy -->
         <div class="section">
           <div class="share-section">
-            <div class="share-title">📱 QR Code</div>
-            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
-              Print it, drop it in a newsletter, or flash it on stream — members scan to join instantly.
-            </p>
-            <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">
-              <div id="qrCodeBox" style="background:#fff;padding:12px;border-radius:10px;border:1px solid var(--border);display:inline-block"></div>
-              <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;padding-top:4px">
-                <div id="qrCodeUrl" style="font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
-                <button class="share-btn" onclick="downloadQR()" style="width:fit-content">⬇ Download QR</button>
+            <div class="share-title">📝 Ready-to-Post Copy</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px">
+                <div style="font-size:12px;font-weight:700;color:var(--dim);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">For X / Twitter</div>
+                <div id="shareCopyX" style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">Loading…</div>
+                <button class="share-btn" style="font-size:12px" onclick="postShareCopyX()">𝕏 Post this</button>
               </div>
             </div>
           </div>
         </div>
+
       </div>
 
       <!-- Settings Tab -->
@@ -6019,44 +6004,27 @@ window.hfxOpenDeposit = function() {
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
         <div class="section">
-          <div class="markets-table" style="padding:28px;max-width:560px">
-            <h2 style="font-size:18px;font-weight:800;margin-bottom:6px">My Account</h2>
-            <p style="font-size:13px;color:var(--dim);margin-bottom:28px">Switch between your creator and member views, and access your public profiles.</p>
+          <div class="markets-table" style="padding:28px;max-width:520px">
+            <h2 style="font-size:18px;font-weight:800;margin-bottom:24px">My Account</h2>
 
-            <!-- Creator / Member toggle -->
-            <div style="margin-bottom:24px">
-              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Current View</div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.4);color:var(--gold);padding:10px 18px;border-radius:8px;font-weight:700;font-size:13px">🛠 Creator Dashboard <span style="font-size:11px;opacity:0.7">(current)</span></span>
-                <a href="#" id="accountMemberDashBtn" onclick="goToMemberView(event)" style="display:inline-flex;align-items:center;gap:7px;background:var(--paper);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">👤 Member Dashboard →</a>
-              </div>
+            <!-- Display Name -->
+            <div style="margin-bottom:20px">
+              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Display Name</div>
+              <input type="text" id="acDisplayName" class="form-input" placeholder="Your name" maxlength="50" />
             </div>
 
-            <!-- Profile links -->
+            <!-- Bio -->
             <div style="margin-bottom:24px">
-              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Public Profiles</div>
-              <div style="display:flex;flex-direction:column;gap:10px">
-                <a id="accountCommunityLink" href="#" target="_blank" style="display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--border);padding:12px 16px;border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-                  <div>
-                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">👁 Community Page</div>
-                    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)" id="accountCommunityUrl">hyperflex.network/…</div>
-                  </div>
-                  <span style="color:var(--dim);font-size:16px">↗</span>
-                </a>
-                <a id="accountProfileLink" href="#" target="_blank" style="display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--border);padding:12px 16px;border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-                  <div>
-                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">👤 Creator Profile</div>
-                    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)" id="accountProfileUrl">hyperflex.network/u/…</div>
-                  </div>
-                  <span style="color:var(--dim);font-size:16px">↗</span>
-                </a>
-              </div>
+              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Bio <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px">— shown on your predictor profile</span></div>
+              <textarea id="acBio" class="form-input" placeholder="Tell the community what you trade and why they should follow you…" maxlength="160" rows="3" style="resize:vertical;line-height:1.5"></textarea>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:right;margin-top:4px"><span id="acBioCount">0</span>/160</div>
             </div>
 
-            <!-- Plan section removed — platform is free for everyone -->
+            <button class="btn-primary" onclick="saveAccountProfile()" style="margin-bottom:32px">Save Profile</button>
+            <div id="acProfileMsg" style="font-size:12px;display:none;margin-top:-24px;margin-bottom:24px"></div>
 
             <!-- Change Password -->
-            <div style="margin-top:28px">
+            <div style="border-top:1px solid var(--border);padding-top:28px">
               <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Change Password</div>
               <div style="display:flex;flex-direction:column;gap:10px">
                 <input type="password" id="acCurrent" class="form-input" placeholder="Current password" autocomplete="current-password" />
@@ -6064,50 +6032,6 @@ window.hfxOpenDeposit = function() {
                 <input type="password" id="acConfirm" class="form-input" placeholder="Confirm new password" autocomplete="new-password" />
                 <div id="acError" style="font-size:12px;color:#ff6b6b;display:none;font-family:var(--mono)"></div>
                 <button class="btn-primary" onclick="submitAccountChangePassword()" style="width:fit-content">Update Password</button>
-              </div>
-            </div>
-
-            <!-- USDC Rewards -->
-            <div style="margin-top:36px;border-top:1px solid var(--border);padding-top:28px">
-              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">USDC Rewards</div>
-              <div style="font-size:12px;color:var(--dim);margin-bottom:20px;line-height:1.6">Every Polymarket link you click through HYPERFLEX earns you a share of our weekly USDC pool. The more active you are, the bigger your share.</div>
-
-              <!-- Stats cards -->
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
-                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-                  <div style="font-size:20px;font-weight:800;color:var(--gold)" id="usdcClicksWeek">-</div>
-                  <div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--sans)">CLICKS THIS WEEK</div>
-                </div>
-                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-                  <div style="font-size:20px;font-weight:800;color:#00e68a" id="usdcPending">$0.00</div>
-                  <div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--sans)">PENDING USDC</div>
-                </div>
-                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-                  <div style="font-size:20px;font-weight:800;color:var(--text)" id="usdcLifetime">$0.00</div>
-                  <div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--sans)">LIFETIME EARNED</div>
-                </div>
-              </div>
-
-              <!-- Current week estimate -->
-              <div id="usdcEstimateBar" style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.15);border-radius:8px;padding:12px 16px;margin-bottom:20px;display:none">
-                <span style="font-size:12px;color:var(--dim)">Estimated this week:</span>
-                <span style="font-size:14px;font-weight:800;color:var(--gold);margin-left:6px" id="usdcEstimate">$0.00</span>
-              </div>
-
-              <!-- Payout wallet -->
-              <div style="margin-bottom:20px">
-                <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Payout Wallet</div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <input class="form-input" id="usdcWalletInput" placeholder="0x..." style="flex:1;min-width:200px;font-family:var(--mono);font-size:12px"/>
-                  <button class="btn-primary" onclick="savePayoutWallet()" style="white-space:nowrap">Save Wallet</button>
-                </div>
-                <div id="usdcWalletStatus" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
-              </div>
-
-              <!-- Payout history -->
-              <div style="margin-top:20px">
-                <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Recent Payouts</div>
-                <div id="usdcPayoutHistory" style="font-size:12px;color:var(--dim)">Loading...</div>
               </div>
             </div>
 
@@ -7855,12 +7779,7 @@ function showTab(tab) {
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
-  if (tab === 'share') {
-    loadCreatorReferralStats();
-    // Sponsor kit visible to all — platform is free
-    const kitSection = document.getElementById('sponsorKitSection');
-    if (kitSection) kitSection.style.display = '';
-  }
+  if (tab === 'share') { loadShareTab(); }
   if (tab === 'resolve') loadDisputes();
   // Re-render markets from cache so tab is never stuck on "Loading…"
   if (tab === 'markets') {
@@ -7892,7 +7811,7 @@ function showTab(tab) {
   if (tab === 'aiportfolio' && !_aiPortfolioLoaded) loadAIPortfolio();
   if (tab === 'flexpoints') loadFlexPointsTab();
   if (tab === 'settings') loadApiAccess();
-  if (tab === 'account') loadUsdcRewards();
+  if (tab === 'account') { populateAccountTab(); }
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'performance') loadPerformanceTab();
   if (tab === 'breaking') { loadBreakingTab(); }
@@ -11205,6 +11124,94 @@ async function sendDigestNow() {
   }
 }
 
+async function loadShareTab() {
+  const userId = creatorData?.creator?.id;
+  const profileUrl = userId ? 'https://hyperflex.network/m/' + userId : '';
+  const inviteUrl  = 'https://hyperflex.network/?ref=' + (creatorData?.creator?.id || '');
+
+  const profileEl = document.getElementById('profileShareLink');
+  const inviteEl  = document.getElementById('traderInviteLink');
+  if (profileEl) profileEl.value = profileUrl || 'Connect wallet to see your profile';
+  if (inviteEl)  inviteEl.value  = inviteUrl;
+
+  // Copy template for X
+  const copyEl = document.getElementById('shareCopyX');
+  if (copyEl) {
+    const flexScore = document.getElementById('navFlexBadge')?.textContent || '';
+    const scoreStr  = flexScore ? ` (Flex Score: ${flexScore})` : '';
+    copyEl.textContent = `I post my prediction market calls on HYPERFLEX — every prediction is scored when the market resolves.${scoreStr}\n\nSee my track record: ${profileUrl}\n\nhyperflex.network`;
+  }
+
+  // Follower count
+  if (userId) {
+    try {
+      const r = await fetch(`/api/predictors/${userId}/follow-status`);
+      if (r.ok) {
+        const d = await r.json();
+        const el = document.getElementById('refTraderFollowers');
+        if (el) el.textContent = (d.follower_count || 0).toString();
+      }
+    } catch(e) {}
+  }
+
+  // Invited traders (reuse referral stats)
+  try {
+    const r = await fetch('/api/creator/referral-stats', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) {
+      const d = await r.json();
+      const el = document.getElementById('refTraderCount');
+      if (el) el.textContent = (d.referred_creators || 0).toString();
+    }
+  } catch(e) {}
+
+  // Correct predictions list
+  if (userId) {
+    try {
+      const r = await fetch(`/api/predictions/user/${userId}?outcome=correct&limit=5`);
+      if (r.ok) {
+        const d = await r.json();
+        const list = document.getElementById('shareWinList');
+        if (list && d.predictions && d.predictions.length) {
+          list.innerHTML = d.predictions.map(p => `
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(34,197,94,0.04);border:1px solid rgba(34,197,94,0.15);border-radius:10px">
+              <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25);white-space:nowrap">CORRECT</span>
+              <div style="flex:1;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlDash(p.market_title || '')}</div>
+              <button onclick="shareWinCard('${p.id}')" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid rgba(201,146,13,0.3);background:rgba(201,146,13,0.06);color:#c9920d;cursor:pointer;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(201,146,13,0.16)'" onmouseout="this.style.background='rgba(201,146,13,0.06)'">𝕏 Share</button>
+            </div>`).join('');
+        }
+      }
+    } catch(e) {}
+  }
+}
+
+function copyProfileLink() {
+  const el = document.getElementById('profileShareLink');
+  if (el && el.value && el.value !== 'Connect wallet to see your profile') copyText(el.value);
+}
+function copyTraderInviteLink() {
+  const el = document.getElementById('traderInviteLink');
+  if (el) copyText(el.value);
+}
+function shareProfileOnX() {
+  const userId = creatorData?.creator?.id;
+  if (!userId) return;
+  const flexScore = document.getElementById('navFlexBadge')?.textContent || '';
+  const scoreStr  = flexScore ? ` Flex Score: ${flexScore}.` : '';
+  const text = `My prediction market track record is public.${scoreStr} Every call scored when markets resolve.\n\nhyperflex.network/m/${userId}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'width=600,height=400');
+}
+function postShareCopyX() {
+  const el = document.getElementById('shareCopyX');
+  if (!el) return;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(el.textContent), '_blank', 'width=600,height=400');
+}
+function shareWinCard(predictionId) {
+  const userId = creatorData?.creator?.id;
+  const url = `https://hyperflex.network/m/${userId}`;
+  const text = `Called it correctly on HYPERFLEX — my track record is public.\n\n${url}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'width=600,height=400');
+}
+
 function copyLink() {
   if (!creatorData) return;
   copyText('https://hyperflex.network/' + creatorData.creator.slug);
@@ -11388,19 +11395,34 @@ function escHtml(s) {
 }
 
 function populateAccountTab() {
-  const slug = user?.slug || creatorData?.creator?.slug;
-  if (!slug) return;
-  const communityUrl = 'hyperflex.network/' + slug;
-  const profileUrl = 'hyperflex.network/u/' + slug;
-  const el1 = document.getElementById('accountCommunityUrl');
-  const el2 = document.getElementById('accountProfileUrl');
-  const link1 = document.getElementById('accountCommunityLink');
-  const link2 = document.getElementById('accountProfileLink');
-  if (el1) el1.textContent = communityUrl;
-  if (el2) el2.textContent = profileUrl;
-  if (link1) link1.href = 'https://' + communityUrl;
-  if (link2) link2.href = 'https://' + profileUrl;
-  // Plan pill sync removed — platform is free
+  // Pre-fill display name + bio from creatorData
+  const c = creatorData?.creator;
+  const nameEl = document.getElementById('acDisplayName');
+  const bioEl  = document.getElementById('acBio');
+  const bioCount = document.getElementById('acBioCount');
+  if (nameEl && c?.display_name) nameEl.value = c.display_name;
+  if (bioEl  && c?.bio)          bioEl.value  = c.bio;
+  if (bioCount && bioEl) bioCount.textContent = (bioEl.value || '').length;
+  if (bioEl && bioCount) {
+    bioEl.oninput = function() { bioCount.textContent = this.value.length; };
+  }
+}
+
+async function saveAccountProfile() {
+  const name = (document.getElementById('acDisplayName')?.value || '').trim();
+  const bio  = (document.getElementById('acBio')?.value || '').trim();
+  const msg  = document.getElementById('acProfileMsg');
+  if (!name) { showToast('Display name cannot be empty', 'error'); return; }
+  try {
+    const r = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ display_name: name, bio })
+    });
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || 'Save failed');
+    if (creatorData?.creator) { creatorData.creator.display_name = name; creatorData.creator.bio = bio; }
+    showToast('Profile saved', 'success');
+  } catch(e) { showToast(e.message || 'Save failed', 'error'); }
 }
 
 function goToMemberView(e) {

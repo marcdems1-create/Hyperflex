@@ -19460,6 +19460,25 @@ app.put('/api/user/display-name', requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/user/profile — update display_name + bio
+app.put('/api/user/profile', requireAuth, async (req, res) => {
+  try {
+    const { display_name, bio } = req.body || {};
+    if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'display_name required' });
+    const name    = display_name.trim().slice(0, 50);
+    const bioText = (bio || '').trim().slice(0, 160);
+    if (pool) {
+      await dbQuery('UPDATE users SET display_name = $1, bio = $2 WHERE id = $3', [name, bioText, req.user.id]);
+    } else {
+      const { error } = await supabase.from('users').update({ display_name: name, bio: bioText }).eq('id', req.user.id);
+      if (error) return res.status(500).json({ error: error.message });
+    }
+    res.json({ ok: true, display_name: name, bio: bioText });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // PUT /api/user/change-password
 // Works for both members and creators (all in users table).
