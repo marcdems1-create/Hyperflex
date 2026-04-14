@@ -713,6 +713,8 @@ function renderMarket() {
 
   updateTradeCalc();
   renderOutcomes(m);
+  // Immediately refresh prices from CLOB for multi-outcome events (bypasses server cache)
+  refreshLiveOutcomePrices();
   // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
   updateOutcomeLabels();
   // Multi-outcome chart: fetch history for top outcomes and draw colored lines (like Polymarket)
@@ -866,6 +868,35 @@ function renderOutcomes(m) {
 
   html += '</tbody></table>';
   document.getElementById('mktOutcomes').innerHTML = html;
+}
+
+// ── refreshLiveOutcomePrices — client-side CLOB midpoint refresh for multi-outcome events ──
+// Fires after renderOutcomes() to guarantee live prices regardless of server cache staleness.
+function refreshLiveOutcomePrices() {
+  if (!_eventMarkets || _eventMarkets.length <= 1) return;
+  var fetches = _eventMarkets.map(function(em, idx) {
+    var tids;
+    try { tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds; } catch(e) { tids = null; }
+    var yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
+    if (!yesTokenId) return Promise.resolve(null);
+    return fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(yesTokenId))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .catch(function() { return null; });
+  });
+  Promise.all(fetches).then(function(midpoints) {
+    var updated = false;
+    for (var i = 0; i < _eventMarkets.length; i++) {
+      var mp = midpoints[i];
+      if (mp && mp.mid !== undefined) {
+        var mid = parseFloat(mp.mid);
+        if (!isNaN(mid) && mid > 0 && mid < 1) {
+          _eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
+          updated = true;
+        }
+      }
+    }
+    if (updated && _market) renderOutcomes(_market);
+  });
 }
 
 // ── buyOutcome — click Buy Yes/No on outcomes table → select outcome + side + scroll to trade ──
