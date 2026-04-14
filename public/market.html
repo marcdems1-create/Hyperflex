@@ -886,29 +886,46 @@ function renderOutcomes(m) {
   document.getElementById('mktOutcomes').innerHTML = html;
 }
 
-// ── refreshLiveOutcomePrices — client-side CLOB midpoint refresh for multi-outcome events ──
+// ── bookBestPrices — extract best ask/bid from CLOB orderbook ──
+function bookBestPrices(book) {
+  var bestAsk = null, bestBid = null;
+  if (book && book.asks && book.asks.length) {
+    for (var a = 0; a < book.asks.length; a++) {
+      var ap = parseFloat(book.asks[a].price);
+      if (!isNaN(ap) && ap > 0 && ap < 1 && (bestAsk === null || ap < bestAsk)) bestAsk = ap;
+    }
+  }
+  if (book && book.bids && book.bids.length) {
+    for (var b = 0; b < book.bids.length; b++) {
+      var bp = parseFloat(book.bids[b].price);
+      if (!isNaN(bp) && bp > 0 && bp < 1 && (bestBid === null || bp > bestBid)) bestBid = bp;
+    }
+  }
+  return { bestAsk: bestAsk, bestBid: bestBid };
+}
+
+// ── refreshLiveOutcomePrices — client-side CLOB best-ask refresh for multi-outcome events ──
 // Fires after renderOutcomes() to guarantee live prices regardless of server cache staleness.
+// Polymarket UI displays best ask (price a buyer pays for YES), NOT midpoint — match that.
 function refreshLiveOutcomePrices() {
   if (!_eventMarkets || _eventMarkets.length <= 1) return;
-  var fetches = _eventMarkets.map(function(em, idx) {
+  var fetches = _eventMarkets.map(function(em) {
     var tids;
     try { tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds; } catch(e) { tids = null; }
     var yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
     if (!yesTokenId) return Promise.resolve(null);
-    return fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(yesTokenId))
+    return fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(yesTokenId))
       .then(function(r) { return r.ok ? r.json() : null; })
       .catch(function() { return null; });
   });
-  Promise.all(fetches).then(function(midpoints) {
+  Promise.all(fetches).then(function(books) {
     var updated = false;
     for (var i = 0; i < _eventMarkets.length; i++) {
-      var mp = midpoints[i];
-      if (mp && mp.mid !== undefined) {
-        var mid = parseFloat(mp.mid);
-        if (!isNaN(mid) && mid > 0 && mid < 1) {
-          _eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
-          updated = true;
-        }
+      var bp = bookBestPrices(books[i]);
+      var live = bp.bestAsk !== null ? bp.bestAsk : bp.bestBid;
+      if (live !== null && live > 0 && live < 1) {
+        _eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
+        updated = true;
       }
     }
     if (updated && _market) renderOutcomes(_market);
@@ -4059,25 +4076,29 @@ async function fetchLivePrices() {
 
   if (!tokens.length) return;
 
-  // Fetch midpoints in parallel from CLOB
+  // Fetch orderbooks in parallel from CLOB — use best ask to match Polymarket UI (NOT midpoint)
   var results = await Promise.all(tokens.map(function(t) {
-    if (!t.tokenId) return Promise.resolve({ src: t.src, idx: t.idx, mid: null });
-    return fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(t.tokenId))
+    if (!t.tokenId) return Promise.resolve({ src: t.src, idx: t.idx, price: null });
+    return fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(t.tokenId))
       .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(d) { return { src: t.src, idx: t.idx, mid: d && d.mid !== undefined ? parseFloat(d.mid) : null }; })
-      .catch(function() { return { src: t.src, idx: t.idx, mid: null }; });
+      .then(function(book) {
+        var bp = bookBestPrices(book);
+        var live = bp.bestAsk !== null ? bp.bestAsk : bp.bestBid;
+        return { src: t.src, idx: t.idx, price: live };
+      })
+      .catch(function() { return { src: t.src, idx: t.idx, price: null }; });
   }));
 
   var changed = false;
   for (var r = 0; r < results.length; r++) {
     var res = results[r];
-    if (res.mid === null || isNaN(res.mid) || res.mid <= 0 || res.mid >= 1) continue;
+    if (res.price === null || isNaN(res.price) || res.price <= 0 || res.price >= 1) continue;
 
     if (res.src === 'event' && _eventMarkets && _eventMarkets[res.idx]) {
-      _eventMarkets[res.idx].outcomePrices = JSON.stringify([res.mid, 1 - res.mid]);
+      _eventMarkets[res.idx].outcomePrices = JSON.stringify([res.price, 1 - res.price]);
       changed = true;
     } else if (res.src === 'market') {
-      _market.outcomePrices = JSON.stringify([res.mid, 1 - res.mid]);
+      _market.outcomePrices = JSON.stringify([res.price, 1 - res.price]);
       changed = true;
     }
   }
