@@ -43095,6 +43095,65 @@ app.listen(PORT, () => {
     } catch (err) {
       console.error('[boot] ✗ failed to ensure predictions schema:', err.message);
     }
+
+    // Data-engine snapshots schema (was logging "normalized_snapshots table
+    // not found — run migration" on every boot before this self-healing
+    // block existed). Same idempotent pattern as predictionsSchema above.
+    // NOTE: api_keys.user_id is TEXT here to match the project's users
+    // table type (the supabase_migration_normalized_snapshots.sql file
+    // declares it as auth.users.id UUID — that won't work here because
+    // we use the project schema, not Supabase auth).
+    const dataEngineSchema = `
+      CREATE TABLE IF NOT EXISTS normalized_snapshots (
+        id          BIGSERIAL PRIMARY KEY,
+        hfx_id      TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        title       TEXT,
+        yes_price   NUMERIC(6,4),
+        volume      NUMERIC(18,2) DEFAULT 0,
+        snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ns_hfx_id_ts    ON normalized_snapshots (hfx_id, snapshot_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ns_source_ts    ON normalized_snapshots (source, snapshot_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ns_snapshot_at  ON normalized_snapshots (snapshot_at DESC);
+
+      CREATE TABLE IF NOT EXISTS cross_market_refs (
+        id          BIGSERIAL PRIMARY KEY,
+        hfx_id_a    TEXT NOT NULL,
+        hfx_id_b    TEXT NOT NULL,
+        source_a    TEXT NOT NULL,
+        source_b    TEXT NOT NULL,
+        confidence  NUMERIC(4,3) DEFAULT 0,
+        spread      NUMERIC(6,4) DEFAULT 0,
+        first_seen  TIMESTAMPTZ DEFAULT NOW(),
+        last_seen   TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(hfx_id_a, hfx_id_b)
+      );
+      CREATE INDEX IF NOT EXISTS idx_cmr_spread       ON cross_market_refs (spread DESC);
+      CREATE INDEX IF NOT EXISTS idx_cmr_source_pair  ON cross_market_refs (source_a, source_b);
+
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id             TEXT REFERENCES users(id) ON DELETE CASCADE,
+        key_hash            TEXT NOT NULL,
+        key_prefix          TEXT NOT NULL,
+        tier                TEXT NOT NULL DEFAULT 'free',
+        name                TEXT,
+        rate_limit_per_min  INTEGER DEFAULT 60,
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at        TIMESTAMPTZ,
+        revoked_at          TIMESTAMPTZ,
+        is_active           BOOLEAN DEFAULT true
+      );
+      CREATE INDEX IF NOT EXISTS idx_api_keys_prefix  ON api_keys (key_prefix) WHERE is_active = true;
+      CREATE INDEX IF NOT EXISTS idx_api_keys_user    ON api_keys (user_id);
+    `;
+    try {
+      await pool.query(dataEngineSchema);
+      console.log('[boot] ✓ normalized_snapshots + cross_market_refs + api_keys schema ensured');
+    } catch (err) {
+      console.error('[boot] ✗ failed to ensure data-engine schema:', err.message);
+    }
   })();
 
   // Pre-warm critical data caches on startup (non-blocking)
