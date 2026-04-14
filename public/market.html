@@ -642,25 +642,37 @@ async function loadMarket() {
   }
 }
 
+// Extract best ask + best bid from a CLOB /book response.
+// Polymarket's UI displays best ask as the "Yes ¢" — mirroring that keeps us in sync.
+function bookBestPrices(book) {
+  var bestAsk = null, bestBid = null;
+  if (book && book.asks && book.asks.length) {
+    for (var a = 0; a < book.asks.length; a++) {
+      var ap = parseFloat(book.asks[a].price);
+      if (!isNaN(ap) && ap > 0 && ap < 1 && (bestAsk === null || ap < bestAsk)) bestAsk = ap;
+    }
+  }
+  if (book && book.bids && book.bids.length) {
+    for (var b = 0; b < book.bids.length; b++) {
+      var bp = parseFloat(book.bids[b].price);
+      if (!isNaN(bp) && bp > 0 && bp < 1 && (bestBid === null || bp > bestBid)) bestBid = bp;
+    }
+  }
+  return { bestAsk: bestAsk, bestBid: bestBid };
+}
+
 function renderMarket() {
   var m = _market;
   var prices = m.outcomePrices || '[]';
   if (typeof prices === 'string') prices = JSON.parse(prices);
   var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
 
-  // Upgrade to live CLOB mid price from orderbook (Gamma prices can be stale)
+  // Upgrade to live CLOB best-ask — matches Polymarket's displayed "Yes ¢".
+  // Polymarket shows the price a buyer pays (best ask); midpoint would drift 1-5¢ low.
   try {
-    if (_orderbook && _orderbook.bids && _orderbook.asks) {
-      var topBid = _orderbook.bids.length ? parseFloat(_orderbook.bids[0].price) : null;
-      var topAsk = _orderbook.asks.length ? parseFloat(_orderbook.asks[0].price) : null;
-      if (topBid != null && topAsk != null && topBid > 0 && topAsk < 1 && topAsk > topBid) {
-        yesPrice = (topBid + topAsk) / 2;
-      } else if (topBid != null && topBid > 0) {
-        yesPrice = topBid;
-      } else if (topAsk != null && topAsk < 1) {
-        yesPrice = topAsk;
-      }
-    }
+    var bp = bookBestPrices(_orderbook);
+    if (bp.bestAsk !== null) yesPrice = bp.bestAsk;
+    else if (bp.bestBid !== null) yesPrice = bp.bestBid;
   } catch (e) { /* fallback to Gamma price */ }
 
   if (!yesPrice || isNaN(yesPrice) || yesPrice <= 0 || yesPrice >= 1) yesPrice = 0.5;
@@ -729,6 +741,8 @@ function renderMarket() {
 
   updateTradeCalc();
   renderOutcomes(m);
+  // Refresh multi-outcome prices directly from CLOB (bypasses server cache).
+  refreshLiveOutcomePrices();
   // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
   updateOutcomeLabels();
   // Multi-outcome chart: fetch history for top outcomes and draw colored lines (like Polymarket)
@@ -882,6 +896,34 @@ function renderOutcomes(m) {
 
   html += '</tbody></table>';
   document.getElementById('mktOutcomes').innerHTML = html;
+}
+
+// ── refreshLiveOutcomePrices — client-side CLOB orderbook refresh for multi-outcome events ──
+// Runs after renderOutcomes() to guarantee displayed prices match Polymarket's UI.
+// Uses best ask from each sub-market's /book (bypasses server cache entirely).
+function refreshLiveOutcomePrices() {
+  if (!_eventMarkets || _eventMarkets.length <= 1) return;
+  var fetches = _eventMarkets.map(function(em) {
+    var tids;
+    try { tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds; } catch(e) { tids = null; }
+    var yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
+    if (!yesTokenId) return Promise.resolve(null);
+    return fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(yesTokenId))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .catch(function() { return null; });
+  });
+  Promise.all(fetches).then(function(books) {
+    var updated = false;
+    for (var i = 0; i < _eventMarkets.length; i++) {
+      var bp = bookBestPrices(books[i]);
+      var live = bp.bestAsk !== null ? bp.bestAsk : bp.bestBid;
+      if (live !== null) {
+        _eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
+        updated = true;
+      }
+    }
+    if (updated && _market) renderOutcomes(_market);
+  });
 }
 
 // ── buyOutcome — click Buy Yes/No on outcomes table → select outcome + side + scroll to trade ──

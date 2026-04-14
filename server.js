@@ -23603,38 +23603,50 @@ app.get('/api/market/:slug', async (req, res) => {
     let market = null;
     let eventMarkets = null; // populated if this is a multi-outcome event
 
-    // Try direct market slug first
-    const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
-    if (gammaRes.ok) {
-      const gammaData = await gammaRes.json();
+    // Fetch market and event endpoints in parallel — event wins if it has multiple markets
+    // (WTI-style event slugs return a single market via /markets?slug, but we need every
+    // sub-market of the event to show all price tiers).
+    const [gammaRes, eventRes] = await Promise.allSettled([
+      fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders }),
+      fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders })
+    ]);
+
+    // Prefer event structure if it's multi-outcome
+    if (eventRes.status === 'fulfilled' && eventRes.value.ok) {
+      const eventData = await eventRes.value.json();
+      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length > 1) {
+        const evt = eventData[0];
+        const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
+        market = activeMarkets[0] || evt.markets[0];
+        market._eventTitle = evt.title || market.question;
+        market._eventSlug = evt.slug;
+        eventMarkets = evt.markets.map(m => ({
+          question: m.question,
+          slug: m.slug,
+          outcomePrices: m.outcomePrices,
+          clobTokenIds: m.clobTokenIds,
+          active: m.active,
+          closed: m.closed,
+          conditionId: m.conditionId,
+          neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
+          groupItemTitle: m.groupItemTitle || ''
+        }));
+      }
+    }
+
+    // Fall back to direct market match if event wasn't multi-outcome
+    if (!market && gammaRes.status === 'fulfilled' && gammaRes.value.ok) {
+      const gammaData = await gammaRes.value.json();
       if (gammaData && gammaData.length) market = gammaData[0];
     }
 
-    // If no market found, try as an event slug (e.g. "2026-nba-champion" is an event with multiple markets)
-    if (!market) {
-      const eventRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
-      if (eventRes.ok) {
-        const eventData = await eventRes.json();
-        if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length) {
-          const evt = eventData[0];
-          // Use the first active market as the primary, pass all markets as outcomes
-          const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
-          market = activeMarkets[0] || evt.markets[0];
-          // Attach event-level info
-          market._eventTitle = evt.title || market.question;
-          market._eventSlug = evt.slug;
-          eventMarkets = evt.markets.map(m => ({
-            question: m.question,
-            slug: m.slug,
-            outcomePrices: m.outcomePrices,
-            clobTokenIds: m.clobTokenIds,
-            active: m.active,
-            closed: m.closed,
-            conditionId: m.conditionId,
-            neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
-            groupItemTitle: m.groupItemTitle || ''
-          }));
-        }
+    // Last resort: single-market event
+    if (!market && eventRes.status === 'fulfilled' && eventRes.value.ok) {
+      const eventData = await eventRes.value.json();
+      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length === 1) {
+        market = eventData[0].markets[0];
+        market._eventTitle = eventData[0].title || market.question;
+        market._eventSlug = eventData[0].slug;
       }
     }
 
@@ -23677,46 +23689,55 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
-    // 4. For multi-outcome events, fetch live CLOB midpoints for ALL outcomes
-    //    Gamma-api outcomePrices are delayed; CLOB midpoints are real-time
+    // Extract best ask from a /book response — Polymarket's UI displays best ask
+    // as the YES price, so we match that exactly. Falls back to best bid.
+    const bookBestAsk = (book) => {
+      if (!book) return null;
+      let bestAsk = null, bestBid = null;
+      if (Array.isArray(book.asks)) {
+        for (const a of book.asks) {
+          const p = parseFloat(a && a.price);
+          if (!isNaN(p) && p > 0 && p < 1 && (bestAsk === null || p < bestAsk)) bestAsk = p;
+        }
+      }
+      if (Array.isArray(book.bids)) {
+        for (const b of book.bids) {
+          const p = parseFloat(b && b.price);
+          if (!isNaN(p) && p > 0 && p < 1 && (bestBid === null || p > bestBid)) bestBid = p;
+        }
+      }
+      return bestAsk !== null ? bestAsk : bestBid;
+    };
+
+    // 4. For multi-outcome events, fetch CLOB orderbooks per sub-market and use best ask
     if (eventMarkets && eventMarkets.length > 1) {
-      const midpointPromises = eventMarkets.map(em => {
+      const bookPromises = eventMarkets.map(em => {
         try {
           const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
           const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
           if (!yesTokenId) return Promise.resolve(null);
-          return fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(yesTokenId)}`, {
+          return fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(yesTokenId)}`, {
             headers: { Accept: 'application/json' }
           }).then(r => r.ok ? r.json() : null).catch(() => null);
         } catch (e) { return Promise.resolve(null); }
       });
-      const midpoints = await Promise.all(midpointPromises);
+      const books = await Promise.all(bookPromises);
       for (let i = 0; i < eventMarkets.length; i++) {
-        if (midpoints[i] && midpoints[i].mid !== undefined) {
-          const mid = parseFloat(midpoints[i].mid);
-          if (!isNaN(mid) && mid > 0 && mid < 1) {
-            eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
-            eventMarkets[i]._livePrice = true;
-          }
+        const live = bookBestAsk(books[i]);
+        if (live !== null) {
+          eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
+          eventMarkets[i]._livePrice = true;
         }
       }
     }
 
-    // Also fetch live midpoint for primary market
-    if (tokenId) {
-      try {
-        const midRes = await fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`, {
-          headers: { Accept: 'application/json' }
-        });
-        if (midRes.ok) {
-          const midData = await midRes.json();
-          const mid = parseFloat(midData.mid);
-          if (!isNaN(mid) && mid > 0 && mid < 1) {
-            market.outcomePrices = JSON.stringify([mid, 1 - mid]);
-            market._livePrice = true;
-          }
-        }
-      } catch (e) { /* continue with gamma prices */ }
+    // Primary market: use best ask from the orderbook we already fetched above
+    if (tokenId && orderbook) {
+      const live = bookBestAsk(orderbook);
+      if (live !== null) {
+        market.outcomePrices = JSON.stringify([live, 1 - live]);
+        market._livePrice = true;
+      }
     }
 
     const result = { market, priceHistory, orderbook };
