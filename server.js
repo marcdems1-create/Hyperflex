@@ -23603,38 +23603,48 @@ app.get('/api/market/:slug', async (req, res) => {
     let market = null;
     let eventMarkets = null; // populated if this is a multi-outcome event
 
-    // Try direct market slug first
-    const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
-    if (gammaRes.ok) {
-      const gammaData = await gammaRes.json();
+    // Try both market slug AND event slug in parallel — WTI/NBA-style slugs are event slugs
+    const [gammaRes, eventRes] = await Promise.allSettled([
+      fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders }),
+      fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders })
+    ]);
+
+    // Check event result first — if event has multiple markets, treat as multi-outcome even if a single market matches
+    if (eventRes.status === 'fulfilled' && eventRes.value.ok) {
+      const eventData = await eventRes.value.json();
+      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length > 1) {
+        const evt = eventData[0];
+        const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
+        market = activeMarkets[0] || evt.markets[0];
+        market._eventTitle = evt.title || market.question;
+        market._eventSlug = evt.slug;
+        eventMarkets = evt.markets.map(m => ({
+          question: m.question,
+          slug: m.slug,
+          outcomePrices: m.outcomePrices,
+          clobTokenIds: m.clobTokenIds,
+          active: m.active,
+          closed: m.closed,
+          conditionId: m.conditionId,
+          neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
+          groupItemTitle: m.groupItemTitle || ''
+        }));
+      }
+    }
+
+    // Fall back to direct market match if event lookup didn't yield a multi-outcome event
+    if (!market && gammaRes.status === 'fulfilled' && gammaRes.value.ok) {
+      const gammaData = await gammaRes.value.json();
       if (gammaData && gammaData.length) market = gammaData[0];
     }
 
-    // If no market found, try as an event slug (e.g. "2026-nba-champion" is an event with multiple markets)
-    if (!market) {
-      const eventRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
-      if (eventRes.ok) {
-        const eventData = await eventRes.json();
-        if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length) {
-          const evt = eventData[0];
-          // Use the first active market as the primary, pass all markets as outcomes
-          const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
-          market = activeMarkets[0] || evt.markets[0];
-          // Attach event-level info
-          market._eventTitle = evt.title || market.question;
-          market._eventSlug = evt.slug;
-          eventMarkets = evt.markets.map(m => ({
-            question: m.question,
-            slug: m.slug,
-            outcomePrices: m.outcomePrices,
-            clobTokenIds: m.clobTokenIds,
-            active: m.active,
-            closed: m.closed,
-            conditionId: m.conditionId,
-            neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
-            groupItemTitle: m.groupItemTitle || ''
-          }));
-        }
+    // Last resort: single-market event (event with exactly 1 market)
+    if (!market && eventRes.status === 'fulfilled' && eventRes.value.ok) {
+      const eventData = await eventRes.value.json();
+      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length === 1) {
+        market = eventData[0].markets[0];
+        market._eventTitle = eventData[0].title || market.question;
+        market._eventSlug = eventData[0].slug;
       }
     }
 
