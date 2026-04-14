@@ -42966,6 +42966,65 @@ app.listen(PORT, () => {
     console.log('[boot] Polymarket Builder credentials configured - fee attribution enabled');
   }
 
+  // Self-healing schema: run idempotent migrations so the DB never falls
+  // behind a code deploy. Fixes "predictions relation does not exist" type
+  // errors for good — previously required a manual Supabase SQL editor step.
+  // All statements use IF NOT EXISTS / ADD COLUMN IF NOT EXISTS so repeated
+  // runs are no-ops. Non-blocking: if it fails, the server still starts and
+  // logs the error, matching the prior manual-migration behavior.
+  (async () => {
+    if (!pool) {
+      console.warn('[boot] No DATABASE_URL — cannot auto-apply schema. Run supabase_migration_predictions.sql manually in Supabase SQL editor.');
+      return;
+    }
+    const predictionsSchema = `
+      CREATE TABLE IF NOT EXISTS predictions (
+        id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id            UUID REFERENCES users(id) ON DELETE CASCADE,
+        platform           TEXT NOT NULL,
+        market_id          TEXT NOT NULL,
+        market_title       TEXT NOT NULL,
+        posted_at          TIMESTAMPTZ DEFAULT now(),
+        direction          TEXT NOT NULL,
+        entry_price        NUMERIC(5,2) NOT NULL,
+        position_size_usd  NUMERIC,
+        size_display       TEXT DEFAULT 'range',
+        conviction         TEXT,
+        thesis_text        TEXT CHECK (char_length(thesis_text) <= 500),
+        category_tags      TEXT[],
+        resolved_at        TIMESTAMPTZ,
+        outcome            TEXT DEFAULT 'pending',
+        brier_contribution NUMERIC,
+        pnl_usd            NUMERIC,
+        cascade_ids        UUID[]
+      );
+      CREATE INDEX IF NOT EXISTS idx_predictions_user    ON predictions(user_id, posted_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_predictions_market  ON predictions(market_id, posted_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_predictions_outcome ON predictions(outcome);
+      CREATE INDEX IF NOT EXISTS idx_predictions_posted  ON predictions(posted_at DESC);
+
+      CREATE TABLE IF NOT EXISTS follows (
+        follower_id   UUID REFERENCES users(id) ON DELETE CASCADE,
+        following_id  UUID REFERENCES users(id) ON DELETE CASCADE,
+        followed_at   TIMESTAMPTZ DEFAULT now(),
+        follow_reason TEXT,
+        PRIMARY KEY (follower_id, following_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id);
+      CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_score_90d       NUMERIC DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_score_alltime   NUMERIC DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS predictions_resolved INTEGER DEFAULT 0;
+    `;
+    try {
+      await pool.query(predictionsSchema);
+      console.log('[boot] ✓ predictions + follows schema ensured');
+    } catch (err) {
+      console.error('[boot] ✗ failed to ensure predictions schema:', err.message);
+    }
+  })();
+
   // Pre-warm critical data caches on startup (non-blocking)
   setTimeout(async () => {
     console.log('[boot] Pre-warming data caches...');
