@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS predictions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id text REFERENCES users(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
   platform text DEFAULT 'polymarket',          -- 'polymarket' | 'kalshi' | 'manifold'
   market_id text,                               -- external market identifier (conditionId etc)
   market_title text NOT NULL,
