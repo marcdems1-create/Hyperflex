@@ -23586,7 +23586,7 @@ app.get('/api/market/:slug', async (req, res) => {
         market = activeMarkets[0] || evt.markets[0];
         market._eventTitle = evt.title || market.question;
         market._eventSlug = evt.slug;
-        market._eventId = evt.id || null; // needed for markets?event_id= price fetch
+        market._eventId = evt.id || null; // carried through for downstream consumers
         eventMarkets = evt.markets.map(m => ({
           question: m.question,
           slug: m.slug,
@@ -23658,10 +23658,17 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
-    // 4. For multi-outcome events: fetch fresh prices via Gamma markets?event_id=X
-    //    The events endpoint returns stale/terminal outcomePrices for neg-risk markets.
-    //    The markets endpoint has live pre-computed probabilities refreshed every ~5s.
-    //    CLOB book fallback for any markets where Gamma doesn't return fresh prices.
+    // 4. For multi-outcome events: refresh live prices via CLOB /book best-ask.
+    //    Gamma's events?slug response is the PRIMARY (has outcomePrices for
+    //    every market, always valid JSON, never 404s) — we keep whatever it
+    //    returned as the fallback. CLOB best-ask is the "fresher" layer that
+    //    matches what polymarket.com displays. upgradeToClobBestAsk() handles
+    //    all markets in parallel chunks of 25, caches per-token for 15s, and
+    //    leaves the Gamma value in place for any market where CLOB didn't
+    //    respond — so a partial CLOB outage degrades gracefully instead of
+    //    showing 100¢/0¢. Previous implementation capped at 10 markets and
+    //    relied on the undocumented Gamma markets?event_id= filter, which
+    //    left 18/28 outcomes on WTI stuck at Gamma's terminal prices.
     const bookBestAsk = (book) => {
       if (!book) return null;
       let bestAsk = null, bestBid = null;
@@ -23682,75 +23689,9 @@ app.get('/api/market/:slug', async (req, res) => {
 
     if (eventMarkets && eventMarkets.length > 1) {
       try {
-        // Step A: single Gamma markets?event_id=X call for all fresh prices
-        const eventId = market._eventId || eventMarkets[0]?.event_id || eventMarkets[0]?.game_id || market.game_id;
-        let gammaMarketPrices = {}; // conditionId -> outcomePrices string
-
-        if (eventId) {
-          const gmRes = await fetch(
-            `https://gamma-api.polymarket.com/markets?event_id=${encodeURIComponent(eventId)}&limit=200`,
-            { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
-          ).catch(() => null);
-          if (gmRes && gmRes.ok) {
-            const gmData = await gmRes.json();
-            if (Array.isArray(gmData)) {
-              for (const gm of gmData) {
-                if (gm.conditionId && gm.outcomePrices) {
-                  gammaMarketPrices[gm.conditionId] = gm.outcomePrices;
-                }
-              }
-            }
-          }
-        }
-
-        // Apply fresh Gamma prices; collect markets that still need CLOB fallback
-        const needClob = [];
-        for (let i = 0; i < eventMarkets.length; i++) {
-          const em = eventMarkets[i];
-          const freshPrices = gammaMarketPrices[em.conditionId];
-          if (freshPrices) {
-            let parsed;
-            try { parsed = typeof freshPrices === 'string' ? JSON.parse(freshPrices) : freshPrices; } catch(e) { parsed = null; }
-            if (Array.isArray(parsed) && parsed.length >= 2) {
-              const yp = parseFloat(parsed[0]);
-              // Accept any price — even terminal (0/1) since Gamma is authoritative
-              if (!isNaN(yp)) {
-                eventMarkets[i].outcomePrices = JSON.stringify([yp, 1 - yp]);
-                eventMarkets[i]._livePrice = true;
-                continue;
-              }
-            }
-          }
-          needClob.push(i);
-        }
-
-        // CLOB fallback only for markets not updated by Gamma (max 10 to avoid timeout)
-        if (needClob.length > 0 && needClob.length <= 10) {
-          const midpointPromises = needClob.map(idx => {
-            try {
-              const em = eventMarkets[idx];
-              const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
-              const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
-              if (!yesTokenId) return Promise.resolve({ idx, mid: null });
-              return fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(yesTokenId)}`, {
-                headers: { Accept: 'application/json' },
-                signal: AbortSignal.timeout(3000),
-              }).then(r => r.ok ? r.json().then(d => ({ idx, mid: d.mid })) : { idx, mid: null }).catch(() => ({ idx, mid: null }));
-            } catch (e) { return Promise.resolve({ idx, mid: null }); }
-          });
-          const midpoints = await Promise.all(midpointPromises);
-          for (const { idx, mid } of midpoints) {
-            if (mid !== null && mid !== undefined) {
-              const m = parseFloat(mid);
-              if (!isNaN(m) && m > 0 && m < 1) {
-                eventMarkets[idx].outcomePrices = JSON.stringify([m, 1 - m]);
-                eventMarkets[idx]._livePrice = true;
-              }
-            }
-          }
-        }
+        await upgradeToClobBestAsk(eventMarkets);
       } catch (e) {
-        console.warn('[market-detail] multi-outcome price fetch error:', e.message);
+        console.warn('[market-detail] multi-outcome CLOB best-ask refresh error:', e.message);
       }
     }
 
@@ -24322,6 +24263,103 @@ async function upgradeToClobPrices(markets, priceField = 'yes_price') {
   }
 
   return markets;
+}
+
+// ── CLOB BEST-ASK (Polymarket-UI-matching live prices) ──────────────────────
+// Polymarket's own UI displays best-ask (price to BUY yes), not midpoint.
+// For multi-outcome events (WTI with 28 price levels, NBA champion with 30
+// teams, etc.) Gamma's outcomePrices often lag or go terminal (0/1) for
+// neg-risk markets, so the front door /api/market/:slug needs fresher data.
+// This mirrors upgradeToClobPrices but pulls /book and extracts best-ask.
+const _clobBestAskCache = new Map(); // tokenId -> { ask, ts }
+const CLOB_BOOK_TTL = 15 * 1000;     // 15s — Polymarket itself refreshes ~5s
+
+async function upgradeToClobBestAsk(eventMarkets) {
+  if (!eventMarkets || eventMarkets.length === 0) return eventMarkets;
+  const fetch = _nodeFetch;
+  const now = Date.now();
+
+  // Collect tokens that need fetching (using cache where fresh)
+  const toFetch = []; // { idx, tokenId }
+  for (let i = 0; i < eventMarkets.length; i++) {
+    const em = eventMarkets[i];
+    let tokenId = null;
+    try {
+      const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
+      if (Array.isArray(tids) && tids[0]) tokenId = tids[0];
+    } catch (_) {}
+    if (!tokenId) continue;
+
+    const cached = _clobBestAskCache.get(tokenId);
+    if (cached && (now - cached.ts < CLOB_BOOK_TTL) && cached.ask !== null) {
+      eventMarkets[i].outcomePrices = JSON.stringify([cached.ask, 1 - cached.ask]);
+      eventMarkets[i]._livePrice = true;
+      continue;
+    }
+    toFetch.push({ idx: i, tokenId });
+  }
+
+  if (toFetch.length === 0) return eventMarkets;
+
+  // Chunked parallel /book calls. 25 concurrent is comfortable for Polymarket
+  // and avoids socket-exhaustion on Railway. 5s timeout matches
+  // upgradeToClobPrices. Failures keep Gamma's fallback price — we never
+  // regress outcomePrices to something worse than what Gamma returned.
+  const CHUNK_SIZE = 25;
+  let hitCount = 0, missCount = 0;
+  for (let c = 0; c < toFetch.length; c += CHUNK_SIZE) {
+    const chunk = toFetch.slice(c, c + CHUNK_SIZE);
+    const results = await Promise.all(chunk.map(t =>
+      fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(t.tokenId)}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(book => {
+          if (!book || !Array.isArray(book.asks)) return { idx: t.idx, tokenId: t.tokenId, ask: null };
+          let bestAsk = null;
+          for (const a of book.asks) {
+            const p = parseFloat(a && a.price);
+            if (!isNaN(p) && p > 0 && p < 1 && (bestAsk === null || p < bestAsk)) bestAsk = p;
+          }
+          // Fall back to best bid if asks are empty (common on thin markets)
+          if (bestAsk === null && Array.isArray(book.bids)) {
+            let bestBid = null;
+            for (const b of book.bids) {
+              const p = parseFloat(b && b.price);
+              if (!isNaN(p) && p > 0 && p < 1 && (bestBid === null || p > bestBid)) bestBid = p;
+            }
+            bestAsk = bestBid;
+          }
+          return { idx: t.idx, tokenId: t.tokenId, ask: bestAsk };
+        })
+        .catch(() => ({ idx: t.idx, tokenId: t.tokenId, ask: null }))
+    ));
+
+    for (const r of results) {
+      if (r.ask === null || isNaN(r.ask) || r.ask <= 0 || r.ask >= 1) {
+        missCount++;
+        continue;
+      }
+      _clobBestAskCache.set(r.tokenId, { ask: r.ask, ts: Date.now() });
+      eventMarkets[r.idx].outcomePrices = JSON.stringify([r.ask, 1 - r.ask]);
+      eventMarkets[r.idx]._livePrice = true;
+      hitCount++;
+    }
+  }
+
+  // Evict old entries
+  if (_clobBestAskCache.size > 1000) {
+    for (const [k, v] of _clobBestAskCache) {
+      if (now - v.ts > 5 * 60 * 1000) _clobBestAskCache.delete(k);
+    }
+  }
+
+  if (eventMarkets.length > 1) {
+    console.log(`[market-detail] CLOB best-ask refreshed ${hitCount}/${eventMarkets.length} markets (${missCount} kept Gamma fallback)`);
+  }
+
+  return eventMarkets;
 }
 
 // ── CLOB ORDERBOOK DEPTH ──────────────────────────────────────────────────
