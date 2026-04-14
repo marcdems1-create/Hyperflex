@@ -23520,9 +23520,15 @@ app.get('/api/market/:slug', async (req, res) => {
   const { slug } = req.params;
   if (!slug) return res.status(400).json({ error: 'Missing slug' });
 
+  // Diagnostic mode: ?debug=1 bypasses cache + attaches per-outcome
+  // price-source breadcrumbs so we can see exactly which outcomes
+  // got CLOB best-ask vs fell back to Gamma. Also temporarily forces
+  // verbose console logging for this single request.
+  const debug = req.query.debug === '1';
+
   const cacheKey = `market_detail_${slug}`;
   const cached = _marketDetailCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < MARKET_DETAIL_CACHE_TTL) {
+  if (cached && !debug && Date.now() - cached.ts < MARKET_DETAIL_CACHE_TTL) {
     return res.json(cached.data);
   }
 
@@ -23649,10 +23655,20 @@ app.get('/api/market/:slug', async (req, res) => {
     };
 
     if (eventMarkets && eventMarkets.length > 1) {
+      // Snapshot Gamma prices BEFORE CLOB refresh so the debug payload can
+      // show which outcomes actually changed (lets us tell "CLOB returned
+      // the same number" apart from "CLOB didn't respond and we kept Gamma").
+      const beforeGamma = debug ? eventMarkets.map(m => m.outcomePrices) : null;
       try {
         await upgradeToClobBestAsk(eventMarkets);
       } catch (e) {
         console.warn('[market-detail] multi-outcome CLOB best-ask refresh error:', e.message);
+      }
+      if (debug) {
+        eventMarkets.forEach((m, i) => {
+          m._priceSource = m._livePrice ? 'clob_best_ask' : 'gamma_fallback';
+          m._gammaOriginal = beforeGamma[i];
+        });
       }
     }
 
@@ -23677,8 +23693,18 @@ app.get('/api/market/:slug', async (req, res) => {
     const result = { market, priceHistory, orderbook };
     if (eventMarkets) result.eventMarkets = eventMarkets;
 
+    // Boot diagnostic for multi-outcome events: log how many outcomes
+    // got live prices vs fell back. The user can grep Railway for
+    // `[market-detail] slug=...` to confirm CLOB best-ask is reaching
+    // them when "prices don't match Polymarket" reports come in.
+    if (eventMarkets && eventMarkets.length > 1) {
+      const live = eventMarkets.filter(m => m._livePrice).length;
+      console.log(`[market-detail] slug=${slug} eventMarkets=${eventMarkets.length} live=${live} fallback=${eventMarkets.length - live}`);
+    }
+
     // Cache the result (shorter TTL for live prices — 60s instead of 5min)
-    _marketDetailCache.set(cacheKey, { data: result, ts: Date.now() });
+    // Skip caching for ?debug=1 so each diagnostic call is fresh.
+    if (!debug) _marketDetailCache.set(cacheKey, { data: result, ts: Date.now() });
 
     // Evict old cache entries periodically
     if (_marketDetailCache.size > 200) {
