@@ -642,13 +642,41 @@ async function loadMarket() {
   }
 }
 
+// Compute best ask + best bid from a CLOB /book response.
+// Polymarket's UI displays best ask as the "Yes ¢" — matching that keeps us in sync.
+function bookBestPrices(book) {
+  var bestAsk = null, bestBid = null;
+  if (book && book.asks && book.asks.length) {
+    for (var a = 0; a < book.asks.length; a++) {
+      var ap = parseFloat(book.asks[a].price);
+      if (!isNaN(ap) && ap > 0 && ap < 1 && (bestAsk === null || ap < bestAsk)) bestAsk = ap;
+    }
+  }
+  if (book && book.bids && book.bids.length) {
+    for (var b = 0; b < book.bids.length; b++) {
+      var bp = parseFloat(book.bids[b].price);
+      if (!isNaN(bp) && bp > 0 && bp < 1 && (bestBid === null || bp > bestBid)) bestBid = bp;
+    }
+  }
+  return { bestAsk: bestAsk, bestBid: bestBid };
+}
+
 function renderMarket() {
   var m = _market;
   var prices = m.outcomePrices || '[]';
   if (typeof prices === 'string') prices = JSON.parse(prices);
   var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+
+  // Override with live CLOB best-ask (what Polymarket displays as YES ¢).
+  // Gamma's outcomePrices can lag; CLOB orderbook is the source of truth.
+  try {
+    var bp = bookBestPrices(_orderbook);
+    if (bp.bestAsk !== null) yesPrice = bp.bestAsk;
+    else if (bp.bestBid !== null) yesPrice = bp.bestBid;
+  } catch (e) { /* fallback to Gamma */ }
+
   if (!yesPrice || isNaN(yesPrice) || yesPrice <= 0 || yesPrice >= 1) yesPrice = 0.5;
-  var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+  var noPrice = 1 - yesPrice;
   if (!noPrice || isNaN(noPrice) || noPrice <= 0 || noPrice >= 1) noPrice = 1 - yesPrice;
   var icon = m.icon || m.image || '';
 
@@ -874,25 +902,25 @@ function renderOutcomes(m) {
 // Fires after renderOutcomes() to guarantee live prices regardless of server cache staleness.
 function refreshLiveOutcomePrices() {
   if (!_eventMarkets || _eventMarkets.length <= 1) return;
-  var fetches = _eventMarkets.map(function(em, idx) {
+  // Fetch the full orderbook for each sub-market so we can use best ask
+  // (what Polymarket displays), not midpoint.
+  var fetches = _eventMarkets.map(function(em) {
     var tids;
     try { tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds; } catch(e) { tids = null; }
     var yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
     if (!yesTokenId) return Promise.resolve(null);
-    return fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(yesTokenId))
+    return fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(yesTokenId))
       .then(function(r) { return r.ok ? r.json() : null; })
       .catch(function() { return null; });
   });
-  Promise.all(fetches).then(function(midpoints) {
+  Promise.all(fetches).then(function(books) {
     var updated = false;
     for (var i = 0; i < _eventMarkets.length; i++) {
-      var mp = midpoints[i];
-      if (mp && mp.mid !== undefined) {
-        var mid = parseFloat(mp.mid);
-        if (!isNaN(mid) && mid > 0 && mid < 1) {
-          _eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
-          updated = true;
-        }
+      var bp = bookBestPrices(books[i]);
+      var live = bp.bestAsk !== null ? bp.bestAsk : bp.bestBid;
+      if (live !== null) {
+        _eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
+        updated = true;
       }
     }
     if (updated && _market) renderOutcomes(_market);

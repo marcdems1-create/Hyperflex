@@ -21476,46 +21476,57 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
-    // 4. For multi-outcome events, fetch live CLOB midpoints for ALL outcomes
-    //    Gamma-api outcomePrices are delayed; CLOB midpoints are real-time
+    // Helper: extract best ask (what Polymarket displays as YES ¢) from a /book response.
+    // Best ask wins because it's the price a buyer actually pays — the source of truth
+    // for Polymarket's displayed percentage. Falls back to best bid if no asks exist.
+    const bookBestAsk = (book) => {
+      if (!book) return null;
+      let bestAsk = null, bestBid = null;
+      if (Array.isArray(book.asks)) {
+        for (const a of book.asks) {
+          const p = parseFloat(a && a.price);
+          if (!isNaN(p) && p > 0 && p < 1 && (bestAsk === null || p < bestAsk)) bestAsk = p;
+        }
+      }
+      if (Array.isArray(book.bids)) {
+        for (const b of book.bids) {
+          const p = parseFloat(b && b.price);
+          if (!isNaN(p) && p > 0 && p < 1 && (bestBid === null || p > bestBid)) bestBid = p;
+        }
+      }
+      return bestAsk !== null ? bestAsk : bestBid;
+    };
+
+    // 4. For multi-outcome events, fetch live CLOB orderbooks for ALL outcomes.
+    //    Use best ask as display price — that's what Polymarket's UI shows.
     if (eventMarkets && eventMarkets.length > 1) {
-      const midpointPromises = eventMarkets.map(em => {
+      const bookPromises = eventMarkets.map(em => {
         try {
           const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
           const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
           if (!yesTokenId) return Promise.resolve(null);
-          return fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(yesTokenId)}`, {
+          return fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(yesTokenId)}`, {
             headers: { Accept: 'application/json' }
           }).then(r => r.ok ? r.json() : null).catch(() => null);
         } catch (e) { return Promise.resolve(null); }
       });
-      const midpoints = await Promise.all(midpointPromises);
+      const books = await Promise.all(bookPromises);
       for (let i = 0; i < eventMarkets.length; i++) {
-        if (midpoints[i] && midpoints[i].mid !== undefined) {
-          const mid = parseFloat(midpoints[i].mid);
-          if (!isNaN(mid) && mid > 0 && mid < 1) {
-            eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
-            eventMarkets[i]._livePrice = true;
-          }
+        const live = bookBestAsk(books[i]);
+        if (live !== null) {
+          eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
+          eventMarkets[i]._livePrice = true;
         }
       }
     }
 
-    // Also fetch live midpoint for primary market
-    if (tokenId) {
-      try {
-        const midRes = await fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`, {
-          headers: { Accept: 'application/json' }
-        });
-        if (midRes.ok) {
-          const midData = await midRes.json();
-          const mid = parseFloat(midData.mid);
-          if (!isNaN(mid) && mid > 0 && mid < 1) {
-            market.outcomePrices = JSON.stringify([mid, 1 - mid]);
-            market._livePrice = true;
-          }
-        }
-      } catch (e) { /* continue with gamma prices */ }
+    // Also set primary market price from its orderbook's best ask (we already fetched it above)
+    if (tokenId && orderbook) {
+      const live = bookBestAsk(orderbook);
+      if (live !== null) {
+        market.outcomePrices = JSON.stringify([live, 1 - live]);
+        market._livePrice = true;
+      }
     }
 
     const result = { market, priceHistory, orderbook };
