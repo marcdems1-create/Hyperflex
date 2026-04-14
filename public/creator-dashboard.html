@@ -20249,12 +20249,17 @@ function updatePredictPreview() {
 function deriveTagsClient(question) {
   var q = (question || '').toLowerCase();
   var tags = [];
-  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot/.test(q)) tags.push('Politics');
+  // US Politics — domestic OR US involvement in foreign events
+  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot|white house/.test(q) ||
+      /\bus\b.{0,40}(conflict|war|sanction|deal|policy|ban|trade)/.test(q) ||
+      /(conflict|war|sanction|deal|policy|ban|trade).{0,40}\bus\b/.test(q)) tags.push('US Politics');
   if (/bitcoin|ethereum|btc|eth|crypto|blockchain|defi|altcoin|nft|token/.test(q)) tags.push('Crypto');
-  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|fomc|tariff/.test(q)) tags.push('Macro');
-  if (/us policy|policy|regulation|legislation|executive order/.test(q)) tags.push('US Policy');
-  if (/nfl|nba|mlb|soccer|football|basketball|baseball|world cup|championship/.test(q)) tags.push('Sports');
-  if (/russia|ukraine|china|taiwan|war|military|nato|sanction|conflict/.test(q)) tags.push('Geo');
+  // Macro — economic + geopolitical market-movers
+  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|fomc|tariff|conflict|war|invasion|ceasefire|sanctions/.test(q)) tags.push('Macro');
+  // Geo — international events not already tagged US Politics
+  if (/russia|ukraine|china|taiwan|israel|iran|military|nato|conflict|invasion|war/.test(q) && tags.indexOf('US Politics') === -1) tags.push('Geo');
+  // Sports — strict keywords only
+  if (/\bnfl\b|\bnba\b|\bnhl\b|\bmlb\b|soccer|football|basketball|baseball|world cup|championship|superbowl|playoffs|tournament|\bpga\b|ufc|boxing/.test(q)) tags.push('Sports');
   if (/\bai\b|openai|apple|microsoft|google|meta|amazon|nvidia|tech|software/.test(q)) tags.push('Tech');
   return tags.slice(0, 2).length ? tags.slice(0, 2) : ['Macro'];
 }

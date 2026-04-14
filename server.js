@@ -14789,14 +14789,19 @@ app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
 function deriveCategories(question) {
   const q = (question || '').toLowerCase();
   const tags = [];
-  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot|primary/.test(q)) tags.push('politics');
-  if (/bitcoin|ethereum|btc|eth|crypto|blockchain|defi|altcoin|nft|token|solana|coin/.test(q)) tags.push('crypto');
-  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|economic|economy|fomc|tariff/.test(q)) tags.push('macro');
-  if (/us policy|policy|regulation|legislation|executive order|admin/.test(q)) tags.push('US Policy');
-  if (/nfl|nba|mlb|soccer|football|basketball|baseball|world cup|championship|nhl|tournament|match|superbowl/.test(q)) tags.push('sports');
-  if (/russia|ukraine|china|taiwan|war|military|nato|sanction|conflict|invasion/.test(q)) tags.push('geo');
-  if (/\bai\b|openai|apple|microsoft|google|meta|amazon|nvidia|tech|software|startup|model|gpt/.test(q)) tags.push('tech');
-  return tags.slice(0, 2).length ? tags.slice(0, 2) : ['macro'];
+  // US Politics — domestic US politics OR US involvement in foreign events
+  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot|primary|white house|state department/.test(q) ||
+      /\bus\b.{0,40}(conflict|war|sanction|deal|policy|foreign|ban|trade)/.test(q) ||
+      /(conflict|war|sanction|deal|policy|ban|trade).{0,40}\bus\b/.test(q)) tags.push('US Politics');
+  if (/bitcoin|ethereum|btc|eth|crypto|blockchain|defi|altcoin|nft|token|solana|coin/.test(q)) tags.push('Crypto');
+  // Macro — economic signals + geopolitical events that move markets
+  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|economic|economy|fomc|tariff|conflict|war|invasion|ceasefire|sanctions/.test(q)) tags.push('Macro');
+  // Geo — international events (suppress if already US Politics to avoid dupe)
+  if (/russia|ukraine|china|taiwan|israel|iran|military|nato|conflict|invasion|war|geopolit/.test(q) && !tags.includes('US Politics')) tags.push('Geo');
+  // Sports — strict, no generic words like "match"
+  if (/\bnfl\b|\bnba\b|\bnhl\b|\bmlb\b|soccer|football|basketball|baseball|world cup|championship|superbowl|playoffs|tournament|\bpga\b|\bgolf\b|ufc|boxing/.test(q)) tags.push('Sports');
+  if (/\bai\b|openai|apple|microsoft|google|meta|amazon|nvidia|tech|software|startup|model|gpt/.test(q)) tags.push('Tech');
+  return tags.slice(0, 2).length ? tags.slice(0, 2) : ['Macro'];
 }
 
 // Size display: exact → '$850', range → bucket string
