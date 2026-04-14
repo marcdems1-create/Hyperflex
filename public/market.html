@@ -647,8 +647,24 @@ function renderMarket() {
   var prices = m.outcomePrices || '[]';
   if (typeof prices === 'string') prices = JSON.parse(prices);
   var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+
+  // Upgrade to live CLOB mid price from orderbook (Gamma prices can be stale)
+  try {
+    if (_orderbook && _orderbook.bids && _orderbook.asks) {
+      var topBid = _orderbook.bids.length ? parseFloat(_orderbook.bids[0].price) : null;
+      var topAsk = _orderbook.asks.length ? parseFloat(_orderbook.asks[0].price) : null;
+      if (topBid != null && topAsk != null && topBid > 0 && topAsk < 1 && topAsk > topBid) {
+        yesPrice = (topBid + topAsk) / 2;
+      } else if (topBid != null && topBid > 0) {
+        yesPrice = topBid;
+      } else if (topAsk != null && topAsk < 1) {
+        yesPrice = topAsk;
+      }
+    }
+  } catch (e) { /* fallback to Gamma price */ }
+
   if (!yesPrice || isNaN(yesPrice) || yesPrice <= 0 || yesPrice >= 1) yesPrice = 0.5;
-  var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+  var noPrice = 1 - yesPrice;
   if (!noPrice || isNaN(noPrice) || noPrice <= 0 || noPrice >= 1) noPrice = 1 - yesPrice;
   var icon = m.icon || m.image || '';
 

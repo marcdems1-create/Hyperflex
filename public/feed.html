@@ -4,308 +4,319 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flex Feed — HYPERFLEX</title>
-<meta name="description" content="The social feed of prediction markets. See what the sharpest traders are calling, follow their track record, and act on edge."/>
+<meta name="description" content="The social feed of prediction markets. Post takes, prove your track record, build your Flex Score."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0d0d10;
-  --surface:#13131a;
-  --surface-2:#1a1a24;
-  --gold:#f5a623;
-  --gold-dim:rgba(245,166,35,0.10);
-  --gold-border:rgba(245,166,35,0.30);
-  --purple:#7c5cfc;
-  --purple-dim:rgba(124,92,252,0.10);
-  --purple-border:rgba(124,92,252,0.28);
-  --green:#22c55e;
-  --green-dim:rgba(34,197,94,0.10);
-  --red:#ff4d6a;
-  --red-dim:rgba(255,77,106,0.10);
-  --text:#f1f0f5;
-  --text-dim:#8b8a9a;
-  --border:rgba(255,255,255,0.07);
-  --mono:'Space Mono',monospace;
-  --sans:'Syne',sans-serif;
-}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+:root{--gold:#c9920d;--gold-dim:rgba(201,146,13,0.15);--paper:#0a0a0f;--surface:#111118;--card:#16161f;--border:#1e1e2a;--border-hover:#2a2a38;--text:#e8e6f0;--text-soft:#a0a0b4;--muted:#6b6880;--dim:#4a4760;--green:#00e68a;--green-dim:rgba(0,230,138,0.15);--red:#ff4d6a;--red-dim:rgba(255,77,106,0.15);--blue:#4d9fff;--blue-dim:rgba(77,159,255,0.12);--purple:#a855f7;--purple-dim:rgba(168,85,247,0.12);--amber:#f59e0b;--amber-dim:rgba(245,158,11,0.12);--sans:'Inter',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
-
-/* Nav */
-nav{position:fixed;top:0;left:0;right:0;height:52px;background:rgba(13,13,16,0.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:16px}
-.nb{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold);letter-spacing:-.5px;flex-shrink:0}
-.nl{display:flex;gap:12px;align-items:center}
-.nl a{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;transition:color .15s;white-space:nowrap}
+.feed-wrap{max-width:660px;margin:0 auto;padding:60px 16px 40px}
+nav{position:fixed;top:0;left:0;right:0;height:52px;background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
+.nb{font-family:var(--mono);font-size:14px;font-weight:900;color:var(--gold);letter-spacing:-0.5px}
+.nl{display:flex;gap:14px;align-items:center}
+.nl a{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);transition:color .15s}
 .nl a:hover{color:var(--text)}
 .nl a.on{color:var(--gold)}
-.nr{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.nav-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:7px;cursor:pointer;letter-spacing:.04em;transition:all .15s;white-space:nowrap}
-.nav-btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim)}
-.nav-btn-ghost:hover{border-color:var(--gold-border);color:var(--gold)}
-.nav-btn-gold{background:var(--gold);border:none;color:#0d0d10}
-.nav-btn-gold:hover{opacity:.88}
-
-/* Layout */
-.wrap{max-width:680px;margin:0 auto;padding:72px 16px 48px}
-
-/* Page header */
-.page-hd{padding:20px 0 16px}
-.page-title{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
-.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.page-sub{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:4px}
-
-/* Tabs */
-.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:2px}
-.tab{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text-dim);padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;letter-spacing:.06em;user-select:none}
-.tab:hover{color:var(--text)}
+.fh{padding:18px 0 0}
+.ft{font-family:var(--mono);font-size:22px;font-weight:900;color:var(--gold);letter-spacing:-0.5px;display:flex;align-items:center;gap:10px}
+.fs{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+.ld{width:8px;height:8px;border-radius:50%;background:var(--green);animation:p 2s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-top:14px}
+.tab{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted);padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;letter-spacing:.5px;user-select:none}
+.tab:hover{color:var(--text-soft)}
 .tab.on{color:var(--gold);border-bottom-color:var(--gold)}
-
-/* CTA banner for non-authenticated users */
-.post-cta{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:12px;margin:14px 0}
-.post-cta-text{font-family:var(--mono);font-size:11px;color:var(--text-dim);flex:1}
-.post-cta-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;background:var(--gold);border:none;border-radius:7px;color:#0d0d10;cursor:pointer;white-space:nowrap}
-
-/* Feed cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;border-top:2px solid var(--purple);padding:16px;margin-bottom:12px;transition:border-color .15s}
-.card:hover{border-color:var(--purple-border)}
-.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
-.card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
-.avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--purple),#5b21b6);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
-.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.author-block{min-width:0}
-.author-name{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.author-name:hover{text-decoration:underline;cursor:pointer}
-.author-meta{font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:1px}
-.follow-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 12px;border:1px solid var(--purple-border);border-radius:6px;background:var(--purple-dim);color:var(--purple);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
-.follow-btn:hover{background:rgba(124,92,252,0.2)}
-.follow-btn.following{border-color:rgba(255,255,255,0.12);background:transparent;color:var(--text-dim)}
-.timestamp{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex-shrink:0}
-
-.badge-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;letter-spacing:.03em}
-.badge-platform{background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple-border)}
-.badge-yes{background:var(--green-dim);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
-.badge-no{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
-.badge-size{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border)}
-.badge-correct{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
-.badge-wrong{background:rgba(255,77,106,0.10);color:var(--red);border:1px solid rgba(255,77,106,0.2)}
-.badge-conv-low{background:rgba(139,138,154,0.10);color:var(--text-dim);border:1px solid rgba(139,138,154,0.15)}
-.badge-conv-medium{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border)}
-.badge-conv-high{background:rgba(251,146,60,0.12);color:#fb923c;border:1px solid rgba(251,146,60,0.25)}
-
-.market-title{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:8px}
-.thesis{font-family:var(--sans);font-size:13px;color:var(--gold);line-height:1.55;border-left:2px solid var(--gold-border);padding-left:12px;margin-bottom:10px;word-break:break-word}
-.domain-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.domain-tag{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:var(--green-dim);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
-
-/* Empty / loading states */
-.empty{text-align:center;padding:56px 20px;color:var(--text-dim)}
-.empty-icon{font-size:38px;margin-bottom:12px}
-.empty-title{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
-.empty-sub{font-family:var(--sans);font-size:13px;line-height:1.5;max-width:320px;margin:0 auto 20px}
-.empty-action{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 22px;background:var(--gold);border:none;border-radius:8px;color:#0d0d10;cursor:pointer}
-.ld-txt{text-align:center;padding:28px;font-family:var(--mono);font-size:11px;color:var(--text-dim)}
-.load-more{display:none;text-align:center;padding:16px}
-.load-more-btn{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold-border);border-radius:8px;padding:8px 26px;cursor:pointer;transition:background .15s}
-.load-more-btn:hover{background:var(--gold-dim)}
+.cmp{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid var(--border)}
+.cav{width:40px;height:40px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:700;color:#000;flex-shrink:0;overflow:hidden}
+.cbtn{font-family:var(--mono);font-size:11px;font-weight:700;color:#000;background:var(--gold);border:none;border-radius:20px;padding:8px 20px;cursor:pointer;align-self:center}
+.cbtn:hover{background:#daa520}
+.tk{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+.tk:hover{background:rgba(255,255,255,.01)}
+.av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}
+.av.w{background:linear-gradient(135deg,#a855f7,#6d28d9);color:#fff}
+.av.c{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000}
+.av.i{background:linear-gradient(135deg,#1d9bf0,#0a66c2);color:#fff}
+.av.u{background:var(--gold);color:#000}
+.av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tb{flex:1;min-width:0}
+.th{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tn{font-size:13px;font-weight:700;color:var(--text)}
+.tn:hover{text-decoration:underline}
+.bg{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
+.bg-w{background:var(--purple-dim);color:var(--purple)}
+.bg-i{background:rgba(29,155,240,.12);color:#1d9bf0}
+.bg-c{background:var(--amber-dim);color:var(--amber)}
+.bg-ok{background:var(--green-dim);color:var(--green)}
+.bg-no{background:var(--red-dim);color:var(--red)}
+.tt{font-size:11px;color:var(--dim);margin-left:auto}
+.ml{display:flex;align-items:center;gap:8px;margin-top:7px;padding:9px 12px;background:rgba(22,22,31,.8);border:1px solid var(--border);border-radius:10px;transition:border-color .15s}
+.ml:hover{border-color:var(--border-hover)}
+.mq{font-size:13px;font-weight:600;color:var(--text);line-height:1.3;flex:1;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.sd{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;flex-shrink:0}
+.sy{background:var(--green-dim);color:var(--green)}
+.sn{background:var(--red-dim);color:var(--red)}
+.tx{font-size:13px;color:var(--text-soft);line-height:1.5;margin-top:6px;word-break:break-word}
+.ta{display:flex;gap:0;margin-top:10px}
+.ab{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted);background:none;border:none;padding:5px 14px 5px 0;cursor:pointer;transition:color .15s}
+.ab:hover{color:var(--text-soft)}
+.ab.ag.on{color:var(--green)}
+.ab.dg.on{color:var(--red)}
+.ab .ic{font-size:15px}
+.cmt-section{border-top:1px solid var(--border);padding-top:8px}
+.cmt-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto}
+.cmt-item{display:flex;gap:6px;font-size:12px}
+.cmt-item .cn{font-weight:700;color:var(--text);flex-shrink:0}
+.cmt-item .cb{color:var(--text-soft);flex:1;word-break:break-word}
+.cmt-item .ct2{font-size:10px;color:var(--dim);flex-shrink:0}
+.cmt-input{flex:1;padding:7px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--sans);font-size:12px;outline:none}
+.cmt-input:focus{border-color:rgba(201,146,13,.4)}
+.cmt-post{font-family:var(--mono);font-size:10px;font-weight:700;color:#000;background:var(--gold);border:none;border-radius:6px;padding:7px 14px;cursor:pointer;white-space:nowrap}
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .ei{font-size:36px;margin-bottom:10px}
+.ld-txt{text-align:center;padding:20px;font-size:12px;color:var(--muted)}
+/* Modal */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;align-items:flex-start;justify-content:center;padding-top:12vh}
+.mo.open{display:flex}
+.mx{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:540px;padding:20px}
+.mx h3{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold);margin-bottom:14px}
+.mx input[type=search]{width:100%;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none}
+.mx input:focus{border-color:rgba(201,146,13,.4)}
+.mx textarea{width:100%;min-height:70px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 12px;resize:vertical;outline:none}
+.mx textarea:focus{border-color:rgba(201,146,13,.4)}
+.mr{padding:10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:10px}
+.mr:hover{background:rgba(255,255,255,.03)}
+.mr .rq{font-size:12px;font-weight:600;color:var(--text);flex:1;line-height:1.3}
+.mr .ro{font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0}
+.sm{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--card);border:1px solid rgba(201,146,13,.3);border-radius:10px;margin-bottom:12px}
+.sm .sq{font-size:13px;font-weight:600;color:var(--text);flex:1}
+.sb{display:flex;gap:8px;margin-bottom:12px}
+.si{font-family:var(--mono);font-size:13px;font-weight:700;padding:10px 28px;border-radius:8px;border:2px solid var(--border);background:transparent;cursor:pointer;transition:all .15s;flex:1;text-align:center}
+.si.yes{color:var(--green)}
+.si.yes.pk{background:var(--green-dim);border-color:var(--green)}
+.si.no{color:var(--red)}
+.si.no.pk{background:var(--red-dim);border-color:var(--red)}
+.mf{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.mf .cc{font-family:var(--mono);font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 16px;cursor:pointer}
+.mf .cs{font-family:var(--mono);font-size:11px;font-weight:700;color:#000;background:var(--gold);border:none;border-radius:8px;padding:8px 22px;cursor:pointer}
+.mf .cs:disabled{opacity:.4}
 </style>
 </head>
 <body>
-
 <nav>
   <a href="/" class="nb">HYPERFLEX</a>
   <div class="nl">
     <a href="/feed" class="on">Feed</a>
     <a href="/explore">Explore</a>
-    <a href="/alpha-live">Alpha</a>
+    <a href="/alpha">Alpha</a>
     <a href="/whales">Whales</a>
-    <a href="/predictors">Predictors</a>
-  </div>
-  <div class="nr" id="nav-right">
-    <button class="nav-btn nav-btn-ghost" onclick="window.location.href='/creator/login'">Sign in</button>
-    <button class="nav-btn nav-btn-gold" onclick="window.location.href='/creator/dashboard'">Dashboard</button>
+    <a href="/predictors">Leaderboard</a>
   </div>
 </nav>
-
-<div class="wrap">
-  <div class="page-hd">
-    <div class="page-title"><span class="live-dot"></span>FLEX FEED</div>
-    <div class="page-sub">Predictions from the sharpest traders — sourced from real positions</div>
+<div class="feed-wrap">
+  <div class="fh">
+    <div class="ft"><span class="ld"></span> FLEX FEED</div>
+    <div class="fs">Predict. Prove. Flex.</div>
   </div>
-
   <div class="tabs">
-    <div class="tab on" id="t-foryou" onclick="switchTab('foryou')">For You</div>
-    <div class="tab" id="t-following" onclick="switchTab('following')">Following</div>
-    <div class="tab" id="t-trending" onclick="switchTab('trending')">Trending</div>
+    <div class="tab on" onclick="sw('foryou')" id="t-foryou">For You</div>
+    <div class="tab" onclick="sw('following')" id="t-following">Following</div>
+    <div class="tab" onclick="sw('trending')" id="t-trending">Trending</div>
   </div>
-
-  <!-- CTA for guests -->
-  <div class="post-cta" id="post-cta" style="display:none">
-    <span class="post-cta-text">Post predictions from your open positions and build your track record.</span>
-    <button class="post-cta-btn" onclick="window.location.href='/creator/dashboard#portfolio'">Go to Dashboard →</button>
+  <div class="cmp" id="cbar">
+    <div class="cav" id="myav">?</div>
+    <div style="flex:1;cursor:text;display:flex;align-items:center" onclick="openC()">
+      <span style="color:var(--dim);font-size:14px">What's your take on the market?</span>
+    </div>
+    <button class="cbtn" onclick="openC()">Post Take</button>
   </div>
+  <div id="feed"><div class="ld-txt">Loading Flex Feed...</div></div>
+  <div id="more" style="display:none;text-align:center;padding:16px">
+    <button onclick="loadMore()" style="font-family:var(--mono);font-size:11px;color:var(--gold);background:transparent;border:1px solid rgba(201,146,13,.3);border-radius:8px;padding:8px 24px;cursor:pointer">Load more</button>
+  </div>
+</div>
 
-  <div id="feed"><div class="ld-txt">Loading...</div></div>
-  <div class="load-more" id="load-more">
-    <button class="load-more-btn" onclick="loadMore()">Load more</button>
+<!-- Compose Modal -->
+<div class="mo" id="modal" onclick="if(event.target===this)closeC()">
+  <div class="mx">
+    <h3>Post Your Take</h3>
+    <div id="s1">
+      <input type="search" id="ms" placeholder="Search a Polymarket market..." oninput="searchM(this.value)" autocomplete="off">
+      <div id="mres" style="max-height:220px;overflow-y:auto;margin-top:4px"></div>
+    </div>
+    <div id="s2" style="display:none">
+      <div class="sm"><div class="sq" id="sq"></div><button onclick="clrM()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">&times;</button></div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Pick your side</div>
+      <div class="sb">
+        <button class="si yes" id="by" onclick="pick('YES')">YES</button>
+        <button class="si no" id="bn" onclick="pick('NO')">NO</button>
+      </div>
+    </div>
+    <div id="s3" style="display:none">
+      <textarea id="thesis" placeholder="Why? What's your thesis? (optional)" maxlength="500"></textarea>
+      <div style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px"><span id="ch">0</span>/500</div>
+    </div>
+    <div class="mf">
+      <button class="cc" onclick="closeC()">Cancel</button>
+      <button class="cs" id="sub" onclick="post()" disabled>Post Take</button>
+    </div>
   </div>
 </div>
 
 <script>
-var _tab = 'foryou', _cursor = null, _loading = false;
-var _following = new Set();
+var _m='foryou',_cur=null,_ld=false,_sel=null,_sd=null;
+function e(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function tk(){return localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token')||''}
+function ta(d){if(!d)return'';var s=d.endsWith('Z')||d.includes('+')?d:d+'Z';var x=Math.floor((Date.now()-new Date(s))/1e3);if(x<0)return'now';if(x<60)return x+'s';if(x<3600)return Math.floor(x/60)+'m';if(x<86400)return Math.floor(x/3600)+'h';return Math.floor(x/86400)+'d'}
+function ini(n){return(n||'?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2)}
 
-function e(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function sw(m){_m=m;_cur=null;document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on')});var el=document.getElementById('t-'+m);if(el)el.classList.add('on');document.getElementById('cbar').style.display=m==='following'?'none':'flex';lf(false)}
+
+function lf(ap){
+  if(_ld)return;_ld=true;var el=document.getElementById('feed');
+  if(!ap)el.innerHTML='<div class="ld-txt">Loading...</div>';
+  var url=_m==='trending'?'/api/takes/trending?limit=30'+(_cur?'&offset='+_cur:''):'/api/takes/feed?mode='+_m+'&limit=30'+(_cur?'&cursor='+encodeURIComponent(_cur):'');
+  var h={Accept:'application/json'};var t=tk();if(t)h['Authorization']='Bearer '+t;
+  fetch(url,{headers:h}).then(function(r){return r.ok?r.json():{takes:[]}}).then(function(d){
+    var ts=d.takes||[];if(!ap)el.innerHTML='';
+    if(!ts.length&&!ap){el.innerHTML='<div class="empty"><div class="ei">'+(_m==='following'?'\uD83D\uDC65':'\uD83D\uDD25')+'</div><div>'+(_m==='following'?'Follow predictors to see their takes':'No takes yet \u2014 post the first one')+'</div></div>';document.getElementById('more').style.display='none';_ld=false;return}
+    for(var i=0;i<ts.length;i++)el.insertAdjacentHTML('beforeend',rt(ts[i]));
+    _cur=_m==='trending'?ts.length:(d.cursor||null);
+    document.getElementById('more').style.display=ts.length>=20?'block':'none';_ld=false;
+  }).catch(function(){if(!ap)el.innerHTML='<div class="empty">Failed to load</div>';_ld=false});
 }
-function tk() { return localStorage.getItem('hf_token') || localStorage.getItem('creator_token') || ''; }
-function timeAgo(d) {
-  if (!d) return '';
-  var s = d.endsWith('Z') || d.includes('+') ? d : d + 'Z';
-  var x = Math.floor((Date.now() - new Date(s)) / 1000);
-  if (x < 0) return 'now'; if (x < 60) return x + 's'; if (x < 3600) return Math.floor(x/60) + 'm';
-  if (x < 86400) return Math.floor(x/3600) + 'h'; return Math.floor(x/86400) + 'd';
-}
-function initials(n) { return (n||'?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2); }
-function sizeLabel(usd) {
-  if (!usd) return null;
-  if (usd < 250) return '<$250'; if (usd < 1000) return '$250–$1K';
-  if (usd < 5000) return '$1K–$5K'; return '$5K+';
-}
-function platformLabel(p) { return p === 'kalshi' ? 'Kalshi' : p === 'manifold' ? 'Manifold' : 'Polymarket'; }
+function loadMore(){lf(true)}
 
-function switchTab(tab) {
-  _tab = tab; _cursor = null;
-  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
-  document.getElementById('t-' + tab).classList.add('on');
-  load(false);
-}
-
-function load(append) {
-  if (_loading) return;
-  _loading = true;
-  var feed = document.getElementById('feed');
-  if (!append) feed.innerHTML = '<div class="ld-txt">Loading...</div>';
-
-  var url = '/api/predictions/feed?mode=' + _tab + '&limit=20' + (_cursor ? '&cursor=' + encodeURIComponent(_cursor) : '');
-  var headers = { Accept: 'application/json' };
-  var t = tk(); if (t) headers['Authorization'] = 'Bearer ' + t;
-
-  fetch(url, { headers: headers })
-    .then(function(r) { return r.ok ? r.json() : { predictions: [] }; })
-    .then(function(d) {
-      var preds = d.predictions || [];
-      if (!append) feed.innerHTML = '';
-      if (!preds.length && !append) {
-        if (_tab === 'following') {
-          feed.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No predictions yet</div><div class="empty-sub">Follow predictors on the leaderboard to see their takes here.</div><button class="empty-action" onclick="window.location.href=\'/predictors\'">Browse Predictors</button></div>';
-        } else {
-          feed.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No predictions yet</div><div class="empty-sub">Predictions posted from the dashboard will appear here.</div><button class="empty-action" onclick="window.location.href=\'/creator/dashboard\'">Go to Dashboard</button></div>';
-        }
-        document.getElementById('load-more').style.display = 'none';
-        _loading = false; return;
-      }
-      preds.forEach(function(p) { feed.insertAdjacentHTML('beforeend', renderCard(p)); });
-      _cursor = preds.length ? preds[preds.length - 1].posted_at : null;
-      document.getElementById('load-more').style.display = preds.length >= 20 ? 'block' : 'none';
-      _loading = false;
-    })
-    .catch(function() {
-      if (!append) feed.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Failed to load</div></div>';
-      _loading = false;
-    });
-}
-
-function loadMore() { load(true); }
-
-function renderCard(p) {
-  var dir = (p.direction || 'YES').toUpperCase();
-  var isYes = dir === 'YES';
-  var platform = platformLabel(p.platform);
-  var sizeUsd = p.position_size_usd;
-  var sizeStr = sizeUsd ? (p.size_display === 'exact' ? '$' + Math.round(sizeUsd) : sizeLabel(sizeUsd)) : null;
-  var entryStr = p.entry_price != null ? Math.round(p.entry_price * 100) + '¢' : null;
-  var flexScore = p.flex_score_90d != null ? p.flex_score_90d : p.flex_score_alltime;
-  var flexColor = flexScore >= 70 ? 'var(--gold)' : flexScore >= 55 ? 'var(--green)' : flexScore >= 40 ? '#60a5fa' : 'var(--red)';
-  var resolved = p.predictions_resolved || 0;
-  var authorMeta = (flexScore != null ? Math.round(flexScore) + '% Flex' : '') + (resolved > 0 ? (flexScore != null ? ' · ' : '') + resolved + ' resolved' : '');
-  var convClass = p.conviction === 'high' ? 'badge-conv-high' : p.conviction === 'low' ? 'badge-conv-low' : 'badge-conv-medium';
-  var convLabel = p.conviction === 'high' ? '🔥 High' : p.conviction === 'low' ? 'Low' : 'Medium';
-  var userId = p.user_id || '';
-  var name = p.display_name || 'Trader';
-  var ini = initials(name);
-  var avatar = p.avatar_url
-    ? '<img src="' + e(p.avatar_url) + '" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + ini + '\'">'
-    : ini;
-  var isFollowing = _following.has(userId);
-  var tagsHtml = '';
-  if (Array.isArray(p.category_tags) && p.category_tags.length) {
-    tagsHtml = '<div class="domain-tags">' + p.category_tags.map(function(t){ return '<span class="domain-tag">' + e(t) + '</span>'; }).join('') + '</div>';
+function rt(t){
+  var iW=t.source==='whale',iC=t.source==='consensus',iI=t.source==='influencer';
+  var ac=iI?'i':iW?'w':iC?'c':'u';
+  var ai=iW?'\uD83D\uDC33':iC?'\uD83E\uDD1D':iI?'\uD835\uDD4F':ini(t.display_name);
+  var an=t.avatar_url?'<img src="'+e(t.avatar_url)+'" onerror="this.style.display=\'none\';this.parentNode.textContent=\''+ai+'\'">':ai;
+  var hr=t.user_id?'/m/'+t.user_id:null;
+  var av=hr?'<a href="'+hr+'" class="av '+ac+'">'+an+'</a>':'<div class="av '+ac+'">'+an+'</div>';
+  var nm=hr?'<a href="'+hr+'" class="tn">'+e(t.display_name||'Anonymous')+'</a>':'<span class="tn">'+e(t.display_name||'Anonymous')+'</span>';
+  var bg='';
+  if(iI)bg+='<span class="bg bg-i">\uD835\uDD4F INFLUENCER</span>';
+  else if(iW)bg+='<span class="bg bg-w">WHALE</span>';
+  else if(iC)bg+='<span class="bg bg-c">CONSENSUS</span>';
+  if(t.flex_score!=null&&t.flex_score>0){var fc=t.flex_score>=70?'var(--gold)':t.flex_score>=55?'var(--green)':t.flex_score>=40?'var(--blue)':'var(--red)';var fb=t.flex_score>=70?'var(--gold-dim)':t.flex_score>=55?'var(--green-dim)':t.flex_score>=40?'var(--blue-dim)':'var(--red-dim)';bg+='<span class="bg" style="color:'+fc+';background:'+fb+'">'+t.flex_score+'% FLEX</span>'}
+  if(t.is_correct===true)bg+='<span class="bg bg-ok">\u2713 CORRECT</span>';
+  else if(t.is_correct===false)bg+='<span class="bg bg-no">\u2717 WRONG</span>';
+  var sc=(t.side||'').toUpperCase()==='YES'?'sy':'sn';
+  var ml='';if(t.question&&t.market_slug){var mh='/market/'+t.market_slug;ml='<a class="ml" href="'+mh+'" target="_blank"><div class="mq">'+e(t.question)+'</div><span class="sd '+sc+'">'+(t.side||'').toUpperCase()+'</span>'+(t.entry_price?'<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">'+Math.round(t.entry_price*100)+'\u00a2</span>':'')+'</a>'}
+  // Render thesis — extract tweet URL if present, show "View on X" link
+  var tx='';
+  if(t.thesis){
+    var thesisText=t.thesis;
+    var tweetUrl=null;
+    var urlMatch=thesisText.match(/(https?:\/\/(?:x|twitter)\.com\/[^\s]+\/status\/\d+)/);
+    if(urlMatch){tweetUrl=urlMatch[1];thesisText=thesisText.replace(urlMatch[0],'').trim()}
+    tx='<div class="tx">'+e(thesisText)+'</div>';
+    if(tweetUrl){tx+='<a href="'+e(tweetUrl)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:#1d9bf0;margin-top:4px;text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'"><span style="font-weight:700">\uD835\uDD4F</span> View on X \u2197</a>'}
   }
-  var outcomeHtml = '';
-  if (p.outcome === 'correct') outcomeHtml = '<span class="badge badge-correct">✓ CORRECT</span>';
-  else if (p.outcome === 'incorrect') outcomeHtml = '<span class="badge badge-wrong">✗ WRONG</span>';
-
-  var followHtml = userId && tk() ? '<button class="follow-btn' + (isFollowing ? ' following' : '') + '" id="fol-' + e(userId) + '" onclick="toggleFollow(\'' + e(userId) + '\',this)">' + (isFollowing ? 'Following' : '+ Follow') + '</button>' : '';
-
-  return '<div class="card" id="card-' + e(p.id) + '">' +
-    '<div class="card-top">' +
-      '<div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0">' +
-        '<a href="/m/' + e(userId) + '" class="avatar">' + avatar + '</a>' +
-        '<div class="author-block" style="flex:1;min-width:0">' +
-          '<div class="author-name" onclick="window.location.href=\'/m/' + e(userId) + '\'">' + e(name) + '</div>' +
-          (authorMeta ? '<div class="author-meta" style="color:' + (flexScore != null ? flexColor : 'var(--text-dim)') + '">' + e(authorMeta) + '</div>' : '') +
-        '</div>' +
-      '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
-        followHtml +
-        '<span class="timestamp">' + timeAgo(p.posted_at) + '</span>' +
-      '</div>' +
-    '</div>' +
-    '<div class="badge-row">' +
-      '<span class="badge badge-platform">' + e(platform) + '</span>' +
-      '<span class="badge ' + (isYes ? 'badge-yes' : 'badge-no') + '">' + dir + '</span>' +
-      (entryStr ? '<span class="badge" style="background:rgba(255,255,255,0.04);color:var(--text-dim);border:1px solid var(--border)">' + e(entryStr) + '</span>' : '') +
-      (sizeStr ? '<span class="badge badge-size">' + e(sizeStr) + '</span>' : '') +
-      '<span class="badge ' + convClass + '">' + convLabel + '</span>' +
-      outcomeHtml +
-    '</div>' +
-    '<div class="market-title">' + e(p.market_title || '') + '</div>' +
-    (p.thesis_text ? '<div class="thesis">' + e(p.thesis_text) + '</div>' : '') +
-    tagsHtml +
-  '</div>';
+  var ao=t.my_reaction==='agree'?' on':'',do2=t.my_reaction==='disagree'?' on':'';
+  var cc=t.comment_count||0;
+  return'<div class="tk" id="k-'+t.id+'">'+av+'<div class="tb"><div class="th">'+nm+bg+'<span class="tt">'+ta(t.created_at)+'</span></div>'+ml+tx+
+    '<div class="ta"><button class="ab ag'+ao+'" onclick="rx(\''+t.id+'\',\'agree\',this)"><span class="ic">\u2191</span><span class="ct">'+(t.agree_count||0)+'</span></button>'+
+    '<button class="ab dg'+do2+'" onclick="rx(\''+t.id+'\',\'disagree\',this)"><span class="ic">\u2193</span><span class="ct">'+(t.disagree_count||0)+'</span></button>'+
+    '<button class="ab cmt" onclick="toggleCmt(\''+t.id+'\')"><span class="ic">\uD83D\uDCAC</span><span class="ct">'+cc+'</span></button>'+
+    '<button class="ab" onclick="sh(\''+t.id+'\')"><span class="ic">\u2197</span></button></div>'+
+    '<div class="cmt-section" id="cmt-'+t.id+'" style="display:none;margin-top:8px">'+
+      '<div class="cmt-list" id="cl-'+t.id+'"></div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px">'+
+        '<input type="text" class="cmt-input" id="ci-'+t.id+'" placeholder="Add a comment..." maxlength="500" onkeydown="if(event.key===\'Enter\')postCmt(\''+t.id+'\')">'+
+        '<button class="cmt-post" onclick="postCmt(\''+t.id+'\')">Post</button>'+
+      '</div>'+
+    '</div>'+
+  '</div></div>';
 }
 
-function toggleFollow(userId, btn) {
-  var t = tk();
-  if (!t) { window.location.href = '/creator/login'; return; }
-  var following = _following.has(userId);
-  fetch('/api/predictors/' + encodeURIComponent(userId) + '/follow', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + t }
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.following) { _following.add(userId); btn.textContent = 'Following'; btn.classList.add('following'); }
-    else { _following.delete(userId); btn.textContent = '+ Follow'; btn.classList.remove('following'); }
-  }).catch(function() {});
+function rx(id,type,btn){var t=tk();if(!t){alert('Sign in to react');return}
+  fetch('/api/takes/'+id+'/react',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify({reaction:type})})
+  .then(function(r){return r.json()}).then(function(d){if(!d.ok)return;var c=document.getElementById('k-'+id);if(!c)return;
+    var ag=c.querySelector('.ab.ag'),dg=c.querySelector('.ab.dg');
+    if(btn.classList.contains('on'))btn.classList.remove('on');else{if(ag)ag.classList.remove('on');if(dg)dg.classList.remove('on');btn.classList.add('on')}
+    if(ag)ag.querySelector('.ct').textContent=d.agree_count||0;if(dg)dg.querySelector('.ct').textContent=d.disagree_count||0;
+  }).catch(function(){});}
+
+function toggleCmt(id){
+  var sec=document.getElementById('cmt-'+id);if(!sec)return;
+  var open=sec.style.display!=='none';
+  sec.style.display=open?'none':'block';
+  if(!open)loadCmt(id);
+}
+function loadCmt(id){
+  var list=document.getElementById('cl-'+id);if(!list)return;
+  list.innerHTML='<div style="font-size:11px;color:var(--dim)">Loading...</div>';
+  fetch('/api/takes/'+id+'/comments').then(function(r){return r.ok?r.json():{comments:[]}}).then(function(d){
+    var cmts=d.comments||[];
+    if(!cmts.length){list.innerHTML='<div style="font-size:11px;color:var(--dim)">No comments yet</div>';return}
+    list.innerHTML=cmts.map(function(c){
+      return'<div class="cmt-item"><span class="cn">'+e(c.display_name||'Anon')+'</span><span class="cb">'+e(c.body)+'</span><span class="ct2">'+ta(c.created_at)+'</span></div>';
+    }).join('');
+  }).catch(function(){list.innerHTML='<div style="color:var(--red);font-size:11px">Failed</div>'});
+}
+function postCmt(id){
+  var t=tk();if(!t){alert('Sign in to comment');return}
+  var input=document.getElementById('ci-'+id);if(!input)return;
+  var body=input.value.trim();if(!body)return;
+  fetch('/api/takes/'+id+'/comments',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify({body:body})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(d.ok){input.value='';loadCmt(id);
+      var countEl=document.querySelector('#k-'+id+' .cmt .ct');
+      if(countEl)countEl.textContent=parseInt(countEl.textContent||0)+1;
+    }
+  }).catch(function(){});
 }
 
-// Init
-(function() {
-  var t = tk();
-  if (!t) {
-    document.getElementById('post-cta').style.display = 'flex';
-  } else {
-    // Load who the user follows
-    fetch('/api/follows/following', { headers: { Authorization: 'Bearer ' + t } })
-      .then(function(r) { return r.ok ? r.json() : {}; })
-      .then(function(d) { (d.following || []).forEach(function(id) { _following.add(id); }); })
-      .catch(function() {});
-  }
-  load(false);
-  setInterval(function() { if (_tab === 'foryou' && !_loading) { _cursor = null; load(false); } }, 60000);
-})();
+function sh(id){var c=document.getElementById('k-'+id);if(!c)return;var q=c.querySelector('.mq');
+  window.open('https://x.com/intent/tweet?text='+encodeURIComponent((q?q.textContent:'Check out this take')+'\n\nhyperflex.network/feed'),'_blank');}
+
+function openC(){var t=tk();if(!t){alert('Sign in to post a take');return}_sel=null;_sd=null;
+  document.getElementById('ms').value='';document.getElementById('mres').innerHTML='';
+  document.getElementById('s1').style.display='block';document.getElementById('s2').style.display='none';document.getElementById('s3').style.display='none';
+  document.getElementById('sub').disabled=true;document.getElementById('by').classList.remove('pk');document.getElementById('bn').classList.remove('pk');
+  document.getElementById('thesis').value='';document.getElementById('ch').textContent='0';
+  document.getElementById('modal').classList.add('open');setTimeout(function(){document.getElementById('ms').focus()},100);}
+function closeC(){document.getElementById('modal').classList.remove('open')}
+
+var _st;
+function searchM(q){clearTimeout(_st);var r=document.getElementById('mres');if(!q||q.length<2){r.innerHTML='';return}
+  _st=setTimeout(function(){fetch('/api/takes/search-markets?q='+encodeURIComponent(q)).then(function(r){return r.ok?r.json():{markets:[]}}).then(function(d){
+    var ms=d.markets||[];if(!ms.length){r.innerHTML='<div style="padding:12px;font-size:12px;color:var(--muted)">No markets found</div>';return}
+    r.innerHTML=ms.map(function(m){var yp=m.yes_price!=null?Math.round(m.yes_price*100)+'%':'\u2014';var np=m.yes_price!=null?(100-Math.round(m.yes_price*100))+'%':'\u2014';
+      return'<div class="mr" onclick=\'selM('+JSON.stringify(JSON.stringify(m))+')\'>'+
+        '<div class="rq">'+e(m.question||'')+'</div>'+
+        '<span class="ro" style="color:var(--green)">'+yp+'</span>'+
+        '<span style="color:var(--muted);font-family:var(--mono);font-size:10px">/</span>'+
+        '<span class="ro" style="color:var(--red)">'+np+'</span></div>';}).join('');
+  }).catch(function(){r.innerHTML='<div style="padding:12px;color:var(--red);font-size:12px">Search failed</div>'})},250);}
+
+function selM(j){var m=JSON.parse(j);_sel=m;_sd=null;
+  document.getElementById('s1').style.display='none';document.getElementById('s2').style.display='block';document.getElementById('s3').style.display='block';
+  document.getElementById('sq').textContent=m.question;document.getElementById('by').classList.remove('pk');document.getElementById('bn').classList.remove('pk');
+  var yp=m.yes_price!=null?Math.round(m.yes_price*100)+'%':'';var np=m.yes_price!=null?(100-Math.round(m.yes_price*100))+'%':'';
+  document.getElementById('by').textContent='YES'+(yp?' '+yp:'');document.getElementById('bn').textContent='NO'+(np?' '+np:'');
+  document.getElementById('sub').disabled=true;}
+
+function clrM(){_sel=null;_sd=null;document.getElementById('s1').style.display='block';document.getElementById('s2').style.display='none';document.getElementById('s3').style.display='none';
+  document.getElementById('sub').disabled=true;document.getElementById('ms').value='';document.getElementById('ms').focus();}
+
+function pick(s){_sd=s;document.getElementById('by').classList.toggle('pk',s==='YES');document.getElementById('bn').classList.toggle('pk',s==='NO');document.getElementById('sub').disabled=false}
+
+document.getElementById('thesis').addEventListener('input',function(){document.getElementById('ch').textContent=this.value.length});
+
+function post(){var t=tk();if(!t||!_sel||!_sd)return;var b=document.getElementById('sub');b.disabled=true;b.textContent='Posting...';
+  var th=document.getElementById('thesis').value.trim();
+  fetch('/api/takes',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},
+    body:JSON.stringify({market_slug:_sel.slug||null,condition_id:_sel.condition_id||null,question:_sel.question,side:_sd,entry_price:_sel.yes_price||null,thesis:th||null})
+  }).then(function(r){return r.json()}).then(function(d){if(d.ok){closeC();_cur=null;lf(false)}else{alert(d.error||'Failed');b.disabled=false;b.textContent='Post Take'}
+  }).catch(function(){b.disabled=false;b.textContent='Post Take'});}
+
+lf(false);
+setInterval(function(){if(_m==='foryou'&&!_ld){_cur=null;lf(false)}},45000);
 </script>
 </body>
 </html>

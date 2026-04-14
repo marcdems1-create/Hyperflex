@@ -3598,7 +3598,18 @@ function renderTakeCard(t) {
       '</div>';
   }
 
-  var thesis = t.thesis ? '<div class="take-thesis">' + escHtml(t.thesis) + '</div>' : '';
+  // Render thesis — extract tweet URL if present, show "View on X" link
+  var thesis = '';
+  if (t.thesis) {
+    var thesisText = t.thesis;
+    var tweetUrl = null;
+    var urlMatch = thesisText.match(/(https?:\/\/(?:x|twitter)\.com\/[^\s]+\/status\/\d+)/);
+    if (urlMatch) { tweetUrl = urlMatch[1]; thesisText = thesisText.replace(urlMatch[0], '').trim(); }
+    thesis = '<div class="take-thesis">' + escHtml(thesisText) + '</div>';
+    if (tweetUrl) {
+      thesis += '<a href="' + escHtml(tweetUrl) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:#1d9bf0;margin-top:4px;text-decoration:none">𝕏 View on X ↗</a>';
+    }
+  }
   var amount = amountDisplay ? '<div class="take-amount">' + amountDisplay + ' position</div>' : '';
   var correctBadge = t.is_correct === true ? '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">\u2713 CORRECT</span>'
     : t.is_correct === false ? '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--accent-red);background:var(--accent-red-dim);padding:2px 6px;border-radius:4px">\u2717 WRONG</span>' : '';

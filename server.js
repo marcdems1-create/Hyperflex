@@ -12831,6 +12831,9 @@ const INFLUENCER_SEED = [
     // Clean up any fake seed takes that have no market_slug (not tied to real Polymarket markets)
     await dbQuery("DELETE FROM takes WHERE source = 'influencer' AND market_slug IS NULL").catch(() => {});
     console.log('[influencer-seed] Cleaned up takes without market slugs');
+    // Delete synthetic "is watching this market" takes — they weren't real tweets
+    await dbQuery("DELETE FROM takes WHERE source = 'influencer' AND thesis LIKE '%is watching this market at%'").catch(() => {});
+    console.log('[influencer-seed] Cleaned up synthetic market-watching takes');
 
   } catch (e) { console.warn('[influencer-seed]', e.message); }
 })();
@@ -13105,8 +13108,10 @@ async function generateInfluencerTakesFromMarkets() {
 }
 
 // Run market-first takes on boot (after screener warms) and every hour
-setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
-cron.schedule('0 * * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
+// DISABLED — was generating fake "X is watching this market at N%" takes.
+// Real takes come from X API scanner via fetchInfluencerTweets().
+// setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
+// cron.schedule('0 * * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
 
 // POST /api/nominate — save a creator nomination
 app.post('/api/nominate', async (req, res) => {
@@ -23580,7 +23585,7 @@ ${JSON.stringify({
 });
 
 const _marketDetailCache = new Map();
-const MARKET_DETAIL_CACHE_TTL = 60 * 1000; // 60 seconds — live CLOB prices need freshness
+const MARKET_DETAIL_CACHE_TTL = 15 * 1000; // 15 seconds — live CLOB prices need freshness
 
 app.get('/api/market/:slug', async (req, res) => {
   const { slug } = req.params;
