@@ -11722,6 +11722,60 @@ app.get('/api/predictors/following/list', requireAuth, async (req, res) => {
   }
 });
 
+// /api/follows/* — aliases used by feed.html
+app.get('/api/follows/following', requireAuth, async (req, res) => {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery('SELECT following_id FROM predictor_follows WHERE follower_id = $1', [req.user.id]);
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', req.user.id);
+      rows = data || [];
+    }
+    res.json({ following: rows.map(r => r.following_id) });
+  } catch (e) { res.json({ following: [] }); }
+});
+
+app.post('/api/follows', requireAuth, async (req, res) => {
+  req.params = { userId: (req.body || {}).userId };
+  // reuse the toggle logic
+  try {
+    const followerId = req.user.id;
+    const followingId = (req.body || {}).userId;
+    if (!followingId) return res.status(400).json({ error: 'userId required' });
+    if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(followingId)) return res.json({ following: true, client_only: true });
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [followerId, followingId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', followerId).eq('following_id', followingId).maybeSingle();
+      existing = data;
+    }
+    if (existing) {
+      if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE id = $1', [existing.id]); }
+      else { await supabase.from('predictor_follows').delete().eq('id', existing.id); }
+      return res.json({ following: false });
+    } else {
+      if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [followerId, followingId]); }
+      else { await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId }); }
+      return res.json({ following: true });
+    }
+  } catch (e) { res.status(500).json({ error: 'Follow failed' }); }
+});
+
+app.delete('/api/follows/:userId', requireAuth, async (req, res) => {
+  try {
+    const followerId = req.user.id;
+    const followingId = req.params.userId;
+    if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE follower_id = $1 AND following_id = $2', [followerId, followingId]); }
+    else { await supabase.from('predictor_follows').delete().eq('follower_id', followerId).eq('following_id', followingId); }
+    res.json({ following: false });
+  } catch (e) { res.status(500).json({ error: 'Unfollow failed' }); }
+});
+
 // Get follow status + count for a user
 app.get('/api/predictors/:userId/follow-status', optionalAuth, async (req, res) => {
   const targetId = req.params.userId;
