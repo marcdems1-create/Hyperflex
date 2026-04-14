@@ -5,9 +5,13 @@
 -- ═══════════════════════════════════════════
 -- PREDICTIONS (enhanced, wallet-enriched)
 -- ═══════════════════════════════════════════
+-- NOTE: users.id is TEXT in this schema — user_id / follower_id /
+-- following_id below must match. The server's self-healing boot
+-- migration (search "predictionsSchema" in server.js) keeps these
+-- in lockstep; update both together.
 CREATE TABLE IF NOT EXISTS predictions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id           UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id           TEXT REFERENCES users(id) ON DELETE CASCADE,
   platform          TEXT NOT NULL,              -- 'polymarket' | 'kalshi' | 'manifold'
   market_id         TEXT NOT NULL,              -- external market identifier (condition_id or slug)
   market_title      TEXT NOT NULL,
@@ -35,8 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_predictions_posted   ON predictions(posted_at DES
 -- FOLLOWS (with follow_reason)
 -- ═══════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS follows (
-  follower_id   UUID REFERENCES users(id) ON DELETE CASCADE,
-  following_id  UUID REFERENCES users(id) ON DELETE CASCADE,
+  follower_id   TEXT REFERENCES users(id) ON DELETE CASCADE,
+  following_id  TEXT REFERENCES users(id) ON DELETE CASCADE,
   followed_at   TIMESTAMPTZ DEFAULT now(),
   follow_reason TEXT,  -- 'leaderboard' | 'prediction_card' | 'search'
   PRIMARY KEY (follower_id, following_id)
