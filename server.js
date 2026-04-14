@@ -3214,7 +3214,7 @@ async function settleMarkets() {
     sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
     // Score takes for this market (fire-and-forget)
     scoreTakesForMarket(market.question, outcome ? 'YES' : 'NO', null).catch(() => {});
-    scorePredictionsForMarket(market.question, market.condition_id || null, outcome ? 'YES' : 'NO').catch(() => {});
+    scorePredictionsForMarket(market.condition_id || market.id, outcome).catch(() => {});
   }
   } catch (err) {
     console.error('[settle] Error:', err.message);
@@ -7529,7 +7529,7 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
     // Score takes for this market (fire-and-forget)
     scoreTakesForMarket(market.question, outcome, null).catch(() => {});
-    scorePredictionsForMarket(market.question, market.condition_id || null, outcome).catch(() => {});
+    scorePredictionsForMarket(market.condition_id || market.id, outcome === 'YES').catch(() => {});
 
     // In-app notifications for each bettor
     if (positions && positions.length > 0) {
@@ -23585,7 +23585,7 @@ ${JSON.stringify({
 });
 
 const _marketDetailCache = new Map();
-const MARKET_DETAIL_CACHE_TTL = 15 * 1000; // 15 seconds — live CLOB prices need freshness
+const MARKET_DETAIL_CACHE_TTL = 15 * 1000; // 15 seconds — Gamma live prices refresh ~5s
 
 app.get('/api/market/:slug', async (req, res) => {
   const { slug } = req.params;
@@ -23618,6 +23618,7 @@ app.get('/api/market/:slug', async (req, res) => {
         market = activeMarkets[0] || evt.markets[0];
         market._eventTitle = evt.title || market.question;
         market._eventSlug = evt.slug;
+        market._eventId = evt.id || null; // needed for markets?event_id= price fetch
         eventMarkets = evt.markets.map(m => ({
           question: m.question,
           slug: m.slug,
@@ -23627,7 +23628,8 @@ app.get('/api/market/:slug', async (req, res) => {
           closed: m.closed,
           conditionId: m.conditionId,
           neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
-          groupItemTitle: m.groupItemTitle || ''
+          groupItemTitle: m.groupItemTitle || '',
+          event_id: evt.id || null,
         }));
       }
     }
@@ -23645,6 +23647,7 @@ app.get('/api/market/:slug', async (req, res) => {
         market = eventData[0].markets[0];
         market._eventTitle = eventData[0].title || market.question;
         market._eventSlug = eventData[0].slug;
+        market._eventId = eventData[0].id || null;
       }
     }
 
@@ -23687,8 +23690,10 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
-    // 4. For multi-outcome events, fetch live CLOB best ask for ALL outcomes
-    //    Gamma-api outcomePrices are delayed; Polymarket UI displays best ask (not midpoint)
+    // 4. For multi-outcome events: fetch fresh prices via Gamma markets?event_id=X
+    //    The events endpoint returns stale/terminal outcomePrices for neg-risk markets.
+    //    The markets endpoint has live pre-computed probabilities refreshed every ~5s.
+    //    CLOB book fallback for any markets where Gamma doesn't return fresh prices.
     const bookBestAsk = (book) => {
       if (!book) return null;
       let bestAsk = null, bestBid = null;
@@ -23708,28 +23713,81 @@ app.get('/api/market/:slug', async (req, res) => {
     };
 
     if (eventMarkets && eventMarkets.length > 1) {
-      const bookPromises = eventMarkets.map(em => {
-        try {
-          const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
-          const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
-          if (!yesTokenId) return Promise.resolve(null);
-          return fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(yesTokenId)}`, {
-            headers: { Accept: 'application/json' }
-          }).then(r => r.ok ? r.json() : null).catch(() => null);
-        } catch (e) { return Promise.resolve(null); }
-      });
-      const books = await Promise.all(bookPromises);
-      for (let i = 0; i < eventMarkets.length; i++) {
-        const live = bookBestAsk(books[i]);
-        if (live !== null && live > 0 && live < 1) {
-          eventMarkets[i].outcomePrices = JSON.stringify([live, 1 - live]);
-          eventMarkets[i]._livePrice = true;
+      try {
+        // Step A: single Gamma markets?event_id=X call for all fresh prices
+        const eventId = market._eventId || eventMarkets[0]?.event_id || eventMarkets[0]?.game_id || market.game_id;
+        let gammaMarketPrices = {}; // conditionId -> outcomePrices string
+
+        if (eventId) {
+          const gmRes = await fetch(
+            `https://gamma-api.polymarket.com/markets?event_id=${encodeURIComponent(eventId)}&limit=200`,
+            { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+          ).catch(() => null);
+          if (gmRes && gmRes.ok) {
+            const gmData = await gmRes.json();
+            if (Array.isArray(gmData)) {
+              for (const gm of gmData) {
+                if (gm.conditionId && gm.outcomePrices) {
+                  gammaMarketPrices[gm.conditionId] = gm.outcomePrices;
+                }
+              }
+            }
+          }
         }
+
+        // Apply fresh Gamma prices; collect markets that still need CLOB fallback
+        const needClob = [];
+        for (let i = 0; i < eventMarkets.length; i++) {
+          const em = eventMarkets[i];
+          const freshPrices = gammaMarketPrices[em.conditionId];
+          if (freshPrices) {
+            let parsed;
+            try { parsed = typeof freshPrices === 'string' ? JSON.parse(freshPrices) : freshPrices; } catch(e) { parsed = null; }
+            if (Array.isArray(parsed) && parsed.length >= 2) {
+              const yp = parseFloat(parsed[0]);
+              // Accept any price — even terminal (0/1) since Gamma is authoritative
+              if (!isNaN(yp)) {
+                eventMarkets[i].outcomePrices = JSON.stringify([yp, 1 - yp]);
+                eventMarkets[i]._livePrice = true;
+                continue;
+              }
+            }
+          }
+          needClob.push(i);
+        }
+
+        // CLOB fallback only for markets not updated by Gamma (max 10 to avoid timeout)
+        if (needClob.length > 0 && needClob.length <= 10) {
+          const midpointPromises = needClob.map(idx => {
+            try {
+              const em = eventMarkets[idx];
+              const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
+              const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
+              if (!yesTokenId) return Promise.resolve({ idx, mid: null });
+              return fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(yesTokenId)}`, {
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(3000),
+              }).then(r => r.ok ? r.json().then(d => ({ idx, mid: d.mid })) : { idx, mid: null }).catch(() => ({ idx, mid: null }));
+            } catch (e) { return Promise.resolve({ idx, mid: null }); }
+          });
+          const midpoints = await Promise.all(midpointPromises);
+          for (const { idx, mid } of midpoints) {
+            if (mid !== null && mid !== undefined) {
+              const m = parseFloat(mid);
+              if (!isNaN(m) && m > 0 && m < 1) {
+                eventMarkets[idx].outcomePrices = JSON.stringify([m, 1 - m]);
+                eventMarkets[idx]._livePrice = true;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[market-detail] multi-outcome price fetch error:', e.message);
       }
     }
 
-    // Also fetch live best ask for primary market (reuse orderbook if already fetched)
-    if (tokenId) {
+    // 5. Live best ask for primary (binary) market — reuse orderbook if already fetched
+    if (tokenId && (!eventMarkets || eventMarkets.length <= 1)) {
       try {
         let book = orderbook;
         if (!book) {
@@ -23765,6 +23823,11 @@ app.get('/api/market/:slug', async (req, res) => {
     console.error('[/api/market/:slug] Error:', err.message);
     res.status(500).json({ error: 'Failed to fetch market data' });
   }
+});
+
+// /api/markets/:slug — alias for /api/market/:slug (consistent plural)
+app.get('/api/markets/:slug', (req, res) => {
+  res.redirect(307, `/api/market/${encodeURIComponent(req.params.slug)}`);
 });
 
 // ════════════════════════════════════════════════════════════
@@ -42464,6 +42527,449 @@ app.get('/api/social/search', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// PREDICTION POSTS — enhanced prediction system with wallet
+// enrichment, Flex Score, and cascade detection
+// ════════════════════════════════════════════════════════════
+
+const PRED_TAG_MAP = {
+  politics: ['Politics', 'US Gov'],
+  crypto: ['Crypto', 'DeFi'],
+  sports: ['Sports'],
+  economics: ['Macro', 'Inflation'],
+  science: ['Tech'],
+  world: ['Geo'],
+};
+
+function tagsFromCategory(cat) {
+  if (!cat) return [];
+  const key = cat.toLowerCase().replace(/[^a-z]/g, '');
+  for (const [k, v] of Object.entries(PRED_TAG_MAP)) {
+    if (key.includes(k)) return v.slice(0, 2);
+  }
+  return [];
+}
+
+function sizeDisplayLabel(usd) {
+  if (!usd || usd <= 0) return null;
+  if (usd < 250) return '<$250';
+  if (usd < 1000) return '$250–$1K';
+  if (usd < 5000) return '$1K–$5K';
+  return '$5K+';
+}
+
+// POST /api/wallet/positions — fetch + enrich active positions for composer
+app.post('/api/wallet/positions', requireAuth, async (req, res) => {
+  try {
+    const { wallet_address } = req.body;
+    if (!wallet_address || !/^0x[0-9a-fA-F]{40}$/.test(wallet_address)) {
+      return res.status(400).json({ error: 'Valid Polymarket wallet address required' });
+    }
+    const addr = wallet_address.toLowerCase();
+
+    // Fetch open positions from Polymarket Data API
+    const [r1, r2] = await Promise.all([
+      fetch(`https://data-api.polymarket.com/positions?user=${addr}&limit=50&sortBy=CURRENT&winning=false`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+      }).catch(() => null),
+      fetch(`https://data-api.polymarket.com/positions?user=${addr}&limit=50&sortBy=CURRENT&winning=true`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+      }).catch(() => null),
+    ]);
+
+    const raw1 = r1 && r1.ok ? await r1.json() : [];
+    const raw2 = r2 && r2.ok ? await r2.json() : [];
+    const seen = new Set();
+    const rawAll = [...(Array.isArray(raw1) ? raw1 : []), ...(Array.isArray(raw2) ? raw2 : [])];
+    const deduped = rawAll.filter(p => {
+      const key = (p.conditionId || '') + ':' + (p.outcome || '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Filter to meaningful positions (>$5 current value)
+    const positions = deduped
+      .filter(p => parseFloat(p.currentValue || 0) >= 5)
+      .map(p => {
+        const currentValue = parseFloat(p.currentValue) || 0;
+        const curPrice = parseFloat(p.curPrice) || 0;
+        const category = p.category || '';
+        const tags = tagsFromCategory(category);
+        return {
+          market_id: p.conditionId || p.slug || '',
+          market_title: p.title || p.question || 'Unknown market',
+          direction: (p.outcome || 'YES').toUpperCase() === 'NO' ? 'NO' : 'YES',
+          entry_price: parseFloat(p.avgPrice || p.initialValue / (parseFloat(p.size) || 1)) || curPrice,
+          position_size_usd: Math.round(currentValue * 100) / 100,
+          size_display: sizeDisplayLabel(currentValue),
+          category_tags: tags,
+          platform: 'polymarket',
+          market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : null,
+        };
+      });
+
+    res.json({ positions });
+  } catch (e) {
+    console.error('[wallet/positions]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/predictions — create a prediction (auth required)
+app.post('/api/predictions', requireAuth, async (req, res) => {
+  try {
+    const {
+      platform, market_id, market_title, direction, entry_price,
+      conviction, thesis_text, category_tags, size_display,
+      // position_size_usd is NOT accepted from client — only from wallet enrichment
+    } = req.body;
+
+    if (!market_id || !market_title || !direction || entry_price == null) {
+      return res.status(400).json({ error: 'market_id, market_title, direction, entry_price required' });
+    }
+    if (!['YES', 'NO'].includes(direction.toUpperCase())) {
+      return res.status(400).json({ error: 'direction must be YES or NO' });
+    }
+    if (thesis_text && thesis_text.length > 500) {
+      return res.status(400).json({ error: 'thesis_text must be under 500 characters' });
+    }
+    const safeConviction = ['low', 'medium', 'high'].includes(conviction) ? conviction : null;
+
+    // category_tags must come from server enrichment, not free-form client input
+    // Accept client tags only if they match known values
+    const allowedTags = Object.values(PRED_TAG_MAP).flat();
+    const safeTags = Array.isArray(category_tags)
+      ? category_tags.filter(t => allowedTags.includes(t)).slice(0, 2)
+      : [];
+
+    const { data, error } = await supabase.from('predictions').insert({
+      user_id: req.userId,
+      platform: platform || 'polymarket',
+      market_id: String(market_id),
+      market_title: String(market_title).slice(0, 300),
+      direction: direction.toUpperCase(),
+      entry_price: parseFloat(entry_price),
+      conviction: safeConviction,
+      thesis_text: thesis_text ? thesis_text.trim() : null,
+      category_tags: safeTags.length ? safeTags : null,
+      size_display: size_display || 'range',
+      outcome: 'pending',
+    }).select().single();
+
+    if (error) throw error;
+
+    // Non-blocking: cascade detection
+    detectCascade(data.id, data.market_id, data.posted_at).catch(() => {});
+
+    // Non-blocking: notify followers
+    supabase.from('follows').select('follower_id').eq('following_id', req.userId)
+      .then(({ data: fs }) => {
+        if (!fs?.length) return;
+        supabase.from('notifications').insert(fs.map(f => ({
+          user_id: f.follower_id,
+          type: 'new_prediction',
+          title: 'New prediction',
+          body: `${direction.toUpperCase()} on "${market_title.slice(0, 60)}"`,
+        }))).then(() => {}).catch(() => {});
+      }).catch(() => {});
+
+    res.json({ prediction: data });
+  } catch (e) {
+    console.error('[predictions] POST error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/predictions/feed — following feed, chronological (auth required)
+app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const before = req.query.before || null;
+
+    if (!req.userId) {
+      // Public: recent pending predictions
+      let q = supabase.from('predictions').select('*').eq('outcome', 'pending').order('posted_at', { ascending: false }).limit(limit);
+      if (before) q = q.lt('posted_at', before);
+      const { data, error } = await q;
+      if (error) throw error;
+      return res.json({ predictions: await enrichPredictions(data || []), next_cursor: null, empty: false });
+    }
+
+    // Get followed user IDs
+    const { data: followRows } = await supabase.from('follows').select('following_id').eq('follower_id', req.userId);
+    const followedIds = (followRows || []).map(f => f.following_id);
+    followedIds.push(req.userId); // include own predictions
+
+    if (!followRows || !followRows.length) {
+      return res.json({ predictions: [], next_cursor: null, empty: true, reason: 'no_follows' });
+    }
+
+    let q = supabase.from('predictions').select('*').in('user_id', followedIds).order('posted_at', { ascending: false }).limit(limit + 1);
+    if (before) q = q.lt('posted_at', before);
+
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data || [];
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
+
+    res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: false });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/predictions/user/:userId — all predictions for a user
+app.get('/api/predictions/user/:userId', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const { data, error } = await supabase.from('predictions').select('*').eq('user_id', req.params.userId).order('posted_at', { ascending: false }).limit(limit);
+    if (error) throw error;
+    const all = data || [];
+    const resolved = all.filter(p => p.outcome === 'correct' || p.outcome === 'incorrect');
+    const correct = resolved.filter(p => p.outcome === 'correct').length;
+    res.json({
+      predictions: await enrichPredictions(all),
+      stats: {
+        total: all.length,
+        resolved: resolved.length,
+        correct,
+        win_rate: resolved.length > 0 ? Math.round(correct / resolved.length * 100) : null,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/predictions/:id — single prediction
+app.get('/api/predictions/:id', optionalAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('predictions').select('*').eq('id', req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: 'Not found' });
+    const enriched = await enrichPredictions([data], req.userId);
+    res.json({ prediction: enriched[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Helper: enrich predictions with author info and flex scores
+async function enrichPredictions(preds, viewerUserId) {
+  if (!preds.length) return [];
+  const authorIds = [...new Set(preds.map(p => p.user_id).filter(Boolean))];
+  let authors = {};
+  if (authorIds.length) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, username, avatar_url, flex_score_90d, flex_score_alltime, predictions_resolved, is_whale, whale_rank')
+      .in('id', authorIds);
+    if (users) users.forEach(u => { authors[u.id] = u; });
+  }
+
+  // Check follows for viewer
+  let followingSet = new Set();
+  if (viewerUserId && authorIds.length) {
+    const { data: fs } = await supabase.from('follows').select('following_id').eq('follower_id', viewerUserId).in('following_id', authorIds);
+    if (fs) fs.forEach(f => followingSet.add(f.following_id));
+  }
+
+  return preds.map(p => ({
+    ...p,
+    author: authors[p.user_id] || { display_name: 'Anonymous' },
+    is_following: viewerUserId ? followingSet.has(p.user_id) : false,
+  }));
+}
+
+// ════════════════════════════════════════════════════════════
+// FOLLOWS (enhanced with follow_reason)
+// ════════════════════════════════════════════════════════════
+
+// POST /api/follows — follow a user
+app.post('/api/follows', requireAuth, async (req, res) => {
+  try {
+    const { following_id, follow_reason } = req.body;
+    if (!following_id) return res.status(400).json({ error: 'following_id required' });
+    if (following_id === req.userId) return res.status(400).json({ error: 'Cannot follow yourself' });
+
+    const safeReason = ['leaderboard', 'prediction_card', 'search'].includes(follow_reason) ? follow_reason : null;
+
+    const { error } = await supabase.from('follows').upsert({
+      follower_id: req.userId,
+      following_id,
+      follow_reason: safeReason,
+      followed_at: new Date().toISOString(),
+    }, { onConflict: 'follower_id,following_id', ignoreDuplicates: true });
+    if (error) throw error;
+
+    res.json({ following: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/follows/:followingId — unfollow
+app.delete('/api/follows/:followingId', requireAuth, async (req, res) => {
+  try {
+    await supabase.from('follows').delete().eq('follower_id', req.userId).eq('following_id', req.params.followingId);
+    res.json({ following: false });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/follows/following — who the authed user follows
+app.get('/api/follows/following', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('follows').select('following_id, followed_at, follow_reason').eq('follower_id', req.userId).order('followed_at', { ascending: false });
+    if (error) throw error;
+    const ids = (data || []).map(f => f.following_id);
+    let users = {};
+    if (ids.length) {
+      const { data: us } = await supabase.from('users').select('id, display_name, username, avatar_url, flex_score_90d, predictions_resolved').in('id', ids);
+      if (us) us.forEach(u => { users[u.id] = u; });
+    }
+    res.json({ following: (data || []).map(f => ({ ...f, user: users[f.following_id] || null })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/follows/followers — who follows the authed user
+app.get('/api/follows/followers', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('follows').select('follower_id, followed_at, follow_reason').eq('following_id', req.userId).order('followed_at', { ascending: false });
+    if (error) throw error;
+    const ids = (data || []).map(f => f.follower_id);
+    let users = {};
+    if (ids.length) {
+      const { data: us } = await supabase.from('users').select('id, display_name, username, avatar_url, flex_score_90d, predictions_resolved').in('id', ids);
+      if (us) us.forEach(u => { users[u.id] = u; });
+    }
+    res.json({ followers: (data || []).map(f => ({ ...f, user: users[f.follower_id] || null })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FLEX SCORE ENGINE
+// ════════════════════════════════════════════════════════════
+
+async function scoreAndUpdateFlexScore(userId) {
+  try {
+    const { data: all, error } = await supabase
+      .from('predictions')
+      .select('id, outcome, entry_price, direction, position_size_usd, resolved_at')
+      .eq('user_id', userId)
+      .in('outcome', ['correct', 'incorrect']);
+
+    if (error || !all || !all.length) return;
+
+    const ninety_days_ago = new Date(Date.now() - 90 * 86400000).toISOString();
+    const recent = all.filter(p => p.resolved_at && p.resolved_at >= ninety_days_ago);
+
+    function brierSet(preds) {
+      if (!preds.length) return null;
+      let sum = 0;
+      for (const p of preds) {
+        const predicted = parseFloat(p.entry_price) || 0.5;
+        const outcome_bin = p.outcome === 'correct' ? 1 : 0;
+        sum += Math.pow(predicted - outcome_bin, 2);
+      }
+      return sum / preds.length;
+    }
+
+    const brier90 = brierSet(recent);
+    const brierAll = brierSet(all);
+    // Display as 100 - score*100 so higher = better
+    const flex90 = brier90 != null ? Math.round((1 - brier90) * 100) : null;
+    const flexAll = brierAll != null ? Math.round((1 - brierAll) * 100) : null;
+
+    await supabase.from('users').update({
+      flex_score_90d: flex90 ?? 0,
+      flex_score_alltime: flexAll ?? 0,
+      predictions_resolved: all.length,
+    }).eq('id', userId);
+  } catch (e) {
+    console.warn('[flex-score] error:', e.message);
+  }
+}
+
+// Score predictions when a Polymarket market resolves (via condition_id match)
+async function scorePredictionsForMarket(marketId, outcomeYes) {
+  try {
+    if (!marketId) return;
+    const winSide = outcomeYes ? 'YES' : 'NO';
+
+    const { data: preds, error } = await supabase
+      .from('predictions')
+      .select('id, user_id, direction, entry_price, position_size_usd')
+      .eq('market_id', String(marketId))
+      .eq('outcome', 'pending');
+
+    if (error || !preds || !preds.length) return;
+
+    const now = new Date().toISOString();
+    const affected_users = new Set();
+
+    for (const p of preds) {
+      const isCorrect = p.direction.toUpperCase() === winSide;
+      const outcome_bin = isCorrect ? 1 : 0;
+      const ep = parseFloat(p.entry_price) || 0.5;
+      const brier = Math.pow(ep - outcome_bin, 2);
+      const pnl = isCorrect
+        ? Math.round((p.position_size_usd || 0) * (1 / ep - 1) * 100) / 100
+        : -Math.abs(p.position_size_usd || 0);
+
+      await supabase.from('predictions').update({
+        outcome: isCorrect ? 'correct' : 'incorrect',
+        resolved_at: now,
+        brier_contribution: brier,
+        pnl_usd: pnl,
+      }).eq('id', p.id);
+
+      affected_users.add(p.user_id);
+    }
+
+    // Update Flex Score for each affected user (non-blocking)
+    for (const uid of affected_users) {
+      scoreAndUpdateFlexScore(uid).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[predictions] scorePredictionsForMarket error:', e.message);
+  }
+}
+
+// Cascade detection: when a prediction is posted, find others on the same market
+// within 24h and link them via cascade_ids on the earliest prediction
+async function detectCascade(newPredId, marketId, postedAt) {
+  try {
+    const windowStart = new Date(new Date(postedAt).getTime() - 24 * 3600 * 1000).toISOString();
+    const { data: group } = await supabase
+      .from('predictions')
+      .select('id, posted_at')
+      .eq('market_id', String(marketId))
+      .gte('posted_at', windowStart)
+      .lte('posted_at', postedAt)
+      .neq('id', newPredId)
+      .order('posted_at', { ascending: true });
+
+    if (!group || group.length === 0) return;
+
+    // The earliest prediction in the group gets the cascade_ids updated
+    const earliest = group[0];
+    const allInGroup = [...group.map(p => p.id), newPredId];
+    const cascadeIds = allInGroup.filter(id => id !== earliest.id);
+
+    await supabase.from('predictions').update({ cascade_ids: cascadeIds }).eq('id', earliest.id);
+  } catch (e) {
+    console.warn('[cascade] error:', e.message);
+  }
+}
 
 // 404 catch-all — MUST be the very last route
 app.use((req, res) => {
