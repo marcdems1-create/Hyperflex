@@ -3214,6 +3214,7 @@ async function settleMarkets() {
     sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
     // Score takes for this market (fire-and-forget)
     scoreTakesForMarket(market.question, outcome ? 'YES' : 'NO', null).catch(() => {});
+    scorePredictionsForMarket(market.question, market.condition_id || null, outcome ? 'YES' : 'NO').catch(() => {});
   }
   } catch (err) {
     console.error('[settle] Error:', err.message);
@@ -7528,6 +7529,7 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
     // Score takes for this market (fire-and-forget)
     scoreTakesForMarket(market.question, outcome, null).catch(() => {});
+    scorePredictionsForMarket(market.question, market.condition_id || null, outcome).catch(() => {});
 
     // In-app notifications for each bettor
     if (positions && positions.length > 0) {
@@ -14780,6 +14782,284 @@ app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
     res.json({ ok: true, comment: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── PREDICTIONS (social prediction posts) ────────────────────────────────────
+
+// Derive 1-2 category tags from market question text
+function deriveCategories(question) {
+  const q = (question || '').toLowerCase();
+  const tags = [];
+  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot|primary/.test(q)) tags.push('politics');
+  if (/bitcoin|ethereum|btc|eth|crypto|blockchain|defi|altcoin|nft|token|solana|coin/.test(q)) tags.push('crypto');
+  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|economic|economy|fomc|tariff/.test(q)) tags.push('macro');
+  if (/us policy|policy|regulation|legislation|executive order|admin/.test(q)) tags.push('US Policy');
+  if (/nfl|nba|mlb|soccer|football|basketball|baseball|world cup|championship|nhl|tournament|match|superbowl/.test(q)) tags.push('sports');
+  if (/russia|ukraine|china|taiwan|war|military|nato|sanction|conflict|invasion/.test(q)) tags.push('geo');
+  if (/\bai\b|openai|apple|microsoft|google|meta|amazon|nvidia|tech|software|startup|model|gpt/.test(q)) tags.push('tech');
+  return tags.slice(0, 2).length ? tags.slice(0, 2) : ['macro'];
+}
+
+// Size display: exact → '$850', range → bucket string
+function sizeRangeLabel(usd) {
+  if (!usd || usd <= 0) return null;
+  if (usd < 250) return '<$250';
+  if (usd < 1000) return '$250–$1K';
+  if (usd < 5000) return '$1K–$5K';
+  return '$5K+';
+}
+
+// POST /api/wallet/positions — fetch + enrich Polymarket positions for the post composer
+app.post('/api/wallet/positions', async (req, res) => {
+  try {
+    const { address } = req.body || {};
+    if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address)) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    const [r1, r2] = await Promise.all([
+      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      }),
+      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=true`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      }).catch(() => null)
+    ]);
+    if (!r1.ok) return res.status(502).json({ error: 'Failed to fetch positions from Polymarket' });
+    const raw1 = await r1.json();
+    const raw2 = r2 && r2.ok ? await r2.json() : [];
+    const seen = new Set();
+    const all = [...(Array.isArray(raw1) ? raw1 : []), ...(Array.isArray(raw2) ? raw2 : [])].filter(p => {
+      const k = (p.conditionId || '') + ':' + (p.outcome || '');
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    const positions = all.map(p => {
+      const shares = parseFloat(p.size) || 0;
+      const currentPrice = parseFloat(p.curPrice) || 0;
+      const costBasis = parseFloat(p.initialValue) || 0;
+      const question = p.title || p.question || 'Unknown market';
+      const sizeUsd = Math.round(shares * currentPrice * 100) / 100;
+      return {
+        condition_id: p.conditionId || null,
+        market_id: p.conditionId || null,
+        question,
+        direction: (p.outcome || 'YES').toUpperCase(),
+        entry_price: shares > 0 ? Math.round((costBasis / shares) * 100) / 100 : Math.round(currentPrice * 100) / 100,
+        position_size_usd: sizeUsd,
+        size_range: sizeRangeLabel(sizeUsd),
+        category_tags: deriveCategories(question),
+        platform: 'polymarket',
+        slug: p.eventSlug || p.slug || null
+      };
+    }).filter(p => p.position_size_usd > 0);
+    res.json({ positions, address });
+  } catch (err) {
+    console.error('[wallet/positions]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/predictions — create a prediction post
+app.post('/api/predictions', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const { platform, market_id, market_title, direction, entry_price, position_size_usd, size_display, conviction, thesis_text, category_tags } = req.body || {};
+    if (!market_title || !direction) return res.status(400).json({ error: 'market_title and direction are required' });
+    const insert = {
+      user_id: userId,
+      platform: platform || 'polymarket',
+      market_id: market_id || null,
+      market_title: market_title.slice(0, 300),
+      direction: direction.toUpperCase(),
+      entry_price: entry_price != null ? parseFloat(entry_price) : null,
+      position_size_usd: position_size_usd != null ? parseFloat(position_size_usd) : null,
+      size_display: size_display || 'range',
+      conviction: conviction || 'medium',
+      thesis_text: thesis_text ? thesis_text.slice(0, 500) : null,
+      category_tags: Array.isArray(category_tags) ? category_tags : deriveCategories(market_title),
+      outcome: 'pending',
+      posted_at: new Date().toISOString()
+    };
+    let row;
+    if (pool) {
+      const cols = Object.keys(insert);
+      const vals = Object.values(insert);
+      const ph = cols.map((_, i) => '$' + (i + 1)).join(',');
+      const { rows } = await pool.query(`INSERT INTO predictions (${cols.join(',')}) VALUES (${ph}) RETURNING *`, vals);
+      row = rows[0];
+    } else {
+      const { data, error } = await supabase.from('predictions').insert(insert).select().single();
+      if (error) throw error;
+      row = data;
+    }
+    res.json({ ok: true, prediction: row });
+  } catch (err) {
+    console.error('[predictions create]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/predictions/feed — social feed (foryou / following / trending)
+app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?.userId;
+    const { mode = 'foryou', limit = 30, cursor } = req.query;
+    const lim = Math.min(parseInt(limit) || 30, 50);
+    let rows = [];
+    if (pool) {
+      const params = [];
+      let where = 'WHERE 1=1';
+      if (mode === 'following' && userId) {
+        params.push(userId);
+        where += ` AND p.user_id IN (SELECT following_id FROM predictor_follows WHERE follower_id = $${params.length})`;
+      }
+      if (cursor) {
+        params.push(cursor);
+        where += ` AND p.posted_at < $${params.length}`;
+      }
+      params.push(lim);
+      const q = `
+        SELECT p.*, u.display_name, u.avatar_url, u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved
+        FROM predictions p
+        LEFT JOIN users u ON u.id::text = p.user_id
+        ${where}
+        ORDER BY p.posted_at DESC
+        LIMIT $${params.length}
+      `;
+      rows = await dbQuery(q, params);
+    } else {
+      let q = supabase.from('predictions')
+        .select('*, users(display_name, avatar_url, flex_score_90d, flex_score_alltime, predictions_resolved)')
+        .order('posted_at', { ascending: false })
+        .limit(lim);
+      if (mode === 'following' && userId) {
+        const { data: follows } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
+        const ids = (follows || []).map(f => f.following_id);
+        if (!ids.length) return res.json({ predictions: [], cursor: null });
+        q = q.in('user_id', ids);
+      }
+      if (cursor) q = q.lt('posted_at', cursor);
+      const { data, error } = await q;
+      if (error) throw error;
+      rows = (data || []).map(p => {
+        const u = p.users || {};
+        const r = { ...p }; delete r.users;
+        return { ...r, ...u };
+      });
+    }
+    res.json({ predictions: rows, cursor: rows.length ? rows[rows.length - 1]?.posted_at : null });
+  } catch (err) {
+    console.error('[predictions feed]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/predictions/user/:userId — all predictions for a user
+app.get('/api/predictions/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(
+        `SELECT p.*, u.display_name, u.avatar_url, u.flex_score_90d, u.predictions_resolved
+         FROM predictions p LEFT JOIN users u ON u.id::text = p.user_id
+         WHERE p.user_id = $1 ORDER BY p.posted_at DESC LIMIT 50`, [userId]);
+    } else {
+      const { data, error } = await supabase.from('predictions')
+        .select('*, users(display_name, avatar_url, flex_score_90d, predictions_resolved)')
+        .eq('user_id', userId).order('posted_at', { ascending: false }).limit(50);
+      if (error) throw error;
+      rows = (data || []).map(p => { const u = p.users||{}; const r={...p}; delete r.users; return {...r,...u}; });
+    }
+    res.json({ predictions: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/predictions/:id — single prediction
+app.get('/api/predictions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let row;
+    if (pool) {
+      const rows = await dbQuery(
+        `SELECT p.*, u.display_name, u.avatar_url, u.flex_score_90d, u.predictions_resolved
+         FROM predictions p LEFT JOIN users u ON u.id::text = p.user_id WHERE p.id = $1`, [id]);
+      row = rows[0];
+    } else {
+      const { data, error } = await supabase.from('predictions')
+        .select('*, users(display_name, avatar_url, flex_score_90d, predictions_resolved)')
+        .eq('id', id).single();
+      if (error) throw error;
+      row = data ? { ...data, ...(data.users||{}), users: undefined } : null;
+    }
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Score predictions when a market resolves — call fire-and-forget alongside scoreTakesForMarket
+async function scorePredictionsForMarket(marketTitle, marketId, outcome) {
+  try {
+    const upperOutcome = (outcome || '').toUpperCase();
+    let preds = [];
+    if (pool) {
+      const q = marketId
+        ? `SELECT * FROM predictions WHERE (market_id=$1 OR market_title=$2) AND outcome='pending'`
+        : `SELECT * FROM predictions WHERE market_title=$1 AND outcome='pending'`;
+      const params = marketId ? [marketId, marketTitle] : [marketTitle];
+      preds = await dbQuery(q, params);
+    } else {
+      const filter = marketId
+        ? supabase.from('predictions').select('*').or(`market_id.eq.${marketId},market_title.eq.${encodeURIComponent(marketTitle)}`).eq('outcome', 'pending')
+        : supabase.from('predictions').select('*').eq('market_title', marketTitle).eq('outcome', 'pending');
+      const { data } = await filter;
+      preds = data || [];
+    }
+    const affectedUsers = new Set();
+    for (const pred of preds) {
+      const correct = pred.direction === upperOutcome;
+      const outcome2 = correct ? 'correct' : 'incorrect';
+      const entry = parseFloat(pred.entry_price) || 0.5;
+      const brier = Math.pow((correct ? 1 : 0) - entry, 2);
+      const pnl = correct ? (parseFloat(pred.position_size_usd) || 0) * (1 / entry - 1) : -(parseFloat(pred.position_size_usd) || 0);
+      if (pool) {
+        await pool.query(`UPDATE predictions SET outcome=$1,brier_contribution=$2,pnl_usd=$3,resolved_at=NOW() WHERE id=$4`,
+          [outcome2, Math.round(brier * 10000) / 10000, Math.round(pnl * 100) / 100, pred.id]);
+      } else {
+        await supabase.from('predictions').update({ outcome: outcome2, brier_contribution: brier, pnl_usd: pnl, resolved_at: new Date().toISOString() }).eq('id', pred.id);
+      }
+      if (pred.user_id) affectedUsers.add(pred.user_id);
+    }
+    for (const uid of affectedUsers) {
+      recomputeFlexScore(uid).catch(() => {});
+    }
+    if (preds.length) console.log(`[predictions] Scored ${preds.length} predictions for "${(marketTitle||'').substring(0,40)}" → ${upperOutcome}`);
+  } catch (err) { console.warn('[predictions] scorePredictionsForMarket error:', err.message); }
+}
+
+async function recomputeFlexScore(userId) {
+  try {
+    const since90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+    let allPreds, recentPreds;
+    if (pool) {
+      allPreds = await dbQuery(`SELECT brier_contribution FROM predictions WHERE user_id=$1 AND outcome IN ('correct','incorrect')`, [userId]);
+      recentPreds = await dbQuery(`SELECT brier_contribution FROM predictions WHERE user_id=$1 AND outcome IN ('correct','incorrect') AND resolved_at > $2`, [userId, since90]);
+    } else {
+      const { data: a } = await supabase.from('predictions').select('brier_contribution').eq('user_id', userId).in('outcome', ['correct','incorrect']);
+      const { data: r } = await supabase.from('predictions').select('brier_contribution').eq('user_id', userId).in('outcome', ['correct','incorrect']).gt('resolved_at', since90);
+      allPreds = a || []; recentPreds = r || [];
+    }
+    const avgBrier = arr => arr.length ? arr.reduce((s, r) => s + (parseFloat(r.brier_contribution) || 0), 0) / arr.length : null;
+    const toScore = b => b !== null ? Math.round(Math.max(0, Math.min(100, (1 - b) * 100))) : null;
+    const scoreAll = toScore(avgBrier(allPreds));
+    const score90 = toScore(avgBrier(recentPreds));
+    if (pool) {
+      await pool.query(`UPDATE users SET flex_score_alltime=$1,flex_score_90d=$2,predictions_resolved=$3 WHERE id=$4`,
+        [scoreAll, score90, allPreds.length, userId]);
+    } else {
+      await supabase.from('users').update({ flex_score_alltime: scoreAll, flex_score_90d: score90, predictions_resolved: allPreds.length }).eq('id', userId);
+    }
+  } catch (err) { console.warn('[predictions] recomputeFlexScore error:', err.message); }
+}
 
 // ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────
 async function syncAllUserPositions() {
