@@ -4489,16 +4489,73 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
     var apiPassphrase = localStorage.getItem('poly_api_passphrase');
     var proxyAddress = localStorage.getItem('hf_poly_wallet');
     var eoaAddress = localStorage.getItem('poly_eoa_address');
+    var hasFullSetup = apiKey && apiSecret && apiPassphrase && proxyAddress;
 
-    // If Polymarket CLOB API keys or proxy aren't derived yet, the wallet IS
-    // connected but trading isn't set up. Previously this branch hard-failed
-    // with "Wallet not connected" — misleading because the user actually had
-    // MetaMask connected, they just hadn't tapped "Set Up Trading" yet.
-    // User-initiated: auto-run enableTrading() (same flow as the Set Up
-    // Trading button) then continue.
-    // Auto-execute on trigger: bail silently so the user can tap the banner
-    // when they're ready — don't ambush them with a MetaMask popup.
-    if (!apiKey || !apiSecret || !apiPassphrase || !proxyAddress) {
+    // ── Chain check (user-initiated only) ────────────────────────────────
+    // Root cause of "why isn't it working?": the wallet was connected but
+    // on the wrong chain. enableTrading() tries to switch but silently
+    // swallows any non-4902 error — so if the user rejected a previous
+    // chain-switch prompt (or mobile MetaMask dropped the request), the
+    // flow continued on mainnet and every downstream CLOB call 401'd or
+    // failed opaquely. Handle the chain switch here with explicit user
+    // feedback BEFORE we reach enableTrading.
+    if (userInitiated && window.ethereum) {
+      try {
+        var raw = await window.ethereum.request({ method: 'eth_chainId' });
+        // Mobile MetaMask has been observed returning decimal strings or
+        // numbers in addition to EIP-1193's spec hex. Normalize.
+        var chainIdNum = typeof raw === 'string'
+          ? (raw.indexOf('0x') === 0 ? parseInt(raw, 16) : parseInt(raw, 10))
+          : Number(raw);
+        if (chainIdNum !== 137) {
+          showTradeStatus('Switching MetaMask to Polygon — approve in MetaMask…', 'info');
+          try {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+          } catch (switchErr) {
+            if (switchErr && switchErr.code === 4902) {
+              // Chain not configured in this wallet — add it
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+                });
+              } catch (addErr) {
+                showTradeStatus('Could not add Polygon to MetaMask. Switch manually then tap Execute Sell.', 'error');
+                return;
+              }
+            } else if (switchErr && (switchErr.code === 4001 || switchErr.code === 'ACTION_REJECTED')) {
+              showTradeStatus('Polygon switch rejected. MetaMask must be on Polygon to execute stop sells.', 'error');
+              return;
+            } else {
+              showTradeStatus('Could not switch to Polygon: ' + (switchErr && switchErr.message || 'unknown error'), 'error');
+              return;
+            }
+          }
+          // Re-read chain to confirm
+          try {
+            var raw2 = await window.ethereum.request({ method: 'eth_chainId' });
+            var confirmed = typeof raw2 === 'string'
+              ? (raw2.indexOf('0x') === 0 ? parseInt(raw2, 16) : parseInt(raw2, 10))
+              : Number(raw2);
+            if (confirmed !== 137) {
+              showTradeStatus('MetaMask is still not on Polygon. Open MetaMask → Networks → Polygon, then retry.', 'error');
+              return;
+            }
+          } catch (_) { /* if re-check fails, we'll fail downstream with a clear error */ }
+          // Invalidate the cached signer now that chain changed
+          if (typeof HFXWallet !== 'undefined' && HFXWallet.invalidate) HFXWallet.invalidate();
+          showTradeStatus('Polygon active — continuing…', 'info');
+        }
+      } catch (chainErr) { /* if eth_chainId fails, proceed and let later checks catch it */ }
+    }
+
+    // ── CLOB auth keys ──────────────────────────────────────────────────
+    // Auto-derive if the wallet's connected but keys aren't in localStorage
+    // yet. This covers the "I set up trading last week, my mobile browser
+    // wiped localStorage, now it looks un-set-up" case: one signature and
+    // we're back. User-initiated only, to avoid surprising the user with
+    // an unsolicited MetaMask popup on auto-execute.
+    if (!hasFullSetup) {
       if (!userInitiated) {
         console.log('[stop-orders] CLOB keys not yet derived — banner waits for user tap');
         showTradeStatus('Stop triggered — tap Execute Sell to complete.', 'info');
