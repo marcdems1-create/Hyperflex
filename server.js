@@ -43080,6 +43080,90 @@ app.listen(PORT, () => {
     } catch (err) {
       console.error('[boot] ✗ failed to ensure data-engine schema:', err.message);
     }
+
+    // Three more schemas surfaced by Railway logs after the WTI fix:
+    //   [referral-fp] column "referred_by" does not exist
+    //   [supabase-proxy] relation "polymarket_trades" does not exist
+    //   [trades] insert error: relation "polymarket_trades" does not exist
+    //   [login-streak] column "login_streak" does not exist
+    // Each was silently breaking its feature (referral fingerprinting,
+    // trade history, daily streak counter). Same idempotent pattern as
+    // the predictions and data-engine schemas above.
+    //
+    // Two deliberate divergences from the .sql files on disk:
+    //  - users.referred_by + platform_referrals.{referrer_id,referee_id}
+    //    typed as TEXT REFERENCES users(id), not UUID — same FK-type
+    //    fix we already applied to the predictions block (5cbf8dd).
+    //  - The polymarket_trades .sql file starts with `DROP TABLE IF
+    //    EXISTS polymarket_trades` to wipe an older bare-bones version.
+    //    We can't include that here — running it every boot would
+    //    delete trade history. CREATE TABLE IF NOT EXISTS instead. If
+    //    a partial older table exists in your DB, drop it manually
+    //    once in the Supabase SQL editor; subsequent boots will
+    //    recreate it with the full schema.
+    const extraSchemas = `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by   TEXT REFERENCES users(id);
+      CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code) WHERE referral_code IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_referred_by   ON users(referred_by)   WHERE referred_by   IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS platform_referrals (
+        id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        referrer_id  TEXT NOT NULL REFERENCES users(id),
+        referee_id   TEXT NOT NULL REFERENCES users(id),
+        level        INTEGER NOT NULL DEFAULT 1,
+        fp_earned    NUMERIC DEFAULT 0,
+        usdc_earned  NUMERIC DEFAULT 0,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_platform_referrals_referrer ON platform_referrals(referrer_id);
+      CREATE INDEX IF NOT EXISTS idx_platform_referrals_referee  ON platform_referrals(referee_id);
+
+      CREATE TABLE IF NOT EXISTS polymarket_trades (
+        id                       UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        eoa_address              TEXT NOT NULL,
+        proxy_address            TEXT,
+        market_slug              TEXT,
+        market_question          TEXT,
+        condition_id             TEXT,
+        token_id                 TEXT,
+        side                     TEXT NOT NULL,
+        trade_mode               TEXT DEFAULT 'buy',
+        order_type               TEXT DEFAULT 'GTC',
+        entry_price              NUMERIC(6,4),
+        entry_price_cents        INTEGER,
+        amount_usd               NUMERIC(12,2) NOT NULL,
+        shares                   NUMERIC(14,4),
+        order_id                 TEXT,
+        market_price_at_entry    NUMERIC(6,4),
+        volume_at_entry          NUMERIC(14,2),
+        status                   TEXT DEFAULT 'open',
+        exit_price               NUMERIC(6,4),
+        exit_amount_usd          NUMERIC(12,2),
+        pnl                      NUMERIC(12,2),
+        pnl_percent              NUMERIC(8,2),
+        closed_at                TIMESTAMPTZ,
+        close_reason             TEXT,
+        created_at               TIMESTAMPTZ DEFAULT NOW(),
+        updated_at               TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_pt_eoa        ON polymarket_trades(eoa_address);
+      CREATE INDEX IF NOT EXISTS idx_pt_eoa_status ON polymarket_trades(eoa_address, status);
+      CREATE INDEX IF NOT EXISTS idx_pt_slug       ON polymarket_trades(market_slug);
+      CREATE INDEX IF NOT EXISTS idx_pt_created    ON polymarket_trades(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_pt_condition  ON polymarket_trades(condition_id);
+      CREATE INDEX IF NOT EXISTS idx_pt_status     ON polymarket_trades(status);
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS login_streak      INTEGER DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_date   TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_multiplier NUMERIC DEFAULT 1;
+    `;
+    try {
+      await pool.query(extraSchemas);
+      console.log('[boot] ✓ platform_referrals + polymarket_trades + login_streak schema ensured');
+    } catch (err) {
+      console.error('[boot] ✗ failed to ensure extra schemas:', err.message);
+    }
   })();
 
   // Pre-warm critical data caches on startup (non-blocking)
