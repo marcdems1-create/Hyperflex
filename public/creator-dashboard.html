@@ -20242,7 +20242,11 @@ function deriveTagsClient(question) {
 }
 
 async function submitPredictionPost() {
-  if (!_ppcData) return;
+  if (!_ppcData) {
+    // Previously this returned silently, making the button appear dead.
+    showToast('No position selected — reopen the composer and try again', 'error');
+    return;
+  }
   var btn = document.getElementById('ppc-submit');
   btn.disabled = true;
   btn.textContent = 'Posting...';

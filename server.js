@@ -14922,45 +14922,13 @@ app.post('/api/wallet/positions', async (req, res) => {
   }
 });
 
-// POST /api/predictions — create a prediction post
-app.post('/api/predictions', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id || req.user.userId;
-    const { platform, market_id, market_title, direction, entry_price, position_size_usd, size_display, conviction, thesis_text, category_tags } = req.body || {};
-    if (!market_title || !direction) return res.status(400).json({ error: 'market_title and direction are required' });
-    const insert = {
-      user_id: userId,
-      platform: platform || 'polymarket',
-      market_id: market_id || null,
-      market_title: market_title.slice(0, 300),
-      direction: direction.toUpperCase(),
-      entry_price: entry_price != null ? parseFloat(entry_price) : null,
-      position_size_usd: position_size_usd != null ? parseFloat(position_size_usd) : null,
-      size_display: size_display || 'range',
-      conviction: conviction || 'medium',
-      thesis_text: thesis_text ? thesis_text.slice(0, 500) : null,
-      category_tags: Array.isArray(category_tags) ? category_tags : deriveCategories(market_title),
-      outcome: 'pending',
-      posted_at: new Date().toISOString()
-    };
-    let row;
-    if (pool) {
-      const cols = Object.keys(insert);
-      const vals = Object.values(insert);
-      const ph = cols.map((_, i) => '$' + (i + 1)).join(',');
-      const { rows } = await pool.query(`INSERT INTO predictions (${cols.join(',')}) VALUES (${ph}) RETURNING *`, vals);
-      row = rows[0];
-    } else {
-      const { data, error } = await supabase.from('predictions').insert(insert).select().single();
-      if (error) throw error;
-      row = data;
-    }
-    res.json({ ok: true, prediction: row });
-  } catch (err) {
-    console.error('[predictions create]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+// POST /api/predictions — handler lives at the canonical location below
+// (search for `POST /api/predictions — create a prediction (auth required)`).
+// The earlier shim here was registered first and shadowed the new handler,
+// causing the Post Prediction button on creator-dashboard to appear to do
+// nothing: it had looser validation, let null market_id / entry_price
+// through, then the predictions table NOT NULL constraints failed and
+// the 500 error toast was the only (mobile-invisible) feedback.
 
 // GET /api/predictions/feed — social feed (foryou / following / trending)
 app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
@@ -42675,7 +42643,8 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
         }))).then(() => {}).catch(() => {});
       }).catch(() => {});
 
-    res.json({ prediction: data });
+    // Keep `ok: true` for the creator-dashboard client which checks data.ok.
+    res.json({ ok: true, prediction: data });
   } catch (e) {
     console.error('[predictions] POST error:', e.message);
     res.status(500).json({ error: e.message });
