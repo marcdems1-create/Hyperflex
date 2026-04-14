@@ -23554,7 +23554,21 @@ app.get('/api/market/:slug', async (req, res) => {
         market._eventTitle = evt.title || market.question;
         market._eventSlug = evt.slug;
         market._eventId = evt.id || null; // carried through for downstream consumers
-        eventMarkets = evt.markets.map(m => ({
+        // Map only ACTIVE markets — previously this used evt.markets which
+        // included resolved/closed versions of the same threshold. For a
+        // recurring event like WTI April 2026, several thresholds (↑$100,
+        // ↑$105, ↑$110, ↓$95 etc.) had a closed version from a previous
+        // resolution AND an active version, so the multi-outcome list
+        // contained duplicate rows: the closed one returned terminal
+        // [1,0] / [0,1] from Gamma (no live orderbook → CLOB best-ask
+        // refresh couldn't help), and the active one returned the real
+        // probability. Polymarket's own UI filters closed out, so HYPERFLEX
+        // looked like it had wildly different numbers when really we were
+        // just rendering ghost rows for resolved markets next to live ones.
+        // Falls back to evt.markets only if every market in the event is
+        // closed (edge case, won't usually happen for an active event).
+        const marketsToMap = activeMarkets.length ? activeMarkets : evt.markets;
+        eventMarkets = marketsToMap.map(m => ({
           question: m.question,
           slug: m.slug,
           outcomePrices: m.outcomePrices,
