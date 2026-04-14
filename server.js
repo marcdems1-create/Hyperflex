@@ -137,6 +137,7 @@ const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const liveStream = require('./lib/live-stream');
+const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -787,6 +788,13 @@ console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SER
 // Fallback: Supabase JS client via REST API (may fail on Railway due to IPv6)
 const { Pool } = require('pg');
 const _nodeFetch = require('node-fetch');
+
+// Initialize the consolidated Polymarket data layer (see lib/polymarket.js).
+// All Gamma + CLOB calls SHOULD route through here so quirks (closed-market
+// ghost rows, the unreliable markets?event_id= filter, CLOB best-ask vs
+// midpoint) get fixed in one place. Existing inline fetches in server.js
+// will be migrated incrementally — start with /api/market/:slug below.
+polymarket.init({ fetch: _nodeFetch });
 
 // Direct Postgres pool — this is the reliable connection
 const pool = process.env.DATABASE_URL
@@ -23533,148 +23541,63 @@ app.get('/api/market/:slug', async (req, res) => {
   }
 
   try {
-    // 1. Fetch market data from Gamma API — try markets endpoint first, then events
-    const _gammaHeaders = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+    // 1. Resolve the slug. Most HYPERFLEX market URLs are EVENT slugs
+    //    (WTI, NBA champion, etc.) — try that first. Fall back to a
+    //    direct market lookup if the slug is a single binary market.
+    //    Both calls go through lib/polymarket so any future Gamma API
+    //    quirks are fixed in one place.
     let market = null;
-    let eventMarkets = null; // populated if this is a multi-outcome event
+    let eventMarkets = null;
 
-    // Try both market slug AND event slug in parallel — WTI/NBA-style slugs are event slugs
-    const [gammaRes, eventRes] = await Promise.allSettled([
-      fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders }),
-      fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders })
+    const [eventLookup, marketLookup] = await Promise.allSettled([
+      polymarket.getEventBySlug(slug),
+      polymarket.getMarketBySlug(slug),
     ]);
 
-    // Check event result first — if event has multiple markets, treat as multi-outcome even if a single market matches
-    if (eventRes.status === 'fulfilled' && eventRes.value.ok) {
-      const eventData = await eventRes.value.json();
-      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length > 1) {
-        const evt = eventData[0];
-        const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
-        market = activeMarkets[0] || evt.markets[0];
-        market._eventTitle = evt.title || market.question;
-        market._eventSlug = evt.slug;
-        market._eventId = evt.id || null; // carried through for downstream consumers
-        // Map only ACTIVE markets — previously this used evt.markets which
-        // included resolved/closed versions of the same threshold. For a
-        // recurring event like WTI April 2026, several thresholds (↑$100,
-        // ↑$105, ↑$110, ↓$95 etc.) had a closed version from a previous
-        // resolution AND an active version, so the multi-outcome list
-        // contained duplicate rows: the closed one returned terminal
-        // [1,0] / [0,1] from Gamma (no live orderbook → CLOB best-ask
-        // refresh couldn't help), and the active one returned the real
-        // probability. Polymarket's own UI filters closed out, so HYPERFLEX
-        // looked like it had wildly different numbers when really we were
-        // just rendering ghost rows for resolved markets next to live ones.
-        // Falls back to evt.markets only if every market in the event is
-        // closed (edge case, won't usually happen for an active event).
-        const marketsToMap = activeMarkets.length ? activeMarkets : evt.markets;
-        eventMarkets = marketsToMap.map(m => ({
-          question: m.question,
-          slug: m.slug,
-          outcomePrices: m.outcomePrices,
-          clobTokenIds: m.clobTokenIds,
-          active: m.active,
-          closed: m.closed,
-          conditionId: m.conditionId,
-          neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
-          groupItemTitle: m.groupItemTitle || '',
-          event_id: evt.id || null,
-        }));
-      }
+    if (eventLookup.status === 'fulfilled' && eventLookup.value && eventLookup.value.eventMarkets.length > 1) {
+      const evt = eventLookup.value.event;
+      eventMarkets = eventLookup.value.eventMarkets;
+      // Pick the primary market for legacy single-market consumers in
+      // the response shape (frontend reads `market` for header/title).
+      market = eventMarkets[0];
+      market._eventTitle = evt.title || market.question;
+      market._eventSlug = evt.slug;
+      market._eventId = evt.id || null;
+    } else if (marketLookup.status === 'fulfilled' && marketLookup.value) {
+      market = marketLookup.value;
+    } else if (eventLookup.status === 'fulfilled' && eventLookup.value && eventLookup.value.eventMarkets.length === 1) {
+      // Single-market event — promote it to the binary path
+      const evt = eventLookup.value.event;
+      market = eventLookup.value.eventMarkets[0];
+      market._eventTitle = evt.title || market.question;
+      market._eventSlug = evt.slug;
+      market._eventId = evt.id || null;
     }
 
-    // Fall back to direct market match if event lookup didn't yield a multi-outcome event
-    if (!market && gammaRes.status === 'fulfilled' && gammaRes.value.ok) {
-      const gammaData = await gammaRes.value.json();
-      if (gammaData && gammaData.length) market = gammaData[0];
-    }
+    if (!market) return res.status(404).json({ error: 'Market not found' });
 
-    // Last resort: single-market event (event with exactly 1 market)
-    if (!market && eventRes.status === 'fulfilled' && eventRes.value.ok) {
-      const eventData = await eventRes.value.json();
-      if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length === 1) {
-        market = eventData[0].markets[0];
-        market._eventTitle = eventData[0].title || market.question;
-        market._eventSlug = eventData[0].slug;
-        market._eventId = eventData[0].id || null;
-      }
-    }
-
-    if (!market) {
-      return res.status(404).json({ error: 'Market not found' });
-    }
-
-    // 2. Parse YES token ID from clobTokenIds
+    // 2. YES token ID for orderbook + price history
     let tokenId = null;
     try {
-      const tokenIds = typeof market.clobTokenIds === 'string'
-        ? JSON.parse(market.clobTokenIds)
-        : market.clobTokenIds;
-      if (Array.isArray(tokenIds) && tokenIds.length > 0) {
-        tokenId = tokenIds[0]; // First token = YES outcome
-      }
-    } catch (e) {
-      // clobTokenIds may not be parseable — continue without price history/orderbook
-    }
+      const tids = typeof market.clobTokenIds === 'string' ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
+      if (Array.isArray(tids) && tids[0]) tokenId = tids[0];
+    } catch (_) {}
 
-    // 3. Fetch price history and orderbook in parallel (if we have a token ID)
+    // 3. Price history + orderbook in parallel (single market only)
     let priceHistory = null;
     let orderbook = null;
-
     if (tokenId) {
-      const [priceRes, bookRes] = await Promise.allSettled([
-        fetch(`https://clob.polymarket.com/prices-history?market=${encodeURIComponent(tokenId)}&interval=all&fidelity=60`, {
-          headers: { Accept: 'application/json' }
-        }),
-        fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
-          headers: { Accept: 'application/json' }
-        })
+      [priceHistory, orderbook] = await Promise.all([
+        polymarket.getPriceHistory(tokenId),
+        polymarket.getOrderbook(tokenId),
       ]);
-
-      if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
-        priceHistory = await priceRes.value.json();
-      }
-      if (bookRes.status === 'fulfilled' && bookRes.value.ok) {
-        orderbook = await bookRes.value.json();
-      }
     }
 
-    // 4. For multi-outcome events: refresh live prices via CLOB /book best-ask.
-    //    Gamma's events?slug response is the PRIMARY (has outcomePrices for
-    //    every market, always valid JSON, never 404s) — we keep whatever it
-    //    returned as the fallback. CLOB best-ask is the "fresher" layer that
-    //    matches what polymarket.com displays. upgradeToClobBestAsk() handles
-    //    all markets in parallel chunks of 25, caches per-token for 15s, and
-    //    leaves the Gamma value in place for any market where CLOB didn't
-    //    respond — so a partial CLOB outage degrades gracefully instead of
-    //    showing 100¢/0¢. Previous implementation capped at 10 markets and
-    //    relied on the undocumented Gamma markets?event_id= filter, which
-    //    left 18/28 outcomes on WTI stuck at Gamma's terminal prices.
-    const bookBestAsk = (book) => {
-      if (!book) return null;
-      let bestAsk = null, bestBid = null;
-      if (Array.isArray(book.asks)) {
-        for (const a of book.asks) {
-          const p = parseFloat(a && a.price);
-          if (!isNaN(p) && p > 0 && p < 1 && (bestAsk === null || p < bestAsk)) bestAsk = p;
-        }
-      }
-      if (Array.isArray(book.bids)) {
-        for (const b of book.bids) {
-          const p = parseFloat(b && b.price);
-          if (!isNaN(p) && p > 0 && p < 1 && (bestBid === null || p > bestBid)) bestBid = p;
-        }
-      }
-      return bestAsk !== null ? bestAsk : bestBid;
-    };
-
+    // 4. Multi-outcome event: refresh prices via CLOB best-ask
     if (eventMarkets && eventMarkets.length > 1) {
-      // Snapshot Gamma prices BEFORE CLOB refresh so the debug payload can
-      // show which outcomes actually changed (lets us tell "CLOB returned
-      // the same number" apart from "CLOB didn't respond and we kept Gamma").
       const beforeGamma = debug ? eventMarkets.map(m => m.outcomePrices) : null;
       try {
-        await upgradeToClobBestAsk(eventMarkets);
+        await polymarket.refreshClobBestAsk(eventMarkets);
       } catch (e) {
         console.warn('[market-detail] multi-outcome CLOB best-ask refresh error:', e.message);
       }
@@ -23686,22 +23609,13 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
-    // 5. Live best ask for primary (binary) market — reuse orderbook if already fetched
+    // 5. Single binary market: pull best-ask from the already-fetched orderbook
     if (tokenId && (!eventMarkets || eventMarkets.length <= 1)) {
-      try {
-        let book = orderbook;
-        if (!book) {
-          const bookRes2 = await fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
-            headers: { Accept: 'application/json' }
-          });
-          if (bookRes2.ok) book = await bookRes2.json();
-        }
-        const live = bookBestAsk(book);
-        if (live !== null && live > 0 && live < 1) {
-          market.outcomePrices = JSON.stringify([live, 1 - live]);
-          market._livePrice = true;
-        }
-      } catch (e) { /* continue with gamma prices */ }
+      const live = polymarket.bookBestAsk(orderbook);
+      if (live !== null && live > 0 && live < 1) {
+        market.outcomePrices = JSON.stringify([live, 1 - live]);
+        market._livePrice = true;
+      }
     }
 
     const result = { market, priceHistory, orderbook };
@@ -23738,6 +23652,25 @@ app.get('/api/market/:slug', async (req, res) => {
 // /api/markets/:slug — alias for /api/market/:slug (consistent plural)
 app.get('/api/markets/:slug', (req, res) => {
   res.redirect(307, `/api/market/${encodeURIComponent(req.params.slug)}`);
+});
+
+// On-demand Polymarket-data smoke test. Same suite that runs at boot,
+// callable via HTTP for ad-hoc verification (e.g. after a Polymarket
+// API change reaches our codebase). Gated on ADMIN_SECRET so it's not
+// a public probe target. Add ?verbose=1 to include eventMarkets counts.
+//   GET /api/_smoke/polymarket?secret=...
+//   GET /api/_smoke/polymarket?secret=...&verbose=1
+app.get('/api/_smoke/polymarket', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (adminSecret && req.query.secret !== adminSecret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const out = await polymarket.smokeTest({ verbose: req.query.verbose === '1' });
+    res.status(out.ok ? 200 : 500).json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════
@@ -24266,102 +24199,9 @@ async function upgradeToClobPrices(markets, priceField = 'yes_price') {
   return markets;
 }
 
-// ── CLOB BEST-ASK (Polymarket-UI-matching live prices) ──────────────────────
-// Polymarket's own UI displays best-ask (price to BUY yes), not midpoint.
-// For multi-outcome events (WTI with 28 price levels, NBA champion with 30
-// teams, etc.) Gamma's outcomePrices often lag or go terminal (0/1) for
-// neg-risk markets, so the front door /api/market/:slug needs fresher data.
-// This mirrors upgradeToClobPrices but pulls /book and extracts best-ask.
-const _clobBestAskCache = new Map(); // tokenId -> { ask, ts }
-const CLOB_BOOK_TTL = 15 * 1000;     // 15s — Polymarket itself refreshes ~5s
-
-async function upgradeToClobBestAsk(eventMarkets) {
-  if (!eventMarkets || eventMarkets.length === 0) return eventMarkets;
-  const fetch = _nodeFetch;
-  const now = Date.now();
-
-  // Collect tokens that need fetching (using cache where fresh)
-  const toFetch = []; // { idx, tokenId }
-  for (let i = 0; i < eventMarkets.length; i++) {
-    const em = eventMarkets[i];
-    let tokenId = null;
-    try {
-      const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
-      if (Array.isArray(tids) && tids[0]) tokenId = tids[0];
-    } catch (_) {}
-    if (!tokenId) continue;
-
-    const cached = _clobBestAskCache.get(tokenId);
-    if (cached && (now - cached.ts < CLOB_BOOK_TTL) && cached.ask !== null) {
-      eventMarkets[i].outcomePrices = JSON.stringify([cached.ask, 1 - cached.ask]);
-      eventMarkets[i]._livePrice = true;
-      continue;
-    }
-    toFetch.push({ idx: i, tokenId });
-  }
-
-  if (toFetch.length === 0) return eventMarkets;
-
-  // Chunked parallel /book calls. 25 concurrent is comfortable for Polymarket
-  // and avoids socket-exhaustion on Railway. 5s timeout matches
-  // upgradeToClobPrices. Failures keep Gamma's fallback price — we never
-  // regress outcomePrices to something worse than what Gamma returned.
-  const CHUNK_SIZE = 25;
-  let hitCount = 0, missCount = 0;
-  for (let c = 0; c < toFetch.length; c += CHUNK_SIZE) {
-    const chunk = toFetch.slice(c, c + CHUNK_SIZE);
-    const results = await Promise.all(chunk.map(t =>
-      fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(t.tokenId)}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(book => {
-          if (!book || !Array.isArray(book.asks)) return { idx: t.idx, tokenId: t.tokenId, ask: null };
-          let bestAsk = null;
-          for (const a of book.asks) {
-            const p = parseFloat(a && a.price);
-            if (!isNaN(p) && p > 0 && p < 1 && (bestAsk === null || p < bestAsk)) bestAsk = p;
-          }
-          // Fall back to best bid if asks are empty (common on thin markets)
-          if (bestAsk === null && Array.isArray(book.bids)) {
-            let bestBid = null;
-            for (const b of book.bids) {
-              const p = parseFloat(b && b.price);
-              if (!isNaN(p) && p > 0 && p < 1 && (bestBid === null || p > bestBid)) bestBid = p;
-            }
-            bestAsk = bestBid;
-          }
-          return { idx: t.idx, tokenId: t.tokenId, ask: bestAsk };
-        })
-        .catch(() => ({ idx: t.idx, tokenId: t.tokenId, ask: null }))
-    ));
-
-    for (const r of results) {
-      if (r.ask === null || isNaN(r.ask) || r.ask <= 0 || r.ask >= 1) {
-        missCount++;
-        continue;
-      }
-      _clobBestAskCache.set(r.tokenId, { ask: r.ask, ts: Date.now() });
-      eventMarkets[r.idx].outcomePrices = JSON.stringify([r.ask, 1 - r.ask]);
-      eventMarkets[r.idx]._livePrice = true;
-      hitCount++;
-    }
-  }
-
-  // Evict old entries
-  if (_clobBestAskCache.size > 1000) {
-    for (const [k, v] of _clobBestAskCache) {
-      if (now - v.ts > 5 * 60 * 1000) _clobBestAskCache.delete(k);
-    }
-  }
-
-  if (eventMarkets.length > 1) {
-    console.log(`[market-detail] CLOB best-ask refreshed ${hitCount}/${eventMarkets.length} markets (${missCount} kept Gamma fallback)`);
-  }
-
-  return eventMarkets;
-}
+// upgradeToClobBestAsk + _clobBestAskCache moved to lib/polymarket.js
+// (search "refreshClobBestAsk"). Use polymarket.refreshClobBestAsk(...)
+// from there. Phase 1 of the codebase decomposition.
 
 // ── CLOB ORDERBOOK DEPTH ──────────────────────────────────────────────────
 // Pulls /book per token, computes bid/ask size imbalance within 5¢ of best.
@@ -43182,6 +43022,15 @@ app.listen(PORT, () => {
       try { await fn(); console.log(`[boot] ✓ ${name}`); } catch (e) { console.warn(`[boot] ✗ ${name}: ${e.message}`); }
     }
     console.log('[boot] Cache pre-warm complete');
+
+    // Polymarket data layer smoke test. Hits a fixed list of known-good
+    // event slugs through the SAME public functions /api/market/:slug
+    // uses, then asserts structural invariants (active-only filter
+    // working, CLOB best-ask refresh reaching most outcomes, prices sum
+    // to 1, etc.). Logs `[smoke] polymarket FAIL` to Railway if any
+    // assertion breaks — that's the early-warning we missed for the
+    // WTI ghost-row regression. Non-blocking; results visible in logs.
+    polymarket.smokeTestAndLog().catch(e => console.error('[smoke] suite threw:', e.message));
 
     // Start the Polymarket real-time trade stream for /terminal live ticks.
     // Non-blocking — if the ws module or the upstream is unavailable, the
