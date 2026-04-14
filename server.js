@@ -42612,7 +42612,12 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
       ? category_tags.filter(t => allowedTags.includes(t)).slice(0, 2)
       : [];
 
-    const { data, error } = await supabase.from('predictions').insert({
+    // Insert via direct pg pool (bypasses Supabase PostgREST which caches
+    // schema — after a fresh table creation PostgREST can still return
+    // "relation predictions does not exist" until it reloads, but pg Pool
+    // talks to Postgres directly and sees the table immediately).
+    // Falls back to the Supabase JS client if no DATABASE_URL is set.
+    const insertRow = {
       user_id: req.userId,
       platform: platform || 'polymarket',
       market_id: String(market_id),
@@ -42624,9 +42629,24 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
       category_tags: safeTags.length ? safeTags : null,
       size_display: size_display || 'range',
       outcome: 'pending',
-    }).select().single();
+    };
+    let data;
+    if (pool) {
+      const cols = Object.keys(insertRow);
+      const vals = Object.values(insertRow);
+      const placeholders = cols.map((_, i) => '$' + (i + 1)).join(',');
+      const { rows } = await pool.query(
+        `INSERT INTO predictions (${cols.join(',')}) VALUES (${placeholders}) RETURNING *`,
+        vals
+      );
+      data = rows[0];
+    } else {
+      const r = await supabase.from('predictions').insert(insertRow).select().single();
+      if (r.error) throw r.error;
+      data = r.data;
+    }
 
-    if (error) throw error;
+    if (!data) throw new Error('Insert returned no row');
 
     // Non-blocking: cascade detection
     detectCascade(data.id, data.market_id, data.posted_at).catch(() => {});
@@ -43020,6 +43040,13 @@ app.listen(PORT, () => {
     try {
       await pool.query(predictionsSchema);
       console.log('[boot] ✓ predictions + follows schema ensured');
+      // Tell Supabase PostgREST to reload its schema cache so
+      // supabase.from('predictions') elsewhere in the codebase sees
+      // the table without waiting for its periodic cache refresh.
+      try {
+        await pool.query(`NOTIFY pgrst, 'reload schema'`);
+        console.log('[boot] ✓ PostgREST schema reload notified');
+      } catch (_) { /* NOTIFY is best-effort */ }
     } catch (err) {
       console.error('[boot] ✗ failed to ensure predictions schema:', err.message);
     }
