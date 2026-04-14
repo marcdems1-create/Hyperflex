@@ -11561,7 +11561,13 @@ function openPostTradePredict() {
 
 async function submitPostTradePrediction() {
   var ctx = window._lastTradeContext;
-  if (!ctx) return;
+  if (!ctx) {
+    // Trade context expires after the user navigates away — give visible
+    // feedback instead of silently returning (previous behavior made the
+    // button look broken).
+    showToast('Trade context expired — place a new trade before posting', 'error');
+    return;
+  }
   var btn = document.getElementById('postTradeSubmitBtn');
   var thesis = (document.getElementById('postTradeThesis')?.value || '').trim();
   btn.textContent = 'Posting...';
@@ -17917,33 +17923,13 @@ function renderMarketSearchResults(data, el) {
   }
 }
 
-async function sharePositionToFeed(p) {
-  try {
-    const token = localStorage.getItem('hf_token');
-    const r = await fetch('/api/activity/share-position', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question:      p.question,
-        side:          p.side,
-        platform:      p.platform,
-        current_price: p.current_price,
-        pnl_pct:       p.pnl_pct,
-        cash_value:    p.cash_value,
-        market_url:    p.market_url,
-      })
-    });
-    if (r.ok) {
-      showToast('Shared to feed!', 'success');
-    } else {
-      const d = await r.json().catch(() => ({}));
-      showToast(d.error || 'Could not share', 'error');
-    }
-  } catch (e) {
-    console.error('[sharePositionToFeed]', e);
-    showToast('Failed to share', 'error');
-  }
-}
+// Legacy `sharePositionToFeed` removed — it posted directly to
+// /api/activity/share-position and was shadowed at parse time by the
+// canonical definition ~2k lines below (which opens the Predict Post
+// composer modal). Shadowing meant the legacy code path was dead and
+// no callers reached the old endpoint. The `/api/activity/share-position`
+// backend handler in server.js is left in place in case external tools
+// rely on it.
 
 // ── BROWSER WALLET CONNECTION (MetaMask / Coinbase Wallet) ──────────────────
 window._connectedWallet = localStorage.getItem('hf_wallet_address') || null;
@@ -20257,7 +20243,11 @@ async function submitPredictionPost() {
   var avgCost = _ppcData.avg_cost != null ? _ppcData.avg_cost : (_ppcData.cost_basis && _ppcData.shares > 0 ? _ppcData.cost_basis / _ppcData.shares : _ppcData.current_price);
   var tags = deriveTagsClient(_ppcData.question || '');
 
-  var token = localStorage.getItem('hf_token') || localStorage.getItem('creator_token') || '';
+  // NB: fallback key is `hf_creator_token` (the canonical name written by
+  // creator-login.html). An earlier typo read `creator_token` which is
+  // never set anywhere, so creator-only sessions silently fell through
+  // and posted without auth.
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
   try {
     var res = await fetch('/api/predictions', {
       method: 'POST',
