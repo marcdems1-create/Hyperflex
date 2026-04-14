@@ -14873,54 +14873,15 @@ function sizeRangeLabel(usd) {
 }
 
 // POST /api/wallet/positions — fetch + enrich Polymarket positions for the post composer
-app.post('/api/wallet/positions', async (req, res) => {
-  try {
-    const { address } = req.body || {};
-    if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address)) {
-      return res.status(400).json({ error: 'Invalid wallet address' });
-    }
-    const [r1, r2] = await Promise.all([
-      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
-        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-      }),
-      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=true`, {
-        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-      }).catch(() => null)
-    ]);
-    if (!r1.ok) return res.status(502).json({ error: 'Failed to fetch positions from Polymarket' });
-    const raw1 = await r1.json();
-    const raw2 = r2 && r2.ok ? await r2.json() : [];
-    const seen = new Set();
-    const all = [...(Array.isArray(raw1) ? raw1 : []), ...(Array.isArray(raw2) ? raw2 : [])].filter(p => {
-      const k = (p.conditionId || '') + ':' + (p.outcome || '');
-      if (seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-    const positions = all.map(p => {
-      const shares = parseFloat(p.size) || 0;
-      const currentPrice = parseFloat(p.curPrice) || 0;
-      const costBasis = parseFloat(p.initialValue) || 0;
-      const question = p.title || p.question || 'Unknown market';
-      const sizeUsd = Math.round(shares * currentPrice * 100) / 100;
-      return {
-        condition_id: p.conditionId || null,
-        market_id: p.conditionId || null,
-        question,
-        direction: (p.outcome || 'YES').toUpperCase(),
-        entry_price: shares > 0 ? Math.round((costBasis / shares) * 100) / 100 : Math.round(currentPrice * 100) / 100,
-        position_size_usd: sizeUsd,
-        size_range: sizeRangeLabel(sizeUsd),
-        category_tags: deriveCategories(question),
-        platform: 'polymarket',
-        slug: p.eventSlug || p.slug || null
-      };
-    }).filter(p => p.position_size_usd > 0);
-    res.json({ positions, address });
-  } catch (err) {
-    console.error('[wallet/positions]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+// POST /api/wallet/positions — handler lives at the canonical location
+// below (search "/api/wallet/positions" again). The shim that used to
+// live here read `req.body.address` and was registered without
+// requireAuth. The frontend at feed.html:404 sends `wallet_address`
+// with auth headers, so the active handler always 400'd "Invalid
+// wallet address" — Post Prediction's wallet scan was effectively dead
+// for every user. Removing the shim lets Express route to the newer
+// handler that (a) reads `wallet_address` (matches the frontend) and
+// (b) requires auth (which it always should have).
 
 // POST /api/predictions — handler lives at the canonical location below
 // (search for `POST /api/predictions — create a prediction (auth required)`).
@@ -39333,88 +39294,13 @@ function detectSentiment(text) {
 
 let _newsImpactCache = null;
 
-app.get('/api/news-impact', async (req, res) => {
-  try {
-    if (_newsImpactCache && (Date.now() - _newsImpactCache.ts < 15 * 60 * 1000)) {
-      return res.json(_newsImpactCache.data);
-    }
-
-    const HOT_TOPICS = [
-      { query: 'bitcoin crypto', keywords: ['bitcoin', 'btc', 'crypto', 'ethereum', 'eth'] },
-      { query: 'trump president', keywords: ['trump', 'president', 'white house', 'republican'] },
-      { query: 'federal reserve interest rate', keywords: ['fed', 'rate', 'interest', 'fomc', 'inflation'] },
-      { query: 'nba basketball', keywords: ['nba', 'basketball', 'lakers', 'celtics', 'playoffs'] },
-      { query: 'election congress senate', keywords: ['election', 'vote', 'congress', 'senate', 'democrat', 'republican'] }
-    ];
-
-    let markets = [];
-    if (_screenerCache && _screenerCache.data) {
-      markets = Array.isArray(_screenerCache.data) ? _screenerCache.data : (_screenerCache.data.markets || []);
-    }
-
-    const topicResults = await Promise.allSettled(
-      HOT_TOPICS.map(async (topic) => {
-        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic.query)}&hl=en-US&gl=US&ceid=US:en`;
-        const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 8000);
-        try {
-          const rssRes = await fetch(rssUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Hyperflex/1.0' } });
-          clearTimeout(tid);
-          if (!rssRes.ok) return [];
-          const xml = await rssRes.text();
-          const items = [];
-          const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-          let match;
-          while ((match = itemRegex.exec(xml)) !== null && items.length < 3) {
-            const block = match[1];
-            const titleMatch = block.match(/<title><!\[CDATA\[(.*?)\]\]>|<title>(.*?)<\/title>/);
-            const linkMatch = block.match(/<link>(.*?)<\/link>|<link><!\[CDATA\[(.*?)\]\]>/);
-            const pubDateMatch = block.match(/<pubDate>(.*?)<\/pubDate>/);
-            const sourceMatch = block.match(/<source[^>]*>(.*?)<\/source>/);
-            const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
-            const link = linkMatch ? (linkMatch[1] || linkMatch[2]) : '';
-            const pubDate = pubDateMatch ? pubDateMatch[1] : '';
-            const source = sourceMatch ? sourceMatch[1].replace(/&amp;/g, '&') : '';
-            if (title && link) items.push({ title, link, pubDate, source, keywords: topic.keywords });
-          }
-          return items;
-        } catch (e) { clearTimeout(tid); return []; }
-      })
-    );
-
-    const allHeadlines = [];
-    for (const r of topicResults) {
-      if (r.status === 'fulfilled' && Array.isArray(r.value)) allHeadlines.push(...r.value);
-    }
-
-    const newsImpacts = [];
-    for (const headline of allHeadlines) {
-      const sentiment = detectSentiment(headline.title);
-      const relatedMarkets = [];
-      for (const mkt of markets) {
-        const qLower = (mkt.question || '').toLowerCase();
-        const matched = (headline.keywords || []).some(kw => qLower.includes(kw));
-        if (!matched) continue;
-        relatedMarkets.push({ question: mkt.question, yes_pct: mkt.yes_price != null ? Math.round(mkt.yes_price * 100) : null, url: mkt.url || 'https://polymarket.com' });
-        if (relatedMarkets.length >= 3) break;
-      }
-
-      newsImpacts.push({
-        headline: headline.title, source: headline.source || '', published: headline.pubDate || '',
-        link: headline.link || '', sentiment, related_markets: relatedMarkets
-      });
-    }
-
-    newsImpacts.sort((a, b) => (b.related_markets.length - a.related_markets.length) || (a.sentiment === 'neutral' ? 1 : -1));
-    const result = { news_impacts: newsImpacts.slice(0, 15), updated_at: new Date().toISOString() };
-    _newsImpactCache = { ts: Date.now(), data: result };
-    res.json(result);
-  } catch (err) {
-    console.error('[news-impact]', err.message);
-    if (_newsImpactCache) return res.json(_newsImpactCache.data);
-    res.status(500).json({ error: 'Failed to load news impact', detail: err.message });
-  }
-});
+// GET /api/news-impact — duplicate handler removed. The earlier
+// definition (~line 29502) is the canonical one; both fetched Google
+// News RSS for hot topics and matched against screener markets, just
+// with slightly different topic lists and cache variable names. The
+// earlier wins in route registration order so this block was always
+// dead code. If the topic list here was meant to replace the older
+// one, copy the HOT_TOPICS array to the active handler at line ~29502.
 
 // ════════════════════════════════════════════════════════════
 // WHALE BEHAVIOR ANALYTICS — track whale trading patterns

@@ -4120,7 +4120,7 @@ async function claimReferralIfPending(token) {
     const r = await fetch(`${API}/api/referral/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ ref_user_id: refUserId, creatorslug: slug })
+      body: JSON.stringify({ ref_user_id: refUserId, creator_slug: slug })
     });
     const data = await r.json();
     if (data.ok && data.welcome_bonus > 0) {
