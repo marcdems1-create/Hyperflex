@@ -5,9 +5,9 @@
 
 ## What HYPERFLEX Is
 
-HYPERFLEX is the **social media of prediction markets**. It's where traders post their takes, build track records, follow the smartest predictors, and act on edge — all in one feed.
+HYPERFLEX is a **social network for prediction market traders** — a platform where users build verified public identities around their forecasting track record, post predictions attached to real money positions with written theses, follow the traders they trust, and trade directly across Polymarket and Kalshi from a single interface.
 
-The core insight: whale signals and alpha terminals are commoditized — anyone with a Claude API key can build a screener. What can't be cloned is a **social graph of predictors with verified track records**. HYPERFLEX is building that graph.
+The core thesis is that the social graph of prediction market participants — who follows whom, whose calls others act on, whose reasoning moves markets — doesn't exist anywhere yet, and HYPERFLEX is the only platform positioned to own it. Built on Node.js/Express with a Supabase backend and hosted on Railway, the platform already has Polymarket CLOB trading live, a cross-platform portfolio aggregator, alpha signal engine, Stripe subscriptions, and creator tooling; what's being built now is the social layer — prediction posts, accuracy scoring, and the follow graph — which transforms HYPERFLEX from a trading utility into a network effect business whose data becomes the defensible B2B asset: verified forecaster accuracy by domain, thesis-linked position data, and influence cascade analytics that no exchange, data vendor, or signal bot can replicate.
 
 **One sentence:** HYPERFLEX is where you post your prediction, prove you were right, and build a reputation that follows you.
 

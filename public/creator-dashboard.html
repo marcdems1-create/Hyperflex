@@ -17474,7 +17474,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
         <!-- Actions -->
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 14px;border:1px solid var(--border);border-radius:6px;transition:all .15s;min-height:36px;display:flex;align-items:center" onmouseover="this.style.borderColor='var(--dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">View market page ↗</a>
-          <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:36px" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Share</button>
+          <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);border-radius:6px;padding:6px 14px;font-size:11px;color:var(--gold);cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">Post to Feed</button>
           ${tradeActionsHtml}
         </div>
       </div>
@@ -20060,6 +20060,255 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
     </div>
   </div>
 </div>
+
+<!-- ── Predict Post Composer Modal ─────────────────────────────────────────── -->
+<div id="predictPostModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);z-index:10000;align-items:flex-start;justify-content:center;padding:5vh 16px 24px;overflow-y:auto" onclick="if(event.target===this)closePredictComposer()">
+  <div style="background:#13131a;border:1px solid rgba(255,255,255,0.08);border-radius:16px;width:100%;max-width:520px;padding:24px;position:relative">
+    <button onclick="closePredictComposer()" style="position:absolute;top:14px;right:14px;background:none;border:none;color:#8b8a9a;font-size:20px;cursor:pointer;line-height:1;padding:4px">×</button>
+
+    <!-- Position pulled from portfolio -->
+    <div style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#8b8a9a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Position — Pulled from Portfolio</div>
+    <div id="ppc-position-strip" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#1a1a24;border:1px solid rgba(255,255,255,0.07);border-radius:10px;margin-bottom:18px">
+      <span id="ppc-platform-badge" style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(124,92,252,0.12);color:#7c5cfc;border:1px solid rgba(124,92,252,0.3)">Polymarket</span>
+      <span id="ppc-dir-badge" style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px">YES</span>
+      <span id="ppc-entry-label" style="font-family:'Space Mono',monospace;font-size:11px;color:#8b8a9a"></span>
+      <span id="ppc-size-label" style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#f5a623"></span>
+    </div>
+    <div id="ppc-market-title" style="font-family:var(--sans);font-size:15px;font-weight:700;color:#f1f0f5;line-height:1.4;margin-bottom:20px"></div>
+
+    <!-- Size display toggle -->
+    <div style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#8b8a9a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px">Show Position Size As</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+      <label id="ppc-size-exact-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid rgba(255,255,255,0.08);border-radius:10px;cursor:pointer;transition:border-color .15s;background:#1a1a24">
+        <input type="radio" name="ppc_size" value="exact" id="ppc-size-exact" style="accent-color:#f5a623;width:16px;height:16px" onchange="updatePredictPreview()">
+        <div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#f1f0f5">Exact amount</div>
+          <div id="ppc-exact-val" style="font-family:'Space Mono',monospace;font-size:11px;color:#8b8a9a">$850</div>
+        </div>
+      </label>
+      <label id="ppc-size-range-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid #f5a623;border-radius:10px;cursor:pointer;transition:border-color .15s;background:rgba(245,166,35,0.06)">
+        <input type="radio" name="ppc_size" value="range" id="ppc-size-range" checked style="accent-color:#f5a623;width:16px;height:16px" onchange="updatePredictPreview()">
+        <div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#f1f0f5">Range only</div>
+          <div id="ppc-range-val" style="font-family:'Space Mono',monospace;font-size:11px;color:#8b8a9a">$250–$1K</div>
+        </div>
+      </label>
+    </div>
+
+    <!-- Thesis -->
+    <div style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#8b8a9a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px">Your Thesis</div>
+    <textarea id="ppc-thesis" placeholder="What's your edge? Why are you taking this position at this price?" maxlength="500" oninput="updatePredictPreview()" style="width:100%;min-height:90px;background:#1a1a24;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#f1f0f5;font-family:var(--sans);font-size:13px;padding:11px 14px;resize:vertical;outline:none;line-height:1.5;transition:border-color .15s;box-sizing:border-box" onfocus="this.style.borderColor='rgba(245,166,35,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
+    <div style="text-align:right;font-family:'Space Mono',monospace;font-size:10px;color:#8b8a9a;margin-top:4px;margin-bottom:20px"><span id="ppc-char-count">0</span>/500</div>
+
+    <!-- Conviction -->
+    <div style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#8b8a9a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px">Conviction</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px">
+      <button id="ppc-conv-low" onclick="setPPCConviction('low')" style="padding:10px;border:1.5px solid rgba(255,255,255,0.08);border-radius:10px;background:#1a1a24;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#8b8a9a;cursor:pointer;transition:all .15s">Low</button>
+      <button id="ppc-conv-medium" onclick="setPPCConviction('medium')" style="padding:10px;border:1.5px solid #f5a623;border-radius:10px;background:rgba(245,166,35,0.1);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#f5a623;cursor:pointer;transition:all .15s">Medium</button>
+      <button id="ppc-conv-high" onclick="setPPCConviction('high')" style="padding:10px;border:1.5px solid rgba(255,255,255,0.08);border-radius:10px;background:#1a1a24;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#8b8a9a;cursor:pointer;transition:all .15s">High ↑</button>
+    </div>
+
+    <!-- Preview -->
+    <div style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#8b8a9a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Preview — How This Appears in the Feed</div>
+    <div id="ppc-preview" style="background:#0d0d10;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 16px;border-left:3px solid #7c5cfc;margin-bottom:20px;min-height:80px"></div>
+
+    <!-- Submit -->
+    <button id="ppc-submit" onclick="submitPredictionPost()" style="width:100%;background:#f5a623;color:#0d0d10;border:none;border-radius:10px;padding:13px;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;letter-spacing:.02em" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">Post Prediction</button>
+  </div>
+</div>
+
+<script>
+// ── Predict Post Composer ────────────────────────────────────────────────────
+var _ppcData = null; // current position being composed
+var _ppcConviction = 'medium';
+
+function sharePositionToFeed(posData) {
+  if (!posData) return;
+  _ppcData = posData;
+  _ppcConviction = 'medium';
+
+  // Populate position strip
+  var platform = (posData.platform || 'polymarket');
+  var platformLabel = platform === 'kalshi' ? 'Kalshi' : platform === 'manifold' ? 'Manifold' : 'Polymarket';
+  document.getElementById('ppc-platform-badge').textContent = platformLabel;
+
+  var dir = (posData.side || 'YES').toUpperCase();
+  var isYes = dir === 'YES';
+  var dirBadge = document.getElementById('ppc-dir-badge');
+  dirBadge.textContent = dir;
+  dirBadge.style.background = isYes ? 'rgba(34,197,94,0.12)' : 'rgba(255,77,106,0.12)';
+  dirBadge.style.color = isYes ? '#22c55e' : '#ff4d6a';
+  dirBadge.style.border = '1px solid ' + (isYes ? 'rgba(34,197,94,0.3)' : 'rgba(255,77,106,0.3)');
+
+  var avgCost = posData.avg_cost != null ? posData.avg_cost : (posData.cost_basis && posData.shares > 0 ? Math.round(posData.cost_basis / posData.shares * 100) / 100 : posData.current_price);
+  document.getElementById('ppc-entry-label').textContent = avgCost != null ? 'Entry ' + Math.round(avgCost * 100) + '¢' : '';
+
+  var sizeUsd = posData.cash_value || (posData.shares && posData.current_price ? posData.shares * posData.current_price : null);
+  var sizeRounded = sizeUsd ? Math.round(sizeUsd) : null;
+  document.getElementById('ppc-size-label').textContent = sizeRounded ? '$' + sizeRounded : '';
+  document.getElementById('ppc-exact-val').textContent = sizeRounded ? '$' + sizeRounded : '—';
+  document.getElementById('ppc-range-val').textContent = sizeToRange(sizeRounded);
+  document.getElementById('ppc-market-title').textContent = posData.question || '';
+
+  // Reset form
+  document.getElementById('ppc-thesis').value = '';
+  document.getElementById('ppc-char-count').textContent = '0';
+  document.getElementById('ppc-size-range').checked = true;
+  document.getElementById('ppc-size-exact').checked = false;
+  updateSizeToggleStyle();
+  setPPCConviction('medium');
+  updatePredictPreview();
+
+  document.getElementById('predictPostModal').style.display = 'flex';
+}
+
+function closePredictComposer() {
+  document.getElementById('predictPostModal').style.display = 'none';
+  _ppcData = null;
+}
+
+function sizeToRange(usd) {
+  if (!usd || usd <= 0) return '—';
+  if (usd < 250) return '<$250';
+  if (usd < 1000) return '$250–$1K';
+  if (usd < 5000) return '$1K–$5K';
+  return '$5K+';
+}
+
+function setPPCConviction(level) {
+  _ppcConviction = level;
+  ['low','medium','high'].forEach(function(l) {
+    var btn = document.getElementById('ppc-conv-' + l);
+    if (!btn) return;
+    if (l === level) {
+      btn.style.borderColor = '#f5a623';
+      btn.style.background = 'rgba(245,166,35,0.1)';
+      btn.style.color = '#f5a623';
+    } else {
+      btn.style.borderColor = 'rgba(255,255,255,0.08)';
+      btn.style.background = '#1a1a24';
+      btn.style.color = '#8b8a9a';
+    }
+  });
+  updatePredictPreview();
+}
+
+function updateSizeToggleStyle() {
+  var rangeWrap = document.getElementById('ppc-size-range-wrap');
+  var exactWrap = document.getElementById('ppc-size-exact-wrap');
+  var useRange = document.getElementById('ppc-size-range').checked;
+  if (rangeWrap) { rangeWrap.style.borderColor = useRange ? '#f5a623' : 'rgba(255,255,255,0.08)'; rangeWrap.style.background = useRange ? 'rgba(245,166,35,0.06)' : '#1a1a24'; }
+  if (exactWrap) { exactWrap.style.borderColor = useRange ? 'rgba(255,255,255,0.08)' : '#f5a623'; exactWrap.style.background = useRange ? '#1a1a24' : 'rgba(245,166,35,0.06)'; }
+}
+
+function updatePredictPreview() {
+  if (!_ppcData) return;
+  updateSizeToggleStyle();
+  var thesis = (document.getElementById('ppc-thesis').value || '').trim();
+  document.getElementById('ppc-char-count').textContent = document.getElementById('ppc-thesis').value.length;
+
+  var useRange = document.getElementById('ppc-size-range').checked;
+  var sizeUsd = _ppcData.cash_value || (_ppcData.shares && _ppcData.current_price ? _ppcData.shares * _ppcData.current_price : null);
+  var sizeRounded = sizeUsd ? Math.round(sizeUsd) : null;
+  var sizeStr = sizeRounded ? (useRange ? sizeToRange(sizeRounded) : '$' + sizeRounded) : '';
+
+  var dir = (_ppcData.side || 'YES').toUpperCase();
+  var isYes = dir === 'YES';
+  var dirColor = isYes ? '#22c55e' : '#ff4d6a';
+  var dirBg = isYes ? 'rgba(34,197,94,0.12)' : 'rgba(255,77,106,0.12)';
+  var dirBorder = isYes ? 'rgba(34,197,94,0.3)' : 'rgba(255,77,106,0.3)';
+  var avgCost = _ppcData.avg_cost != null ? _ppcData.avg_cost : (_ppcData.cost_basis && _ppcData.shares > 0 ? Math.round(_ppcData.cost_basis / _ppcData.shares * 100) / 100 : _ppcData.current_price);
+  var entryStr = avgCost != null ? Math.round(avgCost * 100) + '¢' : '';
+  var platform = (_ppcData.platform || 'polymarket');
+  var platformLabel = platform === 'kalshi' ? 'Kalshi' : platform === 'manifold' ? 'Manifold' : 'Polymarket';
+  var convLabel = _ppcConviction === 'high' ? '🔥 High' : _ppcConviction === 'low' ? 'Low' : 'Medium';
+  var convColor = _ppcConviction === 'high' ? '#f5a623' : _ppcConviction === 'low' ? '#8b8a9a' : '#f5a623';
+
+  // Derive tags for preview only
+  var tags = deriveTagsClient(_ppcData.question || '');
+  var tagsHtml = tags.map(function(t) {
+    return '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)">' + t + '</span>';
+  }).join('');
+
+  document.getElementById('ppc-preview').innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(124,92,252,0.12);color:#7c5cfc;border:1px solid rgba(124,92,252,0.3)">' + platformLabel + '</span>' +
+      '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + dirBg + ';color:' + dirColor + ';border:1px solid ' + dirBorder + '">' + dir + '</span>' +
+      (entryStr ? '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:#8b8a9a">' + entryStr + '</span>' : '') +
+      (sizeStr ? '<span style="font-family:\'Space Mono\',monospace;font-size:11px;font-weight:700;color:#f5a623">' + sizeStr + '</span>' : '') +
+      '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(245,166,35,0.08);color:' + convColor + '">' + convLabel + '</span>' +
+    '</div>' +
+    '<div style="font-family:var(--sans);font-size:13px;font-weight:600;color:#f1f0f5;line-height:1.4;margin-bottom:' + (thesis || tagsHtml ? '8px' : '0') + '">' + escHtmlDash(_ppcData.question || '') + '</div>' +
+    (thesis ? '<div style="font-family:var(--sans);font-size:12px;color:#f5a623;line-height:1.5;border-left:2px solid rgba(245,166,35,0.4);padding-left:10px;margin-bottom:8px">' + escHtmlDash(thesis) + '</div>' : '') +
+    (tagsHtml ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' + tagsHtml + '</div>' : '');
+}
+
+function deriveTagsClient(question) {
+  var q = (question || '').toLowerCase();
+  var tags = [];
+  if (/election|president|congress|senate|vote|democrat|republican|biden|trump|harris|governor|ballot/.test(q)) tags.push('Politics');
+  if (/bitcoin|ethereum|btc|eth|crypto|blockchain|defi|altcoin|nft|token/.test(q)) tags.push('Crypto');
+  if (/fed|inflation|rate|gdp|recession|cpi|jobs|unemployment|treasury|yield|dollar|macro|fomc|tariff/.test(q)) tags.push('Macro');
+  if (/us policy|policy|regulation|legislation|executive order/.test(q)) tags.push('US Policy');
+  if (/nfl|nba|mlb|soccer|football|basketball|baseball|world cup|championship/.test(q)) tags.push('Sports');
+  if (/russia|ukraine|china|taiwan|war|military|nato|sanction|conflict/.test(q)) tags.push('Geo');
+  if (/\bai\b|openai|apple|microsoft|google|meta|amazon|nvidia|tech|software/.test(q)) tags.push('Tech');
+  return tags.slice(0, 2).length ? tags.slice(0, 2) : ['Macro'];
+}
+
+async function submitPredictionPost() {
+  if (!_ppcData) return;
+  var btn = document.getElementById('ppc-submit');
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+
+  var thesis = (document.getElementById('ppc-thesis').value || '').trim();
+  var useRange = document.getElementById('ppc-size-range').checked;
+  var sizeUsd = _ppcData.cash_value || (_ppcData.shares && _ppcData.current_price ? _ppcData.shares * _ppcData.current_price : null);
+  var avgCost = _ppcData.avg_cost != null ? _ppcData.avg_cost : (_ppcData.cost_basis && _ppcData.shares > 0 ? _ppcData.cost_basis / _ppcData.shares : _ppcData.current_price);
+  var tags = deriveTagsClient(_ppcData.question || '');
+
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('creator_token') || '';
+  try {
+    var res = await fetch('/api/predictions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        platform: _ppcData.platform || 'polymarket',
+        market_id: _ppcData.condition_id || _ppcData.id || null,
+        market_title: _ppcData.question || '',
+        direction: (_ppcData.side || 'YES').toUpperCase(),
+        entry_price: avgCost != null ? Math.round(avgCost * 100) / 100 : null,
+        position_size_usd: sizeUsd ? Math.round(sizeUsd * 100) / 100 : null,
+        size_display: useRange ? 'range' : 'exact',
+        conviction: _ppcConviction,
+        thesis_text: thesis || null,
+        category_tags: tags
+      })
+    });
+    var data = await res.json();
+    if (data.ok) {
+      closePredictComposer();
+      showToast('Posted to your feed!');
+    } else {
+      throw new Error(data.error || 'Failed to post');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Post Prediction';
+  }
+}
+
+// Sync radio listeners for size toggle styling
+document.addEventListener('DOMContentLoaded', function() {
+  var exEl = document.getElementById('ppc-size-exact');
+  var raEl = document.getElementById('ppc-size-range');
+  if (exEl) exEl.addEventListener('change', updateSizeToggleStyle);
+  if (raEl) raEl.addEventListener('change', updateSizeToggleStyle);
+});
+</script>
 
 </body>
 </html>
