@@ -811,6 +811,34 @@
           </div>
         </div>
       </div>
+
+      <!-- Polymarket health diagnostic -->
+      <div class="analytics-card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Polymarket Health — Users Stuck at 0 Positions</span>
+          <div style="display:flex;gap:8px">
+            <button onclick="loadPolyHealth()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Refresh</button>
+            <button onclick="resyncStuckUsers()" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer" title="Force re-sync all users with wallet-but-no-positions">⚡ Resync Stuck Users</button>
+          </div>
+        </div>
+        <div id="polyHealthSummary" style="font-size:12px;color:var(--dim);margin-top:8px;margin-bottom:12px">Click Refresh to load per-user wallet health…</div>
+        <div id="polyHealthMsg" style="font-size:12px;color:var(--amber);margin-bottom:8px;display:none"></div>
+        <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px" id="polyHealthTable">
+            <thead style="position:sticky;top:0;background:var(--bg)">
+              <tr>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">User</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">EOA</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Proxy</th>
+                <th style="text-align:right;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Positions</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Status</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Action</th>
+              </tr>
+            </thead>
+            <tbody id="polyHealthBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- FLEX Points tab -->
@@ -2248,6 +2276,122 @@ async function loadAnalytics() {
     } catch (e) {
       console.error('[analytics] users fetch failed', e);
     }
+  }
+}
+
+// ── Polymarket Health Diagnostic ─────────────────────────────────────
+async function loadPolyHealth() {
+  const summary = document.getElementById('polyHealthSummary');
+  const body = document.getElementById('polyHealthBody');
+  const msg = document.getElementById('polyHealthMsg');
+  summary.textContent = 'Loading…';
+  body.innerHTML = '';
+  msg.style.display = 'none';
+
+  try {
+    const r = await fetch(API + '/api/admin/polymarket-health?secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      summary.textContent = 'Error';
+      msg.style.display = 'block';
+      msg.style.color = 'var(--red)';
+      msg.textContent = '❌ ' + (data.code ? '[' + data.code + '] ' : '') + (data.error || 'Unknown error') +
+        (data.failed_query ? ' (query: ' + data.failed_query + ')' : '') +
+        (data.sql_hint ? ' — ' + data.sql_hint : '');
+      return;
+    }
+    const t = data.totals || {};
+    summary.innerHTML =
+      '<strong>' + t.total_with_wallet + '</strong> users with wallet · ' +
+      '<span style="color:var(--green)">' + t.with_positions + ' with positions</span> · ' +
+      '<span style="color:var(--red)">' + t.empty_positions + ' stuck at 0</span> · ' +
+      (t.with_proxy_derived || 0) + ' have proxy derived · ' +
+      (t.never_synced || 0) + ' never synced';
+
+    if (data.schema_note) {
+      msg.style.display = 'block';
+      msg.style.color = 'var(--amber)';
+      msg.textContent = '⚠️ ' + data.schema_note;
+    }
+
+    const rows = data.users || [];
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--dim)">No users with wallet addresses.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows.map(u => {
+      const eoa = u.polymarket_address ? u.polymarket_address.slice(0, 8) + '…' + u.polymarket_address.slice(-4) : '—';
+      const proxy = u.polymarket_proxy ? u.polymarket_proxy.slice(0, 8) + '…' + u.polymarket_proxy.slice(-4) : '<span style="color:var(--dim)">not derived</span>';
+      const stuck = u.pos_count === 0;
+      const statusBadges = (u.status || []).map(s => {
+        const color = s === 'EMPTY_POSITIONS' ? 'var(--red)' : s === 'NO_PROXY_DERIVED' ? 'var(--amber)' : s === 'NEVER_SYNCED' ? 'var(--amber)' : 'var(--dim)';
+        return '<span style="background:rgba(255,255,255,0.05);color:' + color + ';padding:2px 6px;border-radius:4px;font-size:10px;margin-right:4px">' + s + '</span>';
+      }).join('');
+      return '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:8px 12px;font-size:12px">' + escHtml(u.display_name || '—') + '</td>' +
+        '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + escHtml(eoa) + '</td>' +
+        '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + proxy + '</td>' +
+        '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:' + (u.pos_count > 0 ? 'var(--green)' : 'var(--dim)') + '">' + u.pos_count + '</td>' +
+        '<td style="padding:8px 12px">' + statusBadges + '</td>' +
+        '<td style="padding:8px 12px">' +
+          (stuck
+            ? '<button onclick="resyncOneUser(\'' + u.id + '\', this)" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Resync</button>'
+            : '<span style="color:var(--dim);font-size:11px">ok</span>') +
+        '</td>' +
+        '</tr>';
+    }).join('');
+  } catch (e) {
+    summary.textContent = 'Error';
+    msg.style.display = 'block';
+    msg.style.color = 'var(--red)';
+    msg.textContent = '❌ Network error: ' + e.message;
+  }
+}
+
+async function resyncStuckUsers() {
+  if (!confirm('Force-resync all users with wallet-but-no-positions? This hits Polymarket API and may take 30s-2min.')) return;
+  const msg = document.getElementById('polyHealthMsg');
+  msg.style.display = 'block';
+  msg.style.color = 'var(--amber)';
+  msg.textContent = '⏳ Resyncing all stuck users…';
+  try {
+    const r = await fetch(API + '/api/admin/resync-polymarket?stuck=1&secret=' + encodeURIComponent(adminSecret), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = '❌ ' + (data.error || 'Resync failed');
+      return;
+    }
+    msg.style.color = 'var(--green)';
+    msg.textContent = '✅ Resynced ' + data.resynced + ' users · ' +
+      data.users_with_positions_after + ' now have positions · ' +
+      data.users_still_empty + ' still empty';
+    setTimeout(loadPolyHealth, 600);
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '❌ ' + e.message;
+  }
+}
+
+async function resyncOneUser(userId, btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const r = await fetch(API + '/api/admin/resync-polymarket?user_id=' + encodeURIComponent(userId) + '&secret=' + encodeURIComponent(adminSecret), { method: 'POST' });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      btn.textContent = '✓ ' + (data.results?.[0]?.positions_after ?? '?') + ' pos';
+      btn.style.background = 'var(--green)';
+      setTimeout(loadPolyHealth, 400);
+    } else {
+      btn.textContent = '✗ err';
+      btn.style.background = 'var(--red)';
+      btn.title = data.error || 'Unknown error';
+    }
+  } catch (e) {
+    btn.textContent = '✗ net';
+    btn.title = e.message;
   }
 }
 

@@ -17282,18 +17282,66 @@ app.get('/api/admin/signup-audit', requireAdmin, async (req, res) => {
 // users showed 0 positions despite having wallet addresses — root cause
 // was we stored the EOA but Polymarket positions live on the Safe proxy.
 app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
+  // Build the query in two fallbacks: preferred query uses polymarket_proxy
+  // column (added by the self-healing boot migration). If that column
+  // isn't there yet (boot migration hasn't run, or failed — we've seen
+  // 42601 errors pop up before the schema catches up), fall back to a
+  // narrower query that doesn't reference polymarket_proxy.
+  const FULL_SQL = `
+    SELECT u.id, u.email, u.display_name, u.created_at,
+           u.polymarket_address,
+           u.polymarket_proxy,
+           (SELECT COUNT(*) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform = 'polymarket') AS pos_count,
+           (SELECT MAX(updated_at) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform = 'polymarket') AS last_synced
+    FROM users u
+    WHERE u.polymarket_address IS NOT NULL
+    ORDER BY u.created_at DESC
+    LIMIT 500
+  `;
+  const FALLBACK_SQL = `
+    SELECT u.id, u.email, u.display_name, u.created_at,
+           u.polymarket_address,
+           NULL::text AS polymarket_proxy,
+           (SELECT COUNT(*) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform = 'polymarket') AS pos_count,
+           (SELECT MAX(updated_at) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform = 'polymarket') AS last_synced
+    FROM users u
+    WHERE u.polymarket_address IS NOT NULL
+    ORDER BY u.created_at DESC
+    LIMIT 500
+  `;
+
+  let rows = [];
+  let schemaNote = null;
   try {
-    const rows = await dbQuery(
-      `SELECT u.id, u.email, u.display_name, u.created_at,
-              u.polymarket_address,
-              u.polymarket_proxy,
-              (SELECT COUNT(*) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform='polymarket') AS pos_count,
-              (SELECT MAX(updated_at) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform='polymarket') AS last_synced
-       FROM users u
-       WHERE u.polymarket_address IS NOT NULL
-       ORDER BY u.created_at DESC
-       LIMIT 500`
-    ).catch(() => []);
+    rows = await dbQuery(FULL_SQL);
+  } catch (err) {
+    console.warn('[polymarket-health] full query failed:', err.code, err.message);
+    // Retry without polymarket_proxy column (common when the boot
+    // migration hasn't run yet on a fresh deploy). Surface the error
+    // so admin can see what's wrong rather than silent empty.
+    if (err.code === '42703' || err.code === '42601' || err.code === '42P01') {
+      schemaNote = 'FALLBACK_QUERY: ' + err.code + ' — ' + (err.message || '').slice(0, 160);
+      try {
+        rows = await dbQuery(FALLBACK_SQL);
+      } catch (err2) {
+        return res.status(500).json({
+          ok: false,
+          error: err2.message,
+          code: err2.code,
+          failed_query: 'fallback',
+          sql_hint: 'Both full + fallback queries failed. Check that users table exists and has polymarket_address column.',
+        });
+      }
+    } else {
+      return res.status(500).json({
+        ok: false,
+        error: err.message,
+        code: err.code,
+        failed_query: 'full',
+      });
+    }
+  }
+  try {
 
     const enriched = rows.map(u => {
       const status = [];
@@ -17317,7 +17365,7 @@ app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
       with_positions: enriched.filter(e => e.pos_count > 0).length,
     };
 
-    res.json({ ok: true, totals, users: enriched });
+    res.json({ ok: true, totals, users: enriched, schema_note: schemaNote || undefined });
   } catch (err) {
     console.error('[admin/polymarket-health]', err.message);
     res.status(500).json({ ok: false, error: err.message });
