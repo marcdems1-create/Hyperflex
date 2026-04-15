@@ -460,7 +460,8 @@ a:hover { text-decoration: underline; }
   <div class="feed-header">
     <div class="feed-title">Prediction Feed</div>
     <div class="tabs">
-      <button class="tab active" id="tabFollowing" onclick="switchTab('following')">Following</button>
+      <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
+      <button class="tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
       <button class="tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
     </div>
   </div>
@@ -651,7 +652,7 @@ a:hover { text-decoration: underline; }
 <script>
 var API = window.location.origin;
 var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
-var currentTab = 'following';
+var currentTab = 'foryou';
 var nextCursor = null;
 var feedData = [];
 
@@ -1102,7 +1103,14 @@ async function submitManual() {
     if (!r.ok) throw new Error(data.error || 'Failed');
 
     closeModal('manualModal');
-    switchTab('following');
+    // Immediately add the new prediction to the feed for instant feedback
+    if (data.prediction) {
+      var newPred = normaliseNew(data.prediction);
+      feedData.unshift(newPred);
+      renderFeed(false);
+    }
+    // Refresh full feed to get server-enriched version
+    setTimeout(function() { loadFeed(false); }, 1500);
   } catch (e) {
     alert('Error: ' + e.message);
   } finally {
@@ -1514,6 +1522,7 @@ async function toggleFollow(userId, btn) {
 // ── Tabs ──
 function switchTab(tab) {
   currentTab = tab;
+  document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
   loadFeed(false);

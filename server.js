@@ -16345,6 +16345,19 @@ async function monitorPolymarketInfluencers() {
 cron.schedule('*/30 * * * *', () => {
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Cron error:', err.message));
 });
+// Also run once on boot after a short delay (so tables + screener cache are warm)
+setTimeout(() => {
+  console.log('[influencer] Running initial sweep on boot...');
+  monitorPolymarketInfluencers().catch(err => console.error('[influencer] Boot sweep error:', err.message));
+}, 60000); // 60s after boot
+
+// Manual trigger for influencer sweep (admin)
+app.post('/api/admin/influencer-sweep', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  monitorPolymarketInfluencers().catch(err => console.error('[influencer] Manual sweep error:', err.message));
+  res.json({ ok: true, message: 'Influencer sweep triggered — check server logs' });
+});
 
 // ── API: list influencers with stats ─────────────────────────────────────────
 app.get('/api/influencers', async (req, res) => {
@@ -42604,16 +42617,52 @@ app.post('/api/social/reactions', requireAuth, async (req, res) => {
 app.get('/api/social/user/:userId/predictions', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-    const { data, error } = await supabase
-      .from('social_predictions')
-      .select('*')
-      .eq('author_id', req.params.userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
+    // Merge from both social_predictions (legacy) and predictions (new) tables
+    let all = [];
 
-    // Compute stats
-    const all = data || [];
+    // Try social_predictions first (legacy)
+    try {
+      const { data } = await supabase
+        .from('social_predictions')
+        .select('*')
+        .eq('author_id', req.params.userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (data?.length) all = all.concat(data);
+    } catch (_) { /* table may not exist */ }
+
+    // Also pull from predictions table (new)
+    try {
+      const { data } = await supabase
+        .from('predictions')
+        .select('*')
+        .eq('user_id', req.params.userId)
+        .order('posted_at', { ascending: false })
+        .limit(limit);
+      if (data?.length) {
+        // Normalise to social_predictions shape for the frontend
+        const mapped = data.map(p => ({
+          id: p.id,
+          author_id: p.user_id,
+          market_slug: p.market_id,
+          market_title: p.market_title,
+          side: p.direction,
+          entry_price: p.entry_price,
+          thesis: p.thesis_text,
+          status: p.outcome === 'correct' ? 'resolved_win' : p.outcome === 'incorrect' ? 'resolved_loss' : 'active',
+          pnl: p.pnl_usd,
+          created_at: p.posted_at,
+          reaction_count: 0,
+          comment_count: 0,
+        }));
+        all = all.concat(mapped);
+      }
+    } catch (_) { /* table may not exist */ }
+
+    // Sort by date, dedupe by market_slug, limit
+    all.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    all = all.slice(0, limit);
+
     const resolved = all.filter(p => p.status === 'resolved_win' || p.status === 'resolved_loss');
     const wins = resolved.filter(p => p.status === 'resolved_win').length;
 
@@ -43418,8 +43467,27 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     // Get followed user IDs (+ self so own predictions always show)
     const { data: followRows } = await supabase.from('follows').select('following_id').eq('follower_id', req.userId);
     const followedIds = (followRows || []).map(f => f.following_id);
-    followedIds.push(req.userId); // include own predictions
+    followedIds.push(req.userId); // always include own predictions
     const hasFollows = followRows && followRows.length > 0;
+    const isFollowingMode = req.query.mode === 'following';
+
+    if (!hasFollows) {
+      // No follows: For You shows all recent predictions; Following shows own only
+      let q;
+      if (isFollowingMode) {
+        q = supabase.from('predictions').select('*').eq('user_id', req.userId).order('posted_at', { ascending: false }).limit(limit + 1);
+      } else {
+        q = supabase.from('predictions').select('*').eq('outcome', 'pending').order('posted_at', { ascending: false }).limit(limit + 1);
+      }
+      if (before) q = q.lt('posted_at', before);
+      const { data, error } = await q;
+      if (error) throw error;
+      const rows = data || [];
+      const hasMore = rows.length > limit;
+      const page = rows.slice(0, limit);
+      const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
+      return res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: rows.length === 0, reason: rows.length === 0 ? 'no_predictions' : null });
+    }
 
     let q = supabase.from('predictions').select('*').in('user_id', followedIds).order('posted_at', { ascending: false }).limit(limit + 1);
     if (before) q = q.lt('posted_at', before);
@@ -43430,14 +43498,6 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
-
-    // Only fall back to discovery content when the user has no follows AND
-    // no own predictions. A user with zero follows but a posted take should
-    // still see their take here. (Was a bug: the early return on no-follows
-    // bypassed the query entirely and hid dashboard-posted takes.)
-    if (!page.length && !hasFollows) {
-      return res.json({ predictions: [], next_cursor: null, empty: true, reason: 'no_follows' });
-    }
 
     res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: false });
   } catch (e) {
