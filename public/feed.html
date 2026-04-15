@@ -414,17 +414,19 @@ function updateCharCount(textareaId, countId) {
 }
 
 // ── Wallet position scan ──
-async function fetchPositions() {
-  var addr = document.getElementById('walletAddressInput').value.trim();
+// `addr` optional: if omitted, reads from the manual input (user-typed flow).
+// `silent` optional: if true, swallows errors — used by the auto-scan on page
+// load so a user with no open positions doesn't see an intrusive alert.
+async function fetchPositions(addr, silent) {
+  if (!addr) addr = document.getElementById('walletAddressInput').value.trim();
   if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
-    alert('Enter a valid Polymarket wallet address (0x...)');
+    if (!silent) alert('Enter a valid Polymarket wallet address (0x...)');
     return;
   }
   if (!token) { window.location.href = '/creator/login'; return; }
 
   var btn = document.querySelector('.wallet-connect-btn');
-  btn.textContent = 'Scanning…';
-  btn.disabled = true;
+  if (btn) { btn.textContent = 'Scanning…'; btn.disabled = true; }
 
   try {
     var r = await fetch(API + '/api/wallet/positions', {
@@ -438,11 +440,36 @@ async function fetchPositions() {
     _detectedPositions = data.positions || [];
     renderDetectionBanner();
   } catch (e) {
-    alert('Error scanning wallet: ' + e.message);
+    if (!silent) alert('Error scanning wallet: ' + e.message);
   } finally {
-    btn.textContent = 'Scan';
-    btn.disabled = false;
+    if (btn) { btn.textContent = 'Scan'; btn.disabled = false; }
   }
+}
+
+// Auto-fill + auto-scan the saved Polymarket address from the dashboard, if any.
+// Falls back to the manual prompt when the user hasn't connected a wallet yet.
+async function initWalletAutoScan() {
+  if (!token) return;  // unauthenticated — keep manual prompt visible
+  try {
+    var r = await fetch(API + '/api/user/wallets', { headers: authHeaders() });
+    if (!r.ok) return;
+    var data = await r.json();
+    var addr = (data && data.polymarket_address) ? String(data.polymarket_address).trim() : '';
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) return;  // nothing saved — keep manual prompt
+
+    // Hide the manual prompt; the stored address is our source of truth.
+    var prompt = document.getElementById('walletPrompt');
+    if (prompt) prompt.style.display = 'none';
+
+    // Pre-fill the (now hidden) input so "Scan" rescans correctly if the user
+    // ever reveals the prompt manually in the future.
+    var input = document.getElementById('walletAddressInput');
+    if (input) input.value = addr;
+
+    // Silent scan — if there are 0 open positions we just render an empty
+    // detect banner rather than alerting the user.
+    fetchPositions(addr, true);
+  } catch (e) { /* keep manual prompt on any error */ }
 }
 
 function renderDetectionBanner() {
@@ -1091,6 +1118,7 @@ function getMyUserId() {
   } catch(e) {}
 
   loadFeed(false);
+  initWalletAutoScan();  // auto-scan using the address saved in the creator dashboard
 })();
 </script>
 </body>
