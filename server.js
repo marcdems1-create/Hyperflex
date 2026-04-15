@@ -12760,11 +12760,60 @@ const INFLUENCER_SEED = [
 })();
 
 // ── Auto-fetch influencer tweets via public Twitter endpoints ──
-// Uses publish.twitter.com/oembed (no auth required) + syndication API
+// Primary: twitterapi.io (paid third-party, reliable — set TWITTERAPI_IO_KEY)
+// Fallback: X API v2 bearer token, Nitter RSS, Twitter syndication
 // Cron: every 30 minutes
 
 let _lastInfluencerFetch = 0;
 const INFLUENCER_FETCH_INTERVAL = 30 * 60 * 1000; // 30 min
+
+// twitterapi.io — fetch latest tweets for a user handle.
+// Docs: https://docs.twitterapi.io — endpoint `/twitter/user/last_tweets`.
+// Auth: `X-API-Key` header. Pay-per-request, geo-unrestricted, reliable.
+// Returns array of { id, text, url, created_at } on success, [] on failure.
+async function _fetchTweetsFromTwitterApiIo(handle, apiKey) {
+  if (!handle || !apiKey) return [];
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 8000);
+    const url  = `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`;
+    const resp = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        'X-API-Key':  apiKey,
+        'User-Agent': 'Hyperflex/1.0',
+        'Accept':     'application/json',
+      },
+    }).finally(() => clearTimeout(tid));
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) {
+        console.warn(`[twitterapi.io] Auth failed (${resp.status}) — check TWITTERAPI_IO_KEY`);
+      } else if (resp.status === 429) {
+        console.warn('[twitterapi.io] Rate limited');
+      } else {
+        console.warn(`[twitterapi.io] HTTP ${resp.status} for @${handle}`);
+      }
+      return [];
+    }
+    const data = await resp.json().catch(() => ({}));
+    // Response shape (defensive — keys vary across API versions):
+    //   { status, msg, data: { tweets: [...] } }   OR   { tweets: [...] }
+    const tweets = (data?.data?.tweets) || data?.tweets || data?.data || [];
+    if (!Array.isArray(tweets)) return [];
+    return tweets
+      .map(t => {
+        const id   = t.id || t.tweet_id || t.id_str || null;
+        const text = t.text || t.full_text || t.content || '';
+        const createdAt = t.createdAt || t.created_at || t.date || null;
+        const tweetUrl  = t.url || t.tweet_url || (id ? `https://x.com/${handle}/status/${id}` : null);
+        return { id, text, url: tweetUrl, created_at: createdAt };
+      })
+      .filter(t => t.text && t.text.length > 20 && !t.text.startsWith('RT @'));
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('[twitterapi.io] fetch error:', e.message);
+    return [];
+  }
+}
 
 async function fetchInfluencerTweets() {
   if (!pool) return;
@@ -12780,13 +12829,26 @@ async function fetchInfluencerTweets() {
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
     let imported = 0;
     const NITTER_INSTANCES = ['nitter.net', 'nitter.privacydev.net', 'nitter.poast.org'];
-    const xBearerToken = process.env.X_BEARER_TOKEN;
+    const xBearerToken     = process.env.X_BEARER_TOKEN;
+    const twitterApiIoKey  = process.env.TWITTERAPI_IO_KEY;
 
     for (const inf of influencers) {
       try {
         let tweetTexts = [];
 
-        // METHOD 1: X API v2 (best, requires Bearer token)
+        // METHOD 0: twitterapi.io (preferred — paid, reliable, geo-unrestricted)
+        if (twitterApiIoKey && !tweetTexts.length) {
+          const apiTweets = await _fetchTweetsFromTwitterApiIo(inf.x_handle, twitterApiIoKey);
+          for (const tw of apiTweets) {
+            tweetTexts.push({
+              id:   tw.id,
+              text: tw.text,
+              url:  tw.url || (tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null),
+            });
+          }
+        }
+
+        // METHOD 1: X API v2 (fallback, requires Bearer token)
         if (xBearerToken && !tweetTexts.length) {
           try {
             // First get user ID from handle
@@ -16261,7 +16323,8 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
   console.log('[influencer] Starting influencer monitoring sweep');
-  const bearerToken = process.env.X_BEARER_TOKEN;
+  const bearerToken    = process.env.X_BEARER_TOKEN;
+  const twitterApiIoKey = process.env.TWITTERAPI_IO_KEY;
 
   // Load active influencers from DB
   let influencers = [];
@@ -16291,24 +16354,41 @@ async function monitorPolymarketInfluencers() {
 
     // ── X/Twitter ──────────────────────────────────────────────────────────
     if (inf.platform === 'x') {
-      if (!bearerToken) continue;
-      // Resolve user ID if not cached
-      let userId = inf.platform_id;
-      if (!userId) {
-        const userData = await _resolveXUserId(inf.handle, bearerToken);
-        if (!userData) continue;
-        userId = userData.id;
-        // Update platform_id + avatar in DB (fire-and-forget)
-        try {
-          if (pool) {
-            await dbQuery(
-              'UPDATE external_influencers SET platform_id=$1, avatar_url=COALESCE(avatar_url,$2), follower_count=$3 WHERE id=$4',
-              [userId, userData.profile_image_url || null, userData.public_metrics?.followers_count || 0, inf.id]
-            );
-          }
-        } catch {}
+      let tweets = [];
+
+      // Preferred: twitterapi.io (paid, reliable, geo-unrestricted).
+      // Uses handle directly — no separate user-ID resolve step required.
+      if (twitterApiIoKey) {
+        const apiTweets = await _fetchTweetsFromTwitterApiIo(inf.handle, twitterApiIoKey);
+        tweets = apiTweets.map(t => ({
+          id:         t.id,
+          text:       t.text,
+          created_at: t.created_at,
+        })).filter(t => t.id);
       }
-      const tweets = await _fetchXTimeline(userId, bearerToken);
+
+      // Fallback: official X API v2 bearer token.
+      if (!tweets.length && bearerToken) {
+        let userId = inf.platform_id;
+        if (!userId) {
+          const userData = await _resolveXUserId(inf.handle, bearerToken);
+          if (!userData) continue;
+          userId = userData.id;
+          // Update platform_id + avatar in DB (fire-and-forget)
+          try {
+            if (pool) {
+              await dbQuery(
+                'UPDATE external_influencers SET platform_id=$1, avatar_url=COALESCE(avatar_url,$2), follower_count=$3 WHERE id=$4',
+                [userId, userData.profile_image_url || null, userData.public_metrics?.followers_count || 0, inf.id]
+              );
+            }
+          } catch {}
+        }
+        tweets = await _fetchXTimeline(userId, bearerToken);
+      }
+
+      if (!tweets.length) continue;
+
       rawPosts = tweets
         .filter(t => _isPolyContent(t.text, inf.handle))
         .map(t => ({
