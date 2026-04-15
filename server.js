@@ -15020,6 +15020,162 @@ async function markPolymarketConnected(userId, eoa, proxy) {
   }
 }
 
+// ── Monthly rebate computation ───────────────────────────────────────────
+// Called by the monthly cron (1st of month at 01:00 UTC) and manually via
+// POST /api/admin/fee-rebates/compute. Aggregates polymarket_trades for
+// a given YYYY-MM period, filters to eligible users (is_new_polymarket_
+// wallet=true AND rebate_program_enrolled=true), computes rebate at
+// 25 bps (half of Polymarket's 50 bps default builder fee), and upserts
+// one row per user per period into fee_rebates.
+//
+// Returns { period, users_considered, rows_written, total_rebate_usdc,
+//           total_volume, skipped_ineligible, skipped_opted_out, rows }.
+// Idempotent — re-running for a given period overwrites unpaid rows and
+// leaves paid rows untouched (paid=true rows are preserved verbatim).
+//
+// Params:
+//   period: 'YYYY-MM' string, defaults to previous calendar month
+//   opts.dryRun: true → compute + return but DON'T write (preview)
+const REBATE_BPS_OF_VOLUME = 25; // 50 bps builder fee × 50% = 25 bps to user
+
+async function computeRebatesForMonth(period, opts = {}) {
+  const dryRun = !!opts.dryRun;
+  if (!pool) return { error: 'No pool (DATABASE_URL not set)' };
+
+  // Parse / default period to previous calendar month
+  let periodMonth = period;
+  if (!periodMonth) {
+    const d = new Date();
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    periodMonth = d.toISOString().slice(0, 7); // 'YYYY-MM'
+  }
+  if (!/^\d{4}-\d{2}$/.test(periodMonth)) {
+    return { error: 'Period must be YYYY-MM format' };
+  }
+
+  const [year, month] = periodMonth.split('-').map(Number);
+  const start = `${periodMonth}-01`;
+  // Exclusive end — start of next month
+  const nextMonthDate = new Date(Date.UTC(year, month, 1)); // month index rolls over
+  const end = nextMonthDate.toISOString().slice(0, 10);
+
+  try {
+    // Aggregate trade volume per user for the period. Join users to pick
+    // up eligibility flags. Skip users with no polymarket_address (can't
+    // happen via polymarket_trades unless eoa was later cleared) and
+    // users with rebate_program_enrolled=false.
+    const rows = await dbQuery(
+      `SELECT
+         u.id                           AS user_id,
+         u.email,
+         u.display_name,
+         u.polymarket_address,
+         u.polymarket_proxy,
+         u.is_new_polymarket_wallet,
+         u.rebate_program_enrolled,
+         COUNT(pt.id)::int              AS trade_count,
+         COALESCE(SUM(pt.amount_usd),0)::float AS volume_usd
+       FROM polymarket_trades pt
+       JOIN users u ON LOWER(u.polymarket_address) = LOWER(pt.eoa_address)
+                   OR LOWER(u.polymarket_proxy)   = LOWER(pt.eoa_address)
+                   OR LOWER(u.polymarket_address) = LOWER(pt.proxy_address)
+                   OR LOWER(u.polymarket_proxy)   = LOWER(pt.proxy_address)
+       WHERE pt.created_at >= $1::date
+         AND pt.created_at <  $2::date
+       GROUP BY u.id, u.email, u.display_name, u.polymarket_address,
+                u.polymarket_proxy, u.is_new_polymarket_wallet,
+                u.rebate_program_enrolled
+       HAVING COALESCE(SUM(pt.amount_usd),0) > 0
+       ORDER BY volume_usd DESC`,
+      [start, end]
+    );
+
+    let rowsWritten = 0;
+    let totalRebate = 0;
+    let totalVolume = 0;
+    let skippedIneligible = 0;
+    let skippedOptedOut = 0;
+    const outputRows = [];
+
+    for (const r of rows) {
+      const volume = parseFloat(r.volume_usd) || 0;
+      const feesEarned = volume * 0.005; // our builder fee (50 bps)
+      const rebate = volume * (REBATE_BPS_OF_VOLUME / 10000); // 25 bps to user
+
+      const eligibleNow = r.is_new_polymarket_wallet === true;
+      const enrolled = r.rebate_program_enrolled !== false;
+
+      if (!eligibleNow) { skippedIneligible++; continue; }
+      if (!enrolled)    { skippedOptedOut++; continue; }
+
+      totalVolume += volume;
+      totalRebate += rebate;
+
+      outputRows.push({
+        user_id: r.user_id,
+        email: r.email,
+        display_name: r.display_name,
+        polymarket_address: r.polymarket_address,
+        polymarket_proxy: r.polymarket_proxy,
+        trade_count: r.trade_count,
+        volume_usd: Math.round(volume * 100) / 100,
+        fees_earned: Math.round(feesEarned * 1000000) / 1000000,
+        rebate_usdc: Math.round(rebate * 1000000) / 1000000,
+      });
+
+      if (!dryRun) {
+        // Upsert — overwrite unpaid rows, preserve paid ones. Using
+        // explicit WHERE on the conflict clause is the cleanest way to
+        // enforce "don't touch paid rows" without a second round-trip.
+        await dbQuery(
+          `INSERT INTO fee_rebates (
+             user_id, period_month, volume_usd, fees_earned, rebate_usdc,
+             trade_count, eligible_at_computation, payout_address
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (user_id, period_month) DO UPDATE
+             SET volume_usd   = EXCLUDED.volume_usd,
+                 fees_earned  = EXCLUDED.fees_earned,
+                 rebate_usdc  = EXCLUDED.rebate_usdc,
+                 trade_count  = EXCLUDED.trade_count,
+                 eligible_at_computation = EXCLUDED.eligible_at_computation,
+                 payout_address = COALESCE(fee_rebates.payout_address, EXCLUDED.payout_address)
+             WHERE fee_rebates.paid = FALSE`,
+          [
+            r.user_id, periodMonth,
+            Math.round(volume * 100) / 100,
+            Math.round(feesEarned * 1000000) / 1000000,
+            Math.round(rebate * 1000000) / 1000000,
+            r.trade_count,
+            true,
+            // payout_address = proxy (where their Polymarket USDC lives).
+            // Falls back to polymarket_address if proxy not yet derived.
+            r.polymarket_proxy || r.polymarket_address,
+          ]
+        ).catch(e => console.warn('[fee-rebate] upsert failed for', r.user_id, e.message));
+        rowsWritten++;
+      }
+    }
+
+    return {
+      period: periodMonth,
+      dry_run: dryRun,
+      users_considered: rows.length,
+      rows_written: rowsWritten,
+      total_volume_usd: Math.round(totalVolume * 100) / 100,
+      total_rebate_usdc: Math.round(totalRebate * 1000000) / 1000000,
+      skipped_ineligible: skippedIneligible,
+      skipped_opted_out: skippedOptedOut,
+      rows: outputRows,
+    };
+  } catch (err) {
+    console.error('[fee-rebate] computeRebatesForMonth error:', err.message);
+    return { error: err.message };
+  }
+}
+
 async function syncAllUserPositions() {
   console.log('[auto-sync] Starting position sync for all connected users');
   try {
@@ -17654,6 +17810,142 @@ app.post('/api/admin/fee-rebate-backfill', requireAdmin, async (req, res) => {
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────
+// FEE-REBATE DISTRIBUTION (Commit 2 of 3)
+// ──────────────────────────────────────────────────────────────────────
+
+// POST /api/admin/fee-rebates/compute?period=YYYY-MM&dry_run=1&secret=...
+// Computes rebates for a given period. With dry_run=1, returns what
+// WOULD be written without touching the DB (preview). Without dry_run,
+// upserts into fee_rebates. Safe to re-run — paid rows are preserved.
+// Defaults to last calendar month if period not provided.
+app.post('/api/admin/fee-rebates/compute', requireAdmin, async (req, res) => {
+  try {
+    const period = req.query.period || null;
+    const dryRun = req.query.dry_run === '1' || req.query.dry_run === 'true';
+    const result = await computeRebatesForMonth(period, { dryRun });
+    if (result.error) return res.status(500).json({ ok: false, ...result });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[admin/fee-rebates/compute]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/admin/fee-rebates?period=YYYY-MM&paid=0|1&secret=...
+// Lists fee_rebates rows filtered by period (default: latest period
+// with any rows) and optionally paid/unpaid. Returns totals + user
+// joins for display.
+app.get('/api/admin/fee-rebates', requireAdmin, async (req, res) => {
+  try {
+    let period = req.query.period;
+    const paidFilter = req.query.paid; // '0' | '1' | undefined
+
+    // If no period given, find the most recent period that has rows
+    if (!period) {
+      const maxRow = await dbQuery(
+        `SELECT period_month FROM fee_rebates ORDER BY period_month DESC LIMIT 1`
+      ).catch(() => []);
+      period = maxRow[0]?.period_month || null;
+    }
+
+    // Also gather all known periods for a dropdown in the UI
+    const allPeriods = (
+      await dbQuery(
+        `SELECT DISTINCT period_month FROM fee_rebates ORDER BY period_month DESC LIMIT 24`
+      ).catch(() => [])
+    ).map(r => r.period_month);
+
+    if (!period) {
+      return res.json({
+        ok: true,
+        period: null,
+        all_periods: [],
+        totals: { rows: 0, total_rebate_usdc: 0, paid_count: 0, unpaid_count: 0 },
+        rebates: [],
+        note: 'No rebate rows yet. Call POST /api/admin/fee-rebates/compute to generate the first period.',
+      });
+    }
+
+    const whereParts = ['fr.period_month = $1'];
+    const params = [period];
+    if (paidFilter === '0') whereParts.push('fr.paid = FALSE');
+    if (paidFilter === '1') whereParts.push('fr.paid = TRUE');
+
+    const rebates = await dbQuery(
+      `SELECT fr.*, u.email, u.display_name, u.polymarket_address, u.polymarket_proxy
+       FROM fee_rebates fr
+       LEFT JOIN users u ON u.id = fr.user_id
+       WHERE ${whereParts.join(' AND ')}
+       ORDER BY fr.rebate_usdc DESC`,
+      params
+    ).catch(() => []);
+
+    const totals = {
+      rows: rebates.length,
+      total_rebate_usdc: Math.round(
+        rebates.reduce((s, r) => s + (parseFloat(r.rebate_usdc) || 0), 0) * 1000000
+      ) / 1000000,
+      total_volume_usd: Math.round(
+        rebates.reduce((s, r) => s + (parseFloat(r.volume_usd) || 0), 0) * 100
+      ) / 100,
+      paid_count: rebates.filter(r => r.paid).length,
+      unpaid_count: rebates.filter(r => !r.paid).length,
+      paid_rebate_usdc: Math.round(
+        rebates.filter(r => r.paid).reduce((s, r) => s + (parseFloat(r.rebate_usdc) || 0), 0) * 1000000
+      ) / 1000000,
+      unpaid_rebate_usdc: Math.round(
+        rebates.filter(r => !r.paid).reduce((s, r) => s + (parseFloat(r.rebate_usdc) || 0), 0) * 1000000
+      ) / 1000000,
+    };
+
+    res.json({ ok: true, period, all_periods: allPeriods, totals, rebates });
+  } catch (err) {
+    console.error('[admin/fee-rebates]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/admin/fee-rebates/:id/mark-paid?secret=...
+// Body: { tx_hash } (optional). Marks a rebate row as paid and stamps
+// paid_at. Tx hash is optional but recommended for audit trail.
+app.post('/api/admin/fee-rebates/:id/mark-paid', requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const txHash = req.body && req.body.tx_hash ? String(req.body.tx_hash).slice(0, 100) : null;
+    const rows = await dbQuery(
+      `UPDATE fee_rebates
+         SET paid = TRUE,
+             paid_at = NOW(),
+             tx_hash = COALESCE($1, tx_hash)
+       WHERE id = $2 AND paid = FALSE
+       RETURNING *`,
+      [txHash, id]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Not found or already paid' });
+    res.json({ ok: true, rebate: rows[0] });
+  } catch (err) {
+    console.error('[admin/fee-rebates/mark-paid]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/admin/fee-rebates/:id/mark-unpaid?secret=...
+// Reverse of mark-paid. Mistake-recovery path.
+app.post('/api/admin/fee-rebates/:id/mark-unpaid', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      `UPDATE fee_rebates SET paid = FALSE, paid_at = NULL, tx_hash = NULL
+       WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Not found' });
+    res.json({ ok: true, rebate: rows[0] });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // GET /api/admin/users — all members with activity stats + plan info + Polymarket data
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
@@ -20153,6 +20445,26 @@ async function autoResolveNoSourceMarkets() {
 
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
+
+// Monthly fee-rebate cron — fires 01:00 UTC on the 1st of every month,
+// computes rebates for the PREVIOUS calendar month, upserts into
+// fee_rebates. Idempotent — if manually triggered earlier in the month
+// via /api/admin/fee-rebates/compute, this cron run is a no-op for
+// already-written rows (paid rows untouched, unpaid get the same values).
+cron.schedule('0 1 1 * *', async () => {
+  try {
+    const out = await computeRebatesForMonth(null, { dryRun: false });
+    if (out && !out.error) {
+      console.log(
+        `[fee-rebate-cron] period=${out.period} users=${out.rows_written} volume=$${out.total_volume_usd} rebate=$${out.total_rebate_usdc}`
+      );
+    } else {
+      console.error('[fee-rebate-cron] computeRebatesForMonth returned error:', out && out.error);
+    }
+  } catch (err) {
+    console.error('[fee-rebate-cron] fatal:', err.message);
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 // HEDGE ALERTS — scans user positions for profitable hedge opportunities
