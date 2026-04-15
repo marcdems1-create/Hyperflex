@@ -1457,6 +1457,12 @@ app.post('/auth/wallet', async (req, res) => {
 
     if (!user) return res.status(500).json({ error: 'Failed to create account' });
 
+    // Fire-and-forget eligibility check for the 50% fee-rebate program.
+    // Snapshots whether this wallet had ever traded Polymarket BEFORE
+    // connecting to HYPERFLEX. Idempotent — skips if already snapshotted.
+    // Runs async so it doesn't block the signin response.
+    markPolymarketConnected(user.id, addrLower, null).catch(() => {});
+
     const token = jwt.sign({ id: user.id }, JWT_SECRET);
     res.json({
       token,
@@ -14903,6 +14909,117 @@ async function derivePolymarketProxy(eoa) {
   return null;
 }
 
+// ── 50% FEE REBATE PROGRAM ────────────────────────────────────────────────
+// Eligibility detection: call at wallet-connect time to determine whether
+// this wallet had ever traded Polymarket before it connected to HYPERFLEX.
+//
+// Polymarket's /activity endpoint returns the most recent events for a
+// wallet (trades, redemptions, splits, etc). We ask for 1 item. If the
+// endpoint returns any activity for this wallet, the wallet is NOT new;
+// if it returns an empty array (or 404), it's new.
+//
+// Run against the PROXY address (where CTF positions live), not the EOA.
+// The EOA rarely appears in Polymarket's activity API since the Safe
+// proxy holds the shares.
+const _newWalletCheckCache = new Map(); // proxy → { isNew, tradeCount, ts }
+
+async function checkIfNewPolymarketWallet(proxyAddr) {
+  if (!proxyAddr || !/^0x[0-9a-fA-F]{40}$/.test(proxyAddr)) return { isNew: null, reason: 'bad_address' };
+  const addr = proxyAddr.toLowerCase();
+
+  // 1 hour cache — re-checking the same wallet in the same hour is
+  // wasteful and the answer (has-it-ever-traded-before) is stable.
+  const cached = _newWalletCheckCache.get(addr);
+  if (cached && Date.now() - cached.ts < 3600 * 1000) return cached;
+
+  try {
+    // /activity returns trades + liquidity events + redemptions, newest first.
+    // A limit of 100 is enough to tell "has any activity at all" vs "is new".
+    // We count TRADE-type events specifically since redemption-only wallets
+    // still count as having traded at some point.
+    const r = await _nodeFetch(
+      `https://data-api.polymarket.com/activity?user=${addr}&limit=100&type=TRADE`,
+      { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+    );
+    if (!r.ok) {
+      // 404 / 400 from Polymarket for unknown wallets typically means new.
+      // Don't cache — a bad response should be retried on the next connect.
+      if (r.status === 404 || r.status === 400) return { isNew: true, tradeCount: 0, reason: 'no_activity_' + r.status };
+      return { isNew: null, reason: 'api_' + r.status };
+    }
+    const data = await r.json().catch(() => []);
+    const tradeCount = Array.isArray(data) ? data.length : 0;
+    const result = { isNew: tradeCount === 0, tradeCount, ts: Date.now() };
+    _newWalletCheckCache.set(addr, result);
+    return result;
+  } catch (err) {
+    console.warn('[fee-rebate] activity check failed for', addr.slice(0, 10), err.message);
+    return { isNew: null, reason: err.message };
+  }
+}
+
+// Call this at every wallet-connect touchpoint. Idempotent: re-running
+// on a user who already has their eligibility snapshotted is a no-op.
+//
+// What "first connect" means here: the first time we see a polymarket
+// address AND we've never done the eligibility check for this user. We
+// snapshot the data-at-connect-time so changes in Polymarket's activity
+// after connect don't flip the user in or out of eligibility.
+async function markPolymarketConnected(userId, eoa, proxy) {
+  if (!userId || !eoa) return;
+  try {
+    // Skip if already snapshotted — preserves "snapshot at connect" semantic
+    let existing;
+    if (pool) {
+      const rows = await dbQuery(
+        `SELECT is_new_polymarket_wallet, polymarket_connected_at FROM users WHERE id = $1`,
+        [userId]
+      ).catch(() => []);
+      existing = rows[0] || null;
+    }
+    if (existing && existing.polymarket_connected_at) return;
+
+    // Derive proxy if we don't have one (can happen when called from
+    // wallet-signin before any sync has run)
+    const proxyAddr = proxy || await derivePolymarketProxy(eoa);
+    if (!proxyAddr) {
+      // Can't check without a proxy. Stamp connected_at so we don't retry
+      // forever; eligibility stays null until admin backfill can resolve.
+      if (pool) {
+        await dbQuery(
+          `UPDATE users SET polymarket_connected_at = NOW() WHERE id = $1 AND polymarket_connected_at IS NULL`,
+          [userId]
+        ).catch(() => {});
+      }
+      return;
+    }
+
+    const check = await checkIfNewPolymarketWallet(proxyAddr);
+    if (pool) {
+      await dbQuery(
+        `UPDATE users
+         SET is_new_polymarket_wallet = $1,
+             first_trade_count_at_connect = $2,
+             polymarket_connected_at = NOW(),
+             polymarket_proxy = COALESCE(polymarket_proxy, $3)
+         WHERE id = $4`,
+        [
+          typeof check.isNew === 'boolean' ? check.isNew : null,
+          Number.isInteger(check.tradeCount) ? check.tradeCount : null,
+          proxyAddr,
+          userId,
+        ]
+      ).catch(e => console.warn('[fee-rebate] update user failed:', e.message));
+    }
+
+    console.log(
+      `[fee-rebate] ${userId.slice(0, 8)} eligibility check: isNew=${check.isNew}, priorTrades=${check.tradeCount ?? '?'}, proxy=${proxyAddr.slice(0, 10)}…`
+    );
+  } catch (err) {
+    console.warn('[fee-rebate] markPolymarketConnected error:', err.message);
+  }
+}
+
 async function syncAllUserPositions() {
   console.log('[auto-sync] Starting position sync for all connected users');
   try {
@@ -14950,6 +15067,12 @@ async function syncUserPositions(user) {
           }
         }
       }
+
+      // Backfill fee-rebate eligibility for existing users who connected
+      // before the program existed. markPolymarketConnected is idempotent
+      // (skips if polymarket_connected_at is already set), so this is a
+      // no-op for users we've already snapshotted.
+      markPolymarketConnected(user.id, eoa, proxy).catch(() => {});
 
       // Query positions for BOTH addresses in parallel, union the results
       const addrsToQuery = [eoa];
@@ -17444,6 +17567,89 @@ app.post('/api/admin/resync-polymarket', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[admin/resync-polymarket]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/admin/fee-rebate-eligibility?secret=... — who qualifies for
+// the 50% rebate? Shows per-user snapshot: is_new_polymarket_wallet,
+// first_trade_count_at_connect, polymarket_connected_at. Admin can see
+// which users connected before the program existed (no snapshot yet).
+app.get('/api/admin/fee-rebate-eligibility', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      `SELECT u.id, u.email, u.display_name, u.polymarket_address, u.polymarket_proxy,
+              u.is_new_polymarket_wallet, u.first_trade_count_at_connect,
+              u.polymarket_connected_at, u.rebate_program_enrolled, u.created_at
+       FROM users u
+       WHERE u.polymarket_address IS NOT NULL
+       ORDER BY u.created_at DESC LIMIT 1000`
+    ).catch(() => []);
+
+    const totals = {
+      total_wallets: rows.length,
+      eligible_new_wallets: rows.filter(r => r.is_new_polymarket_wallet === true).length,
+      not_new: rows.filter(r => r.is_new_polymarket_wallet === false).length,
+      not_yet_checked: rows.filter(r => r.is_new_polymarket_wallet === null || r.is_new_polymarket_wallet === undefined).length,
+      opted_out: rows.filter(r => r.rebate_program_enrolled === false).length,
+    };
+
+    res.json({ ok: true, totals, users: rows });
+  } catch (err) {
+    console.error('[admin/fee-rebate-eligibility]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/admin/fee-rebate-backfill?secret=... — run the eligibility
+// snapshot for every user with polymarket_address but no snapshot yet.
+// Hits Polymarket's activity API once per user; paced at 500ms between
+// requests to avoid rate-limiting. Safe to re-run.
+app.post('/api/admin/fee-rebate-backfill', requireAdmin, async (req, res) => {
+  try {
+    const users = await dbQuery(
+      `SELECT id, polymarket_address, polymarket_proxy
+       FROM users
+       WHERE polymarket_address IS NOT NULL
+         AND polymarket_connected_at IS NULL
+       LIMIT 500`
+    ).catch(() => []);
+
+    if (!users.length) {
+      return res.json({ ok: true, backfilled: 0, note: 'All users already snapshotted.' });
+    }
+
+    const results = { eligible: 0, not_new: 0, unknown: 0, failed: 0 };
+    const details = [];
+    for (const u of users) {
+      try {
+        await markPolymarketConnected(u.id, u.polymarket_address, u.polymarket_proxy);
+        // Re-read to know the outcome
+        const rows = await dbQuery(
+          `SELECT is_new_polymarket_wallet, first_trade_count_at_connect
+           FROM users WHERE id = $1`,
+          [u.id]
+        ).catch(() => []);
+        const r = rows[0];
+        if (r?.is_new_polymarket_wallet === true)      results.eligible++;
+        else if (r?.is_new_polymarket_wallet === false) results.not_new++;
+        else                                            results.unknown++;
+        details.push({
+          id: u.id,
+          is_new: r?.is_new_polymarket_wallet,
+          prior_trades: r?.first_trade_count_at_connect,
+        });
+      } catch (e) {
+        results.failed++;
+        details.push({ id: u.id, error: e.message });
+      }
+      // Pace to avoid Polymarket API rate-limiting
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    res.json({ ok: true, backfilled: users.length, results, details });
+  } catch (err) {
+    console.error('[admin/fee-rebate-backfill]', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -43059,10 +43265,45 @@ app.listen(PORT, () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS login_streak      INTEGER DEFAULT 0;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_date   TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_multiplier NUMERIC DEFAULT 1;
+
+      -- 50% FEE REBATE PROGRAM
+      -- Wallets that had NEVER traded Polymarket before they connected to
+      -- HYPERFLEX get 50% of their builder fees back, distributed monthly.
+      -- Eligibility is snapshot at connect time: checkIfNewPolymarketWallet()
+      -- queries Polymarket's activity API, counts prior trades, stores the
+      -- result. Trades placed after connect are tracked in polymarket_trades
+      -- (already exists); the monthly cron computes 50% × builder fee on
+      -- those trades and inserts rebate rows here.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_new_polymarket_wallet     BOOLEAN;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS first_trade_count_at_connect INTEGER;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_connected_at      TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS rebate_program_enrolled      BOOLEAN DEFAULT TRUE;
+      CREATE INDEX IF NOT EXISTS idx_users_rebate_eligible
+        ON users(is_new_polymarket_wallet) WHERE is_new_polymarket_wallet = TRUE;
+
+      CREATE TABLE IF NOT EXISTS fee_rebates (
+        id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id        TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        period_month   TEXT        NOT NULL,  -- 'YYYY-MM' of the covered period
+        volume_usd     NUMERIC(18,2) DEFAULT 0,
+        fees_earned    NUMERIC(18,6) DEFAULT 0,  -- our total builder fee on those trades
+        rebate_usdc    NUMERIC(18,6) DEFAULT 0,  -- 50% of fees_earned (what we owe user)
+        trade_count    INTEGER     DEFAULT 0,
+        eligible_at_computation BOOLEAN DEFAULT TRUE,
+        paid           BOOLEAN     DEFAULT FALSE,
+        paid_at        TIMESTAMPTZ,
+        tx_hash        TEXT,
+        payout_address TEXT,       -- wallet address USDC was/will be sent to (proxy)
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, period_month)
+      );
+      CREATE INDEX IF NOT EXISTS idx_fee_rebates_period ON fee_rebates(period_month, paid);
+      CREATE INDEX IF NOT EXISTS idx_fee_rebates_user   ON fee_rebates(user_id, period_month DESC);
+      CREATE INDEX IF NOT EXISTS idx_fee_rebates_unpaid ON fee_rebates(paid, period_month) WHERE paid = FALSE;
     `;
     try {
       await pool.query(extraSchemas);
-      console.log('[boot] ✓ platform_referrals + polymarket_trades + login_streak schema ensured');
+      console.log('[boot] ✓ platform_referrals + polymarket_trades + login_streak + fee_rebates schema ensured');
     } catch (err) {
       console.error('[boot] ✗ failed to ensure extra schemas:', err.message);
     }
