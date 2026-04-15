@@ -5126,6 +5126,50 @@ window.hfxOpenDeposit = function() {
         <div class="section">
           <div style="max-width:860px">
 
+            <!-- ══ GET STARTED — onboarding card for new users ══ -->
+            <!-- Shows the 3 steps a new user needs to get value from
+                 HYPERFLEX: connect wallet → see positions → post a take.
+                 Auto-updates based on user state. Hides itself completely
+                 once all 3 are done OR if user dismissed it. -->
+            <div id="onboardingCard" style="display:none;margin-bottom:24px;background:linear-gradient(135deg,rgba(201,146,13,0.08),rgba(124,58,237,0.08));border:1px solid rgba(201,146,13,0.25);border-radius:14px;padding:20px 20px 18px;position:relative">
+              <button onclick="dismissOnboarding()" title="Hide this" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1">×</button>
+              <div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:4px">GET STARTED</div>
+              <div id="onboardingTitle" style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px">Welcome to HYPERFLEX — 3 quick steps</div>
+              <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:16px">Share takes about your Polymarket trades and build a track record. Other traders will see your calls on the feed — and follow you.</div>
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <!-- Step 1: Connect wallet -->
+                <div id="onbStep1" data-complete="false" style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:10px;transition:border-color .2s">
+                  <div class="onb-badge" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:rgba(201,146,13,0.15);color:var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:12px">1</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">Connect your Polymarket wallet</div>
+                    <div style="font-size:11px;color:var(--dim);margin-top:2px" id="onbStep1Sub">We'll auto-sync your positions so you can post takes about them.</div>
+                  </div>
+                  <button id="onbStep1Btn" onclick="toggleConnectionsPanel();setTimeout(function(){var el=document.getElementById('connectionsBar');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},100)" style="flex-shrink:0;background:var(--gold);color:#0a0a0f;border:none;border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.04em">Connect →</button>
+                </div>
+
+                <!-- Step 2: Positions sync -->
+                <div id="onbStep2" data-complete="false" style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:10px;opacity:.55;transition:all .2s">
+                  <div class="onb-badge" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--dim);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:12px">2</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">See your positions show up</div>
+                    <div style="font-size:11px;color:var(--dim);margin-top:2px" id="onbStep2Sub">Auto-detected from your wallet. Appears in the table below.</div>
+                  </div>
+                  <div id="onbStep2Status" style="flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--dim)">Waiting</div>
+                </div>
+
+                <!-- Step 3: Post first take -->
+                <div id="onbStep3" data-complete="false" style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:10px;opacity:.55;transition:all .2s">
+                  <div class="onb-badge" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--dim);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:12px">3</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">Post your first take</div>
+                    <div style="font-size:11px;color:var(--dim);margin-top:2px">Pick any position below and tap "Post to Feed" — share why you think you're right.</div>
+                  </div>
+                  <div id="onbStep3Status" style="flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--dim)">Locked</div>
+                </div>
+              </div>
+            </div>
+
             <!-- ── Platform Connections Bar ── -->
             <div id="connectionsBar" style="margin-bottom:24px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -6551,6 +6595,8 @@ async function init() {
     const data = await r.json();
     if (!data.creator) { signOut(); return; }
     creatorData = data;
+    // Refresh onboarding card now that we know the user's wallet status
+    if (typeof updateOnboardingCard === 'function') setTimeout(updateOnboardingCard, 20);
     if (!user && data.creator) {
       localStorage.setItem('hf_user', JSON.stringify({
         id: data.creator.id,
@@ -7755,6 +7801,139 @@ function ensureMoreExpanded(tab) {
 // Post-pivot replacement for the old "+ New Market" CTA. Creators no
 // longer publish their own markets — they post takes (predictions)
 // ABOUT their Polymarket positions. This helper jumps to the My
+// ── Onboarding card (Get Started — 3 steps) ─────────────────────────
+// Shows on /creator/dashboard portfolio tab for new users. Auto-hides
+// when all 3 steps are done OR when the user explicitly dismisses it
+// (persisted in localStorage so it stays hidden across sessions).
+
+function _onboardingDismissed() {
+  try { return localStorage.getItem('hfx_onboarding_dismissed') === '1'; }
+  catch (_) { return false; }
+}
+function dismissOnboarding() {
+  try { localStorage.setItem('hfx_onboarding_dismissed', '1'); } catch (_) {}
+  var card = document.getElementById('onboardingCard');
+  if (card) card.style.display = 'none';
+}
+
+// Call this whenever user state changes (after wallet connect, after
+// positions load, after a post). Idempotent — safe to call often.
+function updateOnboardingCard() {
+  var card = document.getElementById('onboardingCard');
+  if (!card) return;
+  if (_onboardingDismissed()) { card.style.display = 'none'; return; }
+
+  // Step 1: Polymarket wallet connected? Check multiple sources:
+  // creatorData, window._connectedWallet (live MetaMask), or the
+  // localStorage hint that wallet.js writes.
+  var hasWallet = !!(
+    (creatorData && creatorData.creator && creatorData.creator.polymarket_address) ||
+    window._connectedWallet ||
+    localStorage.getItem('hf_poly_wallet') ||
+    localStorage.getItem('hf_wallet_address')
+  );
+
+  // Step 2: Any positions synced? window._polyPositionsData is the
+  // canonical array populated by loadPolymarketPositions (line ~15079).
+  var posCount = 0;
+  try {
+    if (Array.isArray(window._polyPositionsData)) posCount = window._polyPositionsData.length;
+  } catch (_) {}
+  var hasPositions = posCount > 0;
+
+  // Step 3: User posted a prediction? We flag this locally after
+  // submitPredictionPost succeeds (see setHasPostedPrediction below).
+  var hasPosted = false;
+  try { hasPosted = localStorage.getItem('hfx_has_posted_prediction') === '1'; }
+  catch (_) {}
+
+  // If all 3 done, auto-dismiss. The user has graduated.
+  if (hasWallet && hasPositions && hasPosted) {
+    card.style.display = 'none';
+    return;
+  }
+
+  // Card visible — update each step
+  card.style.display = 'block';
+
+  // Step 1 styling
+  var s1 = document.getElementById('onbStep1');
+  var s1Btn = document.getElementById('onbStep1Btn');
+  var s1Sub = document.getElementById('onbStep1Sub');
+  if (hasWallet) {
+    s1.setAttribute('data-complete', 'true');
+    s1.style.borderColor = 'rgba(0,230,138,0.35)';
+    s1.querySelector('.onb-badge').innerHTML = '✓';
+    s1.querySelector('.onb-badge').style.background = 'rgba(0,230,138,0.15)';
+    s1.querySelector('.onb-badge').style.color = '#00e68a';
+    s1Btn.textContent = 'Connected';
+    s1Btn.style.background = 'rgba(0,230,138,0.12)';
+    s1Btn.style.color = '#00e68a';
+    s1Btn.style.cursor = 'default';
+    s1Btn.onclick = null;
+    if (s1Sub) s1Sub.textContent = 'Wallet connected — syncing your positions now.';
+  }
+
+  // Step 2 unlocks once step 1 is done
+  var s2 = document.getElementById('onbStep2');
+  var s2Status = document.getElementById('onbStep2Status');
+  var s2Sub = document.getElementById('onbStep2Sub');
+  if (hasWallet) {
+    s2.style.opacity = '1';
+    if (hasPositions) {
+      s2.setAttribute('data-complete', 'true');
+      s2.style.borderColor = 'rgba(0,230,138,0.35)';
+      s2.querySelector('.onb-badge').innerHTML = '✓';
+      s2.querySelector('.onb-badge').style.background = 'rgba(0,230,138,0.15)';
+      s2.querySelector('.onb-badge').style.color = '#00e68a';
+      s2Status.textContent = posCount + ' found';
+      s2Status.style.color = '#00e68a';
+      if (s2Sub) s2Sub.textContent = 'Found ' + posCount + ' open position' + (posCount === 1 ? '' : 's') + ' — scroll down to see them.';
+    } else {
+      s2.querySelector('.onb-badge').style.background = 'rgba(201,146,13,0.15)';
+      s2.querySelector('.onb-badge').style.color = 'var(--gold)';
+      s2Status.textContent = 'Syncing…';
+      s2Status.style.color = 'var(--gold)';
+      if (s2Sub) s2Sub.textContent = 'Checking Polymarket for your positions. Takes 10–30 seconds.';
+    }
+  }
+
+  // Step 3 unlocks once step 2 is done (has positions)
+  var s3 = document.getElementById('onbStep3');
+  var s3Status = document.getElementById('onbStep3Status');
+  if (hasPositions) {
+    s3.style.opacity = '1';
+    if (hasPosted) {
+      s3.setAttribute('data-complete', 'true');
+      s3.style.borderColor = 'rgba(0,230,138,0.35)';
+      s3.querySelector('.onb-badge').innerHTML = '✓';
+      s3.querySelector('.onb-badge').style.background = 'rgba(0,230,138,0.15)';
+      s3.querySelector('.onb-badge').style.color = '#00e68a';
+      s3Status.textContent = 'Posted';
+      s3Status.style.color = '#00e68a';
+    } else {
+      s3.querySelector('.onb-badge').style.background = 'rgba(201,146,13,0.15)';
+      s3.querySelector('.onb-badge').style.color = 'var(--gold)';
+      // Replace the status text with an actual CTA button once step 2 is done
+      s3Status.innerHTML = '<button onclick="openPostTakeFlow()" style="background:var(--gold);color:#0a0a0f;border:none;border-radius:8px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.04em">Post →</button>';
+    }
+  }
+
+  // Update the outer title based on progress
+  var title = document.getElementById('onboardingTitle');
+  if (title) {
+    if (!hasWallet)            title.textContent = 'Welcome to HYPERFLEX — 3 quick steps';
+    else if (!hasPositions)    title.textContent = 'Step 2 of 3 — hang on while we sync';
+    else if (!hasPosted)       title.textContent = 'Last step — share your first take';
+  }
+}
+
+// Call when user successfully posts a prediction so we can flip step 3
+function setHasPostedPrediction() {
+  try { localStorage.setItem('hfx_has_posted_prediction', '1'); } catch (_) {}
+  updateOnboardingCard();
+}
+
 // Positions tab where each position row already has a "Post to Feed"
 // button, and shows a prompt toast so users know what to do next.
 function openPostTakeFlow() {
@@ -7775,6 +7954,11 @@ function showTab(tab) {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
+  // Re-sync the onboarding card whenever the user lands on portfolio —
+  // state may have changed (wallet connected, positions synced, etc).
+  if (tab === 'portfolio' && typeof updateOnboardingCard === 'function') {
+    setTimeout(updateOnboardingCard, 50);
+  }
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
@@ -14894,6 +15078,8 @@ async function loadPolymarketPositions(forceRefresh) {
     }
 
     window._polyPositionsData = positions;
+    // Onboarding card: step 2 (positions synced) may have just flipped
+    if (typeof updateOnboardingCard === 'function') updateOnboardingCard();
     // Mark address as verified good when positions are found
     if (positions.length > 0) markPolyAddressGood();
     // Fetch USDC balance + activity for realized P&L from sold positions
@@ -20178,6 +20364,8 @@ async function submitPredictionPost() {
     if (data.ok) {
       closePredictComposer();
       showToast('Posted to your feed!');
+      // Mark the onboarding "post your first take" step complete
+      if (typeof setHasPostedPrediction === 'function') setHasPostedPrediction();
     } else {
       throw new Error(data.error || 'Failed to post');
     }
