@@ -12793,20 +12793,31 @@ async function fetchInfluencerTweets() {
               headers: { 'X-API-Key': twitterApiKey },
               signal: ctrl.signal
             }).finally(() => clearTimeout(tid));
-            if (res.ok) {
+            if (!res.ok) {
+              const body = await res.text().catch(() => '');
+              console.warn(`[influencer-fetch] @${inf.x_handle} → HTTP ${res.status} ${body.slice(0, 160)}`);
+            } else {
               const data = await res.json();
-              for (const tw of (data.tweets || [])) {
-                if (tw.type === 'retweet') continue;
-                if (tw.text && tw.text.length > 20) {
+              // twitterapi.io may return tweets at top level OR nested under data.tweets
+              const rawTweets = (data && data.tweets)
+                || (data && data.data && data.data.tweets)
+                || [];
+              for (const tw of rawTweets) {
+                if (!tw || tw.type === 'retweet') continue;
+                const text = tw.text || tw.full_text;
+                if (text && text.length > 20) {
                   tweetTexts.push({
-                    id: tw.id,
-                    text: tw.text,
-                    url: tw.url || `https://x.com/${inf.x_handle}/status/${tw.id}`
+                    id: tw.id || tw.id_str || tw.rest_id,
+                    text,
+                    url: tw.url || `https://x.com/${inf.x_handle}/status/${tw.id || tw.id_str || tw.rest_id}`
                   });
                 }
               }
+              if (!tweetTexts.length) {
+                console.warn(`[influencer-fetch] @${inf.x_handle} → 0 usable tweets (keys: ${Object.keys(data || {}).join(',')})`);
+              }
             }
-          } catch (e) { /* twitterapi.io failed */ }
+          } catch (e) { console.warn(`[influencer-fetch] @${inf.x_handle} error:`, e.message); }
         }
 
         if (!tweetTexts.length) continue;
@@ -16002,9 +16013,12 @@ function _isPolyContent(text, handle) {
 }
 
 // ── X/Twitter via twitterapi.io — resolve handle → user info ────────────────
+// twitterapi.io currently returns { status, msg, data: { id, userName, ... } }
+// Older/alternate shapes returned the user fields at the top level.
+// We support both.
 async function _resolveXUserId(handle) {
   const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) { console.warn('[twitterapi.io] TWITTERAPI_IO_KEY not set'); return null; }
   try {
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 10000);
@@ -16012,17 +16026,35 @@ async function _resolveXUserId(handle) {
       `https://api.twitterapi.io/twitter/user/info?userName=${encodeURIComponent(handle)}`,
       { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
     ).finally(() => clearTimeout(tid));
-    if (!r.ok) return null;
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      console.warn(`[twitterapi.io] user/info @${handle} → HTTP ${r.status} ${body.slice(0, 160)}`);
+      return null;
+    }
     const d = await r.json();
-    // twitterapi.io returns { id, userName, name, profilePicture, followers, ... }
-    return d || null;
-  } catch { return null; }
+    // Support { ...user } (old) or { data: { ...user } } (new)
+    return (d && d.data) ? d.data : (d || null);
+  } catch (e) {
+    console.warn(`[twitterapi.io] user/info @${handle} fetch error:`, e.message);
+    return null;
+  }
+}
+
+// Normalize twitterapi.io createdAt (Twitter native string like
+// "Wed Dec 13 10:00:00 +0000 2023", or ISO) to a Postgres-safe ISO string.
+function _normalizeTweetCreatedAt(raw) {
+  if (!raw) return new Date().toISOString();
+  const ms = Date.parse(raw);
+  if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  return new Date().toISOString();
 }
 
 // ── X/Twitter via twitterapi.io — fetch recent tweets for a handle ──────────
+// Returns an array of tweets (id, text, url, createdAt ISO). Logs loudly on
+// any non-ok response so Railway logs show why imports stopped.
 async function _fetchXTimeline(handle) {
   const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) { console.warn('[twitterapi.io] TWITTERAPI_IO_KEY not set'); return []; }
   try {
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 12000);
@@ -16030,11 +16062,34 @@ async function _fetchXTimeline(handle) {
       `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`,
       { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
     ).finally(() => clearTimeout(tid));
-    if (!r.ok) return [];
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      console.warn(`[twitterapi.io] last_tweets @${handle} → HTTP ${r.status} ${body.slice(0, 200)}`);
+      return [];
+    }
     const d = await r.json();
-    // Returns { tweets: [{ id, text, createdAt, author, ... }], has_next_page, next_cursor }
-    return (d.tweets || []).filter(t => t.type !== 'retweet');
-  } catch { return []; }
+    // Handle both shapes:
+    //   { tweets: [...] }            (older/simple)
+    //   { data: { tweets: [...] } }  (current docs shape)
+    const rawTweets = (d && d.tweets)
+      || (d && d.data && d.data.tweets)
+      || [];
+    if (!rawTweets.length) {
+      console.warn(`[twitterapi.io] last_tweets @${handle} → 0 tweets (keys: ${Object.keys(d || {}).join(',')})`);
+    }
+    return rawTweets
+      .filter(t => t && t.type !== 'retweet' && (t.text || t.full_text))
+      .map(t => ({
+        id:        t.id || t.id_str || t.rest_id,
+        text:      t.text || t.full_text || '',
+        url:       t.url || (t.id && handle ? `https://x.com/${handle}/status/${t.id}` : null),
+        createdAt: _normalizeTweetCreatedAt(t.createdAt || t.created_at),
+        type:      t.type,
+      }));
+  } catch (e) {
+    console.warn(`[twitterapi.io] last_tweets @${handle} fetch error:`, e.message);
+    return [];
+  }
 }
 
 // ── YouTube: channel RSS feed (no API key needed) ────────────────────────────
@@ -16379,6 +16434,49 @@ app.post('/api/admin/influencer-sweep', async (req, res) => {
   if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'unauthorized' });
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Manual sweep error:', err.message));
   res.json({ ok: true, message: 'Influencer sweep triggered — check server logs' });
+});
+
+// Debug: verify twitterapi.io key + response shape for a handle (admin only)
+// GET /api/admin/twitterapi-debug?handle=elonmusk&secret=...
+app.get('/api/admin/twitterapi-debug', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const handle = (req.query.handle || 'Polymarket').toString();
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  if (!apiKey) return res.status(400).json({ error: 'TWITTERAPI_IO_KEY not set on Railway' });
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 12000);
+    const r = await _nodeFetch(
+      `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`,
+      { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
+    ).finally(() => clearTimeout(tid));
+    const bodyText = await r.text();
+    let parsed = null; try { parsed = JSON.parse(bodyText); } catch {}
+    const topKeys = parsed && typeof parsed === 'object' ? Object.keys(parsed) : [];
+    const tweets = (parsed && parsed.tweets)
+      || (parsed && parsed.data && parsed.data.tweets)
+      || [];
+    res.json({
+      handle,
+      http_status: r.status,
+      ok: r.ok,
+      top_level_keys: topKeys,
+      tweet_count: tweets.length,
+      first_tweet_preview: tweets[0] ? {
+        id: tweets[0].id || tweets[0].id_str,
+        text_preview: (tweets[0].text || tweets[0].full_text || '').slice(0, 200),
+        createdAt: tweets[0].createdAt || tweets[0].created_at,
+        type: tweets[0].type,
+      } : null,
+      // Never return the API key, but echo length so we can spot accidental
+      // whitespace/truncation from Railway env config.
+      api_key_length: apiKey.length,
+      body_preview: bodyText.slice(0, 400),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── API: list influencers with stats ─────────────────────────────────────────
