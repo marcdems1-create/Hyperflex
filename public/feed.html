@@ -639,30 +639,26 @@ async function loadFeed(append) {
     feedData = [];
   }
 
-  // Use both new predictions API and legacy social predictions
-  var url = currentTab === 'trending'
-    ? API + '/api/social/feed/trending?limit=20'
-    : API + '/api/predictions/feed?limit=20' + (nextCursor ? '&before=' + encodeURIComponent(nextCursor) : '');
+  // Build the feed URL with correct mode param for each tab
+  var url;
+  if (currentTab === 'trending') {
+    url = API + '/api/social/feed/trending?limit=20';
+  } else {
+    // Following tab: pass mode=following so the server filters to self+follows
+    // for user posts (influencer posts always included regardless of mode)
+    var modeParam = currentTab === 'following' ? '&mode=following' : '';
+    var cursorParam = nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
+    url = API + '/api/predictions/feed?limit=20' + modeParam + cursorParam;
+  }
 
   try {
     var r = await fetch(url, { headers: authHeaders() });
     var data = await r.json();
 
-    if (data.empty && data.reason === 'no_follows') {
-      // Fall back to social predictions feed for discovery
-      var r2 = await fetch(API + '/api/social/feed?limit=20', { headers: authHeaders() });
-      var data2 = await r2.json();
-      var preds2 = (data2.predictions || []).map(normaliseLegacy);
-      if (!append) feedData = preds2; else feedData = feedData.concat(preds2);
-      nextCursor = data2.next_cursor || null;
-      renderFeed(true);
-      document.getElementById('loadMoreBtn').style.display = 'none';
-      return;
-    }
-
     var preds = (data.predictions || []).map(normaliseNew);
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
-    nextCursor = data.next_cursor || null;
+    // Server returns `cursor` (not `next_cursor`) for the pagination token
+    nextCursor = data.cursor || null;
     renderFeed(false);
     document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
   } catch (e) {

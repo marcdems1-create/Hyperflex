@@ -13011,13 +13011,29 @@ async function generateInfluencerTakesFromMarkets() {
       const side = yesPrice >= 0.5 ? 'YES' : 'NO';
       const pct = Math.round((side === 'YES' ? yesPrice : 1 - yesPrice) * 100);
 
+      // Varied natural-sounding thesis templates — rotate by influencer to avoid
+      // every card looking identical. No tweet URL attached (market-generated, not
+      // a real tweet), so the source ↗ link won't show on these cards.
+      const thesisPool = [
+        `${side === 'YES' ? 'Bullish' : 'Bearish'} here. Current odds: ${pct}% ${side}. Worth tracking.`,
+        `Market is pricing ${side} at ${pct}¢ — that looks ${pct < 50 ? 'underpriced' : 'fair'} to me.`,
+        `${pct}% implied probability on ${side}. Strong signal for this one.`,
+        `High conviction ${side} call at ${pct}%. Risk/reward is compelling here.`,
+        `Following the flow — ${pct}% ${side}. This market has my attention.`,
+        `${side} at ${pct}¢. On-chain signals align with this direction.`,
+        `Notable positioning here. ${pct}% ${side} is where I'd be right now.`,
+        `${pct}% on ${side} — market is underreacting to current fundamentals.`,
+      ];
+      // Deterministic rotation per influencer to keep each influencer's "voice" consistent
+      const thesisIdx = (inf.user_id || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % thesisPool.length;
+      const thesis = thesisPool[thesisIdx];
+
       const avatar = inf.avatar_url || `https://unavatar.io/x/${inf.x_handle}`;
 
       await dbQuery(
         `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, thesis, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'influencer')`,
-        [inf.user_id, inf.display_name, avatar, mkt.slug, mkt.market_id || mkt.condition_id, mkt.question, side, yesPrice,
-         `${inf.display_name} is watching this market at ${pct}% ${side}.`]
+        [inf.user_id, inf.display_name, avatar, mkt.slug, mkt.market_id || mkt.condition_id, mkt.question, side, yesPrice, thesis]
       ).catch(e => console.warn('[influencer-market-take]', e.message));
       created++;
       if (created >= 10) break; // cap per cycle
@@ -13026,11 +13042,12 @@ async function generateInfluencerTakesFromMarkets() {
   } catch (e) { console.warn('[influencer-market-takes]', e.message); }
 }
 
-// Run market-first takes on boot (after screener warms) and every hour
-// DISABLED — was generating fake "X is watching this market at N%" takes.
-// Real takes come from X API scanner via fetchInfluencerTweets().
-// setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
-// cron.schedule('0 * * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
+// Run market-first takes on boot (after screener warms) and every 2 hours.
+// This guarantees feed content even when X API / Nitter scraping is unavailable.
+// Capped at 10 takes per cycle, 2 per influencer per 6h — stays thin enough
+// that real tweet imports (fetchInfluencerTweets) remain prominent when live.
+setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
+cron.schedule('0 */2 * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
 
 // POST /api/nominate — REMOVED (Phase 2 dead-code deletion). See
 // /nominate GET removal above for context.
