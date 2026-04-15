@@ -2205,7 +2205,9 @@ async function loadAnalytics() {
   if (_analyticsLoaded) return;
   _analyticsLoaded = true;
 
-  // Populate from already-loaded data where possible
+  // Populate from already-loaded data where possible.
+  // Previous catch{} swallowed failures — user saw zeros with no
+  // indication anything was wrong. Surface the error now.
   try {
     const r = await fetch(API + '/api/admin/platform-stats?secret=' + encodeURIComponent(adminSecret));
     if (r.ok) {
@@ -2216,8 +2218,20 @@ async function loadAnalytics() {
       const totalUsers = d.total_users || 0;
       const active = d.active_traders_7d || 0;
       document.getElementById('analyticsInactive').textContent = Math.max(0, totalUsers - active).toLocaleString();
+    } else {
+      console.error('[analytics] platform-stats returned', r.status);
+      const err = await r.text().catch(() => '');
+      ['analyticsNew7d','analyticsTotalTrades','analyticsActive','analyticsInactive']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'err'; });
+      // Use the existing platform-connections container to surface the error line
+      const host = document.getElementById('platformConnectionsBody');
+      if (host) host.innerHTML = '<tr><td colspan="99" style="color:var(--red);padding:12px">[analytics] platform-stats ' + r.status + ': ' + escHtml(err.slice(0, 200)) + '</td></tr>';
     }
-  } catch {}
+  } catch (e) {
+    console.error('[analytics] platform-stats fetch failed', e);
+    ['analyticsNew7d','analyticsTotalTrades','analyticsActive','analyticsInactive']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'err'; });
+  }
 
   // Platform connections
   if (allUsers.length) {
@@ -2228,8 +2242,12 @@ async function loadAnalytics() {
       if (r.ok) {
         const data = await r.json();
         updatePlatformConnections(data);
+      } else {
+        console.error('[analytics] users returned', r.status);
       }
-    } catch {}
+    } catch (e) {
+      console.error('[analytics] users fetch failed', e);
+    }
   }
 }
 
@@ -2311,11 +2329,33 @@ async function loadFinancials() {
   if (_financialsLoaded) return;
   _financialsLoaded = true;
 
-  // Builder fee + trade volume -- placeholders until tracked
-  document.getElementById('finBuilderFee').textContent = '\u2014';
-  document.getElementById('finTradeVolume').textContent = '\u2014';
-  document.getElementById('finRevenuePerUser').textContent = '\u2014';
-  document.getElementById('finTotalPayouts').textContent = '\u2014';
+  // Real financial metrics from /api/admin/builder-fees/local (always
+  // available — reads polymarket_trades table directly, no CLOB dep).
+  // Fills Builder Fee, Trade Volume, Revenue Per User. Total Payouts
+  // comes from rewards/summary below.
+  fetch(API + '/api/admin/builder-fees/local?secret=' + encodeURIComponent(adminSecret))
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data || !data.summary) {
+        document.getElementById('finBuilderFee').textContent = 'err';
+        document.getElementById('finTradeVolume').textContent = 'err';
+        document.getElementById('finRevenuePerUser').textContent = 'err';
+        return;
+      }
+      const s = data.summary;
+      const fees = Number(s.totalFeesUsdc || 0);
+      const volume = Number(s.totalVolumeUsdc || 0);
+      const traders = Number(s.uniqueTraders || 0);
+      document.getElementById('finBuilderFee').textContent = '$' + fees.toFixed(2);
+      document.getElementById('finTradeVolume').textContent = '$' + volume.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('finRevenuePerUser').textContent = traders > 0 ? '$' + (fees / traders).toFixed(2) : '$0';
+    })
+    .catch(() => {
+      document.getElementById('finBuilderFee').textContent = 'err';
+      document.getElementById('finTradeVolume').textContent = 'err';
+      document.getElementById('finRevenuePerUser').textContent = 'err';
+    });
+  document.getElementById('finTotalPayouts').textContent = '…';
 
   // Try to get rewards data for the pool history
   try {
@@ -2325,10 +2365,24 @@ async function loadFinancials() {
       const poolAmt = data.pool ? parseFloat(data.pool.pool_amount) : 0;
       document.getElementById('finRewardsPool').textContent = '$' + poolAmt.toFixed(2);
 
+      // Total payouts = sum of usdc_earned where paid=true across all weeks
+      // in the current distribution. For now, sum paid entries from this
+      // week's distribution as a minimum-viable metric.
+      const paid = (data.distribution || []).filter(d => d.paid);
+      const totalPaid = paid.reduce((s, d) => s + (parseFloat(d.usdc_earned) || 0), 0);
+      document.getElementById('finTotalPayouts').textContent = '$' + totalPaid.toFixed(2);
+
+      // Surface any query errors the new graceful-summary endpoint logged
+      if (data.errors && data.errors.length) {
+        const msg = document.getElementById('finRewardsHistMsg');
+        msg.style.color = 'var(--amber)';
+        msg.textContent = '⚠️ ' + data.errors.map(e => e.step + ': ' + e.error).join(' · ');
+        msg.style.display = 'block';
+      }
+
       // Populate history table
       if (data.all_weeks && data.all_weeks.length) {
         const histBody = document.getElementById('finRewardsHistBody');
-        // Fetch each week summary (simple: just show week list with current pool)
         histBody.innerHTML = data.all_weeks.map(w => {
           return `<tr>
             <td style="font-family:var(--mono);font-size:12px">${escHtml(w)}</td>
@@ -2343,7 +2397,9 @@ async function loadFinancials() {
         document.getElementById('finRewardsHistMsg').textContent = 'No rewards history yet.';
       }
     } else {
-      document.getElementById('finRewardsHistMsg').textContent = 'Could not load rewards data.';
+      const errText = await r.text().catch(() => '');
+      document.getElementById('finRewardsHistMsg').textContent = 'Rewards endpoint ' + r.status + ': ' + errText.slice(0, 200);
+      document.getElementById('finTotalPayouts').textContent = 'err';
     }
   } catch (e) {
     document.getElementById('finRewardsHistMsg').textContent = 'Error: ' + e.message;
@@ -2380,8 +2436,22 @@ async function loadBuilderFees(force) {
   // ── Builder Fees ──
   if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
     try {
-      const data = await feesRes.value.json();
+      const raw = await feesRes.value.json();
+      // Endpoint may return either CLOB-source data directly, or a
+      // local-fallback envelope when CLOB is unreachable (server.js
+      // returns { source: 'local-fallback'|'local-only', local: {...},
+      // warning, clob_error }). Unwrap to the common shape either way.
+      const data = (raw.source === 'local-fallback' || raw.source === 'local-only')
+        ? (raw.local || {})
+        : raw;
       const s = data.summary || {};
+
+      // Surface source/warning so admin can tell CLOB ≠ local
+      if (raw.warning || raw.source === 'local-fallback' || raw.source === 'local-only') {
+        const banner = raw.warning || ('Showing ' + raw.source + ' data (CLOB unavailable)');
+        bfDailyMsg.textContent = '⚠️ ' + banner + (raw.clob_error ? ' (CLOB ' + raw.clob_error.status + ': ' + raw.clob_error.detail + ')' : '');
+        bfDailyMsg.style.color = 'var(--amber)';
+      }
 
       // Summary cards
       document.getElementById('bfTotalFees').textContent   = '$' + (s.totalFeesUsdc || 0).toFixed(4);

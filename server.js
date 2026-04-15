@@ -34166,6 +34166,93 @@ app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
 // Shows all trades attributed to our builder, with fee totals.
 let _builderFeesCache = null;
 let _builderFeesCacheAt = 0;
+// Compute builder-fee estimates from our OWN polymarket_trades table.
+// Always works — doesn't depend on CLOB being reachable or the builder
+// query API being healthy. Used both standalone (/api/admin/builder-fees/local)
+// and as a fallback when CLOB errors in the main endpoint below.
+// Polymarket's standard builder fee is 0.5% (50 bps) of notional USD —
+// the actual amount depends on feeRateBps passed at order submit time
+// (which we don't store, but 50 bps is the default across the book).
+async function computeLocalBuilderFees(windowDays) {
+  if (!pool) return { available: false, reason: 'no DATABASE_URL' };
+  const sinceClause = windowDays ? `WHERE created_at > NOW() - INTERVAL '${parseInt(windowDays)} days'` : '';
+  try {
+    const rows = await dbQuery(
+      `SELECT COUNT(*)::int AS trades,
+              COALESCE(SUM(amount_usd), 0)::float AS volume,
+              COUNT(DISTINCT eoa_address)::int AS unique_traders,
+              COUNT(DISTINCT market_slug)::int AS unique_markets
+       FROM polymarket_trades ${sinceClause}`
+    );
+    const r = rows[0] || {};
+    const volume = parseFloat(r.volume) || 0;
+    const FEE_BPS = 50; // Polymarket default; server.js doesn't record per-trade feeRateBps so this is an estimate
+    const estimatedFees = volume * (FEE_BPS / 10000);
+
+    // Daily breakdown
+    const daily = await dbQuery(
+      `SELECT DATE(created_at) AS day,
+              COUNT(*)::int AS trades,
+              COALESCE(SUM(amount_usd), 0)::float AS volume
+       FROM polymarket_trades ${sinceClause}
+       GROUP BY day ORDER BY day DESC LIMIT 30`
+    );
+
+    // Recent trades
+    const recent = await dbQuery(
+      `SELECT id, eoa_address, market_slug, market_question, side, amount_usd,
+              entry_price_cents, order_type, created_at, status
+       FROM polymarket_trades
+       ORDER BY created_at DESC LIMIT 20`
+    );
+
+    // Shape mirrors the CLOB response (summary/dailyBreakdown/recentTrades)
+    // so the admin UI can render either source without branching.
+    return {
+      available: true,
+      summary: {
+        totalTrades: r.trades || 0,
+        totalVolumeUsdc: Math.round(volume * 100) / 100,
+        totalFeesUsdc: Math.round(estimatedFees * 10000) / 10000,
+        avgFeePerTrade: r.trades > 0 ? Math.round(estimatedFees / r.trades * 10000) / 10000 : 0,
+        feeRate: `${FEE_BPS / 100}% (est)`,
+        uniqueTraders: r.unique_traders || 0,
+        uniqueMarkets: r.unique_markets || 0,
+      },
+      dailyBreakdown: (daily || []).map(d => ({
+        day: d.day instanceof Date ? d.day.toISOString().slice(0, 10) : String(d.day).slice(0, 10),
+        trades: d.trades,
+        volume: Math.round(d.volume * 100) / 100,
+        fees: Math.round(d.volume * (FEE_BPS / 10000) * 10000) / 10000,
+      })),
+      recentTrades: (recent || []).map(t => ({
+        id: t.id,
+        side: t.side,
+        sizeUsdc: (parseFloat(t.amount_usd) || 0).toFixed(2),
+        feeUsdc: ((parseFloat(t.amount_usd) || 0) * FEE_BPS / 10000).toFixed(4),
+        price: t.entry_price_cents ? (t.entry_price_cents / 100).toFixed(2) : null,
+        market: t.market_slug || (t.market_question || '').slice(0, 40),
+        maker: (t.eoa_address || '').slice(0, 10),
+        matchTime: t.created_at,
+        txHash: null, // we don't capture tx hash at submit time
+      })),
+    };
+  } catch (err) {
+    return { available: false, reason: err.message };
+  }
+}
+
+// GET /api/admin/builder-fees/local — always-available fee estimate
+// from our own polymarket_trades log. Doesn't call CLOB at all.
+app.get('/api/admin/builder-fees/local', requireAdmin, async (req, res) => {
+  try {
+    const local = await computeLocalBuilderFees(req.query.days || null);
+    res.json({ source: 'local', ...local });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
   const now = Date.now();
   // Cache for 5 minutes
@@ -34176,8 +34263,17 @@ app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
   const builderKey = process.env.POLY_BUILDER_API_KEY;
   const builderSecret = process.env.POLY_BUILDER_SECRET;
   const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+
+  // Always compute local first — even if CLOB succeeds we want this for
+  // reconciliation, and if CLOB fails this is what the admin UI shows.
+  const local = await computeLocalBuilderFees(null);
+
   if (!builderKey || !builderSecret || !builderPassphrase) {
-    return res.status(503).json({ error: 'Builder credentials not configured' });
+    return res.status(200).json({
+      source: 'local-only',
+      warning: 'Builder credentials not configured — showing trade data from HYPERFLEX records only. CLOB builder-fees query unavailable.',
+      local,
+    });
   }
 
   try {
@@ -34216,7 +34312,15 @@ app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
         const errText = await r.text().catch(() => '');
         console.warn('[builder-fees] CLOB returned', r.status, errText.slice(0, 200));
         if (allTrades.length === 0) {
-          return res.status(r.status).json({ error: 'CLOB error: ' + r.status, detail: errText.slice(0, 200) });
+          // CLOB unreachable — return local-computed data so the admin
+          // UI isn't broken. Expose the CLOB error detail so we can
+          // diagnose separately (wrong endpoint/wrong header set/etc).
+          return res.status(200).json({
+            source: 'local-fallback',
+            clob_error: { status: r.status, detail: errText.slice(0, 400) },
+            warning: 'Polymarket CLOB /builder/trades unreachable — showing data from HYPERFLEX trade log. Fees are estimated at 0.5% default rate.',
+            local,
+          });
         }
         break; // Return what we have
       }
@@ -34290,6 +34394,7 @@ app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
       .map(([id, m]) => ({ conditionId: id.slice(0, 12) + '...', ...m, volume: Math.round(m.volume * 100) / 100, fees: Math.round(m.fees * 10000) / 10000 }));
 
     const result = {
+      source: 'clob',
       summary: {
         totalTrades,
         totalVolumeUsdc: Math.round(totalVolumeUsdc * 100) / 100,
@@ -34301,6 +34406,10 @@ app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
       dailyBreakdown,
       topMarkets,
       recentTrades,
+      // Cross-reference from our own trade log — if CLOB and local disagree
+      // significantly, something's off (worker routing broken, trades
+      // bypassing builder-sign, etc). Admin UI can show a reconciliation row.
+      local,
       cachedAt: new Date().toISOString()
     };
 
@@ -40233,53 +40342,77 @@ app.post('/api/admin/rewards/mark-paid', requireAdmin, async (req, res) => {
 
 // GET /api/admin/rewards/summary — Full admin view
 app.get('/api/admin/rewards/summary', requireAdmin, async (req, res) => {
-  try {
-    const week = rewardsWeekStart(req.query.week);
-    let poolRec, clickStats, distribution, allWeeks;
-    if (pool) {
-      const pRows = await dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]);
-      poolRec = pRows[0] || null;
-      const cRows = await dbQuery(
-        `SELECT COUNT(*) as total_clicks, COUNT(DISTINCT user_id) as unique_users
-         FROM rewards_click_tracking WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [week]);
-      clickStats = cRows[0] || { total_clicks: 0, unique_users: 0 };
-      // Get distribution breakdown with user info
-      const dRows = await dbQuery(
-        `SELECT ur.*, cs.display_name, cs.payout_wallet, cs.slug
-         FROM user_rewards ur
-         LEFT JOIN creator_settings cs ON cs.creator_id = ur.user_id
-         WHERE ur.week_start = $1 ORDER BY ur.usdc_earned DESC`, [week]);
-      distribution = dRows;
-      // Also try to get display_name from users table for non-creators
-      for (const d of distribution) {
-        if (!d.display_name) {
-          const uRows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1', [d.user_id]);
-          if (uRows[0]) { d.display_name = uRows[0].display_name || uRows[0].email; }
-        }
-      }
-      const wRows = await dbQuery('SELECT week_start FROM rewards_pool ORDER BY week_start DESC LIMIT 20');
-      allWeeks = wRows.map(r => r.week_start);
-    } else {
-      const { data: p } = await supabase.from('rewards_pool').select('*').eq('week_start', week).single();
-      poolRec = p;
-      clickStats = { total_clicks: 0, unique_users: 0 };
-      const { data: d } = await supabase.from('user_rewards').select('*').eq('week_start', week).order('usdc_earned', { ascending: false });
-      distribution = d || [];
-      const { data: w } = await supabase.from('rewards_pool').select('week_start').order('week_start', { ascending: false }).limit(20);
-      allWeeks = (w || []).map(r => r.week_start);
+  const week = rewardsWeekStart(req.query.week);
+  // Individual try/catch around each query so a missing-table / empty-
+  // table on ONE source doesn't 500 the whole endpoint. Previously a
+  // single throw in any query collapsed the tab into "Failed to load
+  // summary" with no data and no hint what was wrong.
+  const errors = [];
+  const safe = async (label, fn) => {
+    try { return await fn(); }
+    catch (e) {
+      console.warn(`[rewards-summary] ${label}:`, e.message);
+      errors.push({ step: label, error: e.message });
+      return null;
     }
-    res.json({
-      week_start: week,
-      pool: poolRec,
-      clicks: { total: parseInt(clickStats.total_clicks) || 0, unique_users: parseInt(clickStats.unique_users) || 0 },
-      distributed: poolRec?.distributed || false,
-      distribution: distribution || [],
-      all_weeks: allWeeks || []
+  };
+
+  let poolRec = null, clickStats = { total_clicks: 0, unique_users: 0 };
+  let distribution = [], allWeeks = [];
+
+  if (pool) {
+    const pRows = await safe('rewards_pool lookup', () => dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]));
+    poolRec = (pRows && pRows[0]) || null;
+
+    const cRows = await safe('click stats', () => dbQuery(
+      `SELECT COUNT(*) as total_clicks, COUNT(DISTINCT user_id) as unique_users
+       FROM rewards_click_tracking WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [week]));
+    if (cRows && cRows[0]) clickStats = cRows[0];
+
+    const dRows = await safe('distribution', () => dbQuery(
+      `SELECT ur.*, cs.display_name, cs.payout_wallet, cs.slug
+       FROM user_rewards ur
+       LEFT JOIN creator_settings cs ON cs.creator_id = ur.user_id
+       WHERE ur.week_start = $1 ORDER BY ur.usdc_earned DESC`, [week]));
+    distribution = dRows || [];
+    for (const d of distribution) {
+      if (!d.display_name) {
+        const uRows = await safe('user lookup ' + d.user_id, () => dbQuery('SELECT display_name, email FROM users WHERE id = $1', [d.user_id]));
+        if (uRows && uRows[0]) d.display_name = uRows[0].display_name || uRows[0].email;
+      }
+    }
+
+    const wRows = await safe('all weeks', () => dbQuery('SELECT week_start FROM rewards_pool ORDER BY week_start DESC LIMIT 20'));
+    allWeeks = (wRows || []).map(r => r.week_start);
+  } else if (supabase) {
+    const p = await safe('rewards_pool (supabase)', async () => {
+      const r = await supabase.from('rewards_pool').select('*').eq('week_start', week).maybeSingle();
+      return r.data;
     });
-  } catch (e) {
-    _logError('admin-rewards-summary', e);
-    res.status(500).json({ error: 'Failed to load summary' });
+    poolRec = p || null;
+    const d = await safe('user_rewards (supabase)', async () => {
+      const r = await supabase.from('user_rewards').select('*').eq('week_start', week).order('usdc_earned', { ascending: false });
+      return r.data || [];
+    });
+    distribution = d || [];
+    const w = await safe('all weeks (supabase)', async () => {
+      const r = await supabase.from('rewards_pool').select('week_start').order('week_start', { ascending: false }).limit(20);
+      return (r.data || []).map(x => x.week_start);
+    });
+    allWeeks = w || [];
   }
+
+  res.json({
+    week_start: week,
+    pool: poolRec,
+    clicks: { total: parseInt(clickStats.total_clicks) || 0, unique_users: parseInt(clickStats.unique_users) || 0 },
+    distributed: poolRec?.distributed || false,
+    distribution: distribution || [],
+    all_weeks: allWeeks || [],
+    // Only populated when one or more queries errored. Admin UI can
+    // surface these so failures are visible instead of silent zeros.
+    errors: errors.length ? errors : undefined,
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -42673,6 +42806,76 @@ app.listen(PORT, () => {
       console.log('[boot] ✓ platform_referrals + polymarket_trades + login_streak schema ensured');
     } catch (err) {
       console.error('[boot] ✗ failed to ensure extra schemas:', err.message);
+    }
+
+    // Trade-and-earn rewards tables. Needed by /api/admin/rewards/*
+    // endpoints and the admin Rewards / Financials tabs. The .sql
+    // migration file (supabase_migration_trade_rewards.sql) declares
+    // user_rewards.user_id as UUID — fixed to TEXT here to match
+    // users.id (same fix as predictions/platform_referrals).
+    //
+    // Extra columns on user_rewards (base_usdc, flex_bonus_usdc, etc)
+    // are required by the newer distribute endpoint — the base .sql
+    // file doesn't include them, so we set them up here too.
+    const rewardsSchema = `
+      CREATE TABLE IF NOT EXISTS rewards_pool (
+        id              BIGSERIAL PRIMARY KEY,
+        week_start      DATE NOT NULL UNIQUE,
+        pool_amount     NUMERIC DEFAULT 0,
+        distributed     BOOLEAN DEFAULT false,
+        distributed_at  TIMESTAMPTZ,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS user_rewards (
+        id                BIGSERIAL PRIMARY KEY,
+        user_id           TEXT NOT NULL,
+        week_start        DATE NOT NULL,
+        click_count       INTEGER DEFAULT 0,
+        share_pct         NUMERIC DEFAULT 0,
+        usdc_earned       NUMERIC DEFAULT 0,
+        base_usdc         NUMERIC DEFAULT 0,
+        flex_bonus_usdc   NUMERIC DEFAULT 0,
+        volume_usd        NUMERIC DEFAULT 0,
+        trade_count       INTEGER DEFAULT 0,
+        engagement_score  NUMERIC DEFAULT 0,
+        is_flex_tier      BOOLEAN DEFAULT false,
+        paid              BOOLEAN DEFAULT false,
+        paid_at           TIMESTAMPTZ,
+        tx_hash           TEXT,
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, week_start)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_rewards_week ON user_rewards(week_start, usdc_earned DESC);
+      CREATE INDEX IF NOT EXISTS idx_user_rewards_user ON user_rewards(user_id, week_start);
+
+      CREATE TABLE IF NOT EXISTS rewards_click_tracking (
+        id          BIGSERIAL PRIMARY KEY,
+        user_id     TEXT,
+        session_id  TEXT,
+        market_slug TEXT,
+        source_page TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_rewards_clicks_user    ON rewards_click_tracking(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_rewards_clicks_session ON rewards_click_tracking(session_id, created_at);
+
+      -- payout_wallet column used by the distribute payout step
+      ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS payout_wallet TEXT;
+
+      -- Defensive: add any missing columns to user_rewards on
+      -- existing installs (predates the full schema above).
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS base_usdc        NUMERIC DEFAULT 0;
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS flex_bonus_usdc  NUMERIC DEFAULT 0;
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS volume_usd       NUMERIC DEFAULT 0;
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS trade_count      INTEGER DEFAULT 0;
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS engagement_score NUMERIC DEFAULT 0;
+      ALTER TABLE user_rewards ADD COLUMN IF NOT EXISTS is_flex_tier     BOOLEAN DEFAULT false;
+    `;
+    try {
+      await pool.query(rewardsSchema);
+      console.log('[boot] ✓ rewards_pool + user_rewards + rewards_click_tracking schema ensured');
+    } catch (err) {
+      console.error('[boot] ✗ failed to ensure rewards schema:', err.message);
     }
   })();
 
