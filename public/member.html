@@ -214,6 +214,50 @@ function shareProfile() {
   });
 }
 
+// Minimal info modal — no deps, no CSS class pollution. Used by the ⓘ
+// buttons next to Flex Score and FLEX Points in the stats grid so visitors
+// actually understand what the gold and purple numbers mean.
+function _showInfoModal(title, bodyHtml) {
+  // Dismiss any prior instance so repeated clicks don't stack.
+  const prior = document.getElementById('hfxInfoModal');
+  if (prior) prior.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'hfxInfoModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(5,5,10,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.innerHTML = `
+    <div style="background:#15151d;border:1px solid #2a2a36;border-radius:14px;max-width:420px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,0.6)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${title}</div>
+        <button onclick="document.getElementById('hfxInfoModal').remove()" aria-label="Close" style="background:none;border:0;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px">×</button>
+      </div>
+      <div style="font-size:13px;line-height:1.55;color:var(--text-soft)">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+}
+
+function showFlexScoreInfo() {
+  _showInfoModal('Flex Score', `
+    <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
+    <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
+    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
+      70+ → 🎯 Oracle tier<br>
+      60+ → 🎯 Sharp<br>
+      50+ → 📊 Solid<br>
+      &lt;50 → 🎲 Speculator
+    </div>
+    <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
+  `);
+}
+
+function showFlexPointsInfo() {
+  _showInfoModal('⚡ FLEX Points', `
+    <p style="margin:0 0 10px">Reputation currency earned by posting takes, winning predictions, and getting agrees from other traders.</p>
+    <p style="margin:0 0 10px;color:var(--text-soft)">Every correct call pays out in FLEX. Every take that racks up agrees earns FLEX. It's a running score of how much signal you've contributed to the network.</p>
+    <p style="margin:0;color:var(--muted);font-size:12px">Can't be bought — only earned.</p>
+  `);
+}
+
 async function load() {
   const page = document.getElementById('page');
   try {
@@ -357,7 +401,10 @@ async function load() {
               : stats.flex_score_90d != null ? stats.flex_score_90d
               : '—'
           }</div>
-          <div class="stat-label">Flex Score</div>
+          <div class="stat-label" style="display:flex;align-items:center;justify-content:center;gap:4px">
+            <span>Flex Score</span>
+            <button type="button" onclick="event.stopPropagation();showFlexScoreInfo()" aria-label="What is Flex Score?" style="background:none;border:0;padding:0;color:var(--muted);cursor:pointer;font-size:11px;line-height:1;min-height:auto">ⓘ</button>
+          </div>
           ${stats.flex_score_alltime != null
             ? `<div class="wr-bar-wrap"><div class="wr-bar" style="width:${stats.flex_score_alltime}%;background:var(--gold)"></div></div>`
             : `<div style="font-size:10px;color:var(--muted);margin-top:4px">${stats.predictions_resolved || 0} resolved</div>`}
@@ -382,7 +429,10 @@ async function load() {
               ? (stats.flex_points / 1000).toFixed(1) + 'K'
               : (stats.flex_points || 0)
           }</div>
-          <div class="stat-label">⚡ FLEX Points</div>
+          <div class="stat-label" style="display:flex;align-items:center;justify-content:center;gap:4px">
+            <span>⚡ FLEX Points</span>
+            <button type="button" onclick="event.stopPropagation();showFlexPointsInfo()" aria-label="What are FLEX Points?" style="background:none;border:0;padding:0;color:var(--muted);cursor:pointer;font-size:11px;line-height:1;min-height:auto">ⓘ</button>
+          </div>
         </div>
       </div>
 
