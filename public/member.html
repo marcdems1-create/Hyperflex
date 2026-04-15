@@ -37,7 +37,8 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .badge-oracle { background: rgba(201,146,13,0.2); color: var(--gold); border: 1px solid rgba(201,146,13,0.4); }
 .badge-sharp { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
 /* Stats grid */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
+@media(max-width:900px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media(max-width:500px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
 .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.35); transition: border-color 0.18s, box-shadow 0.18s; }
 .stat-card:hover { border-color: rgba(201,146,13,0.3); box-shadow: 0 4px 20px rgba(0,0,0,0.45); }
@@ -317,34 +318,58 @@ async function load() {
             ${tierBadge(stats.win_rate, stats.streak)}
             <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
           </div>
+          <!-- Followers / following — the clout currency. Shown right under
+               the name so it's the first thing visitors read. Values come from
+               /api/member/:userId stats.{followers,following}. -->
+          <div style="display:flex;align-items:center;gap:18px;margin:6px 0 10px;font-family:var(--mono);font-size:13px">
+            <span><strong style="color:var(--text);font-size:15px">${(stats.followers || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Followers</span></span>
+            <span><strong style="color:var(--text);font-size:15px">${(stats.following || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Following</span></span>
+            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold);font-size:15px">${take_stats.total_agrees.toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Agrees</span></span>` : ''}
+          </div>
           <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy profile link</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
             <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
             <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
           </div>
-          <span id="followerCount" style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px"></span>
+          <span id="followerCount" style="display:none"></span>
         </div>
       </div>
 
       ${scoreCardHTML}
 
       <div class="stats-grid">
+        <div class="stat-card" style="border-color:rgba(201,146,13,0.35)">
+          <div class="stat-value" style="color:var(--gold)">${
+            stats.flex_score_alltime != null ? stats.flex_score_alltime
+              : stats.flex_score_90d != null ? stats.flex_score_90d
+              : '—'
+          }</div>
+          <div class="stat-label">Flex Score</div>
+          ${stats.flex_score_alltime != null
+            ? `<div class="wr-bar-wrap"><div class="wr-bar" style="width:${stats.flex_score_alltime}%;background:var(--gold)"></div></div>`
+            : `<div style="font-size:10px;color:var(--muted);margin-top:4px">${stats.predictions_resolved || 0} resolved</div>`}
+        </div>
         <div class="stat-card" style="${rankClass !== 'default' ? `border-color:${rankColor}44` : ''}">
           <div class="stat-value" style="color:${avgColor}">${stats.win_rate}%</div>
           <div class="stat-label">Accuracy</div>
           <div class="wr-bar-wrap"><div class="wr-bar" style="width:${stats.win_rate}%;background:${avgColor}"></div></div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">${stats.settled_predictions}</div>
+          <div class="stat-value">${stats.settled_predictions || 0}</div>
           <div class="stat-label">Predictions</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" style="color:var(--green)">${stats.wins}</div>
-          <div class="stat-label">Correct</div>
+          ${stats.wins ? `<div style="font-size:10px;color:var(--green);margin-top:4px">${stats.wins} correct</div>` : ''}
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:${stats.streak >= 3 ? '#ff8c00' : 'var(--text)'}">${stats.streak > 0 ? `🔥${stats.streak}` : '—'}</div>
           <div class="stat-label">Streak</div>
+        </div>
+        <div class="stat-card" style="border-color:rgba(168,85,247,0.35)">
+          <div class="stat-value" style="color:#a855f7">${
+            (stats.flex_points || 0) >= 1000
+              ? (stats.flex_points / 1000).toFixed(1) + 'K'
+              : (stats.flex_points || 0)
+          }</div>
+          <div class="stat-label">⚡ FLEX Points</div>
         </div>
       </div>
 
