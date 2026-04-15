@@ -262,6 +262,11 @@ canvas{display:block;width:100%!important}
         <span class="mkt-desc-toggle" id="mktDescToggle" onclick="toggleDesc()" style="display:none">Read more</span>
       </div>
 
+      <!-- Mobile-only slot: on phones (≤900px), relocateTradeCard() moves
+           the trade widget here so it sits right under the rules. On
+           desktop this div stays empty. -->
+      <div id="tradeCardMobileSlot"></div>
+
       <!-- Outcomes -->
       <div class="mkt-outcomes" id="mktOutcomesSection">
         <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:11px;color:var(--soft);font-weight:400"></span></h3>
@@ -377,8 +382,15 @@ canvas{display:block;width:100%!important}
       </div>
     </div>
 
-    <!-- SIDEBAR: Trade Widget -->
+    <!-- SIDEBAR: Trade Widget.
+         The inner wrapper (#tradeCardWrap) lets us relocate the whole
+         trade column into #tradeCardMobileSlot (up in .mkt-main right
+         after the Rules section) on mobile. See relocateTradeCard()
+         at the bottom of the script — it moves the wrapper on resize
+         so desktop keeps the two-column layout but phones get the
+         trade card right under the rules box where the user expects it. -->
     <div class="mkt-sidebar">
+    <div id="tradeCardWrap">
       <!-- 50% fee-rebate callout — sits directly above the trade widget
            so users see it right when they're about to trade. Compact
            so it doesn't push the trade form below the fold. -->
@@ -544,9 +556,10 @@ canvas{display:block;width:100%!important}
         <div style="font-family:var(--body);font-size:11px;color:var(--soft);margin-bottom:12px;line-height:1.4">Auto-mirror trades from the top 50 whales. Set it and forget it.</div>
         <a href="/whales#copy" style="display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 18px;border-radius:8px;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.25);color:#00e68a;text-decoration:none;transition:all .15s" onmouseover="this.style.background='rgba(0,230,138,0.18)'" onmouseout="this.style.background='rgba(0,230,138,0.1)'">Set up Copy-Bot &rarr;</a>
       </div>
-    </div>
-  </div>
-</div>
+    </div><!-- /#tradeCardWrap -->
+    </div><!-- /.mkt-sidebar -->
+  </div><!-- /.mkt-layout -->
+</div><!-- /#marketContent -->
 
 <!-- Loading state -->
 <div class="mkt-loading" id="mktLoading">
@@ -6073,6 +6086,51 @@ function submitMarketTake() {
 
 // Load takes when page loads (after market data is available)
 setTimeout(function() { loadMarketTakes(); }, 2000);
+
+// ─────────────────────────────────────────────────────────────────────────
+// MOBILE LAYOUT: trade card relocation
+// ─────────────────────────────────────────────────────────────────────────
+// On desktop (>900px) #tradeCardWrap lives inside .mkt-sidebar — sticky
+// two-column layout. On phones the sidebar stacks below ALL of the main
+// column's content, which pushed the trade card way below the fold. Users
+// had to scroll past rules / outcomes / AI intel / whale flow / holders
+// / takes / comments / orderbook just to find the buy/sell buttons.
+//
+// Fix: move #tradeCardWrap into #tradeCardMobileSlot (right after Rules)
+// when we're at mobile widths, and move it back when we're at desktop
+// widths. Runs once on boot and on window resize.
+(function setupTradeCardRelocation() {
+  var _lastMobileState = null;
+  function relocateTradeCard() {
+    var isMobile = window.innerWidth <= 900;
+    if (isMobile === _lastMobileState) return;
+    _lastMobileState = isMobile;
+    var wrap = document.getElementById('tradeCardWrap');
+    if (!wrap) return;
+    var target = isMobile
+      ? document.getElementById('tradeCardMobileSlot')
+      : document.querySelector('.mkt-sidebar');
+    if (!target) return;
+    // Prepend so on desktop it stays at the top of the sidebar (above the
+    // social/copy-bot cards that live there).
+    if (isMobile) {
+      target.appendChild(wrap);
+    } else {
+      target.insertBefore(wrap, target.firstChild);
+    }
+  }
+  // Run once content is painted + again every time the viewport changes
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', relocateTradeCard);
+  } else {
+    relocateTradeCard();
+  }
+  var _resizeDebounce = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(_resizeDebounce);
+    _resizeDebounce = setTimeout(relocateTradeCard, 120);
+  });
+})();
 
 // POST-TRADE TAKE PROMPT
 // ══════════════════════════════════════════════════════════════════════════════
