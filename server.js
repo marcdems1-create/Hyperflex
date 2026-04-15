@@ -14612,13 +14612,18 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     const userId = req.user?.id || req.user?.userId;
     const { mode = 'foryou', limit = 30, cursor } = req.query;
     const lim = Math.min(parseInt(limit) || 30, 50);
-    let rows = [];
+
+    // ── 1. User predictions from `predictions` table ───────────────
+    // Following mode: self + followed users (previously excluded self,
+    // so a user who posted their own prediction saw "feed empty").
+    // ForYou mode: everyone.
+    let userPosts = [];
     if (pool) {
       const params = [];
       let where = 'WHERE 1=1';
       if (mode === 'following' && userId) {
         params.push(userId);
-        where += ` AND p.user_id IN (SELECT following_id FROM predictor_follows WHERE follower_id = $${params.length})`;
+        where += ` AND (p.user_id = $${params.length}::text OR p.user_id IN (SELECT following_id FROM predictor_follows WHERE follower_id = $${params.length}::text))`;
       }
       if (cursor) {
         params.push(cursor);
@@ -14633,28 +14638,110 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
         ORDER BY p.posted_at DESC
         LIMIT $${params.length}
       `;
-      rows = await dbQuery(q, params);
-    } else {
+      userPosts = (await dbQuery(q, params).catch(() => [])).map(p => ({
+        ...p,
+        _source: 'user',
+        // Wrap user fields in `author` so frontend's `p.author.display_name`
+        // works. Previously the shim spread these on top level and the
+        // feed card never rendered the user's name.
+        author: {
+          id: p.user_id,
+          display_name: p.display_name,
+          avatar_url: p.avatar_url,
+          flex_score_90d: p.flex_score_90d,
+          flex_score_alltime: p.flex_score_alltime,
+          predictions_resolved: p.predictions_resolved,
+        },
+      }));
+    } else if (supabase) {
       let q = supabase.from('predictions')
-        .select('*, users(display_name, avatar_url, flex_score_90d, flex_score_alltime, predictions_resolved)')
+        .select('*, users(id, display_name, avatar_url, flex_score_90d, flex_score_alltime, predictions_resolved)')
         .order('posted_at', { ascending: false })
         .limit(lim);
       if (mode === 'following' && userId) {
         const { data: follows } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
-        const ids = (follows || []).map(f => f.following_id);
-        if (!ids.length) return res.json({ predictions: [], cursor: null });
+        const ids = [userId, ...((follows || []).map(f => f.following_id))];
         q = q.in('user_id', ids);
       }
       if (cursor) q = q.lt('posted_at', cursor);
-      const { data, error } = await q;
-      if (error) throw error;
-      rows = (data || []).map(p => {
-        const u = p.users || {};
-        const r = { ...p }; delete r.users;
-        return { ...r, ...u };
+      const { data } = await q;
+      userPosts = (data || []).map(p => {
+        const author = p.users || {};
+        const r = { ...p, _source: 'user', author }; delete r.users;
+        return r;
       });
     }
-    res.json({ predictions: rows, cursor: rows.length ? rows[rows.length - 1]?.posted_at : null });
+
+    // ── 2. Influencer posts from `influencer_posts` (cron-populated) ──
+    // These are tweets/posts from tracked X influencers with an auto-
+    // detected market match. We always include them — if the user
+    // follows nobody and has posted nothing, influencer posts are
+    // what keeps the feed non-empty. Normalized to prediction shape
+    // so the frontend renders them through the same card.
+    let influencerPosts = [];
+    if (pool) {
+      const infConditions = ['p.published_at IS NOT NULL'];
+      const infParams = [];
+      if (cursor) { infParams.push(cursor); infConditions.push(`p.published_at < $${infParams.length}`); }
+      infParams.push(lim);
+      influencerPosts = await dbQuery(
+        `SELECT p.id, p.influencer_id, p.platform, p.external_id, p.content_url,
+                p.content_text, p.published_at, p.market_slug, p.market_question,
+                p.predicted_side, p.match_confidence,
+                p.agree_count, p.disagree_count, p.comment_count, p.fire_count,
+                i.name AS influencer_name, i.handle AS influencer_handle,
+                i.avatar_url AS influencer_avatar, i.known_accuracy, i.follower_count
+         FROM influencer_posts p
+         JOIN external_influencers i ON i.id = p.influencer_id
+         WHERE ${infConditions.join(' AND ')}
+         ORDER BY p.published_at DESC
+         LIMIT $${infParams.length}`,
+        infParams
+      ).catch(() => []);
+    }
+
+    // Normalize influencer posts into the prediction-shape envelope.
+    // `_source: 'influencer'` lets the frontend route to the
+    // influencer-post card component if it wants. Everything else
+    // maps onto prediction fields the feed already renders.
+    const normalizedInfluencer = influencerPosts.map(ip => ({
+      id: 'inf_' + ip.id,
+      _source: 'influencer',
+      _external_url: ip.content_url,
+      user_id: null,
+      market_id: ip.market_slug,
+      market_title: ip.market_question,
+      direction: ip.predicted_side,
+      entry_price: null,
+      conviction: ip.match_confidence >= 0.75 ? 'high' : ip.match_confidence >= 0.5 ? 'medium' : 'low',
+      thesis_text: ip.content_text,
+      category_tags: [],
+      outcome: 'pending',
+      posted_at: ip.published_at,
+      // Author shape matches the `predictions` path above so the feed
+      // card renders influencer + user posts through the same component.
+      author: {
+        id: null,
+        display_name: ip.influencer_name || ip.influencer_handle,
+        avatar_url: ip.influencer_avatar,
+        handle: ip.influencer_handle,
+        platform: ip.platform,
+        known_accuracy: ip.known_accuracy,
+        follower_count: ip.follower_count,
+        // No flex_score_* — influencers have `known_accuracy` instead
+      },
+      agree_count: ip.agree_count || 0,
+      disagree_count: ip.disagree_count || 0,
+    }));
+
+    // Merge + sort by timestamp (posted_at for predictions, mapped to
+    // posted_at on normalized influencer posts), newest first, trim.
+    const merged = [...userPosts, ...normalizedInfluencer]
+      .sort((a, b) => new Date(b.posted_at) - new Date(a.posted_at))
+      .slice(0, lim);
+
+    const nextCursor = merged.length === lim ? merged[merged.length - 1].posted_at : null;
+    res.json({ predictions: merged, cursor: nextCursor });
   } catch (err) {
     console.error('[predictions feed]', err.message);
     res.status(500).json({ error: err.message });
