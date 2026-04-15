@@ -68,9 +68,11 @@ a:hover { text-decoration: underline; }
 .detect-banner.collapsed .detect-caret { transform: rotate(-90deg); }
 .detect-banner.collapsed .detect-header { border-bottom: 0; }
 .detect-banner.collapsed .detect-list { display: none; }
-/* When expanded with many positions, cap height and scroll internally so the
-   feed underneath stays reachable without scrolling past 10+ positions. */
-.detect-list { max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* Cap internal height on mobile only — on desktop users want to see every
+   position without an inner scrollbar (screen is tall enough). */
+@media (max-width: 640px) {
+  .detect-list { max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+}
 .detect-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: pulse 1.5s infinite; flex-shrink: 0; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .detect-label { font-size: 12px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -699,15 +701,16 @@ function renderDetectionBanner() {
 
   // Default collapse behavior:
   //   • localStorage pref wins if set ('1' = collapsed, '0' = expanded)
-  //   • Otherwise: collapse automatically if >3 positions OR on phones (≤640px)
-  //     so the feed below stays visible without scrolling past a tall list.
+  //   • Otherwise, collapse only on phones (≤640px) where the banner would
+  //     push the feed below the fold. Desktop always starts expanded so
+  //     users see all their positions without clicking anything.
   var pref = null;
   try { pref = localStorage.getItem('hf_detect_collapsed'); } catch(e) {}
+  var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
   var shouldCollapse;
   if (pref === '1') shouldCollapse = true;
   else if (pref === '0') shouldCollapse = false;
-  else shouldCollapse = (_detectedPositions.length > 3) ||
-                       (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+  else shouldCollapse = isMobile;
   banner.classList.toggle('collapsed', shouldCollapse);
   var headerEl = document.getElementById('detectHeader');
   if (headerEl) headerEl.setAttribute('aria-expanded', shouldCollapse ? 'false' : 'true');
