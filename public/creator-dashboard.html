@@ -6805,17 +6805,8 @@ function renderDashboard(data) {
   // Auto-scan settings
   loadAutoScanSettings();
 
-  // Suggestions enabled prefill
-  const sugToggle = document.getElementById('suggestionsToggle');
-  if (sugToggle) {
-    sugToggle.checked = !!creator.suggestions_enabled;
-    updateSuggestionsToggleUI(!!creator.suggestions_enabled);
-  }
-  if (creator.suggestions_enabled) {
-    const sec = document.getElementById('suggestionsSection');
-    if (sec) sec.style.display = 'block';
-    loadSuggestions();
-  }
+  // Suggestions queue init — REMOVED (Phase 2). Backend endpoints
+  // for member market suggestions are gone; UI stays hidden.
 
   // Referral prefill
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
@@ -7826,8 +7817,7 @@ function showTab(tab) {
       updateMarketCounts();
       filterMarkets(currentMarketFilter);
     }
-    const sec = document.getElementById('suggestionsSection');
-    if (sec && sec.style.display !== 'none') loadSuggestions();
+    // Suggestions queue re-render removed in Phase 2
   }
   if (tab === 'overview') {
     // Re-render overview from cached data

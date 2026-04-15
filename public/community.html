@@ -2739,8 +2739,10 @@ function renderPage(data) {
     if (p) p.style.display = 'none';
   }
 
-  // Market suggestions button
-  if (c.suggestions_enabled) {
+  // Market suggestions button — REMOVED in Phase 2 (feature deleted
+  // post-pivot). The suggestMarketRow div stays in the DOM but never
+  // gets unhidden; backend endpoints return 404.
+  if (false && c.suggestions_enabled) {
     document.getElementById('suggestMarketRow').style.display = 'block';
   }
 
