@@ -16170,9 +16170,16 @@ async function _resolveXUserId(handle) {
 }
 
 // ── X/Twitter via twitterapi.io — fetch recent tweets for a handle ──────────
+// Heavily logged — silent failures here were the reason X tweets never
+// appeared on the feed despite Reddit working: 401s / 402s / empty
+// responses all turned into []. Every failure now surfaces in Railway
+// logs so we can diagnose credit-burn vs real outages.
 async function _fetchXTimeline(handle) {
   const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    console.warn('[x-timeline] TWITTERAPI_IO_KEY not set \u2014 X pipeline disabled');
+    return [];
+  }
   try {
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 12000);
@@ -16180,11 +16187,23 @@ async function _fetchXTimeline(handle) {
       `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`,
       { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
     ).finally(() => clearTimeout(tid));
-    if (!r.ok) return [];
-    const d = await r.json();
-    // Returns { tweets: [{ id, text, createdAt, author, ... }], has_next_page, next_cursor }
-    return (d.tweets || []).filter(t => t.type !== 'retweet');
-  } catch { return []; }
+    if (!r.ok) {
+      let body = '';
+      try { body = (await r.text() || '').slice(0, 200); } catch {}
+      console.warn(`[x-timeline] @${handle} \u2014 twitterapi.io ${r.status}${body ? ' ' + body : ''}`);
+      return [];
+    }
+    const d = await r.json().catch(() => ({}));
+    const total = (d.tweets || []).length;
+    const nonRetweet = (d.tweets || []).filter(t => t.type !== 'retweet');
+    // Log per-handle counts so zero-content handles are obvious. Full
+    // sweep summary is still logged by monitorPolymarketInfluencers.
+    console.log(`[x-timeline] @${handle} total=${total} nonRT=${nonRetweet.length}`);
+    return nonRetweet;
+  } catch (e) {
+    console.warn(`[x-timeline] @${handle} \u2014 fetch error: ${e.message}`);
+    return [];
+  }
 }
 
 // ── YouTube: channel RSS feed (no API key needed) ────────────────────────────
@@ -16400,6 +16419,10 @@ async function monitorPolymarketInfluencers() {
 
   let newPostCount = 0;
   let newTakeCount = 0;
+  // Per-platform counters. Reveals "X fetched 0 but Reddit fetched 40"
+  // without having to grep per-handle logs.
+  const byPlatform = { x:{fetched:0,stored:0}, reddit:{fetched:0,stored:0},
+                       youtube:{fetched:0,stored:0}, substack:{fetched:0,stored:0} };
 
   for (const inf of influencers) {
     // Rate gate: skip if fetched within last 25 minutes
@@ -16492,6 +16515,9 @@ async function monitorPolymarketInfluencers() {
         }));
     }
 
+    // Track how many raw items came out of this platform before dedup.
+    if (byPlatform[inf.platform]) byPlatform[inf.platform].fetched += rawPosts.length;
+
     // ── Process new posts ──────────────────────────────────────────────────
     for (const post of rawPosts.slice(0, 5)) { // max 5 per influencer per sweep
       const exists = await _influencerPostExists(post.platform, post.external_id);
@@ -16504,6 +16530,7 @@ async function monitorPolymarketInfluencers() {
 
       await _saveInfluencerPost(inf, post, prediction);
       newPostCount++;
+      if (byPlatform[post.platform]) byPlatform[post.platform].stored++;
       if (prediction) newTakeCount++;
 
       // Small delay between Claude calls to avoid rate limits
@@ -16519,8 +16546,80 @@ async function monitorPolymarketInfluencers() {
   console.log(`[influencer] Sweep complete — ${newPostCount} new posts, ${newTakeCount} auto-takes created`);
   // Grep-friendly summary for Railway logs. Zero-insert sweeps are the
   // "we're burning credits without getting content" signal.
-  console.log(`[influencer-sweep-summary] newPosts=${newPostCount} newTakes=${newTakeCount}`);
+  const perPlat = Object.entries(byPlatform)
+    .map(([k,v]) => `${k}:${v.stored}/${v.fetched}`).join(' ');
+  console.log(
+    `[influencer-sweep-summary] newPosts=${newPostCount} newTakes=${newTakeCount} ` +
+    `byPlatform=${perPlat}`
+  );
+  // Stash last sweep report for the admin inspector endpoint.
+  _lastSweepReport = {
+    ranAt: new Date().toISOString(),
+    newPosts: newPostCount,
+    newTakes: newTakeCount,
+    byPlatform,
+  };
 }
+// Last influencer sweep summary, exposed via GET /api/admin/influencer-sweep-report
+let _lastSweepReport = null;
+
+// ── Admin: inspect + trigger the influencer sweep on demand ─────────────────
+// Lets us diagnose "why aren't X tweets showing up like Reddit posts" without
+// waiting 4 hours for the next cron tick. Returns:
+//   - last sweep's per-platform fetched/stored counts
+//   - the 10 most-recent influencer_posts with their platform + match status
+//   - the configured env flags (enabled, key-is-set boolean)
+app.get('/api/admin/influencer-sweep-report', requireAdmin, async (req, res) => {
+  try {
+    let recent = [];
+    if (pool) {
+      recent = await dbQuery(
+        `SELECT p.id, p.platform, p.external_id, p.market_slug, p.market_question,
+                p.predicted_side, p.match_confidence, p.published_at, i.handle, i.name
+         FROM influencer_posts p
+         LEFT JOIN external_influencers i ON i.id = p.influencer_id
+         ORDER BY p.published_at DESC NULLS LAST
+         LIMIT 10`
+      );
+    }
+    // Per-platform total counts (how many posts we've stored from each source).
+    let totals = [];
+    if (pool) {
+      totals = await dbQuery(
+        'SELECT platform, COUNT(*)::int AS count FROM influencer_posts GROUP BY platform ORDER BY count DESC'
+      );
+    }
+    res.json({
+      lastSweep: _lastSweepReport,
+      recentPosts: recent,
+      totalsByPlatform: totals,
+      config: {
+        twitterapi_key_set: !!process.env.TWITTERAPI_IO_KEY,
+        twitterapi_fetch_enabled: process.env.TWITTERAPI_FETCH_ENABLED !== 'false',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: force-run the sweep now. Ignores the 25-min per-handle cache
+// so every active influencer is re-fetched. Use sparingly — each X
+// handle still costs one twitterapi.io call.
+app.post('/api/admin/influencer-sweep-run', requireAdmin, async (req, res) => {
+  try {
+    // Clear the per-handle rate-gate so we don't skip everything.
+    _influencerFetchCache.clear();
+    // Fire-and-return — the sweep can take 30-60s for 30+ influencers.
+    // Client polls /api/admin/influencer-sweep-report for the result.
+    monitorPolymarketInfluencers().catch(err =>
+      console.error('[influencer] Manual sweep error:', err.message)
+    );
+    res.json({ ok: true, message: 'Sweep triggered \u2014 poll /api/admin/influencer-sweep-report in ~60s' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Run every 4 hours (was every 30 min) — reduces twitterapi.io burn
 // when the filters are producing few matches. The sweep still runs on
