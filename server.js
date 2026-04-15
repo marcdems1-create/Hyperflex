@@ -3705,17 +3705,16 @@ async function fetchRedditHot(subreddit, limit = 20) {
 }
 
 async function fetchXTrending() {
-  const bearer = process.env.X_BEARER_TOKEN;
-  if (!bearer) return [];
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  if (!apiKey) return [];
   try {
-    // WOEID 1 = worldwide trending
-    const res = await fetch('https://api.twitter.com/2/trends/by/woeid/1', {
-      headers: { 'Authorization': `Bearer ${bearer}` },
+    const res = await fetch('https://api.twitterapi.io/twitter/trends', {
+      headers: { 'X-API-Key': apiKey },
       signal: AbortSignal.timeout(8000)
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data?.data || []).slice(0, 20).map(t => ({
+    return (data?.trends || data?.data || []).slice(0, 20).map(t => ({
       title: t.name || t.trend_name || '',
       link: `https://x.com/search?q=${encodeURIComponent(t.name || '')}`,
       source: 'X Trending'
@@ -12815,91 +12814,35 @@ async function fetchInfluencerTweets() {
 
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
     let imported = 0;
-    const NITTER_INSTANCES = ['nitter.net', 'nitter.privacydev.net', 'nitter.poast.org'];
-    const xBearerToken = process.env.X_BEARER_TOKEN;
+    const twitterApiKey = process.env.TWITTERAPI_IO_KEY;
 
     for (const inf of influencers) {
       try {
         let tweetTexts = [];
 
-        // METHOD 1: X API v2 (best, requires Bearer token)
-        if (xBearerToken && !tweetTexts.length) {
+        // Fetch tweets via twitterapi.io
+        if (twitterApiKey) {
           try {
-            // First get user ID from handle
-            const userCtrl = new AbortController();
-            const userTid = setTimeout(() => userCtrl.abort(), 6000);
-            const userRes = await fetch(`https://api.x.com/2/users/by/username/${inf.x_handle}`, {
-              signal: userCtrl.signal,
-              headers: { Authorization: `Bearer ${xBearerToken}`, 'User-Agent': 'Hyperflex/1.0' }
-            }).finally(() => clearTimeout(userTid));
-            if (userRes.ok) {
-              const userData = await userRes.json();
-              const xUserId = userData.data?.id;
-              if (xUserId) {
-                // Fetch recent tweets
-                const twCtrl = new AbortController();
-                const twTid = setTimeout(() => twCtrl.abort(), 6000);
-                const twRes = await fetch(`https://api.x.com/2/users/${xUserId}/tweets?max_results=10&tweet.fields=created_at,text`, {
-                  signal: twCtrl.signal,
-                  headers: { Authorization: `Bearer ${xBearerToken}`, 'User-Agent': 'Hyperflex/1.0' }
-                }).finally(() => clearTimeout(twTid));
-                if (twRes.ok) {
-                  const twData = await twRes.json();
-                  for (const tw of (twData.data || [])) {
-                    if (tw.text && tw.text.length > 20 && !tw.text.startsWith('RT @')) {
-                      tweetTexts.push({ id: tw.id, text: tw.text, url: `https://x.com/${inf.x_handle}/status/${tw.id}` });
-                    }
-                  }
-                } else if (twRes.status === 429) {
-                  console.warn('[influencer-fetch] X API rate limited — falling back to Nitter');
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 12000);
+            const res = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(inf.x_handle)}`, {
+              headers: { 'X-API-Key': twitterApiKey },
+              signal: ctrl.signal
+            }).finally(() => clearTimeout(tid));
+            if (res.ok) {
+              const data = await res.json();
+              for (const tw of (data.tweets || [])) {
+                if (tw.type === 'retweet') continue;
+                if (tw.text && tw.text.length > 20) {
+                  tweetTexts.push({
+                    id: tw.id,
+                    text: tw.text,
+                    url: tw.url || `https://x.com/${inf.x_handle}/status/${tw.id}`
+                  });
                 }
               }
-            } else if (userRes.status === 401) {
-              console.warn('[influencer-fetch] X API 401 — Bearer token invalid');
             }
-          } catch (e) { /* X API failed, try fallbacks */ }
-        }
-
-        // METHOD 2: Nitter RSS (fallback, no auth needed)
-        for (const instance of NITTER_INSTANCES) {
-          if (tweetTexts.length) break;
-          try {
-            const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 6000);
-            const rssUrl = `https://${instance}/${inf.x_handle}/rss`;
-            const resp = await fetch(rssUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } }).finally(() => clearTimeout(tid));
-            if (!resp.ok) continue;
-            const xml = await resp.text();
-            // Parse RSS items: <item><title>...</title><description>...</description><link>...</link></item>
-            const itemRegex = /<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/gi;
-            let m;
-            while ((m = itemRegex.exec(xml)) !== null) {
-              const text = m[2].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
-              const link = m[3].trim();
-              const tweetId = link.match(/status\/(\d+)/)?.[1] || null;
-              if (text.length > 20) tweetTexts.push({ id: tweetId, text, url: link });
-            }
-          } catch (e) { /* nitter instance failed, try next */ }
-        }
-
-        // Fallback: try Twitter syndication
-        if (!tweetTexts.length) {
-          try {
-            const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 6000);
-            const resp = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${inf.x_handle}`, {
-              signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }
-            }).finally(() => clearTimeout(tid));
-            if (resp.ok) {
-              const html = await resp.text();
-              const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
-              let m;
-              while ((m = pRegex.exec(html)) !== null) {
-                const text = m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
-                if (text.length > 30 && text.length < 500 && !/twitter|sign up|log in/i.test(text)) tweetTexts.push({ id: null, text, url: null });
-              }
-            }
-          } catch (e) { /* syndication failed */ }
+          } catch (e) { /* twitterapi.io failed */ }
         }
 
         if (!tweetTexts.length) continue;
@@ -37071,28 +37014,27 @@ function recordTweet(text, market) {
 
 // ── Seed tweet history from X timeline on startup (prevents post-deploy duplicate spam) ──
 async function _seedTweetHistoryFromTimeline() {
-  const bearer = process.env.X_BEARER_TOKEN;
-  const xUserId = process.env.X_USER_ID;
-  if (!bearer || !xUserId) {
-    console.log('[tweet-seed] Skipped: X_BEARER_TOKEN or X_USER_ID not set');
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  const xHandle = process.env.X_HANDLE || 'HyperFlexapp';
+  if (!apiKey) {
+    console.log('[tweet-seed] Skipped: TWITTERAPI_IO_KEY not set');
     return;
   }
   try {
-    const timelineUrl = `https://api.x.com/2/users/${xUserId}/tweets?max_results=15&tweet.fields=created_at,text`;
-    const res = await fetch(timelineUrl, {
-      headers: { 'Authorization': `Bearer ${bearer}` },
+    const res = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(xHandle)}`, {
+      headers: { 'X-API-Key': apiKey },
       signal: AbortSignal.timeout(10000)
     });
     if (!res.ok) {
-      console.warn('[tweet-seed] X API returned', res.status);
+      console.warn('[tweet-seed] twitterapi.io returned', res.status);
       return;
     }
     const data = await res.json();
-    const tweets = data.data || [];
+    const tweets = data.tweets || [];
     const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
     let seeded = 0;
     for (const t of tweets) {
-      const ts = new Date(t.created_at).getTime();
+      const ts = new Date(t.createdAt).getTime();
       // Only seed tweets from last 48h
       if (Date.now() - ts > 48 * 60 * 60 * 1000) continue;
       const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
@@ -37102,9 +37044,9 @@ async function _seedTweetHistoryFromTimeline() {
       }
     }
     // Also seed _tweetLog timestamps so rate limiter is aware of recent posts
-    const last24h = tweets.filter(t => Date.now() - new Date(t.created_at).getTime() < 24 * 60 * 60 * 1000);
+    const last24h = tweets.filter(t => Date.now() - new Date(t.createdAt).getTime() < 24 * 60 * 60 * 1000);
     for (const t of last24h) {
-      const ts = new Date(t.created_at).getTime();
+      const ts = new Date(t.createdAt).getTime();
       if (!_tweetLog.some(l => Math.abs(l - ts) < 60000)) _tweetLog.push(ts);
     }
     _tweetLog.sort((a, b) => a - b);
@@ -37515,35 +37457,32 @@ async function replyToTweet(tweetId, text) {
 }
 
 async function searchAndDraftReplies() {
-  const bearer = process.env.X_BEARER_TOKEN;
-  // Don't bail if no bearer — we can use OAuth1 as fallback
-  if (!bearer && !_xOAuthSign) return;
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  if (!apiKey && !_xOAuthSign) return;
   try {
     const queries = [
-      'polymarket odds -is:retweet -from:HyperFlexapp',
-      'kalshi prediction -is:retweet -from:HyperFlexapp',
-      '"prediction market" whale -is:retweet -from:HyperFlexapp',
+      'polymarket odds',
+      'kalshi prediction',
+      '"prediction market" whale',
     ];
     const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
-    const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at,reply_settings`;
-    // Use Bearer token if available, otherwise fall back to OAuth1
-    const authHeader = bearer ? `Bearer ${bearer}` : _xOAuthSign('GET', searchUrl, {});
-    if (!authHeader) { console.warn('[reply-bot] No auth available'); return; }
-    const res = await fetch(searchUrl, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(10000) });
+    const res = await fetch(`https://api.twitterapi.io/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&queryType=Latest`, {
+      headers: { 'X-API-Key': apiKey },
+      signal: AbortSignal.timeout(10000)
+    });
     if (!res.ok) { console.warn('[reply-bot] Search failed:', res.status); return; }
     const data = await res.json();
-    const tweets = data.data || [];
+    const tweets = data.tweets || [];
     if (!tweets.length) return;
     const worthy = tweets.filter(t => {
-      const m = t.public_metrics || {};
-      // Skip tweets that restrict replies (only mentioned users, only followers, etc)
-      if (t.reply_settings && t.reply_settings !== 'everyone') return false;
-      return ((m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2) >= 1 && !_replyLog.includes(t.id);
+      if (t.type === 'retweet') return false;
+      if (t.author?.userName === 'HyperFlexapp') return false;
+      return ((t.likeCount || 0) + (t.retweetCount || 0) * 3 + (t.replyCount || 0) * 2) >= 1 && !_replyLog.includes(t.id);
     });
     if (!worthy.length) return;
     const target = worthy.sort((a, b) => {
-      const aE = (a.public_metrics?.like_count || 0) + (a.public_metrics?.retweet_count || 0) * 3;
-      const bE = (b.public_metrics?.like_count || 0) + (b.public_metrics?.retweet_count || 0) * 3;
+      const aE = (a.likeCount || 0) + (a.retweetCount || 0) * 3;
+      const bE = (b.likeCount || 0) + (b.retweetCount || 0) * 3;
       return bE - aE;
     })[0];
 
@@ -37756,16 +37695,19 @@ app.post('/api/reply-to', async (req, res) => {
   try {
     // Fetch the tweet text so we can generate a data-rich reply
     let tweetText = '';
-    const bearer = process.env.X_BEARER_TOKEN;
-    if (bearer) {
-      const tweetRes = await fetch(`https://api.x.com/2/tweets/${tweetId}?tweet.fields=text,public_metrics,author_id`, {
-        headers: { 'Authorization': `Bearer ${bearer}` },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (tweetRes.ok) {
-        const tweetData = await tweetRes.json();
-        tweetText = tweetData.data?.text || '';
-      }
+    const twitterKey = process.env.TWITTERAPI_IO_KEY;
+    if (twitterKey) {
+      try {
+        const tweetRes = await fetch(`https://api.twitterapi.io/twitter/tweets?tweet_ids=${tweetId}`, {
+          headers: { 'X-API-Key': twitterKey },
+          signal: AbortSignal.timeout(10000)
+        });
+        if (tweetRes.ok) {
+          const tweetData = await tweetRes.json();
+          const tweets = tweetData.tweets || [];
+          tweetText = tweets[0]?.text || '';
+        }
+      } catch (e) { /* tweet fetch failed, will use fallback */ }
     }
     // If we couldn't fetch, use the text from the request body if provided
     if (!tweetText) tweetText = req.body.tweet_text || '';
@@ -39748,21 +39690,20 @@ setInterval(async () => {
     // ── TWITTER GUARDIAN — detect & prevent spam/duplicate posting ──
     // Fetch our own recent tweets and check for duplicates that slipped through
     try {
-      const bearer = process.env.X_BEARER_TOKEN;
-      const xUserId = process.env.X_USER_ID; // @HyperFlexapp user ID
-      if (bearer && xUserId) {
-        const timelineUrl = `https://api.x.com/2/users/${xUserId}/tweets?max_results=5&tweet.fields=created_at,text`;
-        const tlRes = await fetch(timelineUrl, {
-          headers: { 'Authorization': `Bearer ${bearer}` },
+      const twitterKey = process.env.TWITTERAPI_IO_KEY;
+      const xHandle = process.env.X_HANDLE || 'HyperFlexapp';
+      if (twitterKey) {
+        const tlRes = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(xHandle)}`, {
+          headers: { 'X-API-Key': twitterKey },
           signal: AbortSignal.timeout(8000)
         });
         if (tlRes.ok) {
           const tlData = await tlRes.json();
-          const recentTweets = (tlData.data || []);
+          const recentTweets = (tlData.tweets || []);
 
           // Check for duplicate tweets in timeline (same text within 6h)
           const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString();
-          const recentSixH = recentTweets.filter(t => t.created_at > sixHoursAgo);
+          const recentSixH = recentTweets.filter(t => t.createdAt > sixHoursAgo);
 
           // Build word sets for similarity comparison
           const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
@@ -39793,7 +39734,7 @@ setInterval(async () => {
           for (const t of recentTweets) {
             const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
             if (!alreadyTracked) {
-              _tweetHistory.push({ text: t.text, market: '', ts: new Date(t.created_at).getTime() });
+              _tweetHistory.push({ text: t.text, market: '', ts: new Date(t.createdAt).getTime() });
             }
           }
           // Keep history bounded
