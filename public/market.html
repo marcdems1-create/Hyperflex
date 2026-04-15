@@ -3417,6 +3417,44 @@ async function executeTrade() {
     }
     var shares = amount / clobPrice;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // PRE-SUBMIT SHARE-BALANCE CHECK (SELL only)
+    // Stops the trade before wasting wallet signatures when the user is
+    // trying to sell more shares than they actually hold on this token/side.
+    // This is the #1 cause of the generic CLOB 400 "invalid amounts" error
+    // that looks like a decimal problem but is really a balance problem.
+    // We read from _userPositions which was populated by fetchUserPositions()
+    // when the market page loaded; that function fetches live positions via
+    // the Polymarket Data API keyed by tokenId. Null/empty cache = skip the
+    // check (CLOB will still reject; better than false-positive blocking).
+    if (clobSide === 'SELL' && tokenId && _userPositions) {
+      var pos = _userPositions[String(tokenId).toLowerCase()];
+      var ownedShares = pos && typeof pos.size === 'number' ? pos.size : 0;
+      if (ownedShares <= 0) {
+        // Nothing on this side at all
+        var marketQ = (_market && (_market.question || _market.title)) || 'this market';
+        showTradeError("You don't own any shares to sell here.", [
+          'Your Polymarket wallet holds zero shares on this outcome — check polymarket.com to confirm which side (YES or NO) your position is on.',
+          'To sell, switch to the outcome you actually hold, or choose "Buy" instead.'
+        ]);
+        cta.disabled = false; updateCtaButton();
+        _tradeInFlight = false;
+        _clearTradeTimeout();
+        return;
+      }
+      if (shares > ownedShares + 0.0001) {  // tiny epsilon for rounding
+        showTradeError('Selling more shares than you own.', [
+          'You hold ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '.',
+          'Tap the MAX button to autofill your full holding, or reduce the amount below.',
+          'Amount in USDC = (shares you want to sell) × limit price.'
+        ]);
+        cta.disabled = false; updateCtaButton();
+        _tradeInFlight = false;
+        _clearTradeTimeout();
+        return;
+      }
+    }
+
     showTradeStatus('Connecting to wallet...', 'info');
     // Timeout guard: MetaMask mobile can silently hang on getSigner()
     var walletCtx;
