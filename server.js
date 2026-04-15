@@ -12732,8 +12732,10 @@ const INFLUENCER_SEED = [
     let seeded = 0;
     for (const inf of INFLUENCER_SEED) {
       try {
-        const existing = await dbQuery('SELECT id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [inf.handle.toLowerCase()]);
-        if (existing.length) continue;
+        // Only skip if influencer exists AND already has a user_id.
+        // If user_id is NULL, ensureInfluencerProfile will fix it.
+        const existing = await dbQuery('SELECT id, user_id FROM influencers WHERE LOWER(x_handle) = $1 LIMIT 1', [inf.handle.toLowerCase()]);
+        if (existing.length && existing[0].user_id) continue;
         await ensureInfluencerProfile(inf.handle, inf.name, `https://unavatar.io/x/${inf.handle}`, null, inf.followers, inf.category);
         seeded++;
       } catch (e) { /* skip dupes */ }
@@ -12948,7 +12950,13 @@ setTimeout(() => fetchInfluencerTweets().catch(() => {}), 60000);
 // Flipped approach: scan Polymarket markets → match to influencer categories → create takes.
 // Guarantees feed content even when X scraping fails.
 async function generateInfluencerTakesFromMarkets() {
-  if (!pool || !_screenerCache || !_screenerCache.data) return;
+  if (!pool) return;
+  // Warm the screener cache if it's not populated yet (happens on first boot
+  // before any /api/screener or /api/alpha/top request has been made).
+  if (!_screenerCache || !_screenerCache.data) {
+    try { await buildAlphaList(); } catch (e) { console.warn('[influencer-market-takes] buildAlphaList failed:', e.message); }
+  }
+  if (!_screenerCache || !_screenerCache.data) return;
   try {
     const influencers = await dbQuery(
       'SELECT id, x_handle, display_name, user_id, avatar_url, category FROM influencers WHERE is_active = true AND user_id IS NOT NULL'
@@ -13046,7 +13054,9 @@ async function generateInfluencerTakesFromMarkets() {
 // This guarantees feed content even when X API / Nitter scraping is unavailable.
 // Capped at 10 takes per cycle, 2 per influencer per 6h — stays thin enough
 // that real tweet imports (fetchInfluencerTweets) remain prominent when live.
-setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
+// Run 60 seconds after boot (influencer seed takes ~3s, this gives plenty of margin).
+// The function calls buildAlphaList() itself if the screener cache is cold.
+setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 60000);
 cron.schedule('0 */2 * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
 
 // POST /api/nominate — REMOVED (Phase 2 dead-code deletion). See
