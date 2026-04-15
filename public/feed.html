@@ -491,9 +491,9 @@ a:hover { text-decoration: underline; }
 
   <!-- Post prediction CTA — opens the composer with a position picker, same
        pattern as the dashboard's "Post Take" button -->
-  <div class="post-bar" id="postBar" onclick="openFeedPostPicker()">
+  <div class="post-bar" id="postBar" onclick="openManualComposer()">
     <div class="post-bar-avatar" id="postAvatar">?</div>
-    <div class="post-bar-prompt">Share a take on one of your positions...</div>
+    <div class="post-bar-prompt">Post a prediction on any market...</div>
     <button class="post-bar-btn">Predict</button>
   </div>
 
@@ -1179,17 +1179,13 @@ async function loadFeed(append) {
 
     var preds = (data.predictions || []).map(normaliseNew);
 
-    // For trending tab, also pull influencer posts and merge
-    if (currentTab === 'trending') {
+    // Always merge influencer posts into For You and Trending tabs
+    // so the feed never feels empty and real tweets are always visible
+    if (currentTab === 'foryou' || currentTab === 'trending' || !preds.length) {
       var infPosts = await fetchInfluencerPosts();
       preds = preds.concat(infPosts).sort(function(a,b) {
         return new Date(b.posted_at) - new Date(a.posted_at);
       });
-    }
-
-    // If feed is still empty after predictions, try influencer posts as last resort
-    if (!preds.length && currentTab !== 'trending') {
-      preds = await fetchInfluencerPosts();
     }
 
     if (!append) feedData = preds; else feedData = feedData.concat(preds);

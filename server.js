@@ -15953,7 +15953,19 @@ const POLY_KEYWORDS = [
   'markets are showing','market says','market gives','market puts','contracts',
   'odds say','betting markets','political betting','market odds',
   'forecast','forecasting','probability','percent chance',
+  // Broader signal keywords — Claude enrichment will filter for actual market matches
+  'crypto','bitcoin','btc','ethereum','eth','tariff','trade war','ceasefire',
+  'election','poll','approval','inflation','rate cut','fed','recession',
+  'ukraine','iran','china','war','deal','treaty','sanction','nato',
+  'ai','regulation','ban','legalize','legislation','ruling','verdict',
+  'championship','finals','super bowl','world cup','playoff',
 ];
+// Accounts where ALL tweets are relevant (prediction market platforms + key traders)
+const ALWAYS_RELEVANT_HANDLES = new Set([
+  'Polymarket','ManifoldMarkets','metaculus','Kalshi','PredictIt',
+  'NotSoEasyMoney','Tradermayne','csp_trading','massieforky',
+  'NateSilver538','PTetlock','slatestarcodex',
+]);
 // For politician accounts we also catch broader political signal tweets
 const POLITICIAN_HANDLES = new Set([
   'ThomasMassie','RandPaul','WarrenDavidson','TomEmmer','SenLummis',
@@ -15965,14 +15977,16 @@ const POLITICIAN_HANDLES = new Set([
 const _influencerFetchCache = new Map(); // platform+id → last fetch ts (rate-gate)
 
 // Returns true if text is probably about a Polymarket-relevant prediction.
-// For politicians, any substantive policy/political tweet is worth capturing —
-// Claude will decide if it maps to a live market.
+// For core prediction market accounts, ALL tweets pass through.
+// For politicians, any substantive policy/political tweet is worth capturing.
+// Claude enrichment downstream decides if each tweet maps to a live market.
 function _isPolyContent(text, handle) {
   if (!text) return false;
+  // Core prediction market accounts — everything they tweet is signal
+  if (handle && ALWAYS_RELEVANT_HANDLES.has(handle)) return true;
   const t = text.toLowerCase();
   if (POLY_KEYWORDS.some(kw => t.includes(kw))) return true;
   // For known politician accounts, also capture political/policy tweets
-  // (bills, elections, appointments, major policy announcements)
   if (handle && POLITICIAN_HANDLES.has(handle)) {
     const politicalKw = [
       'congress','senate','vote','election','legislation','bill','act','law',
@@ -16258,6 +16272,9 @@ async function monitorPolymarketInfluencers() {
         }
       }
       const tweets = await _fetchXTimeline(inf.handle);
+      if (tweets.length) {
+        console.log(`[influencer] @${inf.handle}: ${tweets.length} tweets fetched`);
+      }
       rawPosts = tweets
         .filter(t => _isPolyContent(t.text, inf.handle))
         .map(t => ({
@@ -16267,6 +16284,11 @@ async function monitorPolymarketInfluencers() {
           text:         t.text,
           published_at: t.createdAt || new Date().toISOString(),
         }));
+      if (tweets.length && !rawPosts.length) {
+        console.log(`[influencer] @${inf.handle}: all ${tweets.length} tweets filtered out by keyword check`);
+      } else if (rawPosts.length) {
+        console.log(`[influencer] @${inf.handle}: ${rawPosts.length} tweets passed keyword filter`);
+      }
     }
 
     // ── YouTube ────────────────────────────────────────────────────────────
@@ -16349,7 +16371,7 @@ cron.schedule('*/30 * * * *', () => {
 setTimeout(() => {
   console.log('[influencer] Running initial sweep on boot...');
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Boot sweep error:', err.message));
-}, 60000); // 60s after boot
+}, 15000); // 15s after boot — fast enough for tables to exist, slow enough for DB to be ready
 
 // Manual trigger for influencer sweep (admin)
 app.post('/api/admin/influencer-sweep', async (req, res) => {
