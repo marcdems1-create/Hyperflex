@@ -14882,7 +14882,12 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     let takeInfluencerPosts = [];
     if (pool) {
       const params = [];
-      let where = `WHERE source = 'influencer' AND market_slug IS NOT NULL`;
+      // Previously required `AND market_slug IS NOT NULL`, which meant any
+      // real influencer tweet we couldn't auto-match to a live market was
+      // stored in `takes` but never shown. Drop that filter so every
+      // real tweet lands on /feed — the live-market sub-card just renders
+      // conditionally on whether we have a match.
+      let where = `WHERE source = 'influencer'`;
       if (cursor) { params.push(cursor); where += ` AND created_at < $${params.length}`; }
       params.push(Math.max(20, lim));
       takeInfluencerPosts = await dbQuery(
