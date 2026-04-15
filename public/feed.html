@@ -678,9 +678,12 @@ function normaliseNew(p) {
   return {
     id: p.id,
     _type: 'new',
+    _source: p._source || 'user',
+    _external_url: p._external_url || null,
     author: p.author || {},
     market_title: p.market_title,
     market_id: p.market_id,
+    market_live: p.market_live || null,   // live market snapshot from screener cache
     direction: p.direction,
     entry_price: p.entry_price,
     conviction: p.conviction,
@@ -796,9 +799,53 @@ function renderCard(p) {
     ? '<span class="badge badge-platform" style="text-transform:capitalize">' + esc(p.conviction) + ' conviction</span>'
     : '';
 
-  var marketHref = p.market_id
-    ? ('/market/' + encodeURIComponent(p.market_id))
-    : '#';
+  var marketHref = (p.market_live && p.market_live.url) ||
+    (p.market_id ? ('/market/' + encodeURIComponent(p.market_id)) : '#');
+
+  // Influencer source badge — lets the user know this is from X not a user post
+  var influencerBadge = p._source === 'influencer'
+    ? '<span class="badge" style="background:rgba(29,161,242,0.15);color:#1da1f2;border:1px solid rgba(29,161,242,0.3)">𝕏 Influencer</span>'
+    : '';
+
+  // External link (tweet URL) if present
+  var externalLinkHtml = p._external_url
+    ? ' <a href="' + esc(p._external_url) + '" target="_blank" rel="noopener" style="color:var(--text-faint);font-size:11px;margin-left:6px">source ↗</a>'
+    : '';
+
+  // Live market sub-card — shown when we have live market data attached
+  // for this card (screener cache hit). Gives traders a quick read on
+  // where the market sits right now vs. what the influencer said.
+  var liveMarketHtml = '';
+  if (p.market_live) {
+    var ml = p.market_live;
+    var yesPct = ml.yes_pct != null ? ml.yes_pct : null;
+    var noPct = yesPct != null ? (100 - yesPct) : null;
+    var volLabel = ml.volume_24h
+      ? ('$' + (ml.volume_24h >= 1e6 ? (ml.volume_24h/1e6).toFixed(1) + 'M' : ml.volume_24h >= 1e3 ? Math.round(ml.volume_24h/1e3) + 'K' : Math.round(ml.volume_24h)))
+      : '—';
+    var closes = ml.closes_at
+      ? new Date(ml.closes_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+      : null;
+    var yesBar = yesPct != null
+      ? ('<div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px">' +
+         '<span style="color:#00e68a;font-weight:700">YES ' + yesPct + '%</span>' +
+         '<span style="color:var(--text-faint)">·</span>' +
+         '<span style="color:#ff4d6a;font-weight:700">NO ' + noPct + '%</span>' +
+         '</div>')
+      : '<span style="font-family:var(--mono);font-size:11px;color:var(--text-faint)">no live price</span>';
+    liveMarketHtml =
+      '<a href="' + marketHref + '" style="display:block;margin-top:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold,#c9920d)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+          '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">' +
+            '<span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gold,#c9920d);text-transform:uppercase">Live Market</span>' +
+            (closes ? '<span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">· closes ' + closes + '</span>' : '') +
+          '</div>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">' + volLabel + ' 24h vol</span>' +
+        '</div>' +
+        '<div style="font-size:13px;color:var(--text);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.market_title || '') + '</div>' +
+        '<div style="margin-top:6px">' + yesBar + '</div>' +
+      '</a>';
+  }
 
   return '<div class="pred-card">' +
     '<div class="pred-head">' +
@@ -809,15 +856,16 @@ function renderCard(p) {
           flexHtml + resolvedHtml +
           followHtml +
         '</div>' +
-        '<span class="pred-time">' + timeAgo(p.posted_at) + '</span>' +
+        '<span class="pred-time">' + timeAgo(p.posted_at) + externalLinkHtml + '</span>' +
       '</div>' +
     '</div>' +
     '<div class="pred-badges">' +
+      influencerBadge +
       '<span class="badge ' + sideClass + '">' + esc(p.direction) + '</span>' +
-      '<span class="badge badge-price">' + priceLabel + '</span>' +
+      (p.entry_price ? '<span class="badge badge-price">' + priceLabel + '</span>' : '') +
       convBadge +
     '</div>' +
-    '<a href="' + marketHref + '" class="pred-market">' + esc(p.market_title) + '</a>' +
+    (liveMarketHtml || ('<a href="' + marketHref + '" class="pred-market">' + esc(p.market_title) + '</a>')) +
     outcomeHtml +
     thesisHtml +
     tagsHtml +

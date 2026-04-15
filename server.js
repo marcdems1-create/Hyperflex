@@ -14900,11 +14900,109 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       disagree_count: ip.disagree_count || 0,
     }));
 
-    // Merge + sort by timestamp (posted_at for predictions, mapped to
-    // posted_at on normalized influencer posts), newest first, trim.
-    const merged = [...userPosts, ...normalizedInfluencer]
+    // ── 2b. Influencer takes from `takes` table (source='influencer') ──
+    // The fetchInfluencerTweets() cron writes here (has Nitter fallback
+    // so it works without a paid X API tier). influencer_posts only gets
+    // populated by monitorPolymarketInfluencers() which requires X_BEARER_
+    // TOKEN and hits 402 in practice, so this is where most tweet data
+    // actually lives. Dedup'd against influencer_posts by thesis prefix.
+    let takeInfluencerPosts = [];
+    if (pool) {
+      const params = [];
+      let where = `WHERE source = 'influencer' AND market_slug IS NOT NULL`;
+      if (cursor) { params.push(cursor); where += ` AND created_at < $${params.length}`; }
+      params.push(Math.max(20, lim));
+      takeInfluencerPosts = await dbQuery(
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+                t.condition_id, t.question AS market_title, t.side AS predicted_side,
+                t.thesis, t.created_at, t.agree_count, t.disagree_count
+         FROM takes t ${where}
+         ORDER BY t.created_at DESC LIMIT $${params.length}`,
+        params
+      ).catch(() => []);
+    }
+
+    // Build dedup set from influencer_posts thesis prefix + text
+    const seenThesis = new Set(
+      normalizedInfluencer.map(n =>
+        (n.thesis_text || '').trim().toLowerCase().slice(0, 80)
+      )
+    );
+
+    const normalizedTakes = takeInfluencerPosts
+      .filter(t => {
+        const key = (t.thesis || '').trim().toLowerCase().slice(0, 80);
+        if (!key || seenThesis.has(key)) return false;
+        seenThesis.add(key);
+        return true;
+      })
+      .map(t => {
+        // Pull the URL out of the thesis body if present (fetchInfluencerTweets
+        // appends the tweet URL on a newline at the end)
+        let externalUrl = null;
+        let bodyText = t.thesis || '';
+        const urlMatch = bodyText.match(/\n\n(https?:\/\/[^\s]+)\s*$/);
+        if (urlMatch) {
+          externalUrl = urlMatch[1];
+          bodyText = bodyText.slice(0, urlMatch.index).trim();
+        }
+        return {
+          id: 'take_' + t.id,
+          _source: 'influencer',
+          _external_url: externalUrl,
+          user_id: t.user_id,
+          market_id: t.market_slug,
+          market_title: t.market_title,
+          direction: (t.predicted_side || 'YES').toUpperCase(),
+          entry_price: null,
+          conviction: 'medium',
+          thesis_text: bodyText,
+          category_tags: [],
+          outcome: 'pending',
+          posted_at: t.created_at,
+          author: {
+            id: t.user_id,
+            display_name: t.display_name || 'Anonymous',
+            avatar_url: t.avatar_url,
+          },
+          agree_count: t.agree_count || 0,
+          disagree_count: t.disagree_count || 0,
+        };
+      });
+
+    // ── 3. Merge everything + attach live market data ──────────────────
+    const merged = [...userPosts, ...normalizedInfluencer, ...normalizedTakes]
       .sort((a, b) => new Date(b.posted_at) - new Date(a.posted_at))
       .slice(0, lim);
+
+    // Attach live market prices/volume for every card that has a market_id.
+    // Read from the warm screener cache (_screenerCache.data populated by
+    // buildAlphaList on a 90s TTL) — no extra API calls. This gives users
+    // an at-a-glance signal: "influencer said YES on 'Will X happen?' —
+    // market is at 78% — am I in or out?"
+    if (_screenerCache?.data?.length) {
+      const bySlug = new Map();
+      const byCondition = new Map();
+      for (const m of _screenerCache.data) {
+        if (m.slug) bySlug.set(m.slug, m);
+        if (m.event_slug) bySlug.set(m.event_slug, m);
+        if (m.market_id) byCondition.set(m.market_id, m);
+        if (m.condition_id) byCondition.set(m.condition_id, m);
+      }
+      for (const card of merged) {
+        if (!card.market_id) continue;
+        const match = bySlug.get(card.market_id) || byCondition.get(card.market_id);
+        if (!match) continue;
+        card.market_live = {
+          yes_pct: match.yes_price != null ? Math.round(match.yes_price * 100) : null,
+          volume_24h: match.volume_24h || match.volume24hr || null,
+          liquidity: match.liquidity || null,
+          url: match.slug ? `/market/${match.slug}` : null,
+          closes_at: match.endDate || match.end_date || null,
+          category: match.category || null,
+        };
+      }
+    }
 
     const nextCursor = merged.length === lim ? merged[merged.length - 1].posted_at : null;
     res.json({ predictions: merged, cursor: nextCursor });
