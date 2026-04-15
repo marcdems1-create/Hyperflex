@@ -3257,7 +3257,7 @@ window.hfxOpenDeposit = function() {
           <span id="topbarFlexTier" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:800"></span>
         </div>
         <a href="/" class="btn-explore">⚡ Explore</a>
-        <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
+        <button class="btn-primary" onclick="openPostTakeFlow()">📢 Post Take</button>
       </div>
     </div>
 
@@ -3324,7 +3324,7 @@ window.hfxOpenDeposit = function() {
                 </div>
               </div>
               <div id="obAction2" style="flex-shrink:0">
-                <button class="btn-primary" style="font-size:12px;padding:8px 16px;white-space:nowrap" onclick="openCreateModal()">+ New Market</button>
+                <button class="btn-primary" style="font-size:12px;padding:8px 16px;white-space:nowrap" onclick="openPostTakeFlow()">📢 Post Take</button>
               </div>
             </div>
 
@@ -3484,7 +3484,7 @@ window.hfxOpenDeposit = function() {
             </div>
             <div style="display:flex;gap:8px;align-items:center">
               <button class="btn-secondary" onclick="openYoutubeModal()" style="font-size:13px;display:inline-flex;align-items:center;gap:5px">🤖 AI Scanner</button>
-              <button class="btn-primary" id="newMarketBtn" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
+              <button class="btn-primary" id="newMarketBtn" onclick="openPostTakeFlow()" style="font-size:13px">📢 Post Take</button>
             </div>
           </div>
           <div class="markets-table">
@@ -6951,7 +6951,7 @@ function resonanceBadge(score) {
 function renderMarketRows(markets, containerId) {
   const el = document.getElementById(containerId);
   if (!markets.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-title">No markets here</div><div class="empty-desc">Create your first market to get started.</div><button class="btn-primary" onclick="openCreateModal()" style="margin:0 auto">+ New Market</button></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📢</div><div class="empty-title">Share your first take</div><div class="empty-desc">Post a prediction about one of your Polymarket positions. Takes go to the feed and build your track record.</div><button class="btn-primary" onclick="openPostTakeFlow()" style="margin:0 auto">📢 Post Take</button></div>';
     return;
   }
   el.innerHTML = markets.map(m => {
@@ -7751,6 +7751,24 @@ function ensureMoreExpanded(tab) {
 }
 
 // Tab switching
+
+// Post-pivot replacement for the old "+ New Market" CTA. Creators no
+// longer publish their own markets — they post takes (predictions)
+// ABOUT their Polymarket positions. This helper jumps to the My
+// Positions tab where each position row already has a "Post to Feed"
+// button, and shows a prompt toast so users know what to do next.
+function openPostTakeFlow() {
+  showTab('portfolio');
+  if (typeof showToast === 'function') {
+    showToast('📢 Pick a position below and tap "Post to Feed" to share a take', 'info', 4000);
+  }
+  // Scroll to the positions area on mobile so the button row is in view
+  setTimeout(function() {
+    var el = document.getElementById('openPositionsSection') || document.querySelector('[data-tab-content="portfolio"]');
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
 function showTab(tab) {
   ensureMoreExpanded(tab);
   ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints','ta'].forEach(t => {
