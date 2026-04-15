@@ -408,9 +408,17 @@ canvas{display:block;width:100%!important}
           <div class="trade-header-title" id="tradeTitle">Trade</div>
         </div>
 
+        <!-- YOUR POSITIONS summary — top of the trade card so users don't
+             have to scroll to see what they own. Each row has a direct
+             "Sell" button that switches into Sell mode + selects the right
+             outcome + prefills max shares. Prevents the "accidental
+             double-buy when I meant to sell" confusion by making the Sell
+             action unambiguous. Populated by renderTradePositionsPanel(). -->
+        <div id="tradePositionsPanel" style="display:none;margin-bottom:12px;padding:10px 12px;background:linear-gradient(180deg,rgba(0,230,138,0.08),rgba(0,230,138,0.03));border:1px solid rgba(0,230,138,0.25);border-radius:10px"></div>
+
         <div class="trade-tabs">
-          <button class="trade-tab active" onclick="setTradeMode('buy')">Buy</button>
-          <button class="trade-tab" onclick="setTradeMode('sell')">Sell</button>
+          <button class="trade-tab active" id="tradeTabBuy" onclick="setTradeMode('buy')">Buy</button>
+          <button class="trade-tab" id="tradeTabSell" onclick="setTradeMode('sell')">Sell</button>
           <div style="margin-left:auto;display:flex;align-items:center">
             <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--body);font-size:11px;color:var(--soft)">
               <option value="market" selected>Market</option>
@@ -2239,6 +2247,8 @@ async function fetchUserPositions() {
     if (_market) renderOutcomes(_market);
     // Update sidebar position for active outcome
     updateSidebarPosition();
+    // Refresh the top-of-card positions panel (all held outcomes at once)
+    try { renderTradePositionsPanel(); } catch (e) { console.warn('[positions-panel]', e); }
     // Refresh the SELL-mode balance badge now that we know holdings
     try { updateSellBalanceBadge(); } catch (e) {}
 
@@ -2293,6 +2303,155 @@ function updateSidebarPosition() {
   posEl.style.borderColor = 'rgba(0,230,138,0.25)';
   posEl.style.background = 'rgba(0,230,138,0.06)';
 }
+
+// Render a prominent "Your positions" panel at the top of the trade card.
+// Fixes two related UX bugs that cost us a user:
+//   1. The old "YOUR POSITION" pill only showed for the CURRENTLY selected
+//      outcome in the sidebar, AND it sat below the trade controls — so a
+//      position on a different outcome was invisible until you scrolled.
+//   2. With no clear "Sell" shortcut, users clicked the NO side card while
+//      still in Buy mode and bought BOTH sides thinking they were closing.
+//
+// This panel lists EVERY held position in this market/event with an
+// unambiguous "Sell →" button. Clicking it switches the card into Sell
+// mode, selects the matching outcome + side, and fills Max automatically.
+function renderTradePositionsPanel() {
+  var panel = document.getElementById('tradePositionsPanel');
+  if (!panel) return;
+  if (!_userPositions || !Object.keys(_userPositions).length) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    return;
+  }
+
+  // Walk every outcome row (or the single market) and attach a position
+  // if we have one. claimed prevents a single position from being rendered
+  // under two outcomes (YES vs NO share the conditionId).
+  var rows = [];
+  var claimed = {};
+  var outcomeList = (_sortedEventMarkets && _sortedEventMarkets.length) ? _sortedEventMarkets : [_market];
+  for (var i = 0; i < (outcomeList || []).length; i++) {
+    var em = outcomeList[i];
+    if (!em) continue;
+    var outcomeName = em.groupItemTitle || em.question || '';
+    // Each outcome can hold a YES-side and a NO-side position independently
+    // (rare on binary markets but possible). Loop both assets.
+    var tids = getOutcomeTokenIds(i);
+    for (var side = 0; side < 2; side++) {
+      var tid = ((tids[side] || '') + '').toLowerCase();
+      if (!tid) continue;
+      var pos = _userPositions[tid];
+      if (!pos || pos.size <= 0 || claimed[tid]) continue;
+      claimed[tid] = true;
+      rows.push({
+        outcomeIdx: i,
+        outcomeName: outcomeName,
+        sideIdx: side,                 // 0 = YES, 1 = NO
+        side: side === 0 ? 'YES' : 'NO',
+        size: pos.size,
+        avgPrice: pos.avgPrice,
+        currentPrice: pos.currentPrice,
+        cashPnl: pos.cashPnl
+      });
+    }
+  }
+
+  if (!rows.length) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    return;
+  }
+
+  // Total value for the header
+  var totalValue = 0, totalPnl = 0;
+  for (var j = 0; j < rows.length; j++) {
+    totalValue += rows[j].size * (rows[j].currentPrice || rows[j].avgPrice || 0);
+    totalPnl += rows[j].cashPnl || 0;
+  }
+  var pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  var pnlSign = totalPnl >= 0 ? '+' : '';
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+    '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:#00e68a">\u2705 YOUR POSITION' + (rows.length > 1 ? 'S' : '') + '</div>' +
+    '<div style="font-family:var(--mono);font-size:11px;color:var(--soft)">Value <strong style="color:var(--text)">$' + totalValue.toFixed(2) + '</strong>' +
+      (Math.abs(totalPnl) > 0.01 ? ' \u00b7 <span style="color:' + pnlColor + '">' + pnlSign + '$' + totalPnl.toFixed(2) + '</span>' : '') +
+    '</div>' +
+    '</div>';
+
+  for (var k = 0; k < rows.length; k++) {
+    var r = rows[k];
+    var sideColor = r.side === 'YES' ? '#00e68a' : '#ff4d6a';
+    var sideBg = r.side === 'YES' ? 'rgba(0,230,138,0.14)' : 'rgba(255,77,106,0.14)';
+    var avgCents = ((r.avgPrice || 0) * 100).toFixed(1);
+    var outLabel = r.outcomeName || '';
+    if (outLabel.length > 22) outLabel = outLabel.slice(0, 20) + '\u2026';
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0' +
+      (k < rows.length - 1 ? ';border-bottom:1px solid rgba(0,230,138,0.12)' : '') + '">' +
+      '<span style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.05em;color:' + sideColor + ';background:' + sideBg + ';padding:3px 7px;border-radius:4px;flex-shrink:0">' + r.side + '</span>' +
+      '<div style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        escH(outLabel) +
+        '<div style="font-size:10px;color:var(--soft);margin-top:1px">' + r.size.toFixed(1) + ' shares \u00b7 avg ' + avgCents + '\u00a2</div>' +
+      '</div>' +
+      '<button onclick="sellPositionRow(' + r.outcomeIdx + ',' + r.sideIdx + ')" ' +
+        'style="background:#ff4d6a;border:0;color:#fff;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.04em;padding:7px 14px;border-radius:6px;cursor:pointer;min-height:34px;flex-shrink:0;transition:filter .15s" ' +
+        'onmouseover="this.style.filter=\'brightness(1.12)\'" onmouseout="this.style.filter=\'\'">\u2193 Sell</button>' +
+    '</div>';
+  }
+
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+// Fired from the per-position "Sell" button in the top panel.
+// Puts the trade card into an unambiguous state:
+//   - mode = sell
+//   - active outcome matches the row
+//   - trade side (YES/NO) matches the row
+//   - amount = max (all owned shares at current price)
+//   - Buy tab visually de-emphasised, Sell tab is the CTA
+function sellPositionRow(outcomeIdx, sideIdx) {
+  try {
+    // 1. Activate the right outcome row so trade-side data points at it.
+    //    switchOutcome() is the project's canonical setter — it handles
+    //    active index + UI sync + price fetch for that outcome.
+    if (typeof switchOutcome === 'function' && outcomeIdx != null) {
+      switchOutcome(outcomeIdx);
+    } else if (typeof _activeOutcomeIndex !== 'undefined') {
+      _activeOutcomeIndex = outcomeIdx;
+    }
+  } catch (e) { console.warn('[sell-row] switchOutcome', e); }
+  // 2. Flip to Sell mode.
+  _tradeMode = 'sell';
+  var buyTab = document.getElementById('tradeTabBuy');
+  var sellTab = document.getElementById('tradeTabSell');
+  if (buyTab) buyTab.classList.remove('active');
+  if (sellTab) sellTab.classList.add('active');
+  // 3. Select the side (YES or NO) the position is on.
+  try { setTradeSide(sideIdx === 0 ? 'yes' : 'no'); } catch (e) {}
+  // 4. Re-render mode-dependent UI (quick amount buttons, labels).
+  try {
+    var label = document.getElementById('tradeAmountLabel');
+    var maxBtn = document.getElementById('tradeMaxBtn');
+    var quickBtns = document.getElementById('tradeQuickBtns');
+    if (label) label.textContent = 'Amount (USD)';
+    if (maxBtn) maxBtn.style.display = 'inline';
+    if (quickBtns) quickBtns.innerHTML =
+      '<button class="trade-quick-btn" onclick="setAmount(10)">+$10</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>';
+  } catch (e) {}
+  // 5. Prefill Max shares so the user can confirm with one click.
+  try { setMaxShares(); } catch (e) {}
+  try { updateTradeCalc(); } catch (e) {}
+  try { updateCtaButton(); } catch (e) {}
+  try { updateSellBalanceBadge(); } catch (e) {}
+  // 6. Smooth-scroll the trade card into view in case the user tapped from
+  //    further up / on mobile.
+  var tw = document.querySelector('.trade-widget');
+  if (tw && tw.scrollIntoView) tw.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.sellPositionRow = sellPositionRow;
 
 // Helper: find a user position matching a specific outcome row
 // Matches by token ID (each outcome has unique clobTokenIds) or conditionId
@@ -4144,6 +4303,7 @@ async function executeTrade() {
       // Re-render outcome badges + sidebar position immediately
       if (_market) renderOutcomes(_market);
       updateSidebarPosition();
+      try { renderTradePositionsPanel(); } catch (e) {}
       console.log('[trade] Local position injected for', sideLabel, shares.toFixed(1), 'shares @', price + '¢');
     } catch (posErr) {
       console.log('[trade] Could not inject local position:', posErr.message);
@@ -4199,8 +4359,11 @@ async function executeTrade() {
     } catch (e) { /* silent */ }
 
     // ── Post-trade take prompt — "Share your take" ──
+    // Token fallback: hf_token (member login) OR hf_creator_token (creator
+    // login). The original code only read hf_token which silently no-op'd
+    // the prompt for creator-signed-in users.
     try {
-      var hfTakeToken = localStorage.getItem('hf_token');
+      var hfTakeToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
       if (hfTakeToken) {
         var takeMarketSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
         var takeQuestion = (_market && _market.question) || document.querySelector('.market-title')?.textContent || '';
@@ -6188,15 +6351,28 @@ function showTakePrompt(marketSlug, question, conditionId, side, price, amount, 
 
 function postTakeFromTrade() {
   var d = window._pendingTakeData;
-  if (!d) return;
+  if (!d) { console.warn('[take-post] no _pendingTakeData'); return; }
+
   var btn = document.getElementById('take-post-btn');
+  var bar = document.getElementById('take-prompt-bar');
   if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
 
   var thesis = (document.getElementById('take-thesis-input') || {}).value || '';
 
+  // Re-read token at click time — it might have been set AFTER the bar was
+  // rendered (e.g. user logged in mid-flow). Fall back across both member
+  // and creator tokens.
+  var token = d.token || localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) {
+    _showTakeError(bar, btn, 'Log in to post takes.');
+    return;
+  }
+
+  console.log('[take-post] posting', { slug: d.market_slug, side: d.side, thesis: thesis.length });
+
   fetch('/api/takes', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + d.token },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({
       market_slug: d.market_slug,
       condition_id: d.condition_id,
@@ -6207,10 +6383,15 @@ function postTakeFromTrade() {
       thesis: thesis.trim() || null
     })
   })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.ok) {
-      var bar = document.getElementById('take-prompt-bar');
+  .then(function(r) {
+    // Read the body regardless of status so we can surface the server's
+    // error message instead of a silent failure.
+    return r.json().then(function(body) { return { status: r.status, body: body }; })
+           .catch(function() { return { status: r.status, body: {} }; });
+  })
+  .then(function(res) {
+    console.log('[take-post] response', res.status, res.body);
+    if (res.status >= 200 && res.status < 300 && res.body && res.body.ok) {
       if (bar) {
         bar.innerHTML =
           '<div style="flex:1;text-align:center;font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#00e68a">' +
@@ -6218,12 +6399,35 @@ function postTakeFromTrade() {
         setTimeout(function() { dismissTakePrompt(); }, 3000);
       }
     } else {
-      if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+      var msg = (res.body && (res.body.error || res.body.message))
+                || (res.status === 401 ? 'Session expired — log in again.'
+                 : res.status === 403 ? 'Not allowed.'
+                 : 'Post failed (' + res.status + ')');
+      _showTakeError(bar, btn, msg);
     }
   })
-  .catch(function() {
-    if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+  .catch(function(err) {
+    console.error('[take-post] network error', err);
+    _showTakeError(bar, btn, 'Network error — try again.');
   });
+}
+
+// Surface an error inline on the take bar without destroying the input,
+// so the user can retry without retyping their thesis.
+function _showTakeError(bar, btn, msg) {
+  if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
+  if (!bar) { alert(msg); return; }
+  // Add/update an error banner; don't blow away the input.
+  var err = document.getElementById('take-post-err');
+  if (!err) {
+    err = document.createElement('div');
+    err.id = 'take-post-err';
+    err.style.cssText = 'position:absolute;top:-28px;left:20px;right:20px;font-family:Inter,sans-serif;font-size:11px;color:#ff4d6a;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.3);padding:4px 10px;border-radius:6px';
+    bar.style.position = 'fixed';
+    bar.appendChild(err);
+  }
+  err.textContent = msg;
+  setTimeout(function() { if (err && err.parentNode) err.parentNode.removeChild(err); }, 4500);
 }
 
 function dismissTakePrompt() {
