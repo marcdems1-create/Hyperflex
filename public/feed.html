@@ -109,6 +109,32 @@ a:hover { text-decoration: underline; }
 .pred-foot { display: flex; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .pred-foot-time { font-size: 11px; color: var(--text-faint); }
 
+/* ── Influencer tweet cards ── */
+.tweet-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; transition: border-color .15s; }
+.tweet-card:hover { border-color: rgba(29,155,240,0.4); }
+.tweet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.tweet-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: var(--gold); flex-shrink: 0; overflow: hidden; }
+.tweet-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tweet-author-col { flex: 1; min-width: 0; }
+.tweet-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.tweet-handle-row { display: flex; align-items: center; gap: 6px; }
+.tweet-handle { font-size: 12px; color: var(--text-faint); font-family: 'Space Mono', monospace; }
+.tweet-dot { color: var(--text-faint); font-size: 10px; }
+.tweet-time { font-size: 12px; color: var(--text-faint); }
+.tweet-platform-icon { font-size: 16px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; }
+.tweet-body { font-size: 14px; line-height: 1.55; color: var(--text); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+.tweet-market-strip { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+.tweet-market-label { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; font-family: 'Space Mono', monospace; }
+.tweet-market-q { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; }
+.tweet-market-q:hover { color: var(--gold); }
+.tweet-market-side { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Space Mono', monospace; letter-spacing: 0.04em; flex-shrink: 0; }
+.tweet-market-side.yes { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+.tweet-market-side.no { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.tweet-foot { display: flex; align-items: center; gap: 16px; padding-top: 8px; border-top: 1px solid var(--border); }
+.tweet-foot a { font-size: 11px; color: var(--text-faint); font-weight: 600; }
+.tweet-foot a:hover { color: rgba(29,155,240,1); text-decoration: none; }
+.tweet-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
 /* ── Modals ── */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
 .overlay.open { display: flex; }
@@ -639,6 +665,23 @@ async function loadFeed(append) {
     feedData = [];
   }
 
+  // Fetch influencer posts to supplement the feed
+  async function fetchInfluencerPosts() {
+    try {
+      var ri = await fetch(API + '/api/influencer-feed/unified?limit=30&tab=' + currentTab, { headers: authHeaders() });
+      var di = await ri.json();
+      var items = di.posts || di.items || [];
+      return items.filter(function(p) { return p.post_type === 'influencer' || p.influencer_name; }).map(normaliseInfluencer);
+    } catch(e) {
+      // Fallback to basic endpoint
+      try {
+        var ri2 = await fetch(API + '/api/influencer-feed?limit=30', { headers: authHeaders() });
+        var di2 = await ri2.json();
+        return (di2.posts || []).map(normaliseInfluencer);
+      } catch(e2) { return []; }
+    }
+  }
+
   // Use both new predictions API and legacy social predictions
   var url = currentTab === 'trending'
     ? API + '/api/social/feed/trending?limit=20'
@@ -649,11 +692,17 @@ async function loadFeed(append) {
     var data = await r.json();
 
     if (data.empty && data.reason === 'no_follows') {
-      // Fall back to social predictions feed for discovery
-      var r2 = await fetch(API + '/api/social/feed?limit=20', { headers: authHeaders() });
+      // Fall back to influencer posts + social predictions for discovery
+      var [infPosts, r2] = await Promise.all([
+        fetchInfluencerPosts(),
+        fetch(API + '/api/social/feed?limit=20', { headers: authHeaders() }),
+      ]);
       var data2 = await r2.json();
       var preds2 = (data2.predictions || []).map(normaliseLegacy);
-      if (!append) feedData = preds2; else feedData = feedData.concat(preds2);
+      var combined = infPosts.concat(preds2).sort(function(a,b) {
+        return new Date(b.posted_at) - new Date(a.posted_at);
+      });
+      if (!append) feedData = combined; else feedData = feedData.concat(combined);
       nextCursor = data2.next_cursor || null;
       renderFeed(true);
       document.getElementById('loadMoreBtn').style.display = 'none';
@@ -661,6 +710,20 @@ async function loadFeed(append) {
     }
 
     var preds = (data.predictions || []).map(normaliseNew);
+
+    // For trending tab, also pull influencer posts and merge
+    if (currentTab === 'trending') {
+      var infPosts = await fetchInfluencerPosts();
+      preds = preds.concat(infPosts).sort(function(a,b) {
+        return new Date(b.posted_at) - new Date(a.posted_at);
+      });
+    }
+
+    // If feed is still empty after predictions, try influencer posts as last resort
+    if (!preds.length && currentTab !== 'trending') {
+      preds = await fetchInfluencerPosts();
+    }
+
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
     nextCursor = data.next_cursor || null;
     renderFeed(false);
@@ -714,6 +777,42 @@ function normaliseLegacy(p) {
   };
 }
 
+// Normalise influencer posts from /api/influencer-feed
+function normaliseInfluencer(p) {
+  var inf = p.external_influencers || {};
+  var name = p.influencer_name || inf.name || 'Unknown';
+  var handle = p.influencer_handle || inf.handle || '';
+  var avatar = p.influencer_avatar || inf.avatar_url || '';
+  var platform = p.influencer_platform || inf.platform || 'x';
+  return {
+    id: p.id,
+    _type: 'influencer',
+    _platform: platform,
+    _handle: handle,
+    _content_url: p.content_url || '',
+    _followers: p.follower_count || inf.follower_count || 0,
+    author: {
+      display_name: name,
+      avatar_url: avatar,
+    },
+    market_title: p.title || p.content_text || p.content || '',
+    market_id: null,
+    direction: null,
+    entry_price: null,
+    conviction: null,
+    thesis: p.content_text || p.content || '',
+    _market_slug: p.market_slug || null,
+    _market_question: p.market_question || null,
+    _predicted_side: p.predicted_side || null,
+    category_tags: p.tags || [],
+    outcome: 'pending',
+    pnl_usd: null,
+    posted_at: p.published_at || p.posted_at || p.created_at,
+    is_following: false,
+    size_display: 'range',
+  };
+}
+
 function loadMore() { loadFeed(true); }
 
 function renderFeed(noFollowsYet) {
@@ -758,6 +857,54 @@ function renderCard(p) {
     ? '<span class="pred-resolved-count">' + author.predictions_resolved + ' resolved</span>'
     : '';
 
+  // ── Influencer tweet card ──
+  if (p._type === 'influencer') {
+    var platformIcon = p._platform === 'x' ? '𝕏' : p._platform === 'youtube' ? '▶' : '🌐';
+    var handleStr = p._handle ? '@' + p._handle : '';
+
+    // Market strip (shown when Claude matched a Polymarket market)
+    var marketStripHtml = '';
+    if (p._market_slug || p._market_question) {
+      var slug = p._market_slug || '';
+      var mq = p._market_question || p.market_title || '';
+      var sideHtml = p._predicted_side
+        ? '<span class="tweet-market-side ' + (p._predicted_side === 'YES' ? 'yes' : 'no') + '">' + esc(p._predicted_side) + '</span>'
+        : '';
+      marketStripHtml = '<a href="/market/' + esc(slug) + '" class="tweet-market-strip">' +
+        '<span class="tweet-market-label">MARKET</span>' +
+        '<span class="tweet-market-q">' + esc(mq) + '</span>' +
+        sideHtml +
+      '</a>';
+    }
+
+    // Tags
+    var tweetTags = (p.category_tags || []).length
+      ? '<div class="tweet-tags">' + p.category_tags.map(function(t) { return '<span class="pred-tag"><span class="pred-tag-dot">●</span>' + esc(t) + '</span>'; }).join('') + '</div>'
+      : '';
+
+    return '<div class="tweet-card">' +
+      '<div class="tweet-head">' +
+        '<div class="tweet-avatar">' + avatarHtml + '</div>' +
+        '<div class="tweet-author-col">' +
+          '<div class="tweet-name">' + name + '</div>' +
+          '<div class="tweet-handle-row">' +
+            '<span class="tweet-handle">' + esc(handleStr) + '</span>' +
+            '<span class="tweet-dot">·</span>' +
+            '<span class="tweet-time">' + timeAgo(p.posted_at) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<span class="tweet-platform-icon">' + platformIcon + '</span>' +
+      '</div>' +
+      '<div class="tweet-body">' + esc(p.thesis || '') + '</div>' +
+      marketStripHtml +
+      tweetTags +
+      '<div class="tweet-foot">' +
+        (p._content_url ? '<a href="' + esc(p._content_url) + '" target="_blank" rel="noopener">View original ↗</a>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── Standard prediction card ──
   var sideClass = p.direction === 'YES' ? 'badge-yes' : 'badge-no';
   var priceLabel = Math.round(parseFloat(p.entry_price) * 100) + '¢';
 

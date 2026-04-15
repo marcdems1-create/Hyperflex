@@ -15507,39 +15507,39 @@ function _isPolyContent(text, handle) {
   return false;
 }
 
-// ── X/Twitter: resolve handle → numeric user ID (cached in DB platform_id) ──
-async function _resolveXUserId(handle, bearerToken) {
+// ── X/Twitter via twitterapi.io — resolve handle → user info ────────────────
+async function _resolveXUserId(handle) {
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  if (!apiKey) return null;
   try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 8000);
-    const r = await _nodeFetch(
-      `https://api.twitter.com/2/users/by/username/${handle}?user.fields=profile_image_url,public_metrics,description`,
-      { headers: { Authorization: `Bearer ${bearerToken}` }, signal: ctrl.signal }
-    ).finally(() => clearTimeout(tid));
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.data || null; // { id, name, username, profile_image_url, public_metrics }
-  } catch { return null; }
-}
-
-// ── X/Twitter: fetch recent tweets for a user ID ──────────────────────────────
-async function _fetchXTimeline(userId, bearerToken, sinceId) {
-  try {
-    const params = new URLSearchParams({
-      max_results: '20',
-      exclude: 'retweets,replies',
-      'tweet.fields': 'created_at,text,entities',
-    });
-    if (sinceId) params.set('since_id', sinceId);
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 10000);
     const r = await _nodeFetch(
-      `https://api.twitter.com/2/users/${userId}/tweets?${params}`,
-      { headers: { Authorization: `Bearer ${bearerToken}` }, signal: ctrl.signal }
+      `https://api.twitterapi.io/twitter/user/info?userName=${encodeURIComponent(handle)}`,
+      { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
+    ).finally(() => clearTimeout(tid));
+    if (!r.ok) return null;
+    const d = await r.json();
+    // twitterapi.io returns { id, userName, name, profilePicture, followers, ... }
+    return d || null;
+  } catch { return null; }
+}
+
+// ── X/Twitter via twitterapi.io — fetch recent tweets for a handle ──────────
+async function _fetchXTimeline(handle) {
+  const apiKey = process.env.TWITTERAPI_IO_KEY;
+  if (!apiKey) return [];
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 12000);
+    const r = await _nodeFetch(
+      `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`,
+      { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
     ).finally(() => clearTimeout(tid));
     if (!r.ok) return [];
     const d = await r.json();
-    return d.data || [];
+    // Returns { tweets: [{ id, text, createdAt, author, ... }], has_next_page, next_cursor }
+    return (d.tweets || []).filter(t => t.type !== 'retweet');
   } catch { return []; }
 }
 
@@ -15733,7 +15733,6 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
   console.log('[influencer] Starting influencer monitoring sweep');
-  const bearerToken = process.env.X_BEARER_TOKEN;
 
   // Load active influencers from DB
   let influencers = [];
@@ -15761,34 +15760,32 @@ async function monitorPolymarketInfluencers() {
 
     let rawPosts = [];
 
-    // ── X/Twitter ──────────────────────────────────────────────────────────
+    // ── X/Twitter (via twitterapi.io) ───────────────────────────────────
     if (inf.platform === 'x') {
-      if (!bearerToken) continue;
-      // Resolve user ID if not cached
-      let userId = inf.platform_id;
-      if (!userId) {
-        const userData = await _resolveXUserId(inf.handle, bearerToken);
-        if (!userData) continue;
-        userId = userData.id;
-        // Update platform_id + avatar in DB (fire-and-forget)
-        try {
-          if (pool) {
-            await dbQuery(
-              'UPDATE external_influencers SET platform_id=$1, avatar_url=COALESCE(avatar_url,$2), follower_count=$3 WHERE id=$4',
-              [userId, userData.profile_image_url || null, userData.public_metrics?.followers_count || 0, inf.id]
-            );
-          }
-        } catch {}
+      if (!process.env.TWITTERAPI_IO_KEY) continue;
+      // Update profile info if not cached
+      if (!inf.platform_id || !inf.avatar_url) {
+        const userData = await _resolveXUserId(inf.handle);
+        if (userData) {
+          try {
+            if (pool) {
+              await dbQuery(
+                'UPDATE external_influencers SET platform_id=COALESCE(platform_id,$1), avatar_url=COALESCE(avatar_url,$2), follower_count=COALESCE(NULLIF(follower_count,0),$3) WHERE id=$4',
+                [userData.id || null, userData.profilePicture || null, userData.followers || 0, inf.id]
+              );
+            }
+          } catch {}
+        }
       }
-      const tweets = await _fetchXTimeline(userId, bearerToken);
+      const tweets = await _fetchXTimeline(inf.handle);
       rawPosts = tweets
         .filter(t => _isPolyContent(t.text, inf.handle))
         .map(t => ({
           platform:     'x',
           external_id:  t.id,
-          url:          `https://x.com/${inf.handle}/status/${t.id}`,
+          url:          t.url || `https://x.com/${inf.handle}/status/${t.id}`,
           text:         t.text,
-          published_at: t.created_at || new Date().toISOString(),
+          published_at: t.createdAt || new Date().toISOString(),
         }));
     }
 
