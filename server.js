@@ -4899,38 +4899,11 @@ app.post('/api/creator/signup', async (req, res) => {
       }
     }
 
-    // Notify fans who nominated a creator with a matching name (fire-and-forget)
-    ;(async () => {
-      try {
-        const nameNorm = (display_name || '').toLowerCase().trim();
-        let nominations = [];
-        if (pool) {
-          nominations = await dbQuery(`SELECT fan_email, fan_name FROM creator_nominations WHERE notified = false AND LOWER(creator_name) LIKE $1 LIMIT 10`, [`%${nameNorm.slice(0,20)}%`]).catch(() => []);
-        } else {
-          const { data } = await supabase.from('creator_nominations').select('fan_email, fan_name').eq('notified', false).ilike('creator_name', `%${nameNorm.slice(0,20)}%`).limit(10);
-          nominations = data || [];
-        }
-        if (nominations.length > 0) {
-          const transporter = createMailTransport();
-          for (const nom of nominations) {
-            if (!nom.fan_email) continue;
-            const fanGreeting = nom.fan_name ? `Hey ${nom.fan_name},` : 'Hey,';
-            transporter && transporter.sendMail({
-              from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-              to: nom.fan_email,
-              subject: `🎉 Good news — ${display_name} just joined HYPERFLEX!`,
-              html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;"><div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div><h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">${fanGreeting} your nomination worked! 🎉</h2><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;"><strong style="color:#e8e4d9;">${display_name}</strong> just launched their prediction market community on HYPERFLEX — and you helped make it happen.</p><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 24px;">Head over to their community, join, and be the first to predict on their markets.</p><a href="https://hyperflex.network/${slug}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Visit ${display_name}'s community →</a><p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p></div>`,
-            }).catch(() => {});
-          }
-          // Mark them as notified
-          if (pool) {
-            dbQuery(`UPDATE creator_nominations SET notified = true WHERE notified = false AND LOWER(creator_name) LIKE $1`, [`%${nameNorm.slice(0,20)}%`]).catch(() => {});
-          } else {
-            supabase.from('creator_nominations').update({ notified: true }).eq('notified', false).ilike('creator_name', `%${nameNorm.slice(0,20)}%`).then(() => {}).catch(() => {});
-          }
-        }
-      } catch (e) { /* silent */ }
-    })();
+    // Fan-nomination signup notification REMOVED in Phase 2.
+    // The /nominate page let fans suggest creators pre-launch, then on
+    // the creator's signup we'd email the fans. Post-pivot we're not
+    // recruiting creators this way — removed the entire nominate
+    // feature (see also /nominate and /api/nominate route deletions).
 
     // Record creator referral if signup came via a /ref/:slug link
     if (referred_by && referred_by !== slug) {
@@ -11161,8 +11134,10 @@ app.get('/api/trader/:address/profile', async (req, res) => {
   }
 });
 
-// GET /nominate — nominate your creator page
-app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', 'nominate.html')));
+// GET /nominate and POST /api/nominate — REMOVED (Phase 2). The
+// "nominate your creator" feature was a fan-facing form to suggest
+// creators pre-launch; post-pivot we aren't recruiting creators this
+// way. Also see the signup-flow notification block removed above.
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
@@ -13095,46 +13070,8 @@ async function generateInfluencerTakesFromMarkets() {
 // setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 120000);
 // cron.schedule('0 * * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
 
-// POST /api/nominate — save a creator nomination
-app.post('/api/nominate', async (req, res) => {
-  try {
-    const { creator_name, creator_url, fan_name, fan_email, message } = req.body;
-    if (!creator_name) return res.status(400).json({ error: 'Creator name required' });
-
-    // Store nomination so we can notify the fan when the creator signs up
-    if (fan_email) {
-      const nomRow = { creator_name, creator_url: creator_url || null, fan_name: fan_name || null, fan_email: fan_email.toLowerCase(), message: message || null, notified: false, created_at: new Date().toISOString() };
-      if (pool) {
-        dbQuery(`INSERT INTO creator_nominations (creator_name, creator_url, fan_name, fan_email, message, notified, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`, [nomRow.creator_name, nomRow.creator_url, nomRow.fan_name, nomRow.fan_email, nomRow.message, false, nomRow.created_at]).catch(() => {});
-      } else {
-        supabase.from('creator_nominations').insert([nomRow]).then(() => {}).catch(() => {});
-      }
-    }
-
-    // Email admin
-    const transporter = createMailTransport();
-    if (transporter && process.env.ADMIN_EMAIL) {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-        to: process.env.ADMIN_EMAIL,
-        subject: `🎯 New creator nomination: ${creator_name}`,
-        html: `<div style="font-family:monospace;background:#141412;color:#ddd;padding:24px;border-radius:8px;">
-          <h2 style="color:#c9920d;">New Creator Nomination</h2>
-          <p><strong>Creator:</strong> ${creator_name}</p>
-          ${creator_url ? `<p><strong>Channel/URL:</strong> ${creator_url}</p>` : ''}
-          ${fan_name ? `<p><strong>From fan:</strong> ${fan_name}</p>` : ''}
-          ${fan_email ? `<p><strong>Fan email:</strong> ${fan_email}</p>` : ''}
-          ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
-        </div>`,
-      }).catch(e => console.warn('[nominate] email error:', e.message));
-    }
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[nominate]', err);
-    res.status(500).json({ error: 'Failed to save nomination' });
-  }
-});
+// POST /api/nominate — REMOVED (Phase 2 dead-code deletion). See
+// /nominate GET removal above for context.
 
 // ════════════════════════════════════════════════════════════
 // BUG REPORTS — user-submitted issues with AI triage

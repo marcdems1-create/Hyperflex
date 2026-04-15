@@ -341,9 +341,7 @@
     { href: '/data', label: '📈 Data' },
     { href: '/ecosystem', label: '🌐 Ecosystem' },
     { href: '/features', label: '✨ Features' },
-    { href: '/api-docs', label: '⚙️ API' },
-    { sep: true },
-    { href: '/nominate', label: '➕ Nominate a Creator', gold: true }
+    { href: '/api-docs', label: '⚙️ API' }
   ];
   // Combined for search index
   var links = primaryLinks.concat(moreLinks.filter(function(l){return !l.sep}));
