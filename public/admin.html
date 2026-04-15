@@ -812,6 +812,61 @@
         </div>
       </div>
 
+      <!-- User Activity — what are users clicking on? -->
+      <div class="analytics-card" style="margin-bottom:20px">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span>User Activity — what's being used?</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="uaWindow" onchange="loadUserActivity()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px">
+              <option value="1">Today</option>
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <button onclick="loadUserActivity()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Refresh</button>
+          </div>
+        </div>
+        <div id="uaSummary" style="font-size:12px;color:var(--dim);margin-top:8px;margin-bottom:12px">Click Refresh to load activity data…</div>
+
+        <!-- Two columns: top paths + top users -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Top API Routes (by hits)</div>
+            <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+              <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead style="position:sticky;top:0;background:var(--bg)"><tr>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Path</th>
+                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Hits</th>
+                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Users</th>
+                </tr></thead>
+                <tbody id="uaPathsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Most Active Users</div>
+            <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+              <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead style="position:sticky;top:0;background:var(--bg)"><tr>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">User</th>
+                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Hits</th>
+                  <th style="text-align:right;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Routes</th>
+                  <th style="text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--dim)">Last</th>
+                </tr></thead>
+                <tbody id="uaUsersBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily sparkline -->
+        <div style="margin-top:16px">
+          <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Daily Active Users</div>
+          <div id="uaDailyBars" style="display:flex;align-items:flex-end;gap:2px;height:80px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:rgba(0,0,0,0.15)"></div>
+          <div style="font-size:10px;color:var(--dim);margin-top:4px;text-align:center">Each bar = one day · hover for details · newest on right</div>
+        </div>
+      </div>
+
       <!-- Polymarket health diagnostic -->
       <div class="analytics-card">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -2315,6 +2370,87 @@ async function loadAnalytics() {
       console.error('[analytics] users fetch failed', e);
     }
   }
+}
+
+// ── User Activity — what's being used? ──────────────────────────────
+async function loadUserActivity() {
+  const days = document.getElementById('uaWindow')?.value || '7';
+  const summary = document.getElementById('uaSummary');
+  summary.textContent = 'Loading…';
+  try {
+    const r = await fetch(API + '/api/admin/user-activity?days=' + encodeURIComponent(days) + '&secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      summary.textContent = '❌ ' + (data.error || 'Failed to load');
+      summary.style.color = 'var(--red)';
+      return;
+    }
+    summary.style.color = 'var(--dim)';
+    const totalHits = (data.top_paths || []).reduce((s, p) => s + (p.hits || 0), 0);
+    const maxDau = Math.max(...((data.daily || []).map(d => d.dau || 0)), 0);
+    summary.innerHTML = '<strong>' + data.days + 'd window</strong> · ' +
+      totalHits.toLocaleString() + ' total hits · ' +
+      (data.top_users || []).length + ' active users · peak DAU: ' + maxDau;
+
+    // Top paths
+    const pathsBody = document.getElementById('uaPathsBody');
+    const paths = data.top_paths || [];
+    if (!paths.length) {
+      pathsBody.innerHTML = '<tr><td colspan="3" style="padding:12px;text-align:center;color:var(--dim)">No activity yet. Middleware only tracks from this deploy forward.</td></tr>';
+    } else {
+      const maxHits = paths[0].hits;
+      pathsBody.innerHTML = paths.map(p => {
+        const pct = (p.hits / maxHits) * 100;
+        return '<tr style="border-bottom:1px solid var(--border)">' +
+          '<td style="padding:6px 10px;font-family:var(--mono);font-size:10px;color:var(--text);position:relative">' +
+            '<div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(77,159,255,0.12) ' + pct + '%,transparent ' + pct + '%);pointer-events:none"></div>' +
+            '<span style="position:relative">' + escHtml(p.path) + '</span>' +
+          '</td>' +
+          '<td style="padding:6px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--text);font-weight:700">' + (p.hits || 0).toLocaleString() + '</td>' +
+          '<td style="padding:6px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--dim)">' + (p.users || 0) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    // Top users
+    const usersBody = document.getElementById('uaUsersBody');
+    const users = data.top_users || [];
+    if (!users.length) {
+      usersBody.innerHTML = '<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--dim)">No active users yet.</td></tr>';
+    } else {
+      usersBody.innerHTML = users.map(u => {
+        const who = u.display_name || u.email || (u.user_id ? u.user_id.slice(0, 8) : '—');
+        const last = u.last_seen ? new Date(u.last_seen).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+        return '<tr style="border-bottom:1px solid var(--border)">' +
+          '<td style="padding:6px 10px;font-size:11px">' + escHtml(who) + '</td>' +
+          '<td style="padding:6px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--text);font-weight:700">' + (u.hits || 0) + '</td>' +
+          '<td style="padding:6px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--dim)">' + (u.distinct_paths || 0) + '</td>' +
+          '<td style="padding:6px 10px;font-family:var(--mono);font-size:10px;color:var(--dim)">' + last + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    // Daily bars
+    const daily = (data.daily || []).slice().reverse(); // oldest → newest for left-to-right bars
+    const maxD = Math.max(...daily.map(d => d.dau || 0), 1);
+    const bars = document.getElementById('uaDailyBars');
+    bars.innerHTML = daily.map(d => {
+      const pct = ((d.dau || 0) / maxD) * 100;
+      return '<div title="' + d.day + ': ' + (d.dau || 0) + ' DAU · ' + (d.total_hits || 0) + ' hits" style="flex:1;min-width:4px;background:var(--blue);height:' + pct + '%;border-radius:2px;opacity:.7;transition:opacity .15s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7"></div>';
+    }).join('') || '<div style="color:var(--dim);font-size:11px;width:100%;text-align:center">No data yet.</div>';
+  } catch (e) {
+    summary.textContent = '❌ ' + e.message;
+    summary.style.color = 'var(--red)';
+  }
+}
+
+// Auto-load on Analytics tab open (piggyback on existing loadAnalytics)
+const _origLoadAnalytics = typeof loadAnalytics === 'function' ? loadAnalytics : null;
+if (_origLoadAnalytics) {
+  loadAnalytics = async function(...args) {
+    await _origLoadAnalytics.apply(this, args);
+    setTimeout(() => { if (typeof loadUserActivity === 'function') loadUserActivity(); }, 100);
+  };
 }
 
 // ── Polymarket Health Diagnostic ─────────────────────────────────────

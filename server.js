@@ -1499,11 +1499,115 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     req.userId = payload.id;
     req.user   = { id: payload.id };
+    // Stamp last_active_at + track page view (debounced + buffered).
+    // Defined below but hoisted so order of declaration doesn't matter.
+    if (typeof _trackUserActivity === 'function') _trackUserActivity(payload.id, req);
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
+
+// ── USER ACTIVITY TRACKING ────────────────────────────────────────────
+// Called by requireAuth + optionalAuth whenever they successfully
+// authenticate a request. Two things get updated (both debounced /
+// buffered so we don't hammer the DB):
+//   1. users.last_active_at — only updated if the user hasn't been
+//      stamped in the last 5 minutes (in-memory cache).
+//   2. user_page_views(user_id, path, day) — buffered in memory and
+//      flushed to DB every 30s as a single batch upsert.
+//
+// Path normalization collapses dynamic segments so we see aggregate
+// counts per route template rather than N rows for every unique slug:
+//   /api/market/what-price-wti-2026 → /api/market/:slug
+//   /api/predictions/abc-123        → /api/predictions/:id
+//   /api/polymarket/positions/0xa…  → /api/polymarket/positions/:addr
+const _lastActiveCache = new Map(); // userId → ms of last stamp
+const LAST_ACTIVE_DEBOUNCE_MS = 5 * 60 * 1000;
+let _pageViewBuffer = new Map();    // `${userId}|${path}|${day}` → count
+
+function _normalizeTrackingPath(rawPath) {
+  if (!rawPath || typeof rawPath !== 'string') return null;
+  // Strip query string
+  const bare = rawPath.split('?')[0];
+  // Only track /api/* paths — server-rendered pages are served before auth middleware runs
+  if (!bare.startsWith('/api/')) return null;
+  // Skip the noisy endpoints (would dominate the top-paths chart)
+  if (
+    bare.startsWith('/api/health')                 ||
+    bare.startsWith('/api/admin/')                 || // admin's own requests
+    bare.startsWith('/api/_smoke/')                ||
+    bare.startsWith('/api/user/rebate-status')     || // polls from the dashboard
+    bare.startsWith('/api/notifications')             // polling
+  ) return null;
+
+  const segments = bare.split('/').filter(Boolean); // e.g. ['api','market','what-price-wti']
+  if (segments.length < 2) return bare;
+
+  // Keep /api/x, collapse everything after the 2nd segment
+  // Heuristic: if 3rd segment looks like a slug/id/address, replace it
+  if (segments.length >= 3) {
+    const dynamic = segments[2];
+    let placeholder = ':param';
+    if (/^0x[0-9a-fA-F]{40}$/.test(dynamic))               placeholder = ':address';
+    else if (/^[0-9a-fA-F-]{20,}$/.test(dynamic))          placeholder = ':id';
+    else if (dynamic.length > 20 || dynamic.includes('-')) placeholder = ':slug';
+    return '/' + segments.slice(0, 2).join('/') + '/' + placeholder +
+      (segments.length > 3 ? '/' + segments.slice(3).join('/') : '');
+  }
+  return bare;
+}
+
+function _trackUserActivity(userId, req) {
+  if (!userId || !pool) return;
+  const now = Date.now();
+
+  // Debounced last_active_at update
+  const last = _lastActiveCache.get(userId);
+  if (!last || now - last > LAST_ACTIVE_DEBOUNCE_MS) {
+    _lastActiveCache.set(userId, now);
+    dbQuery('UPDATE users SET last_active_at = NOW() WHERE id = $1', [userId]).catch(() => {});
+  }
+
+  // Buffer page-view count
+  const normalized = _normalizeTrackingPath(req && req.path);
+  if (normalized) {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = userId + '|' + normalized + '|' + day;
+    _pageViewBuffer.set(key, (_pageViewBuffer.get(key) || 0) + 1);
+  }
+
+  // Cap the cache to prevent unbounded growth (very long-running replicas)
+  if (_lastActiveCache.size > 10000) {
+    // Drop the oldest half
+    const entries = [..._lastActiveCache.entries()].sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < entries.length / 2; i++) _lastActiveCache.delete(entries[i][0]);
+  }
+}
+
+// Flush the page-view buffer to DB every 30s. Single UPSERT per batch
+// to minimize write load. Runs only if we have a pool AND there's
+// something to flush.
+setInterval(async () => {
+  if (!pool || _pageViewBuffer.size === 0) return;
+  const toFlush = _pageViewBuffer;
+  _pageViewBuffer = new Map();
+  try {
+    for (const [key, count] of toFlush) {
+      const [userId, path, day] = key.split('|');
+      await dbQuery(
+        `INSERT INTO user_page_views (user_id, path, day, hit_count)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, path, day) DO UPDATE
+           SET hit_count = user_page_views.hit_count + EXCLUDED.hit_count,
+               last_at   = NOW()`,
+        [userId, path, day, count]
+      ).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[activity-flush]', err.message);
+  }
+}, 30000);
 
 function optionalAuth(req, res, next) {
   const auth = req.headers.authorization;
@@ -1513,6 +1617,7 @@ function optionalAuth(req, res, next) {
       const payload = jwt.verify(token, JWT_SECRET);
       req.userId = payload.id;
       req.user   = { id: payload.id };
+      _trackUserActivity(payload.id, req);
     } catch {}
   }
   next();
@@ -17786,6 +17891,66 @@ app.post('/api/admin/resync-polymarket', requireAdmin, async (req, res) => {
 // the 50% rebate? Shows per-user snapshot: is_new_polymarket_wallet,
 // first_trade_count_at_connect, polymarket_connected_at. Admin can see
 // which users connected before the program existed (no snapshot yet).
+// GET /api/admin/user-activity?days=7&secret=... — what are users
+// clicking on? Answers:
+//   (a) top API paths by hit count for the window
+//   (b) daily active users (distinct user_ids with any activity per day)
+//   (c) most active users (rank by hit count)
+// All data comes from user_page_views (per-day rollup, populated by
+// the activity middleware on authed requests).
+app.get('/api/admin/user-activity', requireAdmin, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(parseInt(req.query.days) || 7, 90));
+    const since = new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10);
+
+    const [topPaths, dau, topUsers] = await Promise.all([
+      dbQuery(
+        `SELECT path, SUM(hit_count)::int AS hits, COUNT(DISTINCT user_id)::int AS users
+         FROM user_page_views
+         WHERE day >= $1
+         GROUP BY path
+         ORDER BY hits DESC
+         LIMIT 40`,
+        [since]
+      ).catch(() => []),
+      dbQuery(
+        `SELECT day, COUNT(DISTINCT user_id)::int AS dau,
+                SUM(hit_count)::int AS total_hits
+         FROM user_page_views
+         WHERE day >= $1
+         GROUP BY day
+         ORDER BY day DESC`,
+        [since]
+      ).catch(() => []),
+      dbQuery(
+        `SELECT upv.user_id, SUM(upv.hit_count)::int AS hits,
+                COUNT(DISTINCT upv.path)::int AS distinct_paths,
+                MAX(upv.last_at) AS last_seen,
+                u.display_name, u.email
+         FROM user_page_views upv
+         LEFT JOIN users u ON u.id = upv.user_id
+         WHERE upv.day >= $1
+         GROUP BY upv.user_id, u.display_name, u.email
+         ORDER BY hits DESC
+         LIMIT 40`,
+        [since]
+      ).catch(() => []),
+    ]);
+
+    res.json({
+      ok: true,
+      days,
+      since,
+      top_paths: topPaths,
+      daily: dau,
+      top_users: topUsers,
+    });
+  } catch (err) {
+    console.error('[admin/user-activity]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/admin/fee-rebate-eligibility', requireAdmin, async (req, res) => {
   try {
     const rows = await dbQuery(
@@ -18004,7 +18169,16 @@ app.post('/api/admin/fee-rebates/:id/mark-unpaid', requireAdmin, async (req, res
 // GET /api/admin/users — all members with activity stats + plan info + Polymarket data
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const allUsers = await dbQuery('SELECT id, email, display_name, polymarket_address, created_at FROM users ORDER BY created_at DESC');
+    // last_active_at added by Phase 2 activity tracking. Fall back to
+    // NULL for rows that predate the column (boot migration should
+    // have added it, but graceful fallback if schema is still cold).
+    const allUsers = await dbQuery(
+      `SELECT id, email, display_name, polymarket_address, created_at, last_active_at
+       FROM users ORDER BY created_at DESC`
+    ).catch(async () => {
+      // Fallback if last_active_at column doesn't exist yet
+      return dbQuery('SELECT id, email, display_name, polymarket_address, created_at FROM users ORDER BY created_at DESC').catch(() => []);
+    });
     if (!allUsers?.length) return res.json([]);
 
     const creatorSettings = await dbQuery('SELECT creator_id, slug, plan, plan_trial_expires_at FROM creator_settings');
@@ -18019,18 +18193,36 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     });
 
     const allUserIds = allUsers.map(u => u.id);
-    const [positions, balances, lastActivity, cachedPos] = await Promise.all([
+    // Last-active is now taken DIRECTLY from users.last_active_at (set by
+    // the activity middleware on every authed request). The old path
+    // computed MAX(positions.created_at) — which is empty post-pivot.
+    // Fall back to MAX(polymarket_trades.created_at) for users who
+    // haven't hit an authed API since the middleware shipped but DO have
+    // trade history.
+    const [positions, balances, tradeActivity, cachedPos] = await Promise.all([
       dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]).catch(() => []),
       dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]).catch(() => []),
-      dbQuery('SELECT user_id, MAX(created_at) as last_active FROM positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds]).catch(() => []),
+      // Map each user's most recent polymarket_trades entry to their id
+      // via polymarket_address OR polymarket_proxy. Covers users whose
+      // trades we recorded but who haven't produced a last_active stamp.
+      dbQuery(
+        `SELECT u.id AS user_id, MAX(pt.created_at) AS last_trade
+         FROM users u
+         LEFT JOIN polymarket_trades pt
+           ON LOWER(pt.eoa_address) IN (LOWER(u.polymarket_address), LOWER(u.polymarket_proxy))
+           OR LOWER(pt.proxy_address) IN (LOWER(u.polymarket_address), LOWER(u.polymarket_proxy))
+         WHERE u.id = ANY($1)
+         GROUP BY u.id`,
+        [allUserIds]
+      ).catch(() => []),
       dbQuery('SELECT user_id, COUNT(*) as pos_count, SUM(CASE WHEN pnl IS NOT NULL THEN pnl ELSE 0 END) as total_pnl FROM cached_positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds]).catch(() => [])
     ]);
     const tradeMap = {};
     (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
     const balMap = {};
     (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
-    const activityMap = {};
-    (lastActivity || []).forEach(a => { activityMap[a.user_id] = a.last_active; });
+    const tradeActivityMap = {};
+    (tradeActivity || []).forEach(a => { tradeActivityMap[a.user_id] = a.last_trade; });
     // Polymarket position counts + PnL from cached_positions
     const polyPosMap = {};
     const polyPnlMap = {};
@@ -18039,22 +18231,31 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       polyPnlMap[c.user_id] = parseFloat(c.total_pnl) || 0;
     });
 
-    const rows = allUsers.map(u => ({
-      id:                 u.id,
-      email:              u.email || '—',
-      display_name:       u.display_name || '—',
-      polymarket_address: u.polymarket_address || null,
-      is_creator:         creatorIdSet.has(u.id),
-      creator_slug:       creatorSlugMap[u.id] || null,
-      hfx_trades:         tradeMap[u.id] || 0,
-      total_balance:      balMap[u.id] || 0,
-      poly_positions:     polyPosMap[u.id] || 0,
-      poly_pnl:           polyPnlMap[u.id] || 0,
-      joined:             u.created_at,
-      last_active:        activityMap[u.id] || null,
-      plan:               creatorPlanMap[u.id] || 'free',
-      trial_expires_at:   creatorTrialMap[u.id] || null
-    }));
+    const rows = allUsers.map(u => {
+      // Pick the newest of: users.last_active_at (from activity middleware)
+      // and the latest polymarket_trade for their wallet. Works even
+      // for users who haven't hit an authed API since middleware shipped.
+      const candidates = [u.last_active_at, tradeActivityMap[u.id]].filter(Boolean);
+      const lastActive = candidates.length
+        ? candidates.sort((a, b) => new Date(b) - new Date(a))[0]
+        : null;
+      return {
+        id:                 u.id,
+        email:              u.email || '—',
+        display_name:       u.display_name || '—',
+        polymarket_address: u.polymarket_address || null,
+        is_creator:         creatorIdSet.has(u.id),
+        creator_slug:       creatorSlugMap[u.id] || null,
+        hfx_trades:         tradeMap[u.id] || 0,
+        total_balance:      balMap[u.id] || 0,
+        poly_positions:     polyPosMap[u.id] || 0,
+        poly_pnl:           polyPnlMap[u.id] || 0,
+        joined:             u.created_at,
+        last_active:        lastActive,
+        plan:               creatorPlanMap[u.id] || 'free',
+        trial_expires_at:   creatorTrialMap[u.id] || null
+      };
+    });
 
     res.json(rows);
   } catch (err) {
@@ -43667,6 +43868,32 @@ app.listen(PORT, () => {
       CREATE INDEX IF NOT EXISTS idx_fee_rebates_period ON fee_rebates(period_month, paid);
       CREATE INDEX IF NOT EXISTS idx_fee_rebates_user   ON fee_rebates(user_id, period_month DESC);
       CREATE INDEX IF NOT EXISTS idx_fee_rebates_unpaid ON fee_rebates(paid, period_month) WHERE paid = FALSE;
+
+      -- USER ACTIVITY TRACKING
+      -- last_active_at: stamped by the activity middleware on every
+      -- authenticated API request. Replaces the broken "Last Active"
+      -- admin column which used to compute MAX(positions.created_at) —
+      -- the positions table is empty post-pivot so it showed '—' for
+      -- everyone.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at DESC NULLS LAST);
+
+      -- user_page_views: (user_id, path, date, hit_count) rollup. One
+      -- row per user per path per UTC date. Lets admin see which parts
+      -- of the site are most valuable and which need work. Kept as a
+      -- per-day rollup (not a raw event log) so the table doesn't
+      -- balloon — 100 DAU × 20 paths/day = 2000 rows/day max.
+      CREATE TABLE IF NOT EXISTS user_page_views (
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        path        TEXT NOT NULL,
+        day         DATE NOT NULL,
+        hit_count   INTEGER DEFAULT 1,
+        first_at    TIMESTAMPTZ DEFAULT NOW(),
+        last_at     TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, path, day)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_page_views_day  ON user_page_views(day DESC, hit_count DESC);
+      CREATE INDEX IF NOT EXISTS idx_user_page_views_path ON user_page_views(path, day DESC);
     `;
     try {
       await pool.query(extraSchemas);
