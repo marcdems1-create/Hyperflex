@@ -14746,7 +14746,10 @@ function sizeRangeLabel(usd) {
 app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
   try {
     const userId = req.user?.id || req.user?.userId;
-    const { mode = 'foryou', limit = 30, cursor } = req.query;
+    // Accept both `cursor` (current) and `before` (older client code) so
+    // pagination doesn't silently break if the frontend and server drift.
+    const { mode = 'foryou', limit = 30, cursor: rawCursor, before } = req.query;
+    const cursor = rawCursor || before || null;
     const lim = Math.min(parseInt(limit) || 30, 50);
 
     // ── 1. User predictions from `predictions` table ───────────────
@@ -14975,7 +14978,8 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     }
 
     const nextCursor = merged.length === lim ? merged[merged.length - 1].posted_at : null;
-    res.json({ predictions: merged, cursor: nextCursor });
+    // Expose both names so old clients (next_cursor) and new (cursor) work.
+    res.json({ predictions: merged, cursor: nextCursor, next_cursor: nextCursor });
   } catch (err) {
     console.error('[predictions feed]', err.message);
     res.status(500).json({ error: err.message });

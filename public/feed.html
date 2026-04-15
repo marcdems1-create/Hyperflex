@@ -665,7 +665,8 @@ async function loadFeed(append) {
     feedData = [];
   }
 
-  // Fetch influencer posts to supplement the feed
+  // Fetch influencer posts to supplement the feed (main's twitterapi.io
+  // pipeline — keep this, it's the source of real X tweets).
   async function fetchInfluencerPosts() {
     try {
       var ri = await fetch(API + '/api/influencer-feed/unified?limit=30&tab=' + currentTab, { headers: authHeaders() });
@@ -673,7 +674,6 @@ async function loadFeed(append) {
       var items = di.posts || di.items || [];
       return items.filter(function(p) { return p.post_type === 'influencer' || p.influencer_name; }).map(normaliseInfluencer);
     } catch(e) {
-      // Fallback to basic endpoint
       try {
         var ri2 = await fetch(API + '/api/influencer-feed?limit=30', { headers: authHeaders() });
         var di2 = await ri2.json();
@@ -682,7 +682,8 @@ async function loadFeed(append) {
     }
   }
 
-  // Build the feed URL with correct mode param for each tab
+  // Build the feed URL with correct mode param for each tab.
+  // Server accepts both `cursor` (new shape) and `before` (older shape).
   var url;
   if (currentTab === 'trending') {
     url = API + '/api/social/feed/trending?limit=20';
@@ -730,8 +731,9 @@ async function loadFeed(append) {
     }
 
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
-    // Server returns `cursor` (not `next_cursor`) for the pagination token
-    nextCursor = data.cursor || null;
+    // Server returns `cursor` (new shape) — keep `next_cursor` as fallback
+    // for older responses (legacy social feed uses that name).
+    nextCursor = data.cursor || data.next_cursor || null;
     renderFeed(false);
     document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
   } catch (e) {
