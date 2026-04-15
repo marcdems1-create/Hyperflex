@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>HYPERFLEX — Prediction Feed</title>
+<title>HYPERFLEX — FLEX Feed</title>
 <meta name="description" content="See what the best prediction market traders are betting on. Verified predictions with real money, real P&L, real track records.">
-<meta property="og:title" content="HYPERFLEX Prediction Feed">
+<meta property="og:title" content="HYPERFLEX FLEX Feed">
 <meta property="og:description" content="The social feed for prediction markets. Verified predictions backed by real money.">
 <meta property="og:url" content="https://hyperflex.network/feed">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -458,7 +458,7 @@ a:hover { text-decoration: underline; }
 
 <div class="layout">
   <div class="feed-header">
-    <div class="feed-title">Prediction Feed</div>
+    <div class="feed-title">FLEX Feed</div>
     <div class="tabs">
       <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
       <button class="tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
@@ -761,16 +761,15 @@ function renderDetectionBanner() {
 
   // Default collapse behavior:
   //   • localStorage pref wins if set ('1' = collapsed, '0' = expanded)
-  //   • Otherwise, collapse only on phones (≤640px) where the banner would
-  //     push the feed below the fold. Desktop always starts expanded so
-  //     users see all their positions without clicking anything.
+  //   • Otherwise, collapse by default on BOTH desktop and mobile. With
+  //     15+ detected positions the expanded banner ate most of the viewport
+  //     and buried the actual feed. Users can click the header to expand.
   var pref = null;
   try { pref = localStorage.getItem('hf_detect_collapsed'); } catch(e) {}
-  var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
   var shouldCollapse;
   if (pref === '1') shouldCollapse = true;
   else if (pref === '0') shouldCollapse = false;
-  else shouldCollapse = isMobile;
+  else shouldCollapse = true;
   banner.classList.toggle('collapsed', shouldCollapse);
   var headerEl = document.getElementById('detectHeader');
   if (headerEl) headerEl.setAttribute('aria-expanded', shouldCollapse ? 'false' : 'true');
@@ -995,11 +994,24 @@ document.getElementById('autoThesis').addEventListener('input', function() {
 });
 
 async function submitAuto() {
-  if (!_autoPos) return;
+  if (!_autoPos) { showFeedToast('Pick a position first', 'err'); return; }
   var thesis = document.getElementById('autoThesis').value.trim();
   var btn = document.getElementById('autoSubmitBtn');
   btn.disabled = true;
   btn.textContent = 'Posting…';
+
+  // Token may have been set after page load (e.g. user logged in another
+  // tab). Re-read before posting so we don't silently send an unauth'd
+  // request and die on the server 401.
+  if (!token) token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+  if (!token) {
+    btn.disabled = false; btn.textContent = 'Post Prediction';
+    showFeedToast('Log in to post a prediction', 'err');
+    setTimeout(function(){ window.location.href = '/creator/login'; }, 900);
+    return;
+  }
+
+  console.log('[post-auto] submitting', { slug: _autoPos.market_id, side: _autoPos.direction });
 
   try {
     var r = await fetch(API + '/api/predictions', {
@@ -1017,17 +1029,45 @@ async function submitAuto() {
         size_display: _autoSizeDisplay,
       }),
     });
-    var data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Failed');
+    var data = await r.json().catch(function(){ return {}; });
+    console.log('[post-auto] response', r.status, data);
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
 
     closeModal('autoModal');
+    showFeedToast('\u2705 Posted — viewing your feed', 'ok');
+    // Inject immediately so the user sees their own post at the top
+    // without waiting for the next fetch.
+    if (data.prediction) {
+      try {
+        var newPred = normaliseNew(data.prediction);
+        feedData.unshift(newPred);
+        renderFeed(false);
+      } catch (e) { /* fall through to refresh */ }
+    }
     switchTab('following');
   } catch (e) {
-    alert('Error: ' + e.message);
+    console.error('[post-auto] failed', e);
+    showFeedToast('Post failed: ' + e.message, 'err');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Post Prediction';
   }
+}
+
+// Lightweight toast for the feed page — beats alert() which gets
+// dismissed as a popup and hides the reason for failures. Auto-dismisses
+// after 4s. ok = green border; err = red border.
+function showFeedToast(msg, kind) {
+  var existing = document.getElementById('hfxFeedToast');
+  if (existing) existing.remove();
+  var el = document.createElement('div');
+  el.id = 'hfxFeedToast';
+  var color = kind === 'err' ? '#ff4d6a' : '#00e68a';
+  var bg = kind === 'err' ? 'rgba(255,77,106,0.08)' : 'rgba(0,230,138,0.08)';
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:' + bg + ';border:1px solid ' + color + ';color:' + color + ';font-family:Inter,sans-serif;font-size:13px;font-weight:600;padding:10px 18px;border-radius:10px;z-index:10000;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,0.3)';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function(){ if (el.parentNode) el.remove(); }, 4200);
 }
 
 // ── Manual composer ──
@@ -1074,15 +1114,25 @@ async function submitManual() {
   var entryPrice = parseFloat(document.getElementById('mEntryPrice').value);
   var thesis = document.getElementById('mThesis').value.trim();
 
-  if (!platform) return alert('Select a platform');
-  if (!marketTitle) return alert('Enter a market title');
-  if (!marketId) return alert('Enter a market ID or slug');
-  if (!_mSide) return alert('Select YES or NO');
-  if (!entryPrice || entryPrice < 0.01 || entryPrice > 0.99) return alert('Enter a valid entry price (0.01–0.99)');
+  if (!platform)       return showFeedToast('Select a platform', 'err');
+  if (!marketTitle)    return showFeedToast('Enter a market title', 'err');
+  if (!marketId)       return showFeedToast('Enter a market ID or slug', 'err');
+  if (!_mSide)         return showFeedToast('Select YES or NO', 'err');
+  if (!entryPrice || entryPrice < 0.01 || entryPrice > 0.99)
+                       return showFeedToast('Enter a valid entry price (0.01\u20130.99)', 'err');
+
+  if (!token) token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+  if (!token) {
+    showFeedToast('Log in to post', 'err');
+    setTimeout(function(){ window.location.href = '/creator/login'; }, 900);
+    return;
+  }
 
   var btn = document.getElementById('mSubmitBtn');
   btn.disabled = true;
   btn.textContent = 'Posting…';
+
+  console.log('[post-manual] submitting', { slug: marketId, side: _mSide });
 
   try {
     var r = await fetch(API + '/api/predictions', {
@@ -1099,10 +1149,12 @@ async function submitManual() {
         size_display: 'range',
       }),
     });
-    var data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Failed');
+    var data = await r.json().catch(function(){ return {}; });
+    console.log('[post-manual] response', r.status, data);
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
 
     closeModal('manualModal');
+    showFeedToast('\u2705 Posted', 'ok');
     // Immediately add the new prediction to the feed for instant feedback
     if (data.prediction) {
       var newPred = normaliseNew(data.prediction);
@@ -1112,7 +1164,8 @@ async function submitManual() {
     // Refresh full feed to get server-enriched version
     setTimeout(function() { loadFeed(false); }, 1500);
   } catch (e) {
-    alert('Error: ' + e.message);
+    console.error('[post-manual] failed', e);
+    showFeedToast('Post failed: ' + e.message, 'err');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Post Prediction';

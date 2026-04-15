@@ -13068,14 +13068,22 @@ async function generateInfluencerTakesFromMarkets() {
   } catch (e) { console.warn('[influencer-market-takes]', e.message); }
 }
 
-// Run market-first takes on boot (after screener warms) and every 2 hours.
-// This guarantees feed content even when X API / Nitter scraping is unavailable.
-// Capped at 10 takes per cycle, 2 per influencer per 6h — stays thin enough
-// that real tweet imports (fetchInfluencerTweets) remain prominent when live.
-// Run 60 seconds after boot (influencer seed takes ~3s, this gives plenty of margin).
-// The function calls buildAlphaList() itself if the screener cache is cold.
-setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 60000);
-cron.schedule('0 */2 * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
+// DISABLED (session 15) — the synthetic take generator wrote canned,
+// template-rotated "takes" that looked like fake X posts on the feed
+// ("Bullish here. Current odds: 72% YES. Worth tracking."). Users called
+// them out as fake. The feed now strictly serves:
+//   (a) real user predictions (predictions table)
+//   (b) real influencer tweets with a URL (takes, source='influencer')
+//       — written only by fetchInfluencerTweets() via twitterapi.io
+//   (c) influencer_posts table (monitorPolymarketInfluencers, when X
+//       bearer token is set)
+// If the real tweet pipeline is down the feed goes thin — that's better
+// than faking activity.
+// Keeping the generateInfluencerTakesFromMarkets() function itself in
+// place (not called) so the code diff is minimal and it can be revived
+// if we ever want a gated "curated takes" mode behind a config flag.
+// setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 60000);
+// cron.schedule('0 */2 * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
 
 // POST /api/nominate — REMOVED (Phase 2 dead-code deletion). See
 // /nominate GET removal above for context.
@@ -14984,13 +14992,21 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     let takeInfluencerPosts = [];
     if (pool) {
       const params = [];
-      // Previously required `AND market_slug IS NOT NULL`, which meant any
-      // real influencer tweet we couldn't auto-match to a live market was
-      // stored in `takes` but never shown. Drop that filter so every
-      // real tweet lands on /feed — the live-market sub-card just renders
-      // conditionally on whether we have a match.
-      let where = `WHERE source = 'influencer'`;
-      if (cursor) { params.push(cursor); where += ` AND created_at < $${params.length}`; }
+      // Feed only surfaces REAL influencer tweets, defined as:
+      //   1. source = 'influencer'
+      //   2. thesis contains a URL (fetchInfluencerTweets appends the
+      //      tweet URL; the synthetic generator didn't) — filters out
+      //      legacy "Bullish here. Current odds: X%" template rows.
+      //   3. display_name is non-empty (was leaking "Anonymous" for
+      //      rows with a NULL name).
+      //   4. market_slug is set — every tweet on the feed must link to
+      //      a live market, that's the whole premise of the product.
+      let where = `WHERE t.source = 'influencer'
+                     AND t.thesis ~ 'https?://'
+                     AND t.display_name IS NOT NULL
+                     AND length(trim(t.display_name)) > 0
+                     AND t.market_slug IS NOT NULL`;
+      if (cursor) { params.push(cursor); where += ` AND t.created_at < $${params.length}`; }
       params.push(Math.max(20, lim));
       takeInfluencerPosts = await dbQuery(
         `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
