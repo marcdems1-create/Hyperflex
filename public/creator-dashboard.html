@@ -3127,20 +3127,93 @@ body.nav-open .sidebar-backdrop {
   .section-title { font-size: var(--hfx-fs-md); font-weight: 700; letter-spacing: 0.01em; }
   .stat-label, .section-header .subtitle { font-size: var(--hfx-fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
 
-  /* — 2. Topbar — safe-area + bigger hamburger + proper title hierarchy — */
+  /* — 2. Topbar — two-row layout so nothing gets cut off — */
+  /* Row 1: hamburger + title + primary CTA (Post Take)
+     Row 2: bell, wallet badge, flex points, Explore — horizontally scrollable */
   .topbar {
-    padding: calc(var(--hfx-s-3) + var(--hfx-safe-top)) var(--hfx-s-4) var(--hfx-s-3);
-    gap: var(--hfx-s-3);
-    min-height: calc(56px + var(--hfx-safe-top));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--hfx-s-2);
+    padding: calc(var(--hfx-s-3) + var(--hfx-safe-top)) var(--hfx-s-3) var(--hfx-s-2);
     border-bottom: 1px solid var(--border);
     background: var(--paper);
     position: sticky; top: 0; z-index: 50;
     backdrop-filter: saturate(180%) blur(12px);
     -webkit-backdrop-filter: saturate(180%) blur(12px);
   }
-  .topbar-title { font-size: var(--hfx-fs-lg); font-weight: 700; letter-spacing: -0.01em; flex: 1; }
-  .hamburger { min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--hfx-r-md); }
+
+  /* Row 1 slots */
+  .topbar > .hamburger { order: 1; flex: 0 0 auto; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--hfx-r-md); }
   .hamburger:active { background: rgba(255,255,255,0.06); }
+  .topbar > .topbar-title {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--hfx-fs-lg);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar > .topbar-primary-cta {
+    order: 3;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 var(--hfx-s-3);
+    font-size: var(--hfx-fs-sm);
+    font-weight: 700;
+    border-radius: var(--hfx-r-md);
+    white-space: nowrap;
+  }
+
+  /* Row 2 — full-width horizontal scroll of secondary items */
+  .topbar > .topbar-actions {
+    order: 4;
+    flex: 0 0 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--hfx-s-2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 calc(-1 * var(--hfx-s-3));  /* bleed to edges */
+    padding: 0 var(--hfx-s-3) var(--hfx-s-1);
+  }
+  .topbar > .topbar-actions::-webkit-scrollbar { display: none; }
+  .topbar-actions > * { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Un-hide Explore and any secondary button on mobile now that we have room */
+  .topbar-actions .btn-explore,
+  .topbar-actions .btn-secondary { display: inline-flex !important; }
+
+  /* Row 2 chips: compact but tappable (36-40px) */
+  .topbar-actions .notif-bell {
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: var(--hfx-r-md);
+  }
+  .topbar-actions .btn-explore,
+  .topbar-actions .btn-secondary {
+    min-height: 36px;
+    padding: 0 var(--hfx-s-3);
+    font-size: var(--hfx-fs-xs);
+    letter-spacing: 0.02em;
+  }
+  #topbarFlexPoints, #topbarWalletBadge {
+    padding: 6px var(--hfx-s-2) !important;
+    font-size: var(--hfx-fs-xs) !important;
+    min-height: 36px;
+    box-sizing: border-box;
+  }
+  /* The FLEX Points badge has three inner spans (icon + number + tier) —
+     tighten their gap and make the number more legible than the tier pill */
+  #topbarFlexPoints { gap: 4px !important; }
+  #topbarFlexPoints #topbarFlexTier { font-size: 9px !important; padding: 1px 4px !important; }
+  /* Wallet address: keep it readable, let it truncate if too long */
+  #topbarWalletAddr { max-width: 100px !important; }
 
   /* — 3. Content gutters — unified 16px — */
   .content { padding: var(--hfx-s-4); padding-bottom: calc(var(--hfx-s-6) + var(--hfx-safe-bottom)); }
@@ -3452,6 +3525,7 @@ window.hfxOpenDeposit = function() {
         <span></span><span></span><span></span>
       </button>
       <div class="topbar-title" id="topbarTitle">Overview</div>
+      <button class="btn-primary topbar-primary-cta" onclick="openPostTakeFlow()">📢 Post Take</button>
       <div class="topbar-actions">
         <div class="notif-wrap">
           <button class="notif-bell" onclick="toggleNotifDropdown(event)" title="Notifications">
@@ -3475,7 +3549,6 @@ window.hfxOpenDeposit = function() {
           <span id="topbarFlexTier" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:800"></span>
         </div>
         <a href="/" class="btn-explore">⚡ Explore</a>
-        <button class="btn-primary" onclick="openPostTakeFlow()">📢 Post Take</button>
       </div>
     </div>
 
