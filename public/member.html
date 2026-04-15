@@ -226,6 +226,19 @@ async function load() {
     const data = await res.json();
     const { user, stats, communities, recent_wins, take_stats, recent_takes } = data;
 
+    // Synchronous owner check — decoded JWT's userId must match the profile
+    // we're rendering. Used to show the "post your first take" empty-state
+    // for the profile owner only (visitors see nothing if there are no takes).
+    let isOwner = false;
+    try {
+      const ownTok = localStorage.getItem('hf_token');
+      if (ownTok) {
+        const payload = JSON.parse(atob(ownTok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const selfId = payload.userId || payload.sub || payload.id;
+        if (selfId && String(selfId) === String(userId)) isOwner = true;
+      }
+    } catch {}
+
     const winPct = stats.settled_predictions > 0 ? Math.round((stats.wins / stats.settled_predictions) * 100) : 0;
     const avgColor = winPct >= 70 ? '#c9920d' : winPct >= 55 ? '#22c55e' : winPct >= 40 ? '#60a5fa' : '#ef4444';
     const initials = getInitials(user.display_name);
@@ -373,6 +386,63 @@ async function load() {
         </div>
       </div>
 
+      <!-- Best Call trophy — hero hook, shown right below stats so visitors
+           see the user's biggest proven win before anything else. -->
+      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
+        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
+        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
+          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
+          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
+        </div>
+      </div>
+
+      ${(take_stats && take_stats.total > 0) ? `
+      <!-- Takes — the social moat. Pulled above analytics so a visitor's
+           first scroll shows what this trader *says*, not a chart. -->
+      <div class="section">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>Takes</span>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted)">${take_stats.total} total</span>
+          ${take_stats.accuracy > 0 ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};padding:2px 8px;border-radius:4px">${take_stats.accuracy}% accuracy</span>` : ''}
+          ${take_stats.total_agrees > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${take_stats.total_agrees} agrees</span>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          ${(recent_takes || []).slice(0, 8).map(t => {
+            const sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+            const sideBg = (t.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
+            const correct = t.is_correct === true ? '<span style="color:#00e68a;font-size:10px;margin-left:4px">✓</span>'
+              : t.is_correct === false ? '<span style="color:#ff4d6a;font-size:10px;margin-left:4px">✗</span>' : '';
+            const href = t.market_slug ? '/market/' + t.market_slug : '#';
+            return `<a href="${href}" style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.5);text-decoration:none;transition:background .1s" ${href !== '#' ? '' : ''}>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.question || ''}</div>
+                ${t.thesis ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.thesis}</div>` : ''}
+                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${(t.side || '').toUpperCase()}</span>
+                  ${t.entry_price ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                  <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">↑${t.agree_count || 0} ↓${t.disagree_count || 0}</span>
+                  ${correct}
+                  <span style="font-size:10px;color:var(--dim);margin-left:auto">${timeAgo(t.created_at)}</span>
+                </div>
+              </div>
+            </a>`;
+          }).join('')}
+        </div>
+        <a href="/explore" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:12px;text-decoration:none">View all takes →</a>
+      </div>` : (isOwner ? `
+      <!-- Empty-state for owner: prompt to post a first take. Visitors see
+           nothing (no empty-state nag to preserve a minimal vibe). -->
+      <div class="section" style="text-align:center;padding:28px 16px;background:rgba(201,146,13,0.04);border:1px dashed rgba(201,146,13,0.25);border-radius:12px">
+        <div style="font-size:22px;margin-bottom:6px">✍️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">Post your first take</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Every take you post is scored when the market resolves. Build a track record that speaks for itself.</div>
+        <a href="/explore" style="display:inline-block;background:var(--gold);color:#0e0e15;font-family:var(--mono);font-size:12px;font-weight:700;padding:9px 18px;border-radius:20px;text-decoration:none">Post a take →</a>
+      </div>` : '')}
+
+      <!-- Analytics (calibration + P&L) sits AFTER the social content block
+           above, since it's supporting evidence, not the headline. -->
       <div id="analyticsSection" style="margin:24px 0;display:none">
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
@@ -385,16 +455,6 @@ async function load() {
             <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
             <canvas id="pnlChart" width="300" height="180"></canvas>
           </div>
-        </div>
-      </div>
-
-      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
-        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
-        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
-          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
-          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px">🐦 Share</button>
         </div>
       </div>
 
@@ -420,39 +480,6 @@ async function load() {
           </div>
         </div>
       </div>
-
-      ${(take_stats && take_stats.total > 0) ? `
-      <div class="section">
-        <div class="section-title" style="display:flex;align-items:center;gap:8px">
-          Takes
-          <span style="font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted)">${take_stats.total} total</span>
-          ${take_stats.accuracy > 0 ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};padding:2px 8px;border-radius:4px">${take_stats.accuracy}% accuracy</span>` : ''}
-          ${take_stats.total_agrees > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${take_stats.total_agrees} agrees</span>` : ''}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:0">
-          ${(recent_takes || []).slice(0, 8).map(t => {
-            const sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
-            const sideBg = (t.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
-            const correct = t.is_correct === true ? '<span style="color:#00e68a;font-size:10px;margin-left:4px">✓</span>'
-              : t.is_correct === false ? '<span style="color:#ff4d6a;font-size:10px;margin-left:4px">✗</span>' : '';
-            const href = t.market_slug ? '/market/' + t.market_slug : '#';
-            return `<a href="${href}" style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.5);text-decoration:none;transition:background .1s" ${href !== '#' ? '' : ''}>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.question || ''}</div>
-                ${t.thesis ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.thesis}</div>` : ''}
-                <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${(t.side || '').toUpperCase()}</span>
-                  ${t.entry_price ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${Math.round(t.entry_price * 100)}¢</span>` : ''}
-                  <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">↑${t.agree_count || 0} ↓${t.disagree_count || 0}</span>
-                  ${correct}
-                  <span style="font-size:10px;color:var(--dim);margin-left:auto">${timeAgo(t.created_at)}</span>
-                </div>
-              </div>
-            </a>`;
-          }).join('')}
-        </div>
-        <a href="/explore" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:12px;text-decoration:none">View all takes →</a>
-      </div>` : ''}
 
       ${recent_wins.length ? `
       <div class="section">
