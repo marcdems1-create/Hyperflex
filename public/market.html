@@ -2785,6 +2785,115 @@ function showTradeStatus(msg, type) {
   // Don't auto-hide — let the next action clear it
 }
 
+// Human-readable CLOB error explainer. Given a raw CLOB error string plus
+// context (side, market title, etc), returns { title, hints[] } so the UI
+// can show the user WHY the trade failed and what to do next, instead of
+// dumping "CLOB 400: invalid amounts, the sell orders maker amount supports
+// a max accuracy of 2 decimals, taker amount a max of 5 decimals".
+function humanizeClobError(rawMsg, ctx) {
+  ctx = ctx || {};
+  var msg = String(rawMsg || '');
+  var isSell = (ctx.side || '').toUpperCase() === 'SELL';
+  var marketQ = ctx.marketTitle ? '"' + ctx.marketTitle + '"' : 'this market';
+
+  // "invalid amounts" — CLOB 400's generic catch-all.
+  // Two real-world causes:
+  //   1. Seller doesn't own enough shares of this exact token/side
+  //   2. Market tick changed while the user was entering (price/amount drift)
+  if (/invalid amounts|maker amount|taker amount|max accuracy|decimal/i.test(msg)) {
+    if (isSell) {
+      return {
+        title: "Couldn't place your sell order.",
+        hints: [
+          "Most likely you don't own enough " + marketQ + " shares in your Polymarket wallet to sell this quantity.",
+          "Check your open positions on polymarket.com — the SELL amount here must be ≤ shares you already hold on that exact side (YES or NO).",
+          "If you do hold the shares, refresh this page once and try again — the market's pricing tick may have just changed.",
+        ],
+      };
+    }
+    return {
+      title: "Couldn't place your buy order.",
+      hints: [
+        "The market's pricing tick may have shifted — refresh the page and re-enter your amount.",
+        "If it keeps failing, try a Limit order with a price 1–2¢ above the current ask.",
+      ],
+    };
+  }
+
+  // "not enough balance" / insufficient USDC for a BUY
+  if (/not enough balance|insufficient (?:balance|funds)|balance too low|low balance/i.test(msg)) {
+    return {
+      title: "Not enough USDC in your Polymarket wallet.",
+      hints: [
+        "Tap + Deposit above and send USDC on Polygon to your proxy wallet, then retry.",
+        "Balance shown at the top of this panel is what's actually available for trading.",
+      ],
+    };
+  }
+
+  // FOK market order can't fully fill
+  if (/fully filled|FOK|not enough liquidity|couldn't be filled/i.test(msg)) {
+    return {
+      title: "Market too thin for this order size.",
+      hints: [
+        "Try a smaller amount, or switch to a Limit order at your target price — limits rest on the book and fill as liquidity appears.",
+      ],
+    };
+  }
+
+  // Geo restriction
+  if (/restricted|geoblock|blocked|forbidden/i.test(msg)) {
+    return {
+      title: "Trading not available in your region.",
+      hints: [
+        "Polymarket blocks trading from certain countries (US, UK, others).",
+        "If you're using a VPN, try turning it off; if not, no way around this.",
+      ],
+    };
+  }
+
+  // CLOB auth expired / unauthorized
+  if (/unauthorized|401|api key|expired/i.test(msg)) {
+    return {
+      title: "Trading session expired.",
+      hints: [
+        "Click the trade button once more — we'll re-sign you in automatically and retry.",
+      ],
+    };
+  }
+
+  // Default: show raw message but soften the prefix
+  var cleaned = msg.replace(/^CLOB \d+:\s*/i, '');
+  return { title: cleaned || 'Order rejected', hints: [] };
+}
+
+// Minimal HTML escape for safely rendering error text
+function _escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+// Render a rich trade error — title + bullet-list of next-step hints.
+// Falls back to showTradeStatus() behavior if no hints are supplied.
+function showTradeError(title, hints) {
+  var el = document.getElementById('tradeStatus');
+  if (!el) return;
+  if (!hints || !hints.length) {
+    showTradeStatus(title, 'error');
+    return;
+  }
+  var html = '<div style="font-weight:700;margin-bottom:8px;color:var(--red)">' + _escHtml(title) + '</div>';
+  html += '<ul style="margin:0 0 0 18px;padding:0;font-size:12px;line-height:1.55;color:var(--soft);font-weight:400;list-style-type:disc">';
+  for (var i = 0; i < hints.length; i++) {
+    html += '<li style="margin-bottom:4px">' + _escHtml(hints[i]) + '</li>';
+  }
+  html += '</ul>';
+  el.innerHTML = html;
+  el.style.color = '';  // color set per-element inside
+  el.style.display = 'block';
+}
+
 // Temporary debug panel for trade diagnostics
 var _tradeDebugLog = [];
 function tradeDebug(label, data) {
@@ -3740,7 +3849,12 @@ async function executeTrade() {
           });
           data = await submitClobOrder(retryBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
           if (data._expired || data._error) {
-            showTradeStatus(data._errorMsg || 'Order failed after reconnect', 'error');
+            var retryMsg = data._errorMsg || 'Order failed after reconnect';
+            var retryHint = humanizeClobError(retryMsg, {
+              side: clobSide,
+              marketTitle: (_market && (_market.question || _market.title)) || ''
+            });
+            showTradeError(retryHint.title, retryHint.hints);
             return;
           }
         } else {
@@ -3754,7 +3868,11 @@ async function executeTrade() {
     }
 
     if (data._error) {
-      showTradeStatus(data._errorMsg || 'Order rejected', 'error');
+      var hinted = humanizeClobError(data._errorMsg || 'Order rejected', {
+        side: clobSide,
+        marketTitle: (_market && (_market.question || _market.title)) || ''
+      });
+      showTradeError(hinted.title, hinted.hints);
       return;
     }
 
