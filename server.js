@@ -17344,15 +17344,32 @@ app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
   try {
 
     const enriched = rows.map(u => {
+      const posCount = parseInt(u.pos_count) || 0;
+      const hasProxy = !!u.polymarket_proxy;
+      const hasPositions = posCount > 0;
+      const synced = !!u.last_synced;
+
+      // Only surface warnings that matter:
+      //  - Users with positions are WORKING regardless of whether we
+      //    derived a proxy (their polymarket_address is either already
+      //    the proxy, or the EOA happens to also have positions — we
+      //    query both addresses now so either works).
+      //  - Missing proxy is only concerning when they're also stuck.
+      //  - NEVER_SYNCED is a problem only if they have no positions.
       const status = [];
-      if (!u.polymarket_proxy) status.push('NO_PROXY_DERIVED');
-      if (u.polymarket_proxy && u.polymarket_proxy !== u.polymarket_address) status.push('EOA_WITH_PROXY');
-      if (u.polymarket_proxy && u.polymarket_proxy === u.polymarket_address) status.push('PROXY_STORED_DIRECTLY');
-      if (!u.last_synced) status.push('NEVER_SYNCED');
-      if (u.pos_count === 0) status.push('EMPTY_POSITIONS');
+      if (hasPositions) {
+        status.push('OK');
+        if (hasProxy && u.polymarket_proxy === u.polymarket_address) status.push('PROXY_STORED_DIRECTLY');
+        if (hasProxy && u.polymarket_proxy !== u.polymarket_address) status.push('EOA_WITH_PROXY');
+      } else {
+        status.push('STUCK');
+        if (!hasProxy) status.push('NO_PROXY_DERIVED');
+        if (!synced) status.push('NEVER_SYNCED');
+      }
       return {
         ...u,
-        pos_count: parseInt(u.pos_count) || 0,
+        pos_count: posCount,
+        is_stuck: !hasPositions,
         status,
       };
     });

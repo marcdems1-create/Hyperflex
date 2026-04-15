@@ -814,11 +814,15 @@
 
       <!-- Polymarket health diagnostic -->
       <div class="analytics-card">
-        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Polymarket Health — Users Stuck at 0 Positions</span>
-          <div style="display:flex;gap:8px">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span>Polymarket Health</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="polyHealthStuckOnly" checked onchange="renderPolyHealth()">
+              Stuck only
+            </label>
             <button onclick="loadPolyHealth()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Refresh</button>
-            <button onclick="resyncStuckUsers()" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer" title="Force re-sync all users with wallet-but-no-positions">⚡ Resync Stuck Users</button>
+            <button onclick="resyncStuckUsers()" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer" title="Force re-sync all users with wallet-but-no-positions">⚡ Resync Stuck</button>
           </div>
         </div>
         <div id="polyHealthSummary" style="font-size:12px;color:var(--dim);margin-top:8px;margin-bottom:12px">Click Refresh to load per-user wallet health…</div>
@@ -2280,6 +2284,8 @@ async function loadAnalytics() {
 }
 
 // ── Polymarket Health Diagnostic ─────────────────────────────────────
+let _polyHealthData = null; // cache so toggle re-renders without refetching
+
 async function loadPolyHealth() {
   const summary = document.getElementById('polyHealthSummary');
   const body = document.getElementById('polyHealthBody');
@@ -2300,53 +2306,68 @@ async function loadPolyHealth() {
         (data.sql_hint ? ' — ' + data.sql_hint : '');
       return;
     }
-    const t = data.totals || {};
-    summary.innerHTML =
-      '<strong>' + t.total_with_wallet + '</strong> users with wallet · ' +
-      '<span style="color:var(--green)">' + t.with_positions + ' with positions</span> · ' +
-      '<span style="color:var(--red)">' + t.empty_positions + ' stuck at 0</span> · ' +
-      (t.with_proxy_derived || 0) + ' have proxy derived · ' +
-      (t.never_synced || 0) + ' never synced';
-
+    _polyHealthData = data;
     if (data.schema_note) {
       msg.style.display = 'block';
       msg.style.color = 'var(--amber)';
       msg.textContent = '⚠️ ' + data.schema_note;
     }
-
-    const rows = data.users || [];
-    if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--dim)">No users with wallet addresses.</td></tr>';
-      return;
-    }
-
-    body.innerHTML = rows.map(u => {
-      const eoa = u.polymarket_address ? u.polymarket_address.slice(0, 8) + '…' + u.polymarket_address.slice(-4) : '—';
-      const proxy = u.polymarket_proxy ? u.polymarket_proxy.slice(0, 8) + '…' + u.polymarket_proxy.slice(-4) : '<span style="color:var(--dim)">not derived</span>';
-      const stuck = u.pos_count === 0;
-      const statusBadges = (u.status || []).map(s => {
-        const color = s === 'EMPTY_POSITIONS' ? 'var(--red)' : s === 'NO_PROXY_DERIVED' ? 'var(--amber)' : s === 'NEVER_SYNCED' ? 'var(--amber)' : 'var(--dim)';
-        return '<span style="background:rgba(255,255,255,0.05);color:' + color + ';padding:2px 6px;border-radius:4px;font-size:10px;margin-right:4px">' + s + '</span>';
-      }).join('');
-      return '<tr style="border-bottom:1px solid var(--border)">' +
-        '<td style="padding:8px 12px;font-size:12px">' + escHtml(u.display_name || '—') + '</td>' +
-        '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + escHtml(eoa) + '</td>' +
-        '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + proxy + '</td>' +
-        '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:' + (u.pos_count > 0 ? 'var(--green)' : 'var(--dim)') + '">' + u.pos_count + '</td>' +
-        '<td style="padding:8px 12px">' + statusBadges + '</td>' +
-        '<td style="padding:8px 12px">' +
-          (stuck
-            ? '<button onclick="resyncOneUser(\'' + u.id + '\', this)" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Resync</button>'
-            : '<span style="color:var(--dim);font-size:11px">ok</span>') +
-        '</td>' +
-        '</tr>';
-    }).join('');
+    renderPolyHealth();
   } catch (e) {
     summary.textContent = 'Error';
     msg.style.display = 'block';
     msg.style.color = 'var(--red)';
     msg.textContent = '❌ Network error: ' + e.message;
   }
+}
+
+function renderPolyHealth() {
+  if (!_polyHealthData) return;
+  const data = _polyHealthData;
+  const summary = document.getElementById('polyHealthSummary');
+  const body = document.getElementById('polyHealthBody');
+  const stuckOnly = document.getElementById('polyHealthStuckOnly')?.checked;
+
+  const t = data.totals || {};
+  summary.innerHTML =
+    '<strong>' + t.total_with_wallet + '</strong> wallet-connected · ' +
+    '<span style="color:var(--green)">' + t.with_positions + ' working</span> · ' +
+    '<span style="color:var(--red)">' + t.empty_positions + ' stuck</span> · ' +
+    (t.never_synced || 0) + ' never synced' +
+    (stuckOnly ? ' · <span style="color:var(--dim)">showing stuck only — uncheck to show all</span>' : '');
+
+  const all = data.users || [];
+  const rows = stuckOnly ? all.filter(u => u.is_stuck) : all;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--dim)">' +
+      (stuckOnly ? 'No stuck users 🎉 Everyone with a wallet has positions.' : 'No users with wallet addresses.') +
+      '</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(u => {
+    const eoa = u.polymarket_address ? u.polymarket_address.slice(0, 8) + '…' + u.polymarket_address.slice(-4) : '—';
+    const proxy = u.polymarket_proxy ? u.polymarket_proxy.slice(0, 8) + '…' + u.polymarket_proxy.slice(-4) : '<span style="color:var(--dim)">—</span>';
+    const statusBadges = (u.status || []).map(s => {
+      let color = 'var(--dim)';
+      if (s === 'OK') color = 'var(--green)';
+      else if (s === 'STUCK') color = 'var(--red)';
+      else if (s === 'NO_PROXY_DERIVED' || s === 'NEVER_SYNCED') color = 'var(--amber)';
+      return '<span style="background:rgba(255,255,255,0.05);color:' + color + ';padding:2px 6px;border-radius:4px;font-size:10px;margin-right:4px;font-weight:700">' + s + '</span>';
+    }).join('');
+    return '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:8px 12px;font-size:12px">' + escHtml(u.display_name || '—') + '</td>' +
+      '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + escHtml(eoa) + '</td>' +
+      '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + proxy + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:' + (u.pos_count > 0 ? 'var(--green)' : 'var(--dim)') + '">' + u.pos_count + '</td>' +
+      '<td style="padding:8px 12px">' + statusBadges + '</td>' +
+      '<td style="padding:8px 12px">' +
+        (u.is_stuck
+          ? '<button onclick="resyncOneUser(\'' + u.id + '\', this)" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:700">Resync</button>'
+          : '<span style="color:var(--green);font-size:11px">✓</span>') +
+      '</td>' +
+      '</tr>';
+  }).join('');
 }
 
 async function resyncStuckUsers() {
