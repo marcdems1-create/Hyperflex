@@ -14174,8 +14174,16 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
     );
 
     if (existing.length) {
-      // Update rank/pnl/whale flag
-      const displayName = traderName || existing[0].display_name;
+      // Update rank/pnl/whale flag. PRESERVE the user's chosen display_name —
+      // the whale leaderboard cron runs every ~5 min and used to clobber
+      // user-chosen names with whatever Polymarket's Data API returned (often
+      // "Trader" for wallets without a set username), causing posted takes
+      // to render under the wrong name on the feed and market pages. Only
+      // overwrite when the stored name is empty OR a wallet-prefix stub like
+      // "0x5554...bc9c" which users clearly didn't pick themselves.
+      const existingName = existing[0].display_name || '';
+      const isWalletStub = /^0x[0-9a-fA-F]{4,}\.{2,}[0-9a-fA-F]{4,}$/.test(existingName) || existingName === '';
+      const displayName = (!isWalletStub && existingName) ? existingName : (traderName || existingName);
       await dbQuery(
         'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
         [rank || null, pnl || null, displayName, existing[0].id]
