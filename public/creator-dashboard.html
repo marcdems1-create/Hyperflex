@@ -6992,7 +6992,6 @@ function renderMarketRows(markets, containerId) {
             <div class="mkt-more-menu">
               <button class="mkt-menu-item" onclick="shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_price||0.5},${m.no_price||0.5});closeMktMenus()">↗ Share</button>
               <button class="mkt-menu-item" onclick="toggleFeatureMarket('${m.id}',this);closeMktMenus()" id="feat-btn-${m.id}">${m.featured ? '📌 Unfeature' : '📌 Feature (Editor\'s Pick)'}</button>
-              <button class="mkt-menu-item" onclick="blastMarket('${m.id}',${JSON.stringify(m.question.replace(/"/g,"'"))});closeMktMenus()">📬 Blast to members</button>
               <button class="mkt-menu-item" onclick="duplicateMarket('${m.id}');closeMktMenus()">↻ Duplicate</button>
               <button class="mkt-menu-item" onclick="openQrModal && openQrModal('${m.id}');closeMktMenus()">📱 QR Code</button>
               <button class="mkt-menu-item danger" onclick="openEditModal('${m.id}');closeMktMenus()">✎ Edit / Archive</button>
@@ -8926,26 +8925,9 @@ async function toggleFeatureMarket(marketId) {
   }
 }
 
-async function blastMarket(marketId, question) {
-  const preview = question.length > 80 ? question.slice(0, 77) + '…' : question;
-  if (!confirm(`📬 Blast to all members?\n\n"${preview}"\n\nEvery member of your community will get an email about this market right now. Each market can only be blasted once.`)) return;
-
-  showToast('Sending…', 'info');
-  try {
-    const r = await fetch(`${API}/api/creator/markets/${marketId}/blast`, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    const data = await r.json();
-    if (data.ok) {
-      showToast(`📬 ${data.message}`, 'success');
-    } else {
-      showToast(data.error || 'Blast failed', 'error');
-    }
-  } catch {
-    showToast('Network error', 'error');
-  }
-}
+// blastMarket() removed — Phase 2 dead-code deletion. Feature emailed
+// every community member on market publish; post-pivot we don't have
+// creator-published markets to blast.
 
 function duplicateMarket(marketId) {
   const m = communityMarkets.find(x => x.id === marketId);
