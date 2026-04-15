@@ -2692,9 +2692,9 @@ async function enableTrading() {
             tradeDebug('browser-direct create FAIL', { status: createRes.status, error: clobErr });
             var errorMsg = clobErr.error || clobErr.message || 'CLOB auth failed (' + createRes.status + ')';
             if (createRes.status === 400 && (errorMsg.includes('derive') || errorMsg.includes('signature'))) {
-              errorMsg = 'Invalid signature or wallet not registered. Visit polymarket.com to set up your account first.';
+              errorMsg = "Your trading wallet isn't activated yet. Tap Buy once more and approve the setup prompt — we'll activate it for you in one step.";
             } else if (createRes.status === 401) {
-              errorMsg = 'Unauthorized. Please make sure your wallet is set up for trading.';
+              errorMsg = 'Trading session not ready. Click Buy again to refresh your connection.';
             }
             throw new Error(errorMsg);
           }
@@ -2805,17 +2805,17 @@ function humanizeClobError(rawMsg, ctx) {
       return {
         title: "Couldn't place your sell order.",
         hints: [
-          "Most likely you don't own enough " + marketQ + " shares in your Polymarket wallet to sell this quantity.",
-          "Check your open positions on polymarket.com — the SELL amount here must be ≤ shares you already hold on that exact side (YES or NO).",
-          "If you do hold the shares, refresh this page once and try again — the market's pricing tick may have just changed.",
+          "You're trying to sell more " + marketQ + " shares than you actually own — or you're on the wrong side of the market (YES vs NO).",
+          "Tap MAX to autofill your exact holding, or reduce the amount to match what's in your wallet.",
+          "If the numbers look right, refresh and retry — the market's price tick may have just moved.",
         ],
       };
     }
     return {
       title: "Couldn't place your buy order.",
       hints: [
-        "The market's pricing tick may have shifted — refresh the page and re-enter your amount.",
-        "If it keeps failing, try a Limit order with a price 1–2¢ above the current ask.",
+        "The market's pricing tick may have shifted — refresh and re-enter your amount.",
+        "If it keeps failing, switch to a Limit order and set a price 1–2¢ above the current ask.",
       ],
     };
   }
@@ -2823,10 +2823,10 @@ function humanizeClobError(rawMsg, ctx) {
   // "not enough balance" / insufficient USDC for a BUY
   if (/not enough balance|insufficient (?:balance|funds)|balance too low|low balance/i.test(msg)) {
     return {
-      title: "Not enough USDC in your Polymarket wallet.",
+      title: "Not enough USDC in your trading wallet.",
       hints: [
-        "Tap + Deposit above and send USDC on Polygon to your proxy wallet, then retry.",
-        "Balance shown at the top of this panel is what's actually available for trading.",
+        'Tap + Deposit above to fund your wallet with USDC on Polygon, then retry.',
+        "The balance shown at the top of this panel is what's actually available for trading.",
       ],
     };
   }
@@ -3432,10 +3432,9 @@ async function executeTrade() {
       var ownedShares = pos && typeof pos.size === 'number' ? pos.size : 0;
       if (ownedShares <= 0) {
         // Nothing on this side at all
-        var marketQ = (_market && (_market.question || _market.title)) || 'this market';
         showTradeError("You don't own any shares to sell here.", [
-          'Your Polymarket wallet holds zero shares on this outcome — check polymarket.com to confirm which side (YES or NO) your position is on.',
-          'To sell, switch to the outcome you actually hold, or choose "Buy" instead.'
+          "You're holding zero shares on this outcome — you may be on the opposite side (YES vs NO).",
+          'To sell, switch to the outcome you actually hold. To take a new position, tap Buy instead.'
         ]);
         cta.disabled = false; updateCtaButton();
         _tradeInFlight = false;
