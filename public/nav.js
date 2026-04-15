@@ -627,8 +627,6 @@
       { name: 'API', desc: 'Developer API docs', href: '/api-docs', icon: '⚙️' },
       { name: '99% Bets', desc: 'High probability markets', href: '/high-prob', icon: '🎯' },
       { name: 'Dashboard', desc: 'Your creator dashboard', href: '/creator/dashboard', icon: '🛠' },
-      { name: 'Templates', desc: 'Market template gallery', href: '/templates', icon: '📋' },
-      { name: 'Nominate', desc: 'Nominate a creator', href: '/nominate', icon: '✨' },
       { name: 'Compare', desc: 'HYPERFLEX vs competitors', href: '/compare', icon: '⚖️' },
       { name: 'Copy Bot', desc: 'Auto-mirror whale trades', href: '/whales#copy', icon: '🤖' }
     ];

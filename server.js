@@ -649,7 +649,6 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/whales', priority: '0.8', freq: 'daily' },
       { loc: '/whale-index', priority: '0.7', freq: 'daily' },
       /* /explore redirects to / — removed from sitemap */
-      { loc: '/templates', priority: '0.6', freq: 'weekly' },
       { loc: '/data', priority: '0.6', freq: 'daily' },
       { loc: '/ecosystem', priority: '0.8', freq: 'daily' },
       { loc: '/features', priority: '0.7', freq: 'weekly' },
@@ -4596,25 +4595,11 @@ const TEMPLATES = {
   },
 };
 
-// GET /api/templates/:id — return pre-seeded market questions for a template
-app.get('/api/templates/:id', (req, res) => {
-  const tpl = TEMPLATES[req.params.id];
-  if (!tpl) return res.status(404).json({ error: 'Template not found' });
-  const today = new Date();
-  const markets = tpl.markets.map(m => {
-    const expiry = new Date(today);
-    expiry.setDate(expiry.getDate() + m.days);
-    return {
-      question: m.question,
-      category: m.category,
-      commodity: m.category,
-      target_price: m.target_price,
-      direction: m.direction,
-      expiry_date: expiry.toISOString().split('T')[0],
-    };
-  });
-  res.json({ id: req.params.id, name: tpl.name, markets });
-});
+// GET /api/templates/:id — REMOVED (Phase 2: templates feature was
+// for seeding community-created markets with 72 pre-written questions.
+// Post-pivot the product is Polymarket aggregation + social; users don't
+// create markets anymore. TEMPLATES constant can also be removed if
+// nothing else references it.)
 
 // ── START ─────────────────────────────────────────
 // ============================================================
@@ -10089,21 +10074,10 @@ const RESERVED_SLUGS = new Set([
 // GET /my — private member dashboard
 app.get('/my', (req, res) => res.redirect('/creator/dashboard'));
 
-// GET /templates — market template gallery (SEO + activation)
-app.get('/templates', (req, res) => res.sendFile(path.join(__dirname, 'public', 'templates.html')));
-
-// GET /api/templates — return all template metadata (no markets, for gallery)
-app.get('/api/templates', (req, res) => {
-  const gallery = Object.entries(TEMPLATES).map(([id, tpl]) => ({
-    id,
-    name: tpl.name,
-    emoji: tpl.emoji || '🎯',
-    description: tpl.description || '',
-    count: tpl.markets.length,
-    preview: tpl.markets.slice(0, 2).map(m => m.question),
-  }));
-  res.json(gallery);
-});
+// GET /templates and /api/templates — REMOVED (Phase 2 dead-code
+// deletion). The templates feature seeded community-created markets
+// with 72 pre-written prediction questions. Post-pivot we don't host
+// user-created markets, so there's nothing to seed.
 
 // ── CREATOR REFERRAL PROGRAM ─────────────────────────────────────────────────
 // GET /ref/:slug — referral landing page: tracks the referring creator then
@@ -18257,11 +18231,10 @@ async function maybeFireSignupDropoffEmail(slug, email) {
         <strong style="color:#f5f5f0">${communityName}</strong> is live and ready. The fastest way to get your first predictions is to paste a YouTube URL — the AI will write the markets for you in under 30 seconds.
       </p>
       <div style="background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.2);border-radius:10px;padding:16px 20px;margin-bottom:24px">
-        <div style="font-size:13px;color:#f5f5f0;margin-bottom:8px;font-weight:700">Three ways to get your first market live:</div>
+        <div style="font-size:13px;color:#f5f5f0;margin-bottom:8px;font-weight:700">Two ways to get your first market live:</div>
         <div style="font-size:13px;color:#aaa;line-height:1.8">
           1. Paste a YouTube URL → AI writes markets from the video<br/>
-          2. Pick from the <a href="https://hyperflex.network/templates" style="color:${accent}">template gallery</a> — 72 pre-written questions<br/>
-          3. Type a question manually — takes 30 seconds
+          2. Type a question manually — takes 30 seconds
         </div>
       </div>
       <a href="${dashUrl}" style="display:inline-block;padding:13px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Publish your first market →</a>
