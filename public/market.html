@@ -2785,38 +2785,36 @@ function showTradeStatus(msg, type) {
   // Don't auto-hide — let the next action clear it
 }
 
-// Human-readable CLOB error explainer. Given a raw CLOB error string plus
-// context (side, market title, etc), returns { title, hints[] } so the UI
-// can show the user WHY the trade failed and what to do next, instead of
-// dumping "CLOB 400: invalid amounts, the sell orders maker amount supports
-// a max accuracy of 2 decimals, taker amount a max of 5 decimals".
+// Human-readable CLOB error explainer. Every branch returns concrete actions
+// the END USER can take. If we can't classify the error, we return
+// `reportable: true` so the UI can offer a one-tap "Report this" button that
+// auto-captures diagnostics — the user never needs to paste console logs.
 function humanizeClobError(rawMsg, ctx) {
   ctx = ctx || {};
   var msg = String(rawMsg || '');
   var isSell = (ctx.side || '').toUpperCase() === 'SELL';
-  var marketQ = ctx.marketTitle ? '"' + ctx.marketTitle + '"' : 'this market';
 
-  // "invalid amounts" — CLOB 400's generic catch-all.
-  // Two real-world causes:
-  //   1. Seller doesn't own enough shares of this exact token/side
-  //   2. Market tick changed while the user was entering (price/amount drift)
+  // "invalid amounts" — generic CLOB 400. Real-world causes:
+  //   • SELL: user doesn't own enough shares on this exact side
+  //   • BUY : unusual market tick or price drift — should be rare, reportable
   if (/invalid amounts|maker amount|taker amount|max accuracy|decimal/i.test(msg)) {
     if (isSell) {
       return {
-        title: "Couldn't place your sell order.",
+        title: "You don't have enough shares to sell here.",
         hints: [
-          "You're trying to sell more " + marketQ + " shares than you actually own — or you're on the wrong side of the market (YES vs NO).",
-          "Tap MAX to autofill your exact holding, or reduce the amount to match what's in your wallet.",
-          "If the numbers look right, refresh and retry — the market's price tick may have just moved.",
+          'Tap MAX above the amount box to sell your full holding.',
+          'Or reduce the amount so it matches what you already own.',
+          "If you think you do own enough, you might be on the wrong side (YES vs NO) — switch outcomes above.",
         ],
       };
     }
     return {
-      title: "Couldn't place your buy order.",
+      title: "Something about the price didn't line up with the market.",
       hints: [
-        "The market's pricing tick may have shifted — refresh and re-enter your amount.",
-        "If it keeps failing, switch to a Limit order and set a price 1–2¢ above the current ask.",
+        'Refresh the page once and re-enter your amount — prices can shift mid-entry.',
+        'Still failing? Tap Report below and we\'ll look into it.',
       ],
+      reportable: true,
     };
   }
 
@@ -2826,7 +2824,7 @@ function humanizeClobError(rawMsg, ctx) {
       title: "Not enough USDC in your trading wallet.",
       hints: [
         'Tap + Deposit above to fund your wallet with USDC on Polygon, then retry.',
-        "The balance shown at the top of this panel is what's actually available for trading.",
+        "The balance shown at the top of this panel is what's actually available.",
       ],
     };
   }
@@ -2834,9 +2832,10 @@ function humanizeClobError(rawMsg, ctx) {
   // FOK market order can't fully fill
   if (/fully filled|FOK|not enough liquidity|couldn't be filled/i.test(msg)) {
     return {
-      title: "Market too thin for this order size.",
+      title: "Not enough liquidity to fill this order at the market.",
       hints: [
-        "Try a smaller amount, or switch to a Limit order at your target price — limits rest on the book and fill as liquidity appears.",
+        'Try a smaller amount, or switch to Limit and set your own price.',
+        'Limits sit on the book and fill as other traders come in.',
       ],
     };
   }
@@ -2844,10 +2843,10 @@ function humanizeClobError(rawMsg, ctx) {
   // Geo restriction
   if (/restricted|geoblock|blocked|forbidden/i.test(msg)) {
     return {
-      title: "Trading not available in your region.",
+      title: "Trading isn't available in your region.",
       hints: [
-        "Polymarket blocks trading from certain countries (US, UK, others).",
-        "If you're using a VPN, try turning it off; if not, no way around this.",
+        'If you have a VPN running, switch it off and try again.',
+        'Otherwise this market is restricted where you are — we can\'t route around it.',
       ],
     };
   }
@@ -2855,16 +2854,23 @@ function humanizeClobError(rawMsg, ctx) {
   // CLOB auth expired / unauthorized
   if (/unauthorized|401|api key|expired/i.test(msg)) {
     return {
-      title: "Trading session expired.",
+      title: "Your trading session needs a quick refresh.",
       hints: [
-        "Click the trade button once more — we'll re-sign you in automatically and retry.",
+        "Tap the trade button once more — we'll reconnect your wallet and place the order automatically.",
       ],
     };
   }
 
-  // Default: show raw message but soften the prefix
-  var cleaned = msg.replace(/^CLOB \d+:\s*/i, '');
-  return { title: cleaned || 'Order rejected', hints: [] };
+  // Truly unknown. Show user-safe copy + open the one-tap report path so we
+  // get a full diagnostic bundle without asking them for anything technical.
+  return {
+    title: "We couldn't place this order.",
+    hints: [
+      'Refresh the page and try again.',
+      'If it still fails, tap Report below — we\'ll get it fixed.',
+    ],
+    reportable: true,
+  };
 }
 
 // Minimal HTML escape for safely rendering error text
@@ -2876,22 +2882,83 @@ function _escHtml(s) {
 
 // Render a rich trade error — title + bullet-list of next-step hints.
 // Falls back to showTradeStatus() behavior if no hints are supplied.
-function showTradeError(title, hints) {
+// Options:
+//   opts.reportable  — when true, renders a one-tap "Report this to support"
+//                      button below the hints. Clicking POSTs a complete
+//                      diagnostic bundle (market, side, amounts, prices,
+//                      wallet, raw error, recent trade-debug log, UA, URL)
+//                      to /api/bug-reports — the user never needs to copy
+//                      anything manually.
+//   opts.rawError    — original CLOB error string (captured in the report
+//                      so we can triage without asking the user).
+//   opts.context     — the live trade context snapshot; if omitted we'll
+//                      fall back to the global _lastTradeContext.
+function showTradeError(title, hints, opts) {
+  opts = opts || {};
   var el = document.getElementById('tradeStatus');
   if (!el) return;
   if (!hints || !hints.length) {
-    showTradeStatus(title, 'error');
-    return;
+    // No hints + no report → fall back to the plain status behaviour.
+    if (!opts.reportable) { showTradeStatus(title, 'error'); return; }
+    hints = [];
   }
+  var hasReport = !!opts.reportable;
   var html = '<div style="font-weight:700;margin-bottom:8px;color:var(--red)">' + _escHtml(title) + '</div>';
-  html += '<ul style="margin:0 0 0 18px;padding:0;font-size:12px;line-height:1.55;color:var(--soft);font-weight:400;list-style-type:disc">';
-  for (var i = 0; i < hints.length; i++) {
-    html += '<li style="margin-bottom:4px">' + _escHtml(hints[i]) + '</li>';
+  if (hints.length) {
+    html += '<ul style="margin:0 0 ' + (hasReport ? '10px' : '0') + ' 18px;padding:0;font-size:12px;line-height:1.55;color:var(--soft);font-weight:400;list-style-type:disc">';
+    for (var i = 0; i < hints.length; i++) {
+      html += '<li style="margin-bottom:4px">' + _escHtml(hints[i]) + '</li>';
+    }
+    html += '</ul>';
   }
-  html += '</ul>';
+  if (hasReport) {
+    html += '<button id="reportTradeErrorBtn" type="button" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:#0a0a0f;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:0.02em">Report this to support</button>';
+  }
   el.innerHTML = html;
-  el.style.color = '';  // color set per-element inside
+  el.style.color = '';
   el.style.display = 'block';
+  if (hasReport) {
+    var btn = document.getElementById('reportTradeErrorBtn');
+    if (btn) {
+      btn.onclick = function() { reportTradeError(opts.rawError, opts.context || _lastTradeContext); };
+    }
+  }
+}
+
+// Global trade context snapshot. Kept up-to-date in executeTrade so that if
+// an error fires we have a complete picture ready for a one-tap bug report.
+var _lastTradeContext = null;
+
+// POST diagnostics to /api/bug-reports. AI triage (Claude Haiku) runs on the
+// server. On success the button flips to "Reported"; on failure it lets the
+// user retry.
+async function reportTradeError(rawError, context) {
+  var btn = document.getElementById('reportTradeErrorBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+  var headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  var body = {
+    message: 'Trade failed: ' + String(rawError || 'unknown CLOB response').slice(0, 1500),
+    page_url: location.href,
+    user_agent: navigator.userAgent,
+    context: context || _lastTradeContext || {},
+    console_errors: (typeof _tradeDebugLog !== 'undefined' ? _tradeDebugLog : []).slice(-25),
+  };
+  try {
+    var res = await fetch('/api/bug-reports', { method: 'POST', headers: headers, body: JSON.stringify(body) });
+    if (res.ok) {
+      if (btn) {
+        btn.textContent = '✓ Reported — we\'ll fix it';
+        btn.style.background = 'var(--green)';
+        btn.style.color = '#fff';
+      }
+    } else {
+      if (btn) { btn.textContent = 'Couldn\'t send — tap to retry'; btn.disabled = false; }
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = 'Network error — tap to retry'; btn.disabled = false; }
+  }
 }
 
 // Temporary debug panel for trade diagnostics
@@ -3865,6 +3932,36 @@ async function executeTrade() {
     });
     tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 
+    // Snapshot everything we know right before submission — if the CLOB
+    // response is unknown/unclassified, the "Report this" button grabs this
+    // and posts a full diagnostic to /api/bug-reports automatically.
+    _lastTradeContext = {
+      ts: new Date().toISOString(),
+      side: clobSide,
+      sideLabel: sideLabel,
+      isMarketOrder: isMarketOrder,
+      amount: amount,
+      price: price,
+      clobPrice: clobPrice,
+      shares: shares,
+      ownedShares: (clobSide === 'SELL' && tokenId && _userPositions && _userPositions[String(tokenId).toLowerCase()]) ? _userPositions[String(tokenId).toLowerCase()].size : null,
+      rawMakerAmt: rawMakerAmt,
+      rawTakerAmt: rawTakerAmt,
+      makerAtomic: makerAmt,
+      takerAtomic: takerAmt,
+      tickSize: tickSize,
+      roundConfig: roundConfig,
+      feeRateBps: feeRateBps,
+      isNegRisk: isNegRisk,
+      tokenId: tokenId,
+      conditionId: (_market && _market.conditionId) || null,
+      marketSlug: (_market && (_market.slug || _market.event_slug)) || null,
+      marketTitle: (_market && (_market.question || _market.title)) || null,
+      proxyAddress: proxyAddress || null,
+      eoaAddress: eoaAddress || null,
+      exchange: exchangeAddr,
+    };
+
     var data = await submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
 
     if (data._expired) {
@@ -3891,7 +3988,11 @@ async function executeTrade() {
               side: clobSide,
               marketTitle: (_market && (_market.question || _market.title)) || ''
             });
-            showTradeError(retryHint.title, retryHint.hints);
+            showTradeError(retryHint.title, retryHint.hints, {
+              reportable: retryHint.reportable,
+              rawError: retryMsg,
+              context: _lastTradeContext,
+            });
             return;
           }
         } else {
@@ -3905,11 +4006,16 @@ async function executeTrade() {
     }
 
     if (data._error) {
-      var hinted = humanizeClobError(data._errorMsg || 'Order rejected', {
+      var rawMsg = data._errorMsg || 'Order rejected';
+      var hinted = humanizeClobError(rawMsg, {
         side: clobSide,
         marketTitle: (_market && (_market.question || _market.title)) || ''
       });
-      showTradeError(hinted.title, hinted.hints);
+      showTradeError(hinted.title, hinted.hints, {
+        reportable: hinted.reportable,
+        rawError: rawMsg,
+        context: _lastTradeContext,
+      });
       return;
     }
 
