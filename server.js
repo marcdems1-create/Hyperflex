@@ -18346,87 +18346,17 @@ async function sendNewMarketNotifications(market, creatorSlug) {
   }
 }
 
-// ── Discord webhook — posts a card when a new market goes public ──────────────
-async function sendDiscordWebhook(market, creatorSlug) {
-  if (!creatorSlug || !market?.question) return;
-  try {
-    let settings;
-    if (pool) {
-      const _rows = await dbQuery('SELECT discord_webhook_url, display_name, primary_color FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
-      settings = _rows[0] || null;
-    } else {
-      const { data: settings } = await supabase .from('creator_settings') .select('discord_webhook_url, display_name, primary_color') .eq('slug', creatorSlug) .maybeSingle();
-    }
-    if (!settings?.discord_webhook_url) return;
-
-    const communityUrl = `${process.env.SITE_URL || 'https://hyperflex.network'}/${creatorSlug}`;
-    const color = parseInt((settings.primary_color || '#c9920d').replace('#', ''), 16);
-    const expiryStr = market.expiry_date
-      ? new Date(market.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      : null;
-    const categoryStr = market.category
-      ? market.category.charAt(0).toUpperCase() + market.category.slice(1)
-      : null;
-
-    const fields = [];
-    if (categoryStr) fields.push({ name: 'Category', value: categoryStr, inline: true });
-    if (expiryStr)   fields.push({ name: 'Closes',   value: expiryStr,   inline: true });
-    if (Array.isArray(market.options) && market.options.length > 0) {
-      fields.push({
-        name: 'Options',
-        value: market.options.map(o => `**${o.label}** — ${o.pct}%`).join('\n'),
-        inline: false
-      });
-    }
-
-    const body = {
-      embeds: [{
-        title: market.question,
-        description: `A new prediction market is live on **${settings.display_name || creatorSlug}**!`,
-        url: communityUrl,
-        color,
-        fields,
-        footer: { text: `Predict at ${communityUrl}` },
-        timestamp: new Date().toISOString(),
-      }]
-    };
-
-    const resp = await fetch(settings.discord_webhook_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) console.error('[discord] webhook failed:', resp.status, await resp.text());
-  } catch (err) {
-    console.error('[discord] webhook error:', err.message);
-  }
-}
-
-// ── Expose discord webhook settings ──────────────────────────────────────────
-app.put('/api/creator/discord-webhook', requireCreator, async (req, res) => {
-  try {
-    const { discord_webhook_url } = req.body;
-    // Basic validation — must be empty string (to clear) or a Discord webhook URL
-    if (discord_webhook_url) { try { const _dwu = new URL(discord_webhook_url); if (!['discord.com','discordapp.com'].includes(_dwu.hostname) || !_dwu.pathname.startsWith('/api/webhooks/')) throw new Error(); } catch { return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' }); } }
-    if (false) { // replaced by strict URL validation above
-      return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' });
-    }
-    let error;
-    if (pool) {
-      const _upd = { discord_webhook_url: discord_webhook_url || null };
-      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
-      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-      const _where = [req.creator.id];
-      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, ..._where]);
-    } else {
-      const { error } = await supabase .from('creator_settings') .update({ discord_webhook_url: discord_webhook_url || null }) .eq('creator_id', req.creator.id);
-    }
-    if (error) throw error;
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Discord webhook integration — REMOVED (Phase 2). Fired when a
+// creator published a new community market, posting an embed card
+// to the creator's configured Discord channel. Post-pivot community
+// markets don't exist, so there's nothing to announce. Kept a stub
+// of sendDiscordWebhook so the two remaining callers at the market-
+// publish sites (server.js:2052 and :9320) still resolve — they're
+// in code paths that are themselves dead post-pivot but also slated
+// for deletion in Commit 7 (market create/publish endpoints).
+async function sendDiscordWebhook() { /* no-op: feature removed */ }
+// PUT /api/creator/discord-webhook deleted. discord_webhook_url column
+// on creator_settings left intact (dead data, no writers).
 
 // POST /api/creator/digest/send — manually trigger digest for this creator right now
 app.post('/api/creator/digest/send', requireCreator, async (req, res) => {

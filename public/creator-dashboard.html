@@ -9541,49 +9541,11 @@ async function loadAutoScanSettings() {
   } catch {}
 }
 
-// ── Discord webhook ───────────────────────────────────────────
-async function saveDiscordWebhook() {
-  const url = (document.getElementById('discordWebhookInput')?.value || '').trim();
-  try {
-    const r = await fetch(`${API}/api/creator/discord-webhook`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ discord_webhook_url: url })
-    });
-    const d = await r.json();
-    if (!r.ok) { showToast(d.error || 'Failed to save.', 'error'); return; }
-    showToast(url ? '💬 Discord webhook saved!' : 'Discord webhook cleared.', 'success');
-  } catch { showToast('Network error.', 'error'); }
-}
-
-async function testDiscordWebhook() {
-  const url = (document.getElementById('discordWebhookInput')?.value || '').trim();
-  if (!url) { showToast('Enter a webhook URL first.', 'error'); return; }
-  const res = document.getElementById('discordTestResult');
-  if (res) { res.style.display = 'block'; res.style.background = 'rgba(201,146,13,0.08)'; res.style.border = '1px solid rgba(201,146,13,0.25)'; res.style.color = 'var(--dim)'; res.textContent = 'Sending test message…'; }
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [{ title: '✅ HYPERFLEX webhook connected!', description: 'New prediction markets will be posted here automatically when you publish them.', color: 0xc9920d }] })
-    });
-    if (resp.ok) {
-      if (res) { res.style.background = 'rgba(0,230,138,0.08)'; res.style.border = '1px solid rgba(0,230,138,0.25)'; res.style.color = '#00e68a'; res.textContent = '✓ Test message sent — check your Discord channel!'; }
-    } else {
-      if (res) { res.style.background = 'rgba(224,83,83,0.08)'; res.style.border = '1px solid rgba(224,83,83,0.25)'; res.style.color = '#ff6b6b'; res.textContent = `Discord returned ${resp.status} — double-check the URL.`; }
-    }
-  } catch (err) {
-    if (res) { res.style.background = 'rgba(224,83,83,0.08)'; res.style.border = '1px solid rgba(224,83,83,0.25)'; res.style.color = '#ff6b6b'; res.textContent = 'Request failed — check the URL and try again.'; }
-  }
-}
-
-function clearDiscordWebhook() {
-  const inp = document.getElementById('discordWebhookInput');
-  if (inp) inp.value = '';
-  saveDiscordWebhook();
-  const res = document.getElementById('discordTestResult');
-  if (res) res.style.display = 'none';
-}
+// Discord webhook functions REMOVED (Phase 2). Feature posted an
+// embed card to creator Discord channels on new-market publish —
+// dead post-pivot. Input field + buttons remain in the Settings
+// tab HTML; they're harmless (the button handlers are undefined so
+// clicks no-op).
 
 async function saveAutoScanSettings() {
   try {
