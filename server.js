@@ -12838,10 +12838,24 @@ const INFLUENCER_SEED = [
 // Cron: every 30 minutes
 
 let _lastInfluencerFetch = 0;
-const INFLUENCER_FETCH_INTERVAL = 30 * 60 * 1000; // 30 min
+// 4h between cycles (was 30 min). With 20 influencers per cycle and a
+// 1 call = 1 tweet-list response billing model, 30-min cadence was
+// ~960 calls/day. 4h drops it to ~120 calls/day — well below the
+// cheapest twitterapi.io tier and still fresh enough for a daily-ish
+// tweet feed. Flip TWITTERAPI_FETCH_ENABLED=false to stop entirely.
+const INFLUENCER_FETCH_INTERVAL = 4 * 60 * 60 * 1000;
 
 async function fetchInfluencerTweets() {
   if (!pool) return;
+  // Background cron kill-switch. User owns the twitterapi.io credits;
+  // if the real-import pipeline isn't producing tweets, credits are
+  // waste. Set TWITTERAPI_FETCH_ENABLED=false in Railway to pause this
+  // cron without removing TWITTERAPI_IO_KEY (which interactive
+  // endpoints like handle-verify still depend on).
+  if (process.env.TWITTERAPI_FETCH_ENABLED === 'false') {
+    console.log('[influencer-fetch] Skipped — TWITTERAPI_FETCH_ENABLED=false');
+    return;
+  }
   const now = Date.now();
   if (now - _lastInfluencerFetch < INFLUENCER_FETCH_INTERVAL) return;
   _lastInfluencerFetch = now;
@@ -12853,6 +12867,9 @@ async function fetchInfluencerTweets() {
 
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
     let imported = 0;
+    // Credit-burn metrics: count twitterapi.io calls + tweets fetched
+    // so cron logs show how much spend produced how much stored data.
+    let apiCalls = 0, tweetsFetched = 0, predictionRelevant = 0, marketMatched = 0;
     const twitterApiKey = process.env.TWITTERAPI_IO_KEY;
 
     for (const inf of influencers) {
@@ -12868,6 +12885,7 @@ async function fetchInfluencerTweets() {
               headers: { 'X-API-Key': twitterApiKey },
               signal: ctrl.signal
             }).finally(() => clearTimeout(tid));
+            apiCalls++;
             if (res.ok) {
               const data = await res.json();
               for (const tw of (data.tweets || [])) {
@@ -12878,8 +12896,11 @@ async function fetchInfluencerTweets() {
                     text: tw.text,
                     url: tw.url || `https://x.com/${inf.x_handle}/status/${tw.id}`
                   });
+                  tweetsFetched++;
                 }
               }
+            } else {
+              console.warn(`[influencer-fetch] twitterapi.io ${res.status} for @${inf.x_handle}`);
             }
           } catch (e) { /* twitterapi.io failed */ }
         }
@@ -12889,6 +12910,7 @@ async function fetchInfluencerTweets() {
         // Filter for prediction-relevant content and require market match
         for (const tw of tweetTexts.slice(0, 5)) {
           if (!isPredictionRelevant(tw.text)) continue;
+          predictionRelevant++;
 
           // Dedupe
           const textPrefix = tw.text.substring(0, 80);
@@ -12920,6 +12942,7 @@ async function fetchInfluencerTweets() {
 
           // No market match = skip this tweet (every take must link to a real market)
           if (!matchedSlug) continue;
+          marketMatched++;
 
           const textLower = tw.text.toLowerCase();
           const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(textLower) ? 'YES' : 'NO';
@@ -12939,7 +12962,14 @@ async function fetchInfluencerTweets() {
       } catch (e) { /* skip this influencer */ }
     }
 
-    if (imported > 0) console.log(`[influencer-fetch] Auto-imported ${imported} tweets as takes`);
+    // Always log the summary — a zero-import cycle is the signal that
+    // credits are being spent without producing any stored content.
+    // Line format chosen to grep easily in Railway: [influencer-fetch-summary] apiCalls=N tweetsFetched=N relevant=N marketMatched=N imported=N
+    console.log(
+      `[influencer-fetch-summary] apiCalls=${apiCalls} ` +
+      `tweetsFetched=${tweetsFetched} relevant=${predictionRelevant} ` +
+      `marketMatched=${marketMatched} imported=${imported}`
+    );
   } catch (e) { console.warn('[influencer-fetch] Error:', e.message); }
 }
 
@@ -12957,8 +12987,10 @@ function isPredictionRelevant(text) {
   return true;
 }
 
-// Cron: fetch influencer tweets every 30 minutes
-cron.schedule('*/30 * * * *', () => {
+// Cron: fire at every 4h boundary; the INFLUENCER_FETCH_INTERVAL guard
+// inside fetchInfluencerTweets() enforces the actual spacing so back-
+// to-back container restarts don't trigger extra calls.
+cron.schedule('0 */4 * * *', () => {
   fetchInfluencerTweets().catch(e => console.warn('[influencer-cron]', e.message));
 });
 // Also run on boot after a delay
@@ -16344,6 +16376,12 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
+  // Same kill-switch as fetchInfluencerTweets. Both crons draw from the
+  // same twitterapi.io credit pool, so they have to be gated together.
+  if (process.env.TWITTERAPI_FETCH_ENABLED === 'false') {
+    console.log('[influencer] Skipped — TWITTERAPI_FETCH_ENABLED=false');
+    return;
+  }
   console.log('[influencer] Starting influencer monitoring sweep');
 
   // Load active influencers from DB
@@ -16479,10 +16517,15 @@ async function monitorPolymarketInfluencers() {
   }
 
   console.log(`[influencer] Sweep complete — ${newPostCount} new posts, ${newTakeCount} auto-takes created`);
+  // Grep-friendly summary for Railway logs. Zero-insert sweeps are the
+  // "we're burning credits without getting content" signal.
+  console.log(`[influencer-sweep-summary] newPosts=${newPostCount} newTakes=${newTakeCount}`);
 }
 
-// Run every 30 minutes
-cron.schedule('*/30 * * * *', () => {
+// Run every 4 hours (was every 30 min) — reduces twitterapi.io burn
+// when the filters are producing few matches. The sweep still runs on
+// boot so fresh data appears quickly after a deploy.
+cron.schedule('0 */4 * * *', () => {
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Cron error:', err.message));
 });
 // Also run once on boot after a short delay (so tables + screener cache are warm)

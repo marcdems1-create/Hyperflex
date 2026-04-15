@@ -8591,7 +8591,10 @@ async function submitPostTake() {
     if (!r.ok) throw new Error(data.error || 'Failed to post');
     closePostTakeModal();
     if (typeof showToast === 'function') {
-      showToast('✅ Take posted — view it on the feed', 'success', 4500);
+      // showToast honours HTML when the message contains an <a> tag.
+      // The old copy ("view it on the feed") was plain text, so users
+      // clicked nothing. Wire a real link to /feed.
+      showToast('\u2705 Take posted \u2014 <a href="/feed" style="color:#c9920d;text-decoration:underline;font-weight:700">View on feed \u2192</a>', 'success', 6000);
     }
   } catch (e) {
     alert('Error posting take: ' + e.message);
