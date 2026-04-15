@@ -5920,9 +5920,25 @@ function updateAlertBell() {
 // MARKET TAKES — community predictions for this market
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Monotonic counter so the last in-flight fetch wins. Without this the
+// early t=+2s fetch could land AFTER a post-submit refetch and overwrite
+// the list with stale data — producing the "(7) shown but list empty"
+// mismatch (the stale fetch's empty list + a newer fetch's count = 7
+// was the exact symptom a user reported).
+var _loadTakesSeq = 0;
+
 function loadMarketTakes() {
+  var mySeq = ++_loadTakesSeq;
   var mktSlug = slug || (_market && (_market.slug || _market.event_slug)) || '';
-  if (!mktSlug) return;
+
+  var countEl = document.getElementById('takeCount');
+  var container = document.getElementById('marketTakesList');
+  if (!mktSlug) {
+    if (countEl) countEl.textContent = '';
+    if (container) container.innerHTML = '<div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet \u2014 share your prediction</div>';
+    return;
+  }
+
   var token = localStorage.getItem('hf_token') || '';
   var headers = { Accept: 'application/json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -5930,6 +5946,10 @@ function loadMarketTakes() {
   fetch('/api/takes/market/' + encodeURIComponent(mktSlug), { headers: headers })
     .then(function(r) { return r.ok ? r.json() : { takes: [] }; })
     .then(function(data) {
+      // Only the most recent invocation's response is allowed to apply —
+      // any older in-flight response is ignored so race conditions can't
+      // produce a count/list mismatch on this component.
+      if (mySeq !== _loadTakesSeq) return;
       var takes = data.takes || [];
       var countEl = document.getElementById('takeCount');
       if (countEl) countEl.textContent = takes.length ? '(' + takes.length + ')' : '';

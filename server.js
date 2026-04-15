@@ -14216,13 +14216,32 @@ app.post('/api/takes', requireAuth, async (req, res) => {
     const { market_slug, condition_id, question, side, entry_price, amount, thesis, parent_take_id } = req.body;
     if (!question || !side) return res.status(400).json({ error: 'question and side are required' });
 
-    // Get user info for denormalized display
+    // Get user info for denormalized display. Pull display_name from the
+    // most specific source first. Users who signed up as a creator have
+    // their real name in creator_settings but the users row may still hold
+    // the auto-generated wallet stub ("0xda98...b270") or be null — in
+    // which case the take would show up on the feed as "Anonymous" /
+    // "Trader" / the wallet prefix instead of their chosen handle.
     let displayName = 'Anonymous', avatarUrl = null, sharpScore = null;
     if (pool) {
-      const userRows = await dbQuery('SELECT display_name, avatar_url FROM users WHERE id = $1', [req.userId]);
+      const userRows = await dbQuery(
+        `SELECT u.display_name AS u_name, u.avatar_url AS u_avatar,
+                cs.display_name AS cs_name, cs.avatar_url AS cs_avatar
+         FROM users u
+         LEFT JOIN creator_settings cs ON cs.creator_id = u.id
+         WHERE u.id = $1 LIMIT 1`,
+        [req.userId]
+      );
       if (userRows.length) {
-        displayName = userRows[0].display_name || 'Anonymous';
-        avatarUrl = userRows[0].avatar_url || null;
+        const r = userRows[0];
+        // Prefer an explicit, non-wallet-stub display name. A wallet stub
+        // looks like "0x1234...abcd" — we detect that and deprioritize.
+        const isWalletStub = function(s) { return !s || /^0x[0-9a-fA-F]{4,}\.{2,}[0-9a-fA-F]{4,}$/.test(String(s)); };
+        displayName =
+          (!isWalletStub(r.cs_name) && r.cs_name) ||
+          (!isWalletStub(r.u_name)  && r.u_name ) ||
+          r.cs_name || r.u_name || 'Anonymous';
+        avatarUrl = r.cs_avatar || r.u_avatar || null;
       }
     }
 
