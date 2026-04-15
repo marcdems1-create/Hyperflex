@@ -14857,6 +14857,52 @@ async function recomputeFlexScore(userId) {
 }
 
 // ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────
+// Derive a user's Polymarket proxy (Safe wallet) address from their EOA.
+// Positions + balance are held on the PROXY, not the EOA — wallet-sign-in
+// users had their EOA stored as `polymarket_address` which meant the
+// positions API returned empty (data-api.polymarket.com keys off proxy).
+//
+// Uses the Safe factory on Polygon: calls computeProxyAddress(address)
+// via plain JSON-RPC (no ethers dep). Selector: 0x4d0c6cdb. Results are
+// cached in memory for 24h since the proxy is deterministic — the same
+// EOA always produces the same proxy.
+const _polyProxyCache = new Map(); // eoa → { proxy, ts }
+async function derivePolymarketProxy(eoa) {
+  if (!eoa || !/^0x[0-9a-fA-F]{40}$/.test(eoa)) return null;
+  const eoaLower = eoa.toLowerCase();
+  const cached = _polyProxyCache.get(eoaLower);
+  if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) return cached.proxy;
+
+  const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
+  for (const rpc of rpcs) {
+    try {
+      const r = await _nodeFetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [{
+            to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', // Safe factory
+            data: '0x4d0c6cdb000000000000000000000000' + eoaLower.replace('0x', '').padStart(64, '0'),
+          }, 'latest'],
+          id: 1,
+        }),
+      });
+      const data = await r.json();
+      if (data.result && data.result !== '0x' && data.result.length >= 42) {
+        const proxy = '0x' + data.result.slice(-40).toLowerCase();
+        if (proxy !== '0x0000000000000000000000000000000000000000') {
+          _polyProxyCache.set(eoaLower, { proxy, ts: Date.now() });
+          return proxy;
+        }
+      }
+    } catch (_) { /* try next RPC */ }
+  }
+  console.warn('[derive-proxy] Failed to derive for', eoaLower.slice(0, 10));
+  return null;
+}
+
 async function syncAllUserPositions() {
   console.log('[auto-sync] Starting position sync for all connected users');
   try {
@@ -14882,34 +14928,69 @@ async function syncAllUserPositions() {
 async function syncUserPositions(user) {
   const upserts = [];
 
-  // Polymarket
+  // Polymarket — query BOTH the stored polymarket_address AND the derived
+  // Safe proxy, since CTF positions live on the proxy but the stored
+  // address may be either the EOA (for wallet-sign-in users) or the
+  // proxy (for manually-entered addresses). Querying both covers both
+  // cases and dedups on conditionId. Also persists the derived proxy to
+  // users.polymarket_proxy so we skip re-derivation on subsequent syncs.
   if (user.polymarket_address) {
     try {
-      const cacheKey = `poly_${user.polymarket_address}`;
-      let positions = _polyCache.get(cacheKey);
-      if (!positions) {
-        const res = await fetch(`https://data-api.polymarket.com/positions?user=${user.polymarket_address}&limit=50&sortBy=CURRENT&winning=false`);
-        positions = await res.json();
-        if (_polyCache) {
-          _polyCache.set(cacheKey, positions);
-          setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000);
+      const eoa = user.polymarket_address.toLowerCase();
+      let proxy = user.polymarket_proxy || null;
+      if (!proxy) {
+        proxy = await derivePolymarketProxy(eoa);
+        if (proxy && proxy !== eoa) {
+          // Persist for next sync. Tolerate missing column on older
+          // schemas — self-healing boot will add it on next restart.
+          if (pool) {
+            await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [proxy, user.id]).catch(() => {});
+          } else if (supabase) {
+            await supabase.from('users').update({ polymarket_proxy: proxy }).eq('id', user.id).then(() => {}).catch(() => {});
+          }
         }
       }
-      (Array.isArray(positions) ? positions : []).forEach(p => {
-        if (!p.conditionId) return;
-        upserts.push({
-          user_id: user.id,
-          platform: 'polymarket',
-          external_id: p.conditionId,
-          market_title: p.title || p.question || 'Unknown market',
-          side: p.outcome || 'YES',
-          shares: parseFloat(p.size) || 0,
-          pnl: parseFloat(p.cashPnl) || 0,
-          probability: parseFloat(p.curPrice) || 0,
-          market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
-          updated_at: new Date().toISOString()
-        });
-      });
+
+      // Query positions for BOTH addresses in parallel, union the results
+      const addrsToQuery = [eoa];
+      if (proxy && proxy !== eoa) addrsToQuery.push(proxy);
+
+      const results = await Promise.all(addrsToQuery.map(async (addr) => {
+        const cacheKey = `poly_${addr}`;
+        let positions = _polyCache.get(cacheKey);
+        if (!positions) {
+          try {
+            const res = await _nodeFetch(`https://data-api.polymarket.com/positions?user=${addr}&limit=50&sortBy=CURRENT&winning=false`);
+            positions = await res.json();
+            if (_polyCache) {
+              _polyCache.set(cacheKey, positions);
+              setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000);
+            }
+          } catch (_) { positions = []; }
+        }
+        return Array.isArray(positions) ? positions : [];
+      }));
+
+      // Dedup by conditionId (same position shouldn't appear twice)
+      const seen = new Set();
+      for (const batch of results) {
+        for (const p of batch) {
+          if (!p.conditionId || seen.has(p.conditionId + ':' + (p.outcome || ''))) continue;
+          seen.add(p.conditionId + ':' + (p.outcome || ''));
+          upserts.push({
+            user_id: user.id,
+            platform: 'polymarket',
+            external_id: p.conditionId,
+            market_title: p.title || p.question || 'Unknown market',
+            side: p.outcome || 'YES',
+            shares: parseFloat(p.size) || 0,
+            pnl: parseFloat(p.cashPnl) || 0,
+            probability: parseFloat(p.curPrice) || 0,
+            market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
     } catch(e) { console.warn('[sync-poly]', e.message); }
   }
 
@@ -17191,6 +17272,113 @@ app.get('/api/admin/signup-audit', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[admin/signup-audit]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/admin/polymarket-health?secret=... — per-user wallet health.
+// Tells you exactly which users have a polymarket_address but no cached
+// positions, and whether their proxy has been derived. Built after 14
+// users showed 0 positions despite having wallet addresses — root cause
+// was we stored the EOA but Polymarket positions live on the Safe proxy.
+app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      `SELECT u.id, u.email, u.display_name, u.created_at,
+              u.polymarket_address,
+              u.polymarket_proxy,
+              (SELECT COUNT(*) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform='polymarket') AS pos_count,
+              (SELECT MAX(updated_at) FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform='polymarket') AS last_synced
+       FROM users u
+       WHERE u.polymarket_address IS NOT NULL
+       ORDER BY u.created_at DESC
+       LIMIT 500`
+    ).catch(() => []);
+
+    const enriched = rows.map(u => {
+      const status = [];
+      if (!u.polymarket_proxy) status.push('NO_PROXY_DERIVED');
+      if (u.polymarket_proxy && u.polymarket_proxy !== u.polymarket_address) status.push('EOA_WITH_PROXY');
+      if (u.polymarket_proxy && u.polymarket_proxy === u.polymarket_address) status.push('PROXY_STORED_DIRECTLY');
+      if (!u.last_synced) status.push('NEVER_SYNCED');
+      if (u.pos_count === 0) status.push('EMPTY_POSITIONS');
+      return {
+        ...u,
+        pos_count: parseInt(u.pos_count) || 0,
+        status,
+      };
+    });
+
+    const totals = {
+      total_with_wallet: enriched.length,
+      with_proxy_derived: enriched.filter(e => e.polymarket_proxy).length,
+      never_synced: enriched.filter(e => !e.last_synced).length,
+      empty_positions: enriched.filter(e => e.pos_count === 0).length,
+      with_positions: enriched.filter(e => e.pos_count > 0).length,
+    };
+
+    res.json({ ok: true, totals, users: enriched });
+  } catch (err) {
+    console.error('[admin/polymarket-health]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/admin/resync-polymarket?secret=...&user_id=... — force a
+// position resync for one user OR for all users with empty positions.
+// Hits data-api.polymarket.com for each (EOA + derived proxy), rewrites
+// cached_positions. Use this right after detecting stuck users via the
+// health endpoint above; no need to wait for the hourly cron.
+//   ?user_id=X   → single user
+//   ?stuck=1     → all users with polymarket_address but no cached positions
+app.post('/api/admin/resync-polymarket', requireAdmin, async (req, res) => {
+  try {
+    let users;
+    if (req.query.user_id) {
+      users = await dbQuery('SELECT * FROM users WHERE id = $1', [req.query.user_id]).catch(() => []);
+    } else if (req.query.stuck === '1') {
+      users = await dbQuery(
+        `SELECT u.* FROM users u
+         WHERE u.polymarket_address IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM cached_positions cp WHERE cp.user_id = u.id AND cp.platform = 'polymarket')
+         LIMIT 200`
+      ).catch(() => []);
+    } else {
+      return res.status(400).json({ error: 'Pass ?user_id=X or ?stuck=1' });
+    }
+    if (!users.length) return res.json({ ok: true, resynced: 0, note: 'No matching users' });
+
+    const results = [];
+    for (const user of users) {
+      try {
+        await syncUserPositions(user);
+        const posRows = await dbQuery(
+          `SELECT COUNT(*) AS n FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket'`,
+          [user.id]
+        ).catch(() => [{ n: 0 }]);
+        results.push({
+          id: user.id,
+          display_name: user.display_name,
+          polymarket_address: user.polymarket_address,
+          positions_after: parseInt(posRows[0]?.n) || 0,
+          ok: true,
+        });
+      } catch (e) {
+        results.push({ id: user.id, ok: false, error: e.message });
+      }
+    }
+
+    const success = results.filter(r => r.ok).length;
+    const withPositions = results.filter(r => r.ok && r.positions_after > 0).length;
+    res.json({
+      ok: true,
+      resynced: success,
+      users_with_positions_after: withPositions,
+      users_still_empty: success - withPositions,
+      results,
+    });
+  } catch (err) {
+    console.error('[admin/resync-polymarket]', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -42796,6 +42984,12 @@ app.listen(PORT, () => {
       CREATE INDEX IF NOT EXISTS idx_pt_created    ON polymarket_trades(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pt_condition  ON polymarket_trades(condition_id);
       CREATE INDEX IF NOT EXISTS idx_pt_status     ON polymarket_trades(status);
+
+      -- Derived Safe-wallet proxy (computeProxyAddress of polymarket_address).
+      -- Positions + balance live on the proxy, not the EOA. Populated by
+      -- the auto-sync cron or on first /api/polymarket/* request for a user.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_proxy  TEXT;
+      CREATE INDEX IF NOT EXISTS idx_users_polymarket_proxy ON users(polymarket_proxy) WHERE polymarket_proxy IS NOT NULL;
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS login_streak      INTEGER DEFAULT 0;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_date   TEXT;
