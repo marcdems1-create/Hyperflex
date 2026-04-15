@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>HYPERFLEX — Prediction Feed</title>
 <meta name="description" content="See what the best prediction market traders are betting on. Verified predictions with real money, real P&L, real track records.">
 <meta property="og:title" content="HYPERFLEX Prediction Feed">
 <meta property="og:description" content="The social feed for prediction markets. Verified predictions backed by real money.">
 <meta property="og:url" content="https://hyperflex.network/feed">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hyperflex-mobile.css">
 <style>
 :root {
   --bg: #0d0d10;
@@ -195,11 +196,201 @@ a:hover { text-decoration: underline; }
 .load-more-btn { display: block; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: all .15s; font-family: 'Syne', sans-serif; }
 .load-more-btn:hover { border-color: var(--purple-border); color: var(--text); }
 
-@media (max-width: 480px) {
-  .layout { padding: 70px 10px 40px; }
-  .feed-header { flex-direction: column; align-items: flex-start; }
-  .modal { max-height: 100vh; border-radius: 16px 16px 0 0; align-self: flex-end; }
-  .overlay { align-items: flex-end; padding: 0; }
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE REVAMP (≤640px) — 2026
+   ────────────────────────────────────────────────────────────────────────
+   Uses tokens from /hyperflex-mobile.css. Same pattern as the dashboard:
+   unified typography scale, 44px touch targets, true bottom-sheet modals
+   with drag handle + safe-area-inset-bottom, iOS input zoom prevention.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+
+  /* Layout — tighter gutters, respect safe areas */
+  .layout {
+    padding: calc(72px + var(--hfx-safe-top)) var(--hfx-s-3) calc(var(--hfx-s-7) + var(--hfx-safe-bottom));
+    max-width: 100%;
+  }
+
+  /* Feed header — title on row 1, tabs full-width row below for easy thumb reach */
+  .feed-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--hfx-s-3);
+    margin-bottom: var(--hfx-s-4);
+  }
+  .feed-title { font-size: var(--hfx-fs-2xl); letter-spacing: -0.02em; line-height: 1.1; }
+  .tabs {
+    width: 100%;
+    padding: 4px;
+    border-radius: var(--hfx-r-md);
+  }
+  .tab {
+    flex: 1;
+    padding: var(--hfx-s-2) var(--hfx-s-3);
+    font-size: var(--hfx-fs-xs);
+    min-height: var(--hfx-touch-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Wallet prompt — stack vertically, inputs full-width so nothing clips */
+  .wallet-prompt {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--hfx-s-3);
+    padding: var(--hfx-s-4);
+  }
+  .wallet-prompt-text strong { font-size: var(--hfx-fs-md); }
+  .wallet-input-wrap { flex-direction: row; gap: var(--hfx-s-2); width: 100%; }
+  .wallet-input {
+    flex: 1;
+    min-width: 0;
+    min-height: var(--hfx-touch-min);
+    font-size: 16px;  /* iOS zoom preventer */
+    padding: var(--hfx-s-3);
+  }
+  .wallet-connect-btn {
+    min-height: var(--hfx-touch-min);
+    padding: 0 var(--hfx-s-4);
+    font-size: var(--hfx-fs-sm);
+  }
+
+  /* Detection banner — dense but tappable */
+  .detect-banner { margin-bottom: var(--hfx-s-3); border-radius: var(--hfx-r-lg); }
+  .detect-item { padding: var(--hfx-s-3) var(--hfx-s-4); min-height: 64px; }
+  .detect-market { font-size: var(--hfx-fs-sm); }
+  .detect-cta { min-height: 40px; padding: 0 var(--hfx-s-3); font-size: var(--hfx-fs-xs); }
+
+  /* Post bar — bigger tap, clearer affordance */
+  .post-bar {
+    padding: var(--hfx-s-3) var(--hfx-s-4);
+    border-radius: var(--hfx-r-lg);
+    min-height: 56px;
+  }
+  .post-bar-avatar { width: 38px; height: 38px; font-size: 15px; }
+  .post-bar-prompt { font-size: var(--hfx-fs-sm); }
+  .post-bar-btn {
+    min-height: 36px;
+    padding: 0 var(--hfx-s-3);
+    font-size: var(--hfx-fs-xs);
+    border-radius: var(--hfx-r-md);
+  }
+
+  /* Feed cards — prediction + tweet */
+  .pred-card, .tweet-card {
+    padding: var(--hfx-s-4);
+    margin-bottom: var(--hfx-s-3);
+    border-radius: var(--hfx-r-lg);
+  }
+  .pred-avatar, .tweet-avatar { width: 40px; height: 40px; font-size: 15px; }
+  .pred-author, .tweet-name { font-size: var(--hfx-fs-sm); }
+  .pred-market, .tweet-body { font-size: var(--hfx-fs-md); line-height: 1.5; }
+  .pred-thesis { font-size: var(--hfx-fs-sm); line-height: 1.6; padding-left: var(--hfx-s-3); }
+  .pred-follow-btn {
+    min-height: 36px;
+    padding: 0 var(--hfx-s-3);
+    font-size: var(--hfx-fs-xs);
+    border-radius: 999px;
+  }
+
+  /* Modals — true bottom sheet with drag handle + safe-area inset */
+  .overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .overlay.open { animation: hfx-overlay-fade .18s ease-out; }
+  @keyframes hfx-overlay-fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: var(--hfx-r-xl) var(--hfx-r-xl) 0 0;
+    padding-bottom: var(--hfx-safe-bottom);
+    animation: hfx-sheet-slide .26s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes hfx-sheet-slide { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    margin: 10px auto 0;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.2);
+  }
+  .modal-hd { padding: var(--hfx-s-4) var(--hfx-s-5) var(--hfx-s-3); }
+  .modal-title { font-size: var(--hfx-fs-lg); }
+  .modal-close { min-width: 36px; min-height: 36px; }
+  .modal-body { padding: var(--hfx-s-4) var(--hfx-s-5); }
+
+  /* Sticky footer so the primary CTA is always reachable while scrolling */
+  .modal-foot {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding: var(--hfx-s-3) var(--hfx-s-5) calc(var(--hfx-s-3) + var(--hfx-safe-bottom));
+    gap: var(--hfx-s-3);
+    border-top: 1px solid var(--border);
+  }
+  .btn-cancel, .btn-submit-auto, .btn-submit-manual {
+    min-height: var(--hfx-touch-min);
+    font-size: var(--hfx-fs-sm);
+    border-radius: var(--hfx-r-md);
+  }
+
+  /* Composer form fields — iOS-friendly inputs */
+  .field { margin-bottom: var(--hfx-s-4); }
+  .field-label { font-size: var(--hfx-fs-2xs); margin-bottom: var(--hfx-s-2); }
+  .field-input, .field-textarea {
+    font-size: 16px;  /* iOS zoom preventer */
+    min-height: var(--hfx-touch-min);
+    padding: var(--hfx-s-3) var(--hfx-s-3);
+    border-radius: var(--hfx-r-md);
+  }
+  .field-textarea { min-height: 96px; }
+
+  /* Side / conviction / size toggle rows — tappable */
+  .side-btn, .conv-btn {
+    min-height: var(--hfx-touch-min);
+    padding: var(--hfx-s-3);
+    font-size: var(--hfx-fs-sm);
+    border-radius: var(--hfx-r-md);
+  }
+  .size-toggle-btn {
+    min-height: 40px;
+    padding: 0 var(--hfx-s-3);
+    font-size: var(--hfx-fs-xs);
+    border-radius: var(--hfx-r-md);
+  }
+
+  /* Feed empty / loading states — more generous spacing */
+  .feed-empty { padding: var(--hfx-s-8) var(--hfx-s-5); }
+  .feed-empty-title { font-size: var(--hfx-fs-xl); }
+  .feed-empty-sub { font-size: var(--hfx-fs-sm); line-height: 1.55; }
+  .feed-empty-btn {
+    min-height: var(--hfx-touch-lg);
+    font-size: var(--hfx-fs-sm);
+    padding: 0 var(--hfx-s-5);
+    border-radius: var(--hfx-r-md);
+  }
+
+  /* Load-more CTA — bigger tap */
+  .load-more-btn {
+    min-height: var(--hfx-touch-min);
+    font-size: var(--hfx-fs-sm);
+    border-radius: var(--hfx-r-md);
+  }
+
+  /* Generic button press — subtle scale for tactile feel */
+  button:active, .tab:active, .detect-item:active {
+    transform: scale(0.98);
+  }
+}
+
+/* Narrow phones ≤400px — trim 2 things that still feel tight */
+@media (max-width: 400px) {
+  .layout { padding-left: var(--hfx-s-2); padding-right: var(--hfx-s-2); }
+  .pred-card, .tweet-card { padding: var(--hfx-s-3); }
 }
 </style>
 </head>
