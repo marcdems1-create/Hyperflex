@@ -19734,76 +19734,12 @@ cron.schedule('15,45 * * * *', safeCron('scanHedgeAlerts', scanHedgeAlerts));
 
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
 
-// GET /api/profile/:slug/wall — public, returns last 40 wall posts
-app.get('/api/profile/:slug/wall', async (req, res) => {
-  try {
-    const { slug } = req.params;
-    let data, error;
-    if (pool) {
-      data = await dbQuery(`SELECT creator_wall.*, row_to_json(users.*) as users FROM creator_wall LEFT JOIN users ON creator_wall.user_id = users.id WHERE creator_slug = $1 ORDER BY created_at DESC LIMIT 40`, [slug]).catch(() => []);
-    } else {
-      const { data, error } = await supabase .from('creator_wall') .select('id, content, created_at, user_id, users(display_name)') .eq('creator_slug', slug) .order('created_at', { ascending: false }) .limit(40);
-    }
-    if (error) throw error;
-    const posts = (data || []).map(p => ({
-      id: p.id,
-      content: p.content,
-      created_at: p.created_at,
-      user_id: p.user_id,
-      display_name: p.users?.display_name || 'Anonymous',
-    }));
-    res.json({ posts });
-  } catch (err) {
-    console.error('[profile wall GET]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/profile/:slug/wall — auth required, post to creator wall
-app.post('/api/profile/:slug/wall', requireAuth, async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const userId = req.user.id;
-    const content = (req.body.content || '').trim().slice(0, 280);
-    if (!content) return res.status(400).json({ error: 'Content required' });
-
-    // Verify creator exists
-    let creator;
-    if (pool) {
-      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
-      creator = _rows[0] || null;
-    } else {
-      const { data: creator } = await supabase .from('creator_settings') .select('slug') .eq('slug', slug) .single();
-    }
-    if (!creator) return res.status(404).json({ error: 'Community not found' });
-
-    let post, error;
-    if (pool) {
-      const _insData = Array.isArray({ creator_slug: slug, user_id: userId, content }) ? ({ creator_slug: slug, user_id: userId, content })[0] : ({ creator_slug: slug, user_id: userId, content });
-      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
-      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
-      const _rows = await dbQuery(`INSERT INTO creator_wall (${_cols.join(', ')}) VALUES (${_phs}) RETURNING id, content, created_at, user_id`, _vals);
-      post = _rows[0] || null;
-    } else {
-      const { data: post, error } = await supabase .from('creator_wall') .insert({ creator_slug: slug, user_id: userId, content }) .select('id, content, created_at, user_id') .single();
-    }
-    if (error) throw error;
-
-    // Get display name for response
-    let u;
-    if (pool) {
-      const rows = await dbQuery('SELECT display_name FROM users WHERE id = $1 LIMIT 1', [userId]);
-      u = rows[0] || null;
-    } else {
-      const { data: d } = await supabase.from('users').select('display_name').eq('id', userId).single();
-      u = d;
-    }
-    res.json({ post: { ...post, display_name: u?.display_name || 'Anonymous' } });
-  } catch (err) {
-    console.error('[profile wall POST]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+// Community wall — REMOVED (Phase 2). Creator-specific message
+// board on /u/:slug profiles. Post-pivot creator profiles are for
+// trader/predictor display; the social layer is centralized in
+// /explore takes and /feed predictions. GET + POST /api/profile/
+// :slug/wall deleted. creator_wall table left intact (no inserts
+// now, harmless).
 
 // GET /api/profile/:slug/comments — aggregated market comments for this creator's community
 app.get('/api/profile/:slug/comments', async (req, res) => {
