@@ -10561,10 +10561,37 @@ async function maybeFireMilestoneEmail(slug) {
   }
 }
 
-// GET /u/:slug — public creator profile page
-app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
+// GET /u/:slug — redirect to the trader profile at /m/:userId.
+// The old /u/:slug served profile.html (creator-community page from the
+// pre-pivot product: "Members / Live Markets / Join community"). Post-
+// pivot every user is a trader, not a community owner, so the slug now
+// just maps to their user_id and forwards to the member profile where
+// their takes, flex score, followers and track record live.
+// If no creator_settings row exists for the slug we still fall back to
+// the old page so nothing 404s during the transition.
+app.get('/u/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    if (pool) {
+      // creator_settings.slug → creator_id is the user's id
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      if (rows[0] && rows[0].creator_id) {
+        return res.redirect(302, '/m/' + encodeURIComponent(rows[0].creator_id));
+      }
+    } else if (supabase) {
+      const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+      if (data && data.creator_id) {
+        return res.redirect(302, '/m/' + encodeURIComponent(data.creator_id));
+      }
+    }
+  } catch (err) {
+    console.warn('[u-redirect]', err.message);
+  }
+  // Fallback: legacy community page for any slug that doesn't map to a user
+  res.sendFile(path.join(__dirname, 'public', 'profile.html'));
+});
 
-// GET /m/:userId — public member profile page
+// GET /m/:userId — public member (trader) profile page
 app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
 
 // GET /p/:username — public verified trader profile page
@@ -12056,7 +12083,7 @@ app.get('/api/member/:userId', async (req, res) => {
     let userData, positionsData;
     if (pool) {
       const [userRows, posRows] = await Promise.all([
-        dbQuery('SELECT id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved FROM users WHERE id = $1 LIMIT 1', [userId]),
         dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
@@ -12065,7 +12092,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -12125,7 +12152,7 @@ app.get('/api/member/:userId', async (req, res) => {
         resolved_at:    p.markets.resolved_at,
       }));
 
-    // Takes stats + recent takes
+    // Takes stats + recent takes (25 — this is the primary profile artifact)
     let takeStats = { total: 0, correct: 0, incorrect: 0, accuracy: 0, total_agrees: 0 };
     let recentTakes = [];
     if (pool) {
@@ -12137,8 +12164,8 @@ app.get('/api/member/:userId', async (req, res) => {
             COUNT(*) FILTER (WHERE is_correct = false)::int as incorrect,
             COALESCE(SUM(agree_count), 0)::int as total_agrees
             FROM takes WHERE user_id = $1 AND source = 'user'`, [userId]),
-          dbQuery(`SELECT id, question, side, entry_price, thesis, agree_count, disagree_count, is_correct, created_at, market_slug
-            FROM takes WHERE user_id = $1 AND source = 'user' ORDER BY created_at DESC LIMIT 10`, [userId]),
+          dbQuery(`SELECT id, question, side, entry_price, thesis, agree_count, disagree_count, is_correct, created_at, market_slug, condition_id
+            FROM takes WHERE user_id = $1 AND source = 'user' ORDER BY created_at DESC LIMIT 25`, [userId]),
         ]);
         if (countRows[0]) {
           takeStats.total = countRows[0].total;
@@ -12152,15 +12179,53 @@ app.get('/api/member/:userId', async (req, res) => {
       } catch (e) { /* takes table may not exist yet */ }
     }
 
+    // Real follower/following counts from predictor_follows (users.follower_count
+    // is denormalized and not always refreshed — compute live for the profile).
+    let followerCount = 0, followingCount = 0;
+    if (pool) {
+      try {
+        const [fr, fg] = await Promise.all([
+          dbQuery("SELECT COUNT(*)::int AS c FROM predictor_follows WHERE following_id = $1", [userId]),
+          dbQuery("SELECT COUNT(*)::int AS c FROM predictor_follows WHERE follower_id = $1", [userId]),
+        ]);
+        followerCount = fr[0]?.c || 0;
+        followingCount = fg[0]?.c || 0;
+      } catch (e) {
+        // predictor_follows may not exist on this DB — fall back to the denormalized column
+        followerCount = parseInt(userData.follower_count) || 0;
+        followingCount = parseInt(userData.following_count) || 0;
+      }
+    }
+
+    // FLEX Points balance — the rep currency. Sum all-time credited points.
+    let flexPoints = 0;
+    if (pool) {
+      try {
+        const fp = await dbQuery("SELECT COALESCE(SUM(amount), 0)::numeric AS balance FROM flex_points WHERE user_id = $1", [userId]);
+        flexPoints = parseInt(fp[0]?.balance) || 0;
+      } catch (e) {
+        try {
+          // Alternative table shape: flex_points has a single `balance` column per user
+          const fp2 = await dbQuery("SELECT COALESCE(balance, 0)::int AS balance FROM flex_points WHERE user_id = $1 LIMIT 1", [userId]);
+          flexPoints = parseInt(fp2[0]?.balance) || 0;
+        } catch (e2) { /* table absent */ }
+      }
+    }
+
     res.json({
       user: {
         id:           userData.id,
         display_name: userData.display_name || 'Anonymous',
+        username:     userData.username || null,
+        bio:          userData.bio || null,
+        avatar_url:   userData.avatar_url || null,
+        banner_url:   userData.banner_url || null,
         member_since: userData.created_at,
         is_whale:     userData.is_whale || false,
         whale_rank:   userData.whale_rank || null,
         whale_pnl:    userData.whale_pnl != null ? parseFloat(userData.whale_pnl) : null,
         polymarket_address: userData.polymarket_address || null,
+        wallet_verified: userData.wallet_verified || false,
       },
       stats: {
         total_predictions:  positions.length,
@@ -12170,6 +12235,16 @@ app.get('/api/member/:userId', async (req, res) => {
         total_bet: Math.round(totalBet / 100),
         total_won: Math.round(totalWon / 100),
         streak,
+        // Flex score (Brier-based) + denormalized prediction totals — used
+        // for the primary clout badge on the profile hero.
+        flex_score_90d:     userData.flex_score_90d != null ? parseInt(userData.flex_score_90d) : null,
+        flex_score_alltime: userData.flex_score_alltime != null ? parseInt(userData.flex_score_alltime) : null,
+        predictions_resolved: userData.predictions_resolved != null ? parseInt(userData.predictions_resolved) : 0,
+        // FLEX Points balance (rep currency)
+        flex_points: flexPoints,
+        // Real follower graph (computed from predictor_follows)
+        followers: followerCount,
+        following: followingCount,
       },
       take_stats: takeStats,
       recent_takes: recentTakes,
