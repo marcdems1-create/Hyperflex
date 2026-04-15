@@ -49,11 +49,32 @@ a:hover { text-decoration: underline; }
 /* ── Detection banner ── */
 .detect-banner { background: var(--surface); border: 1px solid var(--gold-border); border-top: 2px solid var(--gold); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; display: none; }
 .detect-banner.visible { display: block; }
-.detect-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.detect-header {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  background: none; border-left: 0; border-right: 0; border-top: 0;
+  color: inherit; cursor: pointer; text-align: left;
+  font-family: inherit;
+}
+.detect-header:hover { background: rgba(255,255,255,0.02); }
+.detect-caret {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-dim);
+  transition: transform .2s ease;
+  flex-shrink: 0;
+}
+.detect-banner.collapsed .detect-caret { transform: rotate(-90deg); }
+.detect-banner.collapsed .detect-header { border-bottom: 0; }
+.detect-banner.collapsed .detect-list { display: none; }
+/* When expanded with many positions, cap height and scroll internally so the
+   feed underneath stays reachable without scrolling past 10+ positions. */
+.detect-list { max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .detect-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: pulse 1.5s infinite; flex-shrink: 0; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .detect-label { font-size: 12px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; }
-.detect-sub { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.detect-sub { font-size: 11px; color: var(--text-dim); }
 .detect-list { padding: 8px 0; }
 .detect-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
 .detect-item:last-child { border-bottom: none; }
@@ -421,11 +442,12 @@ a:hover { text-decoration: underline; }
 
   <!-- Detection banner (auto-detect flow) -->
   <div class="detect-banner" id="detectBanner">
-    <div class="detect-header">
+    <button type="button" class="detect-header" id="detectHeader" onclick="toggleDetectBanner()" aria-expanded="true">
       <span class="detect-dot"></span>
       <span class="detect-label">Positions detected</span>
       <span class="detect-sub" id="detectCount"></span>
-    </div>
+      <span class="detect-caret" aria-hidden="true">▾</span>
+    </button>
     <div class="detect-list" id="detectList"></div>
   </div>
 
@@ -675,6 +697,21 @@ function renderDetectionBanner() {
   banner.classList.add('visible');
   countEl.textContent = _detectedPositions.length + ' position' + (_detectedPositions.length !== 1 ? 's' : '');
 
+  // Default collapse behavior:
+  //   • localStorage pref wins if set ('1' = collapsed, '0' = expanded)
+  //   • Otherwise: collapse automatically if >3 positions OR on phones (≤640px)
+  //     so the feed below stays visible without scrolling past a tall list.
+  var pref = null;
+  try { pref = localStorage.getItem('hf_detect_collapsed'); } catch(e) {}
+  var shouldCollapse;
+  if (pref === '1') shouldCollapse = true;
+  else if (pref === '0') shouldCollapse = false;
+  else shouldCollapse = (_detectedPositions.length > 3) ||
+                       (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+  banner.classList.toggle('collapsed', shouldCollapse);
+  var headerEl = document.getElementById('detectHeader');
+  if (headerEl) headerEl.setAttribute('aria-expanded', shouldCollapse ? 'false' : 'true');
+
   list.innerHTML = _detectedPositions.map(function(p, i) {
     var sideClass = p.direction === 'YES' ? 'badge-yes' : 'badge-no';
     var priceLabel = Math.round(p.entry_price * 100) + '¢';
@@ -693,6 +730,18 @@ function renderDetectionBanner() {
       '<button class="detect-cta">Add thesis &amp; post →</button>' +
     '</div>';
   }).join('');
+}
+
+// Toggle the "Positions detected" banner open/closed; persist the user's
+// choice so they don't have to re-collapse on every feed reload.
+function toggleDetectBanner() {
+  var banner = document.getElementById('detectBanner');
+  var header = document.getElementById('detectHeader');
+  if (!banner) return;
+  var nowCollapsed = !banner.classList.contains('collapsed');
+  banner.classList.toggle('collapsed', nowCollapsed);
+  if (header) header.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+  try { localStorage.setItem('hf_detect_collapsed', nowCollapsed ? '1' : '0'); } catch(e) {}
 }
 
 // ── Auto composer ──
