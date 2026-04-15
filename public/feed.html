@@ -193,6 +193,41 @@ a:hover { text-decoration: underline; }
 .size-toggle-btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); font-size: 11px; font-weight: 700; cursor: pointer; transition: all .12s; font-family: 'Syne', sans-serif; }
 .size-toggle-btn.on { background: var(--purple-dim); border-color: var(--purple-border); color: var(--purple); }
 
+/* Position-picker chips inside the composer — user switches between open
+   positions without closing the modal. Mirrors the dashboard's .pt-chip. */
+.ft-chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ft-chip-row::-webkit-scrollbar { display: none; }
+.ft-chip {
+  flex: 0 0 auto;
+  min-width: 160px;
+  max-width: 240px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+  font-family: 'Syne', sans-serif;
+  color: var(--text);
+}
+.ft-chip:hover { border-color: var(--gold-border); }
+.ft-chip.active { border-color: var(--gold); background: rgba(245,166,35,0.08); }
+.ft-chip-side {
+  display: inline-block;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.ft-chip-side.yes { background: var(--green-dim); color: var(--green); }
+.ft-chip-side.no { background: rgba(239,68,68,0.1); color: var(--red); }
+.ft-chip-price { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); }
+.ft-chip-title { display: block; font-size: 12px; color: var(--text); line-height: 1.35; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .modal-foot { display: flex; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); }
 .btn-cancel { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text-dim); font-weight: 700; font-size: 13px; cursor: pointer; font-family: 'Syne', sans-serif; }
 .btn-submit-auto { flex: 2; padding: 10px; border-radius: 8px; border: none; background: var(--purple); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: 'Syne', sans-serif; }
@@ -453,10 +488,11 @@ a:hover { text-decoration: underline; }
     <div class="detect-list" id="detectList"></div>
   </div>
 
-  <!-- Post prediction CTA (manual flow) -->
-  <div class="post-bar" id="postBar" onclick="openManualComposer()">
+  <!-- Post prediction CTA — opens the composer with a position picker, same
+       pattern as the dashboard's "Post Take" button -->
+  <div class="post-bar" id="postBar" onclick="openFeedPostPicker()">
     <div class="post-bar-avatar" id="postAvatar">?</div>
-    <div class="post-bar-prompt">Post a manual prediction...</div>
+    <div class="post-bar-prompt">Share a take on one of your positions...</div>
     <button class="post-bar-btn">Predict</button>
   </div>
 
@@ -475,6 +511,29 @@ a:hover { text-decoration: underline; }
       <button class="modal-close" onclick="closeModal('autoModal')">×</button>
     </div>
     <div class="modal-body">
+
+      <!-- Position picker (populated when composer is opened from the post
+           bar; hidden when opened directly from the detect banner's single
+           position row) -->
+      <div class="field" id="autoPickerField" style="display:none">
+        <label class="field-label">
+          Which position?
+          <span id="autoPickerCount" style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px"></span>
+        </label>
+        <div class="ft-chip-row" id="autoPicker"></div>
+      </div>
+
+      <!-- Empty states (shown when the picker flow is opened but no positions
+           are available — hidden otherwise) -->
+      <div id="autoEmptyState" style="display:none;text-align:center;padding:28px 8px">
+        <div style="font-size:32px;margin-bottom:10px">📭</div>
+        <div style="font-weight:700;margin-bottom:6px" id="autoEmptyTitle">No open positions</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:14px" id="autoEmptyCopy">
+          Open a position on Polymarket and we'll auto-detect it so you can share your thesis.
+        </div>
+        <button class="btn-cancel" onclick="closeModal('autoModal'); openManualComposer()" style="min-height:40px;font-size:12px">Post manually instead →</button>
+      </div>
+
       <div class="field">
         <label class="field-label">Market</label>
         <div class="locked-row" id="autoMarketRow">
@@ -748,44 +807,169 @@ function toggleDetectBanner() {
 }
 
 // ── Auto composer ──
-function openAutoComposer(posIdx) {
-  if (!token) { window.location.href = '/creator/login'; return; }
-  _autoPos = _detectedPositions[posIdx];
-  _autoConviction = null;
-  _autoSizeDisplay = 'range';
+// Apply a position's data to the locked rows in the modal. Shared by both
+// the single-position flow (openAutoComposer from the detect banner) and the
+// picker flow (openFeedPostPicker from the post bar). Does NOT touch the
+// user's thesis / conviction / size-display — those survive chip switches.
+function _autoApplyPosition(pos) {
+  _autoPos = pos;
+  if (!pos) return;
 
-  document.getElementById('autoMarketTitle').textContent = _autoPos.market_title;
-  document.getElementById('autoPlat').textContent = _autoPos.platform;
+  document.getElementById('autoMarketTitle').textContent = pos.market_title || '';
+  document.getElementById('autoPlat').textContent = pos.platform || 'polymarket';
 
   var sideEl = document.getElementById('autoSideBadge');
-  sideEl.textContent = _autoPos.direction;
-  sideEl.className = 'badge ' + (_autoPos.direction === 'YES' ? 'badge-yes' : 'badge-no');
+  sideEl.textContent = pos.direction || '';
+  sideEl.className = 'badge ' + ((pos.direction || '') === 'YES' ? 'badge-yes' : 'badge-no');
 
-  document.getElementById('autoPriceBadge').textContent = Math.round(_autoPos.entry_price * 100) + '¢';
+  document.getElementById('autoPriceBadge').textContent = Math.round((pos.entry_price || 0) * 100) + '¢';
 
   var sizeEl = document.getElementById('autoSizeBadge');
-  if (_autoPos.position_size_usd) {
-    sizeEl.textContent = '$' + _autoPos.position_size_usd.toFixed(0);
+  if (pos.position_size_usd) {
+    sizeEl.textContent = '$' + Number(pos.position_size_usd).toFixed(0);
     sizeEl.style.display = '';
   } else {
     sizeEl.style.display = 'none';
   }
 
-  var tagsRow = document.getElementById('autoTagsRow');
-  tagsRow.innerHTML = (_autoPos.category_tags || []).map(function(t) {
-    return '<span class="pred-tag"><span class="pred-tag-dot">●</span>' + esc(t) + '</span>';
-  }).join('') || '<span style="font-size:11px;color:var(--text-faint)">No tags detected</span>';
+  document.getElementById('autoTagsRow').innerHTML =
+    (pos.category_tags || []).map(function(t) {
+      return '<span class="pred-tag"><span class="pred-tag-dot">●</span>' + esc(t) + '</span>';
+    }).join('') || '<span style="font-size:11px;color:var(--text-faint)">No tags detected</span>';
 
-  document.getElementById('sizeLabel').textContent = _autoPos.size_display || '';
+  document.getElementById('sizeLabel').textContent = pos.size_display || '';
+}
 
-  // Reset fields
+function _autoResetUserInputs() {
+  _autoConviction = null;
+  _autoSizeDisplay = 'range';
   document.getElementById('autoThesis').value = '';
   document.getElementById('autoCC').textContent = '0';
   document.getElementById('autoPreview').textContent = 'Your thesis will appear here…';
   setConviction(null);
   setSizeDisplay('range');
+}
 
+function _autoShowComposerBody() {
+  // Reveal all fields + the preview card (may have been hidden by picker loader)
+  document.querySelectorAll('#autoModal .modal-body > .field:not(#autoPickerField)').forEach(function(f) {
+    f.style.display = '';
+  });
+  var previewCard = document.querySelector('#autoModal .modal-body > div:last-child');
+  if (previewCard) previewCard.style.display = '';
+  document.querySelector('#autoModal .modal-foot').style.display = '';
+}
+
+// Legacy entry point — fires when user taps a specific position row inside
+// the "Positions detected" banner. Picker is hidden; single position locked.
+function openAutoComposer(posIdx) {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  document.getElementById('autoPickerField').style.display = 'none';
+  document.getElementById('autoEmptyState').style.display = 'none';
+  _autoShowComposerBody();
+  _autoApplyPosition(_detectedPositions[posIdx]);
+  _autoResetUserInputs();
   document.getElementById('autoModal').classList.add('open');
+}
+
+// New entry point — fires when user taps the "Share a take on one of your
+// positions" bar. Loads open positions, shows a chip picker at the top of
+// the composer, and lets the user switch between positions mid-compose.
+var _pickerPositions = [];
+async function openFeedPostPicker() {
+  if (!token) { window.location.href = '/creator/login'; return; }
+
+  var modal = document.getElementById('autoModal');
+  var pickerField = document.getElementById('autoPickerField');
+  var emptyState  = document.getElementById('autoEmptyState');
+  var pickerEl    = document.getElementById('autoPicker');
+  var foot        = document.querySelector('#autoModal .modal-foot');
+
+  // Open modal immediately in loading state
+  pickerField.style.display = '';
+  emptyState.style.display  = 'none';
+  pickerEl.innerHTML = '<div style="padding:10px 2px;font-size:12px;color:var(--text-faint)">Loading your open positions…</div>';
+  document.getElementById('autoPickerCount').textContent = '';
+
+  // Hide composer body + footer while loading (keep picker visible)
+  document.querySelectorAll('#autoModal .modal-body > .field:not(#autoPickerField)').forEach(function(f) {
+    f.style.display = 'none';
+  });
+  var previewCard = document.querySelector('#autoModal .modal-body > div:last-child');
+  if (previewCard) previewCard.style.display = 'none';
+  if (foot) foot.style.display = 'none';
+
+  _autoResetUserInputs();
+  modal.classList.add('open');
+
+  try {
+    // 1. Saved Polymarket wallet for this user (set in the dashboard)
+    var wr = await fetch(API + '/api/user/wallets', { headers: authHeaders() });
+    var wd = wr.ok ? await wr.json() : {};
+    var addr = wd && wd.polymarket_address ? String(wd.polymarket_address).trim() : '';
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      pickerField.style.display = 'none';
+      emptyState.style.display = '';
+      document.getElementById('autoEmptyTitle').textContent = 'No wallet connected';
+      document.getElementById('autoEmptyCopy').textContent =
+        "Connect your Polymarket wallet in the dashboard to auto-load positions, or post manually for any market.";
+      return;
+    }
+
+    // 2. Pull open positions for that address
+    var pr = await fetch(API + '/api/wallet/positions', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ wallet_address: addr }),
+    });
+    var pd = pr.ok ? await pr.json() : { positions: [] };
+    _pickerPositions = (pd && pd.positions) || [];
+
+    if (!_pickerPositions.length) {
+      pickerField.style.display = 'none';
+      emptyState.style.display = '';
+      document.getElementById('autoEmptyTitle').textContent = 'No open positions';
+      document.getElementById('autoEmptyCopy').textContent =
+        "Open a position on Polymarket and we'll auto-detect it so you can share your thesis.";
+      return;
+    }
+
+    // 3. Render picker chips
+    document.getElementById('autoPickerCount').textContent = '(' + _pickerPositions.length + ' open)';
+    pickerEl.innerHTML = _pickerPositions.map(function(p, i) {
+      var side = (p.direction || '').toUpperCase() === 'YES' ? 'yes' : 'no';
+      var title = esc(p.market_title || 'Untitled market');
+      return '<button type="button" class="ft-chip" data-idx="' + i + '" onclick="selectPickerPosition(' + i + ')">' +
+        '<span class="ft-chip-side ' + side + '">' + esc(p.direction || '?') + '</span>' +
+        '<span class="ft-chip-price">' + Math.round((p.entry_price || 0) * 100) + '¢</span>' +
+        '<span class="ft-chip-title">' + title + '</span>' +
+      '</button>';
+    }).join('');
+
+    // Reveal the rest of the composer now that we have a position to lock in
+    _autoShowComposerBody();
+    selectPickerPosition(0);
+  } catch (e) {
+    console.warn('[openFeedPostPicker]', e);
+    pickerField.style.display = 'none';
+    emptyState.style.display = '';
+    document.getElementById('autoEmptyTitle').textContent = 'Could not load positions';
+    document.getElementById('autoEmptyCopy').textContent = 'Try again in a moment, or post manually below.';
+  }
+}
+
+// Switch to a different position inside the picker flow. Updates the locked
+// rows but keeps whatever thesis / conviction / size the user already typed.
+function selectPickerPosition(idx) {
+  if (idx < 0 || idx >= _pickerPositions.length) return;
+  _autoApplyPosition(_pickerPositions[idx]);
+  document.querySelectorAll('#autoPicker .ft-chip').forEach(function(el) {
+    el.classList.toggle('active', Number(el.getAttribute('data-idx')) === idx);
+  });
+  var active = document.querySelector('#autoPicker .ft-chip.active');
+  if (active && active.scrollIntoView) {
+    active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
 }
 
 function setConviction(v) {
