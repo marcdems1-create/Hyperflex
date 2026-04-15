@@ -1243,6 +1243,20 @@
         <button class="refresh-btn" onclick="loadInfluencers()">Refresh</button>
       </div>
 
+      <!-- Force-run the auto-fetcher: ignore the 30-min throttle and pull
+           tweets from every active influencer right now. Useful for
+           sanity-checking "why is the feed empty" without waiting on cron. -->
+      <div style="background:rgba(77,159,255,0.05);border:1px solid rgba(77,159,255,0.25);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#4d9fff;margin-bottom:4px;font-family:var(--mono)">Force-Run Auto Fetcher</div>
+            <div style="font-size:10px;color:var(--dim)">Pulls recent tweets from every active X handle (X API → Nitter → Twitter syndication → Jina). Shows exactly how many imported + recent rows.</div>
+          </div>
+          <button id="refreshFetchBtn" onclick="refreshInfluencerTweets()" style="background:#4d9fff;color:#000;border:none;border-radius:6px;padding:10px 22px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Run Now</button>
+        </div>
+        <div id="refreshFetchMsg" style="font-size:11px;margin-top:12px;display:none"></div>
+      </div>
+
       <!-- Quick URL import — just paste a tweet URL -->
       <div style="background:linear-gradient(135deg,rgba(0,230,138,0.04),rgba(201,146,13,0.04));border:1px solid rgba(0,230,138,0.2);border-radius:10px;padding:16px;margin-bottom:20px">
         <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--green);margin-bottom:4px;font-family:var(--mono)">Quick Import — Paste Tweet URL</div>
@@ -3097,6 +3111,50 @@ async function loadBuilderFees(force) {
     loadCreators();
   }
 })();
+
+// Force-run the fetchInfluencerTweets() cron, bypassing the 30-min
+// in-memory throttle. Calls the admin endpoint we added in server.js,
+// renders import count + the last 15 influencer takes so you can see
+// exactly what the auto-fetcher is producing.
+async function refreshInfluencerTweets() {
+  const btn = document.getElementById('refreshFetchBtn');
+  const msg = document.getElementById('refreshFetchMsg');
+  if (!msg) return;
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = 'Running...';
+  msg.style.display = 'block';
+  msg.style.color = 'var(--dim)';
+  msg.textContent = 'Fetching real X posts from all active influencers (can take 30–60s)…';
+  try {
+    const r = await fetch('/api/admin/refresh-influencer-tweets?secret=' + encodeURIComponent(adminSecret), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || 'Request failed');
+    const imported = data.imported_this_run || 0;
+    const after = data.after_count || 0;
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    const recent = (data.recent || []).map(function(t) {
+      const when = t.created_at ? new Date(t.created_at).toLocaleString() : '';
+      const mkt = t.market_slug ? '<a href="/market/' + encodeURIComponent(t.market_slug) + '" target="_blank" style="color:#4d9fff">' + esc(t.market_slug) + '</a>' : '<span style="color:var(--dim)">no-match</span>';
+      return '<div style="padding:8px 10px;border-top:1px solid var(--border);font-size:11px;display:grid;grid-template-columns:140px 1fr 140px;gap:10px;align-items:start">' +
+        '<div style="color:var(--text);font-weight:600">' + esc(t.display_name || '?') + ' <span style="color:var(--dim);font-weight:400">· ' + esc(t.side || '') + '</span></div>' +
+        '<div style="color:var(--text);word-break:break-word">' + esc(t.thesis_preview || '') + '</div>' +
+        '<div style="color:var(--dim);font-size:10px">' + mkt + '<br>' + esc(when) + '</div>' +
+      '</div>';
+    }).join('');
+    msg.innerHTML =
+      '<div style="color:' + (imported > 0 ? 'var(--green)' : 'var(--amber)') + ';margin-bottom:8px;font-weight:700">' +
+        (imported > 0 ? ('✓ Imported ' + imported + ' new tweets (total: ' + after + ')') : ('No new tweets imported this run (total: ' + after + '). Check server logs for the per-influencer breakdown.')) +
+      '</div>' +
+      (recent ? '<div style="border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,0.02);margin-top:8px"><div style="padding:8px 10px;font-size:10px;color:var(--dim);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em">Recent influencer takes</div>' + recent + '</div>' : '');
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
 
 // ── Influencer Management ──
 async function loadInfluencers() {

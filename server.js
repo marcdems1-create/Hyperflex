@@ -12776,6 +12776,14 @@ async function fetchInfluencerTweets() {
     if (!influencers.length) return;
 
     console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
+    // Counters so we can see in Railway logs exactly why nothing imports.
+    // Previously this fn printed "Checking 20" and then silently returned 0
+    // imports, making it impossible to tell if the problem was:
+    //   - no tweets fetched (Nitter/syndication blocked)
+    //   - tweets fetched but prediction-irrelevant
+    //   - tweets relevant but matched 0 live markets
+    //   - tweets matched but duplicated
+    const stats = { fetched: 0, relevant: 0, matched: 0, imported: 0, skipped: 0 };
     let imported = 0;
     const NITTER_INSTANCES = ['nitter.net', 'nitter.privacydev.net', 'nitter.poast.org'];
     const xBearerToken = process.env.X_BEARER_TOKEN;
@@ -12783,6 +12791,7 @@ async function fetchInfluencerTweets() {
     for (const inf of influencers) {
       try {
         let tweetTexts = [];
+        let fetchMethod = null;
 
         // METHOD 1: X API v2 (best, requires Bearer token)
         if (xBearerToken && !tweetTexts.length) {
@@ -12812,6 +12821,7 @@ async function fetchInfluencerTweets() {
                       tweetTexts.push({ id: tw.id, text: tw.text, url: `https://x.com/${inf.x_handle}/status/${tw.id}` });
                     }
                   }
+                  if (tweetTexts.length) fetchMethod = 'x-api';
                 } else if (twRes.status === 429) {
                   console.warn('[influencer-fetch] X API rate limited — falling back to Nitter');
                 }
@@ -12841,34 +12851,106 @@ async function fetchInfluencerTweets() {
               const tweetId = link.match(/status\/(\d+)/)?.[1] || null;
               if (text.length > 20) tweetTexts.push({ id: tweetId, text, url: link });
             }
+            if (tweetTexts.length) { fetchMethod = `nitter:${instance}`; break; }
           } catch (e) { /* nitter instance failed, try next */ }
         }
 
-        // Fallback: try Twitter syndication
+        // METHOD 3: Twitter CDN syndication (cdn.syndication.twimg.com)
+        // Returns JSON with tweet data directly — more reliable than parsing
+        // the HTML embed widget. Used by Twitter's official embed flow.
         if (!tweetTexts.length) {
           try {
             const ctrl = new AbortController();
             const tid = setTimeout(() => ctrl.abort(), 6000);
-            const resp = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${inf.x_handle}`, {
-              signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }
+            const url = `https://cdn.syndication.twimg.com/timeline/profile?screen_name=${encodeURIComponent(inf.x_handle)}&with_replies=false&lang=en`;
+            const resp = await fetch(url, {
+              signal: ctrl.signal,
+              headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json,text/html' }
             }).finally(() => clearTimeout(tid));
             if (resp.ok) {
-              const html = await resp.text();
-              const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
-              let m;
-              while ((m = pRegex.exec(html)) !== null) {
-                const text = m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
-                if (text.length > 30 && text.length < 500 && !/twitter|sign up|log in/i.test(text)) tweetTexts.push({ id: null, text, url: null });
+              const body = await resp.text();
+              // Body is HTML with __NEXT_DATA__ script containing tweets
+              const dataMatch = body.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+              if (dataMatch) {
+                try {
+                  const data = JSON.parse(dataMatch[1]);
+                  const entries = data?.props?.pageProps?.timeline?.entries || [];
+                  for (const e of entries) {
+                    const c = e?.content?.tweet || e?.content?.items?.[0]?.item?.content?.tweet;
+                    if (!c || !c.text) continue;
+                    if (c.text.startsWith('RT @')) continue;
+                    tweetTexts.push({
+                      id:   c.id_str || c.id || null,
+                      text: c.text,
+                      url:  c.permalink ? `https://twitter.com${c.permalink}` : (c.id_str ? `https://x.com/${inf.x_handle}/status/${c.id_str}` : null),
+                    });
+                  }
+                } catch (_) { /* JSON parse failed */ }
               }
+              // Fallback: regex scan for tweet text blocks if __NEXT_DATA__ missing
+              if (!tweetTexts.length) {
+                const pRegex = /<p[^>]*class="[^"]*tweet-text[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+                let m;
+                while ((m = pRegex.exec(body)) !== null) {
+                  const text = m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+                  if (text.length > 20 && text.length < 500) tweetTexts.push({ id: null, text, url: null });
+                }
+              }
+              if (tweetTexts.length) fetchMethod = 'cdn-syndication';
             }
-          } catch (e) { /* syndication failed */ }
+          } catch (e) { /* syndication CDN failed */ }
         }
 
-        if (!tweetTexts.length) continue;
+        // METHOD 4: Jina AI reader (r.jina.ai) as last-resort mirror.
+        // r.jina.ai proxies any URL through a headless browser and returns
+        // clean markdown. Works when Nitter is dead and syndication shape
+        // has changed — rate-limited but good enough for a 30-min cron.
+        if (!tweetTexts.length) {
+          try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 10000);
+            const url = `https://r.jina.ai/https://x.com/${encodeURIComponent(inf.x_handle)}`;
+            const resp = await fetch(url, {
+              signal: ctrl.signal,
+              headers: { 'User-Agent': 'Mozilla/5.0', 'X-Return-Format': 'text' }
+            }).finally(() => clearTimeout(tid));
+            if (resp.ok) {
+              const text = await resp.text();
+              // Markdown lines that look like tweets: non-empty, >30 chars,
+              // <500 chars, not boilerplate. Extract URLs like /status/ID.
+              const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+              const statusRe = new RegExp(`(https?:\\/\\/(?:x|twitter)\\.com\\/${inf.x_handle}\\/status\\/\\d+)`, 'gi');
+              let currentText = '';
+              for (const line of lines) {
+                if (/^#|^!\[|^\*\s*\*/.test(line)) continue; // headers, images, separators
+                if (/^(log in|sign up|follow|more|replies|home|explore|notifications)$/i.test(line)) continue;
+                const urlMatch = line.match(statusRe);
+                if (urlMatch && currentText.length > 20) {
+                  const tweetId = urlMatch[0].match(/status\/(\d+)/)?.[1] || null;
+                  tweetTexts.push({ id: tweetId, text: currentText.trim(), url: urlMatch[0] });
+                  currentText = '';
+                  if (tweetTexts.length >= 10) break;
+                  continue;
+                }
+                if (line.length > 20 && line.length < 400 && !line.startsWith('http')) {
+                  currentText = (currentText + ' ' + line).trim();
+                }
+              }
+              if (tweetTexts.length) fetchMethod = 'jina';
+            }
+          } catch (e) { /* jina failed */ }
+        }
 
-        // Filter for prediction-relevant content and require market match
+        if (!tweetTexts.length) {
+          stats.skipped++;
+          continue;
+        }
+        stats.fetched += tweetTexts.length;
+
+        // Filter for prediction-relevant content
         for (const tw of tweetTexts.slice(0, 5)) {
           if (!isPredictionRelevant(tw.text)) continue;
+          stats.relevant++;
 
           // Dedupe
           const textPrefix = tw.text.substring(0, 80);
@@ -12878,7 +12960,10 @@ async function fetchInfluencerTweets() {
           ).catch(() => []);
           if (dupe.length) continue;
 
-          // Match to Polymarket market — REQUIRED (no match = skip)
+          // Match to Polymarket market — looser scoring than before.
+          // Was: ratio >= 0.5 && hits >= 3 (almost never matched).
+          // Now: ratio >= 0.25 && hits >= 2 OR a direct $TICKER / slug
+          // keyword hit.
           let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
           if (_screenerCache && _screenerCache.data) {
             const tweetLower = tw.text.toLowerCase();
@@ -12889,20 +12974,29 @@ async function fetchInfluencerTweets() {
               if (!qWords.length) continue;
               const hits = qWords.filter(w => tweetLower.includes(w)).length;
               const ratio = hits / qWords.length;
-              if (ratio > bestScore && ratio >= 0.5 && hits >= 3) { bestScore = ratio; bestMatch = m; }
+              // Also consider slug keyword hit as a strong signal
+              const slug = (m.slug || '').toLowerCase();
+              const slugHit = slug && tweetLower.includes(slug.replace(/-/g, ' '));
+              const score = slugHit ? Math.max(ratio, 0.5) : ratio;
+              if (score > bestScore && ((ratio >= 0.25 && hits >= 2) || slugHit)) {
+                bestScore = score;
+                bestMatch = m;
+              }
             }
             if (bestMatch) {
               matchedSlug = bestMatch.slug || bestMatch.event_slug;
               matchedQuestion = bestMatch.question;
               matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
+              stats.matched++;
             }
           }
 
-          // No market match = skip this tweet (every take must link to a real market)
-          if (!matchedSlug) continue;
-
-          const textLower = tw.text.toLowerCase();
-          const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(textLower) ? 'YES' : 'NO';
+          // No market match — still store the tweet so it shows on the feed
+          // as an influencer take. Without the feed endpoint's mandatory
+          // market_slug filter these would never appear, but the updated
+          // feed query below accepts NULL slugs and just omits the live
+          // market sub-card.
+          const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(tw.text.toLowerCase()) ? 'YES' : 'NO';
           const tweetUrl = tw.url || (tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null);
           const thesis = tw.text + (tweetUrl ? '\n\n' + tweetUrl : '');
           const avatar = inf.avatar_url || `https://unavatar.io/x/${inf.x_handle}`;
@@ -12910,16 +13004,18 @@ async function fetchInfluencerTweets() {
           await dbQuery(
             `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, thesis, source)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'influencer')`,
-            [inf.user_id, inf.display_name || ('@' + inf.x_handle), avatar, matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
+            [inf.user_id, inf.display_name || ('@' + inf.x_handle), avatar, matchedSlug, matchedConditionId, matchedQuestion || tw.text.slice(0, 140), side, thesis]
           ).catch(e => console.warn('[influencer-import]', e.message));
           imported++;
+          stats.imported++;
         }
 
+        console.log(`[influencer-fetch] @${inf.x_handle} via ${fetchMethod || 'none'} — ${tweetTexts.length} tweets, ${stats.imported} imported so far`);
         await new Promise(r => setTimeout(r, 1500));
       } catch (e) { /* skip this influencer */ }
     }
 
-    if (imported > 0) console.log(`[influencer-fetch] Auto-imported ${imported} tweets as takes`);
+    console.log(`[influencer-fetch] Done — fetched=${stats.fetched} relevant=${stats.relevant} matched=${stats.matched} imported=${stats.imported} skipped=${stats.skipped}`);
   } catch (e) { console.warn('[influencer-fetch] Error:', e.message); }
 }
 
@@ -12943,6 +13039,33 @@ cron.schedule('*/30 * * * *', () => {
 });
 // Also run on boot after a delay
 setTimeout(() => fetchInfluencerTweets().catch(() => {}), 60000);
+
+// Admin-only: force-run the influencer fetcher RIGHT NOW (bypass the 30-min
+// in-memory throttle). Used to sanity-check "why are there no real X posts"
+// without waiting for the next cron tick. Returns the imported count and a
+// sample of recent influencer takes so the admin UI can display them.
+app.post('/api/admin/refresh-influencer-tweets', async (req, res) => {
+  const secret = req.query.secret || req.body?.secret;
+  if (!secret || secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'forbidden' });
+  try {
+    _lastInfluencerFetch = 0; // reset throttle
+    const before = await dbQuery("SELECT COUNT(*)::int AS cnt FROM takes WHERE source='influencer'").catch(() => [{ cnt: 0 }]);
+    await fetchInfluencerTweets();
+    const after  = await dbQuery("SELECT COUNT(*)::int AS cnt FROM takes WHERE source='influencer'").catch(() => [{ cnt: 0 }]);
+    const recent = await dbQuery(
+      "SELECT id, display_name, market_slug, question, side, LEFT(thesis, 160) AS thesis_preview, created_at FROM takes WHERE source='influencer' ORDER BY created_at DESC LIMIT 15"
+    ).catch(() => []);
+    res.json({
+      ok: true,
+      before_count: before[0]?.cnt || 0,
+      after_count:  after[0]?.cnt || 0,
+      imported_this_run: Math.max(0, (after[0]?.cnt || 0) - (before[0]?.cnt || 0)),
+      recent,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── MARKET-FIRST INFLUENCER TAKES ──────────────────────────────────────────
 // Flipped approach: scan Polymarket markets → match to influencer categories → create takes.
@@ -14904,15 +15027,21 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     }));
 
     // ── 2b. Influencer takes from `takes` table (source='influencer') ──
-    // The fetchInfluencerTweets() cron writes here (has Nitter fallback
-    // so it works without a paid X API tier). influencer_posts only gets
-    // populated by monitorPolymarketInfluencers() which requires X_BEARER_
-    // TOKEN and hits 402 in practice, so this is where most tweet data
-    // actually lives. Dedup'd against influencer_posts by thesis prefix.
+    // The fetchInfluencerTweets() cron writes here (has Nitter + syndication
+    // + Jina fallback so it works without a paid X API tier). influencer_posts
+    // only gets populated by monitorPolymarketInfluencers() which requires
+    // X_BEARER_TOKEN and hits 402 in practice, so this is where most tweet
+    // data actually lives. Dedup'd against influencer_posts by thesis prefix.
+    //
+    // NOTE: previously this required `market_slug IS NOT NULL`, which meant
+    // a real tweet that couldn't be auto-matched to a live Polymarket market
+    // was fetched and stored but NEVER displayed. Dropping that filter so
+    // every real influencer tweet shows up — the live-market sub-card just
+    // renders conditionally based on whether we found a match.
     let takeInfluencerPosts = [];
     if (pool) {
       const params = [];
-      let where = `WHERE source = 'influencer' AND market_slug IS NOT NULL`;
+      let where = `WHERE source = 'influencer'`;
       if (cursor) { params.push(cursor); where += ` AND created_at < $${params.length}`; }
       params.push(Math.max(20, lim));
       takeInfluencerPosts = await dbQuery(
