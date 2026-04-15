@@ -22266,6 +22266,80 @@ app.get('/api/markets/search', async (req, res) => {
       return false;
     };
 
+    // ────────────────────────────────────────────────────────────────────
+    // RELEVANCE SCORER
+    // Previously market search sorted purely by 24h volume, which meant a
+    // generic high-volume market outranked an exact-phrase match. Example
+    // from a user report: query "trump announces end of mil" returned
+    // "Will China invade Taiwan by end of 2026?" ($20M) as #1 while the
+    // actually-matching "Trump announces end of military operations
+    // against Iran by April 30th?" ($5M) was buried at #4.
+    //
+    // This scorer fixes that by ranking semantic match BEFORE volume:
+    //
+    //   Exact phrase appears in question   +1000
+    //   Question starts with the query     +500  (fast top-of-list hit)
+    //   All words appear in order          +300  (near-exact paraphrase)
+    //   All words appear (any order)       +150
+    //   Per-word match (bounded)           +25 × matched words
+    //   First query word is a prefix       +50
+    //   Position bonus (early = better)    +30 * (1 - pos/len) for phrase
+    //   Volume (tiebreaker only)           +log10(volume)  ~ 0–7 range
+    //
+    // Returned score is a Number; caller sorts DESC.
+    const scoreRelevance = (question, volume) => {
+      const t = (question || '').toLowerCase().trim();
+      if (!t) return -1;
+      let score = 0;
+
+      // 1. Exact phrase (query appears verbatim)
+      const phraseIdx = t.indexOf(q);
+      if (phraseIdx !== -1) {
+        score += 1000;
+        // Earlier in the title = more relevant
+        score += Math.max(0, 30 * (1 - phraseIdx / Math.max(1, t.length)));
+        // Title starts with the phrase — strong signal
+        if (phraseIdx === 0) score += 500;
+      }
+
+      // 2. All query words appear IN ORDER (near-paraphrase)
+      if (qWords.length > 1) {
+        let cursor = 0, allInOrder = true;
+        for (const w of qWords) {
+          const idx = t.indexOf(w, cursor);
+          if (idx === -1) { allInOrder = false; break; }
+          cursor = idx + w.length;
+        }
+        if (allInOrder) score += 300;
+      }
+
+      // 3. All query words appear, any order
+      if (qWords.length > 0 && qWords.every(w => t.includes(w))) {
+        score += 150;
+      }
+
+      // 4. Per-word matches (bounded so a long query of noise can't dominate)
+      let wordHits = 0;
+      for (const w of qWords) {
+        if (w.length >= 2 && t.includes(w)) wordHits++;
+      }
+      score += Math.min(wordHits, 6) * 25;
+
+      // 5. Prefix of first query word (helps while still typing — "tru" → trump)
+      if (qWords[0] && qWords[0].length >= 3) {
+        const firstWordPrefix = qWords[0].slice(0, Math.max(3, qWords[0].length));
+        if (t.indexOf(firstWordPrefix) !== -1 && t.indexOf(firstWordPrefix) < 20) {
+          score += 50;
+        }
+      }
+
+      // 6. Volume as tiebreaker — log-scaled so it never swamps relevance
+      const v = parseFloat(volume) || 0;
+      if (v > 0) score += Math.log10(v + 1);
+
+      return score;
+    };
+
     // --- Sportsbook odds via The Odds API ---
     const ODDS_API_KEY = process.env.ODDS_API_KEY;
     // Map common search terms to sport keys
@@ -22410,7 +22484,10 @@ app.get('/api/markets/search', async (req, res) => {
       } catch (e) { console.warn('[poly-broad] parse error:', e.message); }
     }
 
-    polyMarkets.sort((a, b) => b.volume - a.volume);
+    // Relevance-first sort. Volume is a log-scaled tiebreaker inside the
+    // scorer so an exact phrase match always outranks a higher-volume but
+    // semantically-weaker result.
+    polyMarkets.sort((a, b) => scoreRelevance(b.question, b.volume) - scoreRelevance(a.question, a.volume));
     polyMarkets = polyMarkets.slice(0, 50);
 
     // ── Cross-reference screener cache for live CLOB prices ──
@@ -22575,7 +22652,11 @@ app.get('/api/markets/search', async (req, res) => {
       delete m._ticker;
     });
     // Re-filter: remove markets that are now confirmed 95%+ or 5%- after price backfill
-    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95));
+    const kalshiFiltered = kalshiMarkets
+      .filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95))
+      // Same relevance-first sort as Polymarket so the two panels stay
+      // in sync when the pair-matcher runs below.
+      .sort((a, b) => scoreRelevance(b.question, b.volume) - scoreRelevance(a.question, a.volume));
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
