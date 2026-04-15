@@ -639,10 +639,14 @@ async function loadFeed(append) {
     feedData = [];
   }
 
-  // Use both new predictions API and legacy social predictions
+  // Use both new predictions API and legacy social predictions.
+  // The server route supports `mode` (foryou|following) and `cursor` for
+  // pagination — pass both so the Following tab actually filters and
+  // "Load more" hits the cursor path instead of returning the same page.
+  var mode = currentTab === 'following' ? 'following' : 'foryou';
   var url = currentTab === 'trending'
     ? API + '/api/social/feed/trending?limit=20'
-    : API + '/api/predictions/feed?limit=20' + (nextCursor ? '&before=' + encodeURIComponent(nextCursor) : '');
+    : API + '/api/predictions/feed?limit=20&mode=' + mode + (nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '');
 
   try {
     var r = await fetch(url, { headers: authHeaders() });
@@ -662,7 +666,9 @@ async function loadFeed(append) {
 
     var preds = (data.predictions || []).map(normaliseNew);
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
-    nextCursor = data.next_cursor || null;
+    // Server returns `cursor` (new shape) — keep `next_cursor` as fallback
+    // for the legacy social feed response used above.
+    nextCursor = data.cursor || data.next_cursor || null;
     renderFeed(false);
     document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
   } catch (e) {

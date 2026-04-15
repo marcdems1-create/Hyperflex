@@ -20431,7 +20431,17 @@ async function submitPredictionPost() {
     var data = await res.json();
     if (data.ok) {
       closePredictComposer();
-      showToast('Posted to your feed!');
+      // Include a clickable link so the user has an obvious path to their
+      // take on the global feed and their profile — previously the toast
+      // said "Posted to your feed!" but showed no visible confirmation
+      // anywhere else on the page, making users think it failed silently.
+      var token2 = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+      var myId = null;
+      try { myId = JSON.parse(atob(token2.split('.')[1])).id; } catch(e) {}
+      var mySlug = (typeof creatorData !== 'undefined' && creatorData && creatorData.creator && creatorData.creator.slug) || window._creatorSlug || null;
+      var linkHtml = ' <a href="/feed" style="color:#f5a623;text-decoration:underline;font-weight:700">View feed →</a>';
+      if (mySlug) linkHtml += ' <a href="/' + mySlug + '" style="color:#f5a623;text-decoration:underline;font-weight:700;margin-left:8px">View my profile →</a>';
+      showToast('✓ Posted to your feed!' + linkHtml, 'success', 8000);
       // Mark the onboarding "post your first take" step complete
       if (typeof setHasPostedPrediction === 'function') setHasPostedPrediction();
     } else {
