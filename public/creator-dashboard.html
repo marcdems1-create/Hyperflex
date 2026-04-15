@@ -6119,6 +6119,123 @@ window.hfxOpenDeposit = function() {
   </div>
 </div>
 
+<!-- ══ Post Take Modal (composer with position picker) ══ -->
+<div class="modal-overlay" id="postTakeModal" style="display:none">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title">📢 Post a Take</div>
+      <button class="modal-close" onclick="closePostTakeModal()">×</button>
+    </div>
+    <div class="modal-body" id="postTakeBody">
+      <!-- Loading state -->
+      <div id="postTakeLoading" style="text-align:center;padding:40px 0;color:var(--dim);font-size:13px">
+        Loading your open positions…
+      </div>
+
+      <!-- Empty state (no positions found) -->
+      <div id="postTakeEmpty" style="display:none;text-align:center;padding:32px 12px">
+        <div style="font-size:36px;margin-bottom:12px">📭</div>
+        <div style="font-weight:700;margin-bottom:6px">No open Polymarket positions</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px">
+          Open a position on Polymarket and we'll auto-detect it here so you can share your thesis.
+        </div>
+        <button class="btn-secondary" onclick="closePostTakeModal(); showTab('portfolio')">Connect wallet →</button>
+      </div>
+
+      <!-- Composer (shown when at least one position is found) -->
+      <div id="postTakeComposer" style="display:none">
+        <!-- Position picker -->
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">
+            Which position?
+            <span id="postTakePositionCount" style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px"></span>
+          </label>
+          <div id="postTakePositionPicker" style="display:flex;gap:8px;overflow-x:auto;padding:4px 2px;scrollbar-width:thin"></div>
+        </div>
+
+        <!-- Selected position readout -->
+        <div style="background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px">
+          <div id="postTakeMarketTitle" style="font-size:13px;font-weight:600;line-height:1.4;margin-bottom:10px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span id="postTakeSideBadge" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px"></span>
+            <span id="postTakePriceBadge" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.06);color:var(--text)"></span>
+            <span id="postTakeSizeBadge" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.06);color:var(--text)"></span>
+          </div>
+        </div>
+
+        <!-- Thesis -->
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">
+            Thesis <span style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0">(optional — what's your edge?)</span>
+          </label>
+          <textarea id="postTakeThesis" placeholder="What does the market miss? Why are you right?" maxlength="500"
+            style="width:100%;min-height:100px;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:10px 12px;resize:vertical;outline:none;box-sizing:border-box"
+            oninput="document.getElementById('postTakeThesisCount').textContent = this.value.length"></textarea>
+          <div style="text-align:right;font-size:11px;color:var(--text-faint);font-family:var(--mono);margin-top:4px">
+            <span id="postTakeThesisCount">0</span>/500
+          </div>
+        </div>
+
+        <!-- Conviction -->
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">Conviction</label>
+          <div id="postTakeConvictionRow" style="display:flex;gap:8px">
+            <button type="button" class="btn-secondary pt-conv" data-conv="low" onclick="setPostTakeConviction('low')" style="flex:1">Low</button>
+            <button type="button" class="btn-secondary pt-conv" data-conv="medium" onclick="setPostTakeConviction('medium')" style="flex:1">Medium</button>
+            <button type="button" class="btn-secondary pt-conv" data-conv="high" onclick="setPostTakeConviction('high')" style="flex:1">High</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" id="postTakeFooter" style="display:none">
+      <button class="btn-secondary" onclick="closePostTakeModal()">Cancel</button>
+      <button class="btn-primary" id="postTakeSubmitBtn" onclick="submitPostTake()">Post to Feed</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Position-picker chips */
+  .pt-chip {
+    flex: 0 0 auto;
+    min-width: 160px;
+    max-width: 240px;
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, background .15s;
+    font-family: inherit;
+  }
+  .pt-chip:hover { border-color: var(--gold); }
+  .pt-chip.active { border-color: var(--gold); background: rgba(201,146,13,0.08); }
+  .pt-chip-side {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .pt-chip-side.yes { background: rgba(0,230,138,0.15); color: #00e68a; }
+  .pt-chip-side.no  { background: rgba(255,77,106,0.15); color: #ff4d6a; }
+  .pt-chip-title {
+    display: block;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.35;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pt-conv.on { background: var(--gold); color: #0a0a0f; border-color: var(--gold); }
+</style>
+
 <!-- Create Market Modal -->
 <div class="modal-overlay" id="createModal">
   <div class="modal">
@@ -8004,17 +8121,196 @@ function setHasPostedPrediction() {
 
 // Positions tab where each position row already has a "Post to Feed"
 // button, and shows a prompt toast so users know what to do next.
-function openPostTakeFlow() {
-  showTab('portfolio');
-  if (typeof showToast === 'function') {
-    showToast('📢 Pick a position below and tap "Post to Feed" to share a take', 'info', 4000);
+// ── Post Take modal: pick from open positions, add thesis, post to feed ──
+// Fetches the user's saved Polymarket wallet from /api/user/wallets, pulls
+// current positions via /api/wallet/positions, and opens a composer modal
+// with a horizontally-scrollable picker so they can switch between positions
+// before posting.
+var _postTakePositions = [];
+var _postTakeActiveIdx = 0;
+var _postTakeConviction = null;
+
+async function openPostTakeFlow() {
+  var modal = document.getElementById('postTakeModal');
+  if (!modal) {
+    // Defensive: older cached HTML without the modal — fall back to old flow
+    showTab('portfolio');
+    return;
   }
-  // Scroll to the positions area on mobile so the button row is in view
-  setTimeout(function() {
-    var el = document.getElementById('openPositionsSection') || document.querySelector('[data-tab-content="portfolio"]');
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 100);
+
+  // Reset state
+  _postTakePositions = [];
+  _postTakeActiveIdx = 0;
+  _postTakeConviction = null;
+  document.getElementById('postTakeThesis').value = '';
+  document.getElementById('postTakeThesisCount').textContent = '0';
+  setPostTakeConviction(null);
+
+  // Show modal in loading state
+  document.getElementById('postTakeLoading').style.display = '';
+  document.getElementById('postTakeEmpty').style.display = 'none';
+  document.getElementById('postTakeComposer').style.display = 'none';
+  document.getElementById('postTakeFooter').style.display = 'none';
+  modal.style.display = 'flex';
+  modal.classList.add('show');
+
+  // Get auth token (dashboard uses this same key pattern elsewhere)
+  var token = localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_token') || '';
+  if (!token) {
+    closePostTakeModal();
+    window.location.href = '/creator/login';
+    return;
+  }
+  var authHdrs = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
+
+  try {
+    // 1. Get saved wallet address from dashboard
+    var walletRes = await fetch('/api/user/wallets', { headers: authHdrs });
+    var walletData = walletRes.ok ? await walletRes.json() : {};
+    var addr = walletData && walletData.polymarket_address ? String(walletData.polymarket_address).trim() : '';
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      // No connected wallet — show the "connect first" empty state
+      document.getElementById('postTakeLoading').style.display = 'none';
+      document.getElementById('postTakeEmpty').style.display = '';
+      return;
+    }
+
+    // 2. Pull positions for that address
+    var posRes = await fetch('/api/wallet/positions', {
+      method: 'POST',
+      headers: authHdrs,
+      body: JSON.stringify({ wallet_address: addr }),
+    });
+    var posData = posRes.ok ? await posRes.json() : { positions: [] };
+    _postTakePositions = (posData && posData.positions) || [];
+
+    document.getElementById('postTakeLoading').style.display = 'none';
+    if (!_postTakePositions.length) {
+      document.getElementById('postTakeEmpty').style.display = '';
+      return;
+    }
+
+    // 3. Render picker + composer
+    document.getElementById('postTakeComposer').style.display = '';
+    document.getElementById('postTakeFooter').style.display = '';
+    renderPostTakePicker();
+    selectPostTakePosition(0);
+  } catch (e) {
+    console.warn('[openPostTakeFlow]', e);
+    document.getElementById('postTakeLoading').style.display = 'none';
+    document.getElementById('postTakeEmpty').style.display = '';
+  }
 }
+
+function closePostTakeModal() {
+  var modal = document.getElementById('postTakeModal');
+  if (modal) {
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+  }
+}
+
+function renderPostTakePicker() {
+  var picker = document.getElementById('postTakePositionPicker');
+  var countEl = document.getElementById('postTakePositionCount');
+  if (!picker) return;
+  countEl.textContent = '(' + _postTakePositions.length + ' open)';
+  picker.innerHTML = _postTakePositions.map(function(p, i) {
+    var side = (p.direction || '').toUpperCase() === 'YES' ? 'yes' : 'no';
+    var title = (p.market_title || 'Untitled market').replace(/</g, '&lt;');
+    return '<button type="button" class="pt-chip" data-idx="' + i + '" onclick="selectPostTakePosition(' + i + ')">' +
+      '<span class="pt-chip-side ' + side + '">' + (p.direction || '?') + '</span>' +
+      '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + Math.round((p.entry_price || 0) * 100) + '¢</span>' +
+      '<span class="pt-chip-title">' + title + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function selectPostTakePosition(idx) {
+  if (idx < 0 || idx >= _postTakePositions.length) return;
+  _postTakeActiveIdx = idx;
+
+  // Update chip highlights
+  document.querySelectorAll('#postTakePositionPicker .pt-chip').forEach(function(el) {
+    el.classList.toggle('active', Number(el.getAttribute('data-idx')) === idx);
+  });
+  // Scroll the active chip into view
+  var active = document.querySelector('#postTakePositionPicker .pt-chip.active');
+  if (active && active.scrollIntoView) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+  var p = _postTakePositions[idx];
+  document.getElementById('postTakeMarketTitle').textContent = p.market_title || '';
+  var side = (p.direction || '').toUpperCase();
+  var sideEl = document.getElementById('postTakeSideBadge');
+  sideEl.textContent = side;
+  sideEl.style.background = side === 'YES' ? 'rgba(0,230,138,0.15)' : 'rgba(255,77,106,0.15)';
+  sideEl.style.color      = side === 'YES' ? '#00e68a' : '#ff4d6a';
+  document.getElementById('postTakePriceBadge').textContent = 'Entry ' + Math.round((p.entry_price || 0) * 100) + '¢';
+  var sizeBadge = document.getElementById('postTakeSizeBadge');
+  if (p.position_size_usd) {
+    sizeBadge.textContent = '$' + Number(p.position_size_usd).toFixed(0);
+    sizeBadge.style.display = '';
+  } else {
+    sizeBadge.style.display = 'none';
+  }
+}
+
+function setPostTakeConviction(v) {
+  _postTakeConviction = v;
+  document.querySelectorAll('#postTakeConvictionRow .pt-conv').forEach(function(el) {
+    el.classList.toggle('on', el.getAttribute('data-conv') === v);
+  });
+}
+
+async function submitPostTake() {
+  var p = _postTakePositions[_postTakeActiveIdx];
+  if (!p) return;
+  var thesis = document.getElementById('postTakeThesis').value.trim();
+  var btn = document.getElementById('postTakeSubmitBtn');
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = 'Posting…';
+
+  var token = localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_token') || '';
+  try {
+    var r = await fetch('/api/predictions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        platform:      p.platform || 'polymarket',
+        market_id:     p.market_id,
+        market_title:  p.market_title,
+        direction:     p.direction,
+        entry_price:   p.entry_price,
+        conviction:    _postTakeConviction,
+        thesis_text:   thesis || null,
+        category_tags: p.category_tags || [],
+        size_display:  'range',
+      }),
+    });
+    var data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to post');
+    closePostTakeModal();
+    if (typeof showToast === 'function') {
+      showToast('✅ Take posted — view it on the feed', 'success', 4500);
+    }
+  } catch (e) {
+    alert('Error posting take: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+// Close on overlay click (but not on inner modal click)
+document.addEventListener('DOMContentLoaded', function() {
+  var overlay = document.getElementById('postTakeModal');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closePostTakeModal();
+    });
+  }
+});
 
 function showTab(tab) {
   ensureMoreExpanded(tab);
