@@ -34328,6 +34328,41 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
   }
 });
 
+// ── Builder attribution via @polymarket/builder-signing-sdk ──────────────────
+// BuilderConfig is ESM-only, so we load it via dynamic import into a module-
+// level variable that all order handlers share. The variable is set within
+// ~50 ms of boot; in the rare case an order arrives before it resolves the
+// handler logs a warning and falls through to the existing HMAC fallback.
+let _builderConfig = null;
+(async () => {
+  try {
+    const { BuilderConfig } = await import('@polymarket/builder-signing-sdk');
+    const key        = process.env.POLY_BUILDER_API_KEY;
+    const secret     = process.env.POLY_BUILDER_SECRET;
+    const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
+    if (key && secret && passphrase) {
+      _builderConfig = new BuilderConfig({ localBuilderCreds: { key, secret, passphrase } });
+      console.log('[boot] Builder attribution enabled via BuilderConfig (POLY_BUILDER_API_KEY set)');
+    } else {
+      console.warn('[boot] POLY_BUILDER_* env vars missing — orders will NOT earn builder fees');
+    }
+  } catch (e) {
+    console.warn('[boot] BuilderConfig init failed:', e.message);
+  }
+})();
+
+// Returns POLY_BUILDER_* headers for an order, or {} if credentials aren't ready.
+async function getBuilderHeaders(method, path, body) {
+  if (!_builderConfig) return {};
+  try {
+    const headers = await _builderConfig.generateBuilderHeaders(method, path, body);
+    return headers || {};
+  } catch (e) {
+    console.warn('[builder] generateBuilderHeaders error:', e.message);
+    return {};
+  }
+}
+
 // POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
 // The client handles EIP-712 order signing + HMAC signing; this proxy just forwards to CLOB
 // Used as CORS fallback when browser can't reach clob.polymarket.com directly
@@ -34355,23 +34390,12 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
       .replace(/\+/g, '-').replace(/\//g, '_');
 
-    // Builder attribution headers — gasless + volume tracking
-    const builderHeaders = {};
-    const builderKey = process.env.POLY_BUILDER_API_KEY;
-    const builderSecret = process.env.POLY_BUILDER_SECRET;
-    const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
-    if (builderKey && builderSecret && builderPassphrase) {
-      const builderMessage = ts + method + requestPath + signed_body;
-      const bSecretBuf = Buffer.from(builderSecret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const builderSig = crypto.createHmac('sha256', bSecretBuf).update(builderMessage).digest('base64')
-        .replace(/\+/g, '-').replace(/\//g, '_');
-      builderHeaders['POLY_BUILDER_API_KEY'] = builderKey;
-      builderHeaders['POLY_BUILDER_TIMESTAMP'] = ts;
-      builderHeaders['POLY_BUILDER_PASSPHRASE'] = builderPassphrase;
-      builderHeaders['POLY_BUILDER_SIGNATURE'] = builderSig;
-      console.log('[builder] Attribution headers attached for order');
+    // Builder attribution via BuilderConfig SDK — generates fresh POLY_BUILDER_* headers
+    const builderHeaders = await getBuilderHeaders('POST', '/order', signed_body);
+    if (Object.keys(builderHeaders).length) {
+      console.log('[builder] Attribution headers attached for order (clob-order path)');
     } else {
-      console.warn('[builder] WARNING: No builder credentials configured! Orders will NOT earn trading fees. Set POLY_BUILDER_API_KEY, POLY_BUILDER_SECRET, POLY_BUILDER_PASSPHRASE env vars.');
+      console.warn('[builder] No attribution headers — orders via clob-order will NOT earn fees');
     }
 
     const upstream = await fetch('https://clob.polymarket.com/order', {
@@ -35217,21 +35241,27 @@ app.post('/api/polymarket/order', async (req, res) => {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
+    // Forward user's CLOB auth headers (address, api key, timestamp, signature)
     const headerNames = [
       'poly_address', 'poly_api_key', 'poly_passphrase', 'poly_timestamp', 'poly_signature',
-      'poly_builder_api_key', 'poly_builder_passphrase', 'poly_builder_timestamp', 'poly_builder_signature'
     ];
     for (const h of headerNames) {
       const val = req.headers[h];
       if (val) clobHeaders[h.toUpperCase()] = val;
     }
+    // Inject server-side builder headers — always override any client-provided ones so
+    // attribution is guaranteed regardless of whether the client called builder-sign.
+    const builderHeaders = await getBuilderHeaders('POST', '/order', orderBody);
+    Object.assign(clobHeaders, builderHeaders);
 
     // Log what we're sending for debugging
     const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
     const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    const hasAttribution = 'POLY_BUILDER_API_KEY' in clobHeaders;
     console.log('[clob-proxy] forwarding order | client_ip:', clientIp,
       '| maker:', (req.body.order && req.body.order.maker || '').slice(0, 10),
-      '| auth_headers:', fwdHeaders.join(','));
+      '| auth_headers:', fwdHeaders.join(','),
+      '| builder_attribution:', hasAttribution);
 
     const r = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
@@ -35257,12 +35287,11 @@ app.post('/api/polymarket/order', async (req, res) => {
 });
 
 // POST /api/polymarket/builder-sign — remote signing endpoint
-// Client sends { method, path, body } → server returns builder HMAC headers
+// Client (browser / Cloudflare Worker) sends { method, path, body } and gets
+// back POLY_BUILDER_* headers to include in the CLOB order POST.
+// Uses BuilderConfig from @polymarket/builder-signing-sdk for signing.
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
-  const builderKey = process.env.POLY_BUILDER_API_KEY;
-  const builderSecret = process.env.POLY_BUILDER_SECRET;
-  const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
-  if (!builderKey || !builderSecret || !builderPassphrase) {
+  if (!_builderConfig) {
     _trackBuilderSign(503, 'Builder credentials not configured', req);
     return res.status(503).json({ error: 'Builder credentials not configured' });
   }
@@ -35272,18 +35301,12 @@ app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'method and path required' });
   }
   try {
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const message = ts + (method || 'GET').toUpperCase() + path + (body || '');
-    const secretBuf = Buffer.from(builderSecret, 'base64');
-    const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
-      .replace(/\+/g, '-').replace(/\//g, '_');
+    const headers = await _builderConfig.generateBuilderHeaders(
+      method.toUpperCase(), path, body || undefined
+    );
+    if (!headers) throw new Error('BuilderConfig returned no headers');
     _trackBuilderSign(200, null, req);
-    res.json({
-      POLY_BUILDER_API_KEY: builderKey,
-      POLY_BUILDER_TIMESTAMP: ts,
-      POLY_BUILDER_PASSPHRASE: builderPassphrase,
-      POLY_BUILDER_SIGNATURE: signature
-    });
+    res.json(headers);
   } catch (err) {
     console.error('[builder-sign]', err.message);
     _trackBuilderSign(500, err.message, req);
