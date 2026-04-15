@@ -5140,12 +5140,14 @@ window.hfxOpenDeposit = function() {
               <!-- ══ 50% FEE REBATE CALLOUT ══ -->
               <!-- Shown only to wallets that haven't traded Polymarket yet.
                    HYPERFLEX earns a builder fee on every trade routed through
-                   our /market/:slug pages; we rebate half back to new users. -->
-              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:16px;background:linear-gradient(90deg,rgba(0,230,138,0.10),rgba(77,159,255,0.10));border:1px solid rgba(0,230,138,0.3);border-radius:10px">
+                   our /market/:slug pages; we rebate half back to new users.
+                   Live rebate status (pending/paid totals) rendered by
+                   fetchRebateStatus() once we know the user's eligibility. -->
+              <div id="rebateCallout" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:16px;background:linear-gradient(90deg,rgba(0,230,138,0.10),rgba(77,159,255,0.10));border:1px solid rgba(0,230,138,0.3);border-radius:10px">
                 <div style="font-size:22px;flex-shrink:0">💸</div>
                 <div style="flex:1;min-width:0">
-                  <div style="font-family:var(--sans);font-size:13px;font-weight:800;color:#00e68a;letter-spacing:.01em">New to Polymarket? Get 50% of your trading fees back.</div>
-                  <div style="font-size:11px;color:var(--dim);margin-top:2px;line-height:1.5">Any wallet that's never traded Polymarket before qualifies — just trade through HYPERFLEX and we rebate half of every builder fee straight back to you.</div>
+                  <div style="font-family:var(--sans);font-size:13px;font-weight:800;color:#00e68a;letter-spacing:.01em" id="rebateCalloutTitle">New to Polymarket? Get 50% of your trading fees back.</div>
+                  <div style="font-size:11px;color:var(--dim);margin-top:2px;line-height:1.5" id="rebateCalloutSub">Any wallet that's never traded Polymarket before qualifies — just trade through HYPERFLEX and we rebate half of every builder fee straight back to you.</div>
                 </div>
               </div>
 
@@ -7828,9 +7830,63 @@ function dismissOnboarding() {
   if (card) card.style.display = 'none';
 }
 
+// Fetches the authed user's rebate status + rewrites the rebate callout
+// inside the onboarding card so they see their live pending/paid totals.
+// Idempotent — safe to call repeatedly. Silently no-ops if not logged in.
+var _rebateStatusLoaded = false;
+async function fetchRebateStatus() {
+  if (_rebateStatusLoaded) return; // once per page load is enough
+  _rebateStatusLoaded = true;
+  var tokenForRebate = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!tokenForRebate) return;
+  try {
+    var r = await fetch('/api/user/rebate-status', {
+      headers: { Authorization: 'Bearer ' + tokenForRebate }
+    });
+    if (!r.ok) return;
+    var data = await r.json();
+    var titleEl = document.getElementById('rebateCalloutTitle');
+    var subEl = document.getElementById('rebateCalloutSub');
+    if (!titleEl || !subEl) return;
+
+    var t = data.totals || {};
+    var pending = Number(t.pending_usdc || 0);
+    var paid = Number(t.paid_usdc || 0);
+
+    if (data.eligible === false) {
+      titleEl.textContent = 'Not eligible for the 50% rebate program';
+      subEl.textContent = data.is_new_polymarket_wallet === false
+        ? 'This wallet had Polymarket activity before connecting. The rebate is for first-time Polymarket wallets only.'
+        : (data.enrolled === false
+          ? 'Your account is currently opted out of the rebate program.'
+          : 'No rebate yet — check back once we snapshot your wallet.');
+      return;
+    }
+
+    if (data.eligible === true) {
+      // Show live totals — payment status + lifetime numbers
+      if (pending > 0 || paid > 0) {
+        titleEl.textContent = '💸 $' + pending.toFixed(2) + ' pending rebate' + (paid > 0 ? ' · $' + paid.toFixed(2) + ' already paid' : '');
+        subEl.textContent = 'You\'re earning 50% of your builder fees back. Payout is monthly on the 1st of each month to ' +
+          (data.payout_address ? data.payout_address.slice(0, 8) + '…' + data.payout_address.slice(-4) : 'your Polymarket wallet') + '.';
+      } else {
+        titleEl.textContent = '✓ You\'re eligible — get 50% of your Polymarket fees back';
+        subEl.textContent = 'Trade through HYPERFLEX and we\'ll rebate half your builder fee each month. No rebates earned yet — start trading to accrue.';
+      }
+      return;
+    }
+
+    // eligible === null → not snapshotted yet. Keep default copy.
+  } catch (_) { /* silent */ }
+}
+
 // Call this whenever user state changes (after wallet connect, after
 // positions load, after a post). Idempotent — safe to call often.
 function updateOnboardingCard() {
+  // Fire the rebate-status fetch whenever we touch the card — the
+  // endpoint is cheap (indexed lookups on users + fee_rebates)
+  if (typeof fetchRebateStatus === 'function') fetchRebateStatus();
+
   var card = document.getElementById('onboardingCard');
   if (!card) return;
   if (_onboardingDismissed()) { card.style.display = 'none'; return; }

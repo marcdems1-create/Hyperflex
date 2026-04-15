@@ -10049,6 +10049,61 @@ app.get('/api/embed/:slug', async (req, res) => {
 // GET /api/user/dashboard — authenticated member dashboard data
 // Returns: communities joined, open predictions, history, stats, profile
 // ════════════════════════════════════════════════════════════
+// GET /api/user/rebate-status — tells the authed user their eligibility
+// for the 50% fee rebate program, plus pending + paid totals. Used by
+// the creator dashboard onboarding card to show "$X pending for May".
+app.get('/api/user/rebate-status', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!pool) return res.json({ eligible: null, reason: 'no-db' });
+
+    const uRows = await dbQuery(
+      `SELECT is_new_polymarket_wallet, first_trade_count_at_connect,
+              polymarket_connected_at, rebate_program_enrolled,
+              polymarket_address, polymarket_proxy
+       FROM users WHERE id = $1`,
+      [userId]
+    ).catch(() => []);
+    const u = uRows[0] || null;
+    if (!u) return res.status(404).json({ error: 'User not found' });
+
+    // Aggregate fee_rebates for this user
+    const fr = await dbQuery(
+      `SELECT period_month, volume_usd, fees_earned, rebate_usdc,
+              trade_count, paid, paid_at, tx_hash, payout_address, created_at
+       FROM fee_rebates
+       WHERE user_id = $1
+       ORDER BY period_month DESC
+       LIMIT 24`,
+      [userId]
+    ).catch(() => []);
+
+    const paid = fr.filter(r => r.paid);
+    const unpaid = fr.filter(r => !r.paid);
+    const sum = (arr, k) => arr.reduce((s, r) => s + (parseFloat(r[k]) || 0), 0);
+
+    res.json({
+      eligible: u.is_new_polymarket_wallet === true && u.rebate_program_enrolled !== false,
+      wallet_snapshotted: !!u.polymarket_connected_at,
+      is_new_polymarket_wallet: u.is_new_polymarket_wallet,
+      first_trade_count_at_connect: u.first_trade_count_at_connect,
+      polymarket_connected_at: u.polymarket_connected_at,
+      enrolled: u.rebate_program_enrolled !== false,
+      payout_address: u.polymarket_proxy || u.polymarket_address,
+      totals: {
+        periods: fr.length,
+        pending_usdc: Math.round(sum(unpaid, 'rebate_usdc') * 1000000) / 1000000,
+        paid_usdc: Math.round(sum(paid, 'rebate_usdc') * 1000000) / 1000000,
+        lifetime_volume_usd: Math.round(sum(fr, 'volume_usd') * 100) / 100,
+      },
+      history: fr,
+    });
+  } catch (err) {
+    console.error('[user/rebate-status]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/user/dashboard', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;

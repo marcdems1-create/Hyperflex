@@ -1075,6 +1075,40 @@
           </table>
         </div>
       </div>
+
+      <!-- ══ 50% FEE REBATE DISTRIBUTION ══ -->
+      <div class="analytics-card" style="margin-top:20px">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span>💸 Fee Rebates — 50% back to new Polymarket wallets</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="frbPeriod" onchange="loadFeeRebates()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px"></select>
+            <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="frbUnpaidOnly" checked onchange="renderFeeRebates()">
+              Unpaid only
+            </label>
+            <button onclick="computeFeeRebates(true)" title="Preview — doesn't write" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Preview</button>
+            <button onclick="computeFeeRebates(false)" title="Compute + write rebate rows for selected period" style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">⚡ Compute</button>
+            <button onclick="exportFeeRebatesCsv()" style="background:var(--purple);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">⬇ CSV</button>
+          </div>
+        </div>
+        <div id="frbSummary" style="font-size:12px;color:var(--dim);margin-top:8px;margin-bottom:12px">Click Compute to generate rebates for last month, or pick a period above.</div>
+        <div id="frbMsg" style="font-size:12px;margin-bottom:10px;display:none"></div>
+        <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px" id="frbTable">
+            <thead style="position:sticky;top:0;background:var(--bg)">
+              <tr>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">User</th>
+                <th style="text-align:right;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Trades</th>
+                <th style="text-align:right;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Volume</th>
+                <th style="text-align:right;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Rebate</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Payout Address</th>
+                <th style="text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">Status</th>
+              </tr>
+            </thead>
+            <tbody id="frbBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Builder Fees tab -->
@@ -2488,11 +2522,179 @@ function getTier(points) {
 }
 
 // -- Financials tab --
+// ── Fee Rebates UI ───────────────────────────────────────────────────
+let _feeRebatesData = null;
+
+async function loadFeeRebates() {
+  const select = document.getElementById('frbPeriod');
+  const chosen = select && select.value ? select.value : '';
+  const url = API + '/api/admin/fee-rebates?secret=' + encodeURIComponent(adminSecret) +
+              (chosen ? '&period=' + encodeURIComponent(chosen) : '');
+  const msg = document.getElementById('frbMsg');
+  msg.style.display = 'none';
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      msg.style.display = 'block';
+      msg.style.color = 'var(--red)';
+      msg.textContent = '❌ ' + (data.error || 'Failed to load');
+      return;
+    }
+    _feeRebatesData = data;
+
+    // Populate period dropdown if first load
+    if (select && select.options.length <= 1) {
+      const periods = data.all_periods || [];
+      select.innerHTML = periods.length
+        ? periods.map(p => `<option value="${p}">${p}</option>`).join('')
+        : '<option value="">(no rebates yet)</option>';
+      if (data.period) select.value = data.period;
+    }
+
+    renderFeeRebates();
+  } catch (e) {
+    msg.style.display = 'block';
+    msg.style.color = 'var(--red)';
+    msg.textContent = '❌ Network error: ' + e.message;
+  }
+}
+
+function renderFeeRebates() {
+  if (!_feeRebatesData) return;
+  const data = _feeRebatesData;
+  const body = document.getElementById('frbBody');
+  const summary = document.getElementById('frbSummary');
+  const unpaidOnly = document.getElementById('frbUnpaidOnly')?.checked;
+
+  const t = data.totals || {};
+  summary.innerHTML =
+    'Period <strong>' + (data.period || '—') + '</strong> · ' +
+    t.rows + ' users · ' +
+    '<span style="color:var(--amber)">$' + (t.total_rebate_usdc || 0).toFixed(4) + ' total rebate</span> · ' +
+    '<span style="color:var(--red)">$' + (t.unpaid_rebate_usdc || 0).toFixed(4) + ' unpaid</span> · ' +
+    '<span style="color:var(--green)">$' + (t.paid_rebate_usdc || 0).toFixed(4) + ' paid</span>';
+
+  const all = data.rebates || [];
+  const rows = unpaidOnly ? all.filter(r => !r.paid) : all;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--dim)">' +
+      (unpaidOnly ? 'No unpaid rebates in this period.' : 'No rebates.') +
+      '</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(r => {
+    const payoutAddr = r.payout_address ? r.payout_address.slice(0, 10) + '…' + r.payout_address.slice(-4) : '—';
+    const volume = Number(r.volume_usd || 0);
+    const rebate = Number(r.rebate_usdc || 0);
+    const userLabel = r.display_name || r.email || r.user_id.slice(0, 8);
+    const statusBadge = r.paid
+      ? '<span style="color:var(--green);font-weight:700">✓ paid</span>' + (r.tx_hash ? ' <a href="https://polygonscan.com/tx/' + escHtml(r.tx_hash) + '" target="_blank" style="color:var(--blue);font-size:10px">tx</a>' : '')
+      : '<span style="color:var(--amber);font-weight:700">pending</span>';
+    const actionBtn = r.paid
+      ? '<button onclick="unmarkRebatePaid(\'' + r.id + '\')" style="background:none;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer">undo</button>'
+      : '<button onclick="markRebatePaid(\'' + r.id + '\', \'' + (r.payout_address || '') + '\', ' + rebate.toFixed(4) + ')" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">Mark Paid</button>';
+    return '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:8px 12px;font-size:12px">' + escHtml(userLabel) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px">' + (r.trade_count || 0) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--text)">$' + volume.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--amber);font-weight:700">$' + rebate.toFixed(4) + '</td>' +
+      '<td style="padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--dim)">' + escHtml(payoutAddr) + '</td>' +
+      '<td style="padding:8px 12px;font-size:11px">' + statusBadge + ' ' + actionBtn + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+async function computeFeeRebates(dryRun) {
+  const period = document.getElementById('frbPeriod')?.value || '';
+  const msg = document.getElementById('frbMsg');
+  msg.style.display = 'block';
+  msg.style.color = 'var(--dim)';
+  msg.textContent = '⏳ ' + (dryRun ? 'Previewing' : 'Computing') + '…';
+  const url = API + '/api/admin/fee-rebates/compute?secret=' + encodeURIComponent(adminSecret) +
+              (period ? '&period=' + encodeURIComponent(period) : '') +
+              (dryRun ? '&dry_run=1' : '');
+  try {
+    const r = await fetch(url, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = '❌ ' + (data.error || 'Failed');
+      return;
+    }
+    msg.style.color = dryRun ? 'var(--blue)' : 'var(--green)';
+    msg.textContent = '✓ Period ' + data.period + ' · ' +
+      data.rows_written + (dryRun ? ' would be written' : ' rows written') +
+      ' · $' + (data.total_rebate_usdc || 0).toFixed(4) + ' rebate · ' +
+      data.skipped_ineligible + ' ineligible · ' + data.skipped_opted_out + ' opted out';
+    if (!dryRun) setTimeout(loadFeeRebates, 500);
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '❌ ' + e.message;
+  }
+}
+
+async function markRebatePaid(id, payoutAddr, amount) {
+  const txHash = prompt('Paid $' + amount.toFixed(4) + ' USDC to:\\n' + payoutAddr + '\\n\\nPaste the transaction hash (optional, for audit):');
+  if (txHash === null) return; // cancelled
+  try {
+    const r = await fetch(API + '/api/admin/fee-rebates/' + encodeURIComponent(id) + '/mark-paid?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tx_hash: txHash || null }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      alert('Failed: ' + (data.error || 'unknown'));
+      return;
+    }
+    loadFeeRebates();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function unmarkRebatePaid(id) {
+  if (!confirm('Unmark this rebate as paid? (for mistake-recovery)')) return;
+  try {
+    const r = await fetch(API + '/api/admin/fee-rebates/' + encodeURIComponent(id) + '/mark-unpaid?secret=' + encodeURIComponent(adminSecret), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) { alert('Failed: ' + (data.error || 'unknown')); return; }
+    loadFeeRebates();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function exportFeeRebatesCsv() {
+  if (!_feeRebatesData || !_feeRebatesData.rebates) return;
+  const rows = _feeRebatesData.rebates;
+  const header = ['user_id','display_name','email','payout_address','period_month','trade_count','volume_usd','fees_earned','rebate_usdc','paid','paid_at','tx_hash'];
+  const csvLines = [header.join(',')];
+  for (const r of rows) {
+    const line = header.map(k => {
+      const v = r[k];
+      if (v === null || v === undefined) return '';
+      const s = String(v).replace(/"/g, '""');
+      return /[,"\n]/.test(s) ? '"' + s + '"' : s;
+    }).join(',');
+    csvLines.push(line);
+  }
+  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fee-rebates-' + (_feeRebatesData.period || 'all') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 let _financialsLoaded = false;
 
 async function loadFinancials() {
   if (_financialsLoaded) return;
   _financialsLoaded = true;
+  // Kick off the fee-rebates card load in parallel with the rest of the financials
+  loadFeeRebates();
 
   // Real financial metrics from /api/admin/builder-fees/local (always
   // available — reads polymarket_trades table directly, no CLOB dep).
