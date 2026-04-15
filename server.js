@@ -43415,14 +43415,11 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       return res.json({ predictions: await enrichPredictions(data || []), next_cursor: null, empty: false });
     }
 
-    // Get followed user IDs
+    // Get followed user IDs (+ self so own predictions always show)
     const { data: followRows } = await supabase.from('follows').select('following_id').eq('follower_id', req.userId);
     const followedIds = (followRows || []).map(f => f.following_id);
     followedIds.push(req.userId); // include own predictions
-
-    if (!followRows || !followRows.length) {
-      return res.json({ predictions: [], next_cursor: null, empty: true, reason: 'no_follows' });
-    }
+    const hasFollows = followRows && followRows.length > 0;
 
     let q = supabase.from('predictions').select('*').in('user_id', followedIds).order('posted_at', { ascending: false }).limit(limit + 1);
     if (before) q = q.lt('posted_at', before);
@@ -43433,6 +43430,14 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
+
+    // Only fall back to discovery content when the user has no follows AND
+    // no own predictions. A user with zero follows but a posted take should
+    // still see their take here. (Was a bug: the early return on no-follows
+    // bypassed the query entirely and hid dashboard-posted takes.)
+    if (!page.length && !hasFollows) {
+      return res.json({ predictions: [], next_cursor: null, empty: true, reason: 'no_follows' });
+    }
 
     res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: false });
   } catch (e) {

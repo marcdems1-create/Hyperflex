@@ -8446,7 +8446,11 @@ async function openPostTakeFlow() {
   modal.classList.add('show');
 
   // Get auth token (dashboard uses this same key pattern elsewhere)
-  var token = localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_token') || '';
+  // Use hf_token first to match /feed's token priority — takes posted from
+  // the dashboard need to be attributed to the same user identity the feed
+  // queries for, otherwise the user posts as creator-id but the feed filters
+  // for their member-id and their own take never surfaces.
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
   if (!token) {
     closePostTakeModal();
     window.location.href = '/creator/login';
@@ -8562,7 +8566,11 @@ async function submitPostTake() {
   var originalLabel = btn.textContent;
   btn.textContent = 'Posting…';
 
-  var token = localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_token') || '';
+  // Use hf_token first to match /feed's token priority — takes posted from
+  // the dashboard need to be attributed to the same user identity the feed
+  // queries for, otherwise the user posts as creator-id but the feed filters
+  // for their member-id and their own take never surfaces.
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
   try {
     var r = await fetch('/api/predictions', {
       method: 'POST',
