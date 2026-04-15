@@ -1160,11 +1160,17 @@ async function loadFeed(append) {
     var data = await r.json();
 
     if (data.empty && data.reason === 'no_follows') {
-      // Fall back to influencer posts + social predictions for discovery
+      // Fall back to influencer posts + social predictions for discovery.
+      // Only keep influencer items that have an actual market attached —
+      // a raw subreddit title with no prediction direction has no place
+      // on a prediction feed.
       var [infPosts, r2] = await Promise.all([
         fetchInfluencerPosts(),
         fetch(API + '/api/social/feed?limit=20', { headers: authHeaders() }),
       ]);
+      infPosts = infPosts.filter(function(p) {
+        return !!(p._market_slug || p._market_question || p.market_title);
+      });
       var data2 = await r2.json();
       var preds2 = (data2.predictions || []).map(normaliseLegacy);
       var combined = infPosts.concat(preds2).sort(function(a,b) {
@@ -1179,14 +1185,19 @@ async function loadFeed(append) {
 
     var preds = (data.predictions || []).map(normaliseNew);
 
-    // Always merge influencer posts into For You and Trending tabs
-    // so the feed never feels empty and real tweets are always visible
-    if (currentTab === 'foryou' || currentTab === 'trending' || !preds.length) {
-      var infPosts = await fetchInfluencerPosts();
-      preds = preds.concat(infPosts).sort(function(a,b) {
-        return new Date(b.posted_at) - new Date(a.posted_at);
-      });
-    }
+    // Drop any items that don't actually represent a prediction. An
+    // influencer-sourced row with no matched market + no direction is just
+    // a raw social post — no place for it on a PREDICTION feed. We also
+    // no longer merge /api/influencer-feed/unified here: the server feed
+    // at /api/predictions/feed already pulls in influencer_posts + takes
+    // with source='influencer', so fetching them a second time produced
+    // duplicate cards (one rendered as a take, one as a tweet card).
+    preds = preds.filter(function(p) {
+      if (p._source === 'influencer' || p._type === 'influencer') {
+        return !!(p.market_id || p.market_title);
+      }
+      return true;
+    });
 
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
     // Server returns `cursor` (new shape) — keep `next_cursor` as fallback
