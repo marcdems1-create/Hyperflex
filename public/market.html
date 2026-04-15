@@ -3418,6 +3418,21 @@ async function executeTrade() {
       if (decimalPlaces(num) <= decimals) return num;
       return Math.ceil(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
     }
+    // String-based decimal cap — belt-and-suspenders for the final trip into
+    // parseUnits(). Math.floor tricks can leave float-drift noise in edge
+    // cases (e.g. tick rounding that thinks 28.9992 but stores as
+    // 28.999200000000003 in memory). Truncating the string representation
+    // guarantees an exact N-decimal value with no phantom trailing bits —
+    // which is what CLOB actually validates against.
+    function capDecimals(num, maxDecimals) {
+      var s = typeof num === 'number' ? num.toString() : String(num);
+      var dot = s.indexOf('.');
+      if (dot === -1) return num;
+      var capped = s.slice(0, dot + 1 + maxDecimals);
+      // Strip a trailing '.' if maxDecimals was 0
+      if (capped.endsWith('.')) capped = capped.slice(0, -1);
+      return parseFloat(capped);
+    }
     // SDK's parseUnits equivalent — converts decimal string to fixed-point integer string
     // e.g. parseUnits("9.9981", 6) → "9998100"
     function parseUnits(valStr, unitDecimals) {
@@ -3546,6 +3561,41 @@ async function executeTrade() {
       }
     }
 
+    if (rawMakerAmt <= 0 || rawTakerAmt <= 0) {
+      showTradeStatus('Order too small — increase amount', 'error');
+      cta.disabled = false; updateCtaButton();
+      return;
+    }
+
+    // Final safety net: cap decimals using string truncation so no float-drift
+    // noise (e.g. 28.999200000000003 masquerading as 28.9992) can sneak past
+    // into parseUnits and trigger CLOB 400 "invalid amounts".
+    //
+    //   SELL: maker = shares (size decimals), taker = USDC (amount decimals)
+    //   BUY : maker = USDC (amount decimals), taker = shares (size decimals)
+    //
+    // Market (FOK) orders have HARDCODED decimal caps — not tick-driven — so
+    // use the 2/4 pair explicitly instead of roundConfig.
+    if (isMarketOrder) {
+      if (clobSide === 'BUY') {
+        rawMakerAmt = capDecimals(rawMakerAmt, 2);  // USDC
+        rawTakerAmt = capDecimals(rawTakerAmt, 4);  // shares
+      } else {
+        rawMakerAmt = capDecimals(rawMakerAmt, 4);  // shares
+        rawTakerAmt = capDecimals(rawTakerAmt, 2);  // USDC
+      }
+    } else {
+      if (clobSide === 'BUY') {
+        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);  // USDC
+        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);    // shares
+      } else {
+        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.size);    // shares
+        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.amount);  // USDC
+      }
+    }
+
+    // Re-check positivity after the cap (pathological cases like capDecimals
+    // chopping a fractional-only value to 0 should be rejected, not signed).
     if (rawMakerAmt <= 0 || rawTakerAmt <= 0) {
       showTradeStatus('Order too small — increase amount', 'error');
       cta.disabled = false; updateCtaButton();
