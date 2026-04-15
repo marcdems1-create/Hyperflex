@@ -440,6 +440,10 @@ canvas{display:block;width:100%!important}
           <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="updateTradeCalc()"/>
         </div>
 
+        <!-- SELL mode: proactively show user's share balance on this outcome.
+             Populated by updateSellBalanceBadge(). Hidden in BUY mode. -->
+        <div id="sellBalanceBadge" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin-top:6px;border:1px solid;border-radius:8px;font-size:11px;font-family:var(--mono)"></div>
+
         <div class="trade-quick-btns" id="tradeQuickBtns">
           <button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>
           <button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>
@@ -1514,6 +1518,71 @@ function setTradeSide(side) {
   updateTradeCalc();
   updateCtaButton();
   updateCurrentPriceBtn();
+  updateSellBalanceBadge();  // refresh the "you own N shares" pill for the new side
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SELL-SIDE SHARE-BALANCE UX
+// ─────────────────────────────────────────────────────────────────────────
+// Prevents users from trying to sell shares they don't own. Shows an
+// inline pill above the "Sell" CTA with their exact holding on the active
+// outcome, so they see "You own 0 shares" before typing an amount — rather
+// than hitting CLOB's generic "invalid amounts" error.
+
+// Mirror the tokenId resolution that executeTrade uses, so the badge reads
+// the same token the trade would hit. NegRisk multi-option markets store
+// tokenIds per-outcome under _sortedEventMarkets[i].clobTokenIds; binary
+// markets store them on _market.clobTokenIds directly.
+function _getActiveTokenIdForTrade() {
+  try {
+    var tids = null;
+    if (_sortedEventMarkets && _sortedEventMarkets.length > 1 && typeof _activeOutcomeIndex === 'number' && _sortedEventMarkets[_activeOutcomeIndex]) {
+      tids = _sortedEventMarkets[_activeOutcomeIndex].clobTokenIds;
+    } else if (_market) {
+      tids = _market.clobTokenIds;
+    }
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch (e) { tids = []; } }
+    if (!tids || !tids.length) return null;
+    var tokenIndex = _tradeSide === 'yes' ? 0 : 1;
+    return tids[tokenIndex] || tids[0];
+  } catch (e) { return null; }
+}
+
+function _getOwnedSharesOnCurrentSide() {
+  var tid = _getActiveTokenIdForTrade();
+  if (!tid || !_userPositions) return 0;
+  var pos = _userPositions[String(tid).toLowerCase()];
+  return pos && typeof pos.size === 'number' ? pos.size : 0;
+}
+
+// Renders/updates the pill above the Sell CTA. No-op in BUY mode.
+function updateSellBalanceBadge() {
+  var badge = document.getElementById('sellBalanceBadge');
+  if (!badge) return;
+  if (_tradeMode !== 'sell') {
+    badge.style.display = 'none';
+    return;
+  }
+  var owned = _getOwnedSharesOnCurrentSide();
+  var priceCents = parseFloat(document.getElementById('tradePrice').value) || 0;
+  var marketValue = owned * priceCents / 100;
+  badge.style.display = 'flex';
+  if (owned <= 0) {
+    badge.style.background = 'rgba(239,68,68,0.08)';
+    badge.style.borderColor = 'rgba(239,68,68,0.35)';
+    badge.style.color = '#ff8a8a';
+    badge.innerHTML =
+      '<span style="flex:1">⚠ You don\'t own shares on this outcome.</span>' +
+      '<span style="font-size:10px;opacity:0.85">Try the other side</span>';
+  } else {
+    badge.style.background = 'rgba(245,166,35,0.06)';
+    badge.style.borderColor = 'rgba(245,166,35,0.3)';
+    badge.style.color = 'var(--text)';
+    badge.innerHTML =
+      '<span>You own <strong style="color:var(--gold)">' + owned.toFixed(2) + ' shares</strong>' +
+        ' <span style="color:var(--text-faint)">(~$' + marketValue.toFixed(2) + ' at this price)</span></span>' +
+      '<button type="button" onclick="setMaxShares()" style="background:var(--gold);color:#000;border:0;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">Sell all</button>';
+  }
 }
 
 // Get outcomePrices for the currently selected outcome (respects multi-outcome events)
@@ -1565,6 +1634,7 @@ function setTradeMode(mode) {
   }
   updateTradeCalc();
   updateCtaButton();
+  updateSellBalanceBadge();  // refresh pill on mode change (sell → buy hides it)
 }
 
 function setPrice(p) {
@@ -1572,6 +1642,7 @@ function setPrice(p) {
   document.querySelectorAll('.trade-quick-btns .trade-quick-btn').forEach(function(b) { b.classList.remove('active'); });
   if (event && event.target) event.target.classList.add('active');
   updateTradeCalc();
+  updateSellBalanceBadge();  // "$V at this price" number recomputes when price changes
 }
 
 function setCurrentPrice() {
@@ -1661,6 +1732,9 @@ function updateTradeCalc() {
     // Buy: potential payout = shares (each pays $1 if wins)
     document.getElementById('summaryPayout').textContent = '$' + shares.toFixed(2);
   }
+  // Also refresh the sell-balance badge on any calc update (covers typing into
+  // the price field directly, price-preset buttons, outcome switches, etc).
+  try { updateSellBalanceBadge(); } catch (e) {}
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2152,6 +2226,8 @@ async function fetchUserPositions() {
     if (_market) renderOutcomes(_market);
     // Update sidebar position for active outcome
     updateSidebarPosition();
+    // Refresh the SELL-mode balance badge now that we know holdings
+    try { updateSellBalanceBadge(); } catch (e) {}
 
   } catch (e) {
     console.log('[positions] Error fetching:', e.message);
