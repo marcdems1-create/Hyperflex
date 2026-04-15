@@ -17010,6 +17010,191 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/signup-audit?hours=24&secret=... — growth-spike triage
+// Built after the 140-signup overnight surge to confirm legit growth vs
+// coordinated bot attack. Returns bot-detection signals computed from
+// user data we already have (no IP stored on signup, so analysis is
+// wallet/email/timing-based rather than IP-based).
+//
+// Response sections:
+//  summary        — counts, wallet rate, avg position value, top domains
+//  hourly         — signups per hour bucket (spikes jump out)
+//  users          — last-N signup rows with per-user bot signals
+//  flags          — aggregate warnings that warrant attention
+//
+// Signal hierarchy (strongest → weakest evidence of legitimacy):
+//  1. Has Polymarket address AND has cached positions with nonzero value
+//     → very hard to fake (real on-chain history on the wallet)
+//  2. Has Polymarket address, no cached positions → lightly suspicious
+//     unless auto-sync cron hasn't caught up yet
+//  3. No wallet → most bot-friendly path; flag if dominant in cohort
+app.get('/api/admin/signup-audit', requireAdmin, async (req, res) => {
+  try {
+    const hours = Math.min(parseInt(req.query.hours) || 24, 168); // cap at 7 days
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+    const users = await dbQuery(
+      `SELECT id, email, display_name, polymarket_address, created_at, referred_by,
+              is_creator, tenant_slug
+       FROM users
+       WHERE created_at > $1
+       ORDER BY created_at DESC`,
+      [since]
+    ).catch(() => []);
+
+    if (!users.length) {
+      return res.json({
+        ok: true,
+        summary: { total: 0, hours, since },
+        hourly: [], users: [], flags: ['NO_SIGNUPS_IN_WINDOW'],
+      });
+    }
+
+    const userIds = users.map(u => u.id);
+    const [positions, predictorFollows] = await Promise.all([
+      dbQuery(
+        `SELECT user_id, platform, COUNT(*) AS pos_count,
+                COALESCE(SUM(value), 0) AS total_value,
+                COALESCE(SUM(cost_basis), 0) AS total_cost
+         FROM cached_positions
+         WHERE user_id = ANY($1) GROUP BY user_id, platform`,
+        [userIds]
+      ).catch(() => []),
+      dbQuery(
+        `SELECT follower_id AS user_id, COUNT(*) AS n
+         FROM predictor_follows WHERE follower_id = ANY($1) GROUP BY follower_id`,
+        [userIds]
+      ).catch(() => []),
+    ]);
+
+    const posByUser = {};
+    for (const p of positions) {
+      if (!posByUser[p.user_id]) posByUser[p.user_id] = { platforms: {}, total_value: 0, total_cost: 0, pos_count: 0 };
+      posByUser[p.user_id].platforms[p.platform] = { pos_count: +p.pos_count, value: +p.total_value };
+      posByUser[p.user_id].total_value += +p.total_value;
+      posByUser[p.user_id].total_cost  += +p.total_cost;
+      posByUser[p.user_id].pos_count   += +p.pos_count;
+    }
+    const followsByUser = {};
+    for (const f of predictorFollows) followsByUser[f.user_id] = +f.n;
+
+    // Common disposable / throwaway email providers (not exhaustive —
+    // update as patterns emerge). Not auto-blocked, just flagged.
+    const DISPOSABLE_DOMAINS = new Set([
+      'tempmail.com','10minutemail.com','guerrillamail.com','mailinator.com',
+      'throwaway.email','maildrop.cc','yopmail.com','temp-mail.org','dispostable.com',
+      'fakeinbox.com','trash-mail.com','getnada.com','mohmal.com','emailondeck.com',
+      'sharklasers.com','pokemail.net','mytemp.email',
+    ]);
+
+    const nameCounts = {};
+    for (const u of users) {
+      const n = (u.display_name || '').toLowerCase().trim();
+      if (n) nameCounts[n] = (nameCounts[n] || 0) + 1;
+    }
+
+    // Per-hour bucket (newest first)
+    const hourly = {};
+    for (const u of users) {
+      const bucket = new Date(u.created_at).toISOString().slice(0, 13) + ':00';
+      hourly[bucket] = (hourly[bucket] || 0) + 1;
+    }
+
+    // Per-user signals
+    const enriched = users.map(u => {
+      const pos = posByUser[u.id] || { total_value: 0, pos_count: 0, platforms: {} };
+      const emailDomain = (u.email || '').split('@')[1] || '';
+      const disposable = DISPOSABLE_DOMAINS.has(emailDomain.toLowerCase());
+      const duplicateName = (nameCounts[(u.display_name || '').toLowerCase().trim()] || 0) > 1;
+      const hasWallet = !!u.polymarket_address;
+      const hasPositions = pos.pos_count > 0;
+
+      const signals = [];
+      if (hasWallet && hasPositions && pos.total_value > 10) signals.push('REAL_WALLET_POSITIONS');
+      if (hasWallet && !hasPositions)                       signals.push('WALLET_NO_POSITIONS');
+      if (!hasWallet)                                        signals.push('NO_WALLET');
+      if (disposable)                                        signals.push('DISPOSABLE_EMAIL');
+      if (duplicateName)                                     signals.push('DUPLICATE_DISPLAY_NAME');
+      if (u.referred_by)                                     signals.push('REFERRED');
+
+      return {
+        id: u.id,
+        created_at: u.created_at,
+        email: u.email,
+        email_domain: emailDomain,
+        display_name: u.display_name,
+        polymarket_address: u.polymarket_address,
+        position_value: Math.round(pos.total_value * 100) / 100,
+        position_count: pos.pos_count,
+        platforms: Object.keys(pos.platforms),
+        follows: followsByUser[u.id] || 0,
+        referred_by: u.referred_by || null,
+        is_creator: !!u.is_creator,
+        signals,
+      };
+    });
+
+    // Aggregate signals / flags
+    const total = users.length;
+    const withWallet = enriched.filter(e => e.polymarket_address).length;
+    const withPositions = enriched.filter(e => e.position_count > 0).length;
+    const withRealPositions = enriched.filter(e => e.signals.includes('REAL_WALLET_POSITIONS')).length;
+    const disposableCount = enriched.filter(e => e.signals.includes('DISPOSABLE_EMAIL')).length;
+    const noWalletCount = enriched.filter(e => !e.polymarket_address).length;
+
+    // Email-domain distribution
+    const domainCounts = {};
+    for (const e of enriched) {
+      if (!e.email_domain) continue;
+      domainCounts[e.email_domain] = (domainCounts[e.email_domain] || 0) + 1;
+    }
+    const topDomains = Object.entries(domainCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([d, n]) => ({ domain: d, count: n, pct: Math.round(n / total * 100) }));
+
+    // Biggest hour spike
+    const hourlyArr = Object.entries(hourly)
+      .map(([hour, count]) => ({ hour, count }))
+      .sort((a, b) => a.hour.localeCompare(b.hour));
+    const peakHour = hourlyArr.reduce((max, h) => h.count > max.count ? h : max, { count: 0 });
+    const avgPerHour = total / Math.max(1, hourlyArr.length);
+    const spikeRatio = peakHour.count / Math.max(1, avgPerHour);
+
+    const flags = [];
+    if (withRealPositions / total > 0.6) flags.push('MOSTLY_REAL_WALLETS — >60% of signups have on-chain Polymarket positions with value');
+    if (noWalletCount / total > 0.5)     flags.push(`NO_WALLET_MAJORITY — ${noWalletCount}/${total} signups have no Polymarket wallet connected`);
+    if (disposableCount > 0)             flags.push(`DISPOSABLE_EMAILS_DETECTED — ${disposableCount}/${total} use known throwaway domains`);
+    if (spikeRatio > 3 && peakHour.count > 5) flags.push(`HOUR_SPIKE — peak hour ${peakHour.hour} had ${peakHour.count} signups (${spikeRatio.toFixed(1)}× avg)`);
+    if (topDomains[0] && topDomains[0].pct > 40) flags.push(`DOMAIN_CONCENTRATION — ${topDomains[0].pct}% of signups from ${topDomains[0].domain}`);
+
+    res.json({
+      ok: true,
+      summary: {
+        total,
+        hours,
+        since,
+        with_wallet: withWallet,
+        with_positions: withPositions,
+        with_real_positions: withRealPositions,
+        with_wallet_pct: Math.round(withWallet / total * 100),
+        with_real_positions_pct: Math.round(withRealPositions / total * 100),
+        disposable_emails: disposableCount,
+        no_wallet: noWalletCount,
+        peak_hour: peakHour,
+        avg_per_hour: Math.round(avgPerHour * 10) / 10,
+      },
+      hourly: hourlyArr,
+      top_email_domains: topDomains,
+      flags,
+      users: enriched,
+    });
+  } catch (err) {
+    console.error('[admin/signup-audit]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // GET /api/admin/users — all members with activity stats + plan info + Polymarket data
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
