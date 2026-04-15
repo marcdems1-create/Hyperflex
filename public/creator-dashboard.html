@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>HYPERFLEX — Creator Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/hyperflex-mobile.css"/>
 <style>
 :root {
   --ink: #0a0a0f;
@@ -3101,6 +3102,223 @@ body.nav-open .sidebar-backdrop {
 .ta-ind-btn { padding:5px 12px; font-family:var(--body); font-size:11px; font-weight:600; color:var(--dim); background:transparent; border:1px solid var(--border); border-radius:7px; cursor:pointer; transition:all .15s; text-transform:uppercase; letter-spacing:.04em; }
 .ta-ind-btn.active { background:var(--accent); color:#000; border-color:var(--accent); }
 .ta-ind-btn:hover:not(.active) { color:var(--ink); border-color:var(--dim); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE REVAMP (≤640px) — 2026
+   ────────────────────────────────────────────────────────────────────────
+   Single authoritative mobile block. Overrides the older scattered media
+   queries above by source-order + targeted specificity. Uses tokens from
+   /hyperflex-mobile.css. Touches 6 concrete pain points:
+
+   1. Typography   — one scale, readable line-heights, proper weights
+   2. Topbar       — respects iOS notch, cleaner title, bigger hamburger
+   3. Content      — consistent 16px gutters; no more 10/12/14 mix
+   4. Cards/stats  — modern soft shadow, generous padding, bigger numbers
+   5. Modals       — bottom sheet with drag handle + safe-area-inset bottom
+   6. Buttons/tabs — 44px min, pill-style pressed states, smoother pills
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* — 1. Typography — */
+  body { font-family: var(--body); font-size: var(--hfx-fs-sm); line-height: 1.5; color: var(--text); }
+  h1, h2, h3 { font-weight: 700; letter-spacing: -0.01em; }
+  h1 { font-size: var(--hfx-fs-2xl); line-height: 1.2; }
+  h2 { font-size: var(--hfx-fs-xl); line-height: 1.25; }
+  h3 { font-size: var(--hfx-fs-lg); line-height: 1.3; }
+  .section-title { font-size: var(--hfx-fs-md); font-weight: 700; letter-spacing: 0.01em; }
+  .stat-label, .section-header .subtitle { font-size: var(--hfx-fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+
+  /* — 2. Topbar — safe-area + bigger hamburger + proper title hierarchy — */
+  .topbar {
+    padding: calc(var(--hfx-s-3) + var(--hfx-safe-top)) var(--hfx-s-4) var(--hfx-s-3);
+    gap: var(--hfx-s-3);
+    min-height: calc(56px + var(--hfx-safe-top));
+    border-bottom: 1px solid var(--border);
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+  }
+  .topbar-title { font-size: var(--hfx-fs-lg); font-weight: 700; letter-spacing: -0.01em; flex: 1; }
+  .hamburger { min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--hfx-r-md); }
+  .hamburger:active { background: rgba(255,255,255,0.06); }
+
+  /* — 3. Content gutters — unified 16px — */
+  .content { padding: var(--hfx-s-4); padding-bottom: calc(var(--hfx-s-6) + var(--hfx-safe-bottom)); }
+  .section { margin-bottom: var(--hfx-s-5); }
+  .section + .section { margin-top: 0; }
+
+  /* — 4. Stats cards + section headers — */
+  .stats-row { grid-template-columns: 1fr 1fr; gap: var(--hfx-s-3); margin-bottom: var(--hfx-s-5); }
+  .stat-card {
+    padding: var(--hfx-s-4);
+    border-radius: var(--hfx-r-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--hfx-shadow-sm);
+    display: flex; flex-direction: column; gap: var(--hfx-s-1);
+  }
+  .stat-value { font-size: var(--hfx-fs-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .stat-card-icon { font-size: var(--hfx-fs-lg); opacity: 0.9; }
+  .stat-label { font-size: var(--hfx-fs-2xs); font-weight: 600; }
+
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--hfx-s-3); flex-wrap: wrap;
+    margin-bottom: var(--hfx-s-3);
+  }
+  .section-header .btn-primary,
+  .section-header .btn-secondary {
+    width: 100%;
+    min-height: var(--hfx-touch-min);
+    border-radius: var(--hfx-r-md);
+    font-size: var(--hfx-fs-sm);
+    font-weight: 700;
+  }
+
+  /* — 5. Modals → bottom sheet with drag handle + safe-area bottom — */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+    justify-content: stretch;
+  }
+  .modal-overlay.show { animation: hfx-overlay-fade .18s ease-out; }
+  @keyframes hfx-overlay-fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: var(--hfx-r-xl) var(--hfx-r-xl) 0 0;
+    border-bottom: 0;
+    padding-bottom: var(--hfx-safe-bottom);
+    box-shadow: var(--hfx-shadow-lg);
+    animation: hfx-sheet-slide .26s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes hfx-sheet-slide { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    margin: 10px auto 0;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+  }
+  .modal-header { padding: var(--hfx-s-4) var(--hfx-s-5) var(--hfx-s-3); border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: var(--hfx-fs-lg); font-weight: 700; letter-spacing: -0.01em; }
+  .modal-body { padding: var(--hfx-s-4) var(--hfx-s-5); }
+  .modal-footer {
+    padding: var(--hfx-s-4) var(--hfx-s-5) calc(var(--hfx-s-4) + var(--hfx-safe-bottom));
+    border-top: 1px solid var(--border);
+    gap: var(--hfx-s-3);
+    position: sticky; bottom: 0;
+    background: var(--cream);
+  }
+  .modal-footer .btn-primary,
+  .modal-footer .btn-secondary {
+    flex: 1;
+    min-height: var(--hfx-touch-min);
+    border-radius: var(--hfx-r-md);
+    font-size: var(--hfx-fs-sm);
+    font-weight: 700;
+  }
+
+  /* — 6. Buttons, pills, tabs — unified sizing + modern pressed state — */
+  .btn-primary, .btn-secondary, .btn-cancel, .btn-danger {
+    min-height: var(--hfx-touch-min);
+    padding: 0 var(--hfx-s-4);
+    border-radius: var(--hfx-r-md);
+    font-size: var(--hfx-fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    transition: transform .1s ease, opacity .15s;
+  }
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-cancel:active,
+  .btn-danger:active { transform: scale(0.97); }
+
+  .mkt-pills, .resolve-tabs, .ta-interval-row {
+    display: flex;
+    gap: var(--hfx-s-2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    padding: var(--hfx-s-1) 0 var(--hfx-s-2);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mkt-pills::-webkit-scrollbar,
+  .resolve-tabs::-webkit-scrollbar,
+  .ta-interval-row::-webkit-scrollbar { display: none; }
+  .mkt-pill, .resolve-tab {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    min-height: var(--hfx-touch-min);
+    padding: 0 var(--hfx-s-4);
+    border-radius: 999px;
+    font-size: var(--hfx-fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hfx-s-1);
+  }
+  .mkt-pill.active, .resolve-tab.active {
+    background: var(--gold);
+    color: #0a0a0f;
+    border-color: var(--gold);
+  }
+
+  /* Notification bell + topbar icons — keep 44px square taps */
+  .notif-bell {
+    min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--hfx-r-md);
+  }
+  .notif-bell:active { background: rgba(255,255,255,0.06); }
+
+  /* Inputs everywhere: modern, breathable */
+  input[type="text"],
+  input[type="email"],
+  input[type="url"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  textarea, select {
+    min-height: var(--hfx-touch-min);
+    padding: var(--hfx-s-3) var(--hfx-s-4);
+    border-radius: var(--hfx-r-md);
+    border: 1px solid var(--border);
+    background: var(--paper);
+    color: var(--text);
+    font-size: 16px;  /* iOS zoom preventer */
+    line-height: 1.4;
+    box-sizing: border-box;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  /* Table rows — keep dense but breathable */
+  .market-row, .member-table-row, .pos-table-row {
+    padding: var(--hfx-s-3) var(--hfx-s-4);
+    min-height: var(--hfx-touch-min);
+  }
+
+  /* Prevent horizontal scroll everywhere one more time */
+  html, body { overflow-x: hidden; }
+  .content, .main, .section { max-width: 100vw; }
+
+  /* Sidebar drawer: respect safe-area on notched devices */
+  .sidebar {
+    padding-top: var(--hfx-safe-top);
+    padding-bottom: calc(var(--hfx-s-4) + var(--hfx-safe-bottom));
+  }
+}
+
+/* Narrow phones ≤400px — reduce only two things that still pinch */
+@media (max-width: 400px) {
+  .content { padding: var(--hfx-s-3); }
+  .stats-row { gap: var(--hfx-s-2); }
+  .stat-value { font-size: var(--hfx-fs-xl); }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>

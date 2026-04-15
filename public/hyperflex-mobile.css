@@ -1,0 +1,166 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   HYPERFLEX — shared mobile design system
+   ────────────────────────────────────────────────────────────────────────
+   Single source of truth for mobile tokens + base polish.
+   Load AFTER any page's inline <style> so these tokens win on the cascade.
+
+   Goals:
+   • One breakpoint to rule them all: `max-width: 640px`.
+   • iOS-first: safe-area insets, 16px minimum input font (no zoom),
+     -webkit-text-size-adjust pinned at 100%.
+   • Typography scale uses CSS vars so rewrites only touch one place.
+   • Spacing tokens replace ad-hoc padding/margin values.
+   • Modern mobile patterns: drag-handle bottom sheets, large touch
+     targets (44px min, 52px for primary CTAs), soft shadows.
+
+   Rules:
+   • All new mobile CSS should reference these tokens, not raw pixel values.
+   • Prefer class-based selectors (.hfx-*) over tag or ID selectors so the
+     system composes without specificity wars.
+   • No !important unless fighting inline styles written by someone else.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Global tokens (available everywhere, even on desktop) ─────────── */
+:root {
+  /* Type scale — numeric steps that compose with line-height multipliers */
+  --hfx-fs-2xs: 10px;
+  --hfx-fs-xs:  11px;
+  --hfx-fs-sm:  13px;
+  --hfx-fs-md:  15px;
+  --hfx-fs-lg:  17px;
+  --hfx-fs-xl:  20px;
+  --hfx-fs-2xl: 24px;
+  --hfx-fs-3xl: 30px;
+  --hfx-fs-4xl: 36px;
+
+  /* Spacing — 4px base grid */
+  --hfx-s-1: 4px;
+  --hfx-s-2: 8px;
+  --hfx-s-3: 12px;
+  --hfx-s-4: 16px;
+  --hfx-s-5: 20px;
+  --hfx-s-6: 24px;
+  --hfx-s-7: 32px;
+  --hfx-s-8: 40px;
+
+  /* Radii */
+  --hfx-r-sm: 6px;
+  --hfx-r-md: 10px;
+  --hfx-r-lg: 14px;
+  --hfx-r-xl: 20px;
+
+  /* Touch targets */
+  --hfx-touch-min: 44px;   /* iOS HIG min */
+  --hfx-touch-lg:  52px;   /* primary CTA */
+
+  /* Shadows — soft, modern */
+  --hfx-shadow-sm:  0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.04);
+  --hfx-shadow-md:  0 4px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.05);
+  --hfx-shadow-lg:  0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06);
+
+  /* Safe-area insets — default to 0 on browsers without env() */
+  --hfx-safe-top:    env(safe-area-inset-top,    0px);
+  --hfx-safe-right:  env(safe-area-inset-right,  0px);
+  --hfx-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --hfx-safe-left:   env(safe-area-inset-left,   0px);
+}
+
+/* ── Base: viewport polish applies on ALL screens but quietly ─────── */
+html {
+  -webkit-text-size-adjust: 100%;  /* iOS Safari: don't auto-inflate after rotate */
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Reusable mobile-friendly components (opt-in via class) ──────── */
+
+/* Modern card — soft shadow, generous padding, consistent radius */
+.hfx-card {
+  background: var(--cream, #141420);
+  border: 1px solid var(--border, #1e1e2a);
+  border-radius: var(--hfx-r-lg);
+  padding: var(--hfx-s-5);
+  box-shadow: var(--hfx-shadow-sm);
+}
+
+/* Bottom-sheet modal — mobile-native feel with drag handle */
+.hfx-bottom-sheet {
+  position: fixed; inset: auto 0 0 0;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--cream, #141420);
+  border-radius: var(--hfx-r-xl) var(--hfx-r-xl) 0 0;
+  padding-bottom: calc(var(--hfx-s-6) + var(--hfx-safe-bottom));
+  box-shadow: var(--hfx-shadow-lg);
+  -webkit-overflow-scrolling: touch;
+  animation: hfx-sheet-in .24s cubic-bezier(.4,0,.2,1);
+}
+.hfx-bottom-sheet::before {
+  content: '';
+  display: block;
+  width: 40px; height: 4px;
+  margin: 10px auto 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.2);
+}
+@keyframes hfx-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Primary CTA — large, tappable, confident */
+.hfx-btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hfx-s-2);
+  min-height: var(--hfx-touch-lg);
+  padding: 0 var(--hfx-s-5);
+  border-radius: var(--hfx-r-md);
+  font-size: var(--hfx-fs-md);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: none;
+  background: var(--gold, #c9920d);
+  color: #0a0a0f;
+  cursor: pointer;
+  transition: transform .1s, box-shadow .15s;
+}
+.hfx-btn-cta:active { transform: scale(0.98); }
+.hfx-btn-cta:focus-visible { outline: 2px solid var(--gold, #c9920d); outline-offset: 2px; }
+
+/* Utility: prevent horizontal overflow at the document root */
+.hfx-no-overflow-x { overflow-x: hidden; max-width: 100vw; }
+
+/* ── Phone (≤640px) — where the real work happens ─────────────────── */
+@media (max-width: 640px) {
+  /* Global baseline */
+  html, body { overflow-x: hidden; }
+  body { font-size: var(--hfx-fs-sm); line-height: 1.5; }
+
+  /* Any input can't drop below 16px or iOS Safari zooms on focus */
+  input, select, textarea { font-size: 16px; }
+
+  /* Any tap target at least 44px without us having to remember */
+  button, a[role="button"], [onclick] {
+    min-height: var(--hfx-touch-min);
+  }
+
+  /* Modern bottom-sheet modal upgrade — applied to existing .modal-overlay patterns */
+  .hfx-sheet-active .modal {
+    border-radius: var(--hfx-r-xl) var(--hfx-r-xl) 0 0;
+    padding-bottom: calc(var(--hfx-s-5) + var(--hfx-safe-bottom));
+  }
+  .hfx-sheet-active .modal::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    margin: 10px auto 2px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+  }
+}
