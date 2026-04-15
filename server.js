@@ -7841,44 +7841,9 @@ async function fetchYouTubeLiveChat(videoId) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// GET /api/public/youtube-meta/:videoId — real video stats for demo scanner
-// Uses YOUTUBE_API_KEY (same one as scan-youtube). No auth required.
-// ════════════════════════════════════════════════════════════════════════════
-app.get('/api/public/youtube-meta/:videoId', async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    if (!YOUTUBE_API_KEY) return res.status(503).json({ error: 'YouTube API not configured' });
-
-    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`;
-    const r = await fetch(apiUrl);
-    const data = await r.json();
-
-    const item = data?.items?.[0];
-    if (!item) return res.status(404).json({ error: 'Video not found' });
-
-    const stats   = item.statistics || {};
-    const snippet = item.snippet    || {};
-    const duration = item.contentDetails?.duration || 'PT0S'; // ISO 8601 e.g. PT14M23S
-
-    // Parse ISO 8601 duration to seconds
-    const durMatch = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    const durationSec = durMatch
-      ? (parseInt(durMatch[1] || 0) * 3600 + parseInt(durMatch[2] || 0) * 60 + parseInt(durMatch[3] || 0))
-      : 0;
-
-    res.json({
-      title:        snippet.title          || '',
-      channelTitle: snippet.channelTitle   || '',
-      commentCount: parseInt(stats.commentCount  || 0),
-      viewCount:    parseInt(stats.viewCount     || 0),
-      likeCount:    parseInt(stats.likeCount     || 0),
-      durationSec,                              // seconds
-      durationMin:  Math.round(durationSec / 60),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// GET /api/public/youtube-meta/:videoId — REMOVED (Phase 2). Fed the
+// creator-dashboard demo scanner that auto-generated markets from a
+// YouTube URL. Post-pivot creators don't create markets.
 
 app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
   try {
@@ -19009,49 +18974,10 @@ app.put('/api/user/change-password', requireAuth, async (req, res) => {
 // FEATURE 3 — GET/PUT /api/creator/youtube-scan-settings
 // Per-creator YouTube auto-scan schedule
 // ════════════════════════════════════════════════════════════
-app.get('/api/creator/youtube-scan-settings', requireCreator, async (req, res) => {
-  try {
-    let data, error;
-    if (pool) {
-      const _rows = await dbQuery('SELECT youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
-      data = _rows[0] || null;
-    } else {
-      const { data, error } = await supabase .from('creator_settings') .select('youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run') .eq('creator_id', req.creator.id) .maybeSingle();
-    }
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({
-      youtube_channel_id: data?.youtube_channel_id || '',
-      auto_scan_enabled:  data?.auto_scan_enabled  || false,
-      auto_scan_cadence:  data?.auto_scan_cadence  || 'daily',
-      auto_scan_last_run: data?.auto_scan_last_run || null,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put('/api/creator/youtube-scan-settings', requireCreator, async (req, res) => {
-  try {
-    const { youtube_channel_id, auto_scan_enabled, auto_scan_cadence } = req.body;
-    const updates = {};
-    if (youtube_channel_id !== undefined) updates.youtube_channel_id = youtube_channel_id || null;
-    if (typeof auto_scan_enabled === 'boolean') updates.auto_scan_enabled = auto_scan_enabled;
-    if (auto_scan_cadence)   updates.auto_scan_cadence  = auto_scan_cadence;
-    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
-    let error;
-    if (pool) {
-      const _cols = Object.keys(updates); const _vals = Object.values(updates);
-      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-      try { await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, req.creator.id]); } catch (e) { error = e; }
-    } else {
-      ({ error: error } = await supabase.from('creator_settings').update(updates).eq('creator_id', req.creator.id));
-    }
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true, ...updates });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// GET/PUT /api/creator/youtube-scan-settings — REMOVED (Phase 2).
+// Settings UI for the per-creator YouTube auto-scanner which is
+// gone (cron disabled above, function orphaned). auto_scan_* columns
+// on creator_settings left intact as harmless dead data.
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 3 — scanCreatorYouTubeChannels()
@@ -19159,8 +19085,10 @@ async function scanCreatorYouTubeChannels() {
   }
 }
 
-// Run creator YouTube auto-scan daily at 8am UTC — wrapped to prevent unhandled rejections
-cron.schedule('0 8 * * *', () => { scanCreatorYouTubeChannels().catch(err => console.error('[yt-scan] Cron error:', err.message)); });
+// YouTube auto-scan cron REMOVED (Phase 2). Scanned creator YouTube
+// channels daily and auto-created markets from new videos via Claude;
+// post-pivot creators don't publish markets. The scanCreatorYouTube
+// Channels() function body below is now orphaned dead code.
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 4 — autoResolveExpiredMarkets()
@@ -19484,11 +19412,13 @@ async function autoResolveNoSourceMarkets() {
 }
 
 // Run auto-resolve check every 30 minutes — wrapped to prevent unhandled rejections
-cron.schedule('*/30 * * * *', () => {
-  autoResolveExpiredMarkets().catch(err => console.error('[auto-resolve] Cron error:', err.message));
-  // Run no-source resolution 5 min after source-based, to avoid overlapping
-  setTimeout(() => { autoResolveNoSourceMarkets().catch(err => console.error('[auto-resolve-nosource] Cron error:', err.message)); }, 5 * 60 * 1000);
-});
+// Auto-resolve cron REMOVED (Phase 2). Ran every 30 min to find
+// expired community markets with a resolution_source URL, scraped
+// the source, asked Claude to resolve at >=82% confidence, and
+// auto-resolved (or emailed creator for manual review). Post-pivot
+// community markets don't exist. autoResolveExpiredMarkets() and
+// autoResolveNoSourceMarkets() function bodies remain as orphaned
+// dead code.
 
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
