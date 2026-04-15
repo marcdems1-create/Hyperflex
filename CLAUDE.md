@@ -749,7 +749,20 @@ git status   # verify files are dirty
 
 ---
 
-## ⚠️ MUST DO BEFORE DEPLOY — Run ALL migrations in order in Supabase SQL editor:
+## ⚠️ MUST DO BEFORE DEPLOY — Run ALL migrations in Railway Postgres (NOT Supabase)
+
+**The production DB is Railway Postgres, not Supabase.** `server.js:799` connects via `DATABASE_URL`, which Railway sets to its own Postgres service (`centerbeam.proxy.rlwy.net` or similar). The `supabase_migration_*.sql` filename prefix is historical — keep the filenames as-is for continuity, but run them in Railway's SQL console, not Supabase's.
+
+**To run migrations:**
+1. Railway dashboard → your **Postgres** service → **Data** tab → built-in SQL editor, OR
+2. `psql "$DATABASE_URL"` from a machine with `pg` installed, OR
+3. Any GUI (TablePlus/DBeaver/pgAdmin) connected via the Railway `DATABASE_URL`
+
+**To verify a migration landed:** `node scripts/schema-diff.js` — reports every table/column expected by `supabase_migration_*.sql` files vs. what Railway Postgres actually has. Run this after every migration and after every deploy that adds schema.
+
+**If you run SQL in Supabase by mistake:** it goes into a dead DB with ~9 users and no production traffic. Symptoms: Railway logs spam `relation "foo" does not exist` every cron cycle even though the table "exists" in Supabase. Fix is always "run it again in Railway".
+
+### Ordered migration list
   1. `supabase_migration_community_economy.sql`
   2. `supabase_migration_refill_history.sql`
   3. `supabase_migration_cpmm.sql`
