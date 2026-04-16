@@ -361,10 +361,12 @@
       try {
         var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
         var uid = p.userId || p.sub || p.id;
+        console.log('[nav] JWT payload keys:', Object.keys(p).join(','), '| resolved uid:', uid);
         if (uid) { _navUserId = uid; break; }
-      } catch (e) {}
+      } catch (e) { console.warn('[nav] JWT decode error:', e.message); }
     }
   })();
+  console.log('[nav] Profile link target:', _navUserId ? '/m/' + _navUserId : 'FALLBACK to /creator/login');
 
   // Check if any "More" link is active (to highlight More button)
   var moreActive = moreLinks.some(function(l) { return !l.sep && path === l.href; });
