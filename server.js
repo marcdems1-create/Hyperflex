@@ -9949,7 +9949,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify'
 ]);
 
 // GET /my — private member dashboard
@@ -10590,6 +10590,86 @@ app.get('/u/:slug', async (req, res) => {
 
 // GET /m/:userId — public member (trader) profile page
 app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
+
+// GET /passport/:userId — Prediction Passport (shareable credential page)
+app.get('/passport/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'passport.html')));
+
+// GET /api/verify/:userId — Public verification API (no auth required)
+// Returns a predictor's verified credential data for third-party consumption.
+// Hedge funds, DAOs, media outlets, and hiring platforms use this to verify
+// prediction skill without needing a HYPERFLEX account.
+app.get('/api/verify/:userId', async (req, res) => {
+  try {
+    const uid = req.params.userId;
+    let user = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, display_name, username, is_whale, whale_rank, wallet_verified, created_at FROM users WHERE id = $1 LIMIT 1', [uid]);
+      user = rows[0] || null;
+    }
+    if (!user) return res.status(404).json({ verified: false, error: 'User not found' });
+
+    // Prediction stats from takes
+    let stats = { total: 0, resolved: 0, correct: 0, accuracy: 0 };
+    if (pool) {
+      const sr = await dbQuery(
+        `SELECT COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE is_correct IS NOT NULL)::int AS resolved,
+          COUNT(*) FILTER (WHERE is_correct = true)::int AS correct
+         FROM takes WHERE user_id = $1`, [uid]);
+      if (sr[0]) {
+        stats.total = sr[0].total;
+        stats.resolved = sr[0].resolved;
+        stats.correct = sr[0].correct;
+        stats.accuracy = sr[0].resolved > 0 ? Math.round((sr[0].correct / sr[0].resolved) * 100) : 0;
+      }
+    }
+
+    // Flex score + points
+    let flexScore = null, flexPoints = 0, followers = 0;
+    if (pool) {
+      const fr = await dbQuery('SELECT flex_score_alltime, flex_score_90d, predictions_resolved FROM users WHERE id = $1', [uid]);
+      if (fr[0]) flexScore = fr[0].flex_score_alltime ?? fr[0].flex_score_90d ?? null;
+      const fp = await dbQuery('SELECT total_points FROM flex_points WHERE user_id = $1', [uid]).catch(() => []);
+      if (fp[0]) flexPoints = fp[0].total_points || 0;
+      const fc = await dbQuery('SELECT COUNT(*)::int AS cnt FROM predictor_follows WHERE following_id = $1', [uid]).catch(() => []);
+      if (fc[0]) followers = fc[0].cnt || 0;
+    }
+
+    // Tier
+    let tier = 'NEWCOMER';
+    if (stats.accuracy >= 70 && stats.resolved >= 10) tier = 'ORACLE';
+    else if (stats.accuracy >= 60 && stats.resolved >= 5) tier = 'SHARP';
+    else if (stats.accuracy >= 50 && stats.resolved >= 5) tier = 'SOLID';
+    else if (stats.resolved >= 3) tier = 'SPECULATOR';
+
+    res.json({
+      verified: true,
+      platform: 'HYPERFLEX',
+      credential: {
+        user_id: uid,
+        display_name: user.display_name,
+        username: user.username || null,
+        tier: tier,
+        accuracy_pct: stats.accuracy,
+        predictions_total: stats.total,
+        predictions_resolved: stats.resolved,
+        predictions_correct: stats.correct,
+        flex_score: flexScore,
+        flex_points: flexPoints,
+        followers: followers,
+        is_whale: user.is_whale || false,
+        wallet_verified: user.wallet_verified || false,
+        member_since: user.created_at,
+      },
+      verification_url: `https://hyperflex.network/passport/${uid}`,
+      api_docs: 'https://hyperflex.network/api-docs',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[verify]', err.message);
+    res.status(500).json({ verified: false, error: 'Verification unavailable' });
+  }
+});
 
 // GET /p/:username — public verified trader profile page
 app.get('/p/:username', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile-trader.html')));

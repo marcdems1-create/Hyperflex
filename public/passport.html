@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prediction Passport — HYPERFLEX</title>
+<meta name="description" content="Verified prediction track record on HYPERFLEX">
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="HYPERFLEX">
+<meta name="twitter:card" content="summary_large_image">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --gold: #c9920d; --paper: #0e0e12; --surface: #141418; --card: #1a1a1f; --border: #2a2a32; --text: #f0f0f5; --soft: #a0a0aa; --muted: #606068; --green: #00e68a; --red: #ff4d6a; --blue: #4d9fff; --purple: #a855f7; --mono: 'Space Mono', monospace; --sans: 'Inter', sans-serif; }
+body { background: var(--paper); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+
+/* Passport container */
+.passport { max-width: 600px; margin: 0 auto; padding: 32px 20px 60px; }
+
+/* Header badge */
+.passport-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(201,146,13,0.08); border: 1px solid rgba(201,146,13,0.25); border-radius: 20px; padding: 6px 14px; font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 24px; }
+
+/* Identity */
+.passport-identity { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.passport-avatar { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--sans); font-size: 22px; font-weight: 800; border: 2px solid var(--border); flex-shrink: 0; }
+.passport-name { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.passport-handle { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 2px; }
+.passport-bio { font-size: 13px; color: var(--soft); line-height: 1.5; margin-top: 6px; max-width: 400px; }
+
+/* Tier card */
+.tier-card { background: var(--card); border-radius: 16px; padding: 28px; margin-bottom: 24px; text-align: center; position: relative; overflow: hidden; }
+.tier-card::before { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 1px; background: linear-gradient(135deg, var(--tier-color, var(--gold)), transparent 60%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+.tier-icon { font-size: 40px; margin-bottom: 8px; }
+.tier-label { font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.tier-score { font-family: var(--mono); font-size: 56px; font-weight: 700; line-height: 1; margin: 8px 0; }
+.tier-subtitle { font-size: 12px; color: var(--muted); }
+
+/* Stats grid */
+.passport-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+.passport-stat { background: var(--card); padding: 18px 12px; text-align: center; }
+.passport-stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1.2; }
+.passport-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+/* Top calls */
+.top-calls-title { font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+.call-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+.call-side { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; flex-shrink: 0; }
+.call-side.yes { background: rgba(0,230,138,0.1); color: var(--green); }
+.call-side.no { background: rgba(255,77,106,0.1); color: var(--red); }
+.call-q { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; line-height: 1.4; }
+.call-result { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; }
+.call-result.correct { background: rgba(0,230,138,0.1); color: var(--green); }
+.call-result.incorrect { background: rgba(255,77,106,0.1); color: var(--red); }
+
+/* Verification footer */
+.verified-footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; }
+.verified-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--green); margin-bottom: 8px; }
+.verified-link { font-family: var(--mono); font-size: 10px; color: var(--muted); word-break: break-all; }
+.verified-timestamp { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+/* Share bar */
+.share-bar { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+.share-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--text); transition: all 0.15s; text-decoration: none; }
+.share-btn:hover { border-color: var(--gold); color: var(--gold); }
+.share-btn.primary { background: var(--gold); color: #0e0e12; border-color: var(--gold); }
+.share-btn.primary:hover { opacity: 0.9; }
+
+/* CTA */
+.passport-cta { background: linear-gradient(135deg, rgba(201,146,13,0.06), rgba(201,146,13,0.02)); border: 1px solid rgba(201,146,13,0.2); border-radius: 12px; padding: 20px; text-align: center; margin-top: 24px; }
+.passport-cta-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.passport-cta-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.passport-cta-link { display: inline-block; background: var(--gold); color: #0e0e12; font-weight: 700; font-size: 13px; padding: 10px 24px; border-radius: 8px; text-decoration: none; }
+
+/* Embed code */
+.embed-section { margin-top: 20px; }
+.embed-toggle { font-family: var(--mono); font-size: 11px; color: var(--muted); cursor: pointer; background: none; border: none; text-decoration: underline; }
+.embed-code { display: none; margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 11px; color: var(--soft); word-break: break-all; position: relative; }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .passport { padding: 20px 16px 40px; }
+  .passport-name { font-size: 20px; }
+  .tier-score { font-size: 44px; }
+  .passport-stats { grid-template-columns: repeat(2, 1fr); }
+  .passport-stat:last-child { grid-column: span 2; }
+}
+
+.loading { color: var(--muted); text-align: center; padding: 80px 20px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="passport" id="passport">
+  <div class="loading">Loading credential...</div>
+</div>
+
+<script>
+var userId = location.pathname.split('/').pop();
+var API = location.origin;
+
+function timeAgo(d) {
+  if (!d) return '';
+  var ts = d.endsWith('Z') || d.includes('+') ? d : d + 'Z';
+  var s = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  if (s < 2592000) return Math.floor(s/86400) + 'd ago';
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+function fmtK(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : n; }
+
+async function load() {
+  var el = document.getElementById('passport');
+  try {
+    var res = await fetch(API + '/api/member/' + userId);
+    if (!res.ok) { el.innerHTML = '<div class="loading">Profile not found</div>'; return; }
+    var data = await res.json();
+    var u = data.user, s = data.stats, ts = data.take_stats || {}, takes = data.recent_takes || [];
+
+    var winPct = s.settled_predictions > 0 ? Math.round((s.wins / s.settled_predictions) * 100) : 0;
+    var flexScore = s.flex_score_alltime != null ? s.flex_score_alltime : s.flex_score_90d;
+
+    // Tier
+    var tier, tierIcon, tierColor;
+    if (winPct >= 70 && s.settled_predictions >= 10) { tier = 'ORACLE'; tierIcon = '🎯'; tierColor = '#c9920d'; }
+    else if (winPct >= 60 && s.settled_predictions >= 5) { tier = 'SHARP'; tierIcon = '🎯'; tierColor = '#00e68a'; }
+    else if (winPct >= 50 && s.settled_predictions >= 5) { tier = 'SOLID'; tierIcon = '📊'; tierColor = '#4d9fff'; }
+    else if (s.settled_predictions >= 3) { tier = 'SPECULATOR'; tierIcon = '🎲'; tierColor = '#a0a0aa'; }
+    else { tier = 'NEWCOMER'; tierIcon = '🆕'; tierColor = '#a0a0aa'; }
+
+    // OG tags
+    document.title = u.display_name + ' — Prediction Passport | HYPERFLEX';
+    var metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.content = u.display_name + ' is a ' + tier + ' predictor with ' + winPct + '% accuracy across ' + (s.settled_predictions || 0) + ' predictions on HYPERFLEX.';
+
+    // Top correct calls
+    var correctCalls = takes.filter(function(t) { return t.is_correct === true; }).slice(0, 5);
+    var callsHtml = correctCalls.length ? correctCalls.map(function(t) {
+      return '<div class="call-card">' +
+        '<span class="call-side ' + ((t.side||'').toLowerCase()) + '">' + (t.side||'').toUpperCase() + '</span>' +
+        '<span class="call-q">' + (t.question||'').replace(/</g,'&lt;') + '</span>' +
+        '<span class="call-result correct">✓ CORRECT</span>' +
+      '</div>';
+    }).join('') : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">No resolved predictions yet</div>';
+
+    var initials = (u.display_name || '?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2);
+    var avatarBg = u.is_whale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'var(--card)';
+
+    var profileUrl = 'https://hyperflex.network/m/' + userId;
+    var passportUrl = 'https://hyperflex.network/passport/' + userId;
+    var verifyUrl = 'https://hyperflex.network/api/verify/' + userId;
+
+    var tweetText = encodeURIComponent(
+      'My verified prediction track record:\n\n' +
+      '🎯 ' + tier + ' tier\n' +
+      '📊 ' + winPct + '% accuracy across ' + (s.settled_predictions || 0) + ' predictions\n' +
+      (flexScore != null ? '⚡ Flex Score: ' + flexScore + '/100\n' : '') +
+      '\nVerify it yourself 👇\n' + passportUrl
+    );
+
+    el.innerHTML =
+      '<div class="passport-badge">🛂 Prediction Passport</div>' +
+
+      '<div class="passport-identity">' +
+        '<div class="passport-avatar" style="background:' + avatarBg + ';color:' + tierColor + '">' + (u.is_whale ? '🐋' : initials) + '</div>' +
+        '<div>' +
+          '<div class="passport-name">' + (u.display_name || 'Anonymous') + '</div>' +
+          (u.username ? '<div class="passport-handle">@' + u.username + '</div>' : '') +
+          (u.bio ? '<div class="passport-bio">' + u.bio.replace(/</g,'&lt;') + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="tier-card" style="--tier-color:' + tierColor + '">' +
+        '<div class="tier-icon">' + tierIcon + '</div>' +
+        '<div class="tier-label" style="color:' + tierColor + '">' + tier + '</div>' +
+        '<div class="tier-score" style="color:' + tierColor + '">' + winPct + '%</div>' +
+        '<div class="tier-subtitle">prediction accuracy across ' + (s.settled_predictions || 0) + ' resolved markets</div>' +
+      '</div>' +
+
+      '<div class="passport-stats">' +
+        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--gold)">' + (flexScore != null ? flexScore : '—') + '</div><div class="passport-stat-label">Flex Score</div></div>' +
+        '<div class="passport-stat"><div class="passport-stat-value">' + (s.settled_predictions || 0) + '</div><div class="passport-stat-label">Predictions</div></div>' +
+        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--green)">' + (s.wins || 0) + '</div><div class="passport-stat-label">Correct</div></div>' +
+        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--purple)">' + fmtK(s.flex_points || 0) + '</div><div class="passport-stat-label">FLEX Points</div></div>' +
+        '<div class="passport-stat"><div class="passport-stat-value">' + (s.followers || 0) + '</div><div class="passport-stat-label">Followers</div></div>' +
+        '<div class="passport-stat"><div class="passport-stat-value" style="color:' + (s.streak >= 3 ? '#ff8c00' : 'var(--text)') + '">' + (s.streak > 0 ? '🔥' + s.streak : '—') + '</div><div class="passport-stat-label">Streak</div></div>' +
+      '</div>' +
+
+      (ts.total > 0 ? '<div class="top-calls-title">Top Correct Calls</div>' + callsHtml : '') +
+
+      '<div class="verified-footer">' +
+        '<div class="verified-badge">✓ Verified by HYPERFLEX</div>' +
+        '<div class="verified-link">Verify: <a href="' + verifyUrl + '" target="_blank" style="color:var(--blue);text-decoration:none">' + verifyUrl + '</a></div>' +
+        '<div class="verified-timestamp">Data as of ' + new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + '</div>' +
+      '</div>' +
+
+      '<div class="share-bar">' +
+        '<a class="share-btn primary" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">🐦 Share on X</a>' +
+        '<button class="share-btn" onclick="navigator.clipboard.writeText(\'' + passportUrl + '\');this.textContent=\'✓ Copied!\';setTimeout(()=>this.textContent=\'📋 Copy Link\',2000)">📋 Copy Link</button>' +
+        '<a class="share-btn" href="' + profileUrl + '">View Full Profile →</a>' +
+      '</div>' +
+
+      '<div class="embed-section" style="text-align:center">' +
+        '<button class="embed-toggle" onclick="var c=document.getElementById(\'embedCode\');c.style.display=c.style.display===\'none\'?\'block\':\'none\'">Embed this credential on your website</button>' +
+        '<div class="embed-code" id="embedCode">' +
+          '&lt;iframe src="' + passportUrl + '?embed=1" width="400" height="520" frameborder="0" style="border-radius:12px;border:1px solid #2a2a32"&gt;&lt;/iframe&gt;' +
+          '<br><button onclick="navigator.clipboard.writeText(\'<iframe src=\\x22' + passportUrl + '?embed=1\\x22 width=\\x22400\\x22 height=\\x22520\\x22 frameborder=\\x220\\x22 style=\\x22border-radius:12px;border:1px solid #2a2a32\\x22></iframe>\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy embed code\',2000)" style="margin-top:8px;background:var(--gold);color:#0e0e12;border:none;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">Copy embed code</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="passport-cta">' +
+        '<div class="passport-cta-title">Build your own prediction track record</div>' +
+        '<div class="passport-cta-sub">Post takes, get scored, earn your tier</div>' +
+        '<a href="/" class="passport-cta-link">Start Predicting →</a>' +
+      '</div>';
+
+    // Embed mode: strip share bar + CTA for iframe
+    if (new URLSearchParams(location.search).get('embed') === '1') {
+      document.body.style.background = '#0e0e12';
+      var shareBar = document.querySelector('.share-bar');
+      var cta = document.querySelector('.passport-cta');
+      var embedSec = document.querySelector('.embed-section');
+      if (shareBar) shareBar.style.display = 'none';
+      if (cta) cta.style.display = 'none';
+      if (embedSec) embedSec.style.display = 'none';
+    }
+
+  } catch (err) {
+    el.innerHTML = '<div class="loading">Failed to load credential</div>';
+  }
+}
+
+load();
+</script>
+</body>
+</html>
