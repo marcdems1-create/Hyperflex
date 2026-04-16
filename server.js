@@ -418,7 +418,12 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
   res.json({ received: true });
 });
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  // Capture raw body for routes that need byte-exact HMAC signing (e.g. /api/polymarket/order).
+  // Avoids JSON.stringify(req.body) round-trip which can reorder keys and break builder attribution.
+  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); }
+}));
 
 // ── Telegram Bot Webhook (handles /start, /alerts, /stop, /whales commands) ──
 app.post('/telegram/webhook', (req, res) => {
@@ -35905,7 +35910,10 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 // the CLOB must see Railway's server IP, not the end user's IP.
 app.post('/api/polymarket/order', async (req, res) => {
   try {
-    const orderBody = JSON.stringify(req.body);
+    // Use raw body (byte-exact as the client sent it) so the builder HMAC
+    // signs the identical string the CLOB receives. JSON.stringify(req.body)
+    // can reorder keys and silently break builder attribution.
+    const orderBody = req.rawBody || JSON.stringify(req.body);
 
     // Only forward Poly auth + builder headers — nothing else
     const clobHeaders = {
@@ -35920,10 +35928,20 @@ app.post('/api/polymarket/order', async (req, res) => {
       const val = req.headers[h];
       if (val) clobHeaders[h.toUpperCase()] = val;
     }
-    // Inject server-side builder headers — always override any client-provided ones so
-    // attribution is guaranteed regardless of whether the client called builder-sign.
-    const builderHeaders = await getBuilderHeaders('POST', '/order', orderBody);
-    Object.assign(clobHeaders, builderHeaders);
+    // Also forward client-provided builder headers if present (browser got them from builder-sign)
+    const clientBuilderHeaders = [
+      'poly_builder_api_key', 'poly_builder_passphrase', 'poly_builder_timestamp', 'poly_builder_signature',
+    ];
+    let hasClientBuilder = false;
+    for (const h of clientBuilderHeaders) {
+      const val = req.headers[h];
+      if (val) { clobHeaders[h.toUpperCase()] = val; hasClientBuilder = true; }
+    }
+    // If the client didn't provide builder headers, generate fresh ones server-side
+    if (!hasClientBuilder) {
+      const builderHeaders = await getBuilderHeaders('POST', '/order', orderBody);
+      Object.assign(clobHeaders, builderHeaders);
+    }
 
     // Log what we're sending for debugging
     const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
@@ -35934,7 +35952,8 @@ app.post('/api/polymarket/order', async (req, res) => {
       '| maker:', (req.body.order && req.body.order.maker || '').slice(0, 10),
       '| auth_headers:', fwdHeaders.join(','),
       '| builder_attribution:', hasAttribution,
-      '| builder_key:', builderKeyPrefix ? builderKeyPrefix + '…' : 'NONE');
+      '| builder_key:', builderKeyPrefix ? builderKeyPrefix + '…' : 'NONE',
+      '| body_source:', req.rawBody ? 'raw' : 'reserialized');
 
     const r = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',

@@ -4213,7 +4213,11 @@ async function executeTrade() {
     // Request body for CLOB /order endpoint
     // NOTE: 'side' in the JSON body is a STRING ("BUY"/"SELL") per SDK's orderToJson.
     // The EIP-712 signing struct uses integer (0/1) — these are different representations.
+    // Key ordering MUST match the SDK's orderToJson() output:
+    // deferExec → order → owner → orderType
+    // CLOB may verify the builder HMAC against the canonical body string.
     var requestBody = JSON.stringify({
+      deferExec: false,
       order: {
         salt: parseInt(orderStruct.salt, 10),
         maker: orderStruct.maker,
@@ -4222,16 +4226,15 @@ async function executeTrade() {
         tokenId: orderStruct.tokenId,
         makerAmount: orderStruct.makerAmount,
         takerAmount: orderStruct.takerAmount,
+        side: clobSide,
         expiration: orderStruct.expiration,
         nonce: orderStruct.nonce,
         feeRateBps: String(orderStruct.feeRateBps),
-        side: clobSide,
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC',
-      deferExec: false
+      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
     });
     tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 
@@ -4280,6 +4283,7 @@ async function executeTrade() {
           apiSecret = localStorage.getItem('poly_api_secret');
           apiPassphrase = localStorage.getItem('poly_api_passphrase');
           var retryBody = JSON.stringify({
+            deferExec: false,
             order: JSON.parse(requestBody).order,
             owner: apiKey,
             orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
@@ -5346,23 +5350,29 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
       }
     );
 
-    // Get builder fee headers
-    var builderHeaders = {};
-    try {
-      var bRes = await fetch('/api/polymarket/builder-sign', { method: 'POST' });
-      if (bRes.ok) builderHeaders = await bRes.json();
-    } catch (e) {}
-
-    // Submit to CLOB
+    // Submit to CLOB — build body first so we can sign it for builder attribution
     var body = JSON.stringify({
+      deferExec: false,
       order: {
         salt: salt, maker: proxyAddress, signer: eoaAddress, taker: '0x0000000000000000000000000000000000000000',
         tokenId: tokenId, makerAmount: String(Math.round(rawMakerAmt * 1e6)),
-        takerAmount: String(Math.round(rawTakerAmt * 1e6)), expiration: '0', nonce: '0',
-        feeRateBps: feeRateBps || '0', side: 'SELL', signatureType: 2, signature: order
+        takerAmount: String(Math.round(rawTakerAmt * 1e6)), side: 'SELL', expiration: '0', nonce: '0',
+        feeRateBps: feeRateBps || '0', signatureType: 2, signature: order
       },
-      orderType: 'GTC', deferExec: false
+      owner: apiKey,
+      orderType: 'GTC'
     });
+
+    // Get builder fee headers (must pass body for HMAC signing)
+    var builderHeaders = {};
+    try {
+      var bRes = await fetch('/api/polymarket/builder-sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'POST', path: '/order', body: body })
+      });
+      if (bRes.ok) builderHeaders = await bRes.json();
+    } catch (e) {}
 
     var ts = Math.floor(Date.now() / 1000).toString();
     var hmacMsg = ts + 'POST' + '/order' + body;

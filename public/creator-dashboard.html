@@ -19957,7 +19957,11 @@ async function confirmTrade() {
     // Build CLOB request body — salt must be a JSON number, not string
     btn.textContent = 'Placing order...';
     console.log('[qt-trade] Order params:', { side: clobSide, price: roundedPrice, shares: finalShares, makerAmt, takerAmt, negRisk: isNegRisk, tickSize, exchange: exchangeAddr, maker: orderStruct.maker, signer: orderStruct.signer });
+    // Key ordering MUST match the SDK's orderToJson() output:
+    // deferExec → order → owner → orderType
+    // CLOB may verify the builder HMAC against the canonical body string.
     const requestBody = JSON.stringify({
+      deferExec: false,
       order: {
         salt: Number(orderStruct.salt),
         maker: orderStruct.maker,
@@ -19966,16 +19970,15 @@ async function confirmTrade() {
         tokenId: orderStruct.tokenId,
         makerAmount: orderStruct.makerAmount,
         takerAmount: orderStruct.takerAmount,
+        side: clobSide,
         expiration: orderStruct.expiration,
         nonce: orderStruct.nonce,
         feeRateBps: orderStruct.feeRateBps,
-        side: clobSide,
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK',
-      deferExec: false
+      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK'
     });
 
     // Route through Cloudflare Worker edge proxy to avoid geo-blocking.
