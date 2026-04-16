@@ -1257,6 +1257,45 @@ async function loadFeed(append) {
     });
 
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
+
+    // Belt-and-suspenders: the user has been reporting "posted toast fired
+    // but nothing on the feed". To rule out filter/cache races, explicitly
+    // fetch the authenticated user's own predictions and prepend any that
+    // aren't already in feedData. If the write succeeded, they'll appear
+    // here even when /api/predictions/feed for any reason leaves them out.
+    // Only runs on first-page loads (!append) and only when logged in.
+    if (!append && token) {
+      try {
+        var mr = await fetch(API + '/api/predictions/mine?limit=10', { headers: authHeaders() });
+        if (mr.ok) {
+          var md = await mr.json();
+          var mine = (md && md.predictions) || [];
+          console.log('[feed] /mine returned', mine.length, 'of user\'s predictions');
+          // Normalise into the feed-card shape. predictions/mine returns
+          // raw rows (no author wrap), so we stitch a minimal author onto
+          // each before running it through normaliseNew.
+          var minePrepped = mine.map(function(p) {
+            return Object.assign({}, p, {
+              _source: 'user',
+              author: p.author || { id: md.user_id, display_name: 'You' },
+            });
+          }).map(normaliseNew);
+          // Merge without duplicates — existing feed rows win on id match
+          // so the server's author/flex-score enrichment is preserved.
+          var seen = new Set(feedData.map(function(x) { return x.id; }));
+          var toPrepend = minePrepped.filter(function(x) { return !seen.has(x.id); });
+          if (toPrepend.length) {
+            console.log('[feed] prepending', toPrepend.length, 'of your posts that the feed query missed');
+            feedData = toPrepend.concat(feedData);
+          }
+        } else {
+          console.warn('[feed] /mine failed', mr.status);
+        }
+      } catch (mineErr) {
+        console.warn('[feed] /mine fetch threw', mineErr);
+      }
+    }
+
     // Server returns `cursor` (new shape) — keep `next_cursor` as fallback
     // for older responses (legacy social feed uses that name).
     nextCursor = data.cursor || data.next_cursor || null;
