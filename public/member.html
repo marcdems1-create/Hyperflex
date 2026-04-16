@@ -144,6 +144,34 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .cta-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
 .cta-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
 .cta-link { display: inline-block; background: var(--gold); color: #141412; font-weight: 700; font-size: 14px; padding: 10px 24px; border-radius: 8px; text-decoration: none; }
+/* ── Score Strip ── */
+.score-strip { display: flex; gap: 0; margin-bottom: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.score-strip-item { flex: 1; padding: 14px 12px; text-align: center; border-right: 1px solid var(--border); }
+.score-strip-item:last-child { border-right: none; }
+.score-strip-value { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; line-height: 1.2; }
+.score-strip-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+@media(max-width:480px) { .score-strip { flex-wrap: wrap; } .score-strip-item { flex: 1 1 50%; border-bottom: 1px solid var(--border); } .score-strip-item:nth-child(3),.score-strip-item:nth-child(4) { border-bottom: none; } .score-strip-item:nth-child(2) { border-right: none; } }
+/* ── Tabs ── */
+.profile-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 0; }
+.profile-tab { flex: 1; text-align: center; padding: 12px 16px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; background: none; border-top: 0; border-left: 0; border-right: 0; }
+.profile-tab:hover { color: var(--text-soft); }
+.profile-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+/* ── Take Cards (full, profile-style) ── */
+.take-card-full { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; transition: border-color 0.15s; }
+.take-card-full:hover { border-color: rgba(201,146,13,0.25); }
+.take-card-full a { text-decoration: none; }
+.take-card-q { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
+.take-card-thesis { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.take-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; font-size: 11px; font-family: 'Space Mono', monospace; }
+.take-card-actions { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; font-family: 'Space Mono', monospace; }
+.take-side { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; display: inline-block; }
+.take-side.yes { background: rgba(0,230,138,0.1); color: #00e68a; }
+.take-side.no { background: rgba(255,77,106,0.1); color: #ff4d6a; }
+.take-correct { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.take-correct.win { background: rgba(0,230,138,0.1); color: #00e68a; }
+.take-correct.loss { background: rgba(255,77,106,0.1); color: #ff4d6a; }
 /* ── READABILITY & MOBILE POLISH ── */
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
@@ -234,6 +262,14 @@ function _showInfoModal(title, bodyHtml) {
       <div style="font-size:13px;line-height:1.55;color:var(--text-soft)">${bodyHtml}</div>
     </div>`;
   document.body.appendChild(wrap);
+}
+
+function switchProfileTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+  var el = document.getElementById('tab-' + tabId);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
 function showFlexScoreInfo() {
@@ -383,7 +419,10 @@ async function load() {
             <span><strong style="color:var(--text);font-size:15px">${(stats.following || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Following</span></span>
             ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold);font-size:15px">${take_stats.total_agrees.toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Agrees</span></span>` : ''}
           </div>
-          <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy profile link</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy link</button>
+            <button class="share-btn" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share on X</button>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
             <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
             <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
@@ -392,131 +431,121 @@ async function load() {
         </div>
       </div>
 
-      ${scoreCardHTML}
-
-      <div class="stats-grid">
-        <div class="stat-card" style="border-color:rgba(201,146,13,0.35)">
-          <div class="stat-value" style="color:var(--gold)">${
-            stats.flex_score_alltime != null ? stats.flex_score_alltime
-              : stats.flex_score_90d != null ? stats.flex_score_90d
-              : '—'
-          }</div>
-          <div class="stat-label" style="display:flex;align-items:center;justify-content:center;gap:4px">
-            <span>Flex Score</span>
-            <button type="button" onclick="event.stopPropagation();showFlexScoreInfo()" aria-label="What is Flex Score?" style="background:none;border:0;padding:0;color:var(--muted);cursor:pointer;font-size:11px;line-height:1;min-height:auto">ⓘ</button>
-          </div>
-          ${stats.flex_score_alltime != null
-            ? `<div class="wr-bar-wrap"><div class="wr-bar" style="width:${stats.flex_score_alltime}%;background:var(--gold)"></div></div>`
-            : `<div style="font-size:10px;color:var(--muted);margin-top:4px">${stats.predictions_resolved || 0} resolved</div>`}
+      <!-- Score Strip — compact horizontal metrics bar -->
+      <div class="score-strip">
+        <div class="score-strip-item" onclick="showFlexScoreInfo()" style="cursor:pointer">
+          <div class="score-strip-value" style="color:var(--gold)">${stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—'}</div>
+          <div class="score-strip-label">Flex Score <span style="font-size:9px">ⓘ</span></div>
         </div>
-        <div class="stat-card" style="${rankClass !== 'default' ? `border-color:${rankColor}44` : ''}">
-          <div class="stat-value" style="color:${avgColor}">${stats.win_rate}%</div>
-          <div class="stat-label">Accuracy</div>
-          <div class="wr-bar-wrap"><div class="wr-bar" style="width:${stats.win_rate}%;background:${avgColor}"></div></div>
+        <div class="score-strip-item">
+          <div class="score-strip-value" style="color:${avgColor}">${winPct}%</div>
+          <div class="score-strip-label">Accuracy</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value">${stats.settled_predictions || 0}</div>
-          <div class="stat-label">Predictions</div>
-          ${stats.wins ? `<div style="font-size:10px;color:var(--green);margin-top:4px">${stats.wins} correct</div>` : ''}
+        <div class="score-strip-item" onclick="showFlexPointsInfo()" style="cursor:pointer">
+          <div class="score-strip-value" style="color:#a855f7">${(stats.flex_points || 0) >= 1000 ? ((stats.flex_points / 1000).toFixed(1) + 'K') : (stats.flex_points || 0)}</div>
+          <div class="score-strip-label">⚡ FLEX Pts <span style="font-size:9px">ⓘ</span></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" style="color:${stats.streak >= 3 ? '#ff8c00' : 'var(--text)'}">${stats.streak > 0 ? `🔥${stats.streak}` : '—'}</div>
-          <div class="stat-label">Streak</div>
-        </div>
-        <div class="stat-card" style="border-color:rgba(168,85,247,0.35)">
-          <div class="stat-value" style="color:#a855f7">${
-            (stats.flex_points || 0) >= 1000
-              ? (stats.flex_points / 1000).toFixed(1) + 'K'
-              : (stats.flex_points || 0)
-          }</div>
-          <div class="stat-label" style="display:flex;align-items:center;justify-content:center;gap:4px">
-            <span>⚡ FLEX Points</span>
-            <button type="button" onclick="event.stopPropagation();showFlexPointsInfo()" aria-label="What are FLEX Points?" style="background:none;border:0;padding:0;color:var(--muted);cursor:pointer;font-size:11px;line-height:1;min-height:auto">ⓘ</button>
-          </div>
+        <div class="score-strip-item">
+          <div class="score-strip-value" style="color:${stats.streak >= 3 ? '#ff8c00' : 'var(--text)'}">${stats.streak > 0 ? stats.streak : '—'}</div>
+          <div class="score-strip-label">${stats.streak >= 3 ? '🔥 ' : ''}Streak</div>
         </div>
       </div>
 
-      <!-- Best Call trophy — hero hook, shown right below stats so visitors
-           see the user's biggest proven win before anything else. -->
-      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
-        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
-        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
-          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
-          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
-        </div>
+      <!-- Tabs -->
+      <div class="profile-tabs">
+        <button class="profile-tab active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ' <span style=\\"font-family:Space Mono,monospace;font-size:11px;color:var(--muted);font-weight:400\\">(' + take_stats.total + ')</span>' : ''}</button>
+        <button class="profile-tab" onclick="switchProfileTab('record',this)">Track Record</button>
       </div>
 
-      ${(take_stats && take_stats.total > 0) ? `
-      <!-- Takes — the social moat. Pulled above analytics so a visitor's
-           first scroll shows what this trader *says*, not a chart. -->
-      <div class="section">
-        <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span>Takes</span>
-          <span style="font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted)">${take_stats.total} total</span>
-          ${take_stats.accuracy > 0 ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};padding:2px 8px;border-radius:4px">${take_stats.accuracy}% accuracy</span>` : ''}
-          ${take_stats.total_agrees > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${take_stats.total_agrees} agrees</span>` : ''}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:0">
-          ${(recent_takes || []).slice(0, 8).map(t => {
-            const sideColor = (t.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
-            const sideBg = (t.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
-            const correct = t.is_correct === true ? '<span style="color:#00e68a;font-size:10px;margin-left:4px">✓</span>'
-              : t.is_correct === false ? '<span style="color:#ff4d6a;font-size:10px;margin-left:4px">✗</span>' : '';
+      <!-- ═══ TAKES TAB (default) ═══ -->
+      <div id="tab-takes" class="tab-content active">
+        ${(take_stats && take_stats.total > 0) ? `
+          ${take_stats.accuracy > 0 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.1)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.1)' : 'rgba(255,77,106,0.1)'};padding:4px 10px;border-radius:20px">${take_stats.accuracy}% take accuracy</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${take_stats.correct || 0}W / ${take_stats.incorrect || 0}L</span>
+          </div>` : ''}
+          ${(recent_takes || []).map(t => {
+            const sideUp = (t.side || '').toUpperCase();
             const href = t.market_slug ? '/market/' + t.market_slug : '#';
-            return `<a href="${href}" style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.5);text-decoration:none;transition:background .1s" ${href !== '#' ? '' : ''}>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.question || ''}</div>
-                ${t.thesis ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.thesis}</div>` : ''}
-                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
-                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${(t.side || '').toUpperCase()}</span>
-                  ${t.entry_price ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${Math.round(t.entry_price * 100)}¢</span>` : ''}
-                  <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">↑${t.agree_count || 0} ↓${t.disagree_count || 0}</span>
-                  ${correct}
-                  <span style="font-size:10px;color:var(--dim);margin-left:auto">${timeAgo(t.created_at)}</span>
+            const correctBadge = t.is_correct === true ? '<span class="take-correct win">✓ CORRECT</span>'
+              : t.is_correct === false ? '<span class="take-correct loss">✗ WRONG</span>' : '';
+            return `<div class="take-card-full">
+              <a href="${href}">
+                <div style="display:flex;align-items:flex-start;gap:8px">
+                  <span class="take-side ${sideUp === 'YES' ? 'yes' : 'no'}">${sideUp}</span>
+                  <span class="take-card-q">${t.question || ''}</span>
                 </div>
+              </a>
+              <div class="take-card-meta">
+                ${t.entry_price ? `<span style="color:var(--muted)">Entry: ${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                <span style="color:var(--muted)">${timeAgo(t.created_at)}</span>
+                ${correctBadge}
               </div>
-            </a>`;
+              ${t.thesis ? `<div class="take-card-thesis">${t.thesis.replace(/</g,'&lt;')}</div>` : ''}
+              <div class="take-card-actions">
+                <span style="color:var(--green)">↑ ${t.agree_count || 0}</span>
+                <span style="color:var(--red)">↓ ${t.disagree_count || 0}</span>
+              </div>
+            </div>`;
           }).join('')}
-        </div>
-        <a href="/explore" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:12px;text-decoration:none">View all takes →</a>
-      </div>` : (isOwner ? `
-      <!-- Empty-state for owner: prompt to post a first take. Visitors see
-           nothing (no empty-state nag to preserve a minimal vibe). -->
-      <div class="section" style="text-align:center;padding:28px 16px;background:rgba(201,146,13,0.04);border:1px dashed rgba(201,146,13,0.25);border-radius:12px">
-        <div style="font-size:22px;margin-bottom:6px">✍️</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">Post your first take</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Every take you post is scored when the market resolves. Build a track record that speaks for itself.</div>
-        <a href="/explore" style="display:inline-block;background:var(--gold);color:#0e0e15;font-family:var(--mono);font-size:12px;font-weight:700;padding:9px 18px;border-radius:20px;text-decoration:none">Post a take →</a>
-      </div>` : '')}
+        ` : (isOwner ? `
+          <div style="text-align:center;padding:40px 16px;background:rgba(201,146,13,0.04);border:1px dashed rgba(201,146,13,0.25);border-radius:12px">
+            <div style="font-size:28px;margin-bottom:8px">✍️</div>
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">Post your first take</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;max-width:320px;margin-left:auto;margin-right:auto">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
+            <a href="/explore" style="display:inline-block;background:var(--gold);color:#0e0e15;font-family:var(--mono);font-size:12px;font-weight:700;padding:10px 22px;border-radius:20px;text-decoration:none">Post a take →</a>
+          </div>
+        ` : `<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No takes posted yet.</div>`)}
+      </div>
 
-      <!-- Analytics (calibration + P&L) sits AFTER the social content block
-           above, since it's supporting evidence, not the headline. -->
-      <div id="analyticsSection" style="margin:24px 0;display:none">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-          <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-            <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Calibration Chart</div>
-            <div style="font-size:11px;color:#666;margin-bottom:12px">Predicted % vs actual outcomes</div>
-            <canvas id="calibrationChart" width="300" height="180"></canvas>
+      <!-- ═══ TRACK RECORD TAB ═══ -->
+      <div id="tab-record" class="tab-content">
+        ${scoreCardHTML}
+
+        <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
+          <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
+          <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
+            <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
+            <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
           </div>
-          <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-            <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
-            <canvas id="pnlChart" width="300" height="180"></canvas>
+        </div>
+
+        ${recent_wins.length ? `
+        <div class="section">
+          <div class="section-title">Recent Wins</div>
+          ${winsHtml}
+        </div>` : ''}
+
+        <div id="analyticsSection" style="margin:24px 0;display:none">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
+              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Calibration Chart</div>
+              <div style="font-size:11px;color:#666;margin-bottom:12px">Predicted % vs actual outcomes</div>
+              <canvas id="calibrationChart" width="300" height="180"></canvas>
+            </div>
+            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
+              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
+              <canvas id="pnlChart" width="300" height="180"></canvas>
+            </div>
           </div>
+        </div>
+
+        ${communities.length ? `
+        <div class="section">
+          <div class="section-title">Active Communities</div>
+          ${commHtml}
+        </div>` : ''}
+
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:16px 0;border-top:1px solid var(--border);margin-top:12px">
+          ${stats.settled_predictions || 0} predictions settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
         </div>
       </div>
 
-      <div id="socialPredictions" style="display:none" class="section">
-        <div class="section-title" style="display:flex;align-items:center;gap:8px">
-          Social Predictions
-          <span id="socialPredCount" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></span>
-        </div>
-        <div id="socialPredList"></div>
-      </div>
-
-      <div id="ownerTools" style="display:none;margin-bottom:20px">
+      <!-- Owner tools -->
+      <div id="ownerTools" style="display:none;margin:20px 0">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
           <button id="verifyWalletBtn" onclick="startWalletVerify()" class="verify-wallet-btn" style="display:none">🔗 Verify Wallet</button>
           <button id="editBioBtn" onclick="toggleBioEdit()" style="background:none;border:1px solid var(--border);color:var(--text-soft);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s">✏️ Edit Bio</button>
@@ -530,18 +559,6 @@ async function load() {
           </div>
         </div>
       </div>
-
-      ${recent_wins.length ? `
-      <div class="section">
-        <div class="section-title">Recent Wins</div>
-        ${winsHtml}
-      </div>` : ''}
-
-      ${communities.length ? `
-      <div class="section">
-        <div class="section-title">Active Communities</div>
-        ${commHtml}
-      </div>` : ''}
 
       <div class="cta-card">
         <div class="cta-title">Think you can beat them?</div>
