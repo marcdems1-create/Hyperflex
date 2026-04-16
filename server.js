@@ -16397,9 +16397,10 @@ async function _fetchRedditNew(subreddit) {
 // Returns { market_slug, market_question, predicted_side, confidence_pct } or null
 async function _extractInfluencerPrediction(postText, influencerName) {
   if (!postText || postText.length < 20) return null;
-  // Build context from screener cache (live Polymarket markets)
+  // Build context from screener cache (live Polymarket markets).
+  // Use up to 80 markets so niche/breaking topics don't fall through.
   const markets = (_screenerCache && _screenerCache.data || [])
-    .slice(0, 40)
+    .slice(0, 80)
     .map(m => `• ${m.question} [${m.slug}] YES=${Math.round((m.yes_price||0.5)*100)}%`)
     .join('\n');
   if (!markets) return null;

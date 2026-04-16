@@ -147,17 +147,37 @@ a:hover { text-decoration: underline; }
 .tweet-time { font-size: 12px; color: var(--text-faint); }
 .tweet-platform-icon { font-size: 16px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; }
 .tweet-body { font-size: 14px; line-height: 1.55; color: var(--text); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+/* Old strip kept for any legacy callers */
 .tweet-market-strip { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
-.tweet-market-label { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; font-family: 'Space Mono', monospace; }
+.tweet-market-label { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; font-family: var(--mono); }
 .tweet-market-q { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; }
 .tweet-market-q:hover { color: var(--gold); }
-.tweet-market-side { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Space Mono', monospace; letter-spacing: 0.04em; flex-shrink: 0; }
+.tweet-market-side { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: var(--mono); letter-spacing: 0.04em; flex-shrink: 0; }
 .tweet-market-side.yes { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
 .tweet-market-side.no { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
 .tweet-foot { display: flex; align-items: center; gap: 16px; padding-top: 8px; border-top: 1px solid var(--border); }
 .tweet-foot a { font-size: 11px; color: var(--text-faint); font-weight: 600; }
 .tweet-foot a:hover { color: rgba(29,155,240,1); text-decoration: none; }
 .tweet-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+/* ── Docked Polymarket card inside influencer tweets ── */
+.inf-card { border-left: 3px solid rgba(29,155,240,0.5); }
+.inf-card:hover { border-color: rgba(29,155,240,0.5); border-left-color: rgba(29,155,240,0.85); }
+.inf-market-dock { display: block; margin-top: 12px; background: rgba(201,146,13,0.04); border: 1px solid rgba(201,146,13,0.22); border-radius: 12px; overflow: hidden; text-decoration: none; transition: border-color .15s; }
+.inf-market-dock:hover { border-color: rgba(201,146,13,0.55); }
+.inf-market-dock-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 6px; border-bottom: 1px solid rgba(201,146,13,0.1); }
+.inf-market-dock-label { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: .1em; font-family: var(--mono); text-transform: uppercase; }
+.inf-market-dock-close { font-size: 10px; color: var(--text-faint); font-family: var(--mono); }
+.inf-market-dock-q { padding: 8px 12px 6px; font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.inf-odds-bar { display: flex; height: 4px; margin: 0 12px 2px; border-radius: 2px; overflow: hidden; gap: 2px; }
+.inf-odds-bar-yes { background: #00e68a; }
+.inf-odds-bar-no { background: #ff4d6a; }
+.inf-market-dock-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.inf-bet-yes, .inf-bet-no { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; font-family: var(--mono); text-decoration: none; flex-shrink: 0; transition: background .15s; }
+.inf-bet-yes { background: rgba(0,230,138,0.12); color: #00e68a; border: 1px solid rgba(0,230,138,0.28); }
+.inf-bet-yes:hover { background: rgba(0,230,138,0.22); }
+.inf-bet-no { background: rgba(255,77,106,0.12); color: #ff4d6a; border: 1px solid rgba(255,77,106,0.28); }
+.inf-bet-no:hover { background: rgba(255,77,106,0.22); }
+.inf-market-vol { font-size: 11px; color: var(--text-faint); font-family: var(--mono); margin-left: auto; }
 
 /* ── Modals ── */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -1416,6 +1436,89 @@ function renderFeed(noFollowsYet) {
   container.innerHTML = header + feedData.map(renderCard).join('');
 }
 
+function renderInfluencerCard(p) {
+  var author = p.author || {};
+  var name = esc(author.display_name || 'Anonymous');
+  var initial = (author.display_name || '?')[0].toUpperCase();
+  var avatarHtml = author.avatar_url
+    ? '<img src="' + esc(author.avatar_url) + '" alt="">'
+    : initial;
+
+  var platform = author.platform || p._platform || 'x';
+  var platformIcon = (platform === 'x' || platform === 'twitter') ? '𝕏' : platform === 'youtube' ? '▶' : '🌐';
+  var handle = author.handle || p._handle || '';
+  var handleHtml = handle
+    ? '<span class="tweet-handle">@' + esc(handle) + '</span><span class="tweet-dot">·</span>'
+    : '';
+
+  var tweetText = p.thesis_text || p.thesis || '';
+
+  // ── Docked Polymarket card ──
+  var marketDockHtml = '';
+  var marketHref = (p.market_live && p.market_live.url) || (p.market_id ? '/market/' + encodeURIComponent(p.market_id) : null);
+  var marketQ = p.market_title || (p.market_live && p.market_live.question) || '';
+
+  if (marketQ && marketHref) {
+    var ml = p.market_live || {};
+    var yesPct = ml.yes_pct != null ? ml.yes_pct : null;
+    var noPct = yesPct != null ? (100 - yesPct) : null;
+
+    var volLabel = ml.volume_24h
+      ? '$' + (ml.volume_24h >= 1e6 ? (ml.volume_24h / 1e6).toFixed(1) + 'M' : ml.volume_24h >= 1e3 ? Math.round(ml.volume_24h / 1e3) + 'K' : Math.round(ml.volume_24h))
+      : null;
+    var closesLabel = ml.closes_at
+      ? 'closes ' + new Date(ml.closes_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : null;
+
+    var oddsBarHtml = yesPct != null
+      ? '<div class="inf-odds-bar"><div class="inf-odds-bar-yes" style="width:' + yesPct + '%"></div><div class="inf-odds-bar-no" style="width:' + noPct + '%"></div></div>'
+      : '';
+
+    var yesBtnHtml = yesPct != null
+      ? '<a href="' + esc(marketHref) + '" class="inf-bet-yes">YES ' + yesPct + '¢</a>'
+      : '';
+    var noBtnHtml = noPct != null
+      ? '<a href="' + esc(marketHref) + '" class="inf-bet-no">NO ' + noPct + '¢</a>'
+      : '';
+
+    marketDockHtml =
+      '<a href="' + esc(marketHref) + '" class="inf-market-dock">' +
+        '<div class="inf-market-dock-head">' +
+          '<span class="inf-market-dock-label">📊 Polymarket</span>' +
+          (closesLabel ? '<span class="inf-market-dock-close">' + esc(closesLabel) + '</span>' : '') +
+        '</div>' +
+        '<div class="inf-market-dock-q">' + esc(marketQ) + '</div>' +
+        oddsBarHtml +
+        '<div class="inf-market-dock-foot">' +
+          yesBtnHtml +
+          noBtnHtml +
+          (volLabel ? '<span class="inf-market-vol">' + esc(volLabel) + ' 24h vol</span>' : '') +
+        '</div>' +
+      '</a>';
+  }
+
+  var externalUrl = p._external_url || p._content_url || null;
+
+  return '<div class="tweet-card inf-card">' +
+    '<div class="tweet-head">' +
+      '<div class="tweet-avatar">' + avatarHtml + '</div>' +
+      '<div class="tweet-author-col">' +
+        '<div class="tweet-name">' + name + '</div>' +
+        '<div class="tweet-handle-row">' +
+          handleHtml +
+          '<span class="tweet-time">' + timeAgo(p.posted_at) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<span class="tweet-platform-icon">' + platformIcon + '</span>' +
+    '</div>' +
+    (tweetText ? '<div class="tweet-body">' + esc(tweetText) + '</div>' : '') +
+    marketDockHtml +
+    '<div class="tweet-foot">' +
+      (externalUrl ? '<a href="' + esc(externalUrl) + '" target="_blank" rel="noopener">View on 𝕏 ↗</a>' : '') +
+    '</div>' +
+  '</div>';
+}
+
 function renderCard(p) {
   var author = p.author || {};
   var name = esc(author.display_name || 'Anonymous');
@@ -1433,51 +1536,9 @@ function renderCard(p) {
     ? '<span class="pred-resolved-count">' + author.predictions_resolved + ' resolved</span>'
     : '';
 
-  // ── Influencer tweet card ──
-  if (p._type === 'influencer') {
-    var platformIcon = p._platform === 'x' ? '𝕏' : p._platform === 'youtube' ? '▶' : '🌐';
-    var handleStr = p._handle ? '@' + p._handle : '';
-
-    // Market strip (shown when Claude matched a Polymarket market)
-    var marketStripHtml = '';
-    if (p._market_slug || p._market_question) {
-      var slug = p._market_slug || '';
-      var mq = p._market_question || p.market_title || '';
-      var sideHtml = p._predicted_side
-        ? '<span class="tweet-market-side ' + (p._predicted_side === 'YES' ? 'yes' : 'no') + '">' + esc(p._predicted_side) + '</span>'
-        : '';
-      marketStripHtml = '<a href="/market/' + esc(slug) + '" class="tweet-market-strip">' +
-        '<span class="tweet-market-label">MARKET</span>' +
-        '<span class="tweet-market-q">' + esc(mq) + '</span>' +
-        sideHtml +
-      '</a>';
-    }
-
-    // Tags
-    var tweetTags = (p.category_tags || []).length
-      ? '<div class="tweet-tags">' + p.category_tags.map(function(t) { return '<span class="pred-tag"><span class="pred-tag-dot">●</span>' + esc(t) + '</span>'; }).join('') + '</div>'
-      : '';
-
-    return '<div class="tweet-card">' +
-      '<div class="tweet-head">' +
-        '<div class="tweet-avatar">' + avatarHtml + '</div>' +
-        '<div class="tweet-author-col">' +
-          '<div class="tweet-name">' + name + '</div>' +
-          '<div class="tweet-handle-row">' +
-            '<span class="tweet-handle">' + esc(handleStr) + '</span>' +
-            '<span class="tweet-dot">·</span>' +
-            '<span class="tweet-time">' + timeAgo(p.posted_at) + '</span>' +
-          '</div>' +
-        '</div>' +
-        '<span class="tweet-platform-icon">' + platformIcon + '</span>' +
-      '</div>' +
-      '<div class="tweet-body">' + esc(p.thesis || '') + '</div>' +
-      marketStripHtml +
-      tweetTags +
-      '<div class="tweet-foot">' +
-        (p._content_url ? '<a href="' + esc(p._content_url) + '" target="_blank" rel="noopener">View original ↗</a>' : '') +
-      '</div>' +
-    '</div>';
+  // ── Influencer tweet card (both _source and _type paths) ──
+  if (p._source === 'influencer' || p._type === 'influencer') {
+    return renderInfluencerCard(p);
   }
 
   // ── Standard prediction card ──
