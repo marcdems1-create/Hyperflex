@@ -490,8 +490,12 @@ a:hover { text-decoration: underline; }
   </div>
 
   <!-- Post prediction CTA — opens the composer with a position picker, same
-       pattern as the dashboard's "Post Take" button -->
-  <div class="post-bar" id="postBar" onclick="openManualComposer()">
+       pattern as the dashboard's "Post Take" button. openFeedPostPicker
+       auto-loads the user's open Polymarket positions as chips; each chip
+       locks the market_title / side / entry_price into the composer so the
+       user only has to type their thesis. Falls back to the manual form
+       when no wallet is connected or no positions are open. -->
+  <div class="post-bar" id="postBar" onclick="openFeedPostPicker()">
     <div class="post-bar-avatar" id="postAvatar">?</div>
     <div class="post-bar-prompt">Post a prediction on any market...</div>
     <button class="post-bar-btn">Predict</button>
