@@ -19788,10 +19788,22 @@ async function confirmTrade() {
         if (bookRes.ok) {
           const bookData = await bookRes.json();
           let fillPrice = null;
-          const sellShares = price > 0 ? roundDown(amount / price, rounding.sizeDec) : 0;
+
+          // For SELL book walk: derive share count from current market price (same as the
+          // order itself uses), NOT from limitPrice. Using limitPrice here causes a false
+          // "not enough liquidity" check when limit < current price (e.g. 11.4¢ limit on
+          // an 18.6¢ position gives 34 shares when only 21 are held/needed).
+          const posCurrentPriceWalk = _tradeModalData.current_price || _tradeModalData.probability || price;
+          const heldSharesWalk = _tradeModalData.shares || _tradeModalData.size || Infinity;
+          const sellShares = Math.min(
+            posCurrentPriceWalk > 0 ? roundDown(amount / posCurrentPriceWalk, rounding.sizeDec) : 0,
+            heldSharesWalk
+          );
 
           if (clobSide === 'BUY') {
-            // Walk asks (cheapest first) until we've spent enough USD
+            // Walk asks cheapest→most-expensive (equivalent to SDK calculateBuyMarketPrice
+            // which iterates backwards over descending-sorted asks). Accumulate USD spent
+            // until >= order size; the price at that level is the worst fill = FOK limit.
             const asks = (bookData.asks || []).slice().sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
             let spent = 0;
             console.log('[qt-trade] Book walk BUY: need $' + amount + ', asks:', asks.length);
@@ -19801,7 +19813,9 @@ async function confirmTrade() {
               if (spent >= amount) { fillPrice = lp; break; }
             }
           } else {
-            // Walk bids (highest first) until we've matched enough shares
+            // Walk bids best→worst (equivalent to SDK calculateSellMarketPrice iterating
+            // backwards over ascending-sorted bids). Accumulate shares until >= needed;
+            // the price at that level is the worst acceptable bid = FOK limit.
             const bids = (bookData.bids || []).slice().sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
             let sharesLeft = sellShares;
             console.log('[qt-trade] Book walk SELL: need ' + sellShares + ' shares, bids:', bids.length,
@@ -19859,9 +19873,13 @@ async function confirmTrade() {
       return;
     }
 
-    // SDK-matching amount calculation (from @polymarket/clob-client getMarketOrderRawAmounts)
-    // BUY market order: "amount" = USD to spend. rawMakerAmt = USD, rawTakerAmt = shares = USD/price
-    // SELL market order: "amount" = shares to sell. rawMakerAmt = shares, rawTakerAmt = USD = shares*price
+    // Amount calculation mirrors @polymarket/clob-client helpers.ts exactly:
+    //   getMarketOrderRawAmounts (FOK):  BUY→ makerAmt=USD/sizeDec, takerAmt=shares/amountDec
+    //                                   SELL→ makerAmt=shares/sizeDec, takerAmt=USDC/amountDec
+    //   getOrderRawAmounts (GTC):        BUY→ takerAmt=shares/sizeDec, makerAmt=USDC/amountDec
+    //                                   SELL→ same as FOK SELL (identical overflow logic)
+    // BUY GTC uses USDC-first (roundDown USDC, derive shares) which is equivalent to SDK's
+    // shares-first at tick-aligned prices, and marginally better for buyer on non-aligned prices.
     function roundUp(val, decimals) { const f = Math.pow(10, decimals); return Math.ceil(val * f) / f; }
     function decimalPlaces(v) { const s = v.toString(); const i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; }
 
@@ -19888,20 +19906,21 @@ async function confirmTrade() {
       // SELL: convert USD amount → shares using current market price (NOT limit price).
       // Limit price is only the worst-acceptable fill price, not the conversion rate.
       // Cap at actual held shares to prevent "not enough balance" CLOB errors.
+      // SDK getOrderRawAmounts / getMarketOrderRawAmounts SELL (identical rounding for GTC+FOK):
+      //   rawMakerAmt = roundDown(shares, roundConfig.size)   ← shares, sizeDec=2 for tick 0.01
+      //   rawTakerAmt = rawMakerAmt × price                   ← USDC, amountDec=4 for tick 0.01
+      // Convert user's USD input → shares using current market price (not limit/walk price).
+      // Cap at held shares to prevent "not enough balance" CLOB rejection.
       const posCurrentPrice = _tradeModalData.current_price || _tradeModalData.probability || price;
       const sellShares = posCurrentPrice > 0 ? amount / posCurrentPrice : 0;
       const heldShares = _tradeModalData.shares || _tradeModalData.size || Infinity;
       const cappedShares = Math.min(sellShares, heldShares);
-      // FOK (market): CLOB requires shares ≤4 decimals, USDC ≤2 decimals (hard-coded, NOT tick-driven)
-      // GTC (limit): use tick-driven rounding config
-      const sellSizeDec = isMarketOrder ? 4 : rounding.sizeDec;
-      const sellAmtDec = isMarketOrder ? 2 : rounding.amountDec;
-      const rawMakerAmt = roundDown(cappedShares, sellSizeDec); // shares
-      let rawTakerAmt = rawMakerAmt * roundedPrice; // USDC we expect back
-      if (decimalPlaces(rawTakerAmt) > sellAmtDec) {
-        rawTakerAmt = roundUp(rawTakerAmt, sellAmtDec + 4);
-        if (decimalPlaces(rawTakerAmt) > sellAmtDec) {
-          rawTakerAmt = roundDown(rawTakerAmt, sellAmtDec);
+      const rawMakerAmt = roundDown(cappedShares, rounding.sizeDec); // shares, SDK: roundConfig.size
+      let rawTakerAmt = rawMakerAmt * roundedPrice; // USDC, SDK: rawMakerAmt × rawPrice
+      if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+        rawTakerAmt = roundUp(rawTakerAmt, rounding.amountDec + 4);
+        if (decimalPlaces(rawTakerAmt) > rounding.amountDec) {
+          rawTakerAmt = roundDown(rawTakerAmt, rounding.amountDec);
         }
       }
       finalShares = rawMakerAmt;
