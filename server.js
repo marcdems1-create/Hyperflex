@@ -15133,6 +15133,18 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     }
 
     const nextCursor = merged.length === lim ? merged[merged.length - 1].posted_at : null;
+
+    // Visibility log: quick signal on whether the feed is returning
+    // user predictions for the logged-in viewer. If the POST logs
+    // "ok id=... user_id=X" but this log shows userPosts=0 for the
+    // same userId right after, the /predictions query is the bug
+    // (type mismatch, case, filter, etc.)
+    console.log(
+      `[predictions-feed] mode=${mode} userId=${userId || 'none'} ` +
+      `userPosts=${userPosts.length} infPosts=${normalizedInfluencer.length} ` +
+      `takes=${normalizedTakes.length} returned=${merged.length}`
+    );
+
     // Expose both names so old clients (next_cursor) and new (cursor) work.
     res.json({ predictions: merged, cursor: nextCursor, next_cursor: nextCursor });
   } catch (err) {
@@ -43727,6 +43739,33 @@ app.post('/api/wallet/positions', requireAuth, async (req, res) => {
 });
 
 // POST /api/predictions — create a prediction (auth required)
+// GET /api/predictions/mine — returns the authenticated user's most recent
+// predictions, untouched by any feed filter. If this returns rows but
+// /api/predictions/feed doesn't show them, the feed query is the bug,
+// not the insert. Use this as the ground-truth "did my post save?" check.
+app.get('/api/predictions/mine', requireAuth, async (req, res) => {
+  try {
+    const lim = Math.min(parseInt(req.query.limit) || 10, 50);
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(
+        'SELECT id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at FROM predictions WHERE user_id = $1 ORDER BY posted_at DESC LIMIT $2',
+        [req.userId, lim]
+      );
+    } else if (supabase) {
+      const { data } = await supabase.from('predictions')
+        .select('id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at')
+        .eq('user_id', req.userId)
+        .order('posted_at', { ascending: false })
+        .limit(lim);
+      rows = data || [];
+    }
+    res.json({ user_id: req.userId, count: rows.length, predictions: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/predictions', requireAuth, async (req, res) => {
   try {
     const {
@@ -43788,6 +43827,16 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
     }
 
     if (!data) throw new Error('Insert returned no row');
+
+    // Visibility log: inserted row details + DB echoed values so Railway
+    // logs can confirm "user X posted prediction Y at T with market_id M"
+    // matches the feed-query filter. If POST logs success but the user
+    // still doesn't see their post, we know it's a read-path bug.
+    console.log(
+      `[predictions-post] ok id=${data.id} user_id=${data.user_id} ` +
+      `platform=${data.platform} market_id=${data.market_id} ` +
+      `direction=${data.direction} posted_at=${data.posted_at}`
+    );
 
     // Non-blocking: cascade detection
     detectCascade(data.id, data.market_id, data.posted_at).catch(() => {});

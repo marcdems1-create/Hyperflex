@@ -8571,6 +8571,7 @@ async function submitPostTake() {
   // queries for, otherwise the user posts as creator-id but the feed filters
   // for their member-id and their own take never surfaces.
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+  console.log('[dash-post-take] submitting', { market_id: p.market_id, direction: p.direction, hasToken: !!token });
   try {
     var r = await fetch('/api/predictions', {
       method: 'POST',
@@ -8587,8 +8588,19 @@ async function submitPostTake() {
         size_display:  'range',
       }),
     });
-    var data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Failed to post');
+    var data = await r.json().catch(function(){ return {}; });
+    console.log('[dash-post-take] response', r.status, data);
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    // Sanity ping — immediately fetch /api/predictions/mine to confirm the
+    // row actually lives in the DB under this user. Logs to console so if
+    // the feed still doesn't show it, we have ground-truth side-by-side.
+    try {
+      var mineRes = await fetch('/api/predictions/mine?limit=3', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      var mineBody = await mineRes.json().catch(function(){ return {}; });
+      console.log('[dash-post-take] mine (after insert)', mineBody);
+    } catch (mineErr) { console.warn('[dash-post-take] mine-check failed', mineErr); }
     closePostTakeModal();
     if (typeof showToast === 'function') {
       // showToast honours HTML when the message contains an <a> tag.
@@ -8597,7 +8609,12 @@ async function submitPostTake() {
       showToast('\u2705 Take posted \u2014 <a href="/feed" style="color:#c9920d;text-decoration:underline;font-weight:700">View on feed \u2192</a>', 'success', 6000);
     }
   } catch (e) {
-    alert('Error posting take: ' + e.message);
+    console.error('[dash-post-take] failed', e);
+    if (typeof showToast === 'function') {
+      showToast('Post failed: ' + e.message, 'error', 6000);
+    } else {
+      alert('Error posting take: ' + e.message);
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = originalLabel;
