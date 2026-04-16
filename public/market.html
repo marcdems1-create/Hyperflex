@@ -273,25 +273,31 @@ canvas{display:block;width:100%!important}
         <div id="mktOutcomes">Loading...</div>
       </div>
 
-      <!-- AI Intelligence Panel -->
-      <div class="mkt-intel" id="mktIntelSection" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px">
-        <h3 style="font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">AI Market Intelligence</h3>
-        <div id="intelOutcomeLabel" style="font-family:var(--body);font-size:12px;color:var(--soft);margin-bottom:14px;display:none"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px" id="intelGrid">
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px"><span id="intelMktLabel">YES Market Price</span></div>
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelMktPrice">—</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px"><span id="intelModelLabel">YES Model Price</span></div>
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)" id="intelModelPrice">—</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Alpha Edge</div>
-            <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelAlphaEdge">—</div>
-          </div>
+      <!-- Community Takes -->
+      <div class="mkt-comments" id="mktTakesSection" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0">Takes <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="takeCount"></span></h3>
+          <button onclick="openMarketTakeModal()" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:6px;padding:5px 12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.5)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.2)'">Post Take</button>
         </div>
-        <div style="font-family:var(--body);font-size:11px;color:var(--soft);line-height:1.6" id="intelExplain"></div>
+        <div id="marketTakesList" style="display:flex;flex-direction:column;gap:0">
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet — share your prediction</div>
+        </div>
+      </div>
+
+      <!-- Comments -->
+      <div class="mkt-comments" id="mktCommentsSection">
+        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
+        <div class="comments-tabs">
+          <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
+          <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
+        </div>
+        <div class="comment-list" id="commentList">
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>
+        </div>
+        <div class="comment-input-row">
+          <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
+          <button class="comment-submit" onclick="postMarketComment()">Post</button>
+        </div>
       </div>
 
       <!-- Whale Flow Timeline -->
@@ -332,33 +338,6 @@ canvas{display:block;width:100%!important}
           </div>
         </div>
         <div class="dist-legend" id="distLegend"></div>
-      </div>
-
-      <!-- Community Takes -->
-      <div class="mkt-comments" id="mktTakesSection" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h3 style="margin:0">Takes <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="takeCount"></span></h3>
-          <button onclick="openMarketTakeModal()" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:6px;padding:5px 12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.5)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.2)'">Post Take</button>
-        </div>
-        <div id="marketTakesList" style="display:flex;flex-direction:column;gap:0">
-          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet — share your prediction</div>
-        </div>
-      </div>
-
-      <!-- Comments -->
-      <div class="mkt-comments" id="mktCommentsSection">
-        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
-        <div class="comments-tabs">
-          <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
-          <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
-        </div>
-        <div class="comment-list" id="commentList">
-          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>
-        </div>
-        <div class="comment-input-row">
-          <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
-          <button class="comment-submit" onclick="postMarketComment()">Post</button>
-        </div>
       </div>
 
       <!-- Orderbook -->
@@ -655,7 +634,6 @@ async function loadMarket() {
     document.getElementById('marketContent').style.display = 'block';
     document.title = (_market._displayTitle || _market.question || 'Market') + ' | HYPERFLEX';
     loadTopHolders(_market);
-    loadMarketIntel();
     loadWhaleFlow(slug);
     // Load FLEX points if logged in
     try {
@@ -1021,8 +999,6 @@ function switchOutcome(index) {
     }
     updateSidebarPosition();
     updateOutcomeLabels();
-    // Refresh AI Intel for the newly selected outcome
-    if (typeof loadMarketIntel === 'function') loadMarketIntel();
     return;
   }
 
@@ -1063,120 +1039,6 @@ function switchOutcome(index) {
 
 // ── AI Market Intelligence ───────────────────────────────────────────────────
 // Cache the screener payload across outcome switches so we don't refetch.
-var _intelScreenerCache = null;
-var _intelScreenerCacheTs = 0;
-
-async function loadMarketIntel() {
-  try {
-    // Resolve the active outcome (multi-outcome events) or fall back to the single market
-    var activeMkt = null;
-    if (_sortedEventMarkets && _sortedEventMarkets.length > 0 && _sortedEventMarkets[_activeOutcomeIndex]) {
-      activeMkt = _sortedEventMarkets[_activeOutcomeIndex];
-    } else if (_market) {
-      activeMkt = _market;
-    }
-    if (!activeMkt) return;
-
-    var activeConditionId = (activeMkt.conditionId || activeMkt.condition_id || '').toLowerCase();
-    var activeQuestion = activeMkt.question || activeMkt.groupItemTitle || '';
-
-    // Pull the local YES price from the active outcome — always available,
-    // doesn't depend on the screener. The screener is only consulted for the
-    // model probability and whale stats, which may not be present for low-
-    // volume outcomes (anything outside the screener's top 200 by volume).
-    var localYes = null;
-    try {
-      var prices = activeMkt.outcomePrices || activeMkt.outcome_prices;
-      if (typeof prices === 'string') prices = JSON.parse(prices);
-      if (Array.isArray(prices) && prices[0] != null) localYes = parseFloat(prices[0]);
-      if (localYes == null && activeMkt.yes_price != null) localYes = parseFloat(activeMkt.yes_price);
-    } catch (e) { /* fall through */ }
-
-    // Fetch + cache screener data (90s TTL — matches server-side cache)
-    if (!_intelScreenerCache || (Date.now() - _intelScreenerCacheTs > 90 * 1000)) {
-      var r = await fetch('/api/screener?limit=200');
-      if (r.ok) {
-        var data = await r.json();
-        if (Array.isArray(data)) {
-          _intelScreenerCache = data;
-          _intelScreenerCacheTs = Date.now();
-        }
-      }
-    }
-    var markets = _intelScreenerCache || [];
-
-    // Match by conditionId first (unique per outcome). Fall back to question text.
-    var match = null;
-    if (activeConditionId) {
-      for (var i = 0; i < markets.length; i++) {
-        var mid = (markets[i].market_id || markets[i].conditionId || '').toLowerCase();
-        if (mid === activeConditionId) { match = markets[i]; break; }
-      }
-    }
-    if (!match && activeQuestion) {
-      var qLower = activeQuestion.toLowerCase();
-      for (var j = 0; j < markets.length; j++) {
-        if ((markets[j].question || '').toLowerCase() === qLower) { match = markets[j]; break; }
-      }
-    }
-
-    var section = document.getElementById('mktIntelSection');
-    var outcomeLabel = document.getElementById('intelOutcomeLabel');
-
-    // Show the outcome label whenever this is a multi-outcome event so the
-    // user knows WHICH outcome the panel refers to.
-    if (_sortedEventMarkets && _sortedEventMarkets.length > 1 && activeQuestion) {
-      outcomeLabel.textContent = activeQuestion;
-      outcomeLabel.style.display = '';
-    } else {
-      outcomeLabel.style.display = 'none';
-    }
-
-    section.style.display = '';
-
-    // Always show the YES market price from the local outcome data
-    var mktPct = localYes != null ? Math.round(localYes * 100) : null;
-    document.getElementById('intelMktPrice').textContent = mktPct != null ? mktPct + '%' : '—';
-
-    // Model + edge come from the screener — only show them if we have a match
-    if (!match || match.model_probability == null) {
-      document.getElementById('intelModelPrice').textContent = '—';
-      var edgeEl0 = document.getElementById('intelAlphaEdge');
-      edgeEl0.textContent = '—';
-      edgeEl0.style.color = 'var(--soft)';
-      document.getElementById('intelExplain').textContent = mktPct != null
-        ? 'Model signal not available for this outcome (low volume) · current YES is ' + mktPct + '%'
-        : 'Insufficient signal data for this outcome';
-      return;
-    }
-
-    var modelPct = Math.round(match.model_probability * 100);
-    // Edge = model - actual local price (use local price, not the screener's possibly-stale yes_price)
-    var edge = mktPct != null ? (modelPct - mktPct) : (match.alpha_edge != null ? match.alpha_edge : 0);
-
-    document.getElementById('intelModelPrice').textContent = modelPct + '%';
-
-    var edgeEl = document.getElementById('intelAlphaEdge');
-    edgeEl.textContent = (edge > 0 ? '+' : '') + edge + 'pts';
-    edgeEl.style.color = Math.abs(edge) >= 3 ? (edge > 0 ? 'var(--green)' : 'var(--red)') : 'var(--soft)';
-
-    // Build explanation
-    var parts = [];
-    if (match.whale_count >= 2) parts.push(match.whale_count + ' whale wallets positioned');
-    if (match.price_change_24h && Math.abs(match.price_change_24h) >= 3)
-      parts.push('price ' + (match.price_change_24h > 0 ? 'up' : 'down') + ' ' + Math.abs(Math.round(match.price_change_24h)) + '% in 24h');
-    if (match.total_whale_capital >= 100000)
-      parts.push('$' + (match.total_whale_capital >= 1e6 ? (match.total_whale_capital/1e6).toFixed(1)+'M' : Math.round(match.total_whale_capital/1000)+'K') + ' whale capital');
-
-    if (Math.abs(edge) >= 3) {
-      var dir = edge > 0 ? 'underpriced' : 'overpriced';
-      parts.unshift('Model suggests YES is ' + dir + ' by ' + Math.abs(edge) + ' points');
-    }
-
-    document.getElementById('intelExplain').textContent = parts.length > 0 ? parts.join(' · ') : 'Insufficient signal data for this outcome';
-  } catch(e) { console.warn('[intel]', e.message); }
-}
-
 // ── Whale Flow Timeline ─────────────────────────────────────────────────────
 async function loadWhaleFlow(marketSlug) {
   try {
