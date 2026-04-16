@@ -15208,6 +15208,37 @@ app.get('/api/predictions/user/:userId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/predictions/mine — authenticated user's own recent predictions.
+// MUST be registered before /api/predictions/:id, otherwise Express
+// matches /mine as :id='mine' (the /mine handler we have later in the
+// file never runs in that case). This is where the feed's belt-and-
+// suspenders prepend reads from, so getting it right here is load-
+// bearing — a 500 here blocks the user's posts from appearing on /feed
+// even when the write succeeded.
+app.get('/api/predictions/mine', requireAuth, async (req, res) => {
+  try {
+    const lim = Math.min(parseInt(req.query.limit) || 10, 50);
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(
+        'SELECT id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at FROM predictions WHERE user_id = $1 ORDER BY posted_at DESC LIMIT $2',
+        [req.userId, lim]
+      );
+    } else if (supabase) {
+      const { data } = await supabase.from('predictions')
+        .select('id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at')
+        .eq('user_id', req.userId)
+        .order('posted_at', { ascending: false })
+        .limit(lim);
+      rows = data || [];
+    }
+    res.json({ user_id: req.userId, count: rows.length, predictions: rows });
+  } catch (err) {
+    console.error('[predictions/mine]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/predictions/:id — single prediction
 app.get('/api/predictions/:id', async (req, res) => {
   try {
@@ -43841,33 +43872,9 @@ app.post('/api/wallet/positions', requireAuth, async (req, res) => {
 });
 
 // POST /api/predictions — create a prediction (auth required)
-// GET /api/predictions/mine — returns the authenticated user's most recent
-// predictions, untouched by any feed filter. If this returns rows but
-// /api/predictions/feed doesn't show them, the feed query is the bug,
-// not the insert. Use this as the ground-truth "did my post save?" check.
-app.get('/api/predictions/mine', requireAuth, async (req, res) => {
-  try {
-    const lim = Math.min(parseInt(req.query.limit) || 10, 50);
-    let rows = [];
-    if (pool) {
-      rows = await dbQuery(
-        'SELECT id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at FROM predictions WHERE user_id = $1 ORDER BY posted_at DESC LIMIT $2',
-        [req.userId, lim]
-      );
-    } else if (supabase) {
-      const { data } = await supabase.from('predictions')
-        .select('id, platform, market_id, market_title, direction, entry_price, conviction, thesis_text, outcome, posted_at')
-        .eq('user_id', req.userId)
-        .order('posted_at', { ascending: false })
-        .limit(lim);
-      rows = data || [];
-    }
-    res.json({ user_id: req.userId, count: rows.length, predictions: rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// Note: the GET /api/predictions/mine handler that used to live here
+// was moved earlier in the file (before /api/predictions/:id) because
+// Express was matching /mine against :id first and returning 500.
 app.post('/api/predictions', requireAuth, async (req, res) => {
   try {
     const {
