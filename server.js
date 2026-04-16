@@ -16897,6 +16897,22 @@ app.get('/api/influencer-feed', async (req, res) => {
       const { data } = await q;
       rows = data || [];
     }
+    // Attach live market prices from screener cache (same pattern as /api/predictions/feed).
+    // This is what lets the frontend show YES/NO price buttons instead of "% match".
+    if (_screenerCache?.data?.length) {
+      const bySlug = new Map(_screenerCache.data.map(m => [m.slug, m]));
+      for (const row of rows) {
+        if (!row.market_slug) continue;
+        const m = bySlug.get(row.market_slug);
+        if (!m) continue;
+        row.market_live = {
+          yes_pct:    m.yes_price != null ? Math.round(m.yes_price * 100) : null,
+          volume_24h: m.volume_24h || m.volume24hr || null,
+          closes_at:  m.endDate || m.end_date || null,
+          url:        m.slug ? `/market/${m.slug}` : null,
+        };
+      }
+    }
     res.json({ posts: rows, count: rows.length, updated_at: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: err.message });

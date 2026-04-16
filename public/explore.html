@@ -3535,13 +3535,36 @@ function renderInfluencerCard(p) {
   var timeAgo = p.published_at ? _reltime(p.published_at) : '';
   var text = (p.content_text || '').slice(0, 280);
   var predictionBar = '';
-  if (p.predicted_side) {
-    var sideColor = p.predicted_side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)';
-    predictionBar = '<div style="margin:10px 0 0;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.2);border:1px solid var(--border);display:flex;align-items:center;gap:10px">' +
-      '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + ';padding:2px 7px;border-radius:4px;background:' + (p.predicted_side==='YES' ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)') + '">' + p.predicted_side + '</span>' +
-      '<span style="font-size:12px;color:var(--text-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.market_question || '') + '</span>' +
-      (p.match_confidence ? '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + p.match_confidence + '% match</span>' : '') +
-      '</div>';
+  if (p.market_question || p.market_slug) {
+    var ml = p.market_live || {};
+    var yesPct = ml.yes_pct != null ? ml.yes_pct : null;
+    var noPct  = yesPct != null ? (100 - yesPct) : null;
+    var marketHref = (ml.url) || (p.market_slug ? '/market/' + encodeURIComponent(p.market_slug) : '#');
+    var volLabel = ml.volume_24h
+      ? '$' + (ml.volume_24h >= 1e6 ? (ml.volume_24h/1e6).toFixed(1)+'M' : ml.volume_24h >= 1e3 ? Math.round(ml.volume_24h/1e3)+'K' : Math.round(ml.volume_24h))
+      : null;
+    var oddsBarHtml = yesPct != null
+      ? '<div style="display:flex;height:3px;border-radius:2px;overflow:hidden;gap:2px;margin:6px 0 4px">'
+          + '<div style="background:#00e68a;width:' + yesPct + '%"></div>'
+          + '<div style="background:#ff4d6a;width:' + noPct + '%"></div>'
+        + '</div>'
+      : '';
+    var yesBtnHtml = yesPct != null
+      ? '<a href="' + escHtml(marketHref) + '" style="padding:4px 10px;border-radius:5px;background:rgba(0,230,138,0.12);color:#00e68a;border:1px solid rgba(0,230,138,0.28);font-family:var(--mono);font-size:11px;font-weight:700;text-decoration:none">YES ' + yesPct + '¢</a>'
+      : '';
+    var noBtnHtml = noPct != null
+      ? '<a href="' + escHtml(marketHref) + '" style="padding:4px 10px;border-radius:5px;background:rgba(255,77,106,0.12);color:#ff4d6a;border:1px solid rgba(255,77,106,0.28);font-family:var(--mono);font-size:11px;font-weight:700;text-decoration:none">NO ' + noPct + '¢</a>'
+      : '';
+    predictionBar =
+      '<a href="' + escHtml(marketHref) + '" style="display:block;margin:10px 0 0;padding:8px 10px;border-radius:8px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.2);text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(201,146,13,0.5)\'" onmouseout="this.style.borderColor=\'rgba(201,146,13,0.2)\'">'
+        + '<div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.market_question || '') + '</div>'
+        + oddsBarHtml
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+          + yesBtnHtml
+          + noBtnHtml
+          + (volLabel ? '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto">' + escHtml(volLabel) + ' 24h</span>' : '')
+        + '</div>'
+      + '</a>';
   }
   var sourceLink = p.content_url
     ? '<a href="' + escHtml(p.content_url) + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none">View original →</a>'
