@@ -1303,6 +1303,33 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// ── CLAUDE BUDGET GATE ─────────────────────────────
+// Every background cron that hits Claude (alpha-hooks, news-impact,
+// daily-brief, agent-signals, market-scanner, influencer-match) now
+// routes through this wrapper. User-facing paths (crystal ball,
+// post-take AI, on-demand market analysis) keep calling
+// anthropic.messages.create directly.
+//
+// Set CLAUDE_BACKGROUND_DISABLED=true in Railway to stop all background
+// Claude spend while keeping interactive features available. Useful when
+// the Anthropic credit balance is low and there are few/no users yet —
+// the always-on crons were the bulk of the burn.
+async function backgroundClaudeCall(opts, label) {
+  if (process.env.CLAUDE_BACKGROUND_DISABLED === 'true') {
+    const tag = label ? `[${label}]` : '[claude-bg]';
+    // Throttle this log so a 5-min cron doesn't spam on every tick.
+    const now = Date.now();
+    if (!backgroundClaudeCall._lastLog || (now - backgroundClaudeCall._lastLog) > 60 * 1000) {
+      console.log(`${tag} skipped — CLAUDE_BACKGROUND_DISABLED=true`);
+      backgroundClaudeCall._lastLog = now;
+    }
+    const err = new Error('Claude background call disabled via CLAUDE_BACKGROUND_DISABLED');
+    err.claudeDisabled = true;
+    throw err;
+  }
+  return anthropic.messages.create(opts);
+}
+
 // ── RESONANCE SCORING ─────────────────────────────
 // Scores a market question 1-10 for predicted community engagement.
 // Uses Haiku for speed + cost. Non-blocking — failures are silent.
@@ -3641,7 +3668,8 @@ async function scanAndCreateMarkets() {
     const systemPrompt =
       'You are a financial prediction market creator. Today is ' + today + '. Generate 5 prediction market questions with resolution_date between 30-90 days from today. All dates must be in 2026. Return ONLY a JSON array, no other text. Each object must have: question (string), category (crypto/commodities/earnings/macro), resolution_date (YYYY-MM-DD format), target_price (number), direction (above or below)';
 
-    const response = await anthropic.messages.create({
+    // Background cron — gated by CLAUDE_BACKGROUND_DISABLED.
+    const response = await backgroundClaudeCall({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: systemPrompt,
@@ -14402,8 +14430,12 @@ app.post('/api/takes', requireAuth, async (req, res) => {
 
     res.json({ ok: true, take: rows[0] });
   } catch (err) {
-    console.error('[takes] POST error:', err.message);
-    res.status(500).json({ error: 'Failed to create take' });
+    // Surface the real DB / validation error to the client instead of the
+    // generic "Failed to create take" — that opaque message made every
+    // failure identical (schema mismatch, RLS, FK violation) and there
+    // was no way to diagnose without Railway log access.
+    console.error('[takes] POST error:', err.message, err.code || '');
+    res.status(500).json({ error: err.message || 'Failed to create take' });
   }
 });
 
@@ -16294,7 +16326,8 @@ async function _extractInfluencerPrediction(postText, influencerName) {
     .join('\n');
   if (!markets) return null;
   try {
-    const resp = await anthropic.messages.create({
+    // Influencer tweet → market match. Background path; gated.
+    const resp = await backgroundClaudeCall({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
       messages: [{
@@ -20749,7 +20782,8 @@ async function scanCreatorYouTubeChannels() {
 
         const systemPrompt = `You are a prediction market creator for a content creator community. Today is ${today}. Based on a YouTube creator's channel niche and content style, generate 3 engaging prediction market questions their community would love to bet on. The creator's channel: "${channelId}". Return ONLY a valid JSON array with objects: { question, category, resolution_date (YYYY-MM-DD, 14-60 days from today) }. No other text.`;
 
-        const response = await anthropic.messages.create({
+        // Creator YouTube auto-scan — fires from cron. Gated.
+        const response = await backgroundClaudeCall({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 512,
           system: systemPrompt,
@@ -20875,8 +20909,8 @@ async function autoResolveExpiredMarkets() {
           continue;
         }
 
-        // Ask Claude Haiku to determine outcome
-        const aiResponse = await anthropic.messages.create({
+        // Ask Claude Haiku to determine outcome — cron-triggered; gated.
+        const aiResponse = await backgroundClaudeCall({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 256,
           system: 'You are a prediction market resolver. Given a market question and source content, determine if the outcome is YES, NO, or UNCERTAIN. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief explanation" }',
@@ -21056,7 +21090,8 @@ async function autoResolveNoSourceMarkets() {
         // Method 2: Ask Claude if the question has a knowable answer
         if (!outcome && process.env.ANTHROPIC_API_KEY) {
           try {
-            const aiRes = await anthropic.messages.create({
+            // Knowledge-based resolver fallback — cron-triggered; gated.
+            const aiRes = await backgroundClaudeCall({
               model: 'claude-haiku-4-5-20251001',
               max_tokens: 200,
               system: 'You resolve prediction markets. The market has expired. Based on your knowledge, determine if the prediction came true. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief" }. If you genuinely cannot determine the answer, return UNCERTAIN.',
@@ -25626,7 +25661,7 @@ async function generateAlphaHooks(topMarkets) {
   }).join('\n');
 
   try {
-    const resp = await anthropic.messages.create({
+    const resp = await backgroundClaudeCall({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 600,
       messages: [{
@@ -30655,7 +30690,7 @@ app.get('/api/news-impact', async (req, res) => {
     const headlineList = newsItems.slice(0, 10).map((n, i) => `${i + 1}. "${n.title}"`).join('\n');
     const marketList = marketQuestions.slice(0, 20).map((q, i) => `M${i + 1}. "${q}"`).join('\n');
 
-    const aiResponse = await anthropic.messages.create({
+    const aiResponse = await backgroundClaudeCall({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1200,
       messages: [{
@@ -33032,7 +33067,7 @@ app.get('/api/daily-brief', async (req, res) => {
     let aiCalls = [];
     try {
       if (picks.length > 0 || movers.length > 0) {
-        const callResponse = await anthropic.messages.create({
+        const callResponse = await backgroundClaudeCall({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 800,
           system: `You are an AI prediction market analyst. For each market provided, write a one-sentence trade thesis. Be specific — reference the data points. Return valid JSON array: [{"market":"...","thesis":"BUY YES/NO at X% because...","confidence":"HIGH/MEDIUM/LOW"}]. Max 5 calls.`,
@@ -33111,7 +33146,7 @@ app.get('/api/daily-brief', async (req, res) => {
     let narrative = '';
     const callSummaries = aiCalls.map(c => `[CALL-${c.call_id}]: ${c.market} — ${c.thesis} [${c.confidence}] (${c.stake} pts staked)`).join('\n');
     try {
-      const response = await anthropic.messages.create({
+      const response = await backgroundClaudeCall({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1200,
         system: `You are HYPERFLEX's AI market analyst. Write a concise, opinionated morning brief.
