@@ -8865,17 +8865,17 @@ app.post('/api/community/:slug/follow-social', requireAuth, async (req, res) => 
 
 app.get('/api/user/following', requireAuth, async (req, res) => {
   try {
-    let data;
+    let data = [];
     if (pool) {
-      data = await dbQuery('SELECT creator_slug, followed_at FROM creator_follows WHERE user_id = $1 ORDER BY followed_at DESC', [req.user.id]);
-    } else {
-      const { data: d, error } = await supabase.from('creator_follows').select('creator_slug, followed_at').eq('user_id', req.user.id).order('followed_at', { ascending: false });
-      if (error) throw error;
-      data = d;
+      data = await dbQuery('SELECT creator_slug, followed_at FROM creator_follows WHERE user_id = $1 ORDER BY followed_at DESC', [req.user.id]).catch(() => []);
+    } else if (supabase) {
+      const { data: d } = await supabase.from('creator_follows').select('creator_slug, followed_at').eq('user_id', req.user.id).order('followed_at', { ascending: false });
+      data = d || [];
     }
     res.json({ following: (data || []).map(r => r.creator_slug) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.warn('[user-following]', err.message);
+    res.json({ following: [] });
   }
 });
 
@@ -14719,22 +14719,16 @@ app.get('/api/takes/feed', optionalAuth, async (req, res) => {
     const cursor = req.query.cursor; // ISO timestamp for pagination
 
     // "For You" — algorithmic: recency × engagement × sharp_score × source variety
-    // Also boosts takes from followed users so Following is merged in.
     let sql = `SELECT t.*,
       (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
       (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
       (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
       CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
-      CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END`;
+      CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END
+      AS feed_score
+      FROM takes t WHERE 1=1`;
     let params = [];
     let paramIdx = 1;
-    // Boost followed users' takes in the feed score
-    if (req.userId) {
-      sql += ` + CASE WHEN EXISTS (SELECT 1 FROM predictor_follows pf WHERE pf.follower_id = $${paramIdx} AND pf.following_id = t.user_id) THEN 10 ELSE 0 END`;
-      params.push(req.userId);
-      paramIdx++;
-    }
-    sql += ` AS feed_score FROM takes t WHERE 1=1`;
     if (cursor) {
       sql += ` AND t.created_at < $${paramIdx}`;
       params.push(cursor);
@@ -21464,6 +21458,24 @@ app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
 });
 
 // ── WALLETS / CONNECTED ACCOUNTS ─────────────────────────────────────────────
+
+// GET /api/user/me — authenticated user's basic info
+app.get('/api/user/me', requireAuth, async (req, res) => {
+  try {
+    const uid = req.user?.id || req.userId;
+    if (!uid) return res.status(401).json({ error: 'Auth required' });
+    let user = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, display_name, username, email, avatar_url, bio, polymarket_address, wallet_verified FROM users WHERE id = $1 LIMIT 1', [uid]);
+      user = rows[0] || null;
+    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
+  } catch (err) {
+    console.warn('[user-me]', err.message);
+    res.status(500).json({ error: 'Failed to load user' });
+  }
+});
 
 // GET /api/user/wallets — return connected wallet/platform info for authed user
 app.get('/api/user/wallets', requireAuth, async (req, res) => {
