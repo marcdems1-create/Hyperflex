@@ -16536,14 +16536,11 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
-  // Gated behind TWITTERAPI_FETCH_ENABLED=true — see fetchInfluencerTweets
-  // comment. Reddit/YouTube/Substack paths don't hit twitterapi.io and
-  // would be fine, but the X path dominated the sweep's credit burn.
-  // When we confirm the twitterapi.io endpoint is returning real tweets
-  // again we'll flip this flag in Railway.
-  if (process.env.TWITTERAPI_FETCH_ENABLED !== 'true') {
-    console.log('[influencer] Skipped \u2014 set TWITTERAPI_FETCH_ENABLED=true to enable');
-    return;
+  // Reddit/YouTube/Substack use free public APIs — always run.
+  // X/Twitter requires twitterapi.io credits — skip X handles when disabled.
+  const xEnabled = process.env.TWITTERAPI_FETCH_ENABLED === 'true';
+  if (!xEnabled) {
+    console.log('[influencer] X/Twitter disabled (TWITTERAPI_FETCH_ENABLED!=true) — fetching Reddit/YouTube/Substack only');
   }
   console.log('[influencer] Starting influencer monitoring sweep');
 
@@ -16579,7 +16576,7 @@ async function monitorPolymarketInfluencers() {
 
     // ── X/Twitter (via twitterapi.io) ───────────────────────────────────
     if (inf.platform === 'x') {
-      if (!process.env.TWITTERAPI_IO_KEY) continue;
+      if (!xEnabled || !process.env.TWITTERAPI_IO_KEY) continue;
       // Update profile info if not cached
       if (!inf.platform_id || !inf.avatar_url) {
         const userData = await _resolveXUserId(inf.handle);
@@ -16768,14 +16765,33 @@ app.post('/api/admin/influencer-sweep-run', requireAdmin, async (req, res) => {
 // Run every 4 hours (was every 30 min) — reduces twitterapi.io burn
 // when the filters are producing few matches. The sweep still runs on
 // boot so fresh data appears quickly after a deploy.
+// Full sweep every 4 hours (all platforms — X only when TWITTERAPI_FETCH_ENABLED)
 cron.schedule('0 */4 * * *', () => {
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Cron error:', err.message));
+});
+// Reddit-only fast sweep every 30 min — free API, no rate limit concerns.
+// Keeps Trending feed fresh with recent Reddit posts matched to Polymarket.
+cron.schedule('15,45 * * * *', async () => {
+  try {
+    let influencers = [];
+    if (pool) {
+      influencers = await dbQuery("SELECT * FROM external_influencers WHERE is_active=true AND platform='reddit'", []);
+    }
+    if (!influencers.length) return;
+    console.log(`[influencer] Reddit fast sweep — ${influencers.length} subreddits`);
+    // Temporarily clear rate cache for Reddit handles so they refetch
+    for (const inf of influencers) _influencerFetchCache.delete(`reddit:${inf.handle}`);
+    // Run the full sweep (X will be skipped if disabled, YouTube/Substack rate-cached)
+    await monitorPolymarketInfluencers();
+  } catch (err) {
+    console.error('[influencer] Reddit fast sweep error:', err.message);
+  }
 });
 // Also run once on boot after a short delay (so tables + screener cache are warm)
 setTimeout(() => {
   console.log('[influencer] Running initial sweep on boot...');
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Boot sweep error:', err.message));
-}, 15000); // 15s after boot — fast enough for tables to exist, slow enough for DB to be ready
+}, 15000);
 
 // Manual trigger for influencer sweep (admin)
 app.post('/api/admin/influencer-sweep', async (req, res) => {
