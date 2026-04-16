@@ -26980,9 +26980,9 @@ app.delete('/api/stops/:id', async (req, res) => {
 
     const { id } = req.params;
     if (pool) {
-      await dbQuery(`UPDATE stop_orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND user_id = $2 AND status = 'active'`, [id, userId]);
+      await dbQuery(`UPDATE stop_orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND user_id = $2 AND status IN ('active', 'triggered')`, [id, userId]);
     } else {
-      await supabase.from('stop_orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).eq('status', 'active');
+      await supabase.from('stop_orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).in('status', ['active', 'triggered']);
     }
 
     // Remove from in-memory cache
