@@ -18569,12 +18569,44 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     // last_active_at added by Phase 2 activity tracking. Fall back to
     // NULL for rows that predate the column (boot migration should
     // have added it, but graceful fallback if schema is still cold).
+    //
+    // Exclude shadow profiles auto-created for whales/influencers —
+    // these are NOT real signups. They're rows inserted by
+    // ensureWhaleProfile()/ensureInfluencerProfile() so whale takes can
+    // be attributed to a clickable /m/:userId profile. They don't log
+    // in, don't have real emails, and were inflating the member count.
+    // Identified by: is_whale = true OR password_hash LIKE 'whale_profile_%'
+    //                                  OR password_hash LIKE 'influencer_profile_%'
+    const SHADOW_FILTER = `
+      (is_whale IS NOT TRUE)
+      AND (password_hash IS NULL
+           OR (password_hash NOT LIKE 'whale_profile_%'
+               AND password_hash NOT LIKE 'influencer_profile_%'))
+    `;
     const allUsers = await dbQuery(
       `SELECT id, email, display_name, polymarket_address, created_at, last_active_at
-       FROM users ORDER BY created_at DESC`
+       FROM users
+       WHERE ${SHADOW_FILTER}
+       ORDER BY created_at DESC`
     ).catch(async () => {
       // Fallback if last_active_at column doesn't exist yet
-      return dbQuery('SELECT id, email, display_name, polymarket_address, created_at FROM users ORDER BY created_at DESC').catch(() => []);
+      return dbQuery(
+        `SELECT id, email, display_name, polymarket_address, created_at
+         FROM users
+         WHERE ${SHADOW_FILTER}
+         ORDER BY created_at DESC`
+      ).catch(async () => {
+        // Final fallback if is_whale column doesn't exist yet — at least
+        // drop the password_hash-stub rows.
+        return dbQuery(
+          `SELECT id, email, display_name, polymarket_address, created_at
+           FROM users
+           WHERE password_hash IS NULL
+              OR (password_hash NOT LIKE 'whale_profile_%'
+                  AND password_hash NOT LIKE 'influencer_profile_%')
+           ORDER BY created_at DESC`
+        ).catch(() => []);
+      });
     });
     if (!allUsers?.length) return res.json([]);
 
