@@ -5383,7 +5383,7 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
 
     var headers = {
       'Content-Type': 'application/json',
-      'POLY_ADDRESS': proxyAddress, 'POLY_API_KEY': apiKey,
+      'POLY_ADDRESS': eoaAddress, 'POLY_API_KEY': apiKey,
       'POLY_PASSPHRASE': apiPassphrase, 'POLY_TIMESTAMP': ts, 'POLY_SIGNATURE': b64Sig
     };
     Object.assign(headers, builderHeaders);
