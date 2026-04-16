@@ -22784,17 +22784,35 @@ app.get('/api/markets/search', async (req, res) => {
     const seenPolyQuestions = new Set();
 
     // Helper: extract markets from a /public-search response
+    //
+    // Polymarket's /public-search returns EVENTS ranked by a server-side
+    // semantic match that ALSO considers event descriptions. We then
+    // pull all nested markets out of those events. That means a query
+    // like "marco rubio" — which Polymarket matches loosely against any
+    // event whose description mentions Rubio — was dumping totally
+    // unrelated nested markets (JD Vance, Maduro, Kash Patel, Kristi
+    // Noem, Bill Gates, etc.) into the candidate list. The relevance
+    // scorer couldn't help because those titles contain zero query
+    // words and all scored identically on volume tiebreaker.
+    //
+    // Fix: require the query to appear in either the event TITLE or the
+    // nested market title. Description matching is deliberately dropped
+    // for this path — Polymarket's own ranker already used description
+    // to pick the event, so trusting it a second time lets the same
+    // noise through. A strict title filter is what the user actually
+    // expects: type "marco rubio" → see markets that mention Marco Rubio.
     const parsePublicSearchResponse = (raw) => {
       // /public-search returns { events: [...] } with nested markets
       const events = raw?.events || (Array.isArray(raw) ? raw : []);
       const results = [];
       for (const evt of events) {
         const evtSlug = evt.slug || '';
+        const evtTitle = evt.title || '';
+        const evtMatch = matchesQuery(evtTitle);
         const nestedMarkets = evt.markets || [];
         if (nestedMarkets.length === 0) {
           // Event-level only (no nested markets) — use event title + volume
-          const evtTitle = evt.title || '';
-          if (!evtTitle) continue;
+          if (!evtTitle || !evtMatch) continue;
           let yesPct = null;
           // Some events have outcomePrices at event level
           try { if (evt.outcomePrices) yesPct = Math.round(JSON.parse(evt.outcomePrices)[0] * 100); } catch {}
@@ -22803,8 +22821,12 @@ app.get('/api/markets/search', async (req, res) => {
         }
         for (const m of nestedMarkets) {
           if (m.closed) continue;
-          const mTitle = m.question || m.groupItemTitle || m.title || evt.title || '';
+          const mTitle = m.question || m.groupItemTitle || m.title || evtTitle || '';
           if (!mTitle) continue;
+          // Only keep this nested market if either the event title matches
+          // (strong parent signal) or the nested title matches. Skipping
+          // description-match here is intentional — see block comment above.
+          if (!evtMatch && !matchesQuery(mTitle)) continue;
           let yesPct = null;
           try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
           if (m.bestAsk != null && yesPct == null) yesPct = Math.round(m.bestAsk * 100);
@@ -22831,6 +22853,11 @@ app.get('/api/markets/search', async (req, res) => {
     }
 
     // 2. Parse broad top-200 results (needs client-side keyword filter via matchesQuery)
+    // Title-only match (no description) for the same reason as the
+    // public-search path: an event's description may mention our query
+    // (e.g. "marco rubio" in the blurb for a "Trump cabinet" event)
+    // while none of its nested markets are actually about that topic.
+    // Letting that through dumps 10+ unrelated markets into the palette.
     if (polyBroadResult && polyBroadResult.status === 'fulfilled' && polyBroadResult.value.ok) {
       try {
         const raw = await polyBroadResult.value.json();
@@ -22838,8 +22865,7 @@ app.get('/api/markets/search', async (req, res) => {
         for (const evt of events) {
           const evtTitle = evt.title || '';
           const evtSlug = evt.slug || '';
-          const evtDesc = evt.description || '';
-          const evtMatch = matchesQuery(evtTitle) || matchesQuery(evtDesc);
+          const evtMatch = matchesQuery(evtTitle);
           const nestedMarkets = evt.markets || [];
           for (const m of nestedMarkets) {
             if (m.closed) continue;
