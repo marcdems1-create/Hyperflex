@@ -349,17 +349,22 @@
 
   var path = window.location.pathname.replace(/\/$/, '') || '/';
 
-  var isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
+  var _hfToken = localStorage.getItem('hf_token');
+  var _hfCreatorToken = localStorage.getItem('hf_creator_token');
+  var isLoggedIn = !!(_hfToken || _hfCreatorToken);
 
   // Decode user ID from JWT for profile link
   var _navUserId = null;
-  try {
-    var _tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    if (_tok) {
-      var _p = JSON.parse(atob(_tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      _navUserId = _p.userId || _p.sub || _p.id || null;
+  (function() {
+    var tokens = [_hfToken, _hfCreatorToken].filter(Boolean);
+    for (var i = 0; i < tokens.length; i++) {
+      try {
+        var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        var uid = p.userId || p.sub || p.id;
+        if (uid) { _navUserId = uid; break; }
+      } catch (e) {}
     }
-  } catch (e) {}
+  })();
 
   // Check if any "More" link is active (to highlight More button)
   var moreActive = moreLinks.some(function(l) { return !l.sep && path === l.href; });
