@@ -329,7 +329,8 @@
     { href: '/arbitrage', label: 'Arbitrage', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/feed', label: '💬 Feed', gold: true }
+    { href: '/feed', label: '💬 Feed', gold: true },
+    { href: _navUserId ? '/m/' + _navUserId : '/creator/login', label: '👤 Profile', show: isLoggedIn }
   ];
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
@@ -350,6 +351,16 @@
 
   var isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
 
+  // Decode user ID from JWT for profile link
+  var _navUserId = null;
+  try {
+    var _tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (_tok) {
+      var _p = JSON.parse(atob(_tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      _navUserId = _p.userId || _p.sub || _p.id || null;
+    }
+  } catch (e) {}
+
   // Check if any "More" link is active (to highlight More button)
   var moreActive = moreLinks.some(function(l) { return !l.sep && path === l.href; });
 
@@ -358,8 +369,8 @@
   nav.innerHTML =
     '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
-      primaryLinks.map(function(l) {
-        var isActive = path === l.href;
+      primaryLinks.filter(function(l) { return l.show !== false; }).map(function(l) {
+        var isActive = path === l.href || (l.href.indexOf('/m/') === 0 && path.indexOf('/m/') === 0);
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
@@ -411,6 +422,8 @@
     // Tier 1 — Your Stuff (logged-in only)
     allLinks.push({ href: '#', label: '🔗 Connect Wallet', id: 'navMobileWalletLink', gold: true });
     if (isLoggedIn) {
+      allLinks.push({ href: _navUserId ? '/m/' + _navUserId : '/creator/login', label: '👤 My Profile', gold: true });
+      allLinks.push({ href: _navUserId ? '/passport/' + _navUserId : '#', label: '🛂 Prediction Passport', gold: true });
       allLinks.push({ href: '/rewards', label: '💰 Rewards', gold: true });
     }
     allLinks.push({ sep: true });
