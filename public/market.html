@@ -5237,7 +5237,13 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
     var salt = Math.floor(Math.random() * 9007199254740991);
     var exchange = isNegRisk ? '0xC5d563A36AE78145C45a50134d48A1215220f80a' : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 
-    var signer = await HFXWallet.getSigner();
+    // HFXWallet.getSigner() returns { provider, signer, address } — unwrap
+    // the actual signer. Earlier commit regressed here: using the wrapper
+    // as if it were a bare signer triggered "signer.signTypedData is not
+    // a function" the moment a user tapped Execute Sell on a stop-loss
+    // banner. Same pattern executeTrade uses at line ~3785.
+    var walletCtx = await HFXWallet.getSigner();
+    var signer = walletCtx.signer || walletCtx;
     var order = await signer.signTypedData(
       { name: 'ClobExchange', version: '1', chainId: 137, verifyingContract: exchange },
       { Order: [
