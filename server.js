@@ -15133,9 +15133,18 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       });
 
     // ── 3. Merge everything + attach live market data ──────────────────
-    const merged = [...userPosts, ...normalizedInfluencer, ...normalizedTakes]
-      .sort((a, b) => new Date(b.posted_at) - new Date(a.posted_at))
-      .slice(0, lim);
+    // Real-user predictions ALWAYS rank above influencer posts and
+    // influencer takes, even if an influencer post is newer. Within each
+    // tier, sort by posted_at DESC. That way a post from a human user
+    // lands at the top of the feed as soon as they hit Post, rather than
+    // competing with auto-ingested influencer content from earlier in
+    // the hour.
+    const postedDesc = (a, b) => new Date(b.posted_at) - new Date(a.posted_at);
+    const merged = [
+      ...userPosts.sort(postedDesc),
+      ...normalizedInfluencer.sort(postedDesc),
+      ...normalizedTakes.sort(postedDesc),
+    ].slice(0, lim);
 
     // Attach live market prices/volume for every card that has a market_id.
     // Read from the warm screener cache (_screenerCache.data populated by
@@ -15259,6 +15268,44 @@ app.get('/api/predictions/:id', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Not found' });
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/predictions/:id — author can delete their own prediction.
+// Used by the feed card's trash-icon button so users can clean up the
+// duplicate rows created when double-tapping Post before the first
+// request returned.
+app.delete('/api/predictions/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    // UUID guard — prevents accidental mass-delete if someone hits
+    // /api/predictions/* with a garbage id.
+    if (!/^[0-9a-fA-F-]{30,40}$/.test(id)) {
+      return res.status(400).json({ error: 'Invalid prediction id' });
+    }
+    // Must own the row. ON DELETE returning to confirm something was
+    // actually removed lets us return a precise 404 vs 403.
+    let deleted = null;
+    if (pool) {
+      const rows = await dbQuery(
+        'DELETE FROM predictions WHERE id = $1 AND user_id = $2 RETURNING id',
+        [id, req.userId]
+      );
+      deleted = rows[0] || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('predictions')
+        .delete().eq('id', id).eq('user_id', req.userId).select('id').maybeSingle();
+      deleted = data || null;
+    }
+    if (!deleted) {
+      // Either the prediction doesn't exist or belongs to someone else.
+      // Don't leak which one — both are 404 from the caller's perspective.
+      return res.status(404).json({ error: 'Not found or not yours' });
+    }
+    res.json({ ok: true, deleted_id: deleted.id });
+  } catch (err) {
+    console.error('[predictions DELETE]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Score predictions when a market resolves — call fire-and-forget alongside scoreTakesForMarket
@@ -24843,7 +24890,7 @@ const _marketDetailCache = new Map();
 const MARKET_DETAIL_CACHE_TTL = 15 * 1000; // 15 seconds — Gamma live prices refresh ~5s
 
 app.get('/api/market/:slug', async (req, res) => {
-  const { slug } = req.params;
+  let { slug } = req.params;
   if (!slug) return res.status(400).json({ error: 'Missing slug' });
 
   // Diagnostic mode: ?debug=1 bypasses cache + attaches per-outcome
@@ -24851,6 +24898,49 @@ app.get('/api/market/:slug', async (req, res) => {
   // got CLOB best-ask vs fell back to Gamma. Also temporarily forces
   // verbose console logging for this single request.
   const debug = req.query.debug === '1';
+
+  // Some links (stop-order alerts, sidebar toasts, old bookmarks) point
+  // at /market/<conditionId> instead of /market/<slug>. A 66-char 0x-
+  // hex string isn't a slug and Gamma's getMarketBySlug 404s on it —
+  // user saw "Failed to load market: Market not found" when trying to
+  // act on a stop-loss trigger. Resolve conditionIds to their real
+  // slug via (a) the warm screener cache, then (b) Gamma's markets?
+  // condition_ids= endpoint as a fallback before falling through.
+  if (/^0x[0-9a-fA-F]{64}$/.test(slug)) {
+    const conditionId = slug;
+    let resolvedSlug = null;
+    const cacheHit = _screenerCache?.data?.find(m =>
+      m.market_id === conditionId || m.condition_id === conditionId || m.conditionId === conditionId
+    );
+    if (cacheHit && (cacheHit.slug || cacheHit.event_slug)) {
+      resolvedSlug = cacheHit.slug || cacheHit.event_slug;
+      console.log(`[market-detail] conditionId ${conditionId.slice(0, 10)}… → slug ${resolvedSlug} (cache)`);
+    } else {
+      // Cache miss — query Gamma directly. condition_ids filter returns
+      // the market row so we can read its slug/event_slug.
+      try {
+        const gr = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (gr.ok) {
+          const gdata = await gr.json();
+          const firstMarket = Array.isArray(gdata) ? gdata[0] : null;
+          if (firstMarket) {
+            // Prefer event slug when the market belongs to a multi-outcome event,
+            // otherwise fall back to the market's own slug.
+            const evSlug = firstMarket.events?.[0]?.slug || null;
+            resolvedSlug = evSlug || firstMarket.slug || null;
+            if (resolvedSlug) {
+              console.log(`[market-detail] conditionId ${conditionId.slice(0, 10)}… → slug ${resolvedSlug} (gamma)`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[market-detail] Gamma conditionId lookup failed:', e.message);
+      }
+    }
+    if (resolvedSlug) slug = resolvedSlug;
+  }
 
   const cacheKey = `market_detail_${slug}`;
   const cached = _marketDetailCache.get(cacheKey);
@@ -43926,6 +44016,28 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
     const safeTags = Array.isArray(category_tags)
       ? category_tags.filter(t => allowedTags.includes(t)).slice(0, 2)
       : [];
+
+    // Dedup guard: if the user posted a prediction on the same market in
+    // the same direction within the last 10 minutes, return the existing
+    // row instead of inserting a duplicate. Catches the double-tap-Post
+    // pattern that was filling the feed with repeats.
+    if (pool) {
+      try {
+        const dupe = await dbQuery(
+          `SELECT * FROM predictions
+           WHERE user_id = $1 AND market_id = $2 AND direction = $3
+             AND posted_at > NOW() - INTERVAL '10 minutes'
+           ORDER BY posted_at DESC LIMIT 1`,
+          [req.userId, String(market_id), direction.toUpperCase()]
+        );
+        if (dupe.length) {
+          console.log(`[predictions-post] dedup hit id=${dupe[0].id} — returning existing row instead of inserting duplicate`);
+          return res.json({ ok: true, prediction: dupe[0], deduped: true });
+        }
+      } catch (dupeErr) {
+        console.warn('[predictions-post] dedup check failed (continuing):', dupeErr.message);
+      }
+    }
 
     // Insert via direct pg pool (bypasses Supabase PostgREST which caches
     // schema — after a fresh table creation PostgREST can still return

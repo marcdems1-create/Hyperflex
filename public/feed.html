@@ -1514,6 +1514,18 @@ function renderCard(p) {
       (isFollowing ? 'Following' : 'Follow') + '</button>';
   }
 
+  // Own-post delete button — shown only when this is a user prediction
+  // authored by the viewer. Clicking fires DELETE /api/predictions/:id
+  // and removes the card from the list without a full reload. Lets
+  // users clean up duplicates from accidental double-submits.
+  var deleteHtml = '';
+  if (p._source === 'user' && p.id && author.id && author.id === myId) {
+    deleteHtml = '<button onclick="deleteMyPrediction(\'' + esc(String(p.id)) + '\', this)" ' +
+      'aria-label="Delete this prediction" title="Delete" ' +
+      'style="background:none;border:0;color:var(--text-faint);cursor:pointer;font-size:15px;line-height:1;padding:4px 6px;margin-left:auto;min-height:auto" ' +
+      'onmouseover="this.style.color=\'#ff4d6a\'" onmouseout="this.style.color=\'var(--text-faint)\'">\u00D7</button>';
+  }
+
   // Conviction badge
   var convBadge = p.conviction
     ? '<span class="badge badge-platform" style="text-transform:capitalize">' + esc(p.conviction) + ' conviction</span>'
@@ -1575,6 +1587,7 @@ function renderCard(p) {
           '<a href="/m/' + esc(author.id||'') + '" class="pred-author">' + name + '</a>' +
           flexHtml + resolvedHtml +
           followHtml +
+          deleteHtml +
         '</div>' +
         '<span class="pred-time">' + timeAgo(p.posted_at) + externalLinkHtml + '</span>' +
       '</div>' +
@@ -1639,6 +1652,47 @@ function getMyUserId() {
     var payload = JSON.parse(atob(token.split('.')[1]));
     return payload.sub || payload.id || payload.user_id || null;
   } catch(e) { return null; }
+}
+
+// Delete the viewer's own prediction. Fired by the × button on cards
+// where author.id === myId. On success, removes the card from the DOM
+// without a full feed reload and splices it out of feedData so follow-
+// up renders don't bring it back.
+async function deleteMyPrediction(predId, btn) {
+  if (!predId) return;
+  if (!confirm('Delete this prediction? This cannot be undone.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '\u2026'; }
+  try {
+    var r = await fetch(API + '/api/predictions/' + encodeURIComponent(predId), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    var body = await r.json().catch(function(){ return {}; });
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+
+    // Splice from in-memory list so renderFeed doesn't resurrect it.
+    feedData = feedData.filter(function(p) { return String(p.id) !== String(predId); });
+
+    // Remove the card DOM element immediately for snappy UX.
+    if (btn) {
+      var card = btn.closest('.pred-card');
+      if (card) {
+        card.style.transition = 'opacity .2s, transform .2s';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(-10px)';
+        setTimeout(function(){ if (card.parentNode) card.parentNode.removeChild(card); }, 220);
+      }
+    }
+    if (typeof showFeedToast === 'function') showFeedToast('Prediction deleted', 'ok');
+  } catch (e) {
+    console.error('[delete-prediction]', e);
+    if (typeof showFeedToast === 'function') {
+      showFeedToast('Delete failed: ' + e.message, 'err');
+    } else {
+      alert('Delete failed: ' + e.message);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '\u00D7'; }
+  }
 }
 
 // Close modals on overlay click
