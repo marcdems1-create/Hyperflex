@@ -21003,15 +21003,6 @@ async function scanCreatorYouTubeChannels() {
   }
 }
 
-// YouTube auto-scan cron REMOVED (Phase 2). Scanned creator YouTube
-// channels daily and auto-created markets from new videos via Claude;
-// post-pivot creators don't publish markets. The scanCreatorYouTube
-// Channels() function body below is now orphaned dead code.
-
-// ════════════════════════════════════════════════════════════
-// FEATURE 4 — autoResolveExpiredMarkets()
-// Cron: find expired markets with a resolution_source → ask Claude → auto-resolve or notify creator
-// ════════════════════════════════════════════════════════════
 async function autoResolveExpiredMarkets() {
   if (!process.env.ANTHROPIC_API_KEY) return;
   try {
@@ -21330,15 +21321,6 @@ async function autoResolveNoSourceMarkets() {
   }
 }
 
-// Run auto-resolve check every 30 minutes — wrapped to prevent unhandled rejections
-// Auto-resolve cron REMOVED (Phase 2). Ran every 30 min to find
-// expired community markets with a resolution_source URL, scraped
-// the source, asked Claude to resolve at >=82% confidence, and
-// auto-resolved (or emailed creator for manual review). Post-pivot
-// community markets don't exist. autoResolveExpiredMarkets() and
-// autoResolveNoSourceMarkets() function bodies remain as orphaned
-// dead code.
-
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
 
@@ -21532,13 +21514,6 @@ async function scanHedgeAlerts() {
 cron.schedule('15,45 * * * *', safeCron('scanHedgeAlerts', scanHedgeAlerts));
 
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
-
-// Community wall — REMOVED (Phase 2). Creator-specific message
-// board on /u/:slug profiles. Post-pivot creator profiles are for
-// trader/predictor display; the social layer is centralized in
-// /explore takes and /feed predictions. GET + POST /api/profile/
-// :slug/wall deleted. creator_wall table left intact (no inserts
-// now, harmless).
 
 // GET /api/profile/:slug/comments — aggregated market comments for this creator's community
 app.get('/api/profile/:slug/comments', async (req, res) => {
