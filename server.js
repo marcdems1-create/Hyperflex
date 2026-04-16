@@ -16431,7 +16431,60 @@ Respond with JSON only, no other text.`
     if (!json || json.no_match || !json.market_slug || !json.predicted_side) return null;
     if (json.confidence_pct < 55) return null; // only act on clear predictions
     return json;
-  } catch { return null; }
+  } catch {
+    // Claude unavailable (no credits / disabled) — fall back to keyword matching
+    return _keywordMatchMarket(postText);
+  }
+}
+
+// ── Keyword-based tweet→market matcher (zero API cost fallback) ───────────────
+// Scores each live market by word overlap with the tweet. Used when Claude
+// API is unavailable (out of credits or CLAUDE_BACKGROUND_DISABLED=true).
+// Requires ≥3 matching significant words AND ≥20% density to avoid noise.
+function _keywordMatchMarket(postText) {
+  const allMarkets = (_screenerCache && _screenerCache.data || []).slice(0, 80);
+  if (!allMarkets.length) return null;
+
+  const text = postText.toLowerCase();
+  // Strip punctuation for cleaner matching
+  const textWords = new Set(text.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3));
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const m of allMarkets) {
+    const qWords = (m.question || '').toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3);
+    if (!qWords.length) continue;
+
+    let hits = 0;
+    for (const w of qWords) {
+      if (textWords.has(w)) hits++;
+    }
+    const density = hits / qWords.length;
+    // Require at least 3 matching words AND 20% density
+    if (hits >= 3 && density > bestScore && density >= 0.20) {
+      bestScore = density;
+      best = m;
+    }
+  }
+
+  if (!best) return null;
+
+  // Infer predicted side from sentiment words in the tweet
+  const bullish = /\b(yes|will|going to|gonna|definitely|sure|bullish|happen|pass|win|beat)\b/i.test(postText);
+  const bearish = /\b(no|won't|wont|never|not going|unlikely|bearish|won't happen|fail|lose)\b/i.test(postText);
+  const side = bearish && !bullish ? 'NO' : 'YES';
+
+  return {
+    market_slug: best.slug,
+    market_question: best.question,
+    predicted_side: side,
+    confidence_pct: Math.round(bestScore * 100),
+    reasoning: 'keyword match (no Claude API)',
+  };
 }
 
 // ── Core: check if an external_id is already stored ──────────────────────────
