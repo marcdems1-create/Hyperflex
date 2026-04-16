@@ -478,11 +478,12 @@ a:hover { text-decoration: underline; }
 
 <div class="layout">
   <div class="feed-header">
-    <div class="feed-title">FLEX Feed</div>
+    <div class="feed-title"><a href="/feed" style="color:inherit;text-decoration:none">FLEX Feed</a></div>
     <div class="tabs">
       <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
       <button class="tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
       <button class="tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
+      <button class="tab" id="tabInfluencers" onclick="switchTab('influencers')">𝕏 Influencers</button>
     </div>
   </div>
 
@@ -1221,6 +1222,25 @@ async function loadFeed(append) {
     }
   }
 
+  // ── Influencers tab: X-only posts with docked market cards ──
+  if (currentTab === 'influencers') {
+    try {
+      var cursorParam = nextCursor ? '&before=' + encodeURIComponent(nextCursor) : '';
+      var ir = await fetch(API + '/api/influencer-feed/unified?limit=20&tab=foryou' + cursorParam, { headers: authHeaders() });
+      var id = await ir.json();
+      var infItems = (id.posts || []).map(normaliseInfluencer).filter(function(p) {
+        return !!(p.market_title || p._market_question);
+      });
+      if (!append) feedData = infItems; else feedData = feedData.concat(infItems);
+      nextCursor = id.next_cursor || null;
+      renderFeed(false);
+      document.getElementById('loadMoreBtn').style.display = nextCursor ? 'block' : 'none';
+    } catch(e) {
+      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">𝕏</div><div class="feed-empty-title">No influencer posts yet</div><div class="feed-empty-sub">Influencer tweets matched to live markets will appear here.</div></div>';
+    }
+    return;
+  }
+
   // Build the feed URL with correct mode param for each tab.
   // Server accepts both `cursor` (new shape) and `before` (older shape).
   var url;
@@ -1702,6 +1722,7 @@ function switchTab(tab) {
   document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
+  document.getElementById('tabInfluencers').classList.toggle('active', tab === 'influencers');
   loadFeed(false);
 }
 

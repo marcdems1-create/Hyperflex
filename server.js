@@ -14995,7 +14995,10 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     // so the frontend renders them through the same card.
     let influencerPosts = [];
     if (pool) {
-      const infConditions = ['p.published_at IS NOT NULL'];
+      // X/Twitter only — reddit/substack/youtube posts are background signals,
+      // not shown directly on the feed. Also require market_slug so every
+      // card has a linked market (the whole premise of the feature).
+      const infConditions = ["p.published_at IS NOT NULL", "i.platform = 'x'", "p.market_slug IS NOT NULL"];
       const infParams = [];
       if (cursor) { infParams.push(cursor); infConditions.push(`p.published_at < $${infParams.length}`); }
       infParams.push(lim);
@@ -17163,7 +17166,8 @@ app.get('/api/influencer-feed/unified', optionalAuth, async (req, res) => {
                   'influencer' AS post_type
            FROM influencer_posts p
            JOIN external_influencers i ON i.id = p.influencer_id
-           WHERE p.influencer_id IN (SELECT influencer_id FROM influencer_follows WHERE user_id=$${params.length - 1})
+           WHERE i.platform = 'x'
+             AND p.influencer_id IN (SELECT influencer_id FROM influencer_follows WHERE user_id=$${params.length - 1})
              AND ${conditions.join(' AND ')}
            ORDER BY p.published_at DESC
            LIMIT $${params.length}`, params
@@ -17172,9 +17176,9 @@ app.get('/api/influencer-feed/unified', optionalAuth, async (req, res) => {
     } else if (tab === 'trending') {
       // Top posts by engagement in last 48h
       if (pool) {
-        const conditions = ["p.published_at > NOW() - INTERVAL '48 hours'"];
+        const conditions = ["p.published_at > NOW() - INTERVAL '48 hours'", "i.platform = 'x'"];
         const params = [];
-        if (category) { params.push(category); conditions.push(`(p.category = $${params.length} OR i.platform = $${params.length})`); }
+        if (category) { params.push(category); conditions.push(`p.category = $${params.length}`); }
         params.push(limit);
         posts = await dbQuery(
           `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,
@@ -17191,12 +17195,12 @@ app.get('/api/influencer-feed/unified', optionalAuth, async (req, res) => {
         );
       }
     } else {
-      // For You — all influencer posts, newest first
+      // For You — X/Twitter influencer posts only, newest first
       if (pool) {
-        const conditions = ['p.published_at IS NOT NULL'];
+        const conditions = ["p.published_at IS NOT NULL", "i.platform = 'x'"];
         const params = [];
         if (before) { params.push(before); conditions.push(`p.published_at < $${params.length}`); }
-        if (category) { params.push(category); conditions.push(`(p.category = $${params.length} OR i.platform = $${params.length})`); }
+        if (category) { params.push(category); conditions.push(`p.category = $${params.length}`); }
         params.push(limit);
         posts = await dbQuery(
           `SELECT p.*, i.name AS influencer_name, i.handle AS influencer_handle,

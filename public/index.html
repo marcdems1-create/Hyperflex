@@ -803,16 +803,16 @@ footer {
     </div>
   </div>
 
-  <!-- PANEL 3: HOT TAKES from FLEX FEED -->
+  <!-- PANEL 3: FLEX FEED preview -->
   <div id="hot-takes-panel" style="display:none">
     <div style="background:linear-gradient(135deg,rgba(201,146,13,0.06),rgba(168,85,247,0.04));border:1px solid rgba(201,146,13,0.2);border-radius:10px;padding:20px 24px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">&#x1F525;</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em">Hot Takes</span>
-          <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">FLEX FEED</span>
+          <a href="/feed" style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;text-decoration:none">FLEX Feed</a>
+          <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
         </div>
-        <a href="/explore" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;font-weight:600">See all &#8594;</a>
+        <a href="/feed" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;font-weight:600">See all &#8594;</a>
       </div>
       <div id="hot-takes-list" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
@@ -1051,38 +1051,63 @@ footer {
     }).catch(function(){});
   }
 
-  // PANEL 3: HOT TAKES from Flex Feed
+  // PANEL 3: FLEX FEED preview — top 10 market-correlated posts
   function loadHotTakes(){
-    fetch('/api/takes/hot?limit=5').then(function(r){return r.ok?r.json():{takes:[]}}).then(function(d){
-      var takes=d.takes||[];
+    fetch('/api/predictions/feed?limit=10').then(function(r){return r.ok?r.json():{predictions:[]}}).then(function(d){
+      // Only show posts that are tied to a real market
+      var posts=(d.predictions||[]).filter(function(p){
+        return !!(p.market_id||p.market_title);
+      }).slice(0,10);
       var panel=document.getElementById('hot-takes-panel');
-      if(!takes.length){if(panel)panel.style.display='none';return}
+      if(!posts.length){if(panel)panel.style.display='none';return;}
       if(panel)panel.style.display='block';
       var list=document.getElementById('hot-takes-list');
       if(!list)return;
-      list.innerHTML=takes.map(function(t){
-        var isInf=t.source==='influencer';
-        var isWhale=t.source==='whale';
-        var sideColor=(t.side||'').toUpperCase()==='YES'?'#00e68a':'#ff4d6a';
-        var sideBg=(t.side||'').toUpperCase()==='YES'?'rgba(0,230,138,0.1)':'rgba(255,77,106,0.1)';
-        var badge=isInf?'<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#1d9bf0;background:rgba(29,155,240,0.12);padding:1px 5px;border-radius:3px">\uD835\uDD4F</span>':isWhale?'<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:1px 5px;border-radius:3px">\uD83D\uDC33</span>':'';
-        var avatar=t.avatar_url?'<img src="'+escH(t.avatar_url)+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'">':'<div style="width:32px;height:32px;border-radius:50%;background:'+(isInf?'#1d9bf0':isWhale?'#a855f7':'var(--gold)')+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">'+(isInf?'\uD835\uDD4F':isWhale?'\uD83D\uDC33':(t.display_name||'?')[0])+'</div>';
-        var thesis=t.thesis?(t.thesis.length>120?t.thesis.substring(0,120)+'...':t.thesis):'';
-        var reactions=(t.agree_count||0)+(t.disagree_count||0);
-        var href=t.user_id?'/m/'+t.user_id:'#';
-        return'<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(30,30,42,0.4)">'+
-          avatar+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
-              '<a href="'+href+'" style="font-size:12px;font-weight:700;color:var(--text);text-decoration:none">'+escH(t.display_name||'Anonymous')+'</a>'+
-              badge+
-              '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:'+sideColor+';background:'+sideBg+';padding:2px 7px;border-radius:4px">'+(t.side||'').toUpperCase()+'</span>'+
-              '<span style="font-size:10px;color:var(--dim);margin-left:auto">\u2191'+(t.agree_count||0)+' \u2193'+(t.disagree_count||0)+'</span>'+
-            '</div>'+
-            '<div style="font-size:12px;font-weight:600;color:var(--text);margin-top:4px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(t.question||'')+'</div>'+
-            (thesis?'<div style="font-size:11px;color:var(--dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(thesis)+'</div>':'')+
-          '</div>'+
-        '</div>';
+      list.innerHTML=posts.map(function(p){
+        var author=p.author||{};
+        var isInf=p._source==='influencer';
+        var isWhale=author.is_whale;
+        var name=escH(author.display_name||p.display_name||'Anonymous');
+        var avatarBg=isInf?'#1d9bf0':isWhale?'#a855f7':'var(--gold)';
+        var avatarLetter=isInf?'\uD835\uDD4F':isWhale?'\uD83D\uDC33':(name[0]||'?');
+        var avatar=author.avatar_url
+          ?'<img src="'+escH(author.avatar_url)+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'">'
+          :'<div style="width:36px;height:36px;border-radius:50%;background:'+avatarBg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">'+avatarLetter+'</div>';
+        var badge=isInf?'<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#1d9bf0;background:rgba(29,155,240,0.12);padding:1px 5px;border-radius:3px">\uD835\uDD4F</span>'
+          :isWhale?'<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:1px 5px;border-radius:3px">\uD83D\uDC33 Whale</span>':'';
+        var dir=(p.direction||'').toUpperCase();
+        var sideColor=dir==='YES'?'#00e68a':'#ff4d6a';
+        var sideBg=dir==='YES'?'rgba(0,230,138,0.1)':'rgba(255,77,106,0.1)';
+        var thesis=p.thesis_text||p.thesis||'';
+        if(thesis.length>100)thesis=thesis.substring(0,100)+'…';
+        var market=escH(p.market_title||'');
+        // Live odds if attached
+        var oddsHtml='';
+        if(p.market_live&&p.market_live.yes_pct!=null){
+          var yp=p.market_live.yes_pct;
+          oddsHtml='<span style="font-family:var(--mono);font-size:10px;color:#00e68a;font-weight:700">YES '+yp+'%</span>'
+            +'<span style="font-family:var(--mono);font-size:10px;color:var(--dim)"> · </span>'
+            +'<span style="font-family:var(--mono);font-size:10px;color:#ff4d6a;font-weight:700">NO '+(100-yp)+'%</span>';
+        }
+        var marketHref=(p.market_live&&p.market_live.url)||(p.market_id?'/market/'+encodeURIComponent(p.market_id):'#');
+        var authorHref=author.id?'/m/'+escH(author.id):'#';
+        return'<div style="padding:10px 0;border-bottom:1px solid rgba(30,30,42,0.5)">'
+          +'<div style="display:flex;gap:10px;align-items:flex-start">'
+            +avatar
+            +'<div style="flex:1;min-width:0">'
+              +'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
+                +'<a href="'+authorHref+'" style="font-size:12px;font-weight:700;color:var(--text);text-decoration:none">'+name+'</a>'
+                +badge
+                +(dir?'<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:'+sideColor+';background:'+sideBg+';padding:2px 6px;border-radius:4px">'+dir+'</span>':'')
+              +'</div>'
+              +(thesis?'<div style="font-size:12px;color:var(--dim);line-height:1.4;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(thesis)+'</div>':'')
+              +(market?'<a href="'+escH(marketHref)+'" style="display:block;padding:6px 8px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.18);border-radius:7px;text-decoration:none">'
+                +'<div style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+market+'</div>'
+                +(oddsHtml?'<div style="margin-top:3px">'+oddsHtml+'</div>':'')
+              +'</a>':'')
+            +'</div>'
+          +'</div>'
+        +'</div>';
       }).join('');
     }).catch(function(){});
   }
