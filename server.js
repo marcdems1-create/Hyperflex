@@ -17950,11 +17950,18 @@ app.get('/api/admin/signup-audit', requireAdmin, async (req, res) => {
     const hours = Math.min(parseInt(req.query.hours) || 24, 168); // cap at 7 days
     const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
 
+    // Exclude whale/influencer shadow profiles — they're auto-created by
+    // background jobs, not real signups, and were showing up here as
+    // "bot surges" when the actual signal was our own cron.
     const users = await dbQuery(
       `SELECT id, email, display_name, polymarket_address, created_at, referred_by,
               is_creator, tenant_slug
        FROM users
        WHERE created_at > $1
+         AND is_whale IS NOT TRUE
+         AND (password_hash IS NULL
+              OR (password_hash NOT LIKE 'whale_profile_%'
+                  AND password_hash NOT LIKE 'influencer_profile_%'))
        ORDER BY created_at DESC`,
       [since]
     ).catch(() => []);
@@ -18740,18 +18747,30 @@ app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
     const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
 
+    // Exclude shadow profiles (auto-created whale/influencer rows) from
+    // all user-count queries. Without this, the leaderboard cron was
+    // inflating total_users, new_users_7d, and especially wallets_connected
+    // (every whale profile comes with a polymarket_address).
+    const NOT_SHADOW = `
+      is_whale IS NOT TRUE
+      AND (password_hash IS NULL
+           OR (password_hash NOT LIKE 'whale_profile_%'
+               AND password_hash NOT LIKE 'influencer_profile_%'))
+    `;
+
     const [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13] = await Promise.all([
-      dbQuery('SELECT count(*) as count FROM users'),
+      dbQuery(`SELECT count(*) as count FROM users WHERE ${NOT_SHADOW}`),
       dbQuery('SELECT count(*) as count FROM creator_settings'),
       dbQuery('SELECT count(*) as count FROM markets'),
       dbQuery('SELECT count(*) as count FROM positions'),
-      dbQuery('SELECT count(*) as count FROM users WHERE created_at >= $1', [sevenDaysAgo]),
+      dbQuery(`SELECT count(*) as count FROM users WHERE created_at >= $1 AND ${NOT_SHADOW}`, [sevenDaysAgo]),
       dbQuery('SELECT count(*) as count FROM positions WHERE created_at >= $1', [sevenDaysAgo]),
       // Revenue: trade volume from flex_points_log (this week + last week for trend)
       dbQuery('SELECT coalesce(sum(trade_amount_usd),0) as vol, count(*) as trades FROM flex_points_log WHERE created_at >= $1', [sevenDaysAgo]),
       dbQuery('SELECT coalesce(sum(trade_amount_usd),0) as vol, count(*) as trades FROM flex_points_log WHERE created_at >= $1 AND created_at < $2', [fourteenDaysAgo, sevenDaysAgo]),
-      // Funnel: wallets connected, users who traded at least once
-      dbQuery("SELECT count(*) as count FROM users WHERE polymarket_address IS NOT NULL AND polymarket_address != ''"),
+      // Funnel: wallets connected, users who traded at least once. Excludes
+      // whale shadow rows (which all have polymarket_address set by design).
+      dbQuery(`SELECT count(*) as count FROM users WHERE polymarket_address IS NOT NULL AND polymarket_address != '' AND ${NOT_SHADOW}`),
       dbQuery('SELECT count(DISTINCT user_id) as count FROM flex_points_log'),
       // Active traders 7d
       dbQuery('SELECT count(DISTINCT user_id) as count FROM flex_points_log WHERE created_at >= $1', [sevenDaysAgo]),
