@@ -4738,12 +4738,6 @@ const TEMPLATES = {
   },
 };
 
-// GET /api/templates/:id — REMOVED (Phase 2: templates feature was
-// for seeding community-created markets with 72 pre-written questions.
-// Post-pivot the product is Polymarket aggregation + social; users don't
-// create markets anymore. TEMPLATES constant can also be removed if
-// nothing else references it.)
-
 // ── START ─────────────────────────────────────────
 // ============================================================
 // HYPERFLEX — Creator Platform Routes
@@ -5042,12 +5036,6 @@ app.post('/api/creator/signup', async (req, res) => {
       }
     }
 
-    // Fan-nomination signup notification REMOVED in Phase 2.
-    // The /nominate page let fans suggest creators pre-launch, then on
-    // the creator's signup we'd email the fans. Post-pivot we're not
-    // recruiting creators this way — removed the entire nominate
-    // feature (see also /nominate and /api/nominate route deletions).
-
     // Record creator referral if signup came via a /ref/:slug link
     if (referred_by && referred_by !== slug) {
       if (pool) {
@@ -5291,8 +5279,6 @@ function _sendResetEmail(toEmail, name, token) {
     }).catch(e => console.error('[reset-email] FAILED:', e.message));
   } catch(e) { console.error('[reset-email] ERROR:', e.message); }
 }
-
-// REMOVED: reset-token/:email endpoint — security risk (token enumeration)
 
 app.get('/reset-password', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset-password.html')));
 
@@ -7983,11 +7969,6 @@ async function fetchYouTubeLiveChat(videoId) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// GET /api/public/youtube-meta/:videoId — REMOVED (Phase 2). Fed the
-// creator-dashboard demo scanner that auto-generated markets from a
-// YouTube URL. Post-pivot creators don't create markets.
-
 app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
   try {
     const { url, scan_type = 'comments' } = req.body;
@@ -8897,18 +8878,6 @@ app.get('/api/user/following', requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Market suggestion queue — REMOVED (Phase 2). Members could suggest
-// markets for creators to publish; post-pivot creators don't publish,
-// so there's nothing to suggest. All 5 endpoints deleted:
-//   POST /api/community/:slug/suggest
-//   GET  /api/creator/suggestions
-//   POST /api/creator/suggestions/:id/approve
-//   POST /api/creator/suggestions/:id/reject
-//   PUT  /api/creator/settings/suggestions
-// `suggestions_enabled` column on creator_settings left in place
-// (harmless; any future use can reuse the column name).
-// `market_suggestions` table also untouched — no rows written now.
 
 // ════════════════════════════════════════════════════════════
 // 8d. ANNOUNCEMENTS
@@ -9985,11 +9954,6 @@ const RESERVED_SLUGS = new Set([
 
 // GET /my — private member dashboard
 app.get('/my', (req, res) => res.redirect('/creator/dashboard'));
-
-// GET /templates and /api/templates — REMOVED (Phase 2 dead-code
-// deletion). The templates feature seeded community-created markets
-// with 72 pre-written prediction questions. Post-pivot we don't host
-// user-created markets, so there's nothing to seed.
 
 // ── CREATOR REFERRAL PROGRAM ─────────────────────────────────────────────────
 // GET /ref/:slug — referral landing page: tracks the referring creator then
@@ -11154,11 +11118,6 @@ app.get('/api/trader/:address/profile', async (req, res) => {
     res.status(500).json({ error: 'Failed to load trader profile' });
   }
 });
-
-// GET /nominate and POST /api/nominate — REMOVED (Phase 2). The
-// "nominate your creator" feature was a fan-facing form to suggest
-// creators pre-launch; post-pivot we aren't recruiting creators this
-// way. Also see the signup-flow notification block removed above.
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
@@ -13151,9 +13110,6 @@ async function generateInfluencerTakesFromMarkets() {
 // if we ever want a gated "curated takes" mode behind a config flag.
 // setTimeout(() => generateInfluencerTakesFromMarkets().catch(() => {}), 60000);
 // cron.schedule('0 */2 * * *', () => generateInfluencerTakesFromMarkets().catch(() => {}));
-
-// POST /api/nominate — REMOVED (Phase 2 dead-code deletion). See
-// /nominate GET removal above for context.
 
 // ════════════════════════════════════════════════════════════
 // BUG REPORTS — user-submitted issues with AI triage
@@ -20228,17 +20184,7 @@ async function sendNewMarketNotifications(market, creatorSlug) {
   }
 }
 
-// Discord webhook integration — REMOVED (Phase 2). Fired when a
-// creator published a new community market, posting an embed card
-// to the creator's configured Discord channel. Post-pivot community
-// markets don't exist, so there's nothing to announce. Kept a stub
-// of sendDiscordWebhook so the two remaining callers at the market-
-// publish sites (server.js:2052 and :9320) still resolve — they're
-// in code paths that are themselves dead post-pivot but also slated
-// for deletion in Commit 7 (market create/publish endpoints).
 async function sendDiscordWebhook() { /* no-op: feature removed */ }
-// PUT /api/creator/discord-webhook deleted. discord_webhook_url column
-// on creator_settings left intact (dead data, no writers).
 
 // POST /api/creator/digest/send — manually trigger digest for this creator right now
 app.post('/api/creator/digest/send', requireCreator, async (req, res) => {
@@ -20398,14 +20344,6 @@ app.put('/api/creator/markets/:marketId/feature', requireCreator, async (req, re
   }
 });
 
-// POST /api/creator/markets/:marketId/blast — REMOVED (Phase 2).
-// Emailed every community member when a creator published a new
-// market. Users don't create markets post-pivot, so there's nothing
-// to blast about. markets.blasted_at column left untouched to avoid
-// a destructive schema change.
-
-// Send resolution emails to all bettors on a market.
-// market      — markets row (must include .question)
 // ── Score takes when a market resolves ──
 // Marks every take on this market as correct or incorrect based on outcome.
 // Also fires notifications for correct takes.
@@ -20886,440 +20824,6 @@ app.put('/api/user/change-password', requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// ════════════════════════════════════════════════════════════
-// FEATURE 3 — GET/PUT /api/creator/youtube-scan-settings
-// Per-creator YouTube auto-scan schedule
-// ════════════════════════════════════════════════════════════
-// GET/PUT /api/creator/youtube-scan-settings — REMOVED (Phase 2).
-// Settings UI for the per-creator YouTube auto-scanner which is
-// gone (cron disabled above, function orphaned). auto_scan_* columns
-// on creator_settings left intact as harmless dead data.
-
-// ════════════════════════════════════════════════════════════
-// FEATURE 3 — scanCreatorYouTubeChannels()
-// Daily cron: scan each creator's YouTube channel → draft markets for their community
-// ════════════════════════════════════════════════════════════
-async function scanCreatorYouTubeChannels() {
-  if (!process.env.ANTHROPIC_API_KEY) return;
-  try {
-    // Find all creators with auto-scan enabled and a channel ID set
-    let creators;
-    if (pool) {
-      creators = await dbQuery('SELECT creator_id, slug, display_name, youtube_channel_id, auto_scan_cadence, auto_scan_last_run, plan FROM creator_settings WHERE auto_scan_enabled = true AND youtube_channel_id IS NOT NULL');
-    } else {
-      const { data: d } = await supabase
-        .from('creator_settings')
-        .select('creator_id, slug, display_name, youtube_channel_id, auto_scan_cadence, auto_scan_last_run, plan')
-        .eq('auto_scan_enabled', true)
-        .not('youtube_channel_id', 'is', null);
-      creators = d;
-    }
-
-    if (!creators || !creators.length) return;
-
-    const now = new Date();
-    for (const creator of creators) {
-      try {
-        // Respect cadence: skip if ran recently
-        if (creator.auto_scan_last_run) {
-          const last = new Date(creator.auto_scan_last_run);
-          const hoursAgo = (now - last) / 3600000;
-          const threshold = creator.auto_scan_cadence === 'weekly' ? 168 : 23;
-          if (hoursAgo < threshold) continue;
-        }
-
-        // Only Pro+ creators get auto-scan
-        if (!['pro', 'platinum'].includes(creator.plan)) continue;
-
-        const channelId = creator.youtube_channel_id.trim();
-        const today = now.toISOString().split('T')[0];
-
-        console.log(`[auto-scan] Scanning YouTube channel for creator: ${creator.slug}`);
-
-        const systemPrompt = `You are a prediction market creator for a content creator community. Today is ${today}. Based on a YouTube creator's channel niche and content style, generate 3 engaging prediction market questions their community would love to bet on. The creator's channel: "${channelId}". Return ONLY a valid JSON array with objects: { question, category, resolution_date (YYYY-MM-DD, 14-60 days from today) }. No other text.`;
-
-        // Creator YouTube auto-scan — fires from cron. Gated.
-        const response = await backgroundClaudeCall({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 512,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: 'Generate 3 prediction markets for this creator\'s community.' }],
-        });
-
-        const content = response?.content?.[0]?.text || '';
-        if (!content) continue;
-
-        let markets;
-        try { markets = JSON.parse(content); } catch { continue; }
-        if (!Array.isArray(markets)) continue;
-
-        for (const m of markets) {
-          if (!m?.question || typeof m.question !== 'string') continue;
-          // Check for duplicate question for this creator
-          let existing;
-          if (pool) {
-            const rows = await dbQuery('SELECT id FROM markets WHERE question = $1 AND tenant_slug = $2 LIMIT 1', [m.question, creator.slug]);
-            existing = rows[0] || null;
-          } else {
-            const { data: d } = await supabase.from('markets').select('id').eq('question', m.question).eq('tenant_slug', creator.slug).maybeSingle();
-            existing = d;
-          }
-          if (existing) continue;
-
-          if (pool) {
-            await dbQuery('INSERT INTO markets (question, category, expiry_date, resolution_date, yes_price, no_price, yes_pool, no_pool, resolved, tenant_slug, is_public) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)', [m.question, m.category || 'other', m.resolution_date || today, m.resolution_date || today, 0.5, 0.5, 1000, 1000, false, creator.slug, false]);
-          } else {
-            await supabase.from('markets').insert([{
-              question:        m.question,
-              category:        m.category || 'other',
-              expiry_date:     m.resolution_date || today,
-              resolution_date: m.resolution_date || today,
-              yes_price: 0.5, no_price: 0.5,
-              yes_pool: 1000,  no_pool: 1000,
-              resolved: false,
-              tenant_slug: creator.slug,
-              is_public: false,
-            }]);
-          }
-        }
-
-        // Update last run timestamp
-        if (pool) {
-          await dbQuery('UPDATE creator_settings SET auto_scan_last_run = $1 WHERE creator_id = $2', [now.toISOString(), creator.creator_id]);
-        } else {
-          await supabase.from('creator_settings')
-            .update({ auto_scan_last_run: now.toISOString() })
-            .eq('creator_id', creator.creator_id);
-        }
-
-        console.log(`[auto-scan] Generated ${markets.length} draft markets for ${creator.slug}`);
-      } catch (e) {
-        console.error(`[auto-scan] Error for creator ${creator.slug}:`, e.message);
-      }
-    }
-  } catch (err) {
-    console.error('[auto-scan] Fatal:', err.message);
-  }
-}
-
-async function autoResolveExpiredMarkets() {
-  if (!process.env.ANTHROPIC_API_KEY) return;
-  try {
-    const now = new Date().toISOString();
-    // Find expired unresolved markets with a resolution source
-    let markets;
-    if (pool) {
-      const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 AND expiry_date < $2 AND resolution_source IS NOT NULL', [false, now]);
-      markets = _rows;
-    } else {
-      const { data: _m } = await supabase .from('markets') .select('*') .eq('resolved', false) .lt('expiry_date', now) .not('resolution_source', 'is', null);
-      markets = _m;
-    }
-
-    if (!markets || !markets.length) return;
-
-    for (const market of markets) {
-      try {
-        // Get the source URL
-        let sourceUrl = market.resolution_source;
-        if (!sourceUrl || !sourceUrl.startsWith('http')) {
-          try {
-            const arr = typeof market.resolution_sources === 'string'
-              ? JSON.parse(market.resolution_sources) : (market.resolution_sources || []);
-            const first = arr.find(s => s && (typeof s === 'string' ? s.startsWith('http') : s.url?.startsWith('http')));
-            if (first) sourceUrl = typeof first === 'string' ? first : first.url;
-          } catch {}
-        }
-        if (!sourceUrl || !sourceUrl.startsWith('http')) continue;
-
-        console.log(`[auto-resolve] Checking market ${market.id}: "${market.question}"`);
-
-        // Fetch source content (with timeout)
-        let sourceText = '';
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 8000);
-          const resp = await fetch(sourceUrl, {
-            signal: controller.signal,
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HyperflexBot/1.0)' }
-          });
-          clearTimeout(timeout);
-          if (resp.ok) {
-            const raw = await resp.text();
-            // Strip HTML tags, take first 3000 chars
-            sourceText = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
-          }
-        } catch {}
-
-        if (!sourceText) {
-          console.log(`[auto-resolve] Could not fetch source for market ${market.id}, skipping`);
-          continue;
-        }
-
-        // Ask Claude Haiku to determine outcome — cron-triggered; gated.
-        const aiResponse = await backgroundClaudeCall({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 256,
-          system: 'You are a prediction market resolver. Given a market question and source content, determine if the outcome is YES, NO, or UNCERTAIN. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief explanation" }',
-          messages: [{
-            role: 'user',
-            content: `Market question: "${market.question}"\n\nSource content:\n${sourceText}\n\nDetermine: did this prediction come true?`
-          }],
-        });
-
-        const aiText = aiResponse?.content?.[0]?.text || '';
-        let resolution;
-        try { resolution = JSON.parse(aiText); } catch { continue; }
-        if (!resolution?.outcome || !['YES', 'NO', 'UNCERTAIN'].includes(resolution.outcome)) continue;
-
-        // Get creator info for notification
-        let creatorSettings;
-        if (pool) {
-          const _rows = await dbQuery('SELECT creator_id, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [market.tenant_slug]);
-          creatorSettings = _rows[0] || null;
-        } else {
-          const { data: creatorSettings } = await supabase .from('creator_settings') .select('creator_id, display_name') .eq('slug', market.tenant_slug) .maybeSingle();
-        }
-
-        let creatorEmail = null;
-        if (creatorSettings?.creator_id) {
-          let creatorUser;
-          if (pool) {
-            const _rows = await dbQuery('SELECT email FROM users WHERE id = $1 LIMIT 1', [creatorSettings.creator_id]);
-            creatorUser = _rows[0] || null;
-          } else {
-            const { data: creatorUser } = await supabase .from('users') .select('email') .eq('id', creatorSettings.creator_id) .maybeSingle();
-          }
-          creatorEmail = creatorUser?.email;
-        }
-
-        if (resolution.outcome !== 'UNCERTAIN' && resolution.confidence >= 0.82) {
-          // High confidence — auto-resolve
-          const outcome = resolution.outcome; // 'YES' or 'NO'
-          const winningSide = outcome;
-          const losingSide  = outcome === 'YES' ? 'NO' : 'YES';
-
-          // Settle positions (same logic as manual settle)
-          let positions;
-          if (pool) {
-            const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
-            positions = _rows;
-          } else {
-            const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', market.id) .eq('settled', false);
-          }
-
-          if (positions && positions.length) {
-            for (const pos of positions) {
-              const won = pos.side === winningSide;
-              const payout = won ? (Number(pos.potential_payout) || 0) : 0;
-              if (pool) {
-                await dbQuery('UPDATE positions SET settled = $1 WHERE id = $2', [true, pos.id]);
-              } else {
-                await supabase.from('positions').update({ settled: true, won }).eq('id', pos.id);
-              }
-              if (won && payout > 0) {
-                // Credit community balance
-                let bal;
-                if (pool) {
-                  const rows = await dbQuery('SELECT balance FROM community_balances WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [pos.user_id, market.tenant_slug]);
-                  bal = rows[0] || null;
-                } else {
-                  const { data: d } = await supabase.from('community_balances').select('balance').eq('user_id', pos.user_id).eq('creator_slug', market.tenant_slug).maybeSingle();
-                  bal = d;
-                }
-                const cur = Number(bal?.balance) || 0;
-                if (pool) {
-                  await dbQuery('INSERT INTO community_balances (user_id, creator_slug, balance) VALUES ($1, $2, $3) ON CONFLICT (user_id, creator_slug) DO UPDATE SET balance = $3', [pos.user_id, market.tenant_slug, cur + payout]);
-                } else {
-                  await supabase.from('community_balances')
-                    .upsert({ user_id: pos.user_id, creator_slug: market.tenant_slug, balance: cur + payout },
-                             { onConflict: 'user_id,creator_slug' });
-                }
-              }
-            }
-          }
-
-          if (pool) {
-            await dbQuery('UPDATE markets SET resolved = $1, resolved_at = $2, resolution_outcome = $3, resolution_note = $4 WHERE id = $5', [true, new Date().toISOString(), outcome, `Auto-resolved by AI (${Math.round(resolution.confidence * 100)}% confidence): ${resolution.reasoning}`, market.id]);
-          } else {
-            await supabase.from('markets').update({
-            resolved: true,
-            resolved_at: new Date().toISOString(),
-            resolution_outcome: outcome,
-            resolution_note: `Auto-resolved by AI (${Math.round(resolution.confidence * 100)}% confidence): ${resolution.reasoning}`,
-            }).eq('id', market.id);
-          }
-
-          console.log(`[auto-resolve] Auto-resolved market ${market.id} as ${outcome} (${Math.round(resolution.confidence * 100)}%)`);
-
-          // Notify creator
-          if (creatorEmail && process.env.SMTP_HOST) {
-            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: false, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
-            await transporter.sendMail({
-              from: process.env.SMTP_FROM || 'noreply@hyperflex.network',
-              to: creatorEmail,
-              subject: `✅ Market auto-resolved: ${market.question.slice(0, 60)}`,
-              html: `<div style="background:#141412;padding:32px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:540px;border-radius:12px;"><div style="font-size:20px;font-weight:800;color:#c9920d;margin-bottom:20px;">HYPERFLEX</div><p style="color:#f5f5f0;font-size:16px;font-weight:700;margin:0 0 12px;">A market was auto-resolved ✅</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:20px;"><div style="font-size:13px;color:#ddd8cc;margin-bottom:8px;">"${market.question}"</div><div style="font-size:14px;font-weight:700;color:#c9920d;margin-bottom:4px;">Outcome: ${outcome}</div><div style="font-size:12px;color:#888880;">${resolution.reasoning}</div></div><p style="font-size:12px;color:#888880;">If this seems incorrect, you can override it from your <a href="https://hyperflex.network/creator-dashboard.html" style="color:#c9920d;">dashboard</a>.</p></div>`
-            }).catch(() => {});
-          }
-
-        } else {
-          // Uncertain or low-confidence — flag for creator review
-          if (pool) {
-            await dbQuery('UPDATE markets SET resolution_note = $1 WHERE id = $2', [`⚠️ AI suggested ${resolution.outcome} (${Math.round((resolution.confidence || 0) * 100)}% confidence) — needs manual review. ${resolution.reasoning}`, market.id]);
-          } else {
-            await supabase.from('markets').update({
-            resolution_note: `⚠️ AI suggested ${resolution.outcome} (${Math.round((resolution.confidence || 0) * 100)}% confidence) — needs manual review. ${resolution.reasoning}`,
-            }).eq('id', market.id);
-          }
-
-          console.log(`[auto-resolve] Flagged market ${market.id} for creator review (${resolution.outcome}, ${resolution.confidence})`);
-
-          // Email creator to manually resolve
-          if (creatorEmail && process.env.SMTP_HOST) {
-            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: false, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
-            await transporter.sendMail({
-              from: process.env.SMTP_FROM || 'noreply@hyperflex.network',
-              to: creatorEmail,
-              subject: `⚠️ Market needs your resolution: ${market.question.slice(0, 60)}`,
-              html: `<div style="background:#141412;padding:32px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:540px;border-radius:12px;"><div style="font-size:20px;font-weight:800;color:#c9920d;margin-bottom:20px;">HYPERFLEX</div><p style="color:#f5f5f0;font-size:16px;font-weight:700;margin:0 0 12px;">A market needs your resolution ⚠️</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:20px;"><div style="font-size:13px;color:#ddd8cc;margin-bottom:8px;">"${market.question}"</div><div style="font-size:12px;color:#888880;margin-bottom:8px;">AI suggested <strong style="color:#c9920d;">${resolution.outcome}</strong> but wasn't confident enough to auto-resolve (${Math.round((resolution.confidence || 0) * 100)}%).</div><div style="font-size:12px;color:#888880;">${resolution.reasoning}</div></div><a href="https://hyperflex.network/creator-dashboard.html" style="display:inline-block;background:#c9920d;color:#141412;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;text-decoration:none;">Resolve from dashboard →</a></div>`
-            }).catch(() => {});
-          }
-        }
-      } catch (e) {
-        console.error(`[auto-resolve] Error on market ${market.id}:`, e.message);
-      }
-    }
-  } catch (err) {
-    console.error('[auto-resolve] Fatal:', err.message);
-  }
-}
-
-// FEATURE 4B — autoResolveNoSourceMarkets()
-// Resolves expired markets that have NO resolution_source — uses vote consensus or Claude knowledge
-async function autoResolveNoSourceMarkets() {
-  try {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    // Find markets expired 24h+ ago, unresolved, NO resolution source
-    let markets;
-    if (pool) {
-      markets = await dbQuery(
-        `SELECT id, question, tenant_slug, expiry_date, yes_price, yes_votes, no_votes, options
-         FROM markets WHERE resolved = $1 AND expiry_date < $2
-         AND (resolution_source IS NULL OR resolution_source = '')`,
-        [false, twentyFourHoursAgo]
-      );
-    } else {
-      const { data } = await supabase.from('markets').select('id, question, tenant_slug, expiry_date, yes_price, yes_votes, no_votes, options')
-        .eq('resolved', false).lt('expiry_date', twentyFourHoursAgo).or('resolution_source.is.null,resolution_source.eq.');
-      markets = data || [];
-    }
-    if (!markets || !markets.length) return;
-
-    for (const market of markets) {
-      try {
-        // Skip multi-option markets for now (complex resolution)
-        if (market.options) continue;
-
-        const yesVotes = parseInt(market.yes_votes) || 0;
-        const noVotes = parseInt(market.no_votes) || 0;
-        const totalVotes = yesVotes + noVotes;
-        let outcome = null;
-        let method = '';
-
-        // Method 1: Strong community vote consensus (≥3 votes, ≥70% one side)
-        if (totalVotes >= 3) {
-          const yesPct = yesVotes / totalVotes;
-          if (yesPct >= 0.70) { outcome = 'YES'; method = 'community vote consensus'; }
-          else if (yesPct <= 0.30) { outcome = 'NO'; method = 'community vote consensus'; }
-        }
-
-        // Method 2: Ask Claude if the question has a knowable answer
-        if (!outcome && process.env.ANTHROPIC_API_KEY) {
-          try {
-            // Knowledge-based resolver fallback — cron-triggered; gated.
-            const aiRes = await backgroundClaudeCall({
-              model: 'claude-haiku-4-5-20251001',
-              max_tokens: 200,
-              system: 'You resolve prediction markets. The market has expired. Based on your knowledge, determine if the prediction came true. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief" }. If you genuinely cannot determine the answer, return UNCERTAIN.',
-              messages: [{ role: 'user', content: `Expired market question: "${market.question}"\nExpiry date: ${market.expiry_date}\nToday: ${new Date().toISOString().split('T')[0]}\n\nDid this come true?` }],
-            });
-            const txt = aiRes?.content?.[0]?.text || '';
-            const parsed = JSON.parse(txt);
-            if (parsed?.outcome && parsed.outcome !== 'UNCERTAIN' && parsed.confidence >= 0.80) {
-              outcome = parsed.outcome;
-              method = `AI knowledge (${Math.round(parsed.confidence * 100)}%): ${parsed.reasoning || ''}`;
-            }
-          } catch (e) { /* Claude failed, skip */ }
-        }
-
-        // Method 3: If expired 7+ days with no votes at all → resolve as NO (default)
-        if (!outcome) {
-          const daysSinceExpiry = (Date.now() - new Date(market.expiry_date).getTime()) / (1000 * 60 * 60 * 24);
-          if (daysSinceExpiry >= 7 && totalVotes === 0) {
-            outcome = 'NO';
-            method = 'auto-expired (7+ days, no activity)';
-          }
-        }
-
-        if (!outcome) continue;
-
-        // Settle positions
-        let positions;
-        if (pool) {
-          positions = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
-        } else {
-          const { data } = await supabase.from('positions').select('*').eq('market_id', market.id).eq('settled', false);
-          positions = data || [];
-        }
-
-        if (positions && positions.length) {
-          for (const pos of positions) {
-            const won = pos.side === outcome;
-            const payout = won ? (Number(pos.potential_payout) || 0) : 0;
-            if (pool) {
-              await dbQuery('UPDATE positions SET settled = $1, won = $2 WHERE id = $3', [true, won, pos.id]);
-            } else {
-              await supabase.from('positions').update({ settled: true, won }).eq('id', pos.id);
-            }
-            if (won && payout > 0) {
-              let bal;
-              if (pool) {
-                const rows = await dbQuery('SELECT balance FROM community_balances WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [pos.user_id, market.tenant_slug]);
-                bal = rows[0] || null;
-              } else {
-                const { data: d } = await supabase.from('community_balances').select('balance').eq('user_id', pos.user_id).eq('creator_slug', market.tenant_slug).maybeSingle();
-                bal = d;
-              }
-              const cur = Number(bal?.balance) || 0;
-              if (pool) {
-                await dbQuery('INSERT INTO community_balances (id, user_id, creator_slug, balance) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, creator_slug) DO UPDATE SET balance = $4',
-                  [require('crypto').randomUUID(), pos.user_id, market.tenant_slug, cur + payout]);
-              } else {
-                await supabase.from('community_balances').upsert({ user_id: pos.user_id, creator_slug: market.tenant_slug, balance: cur + payout }, { onConflict: 'user_id,creator_slug' });
-              }
-            }
-          }
-        }
-
-        // Mark resolved
-        if (pool) {
-          await dbQuery('UPDATE markets SET resolved = $1, resolved_at = $2, resolution_outcome = $3, resolution_note = $4 WHERE id = $5',
-            [true, new Date().toISOString(), outcome, `Auto-resolved: ${method}`, market.id]);
-        } else {
-          await supabase.from('markets').update({ resolved: true, resolved_at: new Date().toISOString(), resolution_outcome: outcome, resolution_note: `Auto-resolved: ${method}` }).eq('id', market.id);
-        }
-
-        console.log(`[auto-resolve-nosource] Resolved ${market.id} as ${outcome} via ${method}`);
-      } catch (e) {
-        console.error(`[auto-resolve-nosource] Error on ${market.id}:`, e.message);
-      }
-    }
-  } catch (err) {
-    console.error('[auto-resolve-nosource] Fatal:', err.message);
-  }
-}
 
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
