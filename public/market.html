@@ -457,7 +457,7 @@ canvas{display:block;width:100%!important}
 
         <div class="trade-field">
           <div class="trade-field-label"><span id="tradeAmountLabel">Amount (USD)</span><a id="tradeMaxBtn" href="#" onclick="event.preventDefault();setMaxShares()" style="display:none;color:var(--green);font-size:12px;font-weight:700;text-decoration:none">Max</a></div>
-          <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="updateTradeCalc()"/>
+          <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="_onAmountInput()"/>
         </div>
 
         <!-- SELL mode: proactively show user's share balance on this outcome.
@@ -1729,11 +1729,50 @@ async function setMaxShares() {
 
   console.log('[max] Total shares for', _tradeSide, ':', maxShares);
 
-  // Convert shares to USD value at current limit price
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var priceFrac = price / 100;
   var maxUsd = maxShares * priceFrac;
-  input.value = maxUsd > 0 ? Math.floor(maxUsd) : '0';
+
+  // Polymarket's CLOB has a $1 minimum order total (takerAmount in USDC).
+  // If the position is worth less than $1 at the current price, the order
+  // will be rejected — surface that up front rather than letting the user
+  // submit and eat a confusing CLOB 400. This is the "stuck with dust"
+  // scenario after a partial sell.
+  if (maxShares > 0 && maxUsd > 0 && maxUsd < 1) {
+    input.value = maxUsd.toFixed(2);
+    showTradeStatus(
+      'Position is $' + maxUsd.toFixed(2) + ' — below Polymarket\'s $1 minimum order. ' +
+      'You can\'t fully close until the price moves (need ~' +
+      Math.ceil((1 / maxShares) * 100) + '\u00a2 for $1 total).',
+      'error'
+    );
+    updateTradeCalc();
+    return;
+  }
+
+  // Record the EXACT share count so executeTrade can send it directly
+  // instead of re-deriving shares from a rounded USD amount (which was
+  // floor'ing and leaving sub-share dust that the user couldn't close).
+  // Cleared by updateTradeCalc the moment the user types a new amount,
+  // so this only applies when the user actually hit Max.
+  _pendingMaxShares = maxShares > 0 ? maxShares : null;
+
+  // Display the real USD value (2 decimals) — no more flooring away fractions.
+  input.value = maxUsd > 0 ? maxUsd.toFixed(2) : '0';
+  updateTradeCalc();
+}
+
+// Scratch variable: when non-null, executeTrade in SELL mode uses this
+// share count directly (rounded to 4 decimals, the CLOB spec) instead
+// of shares = amount / price. Reset whenever the user edits the amount
+// so typed inputs behave normally.
+var _pendingMaxShares = null;
+
+// User-typed amount change: clear the Max-shares latch so typed input
+// falls back to the normal amount/price derivation. setMaxShares calls
+// updateTradeCalc directly and so doesn't hit this handler.
+function _onAmountInput() {
+  _pendingMaxShares = null;
   updateTradeCalc();
 }
 
@@ -3731,6 +3770,22 @@ async function executeTrade() {
       return;
     }
     var shares = amount / clobPrice;
+
+    // Full-close override. When the user hit Max, _pendingMaxShares is the
+    // EXACT share balance read from the positions cache. Deriving shares
+    // from a rounded USD input was leaving sub-share dust on every
+    // close — user hit Max, got $1 (floor), sold what $1 buys at current
+    // price, was left with fractional shares under the $1 minimum.
+    // Using pendingMaxShares directly (rounded to 4dp = SELL maker
+    // constraint) closes the position flat.
+    if (clobSide === 'SELL' && typeof _pendingMaxShares === 'number' && _pendingMaxShares > 0) {
+      var flooredMax = Math.floor(_pendingMaxShares * 10000) / 10000;
+      console.log('[trade] Max-close override — using exact share balance', flooredMax, 'instead of derived', shares);
+      shares = flooredMax;
+      // Recompute the USDC takerAmount the user will receive so the
+      // balance / minimum checks below see the correct value.
+      amount = Math.round(shares * clobPrice * 100) / 100;
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // PRE-SUBMIT SHARE-BALANCE CHECK (SELL only)
