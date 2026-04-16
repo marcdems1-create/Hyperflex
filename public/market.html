@@ -1539,6 +1539,7 @@ function setTradeSide(side) {
   updateTradeCalc();
   updateCtaButton();
   updateCurrentPriceBtn();
+  updatePricePills();
   updateSellBalanceBadge();  // refresh the "you own N shares" pill for the new side
 }
 
@@ -1684,6 +1685,31 @@ function updateCurrentPriceBtn() {
   var p = _tradeSide === 'yes' ? parseFloat(prices[0] || 0.5) : parseFloat(prices[1] || 0.5);
   var btn = document.getElementById('currentPriceBtn');
   if (btn) btn.textContent = Math.round(p * 100) + '¢ Mkt';
+}
+
+// Dynamic price pills — centered around current market price instead of
+// hardcoded 10/25/50/75/90 which are useless for extreme-priced markets.
+function updatePricePills() {
+  if (!_market) return;
+  var prices = getActiveOutcomePrices();
+  var p = _tradeSide === 'yes' ? parseFloat(prices[0] || 0.5) : parseFloat(prices[1] || 0.5);
+  var mkt = Math.round(p * 100);
+  // Generate 5 steps below market price, spaced by tick size awareness
+  var step = mkt >= 90 || mkt <= 10 ? 1 : mkt >= 75 || mkt <= 25 ? 2 : 5;
+  var pills = [mkt - step * 4, mkt - step * 2, mkt - step, mkt, mkt + step];
+  // Clamp to valid range and deduplicate
+  pills = pills.map(function(v) { return Math.max(1, Math.min(99, v)); });
+  pills = pills.filter(function(v, i, a) { return a.indexOf(v) === i; });
+  var container = document.querySelector('.trade-quick-btns');
+  if (!container) return;
+  var currentPrice = parseInt(document.getElementById('tradePrice').value) || 50;
+  var html = '';
+  for (var i = 0; i < pills.length; i++) {
+    var active = pills[i] === currentPrice ? ' active' : '';
+    html += '<button class="trade-quick-btn' + active + '" onclick="setPrice(' + pills[i] + ')">' + pills[i] + '¢</button>';
+  }
+  html += '<button class="trade-quick-btn' + (currentPrice === mkt ? ' active' : '') + '" id="currentPriceBtn" onclick="setCurrentPrice()" style="background:rgba(201,146,13,0.12);border-color:rgba(201,146,13,0.3);color:var(--gold);font-weight:700">' + mkt + '¢ Mkt</button>';
+  container.innerHTML = html;
 }
 
 function setAmount(a) {
@@ -4836,8 +4862,9 @@ function updateActiveTradePrice() {
 
   document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '\u00a2';
   document.getElementById('noPrice').textContent = Math.round(np * 100) + '\u00a2';
-  // Update Mkt button
+  // Update Mkt button + dynamic price pills
   updateCurrentPriceBtn();
+  updatePricePills();
 }
 
 // Alpha-terminal prefill — when arriving from /alpha-live or the landing
@@ -5480,6 +5507,9 @@ async function runCrystalBall() {
 // Init
 loadMarket().then(function() {
   updateCurrentPriceBtn();
+  updatePricePills();
+  // Default the price input to current market price on load
+  setCurrentPrice();
   fetchTradeBalance();
   // Fetch user positions (non-blocking) — shows badges on outcomes + sidebar
   setTimeout(function() {
