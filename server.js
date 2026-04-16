@@ -12847,13 +12847,15 @@ const INFLUENCER_FETCH_INTERVAL = 4 * 60 * 60 * 1000;
 
 async function fetchInfluencerTweets() {
   if (!pool) return;
-  // Background cron kill-switch. User owns the twitterapi.io credits;
-  // if the real-import pipeline isn't producing tweets, credits are
-  // waste. Set TWITTERAPI_FETCH_ENABLED=false in Railway to pause this
-  // cron without removing TWITTERAPI_IO_KEY (which interactive
-  // endpoints like handle-verify still depend on).
-  if (process.env.TWITTERAPI_FETCH_ENABLED === 'false') {
-    console.log('[influencer-fetch] Skipped — TWITTERAPI_FETCH_ENABLED=false');
+  // Default OFF (flipped 2026-04-16). Railway logs proved the twitterapi.io
+  // /user/last_tweets endpoint was returning 0 tweets for every handle in
+  // our influencer list — burning credits for zero stored content. The
+  // cron no longer runs unless TWITTERAPI_FETCH_ENABLED is *explicitly*
+  // set to 'true' in Railway. Interactive endpoints (handle-verify,
+  // manual import-tweet) still work since those read TWITTERAPI_IO_KEY
+  // directly and aren't gated by this flag.
+  if (process.env.TWITTERAPI_FETCH_ENABLED !== 'true') {
+    console.log('[influencer-fetch] Skipped \u2014 set TWITTERAPI_FETCH_ENABLED=true to enable');
     return;
   }
   const now = Date.now();
@@ -16205,12 +16207,23 @@ async function _fetchXTimeline(handle) {
       console.warn(`[x-timeline] @${handle} \u2014 twitterapi.io ${r.status}${body ? ' ' + body : ''}`);
       return [];
     }
-    const d = await r.json().catch(() => ({}));
+    // Capture the raw payload so a zero-tweet response shows us what the
+    // API actually returned — error string buried inside a 200, missing
+    // field, wrong shape, etc. Previous version only logged total=0 which
+    // hid the root cause.
+    const rawText = await r.text().catch(() => '');
+    let d = {};
+    try { d = JSON.parse(rawText); } catch {}
     const total = (d.tweets || []).length;
     const nonRetweet = (d.tweets || []).filter(t => t.type !== 'retweet');
-    // Log per-handle counts so zero-content handles are obvious. Full
-    // sweep summary is still logged by monitorPolymarketInfluencers.
-    console.log(`[x-timeline] @${handle} total=${total} nonRT=${nonRetweet.length}`);
+    if (total === 0) {
+      // Dump the first 300 chars of the body so we can see what fields
+      // the API actually returned (maybe `data.tweets`, `statuses`,
+      // `code: 88`, etc).
+      console.log(`[x-timeline] @${handle} total=0 rawBody=${rawText.slice(0, 300)}`);
+    } else {
+      console.log(`[x-timeline] @${handle} total=${total} nonRT=${nonRetweet.length}`);
+    }
     return nonRetweet;
   } catch (e) {
     console.warn(`[x-timeline] @${handle} \u2014 fetch error: ${e.message}`);
@@ -16407,10 +16420,13 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
-  // Same kill-switch as fetchInfluencerTweets. Both crons draw from the
-  // same twitterapi.io credit pool, so they have to be gated together.
-  if (process.env.TWITTERAPI_FETCH_ENABLED === 'false') {
-    console.log('[influencer] Skipped — TWITTERAPI_FETCH_ENABLED=false');
+  // Gated behind TWITTERAPI_FETCH_ENABLED=true — see fetchInfluencerTweets
+  // comment. Reddit/YouTube/Substack paths don't hit twitterapi.io and
+  // would be fine, but the X path dominated the sweep's credit burn.
+  // When we confirm the twitterapi.io endpoint is returning real tweets
+  // again we'll flip this flag in Railway.
+  if (process.env.TWITTERAPI_FETCH_ENABLED !== 'true') {
+    console.log('[influencer] Skipped \u2014 set TWITTERAPI_FETCH_ENABLED=true to enable');
     return;
   }
   console.log('[influencer] Starting influencer monitoring sweep');
