@@ -5079,28 +5079,114 @@ function connectStopSSE() {
 
 async function handleStopTrigger(data) {
   var typeLabel = data.order_type === 'take_profit' ? 'Take-profit' : 'Stop-loss';
-  var trigCents = Math.round(data.trigger_price * 100);
   var fillCents = Math.round((data.fill_price || data.trigger_price) * 100);
+
+  // If the SSE payload names a market_slug and the viewer is currently on
+  // a DIFFERENT market, "Execute Sell" has no chance of working here —
+  // the in-memory _market / _userPositions point at the wrong market,
+  // tick-size/neg-risk are wrong, the CLOB call will 400, and the
+  // wallet-signature popup appears against a market the user didn't
+  // trigger. Cache the stop in the current page's sessionStorage under
+  // the destination slug and make the button an explicit navigation,
+  // not a click-to-sign. On arrival at /market/<slug> the page checks
+  // the cached entry and auto-pops the banner pre-filled to execute.
+  var onRightMarket = false;
+  try {
+    var curSlug = (typeof slug === 'string' && slug) ? slug
+      : (window.location.pathname.split('/market/')[1] || '').split('/')[0];
+    onRightMarket = !!(data.market_slug && curSlug && curSlug === data.market_slug)
+      || !data.market_slug; // backwards-compat if backend doesn't send slug
+  } catch (e) {}
+
+  // Persist the trigger so arriving on the correct market page still
+  // shows the banner + can execute. Keyed by slug so multiple triggers
+  // on different markets don't overwrite each other.
+  try {
+    if (data.market_slug) {
+      var key = 'hfx_pending_stop_' + data.market_slug;
+      sessionStorage.setItem(key, JSON.stringify({
+        stop_id: data.stop_id, token_id: data.token_id, shares: data.shares,
+        trigger_price: data.trigger_price, fill_price: data.fill_price,
+        order_type: data.order_type, side: data.side,
+        market_slug: data.market_slug, market_title: data.market_title,
+        savedAt: Date.now()
+      }));
+    }
+  } catch (_) {}
 
   // Show urgent banner
   var banner = document.createElement('div');
   banner.id = 'stopTriggerBanner';
   banner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#ff4d6a,#f59e0b);color:#fff;padding:14px 24px;border-radius:12px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 24px rgba(255,77,106,0.4);display:flex;align-items:center;gap:12px;max-width:90vw';
-  // Banner button is user-initiated → passes {userInitiated:true} so that
-  // executeStopSell runs enableTrading() to derive CLOB keys if missing.
-  banner.innerHTML = '<span>🛑 ' + typeLabel + ' triggered at ' + fillCents + '¢</span><button onclick="executeStopSell(\'' + data.stop_id + '\',\'' + data.token_id + '\',' + data.shares + ',' + data.trigger_price + ',{userInitiated:true})" style="background:#fff;color:#ff4d6a;border:none;padding:8px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Execute Sell →</button><button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;padding:4px">✕</button>';
+
+  var actionHtml;
+  if (onRightMarket) {
+    // Same market — keep the in-place Execute Sell button. user-initiated
+    // flag lets executeStopSell derive CLOB keys on demand.
+    actionHtml = '<button onclick="executeStopSell(\'' + data.stop_id + '\',\'' + data.token_id + '\',' + data.shares + ',' + data.trigger_price + ',{userInitiated:true})" style="background:#fff;color:#ff4d6a;border:none;padding:8px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Execute Sell \u2192</button>';
+  } else {
+    // Different market — button becomes a navigation link. Arrival
+    // handler (initPendingStopFromSession) picks the state back up.
+    actionHtml = '<a href="/market/' + encodeURIComponent(data.market_slug) +
+      '?stop=' + encodeURIComponent(data.stop_id) +
+      '" style="background:#fff;color:#ff4d6a;border:none;padding:8px 16px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block">' +
+      'Go to market \u2192</a>';
+  }
+
+  var marketLabel = data.market_title
+    ? ' on <span style="opacity:.85;font-weight:600">"' + escH(String(data.market_title).slice(0, 60)) + '"</span>'
+    : '';
+  banner.innerHTML = '<span>\ud83d\uded1 ' + typeLabel + ' triggered at ' + fillCents + '\u00a2' + marketLabel + '</span>' +
+    actionHtml +
+    '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;padding:4px">\u2715</button>';
   document.body.appendChild(banner);
 
-  // Auto-execute if we can — but NOT user-initiated, so if CLOB keys are
-  // missing we fail silently rather than popping MetaMask unexpectedly.
-  try {
-    await executeStopSell(data.stop_id, data.token_id, data.shares, data.trigger_price);
-  } catch (e) {
-    console.warn('[stop-orders] Auto-execute failed, waiting for user action:', e.message);
+  // Auto-execute only when we're on the correct market page. Skipping
+  // auto-exec on the wrong market avoids a MetaMask popup for a market
+  // the user isn't viewing — they navigate first, confirm second.
+  if (onRightMarket) {
+    try {
+      await executeStopSell(data.stop_id, data.token_id, data.shares, data.trigger_price);
+    } catch (e) {
+      console.warn('[stop-orders] Auto-execute failed, waiting for user action:', e.message);
+    }
   }
 
   loadUserStops(); // refresh the panel
 }
+
+// On market-page load: if the URL has ?stop=<id> and we have a matching
+// pending stop cached in sessionStorage, re-render the banner so the
+// user lands already prompted to execute. Cleared after use so hitting
+// refresh doesn't re-fire it forever.
+function initPendingStopFromSession() {
+  try {
+    var qs = new URLSearchParams(window.location.search);
+    var pendingId = qs.get('stop');
+    if (!pendingId) return;
+    var curSlug = (typeof slug === 'string' && slug) ? slug
+      : (window.location.pathname.split('/market/')[1] || '').split('/')[0];
+    if (!curSlug) return;
+    var key = 'hfx_pending_stop_' + curSlug;
+    var raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    var cached = JSON.parse(raw);
+    if (!cached || cached.stop_id !== pendingId) return;
+    // Drop the session entry so a hard refresh doesn't keep popping the
+    // banner after the user deals with (or dismisses) it.
+    sessionStorage.removeItem(key);
+    // Re-run the normal handler with the cached payload. It'll render the
+    // in-place Execute Sell button because curSlug === cached.market_slug.
+    handleStopTrigger(cached);
+  } catch (e) {
+    console.warn('[stop-orders] pending-stop restore failed:', e.message);
+  }
+}
+// Wait a beat so _market + _userPositions are populated before the
+// banner's auto-execute tries to sign.
+window.addEventListener('load', function() {
+  setTimeout(initPendingStopFromSession, 1500);
+});
 
 async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
   // opts.userInitiated=true means this came from the banner button (user
