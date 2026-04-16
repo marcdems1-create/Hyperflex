@@ -24813,7 +24813,7 @@ const _marketDetailCache = new Map();
 const MARKET_DETAIL_CACHE_TTL = 15 * 1000; // 15 seconds — Gamma live prices refresh ~5s
 
 app.get('/api/market/:slug', async (req, res) => {
-  const { slug } = req.params;
+  let { slug } = req.params;
   if (!slug) return res.status(400).json({ error: 'Missing slug' });
 
   // Diagnostic mode: ?debug=1 bypasses cache + attaches per-outcome
@@ -24821,6 +24821,49 @@ app.get('/api/market/:slug', async (req, res) => {
   // got CLOB best-ask vs fell back to Gamma. Also temporarily forces
   // verbose console logging for this single request.
   const debug = req.query.debug === '1';
+
+  // Some links (stop-order alerts, sidebar toasts, old bookmarks) point
+  // at /market/<conditionId> instead of /market/<slug>. A 66-char 0x-
+  // hex string isn't a slug and Gamma's getMarketBySlug 404s on it —
+  // user saw "Failed to load market: Market not found" when trying to
+  // act on a stop-loss trigger. Resolve conditionIds to their real
+  // slug via (a) the warm screener cache, then (b) Gamma's markets?
+  // condition_ids= endpoint as a fallback before falling through.
+  if (/^0x[0-9a-fA-F]{64}$/.test(slug)) {
+    const conditionId = slug;
+    let resolvedSlug = null;
+    const cacheHit = _screenerCache?.data?.find(m =>
+      m.market_id === conditionId || m.condition_id === conditionId || m.conditionId === conditionId
+    );
+    if (cacheHit && (cacheHit.slug || cacheHit.event_slug)) {
+      resolvedSlug = cacheHit.slug || cacheHit.event_slug;
+      console.log(`[market-detail] conditionId ${conditionId.slice(0, 10)}… → slug ${resolvedSlug} (cache)`);
+    } else {
+      // Cache miss — query Gamma directly. condition_ids filter returns
+      // the market row so we can read its slug/event_slug.
+      try {
+        const gr = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (gr.ok) {
+          const gdata = await gr.json();
+          const firstMarket = Array.isArray(gdata) ? gdata[0] : null;
+          if (firstMarket) {
+            // Prefer event slug when the market belongs to a multi-outcome event,
+            // otherwise fall back to the market's own slug.
+            const evSlug = firstMarket.events?.[0]?.slug || null;
+            resolvedSlug = evSlug || firstMarket.slug || null;
+            if (resolvedSlug) {
+              console.log(`[market-detail] conditionId ${conditionId.slice(0, 10)}… → slug ${resolvedSlug} (gamma)`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[market-detail] Gamma conditionId lookup failed:', e.message);
+      }
+    }
+    if (resolvedSlug) slug = resolvedSlug;
+  }
 
   const cacheKey = `market_detail_${slug}`;
   const cached = _marketDetailCache.get(cacheKey);
