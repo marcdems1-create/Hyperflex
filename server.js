@@ -34485,7 +34485,8 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     // Builder attribution via BuilderConfig SDK — generates fresh POLY_BUILDER_* headers
     const builderHeaders = await getBuilderHeaders('POST', '/order', signed_body);
     if (Object.keys(builderHeaders).length) {
-      console.log('[builder] Attribution headers attached for order (clob-order path)');
+      const keyPrefix = (builderHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
+      console.log(`[builder] Attribution headers attached (clob-order path) | key=${keyPrefix}… | headers=${Object.keys(builderHeaders).join(',')}`);
     } else {
       console.warn('[builder] No attribution headers — orders via clob-order will NOT earn fees');
     }
@@ -35350,10 +35351,12 @@ app.post('/api/polymarket/order', async (req, res) => {
     const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
     const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     const hasAttribution = 'POLY_BUILDER_API_KEY' in clobHeaders;
+    const builderKeyPrefix = (clobHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
     console.log('[clob-proxy] forwarding order | client_ip:', clientIp,
       '| maker:', (req.body.order && req.body.order.maker || '').slice(0, 10),
       '| auth_headers:', fwdHeaders.join(','),
-      '| builder_attribution:', hasAttribution);
+      '| builder_attribution:', hasAttribution,
+      '| builder_key:', builderKeyPrefix ? builderKeyPrefix + '…' : 'NONE');
 
     const r = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
@@ -35398,6 +35401,8 @@ app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
     );
     if (!headers) throw new Error('BuilderConfig returned no headers');
     _trackBuilderSign(200, null, req);
+    const keyPrefix = (headers.POLY_BUILDER_API_KEY || '').slice(0, 8);
+    console.log(`[builder-sign] issued headers | key=${keyPrefix}… | method=${method} | path=${path}`);
     res.json(headers);
   } catch (err) {
     console.error('[builder-sign]', err.message);
@@ -35417,6 +35422,158 @@ app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
     failure_rate_pct: Math.round(failureRate * 10000) / 100,
     tracked_since: _builderSignStats.first_tracked_at
   });
+});
+
+// GET /api/admin/builder-attribution-probe — single-shot end-to-end health check
+// Answers "is our builder key actually being credited by Polymarket?" by:
+//   1. Reporting whether env vars are set (redacted)
+//   2. Confirming BuilderConfig initialized at boot (_builderConfig !== null)
+//   3. Generating a sample POLY_BUILDER_* header set so you can verify format
+//   4. Calling GET /builder/trades on Polymarket CLOB with our credentials —
+//      if it returns 200 with trades, attribution IS working; if it returns
+//      401/403, the key itself is rejected by Polymarket
+//   5. Comparing that count to our LOCAL trade log (polymarket_trades) so
+//      you can see divergence (local > CLOB = trades reaching CLOB without
+//      builder headers → CORS strip on direct-CLOB path or something else)
+//   6. Reporting builder-sign call stats (how many times client asked for headers)
+//   7. Reporting recent direct-path Railway trades (where we log attribution status)
+app.get('/api/admin/builder-attribution-probe', requireAdmin, async (req, res) => {
+  const key        = process.env.POLY_BUILDER_API_KEY || '';
+  const secret     = process.env.POLY_BUILDER_SECRET || '';
+  const passphrase = process.env.POLY_BUILDER_PASSPHRASE || '';
+
+  const report = {
+    env_vars: {
+      POLY_BUILDER_API_KEY: key ? (key.slice(0, 8) + '…' + key.slice(-4) + ` (len=${key.length})`) : 'MISSING',
+      POLY_BUILDER_SECRET: secret ? `SET (len=${secret.length}, b64-like=${/^[A-Za-z0-9+/=_-]+$/.test(secret)})` : 'MISSING',
+      POLY_BUILDER_PASSPHRASE: passphrase ? `SET (len=${passphrase.length})` : 'MISSING',
+    },
+    builder_config_initialized: !!_builderConfig,
+    builder_sign_stats: {
+      total: _builderSignStats.total,
+      success: _builderSignStats.success,
+      failures: _builderSignStats.failures,
+      last_success_at: _builderSignStats.last_success_at,
+      last_failure_at: _builderSignStats.last_failure_at,
+      last_failures_sample: _builderSignStats.last_failures.slice(-3),
+    },
+    sample_headers: null,
+    clob_builder_trades_probe: null,
+    local_vs_clob_reconciliation: null,
+    recent_proxy_attempts: null,
+    diagnosis: [],
+    suggested_next_steps: [],
+  };
+
+  // 1. Generate a sample header set so the user can see what we'd send on a
+  // real trade. Uses the SAME BuilderConfig the order handlers use — if this
+  // fails, the handlers fail too.
+  if (_builderConfig) {
+    try {
+      const sampleBody = JSON.stringify({ order: { tokenId: 'probe', maker: '0x0', signer: '0x0' }, owner: 'probe-owner', orderType: 'GTC', deferExec: false });
+      const sampleHeaders = await _builderConfig.generateBuilderHeaders('POST', '/order', sampleBody);
+      report.sample_headers = {
+        POLY_BUILDER_API_KEY: sampleHeaders.POLY_BUILDER_API_KEY ? (sampleHeaders.POLY_BUILDER_API_KEY.slice(0, 8) + '…') : null,
+        POLY_BUILDER_TIMESTAMP: sampleHeaders.POLY_BUILDER_TIMESTAMP || null,
+        POLY_BUILDER_PASSPHRASE: sampleHeaders.POLY_BUILDER_PASSPHRASE ? 'SET' : null,
+        POLY_BUILDER_SIGNATURE: sampleHeaders.POLY_BUILDER_SIGNATURE ? (sampleHeaders.POLY_BUILDER_SIGNATURE.slice(0, 12) + '…') : null,
+        all_four_present: ['POLY_BUILDER_API_KEY','POLY_BUILDER_TIMESTAMP','POLY_BUILDER_PASSPHRASE','POLY_BUILDER_SIGNATURE'].every(h => !!sampleHeaders[h]),
+      };
+    } catch (e) {
+      report.sample_headers = { error: e.message };
+      report.diagnosis.push('❌ BuilderConfig.generateBuilderHeaders() threw — SDK init is broken');
+    }
+  } else {
+    report.diagnosis.push('❌ _builderConfig is null — env vars missing OR BuilderConfig import failed at boot');
+  }
+
+  // 2. Call Polymarket's /builder/trades with our key — this is the DEFINITIVE
+  // test. Polymarket returns what THEY see for this builder key. If this
+  // returns 0 trades yet our local polymarket_trades has N trades, then
+  // headers are being stripped somewhere between browser → clob.polymarket.com.
+  if (key && secret && passphrase) {
+    try {
+      const ts = Math.floor(Date.now() / 1000).toString();
+      const secretBuf = Buffer.from(secret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+      const message = ts + 'GET' + '/builder/trades';
+      const sig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_');
+
+      const r = await fetch('https://clob.polymarket.com/builder/trades', {
+        headers: {
+          'POLY_BUILDER_API_KEY': key,
+          'POLY_BUILDER_TIMESTAMP': ts,
+          'POLY_BUILDER_PASSPHRASE': passphrase,
+          'POLY_BUILDER_SIGNATURE': sig,
+          'Accept': 'application/json'
+        }
+      });
+      const text = await r.text();
+      let body = null;
+      try { body = JSON.parse(text); } catch { body = { _raw: text.slice(0, 400) }; }
+
+      report.clob_builder_trades_probe = {
+        http_status: r.status,
+        ok: r.ok,
+        trades_count: Array.isArray(body?.trades) ? body.trades.length
+                     : Array.isArray(body?.data) ? body.data.length
+                     : Array.isArray(body) ? body.length : 0,
+        next_cursor: body?.next_cursor || null,
+        response_keys: body && typeof body === 'object' ? Object.keys(body).slice(0, 10) : [],
+        response_preview: JSON.stringify(body).slice(0, 300),
+      };
+
+      if (r.status === 401 || r.status === 403) {
+        report.diagnosis.push('❌ Polymarket REJECTS our builder credentials (401/403). Key is invalid, inactive, or signature scheme is wrong.');
+        report.suggested_next_steps.push('Email your Polymarket builder contact with your POLY_BUILDER_API_KEY prefix and ask them to verify the key is active.');
+        report.suggested_next_steps.push('Verify POLY_BUILDER_SECRET is the raw base64 string from Polymarket — no extra quoting, no trimming.');
+      } else if (r.ok && report.clob_builder_trades_probe.trades_count === 0) {
+        report.diagnosis.push('⚠️ Polymarket accepts our key BUT reports 0 attributed trades. Trades are submitting to CLOB without the POLY_BUILDER_* headers.');
+        report.suggested_next_steps.push('Most likely cause: browser CORS preflight on direct-CLOB path is stripping POLY_BUILDER_* headers before the POST. Have the user open DevTools → Network → /order → look for an OPTIONS preflight to clob.polymarket.com — if Access-Control-Allow-Headers does not list POLY_BUILDER_API_KEY, the browser drops those headers and the trade still succeeds without attribution.');
+        report.suggested_next_steps.push('Fix: route trades primarily through hyperflex-trade-proxy.hyperflex.workers.dev (CF Worker) instead of direct CLOB, so builder headers always traverse a server we control.');
+      } else if (r.ok) {
+        report.diagnosis.push('✓ Polymarket is attributing trades to our builder key.');
+      } else {
+        report.diagnosis.push(`❌ Polymarket /builder/trades returned ${r.status} — unexpected status`);
+      }
+    } catch (e) {
+      report.clob_builder_trades_probe = { error: e.message };
+      report.diagnosis.push('❌ Network error calling /builder/trades: ' + e.message);
+    }
+  } else {
+    report.diagnosis.push('❌ Cannot probe Polymarket — env vars are missing');
+    report.suggested_next_steps.push('Set POLY_BUILDER_API_KEY, POLY_BUILDER_SECRET, and POLY_BUILDER_PASSPHRASE on Railway (Variables tab).');
+  }
+
+  // 3. Compare Polymarket's count to our local polymarket_trades log — if
+  // local > CLOB, trades are bypassing builder attribution somehow.
+  if (pool) {
+    try {
+      const rows = await dbQuery(
+        `SELECT COUNT(*)::int AS trades, COALESCE(SUM(amount_usd), 0)::float AS volume
+         FROM polymarket_trades WHERE created_at > NOW() - INTERVAL '30 days'`
+      );
+      const local = rows[0] || {};
+      report.local_vs_clob_reconciliation = {
+        local_trades_30d: local.trades || 0,
+        local_volume_usdc_30d: Math.round((local.volume || 0) * 100) / 100,
+        clob_attributed_trades: report.clob_builder_trades_probe?.trades_count ?? 'unknown',
+        divergence: (local.trades || 0) - (report.clob_builder_trades_probe?.trades_count || 0),
+      };
+      if ((local.trades || 0) > 0 && (report.clob_builder_trades_probe?.trades_count || 0) === 0) {
+        report.diagnosis.push(`⚠️ CRITICAL: ${local.trades} local trades logged but Polymarket sees 0 attributed. Every single trade is missing the builder headers at Polymarket's end.`);
+      }
+    } catch (e) {
+      report.local_vs_clob_reconciliation = { error: e.message };
+    }
+  }
+
+  // 4. Show the last few Railway proxy attempts so the user can confirm
+  // whether trades are even going through the server-proxy path (where we
+  // log `builder_attribution: true/false`).
+  report.recent_proxy_attempts = 'Check Railway logs for lines matching `[clob-proxy] forwarding order | ... | builder_attribution: true/false` — if none appear in the last hour, all trades are taking the direct-CLOB path (browser → clob.polymarket.com, bypassing our proxy).';
+
+  res.json(report);
 });
 
 // GET /api/admin/builder-fees — fetch builder trade data from Polymarket CLOB
