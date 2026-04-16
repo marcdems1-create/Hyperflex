@@ -1392,9 +1392,7 @@ nav {
       </div>
       <div class="takes-tabs">
         <div class="takes-tab active" onclick="switchTakesTab('foryou')" id="takes-tab-foryou">For You</div>
-        <div class="takes-tab" onclick="switchTakesTab('following')" id="takes-tab-following">Following</div>
         <div class="takes-tab" onclick="switchTakesTab('trending')" id="takes-tab-trending">Trending</div>
-        <div class="takes-tab" onclick="switchTakesTab('influencers')" id="takes-tab-influencers">Influencers</div>
       </div>
 
       <!-- Compose bar -->
@@ -3449,9 +3447,8 @@ function switchTakesTab(mode) {
   document.querySelectorAll('.takes-tab').forEach(function(t){ t.classList.remove('active'); });
   var tabEl = document.getElementById('takes-tab-' + mode);
   if (tabEl) tabEl.classList.add('active');
-  // Hide compose bar on non-composable tabs
   var composeBar = document.getElementById('takes-compose-bar');
-  if (composeBar) composeBar.style.display = (mode === 'following' || mode === 'influencers') ? 'none' : 'flex';
+  if (composeBar) composeBar.style.display = 'flex';
   loadTakesFeed(false);
 }
 
@@ -3465,56 +3462,63 @@ function loadTakesFeed(append) {
   var container = document.getElementById('takes-feed-container');
   if (!append) container.innerHTML = '<div class="takes-loading">Loading takes...</div>';
 
-  var url;
-  if (_takesMode === 'trending') {
-    url = '/api/takes/trending?limit=30' + (_takesCursor ? '&offset=' + _takesCursor : '');
-  } else if (_takesMode === 'influencers') {
-    url = '/api/influencer-feed?limit=30' + (_takesCursor ? '&offset=' + _takesCursor : '');
-  } else {
-    url = '/api/takes/feed?mode=' + _takesMode + '&limit=30' + (_takesCursor ? '&cursor=' + encodeURIComponent(_takesCursor) : '');
-  }
-
   var headers = { Accept: 'application/json' };
   var token = getToken();
   if (token) headers['Authorization'] = 'Bearer ' + token;
 
-  fetch(url, { headers: headers })
-    .then(function(r){ return r.ok ? r.json() : { takes: [], posts: [] }; })
-    .then(function(data) {
-      // Influencer feed returns { posts: [] }; others return { takes: [] }
-      var takes = data.takes || [];
-      var posts  = data.posts || [];
+  if (_takesMode === 'trending') {
+    // Trending merges trending takes + influencer posts, sorted by recency
+    var trendUrl = '/api/takes/trending?limit=20' + (_takesCursor ? '&offset=' + (_takesCursor.trendOffset || 0) : '');
+    var infUrl = '/api/influencer-feed?limit=15' + (_takesCursor ? '&offset=' + (_takesCursor.infOffset || 0) : '');
+    Promise.all([
+      fetch(trendUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : { takes: [] }; }),
+      fetch(infUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : { posts: [] }; })
+    ]).then(function(results) {
+      var takes = results[0].takes || [];
+      var posts = results[1].posts || [];
       if (!append) container.innerHTML = '';
-
-      var isEmpty = _takesMode === 'influencers' ? !posts.length : !takes.length;
-      if (isEmpty && !append) {
-        var emptyIcon = _takesMode === 'following' ? '\uD83D\uDC65' : _takesMode === 'influencers' ? '\uD83D\uDCC1' : '\uD83D\uDCA1';
-        var emptyMsg  = _takesMode === 'following'   ? 'Follow predictors to see their takes here'
-                      : _takesMode === 'influencers' ? 'Influencer posts will appear here once monitoring picks them up — check back shortly'
-                      : 'No takes yet — be the first to post your prediction';
-        container.innerHTML = '<div class="takes-empty"><div class="icon">' + emptyIcon + '</div><div class="msg">' + emptyMsg + '</div></div>';
+      if (!takes.length && !posts.length && !append) {
+        container.innerHTML = '<div class="takes-empty"><div class="icon">\uD83D\uDD25</div><div class="msg">Nothing trending yet — check back soon</div></div>';
         document.getElementById('takes-load-more').style.display = 'none';
         _takesLoading = false;
         return;
       }
-
-      if (_takesMode === 'influencers') {
-        for (var j = 0; j < posts.length; j++) {
-          container.insertAdjacentHTML('beforeend', renderInfluencerCard(posts[j]));
-        }
-        _takesCursor = posts.length >= 30 ? ((_takesCursor || 0) + posts.length) : null;
-      } else {
-        for (var i = 0; i < takes.length; i++) {
-          container.insertAdjacentHTML('beforeend', renderTakeCard(takes[i]));
-        }
-        if (_takesMode === 'trending') {
-          _takesCursor = takes.length;
-        } else {
-          _takesCursor = data.cursor || null;
-        }
+      // Interleave: 2 takes then 1 influencer post, repeat
+      var ti = 0, pi = 0;
+      while (ti < takes.length || pi < posts.length) {
+        if (ti < takes.length) container.insertAdjacentHTML('beforeend', renderTakeCard(takes[ti++]));
+        if (ti < takes.length) container.insertAdjacentHTML('beforeend', renderTakeCard(takes[ti++]));
+        if (pi < posts.length) container.insertAdjacentHTML('beforeend', renderInfluencerCard(posts[pi++]));
       }
-      document.getElementById('takes-load-more').style.display =
-        (_takesMode === 'influencers' ? posts.length : takes.length) >= 20 ? 'block' : 'none';
+      var hasMore = takes.length >= 15 || posts.length >= 10;
+      _takesCursor = hasMore ? { trendOffset: (_takesCursor ? _takesCursor.trendOffset || 0 : 0) + takes.length, infOffset: (_takesCursor ? _takesCursor.infOffset || 0 : 0) + posts.length } : null;
+      document.getElementById('takes-load-more').style.display = hasMore ? 'block' : 'none';
+      _takesLoading = false;
+    }).catch(function() {
+      if (!append) container.innerHTML = '<div class="takes-empty"><div class="msg">Failed to load feed</div></div>';
+      _takesLoading = false;
+    });
+    return;
+  }
+
+  // For You — includes followed users via server-side boost
+  var url = '/api/takes/feed?mode=foryou&limit=30' + (_takesCursor ? '&cursor=' + encodeURIComponent(_takesCursor) : '');
+  fetch(url, { headers: headers })
+    .then(function(r){ return r.ok ? r.json() : { takes: [] }; })
+    .then(function(data) {
+      var takes = data.takes || [];
+      if (!append) container.innerHTML = '';
+      if (!takes.length && !append) {
+        container.innerHTML = '<div class="takes-empty"><div class="icon">\uD83D\uDCA1</div><div class="msg">No takes yet — be the first to post your prediction</div></div>';
+        document.getElementById('takes-load-more').style.display = 'none';
+        _takesLoading = false;
+        return;
+      }
+      for (var i = 0; i < takes.length; i++) {
+        container.insertAdjacentHTML('beforeend', renderTakeCard(takes[i]));
+      }
+      _takesCursor = data.cursor || null;
+      document.getElementById('takes-load-more').style.display = takes.length >= 20 ? 'block' : 'none';
       _takesLoading = false;
     })
     .catch(function() {

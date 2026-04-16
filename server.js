@@ -14632,49 +14632,36 @@ app.get('/api/takes/hot', async (req, res) => {
   }
 });
 
-// GET /api/takes/feed — main social feed (For You / Following)
+// GET /api/takes/feed — main social feed (For You includes followed users)
 app.get('/api/takes/feed', optionalAuth, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const cursor = req.query.cursor; // ISO timestamp for pagination
-    const mode = req.query.mode || 'foryou'; // 'foryou' | 'following'
 
-    let sql, params;
-
-    if (mode === 'following' && req.userId) {
-      // Only takes from people the user follows
-      sql = `SELECT t.* FROM takes t
-        INNER JOIN predictor_follows pf ON pf.following_id = t.user_id AND pf.follower_id = $1
-        WHERE 1=1`;
-      params = [req.userId];
-      let paramIdx = 2;
-      if (cursor) {
-        sql += ` AND t.created_at < $${paramIdx}`;
-        params.push(cursor);
-        paramIdx++;
-      }
-      sql += ` ORDER BY t.created_at DESC LIMIT $${paramIdx}`;
-      params.push(limit);
-    } else {
-      // "For You" — algorithmic: recency + engagement + sharp_score + source variety
-      sql = `SELECT t.*,
-        (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
-        (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
-        (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
-        CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
-        CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END
-        AS feed_score
-        FROM takes t WHERE 1=1`;
-      params = [];
-      let paramIdx = 1;
-      if (cursor) {
-        sql += ` AND t.created_at < $${paramIdx}`;
-        params.push(cursor);
-        paramIdx++;
-      }
-      sql += ` ORDER BY feed_score DESC, t.created_at DESC LIMIT $${paramIdx}`;
-      params.push(limit);
+    // "For You" — algorithmic: recency × engagement × sharp_score × source variety
+    // Also boosts takes from followed users so Following is merged in.
+    let sql = `SELECT t.*,
+      (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
+      (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
+      (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
+      CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
+      CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END`;
+    let params = [];
+    let paramIdx = 1;
+    // Boost followed users' takes in the feed score
+    if (req.userId) {
+      sql += ` + CASE WHEN EXISTS (SELECT 1 FROM predictor_follows pf WHERE pf.follower_id = $${paramIdx} AND pf.following_id = t.user_id) THEN 10 ELSE 0 END`;
+      params.push(req.userId);
+      paramIdx++;
     }
+    sql += ` AS feed_score FROM takes t WHERE 1=1`;
+    if (cursor) {
+      sql += ` AND t.created_at < $${paramIdx}`;
+      params.push(cursor);
+      paramIdx++;
+    }
+    sql += ` ORDER BY feed_score DESC, t.created_at DESC LIMIT $${paramIdx}`;
+    params.push(limit);
 
     const rows = await dbQuery(sql, params);
 
