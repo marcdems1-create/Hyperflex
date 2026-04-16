@@ -27,7 +27,7 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .page { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
 /* Hero */
 .hero { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 32px; }
-.avatar { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; flex-shrink: 0; border: 3px solid var(--border); }
+.avatar { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; flex-shrink: 0; border: 3px solid var(--border); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
 .hero-info { flex: 1; min-width: 0; }
 .hero-name { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; margin-bottom: 4px; }
 .hero-since { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
@@ -145,6 +145,8 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .cta-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
 .cta-link { display: inline-block; background: var(--gold); color: #141412; font-weight: 700; font-size: 14px; padding: 10px 24px; border-radius: 8px; text-decoration: none; }
 /* ── Score Strip ── */
+/* ── Tier card glow ── */
+@keyframes tierPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.8; } }
 .score-strip { display: flex; gap: 0; margin-bottom: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .score-strip-item { flex: 1; padding: 14px 12px; text-align: center; border-right: 1px solid var(--border); }
 .score-strip-item:last-child { border-right: none; }
@@ -428,6 +430,20 @@ async function load() {
             <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
           </div>
           <span id="followerCount" style="display:none"></span>
+        </div>
+      </div>
+
+      <!-- Tier Card — the headline flex -->
+      <div style="background:var(--card);border-radius:16px;padding:24px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;border:1px solid ${rankColor}33">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top, ${rankColor}08, transparent 70%);pointer-events:none"></div>
+        <div style="font-size:36px;margin-bottom:4px">${rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕'}</div>
+        <div style="font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${rankColor};margin-bottom:6px">${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()}</div>
+        <div style="font-family:var(--mono);font-size:52px;font-weight:700;color:${rankColor};line-height:1">${winPct}%</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">${rankDesc}</div>
+        <div style="font-size:11px;color:var(--soft);margin-top:4px">${stats.wins || 0} correct out of ${settled} resolved predictions</div>
+        <div style="display:flex;justify-content:center;gap:8px;margin-top:14px">
+          <a href="/passport/${userId}" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);padding:7px 16px;border-radius:20px;text-decoration:none;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.15)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">🛂 View Prediction Passport</a>
+          <button onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I\\'m a ${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()} predictor with ${winPct}% accuracy on @hypaboranetwork\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-soft);background:none;border:1px solid var(--border);padding:7px 16px;border-radius:20px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">🐦 Flex on X</button>
         </div>
       </div>
 
