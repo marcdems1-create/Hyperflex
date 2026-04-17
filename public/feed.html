@@ -204,8 +204,9 @@ a:hover { text-decoration: underline; }
 .sb-follow-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--gold); flex-shrink: 0; }
 .sb-follow-info { flex: 1; min-width: 0; }
 .sb-follow-name { font-size: 14px; font-weight: 700; color: var(--text); }
-.sb-follow-handle { font-size: 12px; color: var(--text-faint); font-family: 'Space Mono', monospace; }
-.sb-follow-btn { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; background: var(--text); color: var(--bg); transition: opacity .15s; }
+.sb-follow-handle { font-size: 12px; color: #00e68a; font-family: 'Space Mono', monospace; font-weight: 700; }
+.sb-follow-btn { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,0.25); background: none; color: var(--text); transition: all .15s; }
+.sb-follow-btn:hover { background: rgba(255,255,255,0.1); }
 .sb-follow-btn:hover { opacity: 0.85; }
 .sb-results { display: none; background: var(--surface); border-radius: 12px; margin-bottom: 16px; max-height: 400px; overflow-y: auto; }
 .sb-results.visible { display: block; }
@@ -1861,17 +1862,33 @@ async function loadSidebar() {
     if (whales.length) {
       el2.innerHTML = whales.map(function(w) {
         var initials = (w.display_name || '?').split(' ').map(function(s){return s[0]}).join('').toUpperCase().slice(0,2);
-        var pnl = w.whale_pnl != null ? (w.whale_pnl >= 0 ? '+$' : '-$') + (Math.abs(w.whale_pnl) >= 1000 ? Math.round(Math.abs(w.whale_pnl)/1000) + 'K' : Math.round(Math.abs(w.whale_pnl))) : '';
+        var rawPnl = w.whale_pnl != null ? parseFloat(w.whale_pnl) : null;
+        var pnlColor = rawPnl != null ? (rawPnl >= 0 ? '#00e68a' : '#ff4d6a') : 'var(--text-faint)';
+        var pnlStr = rawPnl != null ? (rawPnl >= 0 ? '+' : '') + '$' + (Math.abs(rawPnl) >= 1000000 ? (Math.abs(rawPnl)/1000000).toFixed(1) + 'M' : Math.abs(rawPnl) >= 1000 ? Math.round(Math.abs(rawPnl)/1000) + 'K' : Math.round(Math.abs(rawPnl))) : '';
         return '<div class="sb-follow-item">' +
           '<a href="/m/' + w.id + '" class="sb-follow-avatar">' + initials + '</a>' +
           '<div class="sb-follow-info">' +
             '<a href="/m/' + w.id + '" class="sb-follow-name" style="text-decoration:none;color:var(--text)">' + (w.display_name || 'Whale #' + (w.whale_rank||'')) + '</a>' +
-            '<div class="sb-follow-handle">' + (pnl ? pnl + ' PnL' : 'Rank #' + (w.whale_rank||'—')) + '</div>' +
+            '<div class="sb-follow-handle" style="color:' + pnlColor + '">' + (pnlStr ? pnlStr + ' PnL' : 'Rank #' + (w.whale_rank||'—')) + '</div>' +
           '</div>' +
-          '<a href="/m/' + w.id + '" class="sb-follow-btn" style="text-decoration:none">View</a>' +
+          '<button class="sb-follow-btn" onclick="event.stopPropagation();sidebarFollow(\'' + w.id + '\',this)">Follow</button>' +
         '</div>';
       }).join('');
     }
+  } catch (e) {}
+}
+async function sidebarFollow(userId, btn) {
+  var t = getToken();
+  if (!t) { showFeedToast('Sign in to follow', 'err'); return; }
+  try {
+    var r = await fetch(API + '/api/predictors/' + userId + '/follow', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' }
+    });
+    var d = await r.json();
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.style.background = d.following ? 'rgba(0,230,138,0.12)' : 'none';
+    btn.style.color = d.following ? '#00e68a' : 'var(--text)';
+    btn.style.borderColor = d.following ? 'rgba(0,230,138,0.3)' : 'rgba(255,255,255,0.25)';
   } catch (e) {}
 }
 loadSidebar();
