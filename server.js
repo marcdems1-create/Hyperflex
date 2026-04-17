@@ -12284,10 +12284,39 @@ app.get('/api/member/:userId', async (req, res) => {
       }
     }
 
+    // ── Polymarket trade stats (the real data source post-pivot) ──────────
+    let polyTrades = [];
+    let polyStats = { total: 0, volume: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
+    if (pool && userData.polymarket_address) {
+      try {
+        polyTrades = await dbQuery(
+          `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at
+           FROM polymarket_trades WHERE eoa_address = $1 ORDER BY created_at DESC LIMIT 100`,
+          [userData.polymarket_address]
+        );
+        polyStats.total = polyTrades.length;
+        polyStats.open = polyTrades.filter(t => t.status === 'open').length;
+        for (const t of polyTrades) {
+          polyStats.volume += parseFloat(t.amount_usd) || 0;
+          if (t.status === 'closed' && t.pnl != null) {
+            const p = parseFloat(t.pnl);
+            polyStats.pnl += p;
+            if (p > 0) polyStats.wins++;
+            else polyStats.losses++;
+          }
+        }
+      } catch (e) { /* polymarket_trades table may not exist */ }
+    }
+
+    // Resolve display name: display_name > username > 'Anonymous' (never raw wallet)
+    const displayName = userData.display_name && !userData.display_name.startsWith('0x')
+      ? userData.display_name
+      : userData.username || 'Anonymous';
+
     res.json({
       user: {
         id:           userData.id,
-        display_name: userData.display_name || 'Anonymous',
+        display_name: displayName,
         username:     userData.username || null,
         bio:          userData.bio || null,
         avatar_url:   userData.avatar_url || null,
@@ -12322,6 +12351,25 @@ app.get('/api/member/:userId', async (req, res) => {
       recent_takes: recentTakes,
       communities: slugs.slice(0, 12).map(s => communityMap[s] || { slug: s, display_name: s, primary_color: '#c9920d' }),
       recent_wins: recentWins,
+      polymarket_stats: {
+        total_trades: polyStats.total,
+        open_positions: polyStats.open,
+        closed_wins: polyStats.wins,
+        closed_losses: polyStats.losses,
+        volume_usd: Math.round(polyStats.volume * 100) / 100,
+        pnl_usd: Math.round(polyStats.pnl * 100) / 100,
+        win_rate: (polyStats.wins + polyStats.losses) > 0 ? Math.round((polyStats.wins / (polyStats.wins + polyStats.losses)) * 100) : 0,
+      },
+      recent_trades: polyTrades.slice(0, 10).map(t => ({
+        side: t.side,
+        amount_usd: parseFloat(t.amount_usd),
+        entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
+        market_slug: t.market_slug,
+        market_question: t.market_question,
+        status: t.status,
+        pnl: t.pnl ? parseFloat(t.pnl) : null,
+        created_at: t.created_at,
+      })),
     });
   } catch (err) {
     console.error('[member profile]', err);
