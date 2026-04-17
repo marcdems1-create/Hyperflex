@@ -36,10 +36,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-s
 a { color: var(--gold); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.layout { max-width: 700px; margin: 0 auto; padding: 80px 16px 60px; }
+.layout { max-width: 600px; margin: 0 auto; padding: 80px 0 60px; border-left: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); min-height: 100vh; }
 
 /* ── Tabs ── */
-.feed-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+.feed-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 0; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 64px; background: rgba(13,13,16,0.85); backdrop-filter: blur(12px); z-index: 10; }
 .feed-title { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
 .tabs { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 3px; }
 .tab { padding: 7px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; background: none; color: var(--text-dim); transition: all .15s; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -47,7 +47,7 @@ a:hover { text-decoration: underline; }
 .tab:hover:not(.active) { color: var(--text); }
 
 /* ── Detection banner ── */
-.detect-banner { background: var(--surface); border: 1px solid var(--gold-border); border-top: 2px solid var(--gold); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; display: none; }
+.detect-banner { background: var(--surface); border: none; border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; margin-bottom: 0; overflow: hidden; display: none; }
 .detect-banner.visible { display: block; }
 .detect-header {
   display: flex; align-items: center; gap: 10px;
@@ -93,22 +93,22 @@ a:hover { text-decoration: underline; }
 .detect-cta { padding: 8px 14px; border-radius: 6px; background: var(--gold); color: #000; font-size: 11px; font-weight: 700; border: none; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-family: 'Inter', sans-serif; }
 
 /* ── Post CTA bar ── */
-.post-bar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; cursor: pointer; transition: border-color .15s; }
-.post-bar:hover { border-color: var(--purple-border); }
+.post-bar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0; cursor: pointer; transition: background .15s; }
+.post-bar:hover { background: rgba(255,255,255,0.02); }
 .post-bar-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: var(--text-dim); flex-shrink: 0; }
 .post-bar-prompt { flex: 1; font-size: 13px; color: var(--text-dim); }
 .post-bar-btn { padding: 6px 14px; border-radius: 6px; background: var(--purple); color: #fff; font-size: 11px; font-weight: 700; border: none; cursor: pointer; font-family: 'Inter', sans-serif; }
 
 /* ── Feed cards ── */
-.pred-card { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--purple); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
-.pred-card:hover { border-color: var(--purple-border); border-top-color: var(--purple); }
+.pred-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 0; border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; transition: background .15s; }
+.pred-card:hover { background: rgba(255,255,255,0.015); }
 .pred-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-.pred-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--gold); flex-shrink: 0; overflow: hidden; }
+.pred-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: var(--gold); flex-shrink: 0; overflow: hidden; }
 .pred-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .pred-meta { flex: 1; min-width: 0; }
 .pred-author-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.pred-author { font-size: 13px; font-weight: 700; color: var(--text); }
-.pred-author:hover { color: var(--gold); }
+.pred-author { font-size: 14px; font-weight: 700; color: var(--text); }
+.pred-author:hover { color: var(--gold); text-decoration: none; }
 .pred-flex { font-size: 11px; font-family: 'Space Mono', monospace; color: var(--gold); background: var(--gold-dim); border: 1px solid var(--gold-border); border-radius: 4px; padding: 1px 5px; }
 .pred-resolved-count { font-size: 10px; color: var(--text-faint); }
 .pred-time { font-size: 11px; color: var(--text-faint); }
@@ -117,10 +117,10 @@ a:hover { text-decoration: underline; }
 .pred-follow-btn.following { border-color: var(--green-border); color: var(--green); background: var(--green-dim); }
 
 .pred-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.pred-market { display: block; font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; line-height: 1.35; }
-.pred-market:hover { color: var(--gold); }
+.pred-market { display: block; font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; line-height: 1.4; }
+.pred-market:hover { color: var(--gold); text-decoration: none; }
 
-.pred-thesis { font-size: 13px; line-height: 1.55; color: var(--text-dim); border-left: 3px solid var(--gold); padding-left: 12px; margin-bottom: 10px; font-style: italic; }
+.pred-thesis { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.72); padding: 0; margin-bottom: 10px; font-style: normal; }
 
 .pred-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .pred-tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
@@ -134,8 +134,8 @@ a:hover { text-decoration: underline; }
 .pred-foot-time { font-size: 11px; color: var(--text-faint); }
 
 /* ── Influencer tweet cards ── */
-.tweet-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; transition: border-color .15s; }
-.tweet-card:hover { border-color: rgba(29,155,240,0.4); }
+.tweet-card { background: var(--surface); border: none; border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; padding: 16px; margin-bottom: 0; transition: background .15s; }
+.tweet-card:hover { background: rgba(255,255,255,0.015); }
 .tweet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .tweet-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: var(--gold); flex-shrink: 0; overflow: hidden; }
 .tweet-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -146,7 +146,7 @@ a:hover { text-decoration: underline; }
 .tweet-dot { color: var(--text-faint); font-size: 10px; }
 .tweet-time { font-size: 12px; color: var(--text-faint); }
 .tweet-platform-icon { font-size: 16px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; }
-.tweet-body { font-size: 14px; line-height: 1.55; color: var(--text); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+.tweet-body { font-size: 15px; line-height: 1.6; color: var(--text); margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
 /* Old strip kept for any legacy callers */
 .tweet-market-strip { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
 .tweet-market-label { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; font-family: var(--mono); }
