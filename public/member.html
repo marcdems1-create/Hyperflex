@@ -156,6 +156,7 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
   .community-chip { min-height: 44px; }
 }
 </style>
+<script src="/utils.js"></script>
 </head>
 <body>
 <nav>
@@ -181,21 +182,7 @@ const userId = location.pathname.split('/').pop();
 window._profileUserId = userId;
 const API = location.origin;
 
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const ts   = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-  if (diff < 0)    return 'just now';
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  if (diff < 86400*30) return `${Math.floor(diff/86400)}d ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-}
-
-function getInitials(name) {
-  return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
+// timeAgo + getInitials defined in utils.js
 
 function tierBadge(winRate, streak) {
   let badges = '';

@@ -1846,6 +1846,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(0,230,138,0
 .cohort-badge.sharp-no{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
 .cohort-badge.consensus{background:rgba(255,255,255,0.08);color:#7a7870;border:1px solid rgba(255,255,255,0.1)}
 </style>
+<script src="/utils.js"></script>
 </head>
 <body>
 
@@ -2971,10 +2972,6 @@ function buildCarousel(activeMarkets) {
         <span>${timeStr}</span>
       </div>
     </div>`;
-  }
-
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   const html = tagged.map(cardHTML).join('');
@@ -4807,15 +4804,6 @@ async function markAllNotifsRead() {
   renderNotifBell();
 }
 
-function timeAgo(ts) {
-  if (!ts) return '';
-  const diff = (Date.now() - new Date(ts)) / 1000;
-  if (diff < 60)   return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
-}
-
 function renderUserHeader() {
   const hr = document.getElementById('headerRight');
   const creatorBar = document.getElementById('creatorLoginBar');
@@ -5013,11 +5001,6 @@ function formatDate(d) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 let toastTimer;
 function showToast(msg, type = 'success') {
@@ -5576,7 +5559,7 @@ function renderSeasonBanner(s, lb) {
   banner.style.display = '';
 }
 
-function escHtmlComm(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+var escHtmlComm = escHtml;
 
 function renderAnnouncements(announcements) {
   const sec = document.getElementById('announcementsSection');

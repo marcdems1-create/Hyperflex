@@ -3395,6 +3395,7 @@ body.nav-open .sidebar-backdrop {
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+<script src="/utils.js"></script>
 <script src="/wallet.js?v=1"></script>
 <script src="/deposit.js?v=27"></script>
 <script>
@@ -9606,8 +9607,8 @@ function showSeasonError(msg) {
   el.textContent = msg; el.style.display = '';
 }
 
-function escHtmlDash(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-var escH = escHtmlDash; // alias used by arb/calendar/watchlist/briefing tabs
+var escHtmlDash = escHtml;
+var escH = escHtml;
 
 // Create market
 function obQuickPick(question, category) {
@@ -10950,9 +10951,7 @@ function escapeAttr(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+var escapeHtml = escHtml;
 
 // ── BRANDING ───────────────────────────────────────────────
 async function handleAssetUpload(type, input) {
@@ -12196,19 +12195,7 @@ async function markAllNotifsRead() {
   renderNotifBell();
 }
 
-function timeAgo(ts) {
-  if (!ts) return '';
-  const diff = (Date.now() - new Date(ts)) / 1000;
-  if (diff < 60)   return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
-}
-
-function escHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// timeAgo + escHtml defined in utils.js
 
 function populateAccountTab() {
   // Pre-fill display name + bio from creatorData
@@ -13425,20 +13412,7 @@ async function rejectSuggestion(id) {
   } catch { showToast('Network error', 'error'); }
 }
 
-function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function formatTimeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins  = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days  = Math.floor(diff / 86400000);
-  if (mins < 2)   return 'just now';
-  if (mins < 60)  return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
-}
+var formatTimeAgo = timeAgo;
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
 let announcementsCache = [];
@@ -15108,10 +15082,6 @@ async function loadKalshiPositions(forceRefresh) {
     console.error('[kalshi positions]', e);
     el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
   }
-}
-
-function escHtmlDash(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function renderManifoldConnectState() {
