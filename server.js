@@ -12155,10 +12155,10 @@ app.get('/api/member/:userId', async (req, res) => {
     let userData, positionsData;
     if (pool) {
       const [userRows, posRows] = await Promise.all([
-        dbQuery('SELECT id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT * FROM users WHERE id = $1 LIMIT 1', [userId]),
         dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
-          FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]).catch(() => []),
       ]);
       userData = userRows[0] || null;
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
