@@ -264,7 +264,9 @@ async function load() {
     }
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
-    const { user, stats, communities, recent_wins, take_stats, recent_takes } = data;
+    const { user, stats, communities, recent_wins, take_stats, recent_takes, polymarket_stats, recent_trades } = data;
+    const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
+    const pTrades = recent_trades || [];
 
     // Synchronous owner check — decoded JWT's userId must match the profile
     // we're rendering. Used to show the "post your first take" empty-state
@@ -345,211 +347,259 @@ async function load() {
     const whaleAvatarBg = isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : avatarBg;
     const whaleAvatarColor = isWhale ? '#fff' : avgColor;
 
+    const tierEmoji = rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕';
+    const tierLabel = rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim();
+    const tierColorCss = rankClass === 'oracle' ? 'var(--gold)' : rankClass === 'sharp' ? 'var(--green)' : rankClass === 'solid' ? 'var(--blue)' : 'var(--text-soft)';
+    const volFmt = pStats.volume_usd >= 1000000 ? '$' + (pStats.volume_usd/1000000).toFixed(1) + 'M' : pStats.volume_usd >= 1000 ? '$' + Math.round(pStats.volume_usd/1000) + 'K' : '$' + Math.round(pStats.volume_usd);
+    const pnlFmt = (pStats.pnl_usd >= 0 ? '+$' : '-$') + (Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000) + 'K' : Math.round(Math.abs(pStats.pnl_usd)));
+    const flexPointsFmt = (stats.flex_points || 0) >= 1000 ? ((stats.flex_points/1000).toFixed(1) + 'K') : (stats.flex_points || 0);
+    const flexScoreFmt = stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—';
+
     page.innerHTML = `
       <div class="hero">
-        <div class="avatar" style="background:${whaleAvatarBg};color:${whaleAvatarColor};border-color:${isWhale ? '#a855f744' : avgColor + '44'}">${isWhale ? '🐋' : initials}</div>
+        <div class="avatar ${isWhale ? 'avatar-whale' : ''}">${isWhale ? '🐋' : initials}</div>
         <div class="hero-info">
-          <div class="hero-name">${user.display_name}</div>
-          ${isWhale ? `
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0 2px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:3px 10px;border-radius:100px;letter-spacing:0.5px">POLYMARKET WHALE</span>
-              ${whaleRank ? `<span style="font-family:var(--mono);font-size:10px;color:var(--gold);font-weight:700">Rank #${whaleRank}</span>` : ''}
-              ${pnlDisplay ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${whalePnl >= 0 ? '#00e68a' : '#ff4d6a'}">${pnlDisplay} PnL</span>` : ''}
-            </div>
-            ${walletAddr ? `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 4px;display:flex;align-items:center;gap:6px">
-              <span>${shortWallet}</span>
-              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" style="font-family:var(--mono);font-size:9px;color:var(--dim);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer">Copy</button>
-              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" style="font-family:var(--mono);font-size:9px;color:var(--accent-blue);text-decoration:none">Polygonscan ↗</a>
-            </div>` : ''}
-          ` : `
-            ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
-          `}
+          <div class="hero-name">
+            ${user.display_name}
+            ${user.wallet_verified ? '<span class="hero-verify" title="Verified Wallet">✓</span>' : ''}
+          </div>
           ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
+          ${isWhale ? `
+            <div class="hero-whale-meta">
+              <span class="whale-pill">Polymarket Whale</span>
+              ${whaleRank ? `<span class="whale-rank">Rank #${whaleRank}</span>` : ''}
+              ${pnlDisplay ? `<span class="whale-pnl ${whalePnl >= 0 ? 'pos' : 'neg'}">${pnlDisplay} PnL</span>` : ''}
+            </div>
+            ${walletAddr ? `<div class="wallet-row">
+              <span>${shortWallet}</span>
+              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
+            </div>` : ''}
+          ` : (user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-username">Joined ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : '')}
           ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
           <div class="hero-badges">
-            ${user.wallet_verified ? '<span class="badge badge-verified">✓ Verified Wallet</span>' : ''}
             ${tierBadge(stats.win_rate, stats.streak)}
-            <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
+            <span id="sharpBadge" class="badge" style="display:none;background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)"></span>
           </div>
-          <!-- Followers / following — the clout currency. Shown right under
-               the name so it's the first thing visitors read. Values come from
-               /api/member/:userId stats.{followers,following}. -->
-          <div style="display:flex;align-items:center;gap:18px;margin:6px 0 10px;font-family:var(--mono);font-size:13px">
-            <span><strong style="color:var(--text);font-size:15px">${(stats.followers || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Followers</span></span>
-            <span><strong style="color:var(--text);font-size:15px">${(stats.following || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Following</span></span>
-            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold);font-size:15px">${take_stats.total_agrees.toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Agrees</span></span>` : ''}
+          <div class="social-row">
+            <span><strong>${(stats.followers || 0).toLocaleString()}</strong><span class="lbl">Followers</span></span>
+            <span><strong>${(stats.following || 0).toLocaleString()}</strong><span class="lbl">Following</span></span>
+            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold)">${take_stats.total_agrees.toLocaleString()}</strong><span class="lbl">Agrees</span></span>` : ''}
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy link</button>
-            <button class="share-btn" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share on X</button>
+          <div class="action-row">
+            <button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>
+            <button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">🔔 Copy</button>
+            ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">⚔️ Challenge</button>` : ''}
+            <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">📋 Copy link</button>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share</button>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-            <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
-            <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
-          </div>
-          <span id="followerCount" style="display:none"></span>
         </div>
       </div>
 
-      <!-- Tier Card — the headline flex -->
-      <div style="background:var(--card);border-radius:16px;padding:24px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;border:1px solid ${rankColor}33">
-        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top, ${rankColor}08, transparent 70%);pointer-events:none"></div>
-        <div style="font-size:36px;margin-bottom:4px">${rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕'}</div>
-        <div style="font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${rankColor};margin-bottom:6px">${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()}</div>
-        <div style="font-family:var(--mono);font-size:52px;font-weight:700;color:${rankColor};line-height:1">${winPct}%</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px">${rankDesc}</div>
-        <div style="font-size:11px;color:var(--soft);margin-top:4px">${stats.wins || 0} correct out of ${settled} resolved predictions</div>
-        <div style="display:flex;justify-content:center;gap:8px;margin-top:14px">
-          <a href="/passport/${userId}" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);padding:7px 16px;border-radius:20px;text-decoration:none;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.15)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">🛂 View Prediction Passport</a>
-          <button onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I\\'m a ${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()} predictor with ${winPct}% accuracy on @hypaboranetwork\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-soft);background:none;border:1px solid var(--border);padding:7px 16px;border-radius:20px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">🐦 Flex on X</button>
+      <!-- Tier Hero Card -->
+      <div class="tier-card" style="--tier-color:${tierColorCss}">
+        <div class="tier-glow"></div>
+        <div class="tier-inner">
+          <div class="tier-emoji">${tierEmoji}</div>
+          <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
+          <div class="tier-pct" style="color:${tierColorCss}">${winPct}%</div>
+          <div class="tier-desc">${rankDesc}</div>
+          <div class="tier-record">${stats.wins || 0} correct / ${settled} predictions</div>
+          <div class="tier-bar"><div class="tier-bar-fill" style="width:${winPct}%;background:${tierColorCss}"></div></div>
+          <div class="tier-actions">
+            <a href="/passport/${userId}" class="btn btn-gold">🛂 Passport</a>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I&apos;m a ${tierLabel} predictor with ${winPct}% accuracy on HYPERFLEX\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')">🐦 Flex on X</button>
+          </div>
         </div>
       </div>
 
-      <!-- Score Strip — compact horizontal metrics bar -->
-      <div class="score-strip">
-        <div class="score-strip-item" onclick="showFlexScoreInfo()" style="cursor:pointer">
-          <div class="score-strip-value" style="color:var(--gold)">${stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—'}</div>
-          <div class="score-strip-label">Flex Score <span style="font-size:9px">ⓘ</span></div>
+      <!-- 4-stat grid -->
+      <div class="stats-grid">
+        <button class="stat interactive" onclick="showFlexScoreInfo()">
+          <div class="stat-lbl">Flex Score <span style="font-size:9px">ⓘ</span></div>
+          <div class="stat-val" style="color:var(--gold)">${flexScoreFmt}</div>
+        </button>
+        <div class="stat">
+          <div class="stat-lbl">Volume</div>
+          <div class="stat-val" style="color:var(--green)">${volFmt}</div>
+          <div class="stat-sub">${pStats.total_trades} trades</div>
         </div>
-        <div class="score-strip-item">
-          <div class="score-strip-value" style="color:${avgColor}">${winPct}%</div>
-          <div class="score-strip-label">Accuracy</div>
+        <div class="stat">
+          <div class="stat-lbl">P&amp;L</div>
+          <div class="stat-val" style="color:${pStats.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
+          ${pStats.total_trades > 0 ? `<div class="stat-sub">${pStats.closed_wins}W / ${pStats.closed_losses}L</div>` : ''}
         </div>
-        <div class="score-strip-item" onclick="showFlexPointsInfo()" style="cursor:pointer">
-          <div class="score-strip-value" style="color:#a855f7">${(stats.flex_points || 0) >= 1000 ? ((stats.flex_points / 1000).toFixed(1) + 'K') : (stats.flex_points || 0)}</div>
-          <div class="score-strip-label">⚡ FLEX Pts <span style="font-size:9px">ⓘ</span></div>
-        </div>
-        <div class="score-strip-item">
-          <div class="score-strip-value" style="color:${stats.streak >= 3 ? '#ff8c00' : 'var(--text)'}">${stats.streak > 0 ? stats.streak : '—'}</div>
-          <div class="score-strip-label">${stats.streak >= 3 ? '🔥 ' : ''}Streak</div>
-        </div>
+        <button class="stat interactive" onclick="showFlexPointsInfo()">
+          <div class="stat-lbl">⚡ Flex Pts <span style="font-size:9px">ⓘ</span></div>
+          <div class="stat-val" style="color:var(--purple)">${flexPointsFmt}</div>
+        </button>
       </div>
 
       <!-- Tabs -->
-      <div class="profile-tabs">
-        <button class="profile-tab active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ' <span style=\\"font-family:Space Mono,monospace;font-size:11px;color:var(--muted);font-weight:400\\">(' + take_stats.total + ')</span>' : ''}</button>
-        <button class="profile-tab" onclick="switchProfileTab('record',this)">Track Record</button>
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('trades',this)">Trades${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('record',this)">Track Record</button>
       </div>
 
-      <!-- ═══ TAKES TAB (default) ═══ -->
-      <div id="tab-takes" class="tab-content active">
+      <!-- TAKES -->
+      <div id="tab-takes" class="tab-pane active">
         ${(take_stats && take_stats.total > 0) ? `
           ${take_stats.accuracy > 0 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.1)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.1)' : 'rgba(255,77,106,0.1)'};padding:4px 10px;border-radius:20px">${take_stats.accuracy}% take accuracy</span>
+            <span class="badge" style="background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};color:${take_stats.accuracy >= 60 ? 'var(--green)' : take_stats.accuracy >= 50 ? 'var(--blue)' : 'var(--red)'};border-color:transparent">${take_stats.accuracy}% take accuracy</span>
             <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${take_stats.correct || 0}W / ${take_stats.incorrect || 0}L</span>
           </div>` : ''}
           ${(recent_takes || []).map(t => {
             const sideUp = (t.side || '').toUpperCase();
             const href = t.market_slug ? '/market/' + t.market_slug : '#';
-            const correctBadge = t.is_correct === true ? '<span class="take-correct win">✓ CORRECT</span>'
-              : t.is_correct === false ? '<span class="take-correct loss">✗ WRONG</span>' : '';
-            return `<div class="take-card-full">
+            const correctBadge = t.is_correct === true ? '<span class="badge-correct">✓ CORRECT</span>' : t.is_correct === false ? '<span class="badge-wrong">✗ WRONG</span>' : '';
+            return `<div class="card">
               <a href="${href}">
                 <div style="display:flex;align-items:flex-start;gap:8px">
-                  <span class="take-side ${sideUp === 'YES' ? 'yes' : 'no'}">${sideUp}</span>
-                  <span class="take-card-q">${t.question || ''}</span>
+                  <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                  <span class="card-q">${t.question || ''}</span>
                 </div>
               </a>
-              <div class="take-card-meta">
-                ${t.entry_price ? `<span style="color:var(--muted)">Entry: ${Math.round(t.entry_price * 100)}¢</span>` : ''}
-                <span style="color:var(--muted)">${timeAgo(t.created_at)}</span>
+              <div class="card-meta">
+                ${t.entry_price ? `<span>Entry ${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                <span>${timeAgo(t.created_at)}</span>
                 ${correctBadge}
               </div>
-              ${t.thesis ? `<div class="take-card-thesis">${t.thesis.replace(/</g,'&lt;')}</div>` : ''}
-              <div class="take-card-actions">
+              ${t.thesis ? `<div class="card-thesis">${t.thesis.replace(/</g,'&lt;')}</div>` : ''}
+              <div class="card-actions">
                 <span style="color:var(--green)">↑ ${t.agree_count || 0}</span>
                 <span style="color:var(--red)">↓ ${t.disagree_count || 0}</span>
               </div>
             </div>`;
           }).join('')}
         ` : (isOwner ? `
-          <div style="text-align:center;padding:40px 16px;background:rgba(201,146,13,0.04);border:1px dashed rgba(201,146,13,0.25);border-radius:12px">
-            <div style="font-size:28px;margin-bottom:8px">✍️</div>
-            <div style="font-size:15px;font-weight:600;margin-bottom:6px">Post your first take</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;max-width:320px;margin-left:auto;margin-right:auto">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
-            <a href="/explore" style="display:inline-block;background:var(--gold);color:#0e0e15;font-family:var(--mono);font-size:12px;font-weight:700;padding:10px 22px;border-radius:20px;text-decoration:none">Post a take →</a>
+          <div class="empty">
+            <div class="empty-emoji">✍️</div>
+            <div class="empty-title">Post your first take</div>
+            <div class="empty-sub">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
+            <a href="/feed" class="btn btn-gold">Post a take →</a>
           </div>
-        ` : `<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No takes posted yet.</div>`)}
+        ` : `<div class="empty"><div class="empty-emoji">💭</div><div class="empty-title">No takes yet</div><div class="empty-sub">${user.display_name} hasn't posted any takes yet.</div></div>`)}
       </div>
 
-      <!-- ═══ TRACK RECORD TAB ═══ -->
-      <div id="tab-record" class="tab-content">
-        ${scoreCardHTML}
+      <!-- TRADES (Polymarket) -->
+      <div id="tab-trades" class="tab-pane">
+        ${pStats.total_trades > 0 ? `
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${pStats.win_rate}% win rate</span>
+            <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${pStats.open_positions} open</span>
+            <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${pStats.total_trades} total</span>
+          </div>
+          ${pTrades.map(t => {
+            const sideUp = (t.side || '').toUpperCase();
+            const isOpen = t.status === 'open';
+            const pnl = t.pnl;
+            const href = t.market_slug ? '/market/' + t.market_slug : '#';
+            return `<div class="card">
+              <a href="${href}">
+                <div style="display:flex;align-items:flex-start;gap:8px">
+                  <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                  <span class="card-q">${t.market_question || '(market)'}</span>
+                </div>
+              </a>
+              <div class="card-meta">
+                <span>$${Math.round(t.amount_usd || 0).toLocaleString()}</span>
+                ${t.entry_price ? `<span>@${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                <span>${timeAgo(t.created_at)}</span>
+                ${isOpen ? `<span class="badge" style="background:rgba(77,159,255,0.1);color:var(--blue);border-color:transparent;padding:1px 6px">OPEN</span>` : pnl != null ? `<span class="badge" style="background:${pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${pnl >= 0 ? '+' : ''}$${Math.round(pnl).toLocaleString()}</span>` : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        ` : `<div class="empty"><div class="empty-emoji">💹</div><div class="empty-title">No Polymarket trades yet</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Connect + trade on Polymarket to see your history here.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}
+      </div>
 
-        <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
-          <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
-          <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
-            <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
-            <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
+      <!-- TRACK RECORD -->
+      <div id="tab-record" class="tab-pane">
+        <div id="trophyCard" style="display:none" class="card" style="border-color:rgba(245,166,35,0.35);background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.02));padding:18px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px">🏆 Best Call</div>
+          <div id="trophyQuestion" style="font-size:15px;font-weight:600;margin-bottom:10px;line-height:1.4"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span id="trophySide" class="side"></span>
+            <span id="trophyMultiplier" style="color:var(--gold);font-weight:700;font-family:var(--mono);font-size:14px"></span>
+            <button class="btn btn-ghost" style="margin-left:auto" onclick="shareTrophyOnX()">🐦 Share</button>
           </div>
         </div>
 
         ${recent_wins.length ? `
-        <div class="section">
-          <div class="section-title">Recent Wins</div>
+        <div style="margin-top:18px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Recent Wins</div>
           ${winsHtml}
         </div>` : ''}
 
         <div id="analyticsSection" style="margin:24px 0;display:none">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Calibration Chart</div>
-              <div style="font-size:11px;color:#666;margin-bottom:12px">Predicted % vs actual outcomes</div>
-              <canvas id="calibrationChart" width="300" height="180"></canvas>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px" id="platformCards"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div class="card" style="padding:16px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">Calibration</div>
+              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Predicted vs actual</div>
+              <canvas id="calibrationChart" width="300" height="160"></canvas>
             </div>
-            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
-              <canvas id="pnlChart" width="300" height="180"></canvas>
+            <div class="card" style="padding:16px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">P&amp;L (30d)</div>
+              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Cumulative</div>
+              <canvas id="pnlChart" width="300" height="160"></canvas>
             </div>
           </div>
         </div>
 
         ${communities.length ? `
-        <div class="section">
-          <div class="section-title">Active Communities</div>
+        <div style="margin-top:20px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Active Communities</div>
           ${commHtml}
         </div>` : ''}
 
-        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:16px 0;border-top:1px solid var(--border);margin-top:12px">
-          ${stats.settled_predictions || 0} predictions settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:18px 0;border-top:1px solid var(--border);margin-top:22px">
+          ${stats.settled_predictions || 0} settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
         </div>
       </div>
 
       <!-- Owner tools -->
-      <div id="ownerTools" style="display:none;margin:20px 0">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="verify-wallet-btn" style="display:none">🔗 Verify Wallet</button>
-          <button id="editBioBtn" onclick="toggleBioEdit()" style="background:none;border:1px solid var(--border);color:var(--text-soft);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s">✏️ Edit Bio</button>
+      <div id="ownerTools" style="display:none;margin:22px 0">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="btn btn-ghost" style="display:none;color:var(--green);border-color:rgba(0,230,138,0.3)">🔗 Verify Wallet</button>
+          <button id="editBioBtn" onclick="toggleBioEdit()" class="btn btn-ghost">✏️ Edit Bio</button>
         </div>
         <div id="bioEditArea" style="display:none">
-          <textarea id="bioInput" class="bio-edit-area" maxlength="280" placeholder="Write a short bio (280 chars max)"></textarea>
+          <textarea id="bioInput" maxlength="280" placeholder="Write a short bio (280 chars max)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:60px;margin:6px 0;transition:border-color .15s" onfocus="this.style.borderColor='var(--border-strong)'" onblur="this.style.borderColor='var(--border)'"></textarea>
           <div style="display:flex;gap:8px;align-items:center">
-            <button onclick="saveBio()" class="bio-save-btn">Save</button>
-            <button onclick="toggleBioEdit()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">Cancel</button>
-            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+            <button onclick="saveBio()" class="btn btn-primary">Save</button>
+            <button onclick="toggleBioEdit()" class="btn btn-ghost">Cancel</button>
+            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto;font-family:var(--mono)"></span>
           </div>
         </div>
       </div>
 
-      <div class="cta-card">
-        <div class="cta-title">Think you can beat them?</div>
-        <div class="cta-sub">Join a prediction market community and put your knowledge to the test.</div>
-        <a href="/" class="cta-link">Explore Communities →</a>
+      <!-- Invite section (owner only) -->
+      <div id="inviteSection" style="display:none;margin-top:24px" class="card">
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">📣 Grow Your Following</div>
+        <div style="font-size:13px;color:var(--text-soft);margin-bottom:14px">Share your profile to build your audience:</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
+          <button onclick="copyInviteUrl()" id="inviteCopyBtn" class="btn btn-gold" style="min-height:36px">Copy</button>
+        </div>
+        <button onclick="shareProfileOnX()" class="btn btn-ghost">🐦 Share on X</button>
+        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
       </div>
 
-      <div id="inviteSection" style="display:none;margin-top:20px;background:#1a1916;border:1px solid #c9920d33;border-radius:12px;padding:20px">
-        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">📣 Grow Your Following</div>
-        <div style="font-size:13px;color:#b0ab9f;margin-bottom:14px">Share your profile to build your audience:</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}"
-            style="flex:1;background:#141412;border:1px solid #2a2a26;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:12px;color:#f0ebe3;outline:none"/>
-          <button onclick="copyInviteUrl()" id="inviteCopyBtn" style="background:none;border:1px solid #c9920d;color:#c9920d;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">Copy</button>
+      <!-- Challenge modal -->
+      <div id="challengeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px">
+        <div onclick="event.stopPropagation()" style="background:linear-gradient(180deg,#16161f,#0e0e17);border:1px solid var(--border-strong);border-radius:20px;padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg),0 0 120px -40px rgba(255,77,106,0.3)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-0.01em">⚔️ Challenge ${user.display_name}</div>
+            <button onclick="closeChallenge()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px">×</button>
+          </div>
+          <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
+          <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:90px;margin-bottom:12px;transition:border-color .15s" onfocus="this.style.borderColor='rgba(255,77,106,0.4)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button onclick="closeChallenge()" class="btn btn-ghost">Cancel</button>
+            <button onclick="submitChallenge()" class="btn btn-challenge">Post Challenge →</button>
+          </div>
         </div>
-        <button onclick="shareProfileOnX()" style="display:flex;align-items:center;gap:8px;background:none;border:1px solid #333;color:#ccc;padding:8px 16px;border-radius:20px;cursor:pointer;font-size:13px;transition:border-color 0.15s" onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'" onmouseout="this.style.borderColor='#333';this.style.color='#ccc'">🐦 Share on X</button>
-        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:#555"></div>
       </div>
     `;
     loadAnalytics(userId);
