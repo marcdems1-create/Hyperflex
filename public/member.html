@@ -130,6 +130,16 @@ async function loadFollowStatus(){
   }catch(e){}
 }
 
+async function promptSetName(){
+  var name=prompt('Enter your display name:');
+  if(!name||!name.trim())return;
+  var t=getToken();if(!t)return;
+  try{
+    var r=await fetch(API+'/api/user/display-name',{method:'PUT',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({display_name:name.trim()})});
+    if(r.ok){location.reload()}else{alert('Failed to update name')}
+  }catch(e){alert('Error: '+e.message)}
+}
+
 async function load(){
   var page=document.getElementById('page');
   try{
@@ -202,6 +212,7 @@ async function load(){
         '</div>'+
         '<div class="action-row">'+
           '<button class="btn btn-fill" id="followBtn" onclick="toggleFollow()">Follow</button>'+
+          (isOwner?'<button class="btn btn-gold" onclick="promptSetName()">✏️ Edit Name</button>':'')+
           '<button class="btn" onclick="navigator.clipboard.writeText(location.href);this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'📋 Copy\',2000)">📋 Copy</button>'+
           '<button class="btn" onclick="window.open(\'https://x.com/intent/tweet?text=\'+encodeURIComponent(\'Check out \'+\''+esc(u.display_name)+'\'+ \' on HYPERFLEX\\n\\n\'+location.href),\'_blank\')">🐦 Share</button>'+
           '<a href="/passport/'+userId+'" class="btn btn-gold">🛂 Passport</a>'+
