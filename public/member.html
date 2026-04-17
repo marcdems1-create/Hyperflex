@@ -3,1024 +3,249 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Member Profile — HYPERFLEX</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Profile — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --gold: #c9920d;
-  --paper: #141412;
-  --surface: #1a1a17;
-  --card: #1e1e1b;
-  --border: #2a2a26;
-  --text: #f0ebe3;
-  --text-soft: #b0ab9f;
-  --muted: #70706a;
-  --green: #22c55e;
-  --red: #ef4444;
-}
-body { background: var(--paper); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(20,20,18,0.94); backdrop-filter: blur(12px); z-index: 50; }
-.nav-logo { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); text-decoration: none; letter-spacing: -0.5px; }
-.nav-back { color: var(--muted); text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
-.nav-back:hover { color: var(--text-soft); }
-.page { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0a0f;--surface:#111118;--card:#16161f;--border:#1e1e2a;--text:#f0f0f5;--soft:#8888a0;--muted:#55556a;--gold:#d4a017;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--mono:'Space Mono',monospace;--sans:'Inter',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{color:var(--gold);text-decoration:none}
+.page{max-width:640px;margin:0 auto;padding:24px 20px 80px}
+
 /* Hero */
-.hero { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 32px; }
-.avatar { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; flex-shrink: 0; border: 3px solid var(--border); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-.hero-info { flex: 1; min-width: 0; }
-.hero-name { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; margin-bottom: 4px; }
-.hero-since { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
-.hero-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-.badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 100px; letter-spacing: 0.3px; }
-.badge-streak { background: rgba(255,140,0,0.15); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
-.badge-oracle { background: rgba(201,146,13,0.2); color: var(--gold); border: 1px solid rgba(201,146,13,0.4); }
-.badge-sharp { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-/* Stats grid */
-.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
-@media(max-width:900px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
-@media(max-width:500px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
-.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.35); transition: border-color 0.18s, box-shadow 0.18s; }
-.stat-card:hover { border-color: rgba(201,146,13,0.3); box-shadow: 0 4px 20px rgba(0,0,0,0.45); }
-.stat-value { font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; margin-bottom: 4px; }
-.stat-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-/* Sections */
-.section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin-bottom: 14px; }
-.section { margin-bottom: 28px; }
-/* Win cards */
-.win-list { display: flex; flex-direction: column; gap: 10px; }
-.win-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text); transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s; box-shadow: 0 2px 10px rgba(0,0,0,0.32); }
-.win-item:hover { border-color: rgba(34,197,94,0.55); box-shadow: 0 6px 22px rgba(0,0,0,0.45), 0 0 12px rgba(34,197,94,0.08); transform: translateY(-1px); }
-.win-check { width: 32px; height: 32px; border-radius: 50%; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
-.win-body { flex: 1; min-width: 0; }
-.win-question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
-.win-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
-.win-side { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
-.win-side.yes { background: rgba(34,197,94,0.12); color: var(--green); }
-.win-side.no  { background: rgba(239,68,68,0.12); color: var(--red); }
-/* Communities */
-.community-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.community-chip { display: flex; align-items: center; gap: 7px; background: var(--card); border: 1px solid var(--border); border-radius: 100px; padding: 6px 12px 6px 8px; text-decoration: none; color: var(--text-soft); font-size: 12px; font-weight: 600; transition: border-color 0.15s; }
-.community-chip:hover { border-color: var(--gold); color: var(--text); }
-.chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-/* Share button */
-.share-btn { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--text-soft); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s; margin-top: 4px; }
-.share-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
-.loading { color: var(--muted); font-size: 13px; text-align: center; padding: 60px 20px; }
-.error-state { text-align: center; padding: 80px 20px; }
-.error-icon { font-size: 48px; margin-bottom: 16px; }
-.error-msg { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-.error-sub { font-size: 13px; color: var(--muted); }
-/* Win rate bar */
-.wr-bar-wrap { background: var(--surface); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
-.wr-bar { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s ease; }
-/* Prediction score card */
-.pred-score-card { border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 20px; }
-.pred-score-card.oracle  { background: linear-gradient(135deg,rgba(201,146,13,0.12),rgba(201,146,13,0.04)); border: 1px solid rgba(201,146,13,0.35); }
-.pred-score-card.sharp   { background: linear-gradient(135deg,rgba(34,197,94,0.08),rgba(34,197,94,0.02)); border: 1px solid rgba(34,197,94,0.3); }
-.pred-score-card.solid   { background: linear-gradient(135deg,rgba(96,165,250,0.08),rgba(96,165,250,0.02)); border: 1px solid rgba(96,165,250,0.25); }
-.pred-score-card.default { background: var(--card); border: 1px solid var(--border); }
-.pred-score-pct  { font-family: 'Space Mono', monospace; font-size: 48px; font-weight: 700; line-height: 1; flex-shrink: 0; }
-.pred-score-body { flex: 1; min-width: 0; }
-.pred-score-rank { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 4px; }
-.pred-score-sub  { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.pred-score-bar  { height: 4px; border-radius: 2px; background: var(--surface); margin-top: 8px; overflow: hidden; }
-.pred-score-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
-/* Mobile — touch targets */
-@media (max-width: 600px) {
-  .nav-logo { min-height: 44px; display: inline-flex; align-items: center; }
-  .nav-back { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 0; }
-  .share-btn { min-height: 44px; padding: 10px 16px; }
-  .community-chip { min-height: 44px; padding: 8px 14px 8px 10px; }
-  .win-item { min-height: 48px; }
-}
-@media (max-width: 480px) {
-  .page { padding: 24px 16px 60px; }
-  .hero { gap: 14px; }
-  .avatar { width: 58px; height: 58px; font-size: 20px; }
-  .hero-name { font-size: 20px; }
-  .share-btn { font-size: 12px; }
-  .win-item { gap: 10px; }
-  .win-question { font-size: 12px; }
-  .cta-card { padding: 16px; }
-  .cta-title { font-size: 16px; }
-  .pred-score-card { flex-direction: column; gap: 12px; align-items: flex-start; }
-  .pred-score-pct { font-size: 36px; }
+.hero{padding:32px 0 24px;border-bottom:1px solid var(--border);margin-bottom:0}
+.hero-top{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.avatar{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:24px;font-weight:800;flex-shrink:0;border:2px solid var(--border)}
+.name{font-size:22px;font-weight:800;letter-spacing:-0.03em}
+.handle{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
+.bio{font-size:14px;color:var(--soft);line-height:1.5;margin-bottom:12px;max-width:460px}
+.social-row{display:flex;gap:20px;font-size:13px;margin-bottom:14px}
+.social-row strong{color:var(--text);font-weight:700}
+.social-row span{color:var(--muted)}
+.action-row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:none;color:var(--text);transition:all .15s;font-family:var(--sans)}
+.btn:hover{background:rgba(255,255,255,.06)}
+.btn-gold{border-color:rgba(212,160,23,.4);color:var(--gold)}
+.btn-gold:hover{background:rgba(212,160,23,.1)}
+.btn-fill{background:var(--text);color:var(--bg);border:none}
+.btn-fill:hover{opacity:.85}
 
-  /* Platform stat cards: let them wrap in 2-col */
-  #platformCards { gap: 8px !important; }
-  #platformCards > div { flex: 1 1 calc(50% - 8px); min-width: 0; box-sizing: border-box; }
+/* Tier */
+.tier{text-align:center;padding:28px 0;border-bottom:1px solid var(--border)}
+.tier-icon{font-size:40px;margin-bottom:4px}
+.tier-label{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+.tier-pct{font-family:var(--mono);font-size:56px;font-weight:700;line-height:1}
+.tier-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.tier-bar{height:3px;background:var(--border);border-radius:2px;margin:12px auto 0;max-width:200px;overflow:hidden}
+.tier-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
 
-  /* Analytics chart grid: single column */
-  #analyticsSection > div:nth-child(2) { grid-template-columns: 1fr !important; }
+/* Stats */
+.stats{display:flex;border-bottom:1px solid var(--border)}
+.stat{flex:1;text-align:center;padding:16px 8px;border-right:1px solid var(--border)}
+.stat:last-child{border-right:none}
+.stat-val{font-family:var(--mono);font-size:18px;font-weight:700}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+@media(max-width:480px){.stats{flex-wrap:wrap}.stat{flex:1 1 50%;border-bottom:1px solid var(--border)}.stat:nth-child(3),.stat:nth-child(4){border-bottom:none}}
 
-  /* Charts: scale to container */
-  #calibrationChart, #pnlChart { width: 100% !important; max-width: 100%; height: auto !important; }
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{flex:1;text-align:center;padding:14px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s;font-family:var(--sans)}
+.tab:hover{color:var(--soft)}
+.tab.active{color:var(--text);border-bottom-color:var(--gold)}
+.tab-content{display:none}.tab-content.active{display:block}
 
-  /* Trophy card: full width, wrap inner flex */
-  #trophyCard { padding: 16px !important; }
-  #trophyCard > div:last-child { flex-wrap: wrap; gap: 8px !important; }
-  #trophyCard button { margin-left: 0 !important; width: 100%; min-height: 44px; }
-  #trophyQuestion { font-size: 14px !important; }
-}
-/* Social profile enhancements */
-.hero-username { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-.hero-bio { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin: 8px 0 6px; max-width: 420px; }
-.badge-verified { background: rgba(0,230,138,0.1); color: #22c55e; border: 1px solid rgba(0,230,138,0.3); }
-.badge-whale-social { background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
-.verify-wallet-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid rgba(0,230,138,0.3); color: #22c55e; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 11px; font-weight: 700; transition: background 0.15s; margin-top: 4px; }
-.verify-wallet-btn:hover { background: rgba(0,230,138,0.08); }
-.social-pred-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; transition: border-color 0.18s; }
-.social-pred-card:hover { border-color: rgba(201,146,13,0.3); }
-.social-pred-thesis { font-size: 12px; color: var(--text-soft); line-height: 1.4; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.social-pred-status { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-block; margin-right: 6px; }
-.social-pred-status.active { background: rgba(77,159,255,0.12); color: #4d9fff; }
-.social-pred-status.resolved_win { background: rgba(34,197,94,0.12); color: #22c55e; }
-.social-pred-status.resolved_loss { background: rgba(239,68,68,0.12); color: #ef4444; }
-.bio-edit-area { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 50px; margin: 6px 0; }
-.bio-save-btn { background: var(--gold); color: #141412; border: none; border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+/* Take cards */
+.take{padding:16px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.take:hover{background:rgba(255,255,255,.01)}
+.take a{text-decoration:none;color:inherit}
+.take-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.take-side{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;flex-shrink:0}
+.take-side.yes{background:rgba(0,230,138,.1);color:var(--green)}
+.take-side.no{background:rgba(255,77,106,.1);color:var(--red)}
+.take-q{font-size:15px;font-weight:600;line-height:1.4}
+.take-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.take-thesis{font-size:14px;color:var(--soft);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.take-actions{display:flex;gap:16px;margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.badge-correct{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px}
+.badge-correct.win{background:rgba(0,230,138,.1);color:var(--green)}
+.badge-correct.loss{background:rgba(255,77,106,.1);color:var(--red)}
+
+/* Trade rows */
+.trade{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.trade-info{flex:1;min-width:0}
+.trade-q{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trade-detail{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.trade-pnl{font-family:var(--mono);font-size:13px;font-weight:700;flex-shrink:0}
+
 /* CTA */
-.cta-card { background: linear-gradient(135deg, #1d1b13 0%, #1a1a17 100%); border: 1px solid rgba(201,146,13,0.25); border-radius: 12px; padding: 20px 22px; text-align: center; margin-top: 32px; }
-.cta-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
-.cta-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
-.cta-link { display: inline-block; background: var(--gold); color: #141412; font-weight: 700; font-size: 14px; padding: 10px 24px; border-radius: 8px; text-decoration: none; }
-/* ── Score Strip ── */
-/* ── Tier card glow ── */
-@keyframes tierPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.8; } }
-.score-strip { display: flex; gap: 0; margin-bottom: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.score-strip-item { flex: 1; padding: 14px 12px; text-align: center; border-right: 1px solid var(--border); }
-.score-strip-item:last-child { border-right: none; }
-.score-strip-value { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; line-height: 1.2; }
-.score-strip-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-@media(max-width:480px) { .score-strip { flex-wrap: wrap; } .score-strip-item { flex: 1 1 50%; border-bottom: 1px solid var(--border); } .score-strip-item:nth-child(3),.score-strip-item:nth-child(4) { border-bottom: none; } .score-strip-item:nth-child(2) { border-right: none; } }
-/* ── Tabs ── */
-.profile-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 0; }
-.profile-tab { flex: 1; text-align: center; padding: 12px 16px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; background: none; border-top: 0; border-left: 0; border-right: 0; }
-.profile-tab:hover { color: var(--text-soft); }
-.profile-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-/* ── Take Cards (full, profile-style) ── */
-.take-card-full { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; transition: border-color 0.15s; }
-.take-card-full:hover { border-color: rgba(201,146,13,0.25); }
-.take-card-full a { text-decoration: none; }
-.take-card-q { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
-.take-card-thesis { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.take-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; font-size: 11px; font-family: 'Space Mono', monospace; }
-.take-card-actions { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; font-family: 'Space Mono', monospace; }
-.take-side { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; display: inline-block; }
-.take-side.yes { background: rgba(0,230,138,0.1); color: #00e68a; }
-.take-side.no { background: rgba(255,77,106,0.1); color: #ff4d6a; }
-.take-correct { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
-.take-correct.win { background: rgba(0,230,138,0.1); color: #00e68a; }
-.take-correct.loss { background: rgba(255,77,106,0.1); color: #ff4d6a; }
-/* ── READABILITY & MOBILE POLISH ── */
-@media (max-width: 768px) {
-  body { overflow-x: hidden; }
-  input, textarea, select { font-size: 16px !important; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  #analyticsSection > div:nth-child(2) { grid-template-columns: 1fr !important; }
-  .nav-logo { min-height: 44px; display: inline-flex; align-items: center; }
-  .nav-back { min-height: 44px; display: inline-flex; align-items: center; }
-  .share-btn { min-height: 44px; }
-  .community-chip { min-height: 44px; }
-}
+.challenge{background:linear-gradient(135deg,rgba(212,160,23,.06),rgba(212,160,23,.02));border:1px solid rgba(212,160,23,.2);border-radius:16px;padding:24px;text-align:center;margin-top:24px}
+.challenge-title{font-size:17px;font-weight:800;margin-bottom:4px}
+.challenge-sub{font-size:13px;color:var(--muted);margin-bottom:14px}
+
+/* Loading */
+.loading{color:var(--muted);text-align:center;padding:80px 20px;font-size:13px}
+.empty{text-align:center;padding:40px 16px;color:var(--muted);font-size:13px}
+
+/* Mobile */
+@media(max-width:480px){.page{padding:16px 16px 60px}.name{font-size:18px}.avatar{width:56px;height:56px;font-size:20px}.tier-pct{font-size:44px}}
 </style>
 </head>
 <body>
-<nav>
-  <a href="/" class="nav-logo">
-    <svg viewBox="0 0 32 32" fill="none" style="width:24px;height:24px;margin-right:8px;vertical-align:middle">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-    </svg>HYPERFLEX
-  </a>
-  <div style="display:flex;align-items:center;gap:10px">
-    <a href="/predictors" class="nav-back" style="border:none">Predictors</a>
-    <a href="/" class="nav-back" style="border:none">Explore</a>
-    <a id="creatorDashPill" href="/creator/dashboard" style="display:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);padding:6px 14px;border-radius:20px;text-decoration:none;transition:background 0.15s;min-height:44px;align-items:center" onmouseover="this.style.background='rgba(201,146,13,0.2)'" onmouseout="this.style.background='rgba(201,146,13,0.1)'">Dashboard</a>
-    <a href="javascript:history.back()" class="nav-back">← Back</a>
-  </div>
-</nav>
-<div class="page" id="page">
-  <div class="loading">Loading profile...</div>
-</div>
-
+<div id="nav-root"></div>
+<script src="/nav.js?v=20"></script>
+<div class="page" id="page"><div class="loading">Loading profile...</div></div>
 <script>
-const userId = location.pathname.split('/').pop();
-window._profileUserId = userId;
-const API = location.origin;
+var userId = location.pathname.split('/').pop();
+var API = location.origin;
 
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const ts   = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-  if (diff < 0)    return 'just now';
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  if (diff < 86400*30) return `${Math.floor(diff/86400)}d ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d.endsWith('Z')?d:d+'Z'))/1000);if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';if(s<2592000)return Math.floor(s/86400)+'d';return new Date(d).toLocaleDateString(undefined,{month:'short',year:'numeric'})}
+function fmtK(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n)}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function getToken(){return localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||''}
+
+function switchTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  var el=document.getElementById('tab-'+id);if(el)el.classList.add('active');
+  if(btn)btn.classList.add('active');
 }
 
-function getInitials(name) {
-  return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+async function toggleFollow(){
+  var t=getToken();if(!t)return;
+  try{
+    var r=await fetch(API+'/api/predictors/'+userId+'/follow',{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'}});
+    var d=await r.json();
+    var btn=document.getElementById('followBtn');
+    if(btn){btn.textContent=d.following?'Following':'Follow';btn.className=d.following?'btn btn-gold':'btn btn-fill'}
+  }catch(e){}
 }
 
-function tierBadge(winRate, streak) {
-  let badges = '';
-  if (streak >= 7)       badges += `<span class="badge badge-oracle">⚡ ${streak} STREAK</span>`;
-  else if (streak >= 3)  badges += `<span class="badge badge-streak">🔥 ${streak} WIN STREAK</span>`;
-  if (winRate >= 70)     badges += `<span class="badge badge-oracle">🎯 ORACLE</span>`;
-  else if (winRate >= 60) badges += `<span class="badge badge-sharp">🎯 SHARP</span>`;
-  return badges;
+async function loadFollowStatus(){
+  var t=getToken();if(!t)return;
+  try{
+    var r=await fetch(API+'/api/predictors/'+userId+'/follow-status',{headers:{'Authorization':'Bearer '+t}});
+    var d=await r.json();
+    var btn=document.getElementById('followBtn');
+    if(btn&&d.is_following){btn.textContent='Following';btn.className='btn btn-gold'}
+  }catch(e){}
 }
 
-function shareProfile() {
-  const url = location.href;
-  navigator.clipboard.writeText(url).then(() => {
-    const btn = document.getElementById('shareBtn');
-    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy profile link', 2000); }
-  });
-}
+async function load(){
+  var page=document.getElementById('page');
+  try{
+    var res=await fetch(API+'/api/member/'+userId);
+    if(!res.ok){page.innerHTML='<div class="loading">Profile not found</div>';return}
+    var data=await res.json();
+    var u=data.user,s=data.stats,ts=data.take_stats||{},takes=data.recent_takes||[];
+    var ps=data.polymarket_stats||{},trades=data.recent_trades||[];
 
-// Minimal info modal — no deps, no CSS class pollution. Used by the ⓘ
-// buttons next to Flex Score and FLEX Points in the stats grid so visitors
-// actually understand what the gold and purple numbers mean.
-function _showInfoModal(title, bodyHtml) {
-  // Dismiss any prior instance so repeated clicks don't stack.
-  const prior = document.getElementById('hfxInfoModal');
-  if (prior) prior.remove();
-  const wrap = document.createElement('div');
-  wrap.id = 'hfxInfoModal';
-  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(5,5,10,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.innerHTML = `
-    <div style="background:#15151d;border:1px solid #2a2a36;border-radius:14px;max-width:420px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,0.6)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">${title}</div>
-        <button onclick="document.getElementById('hfxInfoModal').remove()" aria-label="Close" style="background:none;border:0;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px">×</button>
-      </div>
-      <div style="font-size:13px;line-height:1.55;color:var(--text-soft)">${bodyHtml}</div>
-    </div>`;
-  document.body.appendChild(wrap);
-}
+    var isOwner=false;
+    try{var tok=getToken();if(tok){var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if((p.userId||p.sub||p.id)==userId)isOwner=true}}catch(e){}
 
-function switchProfileTab(tabId, btn) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
-  var el = document.getElementById('tab-' + tabId);
-  if (el) el.classList.add('active');
-  if (btn) btn.classList.add('active');
-}
+    var winPct=s.settled_predictions>0?Math.round((s.wins/s.settled_predictions)*100):0;
+    var polyWinPct=ps.win_rate||0;
+    var bestWin=Math.max(winPct,polyWinPct);
+    var initials=(u.display_name||'?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2);
 
-function showFlexScoreInfo() {
-  _showInfoModal('Flex Score', `
-    <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
-    <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
-    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
-      70+ → 🎯 Oracle tier<br>
-      60+ → 🎯 Sharp<br>
-      50+ → 📊 Solid<br>
-      &lt;50 → 🎲 Speculator
-    </div>
-    <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
-  `);
-}
+    // Tier
+    var tier,tierIcon,tierColor;
+    if(bestWin>=70&&(s.settled_predictions>=10||ps.total_trades>=10)){tier='ORACLE';tierIcon='🎯';tierColor='#d4a017'}
+    else if(bestWin>=60&&(s.settled_predictions>=5||ps.total_trades>=5)){tier='SHARP';tierIcon='🎯';tierColor='#00e68a'}
+    else if(bestWin>=50&&(s.settled_predictions>=5||ps.total_trades>=5)){tier='SOLID';tierIcon='📊';tierColor='#4d9fff'}
+    else if(s.settled_predictions>=3||ps.total_trades>=3){tier='SPECULATOR';tierIcon='🎲';tierColor='#8888a0'}
+    else{tier='NEWCOMER';tierIcon='🆕';tierColor='#8888a0'}
 
-function showFlexPointsInfo() {
-  _showInfoModal('⚡ FLEX Points', `
-    <p style="margin:0 0 10px">Reputation currency earned by posting takes, winning predictions, and getting agrees from other traders.</p>
-    <p style="margin:0 0 10px;color:var(--text-soft)">Every correct call pays out in FLEX. Every take that racks up agrees earns FLEX. It's a running score of how much signal you've contributed to the network.</p>
-    <p style="margin:0;color:var(--muted);font-size:12px">Can't be bought — only earned.</p>
-  `);
-}
+    document.title=u.display_name+' — HYPERFLEX';
 
-async function load() {
-  const page = document.getElementById('page');
-  try {
-    const res = await fetch(`${API}/api/member/${userId}`);
-    if (res.status === 404) {
-      page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
-      return;
-    }
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    const { user, stats, communities, recent_wins, take_stats, recent_takes } = data;
+    var volStr=ps.volume_usd?fmtK(ps.volume_usd):'$0';
+    var pnlVal=ps.pnl_usd||0;
+    var pnlColor=pnlVal>=0?'var(--green)':'var(--red)';
+    var pnlStr=pnlVal>=0?'+'+fmtK(pnlVal):'-'+fmtK(Math.abs(pnlVal));
 
-    // Synchronous owner check — decoded JWT's userId must match the profile
-    // we're rendering. Used to show the "post your first take" empty-state
-    // for the profile owner only (visitors see nothing if there are no takes).
-    let isOwner = false;
-    try {
-      const ownTok = localStorage.getItem('hf_token');
-      if (ownTok) {
-        const payload = JSON.parse(atob(ownTok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        const selfId = payload.userId || payload.sub || payload.id;
-        if (selfId && String(selfId) === String(userId)) isOwner = true;
-      }
-    } catch {}
+    // Takes HTML
+    var takesHtml=takes.length?takes.map(function(t){
+      var side=(t.side||'').toUpperCase();
+      var href=t.market_slug?'/market/'+t.market_slug:'#';
+      var correctBadge=t.is_correct===true?'<span class="badge-correct win">✓ CORRECT</span>':t.is_correct===false?'<span class="badge-correct loss">✗ WRONG</span>':'';
+      return '<div class="take"><a href="'+href+'"><div class="take-head"><span class="take-side '+(side==='YES'?'yes':'no')+'">'+side+'</span><span class="take-q">'+esc(t.question||'')+'</span></div></a>'+
+        '<div class="take-meta">'+(t.entry_price?'<span>'+Math.round(t.entry_price*100)+'¢</span>':'')+
+        '<span>'+timeAgo(t.created_at)+'</span>'+correctBadge+'</div>'+
+        (t.thesis?'<div class="take-thesis">'+esc(t.thesis)+'</div>':'')+
+        '<div class="take-actions"><span style="color:var(--green)">↑ '+(t.agree_count||0)+'</span><span style="color:var(--red)">↓ '+(t.disagree_count||0)+'</span></div></div>'
+    }).join(''):(isOwner?'<div class="empty"><div style="font-size:28px;margin-bottom:8px">✍️</div><div style="font-weight:600;margin-bottom:6px">Share your first prediction</div><div style="margin-bottom:16px">Every take is scored when the market resolves.</div><a href="/feed" class="btn btn-gold">Post a take →</a></div>':'<div class="empty">No predictions yet</div>');
 
-    const winPct = stats.settled_predictions > 0 ? Math.round((stats.wins / stats.settled_predictions) * 100) : 0;
-    const avgColor = winPct >= 70 ? '#c9920d' : winPct >= 55 ? '#22c55e' : winPct >= 40 ? '#60a5fa' : '#ef4444';
-    const initials = getInitials(user.display_name);
-    const avatarBg = '#1e1e1b';
+    // Trades HTML
+    var tradesHtml=trades.length?trades.map(function(t){
+      var side=(t.side||'').toUpperCase();
+      var pnl=t.pnl!=null?parseFloat(t.pnl):null;
+      var pnlC=pnl!=null?(pnl>=0?'var(--green)':'var(--red)'):'var(--muted)';
+      var pnlS=pnl!=null?(pnl>=0?'+':'')+'$'+Math.abs(pnl).toFixed(2):(t.status==='open'?'OPEN':'—');
+      return '<div class="trade"><span class="take-side '+(side==='YES'?'yes':'no')+'">'+side+'</span>'+
+        '<div class="trade-info"><div class="trade-q">'+esc(t.market_question||'')+'</div>'+
+        '<div class="trade-detail">$'+parseFloat(t.amount_usd||0).toFixed(2)+' · '+(t.entry_price?Math.round(t.entry_price*100)+'¢':'—')+' · '+timeAgo(t.created_at)+'</div></div>'+
+        '<div class="trade-pnl" style="color:'+pnlC+'">'+pnlS+'</div></div>'
+    }).join(''):'<div class="empty">No trades yet</div>';
 
-    document.title = `${user.display_name} — HYPERFLEX`;
+    var passportUrl='https://hyperflex.network/passport/'+userId;
 
-    // Build community chips
-    const commHtml = communities.length
-      ? `<div class="community-chips">${communities.map(c =>
-          `<a href="/${c.slug}" class="community-chip">
-            <span class="chip-dot" style="background:${c.primary_color || '#c9920d'}"></span>
-            ${c.display_name || c.slug}
-          </a>`
-        ).join('')}</div>`
-      : `<div style="color:var(--muted);font-size:13px">No communities yet.</div>`;
+    page.innerHTML=
+      '<div class="hero">'+
+        '<div class="hero-top">'+
+          '<div class="avatar" style="background:var(--card);color:'+tierColor+';border-color:'+tierColor+'44">'+initials+'</div>'+
+          '<div><div class="name">'+esc(u.display_name)+'</div>'+(u.username?'<div class="handle">@'+esc(u.username)+'</div>':'')+'</div>'+
+        '</div>'+
+        (u.bio?'<div class="bio">'+esc(u.bio)+'</div>':'')+
+        '<div class="social-row">'+
+          '<div><strong>'+(s.followers||0)+'</strong> <span>Followers</span></div>'+
+          '<div><strong>'+(s.following||0)+'</strong> <span>Following</span></div>'+
+          (ts.total_agrees?'<div><strong>'+ts.total_agrees+'</strong> <span>Agrees</span></div>':'')+
+        '</div>'+
+        '<div class="action-row">'+
+          '<button class="btn btn-fill" id="followBtn" onclick="toggleFollow()">Follow</button>'+
+          '<button class="btn" onclick="navigator.clipboard.writeText(location.href);this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'📋 Copy\',2000)">📋 Copy</button>'+
+          '<button class="btn" onclick="window.open(\'https://x.com/intent/tweet?text=\'+encodeURIComponent(\'Check out \'+\''+esc(u.display_name)+'\'+ \' on HYPERFLEX\\n\\n\'+location.href),\'_blank\')">🐦 Share</button>'+
+          '<a href="/passport/'+userId+'" class="btn btn-gold">🛂 Passport</a>'+
+        '</div>'+
+      '</div>'+
 
-    // Build wins list
-    const winsHtml = recent_wins.length
-      ? `<div class="win-list">${recent_wins.map(w =>
-          `<a href="/${w.community_slug}" class="win-item">
-            <div class="win-check">✓</div>
-            <div class="win-body">
-              <div class="win-question">${w.question}</div>
-              <div class="win-meta">
-                <span style="color:${w.community_color || '#c9920d'}">${w.community_name}</span>
-                <span>·</span>
-                <span>${timeAgo(w.resolved_at)}</span>
-                ${w.payout > 0 ? `<span>· <strong style="color:var(--green)">+${w.payout.toLocaleString()} pts</strong></span>` : ''}
-              </div>
-            </div>
-            <span class="win-side ${(w.side || '').toUpperCase() === 'YES' ? 'yes' : 'no'}">${(w.side || '').toUpperCase()}</span>
-          </a>`
-        ).join('')}</div>`
-      : `<div style="color:var(--muted);font-size:13px;padding:16px 0">No wins yet — get predicting!</div>`;
+      '<div class="tier" style="background:radial-gradient(ellipse at center top,'+tierColor+'08,transparent 70%)">'+
+        '<div class="tier-icon">'+tierIcon+'</div>'+
+        '<div class="tier-label" style="color:'+tierColor+'">'+tier+'</div>'+
+        '<div class="tier-pct" style="color:'+tierColor+'">'+bestWin+'%</div>'+
+        '<div class="tier-sub">'+(ps.total_trades>0?ps.closed_wins+' wins / '+(ps.closed_wins+ps.closed_losses)+' closed trades':s.wins+' correct / '+(s.settled_predictions||0)+' predictions')+'</div>'+
+        '<div class="tier-bar"><div class="tier-bar-fill" style="width:'+bestWin+'%;background:'+tierColor+'"></div></div>'+
+      '</div>'+
 
-    // Prediction rank tier
-    const wr = stats.win_rate || 0;
-    const settled = stats.settled_predictions || 0;
-    let rankTier, rankClass, rankColor, rankDesc;
-    if (wr >= 70 && settled >= 10)      { rankTier = '🎯 ORACLE';      rankClass = 'oracle';  rankColor = '#c9920d'; rankDesc = 'Top 5% of predictors — consistently ahead of the crowd'; }
-    else if (wr >= 60 && settled >= 5)  { rankTier = '🎯 SHARP';       rankClass = 'sharp';   rankColor = '#22c55e'; rankDesc = 'Above average predictor — reads markets better than most'; }
-    else if (wr >= 50 && settled >= 5)  { rankTier = '📊 SOLID';       rankClass = 'solid';   rankColor = '#60a5fa'; rankDesc = 'Reliable predictor — more right than wrong'; }
-    else if (settled >= 3)              { rankTier = '🎲 SPECULATOR';  rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Still building their track record'; }
-    else                                { rankTier = '🆕 NEWCOMER';    rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Just getting started — more predictions needed'; }
+      '<div class="stats">'+
+        '<div class="stat"><div class="stat-val" style="color:var(--gold)">'+(s.flex_score_alltime!=null?s.flex_score_alltime:s.flex_score_90d!=null?s.flex_score_90d:'—')+'</div><div class="stat-lbl">Flex Score</div></div>'+
+        '<div class="stat"><div class="stat-val" style="color:var(--green)">'+volStr+'</div><div class="stat-lbl">Volume</div></div>'+
+        '<div class="stat"><div class="stat-val" style="color:'+pnlColor+'">'+pnlStr+'</div><div class="stat-lbl">P&L</div></div>'+
+        '<div class="stat"><div class="stat-val" style="color:var(--purple)">'+(s.flex_points>=1000?(s.flex_points/1000).toFixed(1)+'K':s.flex_points||0)+'</div><div class="stat-lbl">FLEX Pts</div></div>'+
+      '</div>'+
 
-    const scoreCardHTML = settled >= 3 ? `
-      <div class="pred-score-card ${rankClass}">
-        <div class="pred-score-pct" style="color:${rankColor}">${wr}%</div>
-        <div class="pred-score-body">
-          <div class="pred-score-rank" style="color:${rankColor}">${rankTier}</div>
-          <div class="pred-score-sub">${rankDesc}<br>${stats.wins || 0} correct out of ${settled} settled predictions</div>
-          <div class="pred-score-bar"><div class="pred-score-bar-fill" style="width:${wr}%;background:${rankColor}"></div></div>
-        </div>
-      </div>` : '';
+      '<div class="tabs">'+
+        '<button class="tab active" onclick="switchTab(\'takes\',this)">Takes'+(ts.total?' ('+ts.total+')':'')+'</button>'+
+        '<button class="tab" onclick="switchTab(\'trades\',this)">Trades'+(ps.total_trades?' ('+ps.total_trades+')':'')+'</button>'+
+        '<button class="tab" onclick="switchTab(\'record\',this)">Track Record</button>'+
+      '</div>'+
 
-    // Whale-specific data
-    const isWhale = user.is_whale || false;
-    const whaleRank = user.whale_rank;
-    const whalePnl = user.whale_pnl;
-    const walletAddr = user.polymarket_address || '';
-    const shortWallet = walletAddr ? (walletAddr.slice(0, 6) + '...' + walletAddr.slice(-4)) : '';
-    const pnlDisplay = whalePnl != null ? (whalePnl >= 0 ? '+$' + (whalePnl >= 1000000 ? (whalePnl/1000000).toFixed(1) + 'M' : whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl)) : '-$' + Math.abs(whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl))) : null;
-    const whaleAvatarBg = isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : avatarBg;
-    const whaleAvatarColor = isWhale ? '#fff' : avgColor;
+      '<div id="tab-takes" class="tab-content active">'+takesHtml+'</div>'+
+      '<div id="tab-trades" class="tab-content">'+tradesHtml+'</div>'+
+      '<div id="tab-record" class="tab-content"><div class="empty" style="padding:40px 16px">Track record details coming soon</div></div>'+
 
-    page.innerHTML = `
-      <div class="hero">
-        <div class="avatar" style="background:${whaleAvatarBg};color:${whaleAvatarColor};border-color:${isWhale ? '#a855f744' : avgColor + '44'}">${isWhale ? '🐋' : initials}</div>
-        <div class="hero-info">
-          <div class="hero-name">${user.display_name}</div>
-          ${isWhale ? `
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0 2px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#a855f7;background:rgba(168,85,247,0.12);padding:3px 10px;border-radius:100px;letter-spacing:0.5px">POLYMARKET WHALE</span>
-              ${whaleRank ? `<span style="font-family:var(--mono);font-size:10px;color:var(--gold);font-weight:700">Rank #${whaleRank}</span>` : ''}
-              ${pnlDisplay ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${whalePnl >= 0 ? '#00e68a' : '#ff4d6a'}">${pnlDisplay} PnL</span>` : ''}
-            </div>
-            ${walletAddr ? `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 4px;display:flex;align-items:center;gap:6px">
-              <span>${shortWallet}</span>
-              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" style="font-family:var(--mono);font-size:9px;color:var(--dim);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer">Copy</button>
-              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" style="font-family:var(--mono);font-size:9px;color:var(--accent-blue);text-decoration:none">Polygonscan ↗</a>
-            </div>` : ''}
-          ` : `
-            ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
-          `}
-          ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
-          ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
-          <div class="hero-badges">
-            ${user.wallet_verified ? '<span class="badge badge-verified">✓ Verified Wallet</span>' : ''}
-            ${tierBadge(stats.win_rate, stats.streak)}
-            <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
-          </div>
-          <!-- Followers / following — the clout currency. Shown right under
-               the name so it's the first thing visitors read. Values come from
-               /api/member/:userId stats.{followers,following}. -->
-          <div style="display:flex;align-items:center;gap:18px;margin:6px 0 10px;font-family:var(--mono);font-size:13px">
-            <span><strong style="color:var(--text);font-size:15px">${(stats.followers || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Followers</span></span>
-            <span><strong style="color:var(--text);font-size:15px">${(stats.following || 0).toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Following</span></span>
-            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold);font-size:15px">${take_stats.total_agrees.toLocaleString()}</strong> <span style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Agrees</span></span>` : ''}
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy link</button>
-            <button class="share-btn" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share on X</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-            <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
-            <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
-          </div>
-          <span id="followerCount" style="display:none"></span>
-        </div>
-      </div>
+      '<div class="challenge">'+
+        '<div class="challenge-title">⚔️ Challenge '+esc(u.display_name)+'</div>'+
+        '<div class="challenge-sub">Think you can predict better? Challenge them to a prediction duel.</div>'+
+        '<button class="btn btn-gold" onclick="window.location.href=\'/feed\'">Challenge →</button>'+
+      '</div>';
 
-      <!-- Tier Card — the headline flex -->
-      <div style="background:var(--card);border-radius:16px;padding:24px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;border:1px solid ${rankColor}33">
-        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top, ${rankColor}08, transparent 70%);pointer-events:none"></div>
-        <div style="font-size:36px;margin-bottom:4px">${rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕'}</div>
-        <div style="font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${rankColor};margin-bottom:6px">${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()}</div>
-        <div style="font-family:var(--mono);font-size:52px;font-weight:700;color:${rankColor};line-height:1">${winPct}%</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px">${rankDesc}</div>
-        <div style="font-size:11px;color:var(--soft);margin-top:4px">${stats.wins || 0} correct out of ${settled} resolved predictions</div>
-        <div style="display:flex;justify-content:center;gap:8px;margin-top:14px">
-          <a href="/passport/${userId}" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);padding:7px 16px;border-radius:20px;text-decoration:none;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.15)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">🛂 View Prediction Passport</a>
-          <button onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I\\'m a ${rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim()} predictor with ${winPct}% accuracy on @hypaboranetwork\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-soft);background:none;border:1px solid var(--border);padding:7px 16px;border-radius:20px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">🐦 Flex on X</button>
-        </div>
-      </div>
-
-      <!-- Score Strip — compact horizontal metrics bar -->
-      <div class="score-strip">
-        <div class="score-strip-item" onclick="showFlexScoreInfo()" style="cursor:pointer">
-          <div class="score-strip-value" style="color:var(--gold)">${stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—'}</div>
-          <div class="score-strip-label">Flex Score <span style="font-size:9px">ⓘ</span></div>
-        </div>
-        <div class="score-strip-item">
-          <div class="score-strip-value" style="color:${avgColor}">${winPct}%</div>
-          <div class="score-strip-label">Accuracy</div>
-        </div>
-        <div class="score-strip-item" onclick="showFlexPointsInfo()" style="cursor:pointer">
-          <div class="score-strip-value" style="color:#a855f7">${(stats.flex_points || 0) >= 1000 ? ((stats.flex_points / 1000).toFixed(1) + 'K') : (stats.flex_points || 0)}</div>
-          <div class="score-strip-label">⚡ FLEX Pts <span style="font-size:9px">ⓘ</span></div>
-        </div>
-        <div class="score-strip-item">
-          <div class="score-strip-value" style="color:${stats.streak >= 3 ? '#ff8c00' : 'var(--text)'}">${stats.streak > 0 ? stats.streak : '—'}</div>
-          <div class="score-strip-label">${stats.streak >= 3 ? '🔥 ' : ''}Streak</div>
-        </div>
-      </div>
-
-      <!-- Tabs -->
-      <div class="profile-tabs">
-        <button class="profile-tab active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ' <span style=\\"font-family:Space Mono,monospace;font-size:11px;color:var(--muted);font-weight:400\\">(' + take_stats.total + ')</span>' : ''}</button>
-        <button class="profile-tab" onclick="switchProfileTab('record',this)">Track Record</button>
-      </div>
-
-      <!-- ═══ TAKES TAB (default) ═══ -->
-      <div id="tab-takes" class="tab-content active">
-        ${(take_stats && take_stats.total > 0) ? `
-          ${take_stats.accuracy > 0 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${take_stats.accuracy >= 60 ? '#00e68a' : take_stats.accuracy >= 50 ? '#4d9fff' : '#ff4d6a'};background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.1)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.1)' : 'rgba(255,77,106,0.1)'};padding:4px 10px;border-radius:20px">${take_stats.accuracy}% take accuracy</span>
-            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${take_stats.correct || 0}W / ${take_stats.incorrect || 0}L</span>
-          </div>` : ''}
-          ${(recent_takes || []).map(t => {
-            const sideUp = (t.side || '').toUpperCase();
-            const href = t.market_slug ? '/market/' + t.market_slug : '#';
-            const correctBadge = t.is_correct === true ? '<span class="take-correct win">✓ CORRECT</span>'
-              : t.is_correct === false ? '<span class="take-correct loss">✗ WRONG</span>' : '';
-            return `<div class="take-card-full">
-              <a href="${href}">
-                <div style="display:flex;align-items:flex-start;gap:8px">
-                  <span class="take-side ${sideUp === 'YES' ? 'yes' : 'no'}">${sideUp}</span>
-                  <span class="take-card-q">${t.question || ''}</span>
-                </div>
-              </a>
-              <div class="take-card-meta">
-                ${t.entry_price ? `<span style="color:var(--muted)">Entry: ${Math.round(t.entry_price * 100)}¢</span>` : ''}
-                <span style="color:var(--muted)">${timeAgo(t.created_at)}</span>
-                ${correctBadge}
-              </div>
-              ${t.thesis ? `<div class="take-card-thesis">${t.thesis.replace(/</g,'&lt;')}</div>` : ''}
-              <div class="take-card-actions">
-                <span style="color:var(--green)">↑ ${t.agree_count || 0}</span>
-                <span style="color:var(--red)">↓ ${t.disagree_count || 0}</span>
-              </div>
-            </div>`;
-          }).join('')}
-        ` : (isOwner ? `
-          <div style="text-align:center;padding:40px 16px;background:rgba(201,146,13,0.04);border:1px dashed rgba(201,146,13,0.25);border-radius:12px">
-            <div style="font-size:28px;margin-bottom:8px">✍️</div>
-            <div style="font-size:15px;font-weight:600;margin-bottom:6px">Post your first take</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;max-width:320px;margin-left:auto;margin-right:auto">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
-            <a href="/explore" style="display:inline-block;background:var(--gold);color:#0e0e15;font-family:var(--mono);font-size:12px;font-weight:700;padding:10px 22px;border-radius:20px;text-decoration:none">Post a take →</a>
-          </div>
-        ` : `<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No takes posted yet.</div>`)}
-      </div>
-
-      <!-- ═══ TRACK RECORD TAB ═══ -->
-      <div id="tab-record" class="tab-content">
-        ${scoreCardHTML}
-
-        <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
-          <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
-          <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
-            <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
-            <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
-          </div>
-        </div>
-
-        ${recent_wins.length ? `
-        <div class="section">
-          <div class="section-title">Recent Wins</div>
-          ${winsHtml}
-        </div>` : ''}
-
-        <div id="analyticsSection" style="margin:24px 0;display:none">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Calibration Chart</div>
-              <div style="font-size:11px;color:#666;margin-bottom:12px">Predicted % vs actual outcomes</div>
-              <canvas id="calibrationChart" width="300" height="180"></canvas>
-            </div>
-            <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
-              <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
-              <canvas id="pnlChart" width="300" height="180"></canvas>
-            </div>
-          </div>
-        </div>
-
-        ${communities.length ? `
-        <div class="section">
-          <div class="section-title">Active Communities</div>
-          ${commHtml}
-        </div>` : ''}
-
-        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:16px 0;border-top:1px solid var(--border);margin-top:12px">
-          ${stats.settled_predictions || 0} predictions settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
-        </div>
-      </div>
-
-      <!-- Owner tools -->
-      <div id="ownerTools" style="display:none;margin:20px 0">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="verify-wallet-btn" style="display:none">🔗 Verify Wallet</button>
-          <button id="editBioBtn" onclick="toggleBioEdit()" style="background:none;border:1px solid var(--border);color:var(--text-soft);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s">✏️ Edit Bio</button>
-        </div>
-        <div id="bioEditArea" style="display:none">
-          <textarea id="bioInput" class="bio-edit-area" maxlength="280" placeholder="Write a short bio (280 chars max)"></textarea>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button onclick="saveBio()" class="bio-save-btn">Save</button>
-            <button onclick="toggleBioEdit()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">Cancel</button>
-            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="cta-card">
-        <div class="cta-title">Think you can beat them?</div>
-        <div class="cta-sub">Join a prediction market community and put your knowledge to the test.</div>
-        <a href="/" class="cta-link">Explore Communities →</a>
-      </div>
-
-      <div id="inviteSection" style="display:none;margin-top:20px;background:#1a1916;border:1px solid #c9920d33;border-radius:12px;padding:20px">
-        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">📣 Grow Your Following</div>
-        <div style="font-size:13px;color:#b0ab9f;margin-bottom:14px">Share your profile to build your audience:</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}"
-            style="flex:1;background:#141412;border:1px solid #2a2a26;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:12px;color:#f0ebe3;outline:none"/>
-          <button onclick="copyInviteUrl()" id="inviteCopyBtn" style="background:none;border:1px solid #c9920d;color:#c9920d;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">Copy</button>
-        </div>
-        <button onclick="shareProfileOnX()" style="display:flex;align-items:center;gap:8px;background:none;border:1px solid #333;color:#ccc;padding:8px 16px;border-radius:20px;cursor:pointer;font-size:13px;transition:border-color 0.15s" onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'" onmouseout="this.style.borderColor='#333';this.style.color='#ccc'">🐦 Share on X</button>
-        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:#555"></div>
-      </div>
-    `;
-    loadAnalytics(userId);
-    loadTrophyCard(userId);
-    loadInviteSection(userId);
-  } catch (err) {
+    loadFollowStatus();
+  }catch(err){
     console.error(err);
-    page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
+    page.innerHTML='<div class="loading">Failed to load profile</div>';
   }
 }
-
-load().then(loadFollowStatus).then(showCreatorDashPill);
-
-function showCreatorDashPill() {
-  const creatorToken = localStorage.getItem('hf_token');
-  if (!creatorToken) return;
-  try {
-    const payload = JSON.parse(atob(creatorToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    const currentUserId = payload.userId || payload.sub || payload.id;
-    if (currentUserId === window._profileUserId) {
-      const pill = document.getElementById('creatorDashPill');
-      if (pill) pill.style.display = 'inline-flex';
-    }
-  } catch {}
-}
-
-// ── P&L ANALYTICS ─────────────────────────────────────────────────────────────
-async function loadAnalytics(userId) {
-  try {
-    const res = await fetch(`/api/predictors/${userId}/analytics`);
-    const data = await res.json();
-    if (!data.platforms) return;
-    document.getElementById('analyticsSection').style.display = 'block';
-
-    // Platform stat cards
-    const platformColors = { hyperflex: '#c9920d', polymarket: '#6366f1', kalshi: '#8b5cf6', manifold: '#10b981' };
-    const platformLabels = { hyperflex: 'HYPERFLEX', polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold' };
-    document.getElementById('platformCards').innerHTML = Object.entries(data.platforms)
-      .filter(([, p]) => p.total > 0)
-      .map(([name, p]) => {
-        const wr = (p.wins + p.losses) > 0 ? Math.round(p.wins / (p.wins + p.losses) * 100) : 0;
-        const pnlColor = p.pnl >= 0 ? '#10b981' : '#ef4444';
-        return `<div style="background:#1a1916;border:1px solid ${platformColors[name]}44;border-radius:10px;padding:14px 18px;min-width:130px">
-          <div style="font-size:11px;color:${platformColors[name]};font-weight:700;margin-bottom:6px">${platformLabels[name] || name}</div>
-          <div style="font-size:22px;font-weight:700;color:#fff">${wr}%</div>
-          <div style="font-size:11px;color:#888">win rate</div>
-          <div style="font-size:13px;font-weight:700;color:${pnlColor};margin-top:4px">${p.pnl >= 0 ? '+' : ''}${Math.round(p.pnl)} pts</div>
-          <div style="font-size:11px;color:#555">${p.total} positions</div>
-        </div>`;
-      }).join('');
-
-    // Sharp score badge
-    const sharpEl = document.getElementById('sharpBadge');
-    if (sharpEl) {
-      sharpEl.textContent = `⚡ ${data.sharp_score} Sharp Score`;
-      sharpEl.style.display = 'inline-block';
-    }
-
-    // Calibration chart — simple bar chart using canvas
-    const calCtx = document.getElementById('calibrationChart')?.getContext('2d');
-    if (calCtx) {
-      const calData = data.calibration.filter(c => c.predicted > 0);
-      const barW = calData.length > 0 ? 240 / calData.length : 30;
-      calCtx.clearRect(0, 0, 300, 180);
-      calData.forEach((c, i) => {
-        const x = 30 + i * (barW + 4);
-        const expectedH = (c.predicted / 100) * 140;
-        const actualH = c.actual !== null ? (c.actual / 100) * 140 : 0;
-        calCtx.fillStyle = '#c9920d44';
-        calCtx.fillRect(x, 150 - actualH, barW - 2, actualH);
-        calCtx.fillStyle = '#888';
-        calCtx.fillRect(x, 150 - expectedH, barW - 2, 2);
-        calCtx.fillStyle = '#666';
-        calCtx.font = '9px monospace';
-        calCtx.fillText(c.predicted + '%', x, 165);
-      });
-      calCtx.fillStyle = '#888';
-      calCtx.font = '10px monospace';
-      calCtx.fillText('gold=actual  gray=expected', 10, 178);
-    }
-
-    // P&L line chart
-    const pnlCtx = document.getElementById('pnlChart')?.getContext('2d');
-    if (pnlCtx && data.timeline.length > 1) {
-      const vals = data.timeline.map(t => t.pnl);
-      const min = Math.min(...vals, 0);
-      const max = Math.max(...vals, 0);
-      const range = max - min || 1;
-      pnlCtx.clearRect(0, 0, 300, 180);
-      pnlCtx.strokeStyle = data.total_pnl >= 0 ? '#10b981' : '#ef4444';
-      pnlCtx.lineWidth = 2;
-      pnlCtx.beginPath();
-      data.timeline.forEach((t, i) => {
-        const x = 10 + (i / (data.timeline.length - 1)) * 280;
-        const y = 160 - ((t.pnl - min) / range) * 140;
-        i === 0 ? pnlCtx.moveTo(x, y) : pnlCtx.lineTo(x, y);
-      });
-      pnlCtx.stroke();
-      // Zero line
-      const zeroY = 160 - ((0 - min) / range) * 140;
-      pnlCtx.strokeStyle = '#333';
-      pnlCtx.lineWidth = 1;
-      pnlCtx.setLineDash([4, 4]);
-      pnlCtx.beginPath();
-      pnlCtx.moveTo(10, zeroY);
-      pnlCtx.lineTo(290, zeroY);
-      pnlCtx.stroke();
-    }
-  } catch(e) { console.warn('analytics', e); }
-}
-
-// ── FOLLOW SYSTEM ─────────────────────────────────────────────────────────────
-let _isFollowing = false;
-
-async function loadFollowStatus() {
-  try {
-    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-    const headers = token ? { Authorization: 'Bearer ' + token } : {};
-    const r = await fetch(`${API}/api/predictors/${userId}/follow-status`, { headers });
-    if (!r.ok) return;
-    const d = await r.json();
-    _isFollowing = d.is_following;
-    const btn = document.getElementById('followBtn');
-    const countEl = document.getElementById('followerCount');
-    if (btn) {
-      btn.textContent = _isFollowing ? 'Following' : 'Follow';
-      if (_isFollowing) {
-        btn.style.background = 'rgba(201,146,13,0.15)';
-        btn.style.color = 'var(--gold)';
-      }
-    }
-    if (countEl && d.follower_count > 0) {
-      countEl.textContent = `${d.follower_count} follower${d.follower_count !== 1 ? 's' : ''}`;
-    }
-    // Also load copy trade status
-    const cr = await fetch(`${API}/api/predictors/${userId}/copy-status`, { headers });
-    if (cr.ok) {
-      const cd = await cr.json();
-      const copyBtn = document.getElementById('copyTradeBtn');
-      if (copyBtn && cd.is_subscribed) {
-        copyBtn.textContent = '🔔 Copying';
-        copyBtn.style.background = 'rgba(124,58,237,0.15)';
-        copyBtn.dataset.subscribed = '1';
-      }
-    }
-  } catch (e) {
-    console.warn('[follow-status]', e);
-  }
-}
-
-async function toggleFollow() {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) { alert('Sign in to follow predictors'); return; }
-  const btn = document.getElementById('followBtn');
-  if (btn) btn.disabled = true;
-  try {
-    const r = await fetch(`${API}/api/predictors/${userId}/follow`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (!r.ok) throw new Error('Failed');
-    const d = await r.json();
-    _isFollowing = d.following;
-    if (btn) {
-      btn.textContent = _isFollowing ? 'Following' : 'Follow';
-      btn.style.background = _isFollowing ? 'rgba(201,146,13,0.15)' : 'none';
-    }
-    // Refresh count
-    await loadFollowStatus();
-  } catch (e) {
-    console.warn('[toggle-follow]', e);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function toggleCopyTrade() {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) { alert('Sign in to copy trades'); return; }
-  const btn = document.getElementById('copyTradeBtn');
-  if (btn) btn.disabled = true;
-  try {
-    const r = await fetch(`${API}/api/predictors/${userId}/copy-trade`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (!r.ok) throw new Error('Failed');
-    const d = await r.json();
-    if (btn) {
-      btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy Trades';
-      btn.style.background = d.subscribed ? 'rgba(124,58,237,0.15)' : 'none';
-      btn.dataset.subscribed = d.subscribed ? '1' : '';
-    }
-  } catch (e) {
-    console.warn('[toggle-copy-trade]', e);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// loadFollowStatus() is called after load() resolves (button is injected by load())
-
-// ── TROPHY CARD ───────────────────────────────────────────────────────────────
-async function loadTrophyCard(userId) {
-  try {
-    const res = await fetch(`/api/predictors/${userId}/best-call`);
-    const data = await res.json();
-    if (!data.best) return;
-    const b = data.best;
-    document.getElementById('trophyCard').style.display = 'block';
-    document.getElementById('trophyQuestion').textContent = b.question;
-    const sideEl = document.getElementById('trophySide');
-    sideEl.textContent = b.side;
-    sideEl.style.background = b.side === 'YES' ? '#10b98122' : '#ef444422';
-    sideEl.style.color = b.side === 'YES' ? '#10b981' : '#ef4444';
-    document.getElementById('trophyMultiplier').textContent = b.multiplier ? `${b.multiplier}× payout` : '';
-    window._trophyData = b;
-  } catch (e) { console.warn('trophy', e); }
-}
-
-function shareTrophyOnX() {
-  const b = window._trophyData;
-  if (!b) return;
-  const text = `My best prediction call:\n\n"${b.question}"\n\nCalled ${b.side} → ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
-  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
-}
-
-// ── INVITE / SHARE SECTION (owner only) ──────────────────────────────────────
-async function loadInviteSection(profileUserId) {
-  // Only show to the profile owner
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) return;
-  try {
-    // Decode JWT payload to get current user id (no signature verify needed client-side)
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    const currentUserId = payload.userId || payload.sub || payload.id;
-    if (currentUserId !== profileUserId) return;
-
-    const section = document.getElementById('inviteSection');
-    if (section) section.style.display = 'block';
-
-    // Load stats
-    const r = await fetch('/api/user/profile-share-stats', { headers: { Authorization: 'Bearer ' + token } });
-    if (r.ok) {
-      const d = await r.json();
-      const statsEl = document.getElementById('inviteStats');
-      if (statsEl && d.followers > 0) {
-        statsEl.textContent = `${d.followers} follower${d.followers !== 1 ? 's' : ''} · Share to grow your audience`;
-      }
-    }
-  } catch (e) { /* silent — token parse failed or fetch failed */ }
-}
-
-function copyInviteUrl() {
-  const input = document.getElementById('inviteUrlInput');
-  const btn = document.getElementById('inviteCopyBtn');
-  if (!input || !btn) return;
-  navigator.clipboard.writeText(input.value).then(() => {
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
-  });
-}
-
-function shareProfileOnX() {
-  const text = `I'm tracking predictions across Polymarket & Kalshi on HYPERFLEX — follow my calls: hyperflex.network/m/${window._profileUserId}`;
-  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
-}
-
-// ── SOCIAL PREDICTIONS ──────────────────────────────────────────────────────
-async function loadSocialPredictions(profileUserId) {
-  try {
-    const r = await fetch(`/api/social/user/${profileUserId}/predictions?limit=10`);
-    if (!r.ok) return;
-    const d = await r.json();
-    if (!d.predictions?.length) return;
-
-    const section = document.getElementById('socialPredictions');
-    if (section) section.style.display = 'block';
-    document.getElementById('socialPredCount').textContent = `${d.stats?.total || d.predictions.length} total · ${d.stats?.win_rate != null ? d.stats.win_rate + '% win rate' : ''}`;
-
-    document.getElementById('socialPredList').innerHTML = d.predictions.map(p => {
-      const sideColor = p.side === 'YES' ? '#22c55e' : '#ef4444';
-      const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
-      const statusClass = p.status || 'active';
-      const statusLabel = statusClass === 'resolved_win' ? 'Won' : statusClass === 'resolved_loss' ? 'Lost' : statusClass === 'active' ? 'Active' : 'Closed';
-      return `<div class="social-pred-card">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <span class="social-pred-status ${statusClass}">${statusLabel}</span>
-          <span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${p.side}</span>
-          ${p.entry_price ? `<span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)">${Math.round(p.entry_price * 100)}¢</span>` : ''}
-          ${p.pnl != null ? `<span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${p.pnl >= 0 ? '#22c55e' : '#ef4444'}">${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(0)}</span>` : ''}
-          <span style="font-size:10px;color:var(--muted);margin-left:auto">${timeAgo(p.created_at)}</span>
-        </div>
-        <a href="/discuss/${p.market_slug || ''}" style="font-size:13px;font-weight:600;color:var(--text);text-decoration:none;line-height:1.3;display:block">${p.market_title || ''}</a>
-        ${p.thesis ? `<div class="social-pred-thesis">${p.thesis.replace(/</g,'&lt;')}</div>` : ''}
-        <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted)">
-          <span>👍 ${p.reaction_count || 0}</span>
-          <span>💬 ${p.comment_count || 0}</span>
-        </div>
-      </div>`;
-    }).join('');
-  } catch (e) { console.warn('[social-predictions]', e); }
-}
-
-// ── WALLET VERIFICATION ─────────────────────────────────────────────────────
-async function startWalletVerify() {
-  const btn = document.getElementById('verifyWalletBtn');
-  if (!btn) return;
-  if (!window.ethereum) { alert('MetaMask or a Web3 wallet is required'); return; }
-
-  btn.disabled = true;
-  btn.textContent = 'Connecting...';
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    const address = accounts[0];
-
-    btn.textContent = 'Getting challenge...';
-    const token = localStorage.getItem('hf_token');
-    const cr = await fetch('/api/wallet/challenge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ address })
-    });
-    if (!cr.ok) { const e = await cr.json(); throw new Error(e.error || 'Challenge failed'); }
-    const { message } = await cr.json();
-
-    btn.textContent = 'Sign in wallet...';
-    const signature = await window.ethereum.request({
-      method: 'personal_sign',
-      params: [message, address]
-    });
-
-    btn.textContent = 'Verifying...';
-    const vr = await fetch('/api/wallet/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ signature })
-    });
-    if (!vr.ok) { const e = await vr.json(); throw new Error(e.error || 'Verification failed'); }
-
-    btn.textContent = '✓ Verified!';
-    btn.style.borderColor = '#22c55e';
-    btn.style.color = '#22c55e';
-    setTimeout(() => location.reload(), 1500);
-  } catch (e) {
-    btn.textContent = '🔗 Verify Wallet';
-    btn.disabled = false;
-    if (e.code !== 4001) alert(e.message || 'Verification failed');
-  }
-}
-
-// ── BIO EDIT ────────────────────────────────────────────────────────────────
-let _bioEditOpen = false;
-function toggleBioEdit() {
-  _bioEditOpen = !_bioEditOpen;
-  const area = document.getElementById('bioEditArea');
-  if (area) area.style.display = _bioEditOpen ? 'block' : 'none';
-  if (_bioEditOpen) {
-    const bioEl = document.querySelector('.hero-bio');
-    const input = document.getElementById('bioInput');
-    if (input && bioEl) input.value = bioEl.textContent.trim();
-    if (input) {
-      input.focus();
-      updateBioCount();
-      input.addEventListener('input', updateBioCount);
-    }
-  }
-}
-
-function updateBioCount() {
-  const input = document.getElementById('bioInput');
-  const count = document.getElementById('bioCharCount');
-  if (input && count) count.textContent = `${input.value.length}/280`;
-}
-
-async function saveBio() {
-  const input = document.getElementById('bioInput');
-  if (!input) return;
-  const bio = input.value.trim();
-  const token = localStorage.getItem('hf_token');
-  try {
-    const r = await fetch('/api/user/profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ bio })
-    });
-    if (r.ok) {
-      toggleBioEdit();
-      location.reload();
-    } else {
-      const e = await r.json();
-      alert(e.error || 'Failed to save');
-    }
-  } catch (e) { alert('Network error'); }
-}
-
-// ── SHOW OWNER TOOLS ────────────────────────────────────────────────────────
-function showOwnerTools(profileUserId, walletVerified) {
-  const token = localStorage.getItem('hf_token');
-  if (!token) return;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    const currentUserId = payload.userId || payload.sub || payload.id;
-    if (currentUserId !== profileUserId) return;
-
-    const tools = document.getElementById('ownerTools');
-    if (tools) tools.style.display = 'block';
-
-    if (!walletVerified) {
-      const vBtn = document.getElementById('verifyWalletBtn');
-      if (vBtn) vBtn.style.display = 'inline-flex';
-    }
-  } catch {}
-}
-
-// Wire up social predictions + owner tools after main load
-const _origLoad = load;
-load = async function() {
-  await _origLoad();
-  loadSocialPredictions(userId);
-  // Check if owner should see tools
-  try {
-    const r = await fetch(`${API}/api/member/${userId}`);
-    if (r.ok) {
-      const d = await r.json();
-      showOwnerTools(userId, d.user?.wallet_verified);
-    }
-  } catch {}
-};
+load();
 </script>
 </body>
 </html>
