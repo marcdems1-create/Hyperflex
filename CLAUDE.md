@@ -12,16 +12,18 @@
 **The moat is the social graph.** Whale signals and alpha terminals are commoditized — anyone with a Claude API key can build a screener. What can't be cloned overnight is a network of predictors with verified track records, social connections, and engagement history. That's what we're building.
 
 **Primary surfaces:**
-- **Takes Feed** at `/explore` — the front door. For You / Following / Trending tabs. Whale takes auto-synthesized from on-chain activity. User takes with thesis, agree/disagree reactions, quote-predicts.
+- **Landing / Explore** at `/` (file: `public/explore.html`) — the front door. Shows top edges, intelligence cards, live stats, and a **preview** of the FLEX Feed. NOT the full feed — users click through to `/feed` for the full experience. `/explore` redirects here (301).
+- **FLEX Feed** at `/feed` (file: `public/feed.html`) — the full social feed. Two tabs: **For You** (algorithmic + followed users) and **Trending** (trending takes + influencer posts from X/Reddit interleaved). This is a SEPARATE file from explore.html — do NOT confuse them.
 - **Alpha Terminal** at `/alpha-live` — live Polymarket edges ranked by Edge Score (8 signals). The Bloomberg layer underneath the social product.
-- **Whale Profiles** at `/m/:userId` — auto-created for every top-50 Polymarket whale. Purple badge, rank, PnL, wallet address, linked takes.
+- **Member Profiles** at `/m/:userId` (file: `public/member.html`) — trader profile with tier card, takes, trades, track record. Auto-created for every user + top-50 Polymarket whales.
+- **Prediction Passport** at `/passport/:userId` (file: `public/passport.html`) — shareable credential page for verified prediction track record. Embeddable via iframe.
 - **Market Pages** at `/market/:slug` — Polymarket trading with Community Takes section, post-trade "Share your take" prompt.
 
-**Landing page (`/`)** is an intelligence briefing layout:
-- Hero: "Prediction market intelligence" + Read AI brief / See market intel CTAs
-- Intelligence Briefing panels: RIGHT NOW · LAST HOUR (whale feed) · TODAY'S WATCHLIST
-- Live Stats Ticker + Live Data Cards
-- Email capture → Product sections → Footer
+**⚠️ IMPORTANT: explore.html vs feed.html**
+These are TWO DIFFERENT files serving TWO DIFFERENT purposes:
+- `explore.html` = landing page at `/` — intelligence briefing + feed PREVIEW
+- `feed.html` = full feed at `/feed` — the actual social feed with tabs
+Changes to the feed tabs/rendering must be made in BOTH files or (preferably) only in `feed.html` with explore.html showing a preview that links to `/feed`.
 
 **Target user:** Active Polymarket traders who want to post takes, build reputation, and see what sharps think. Whale-watchers who follow whale profiles. Crypto/finance creators proving their track record.
 
@@ -140,24 +142,22 @@ Social products compound. Every take posted is content. Every follow is a connec
 
 ## File Map (what's what)
 
-| File | What it is |
-|------|-----------|
-| `public/index.html` | Landing page — "Prediction market intelligence" hero + Intelligence Briefing panels (RIGHT NOW / LAST HOUR / WATCHLIST) + Live Data Cards. Pricing section says "100% Free. No Limits." |
-| `public/alpha-live.html` | **Alpha Terminal at `/alpha-live`** — live edge cards from `/api/alpha/top`. Marc's redesign (`d48cbef`): glass cards, Inter/JetBrains Mono, Alpha Score badges, whale consensus, trade context strips, colored breakdown bars. Auto-refresh 90s. |
-| `public/predictors.html` | Discover Predictors — ranked leaderboard, grid/list view, sharp scores |
-| `public/explore.html` | Global discover/explore page — activity feed, Following tab, community browser |
-| `public/community.html` | Community prediction market page at `/:slug` |
-| `public/member.html` | Member public profile at `/m/:userId` — stats, P&L, platform cards, trophy |
-| `public/creator-dashboard.html` | Creator dashboard — markets, portfolio, YouTube scanner, analytics, rewards |
-| `public/creator-signup.html` | Creator registration |
-| `public/creator-login.html` | Creator login |
-| `public/creator-terms.html` | Terms of Service |
-| `public/admin.html` | Internal ops dashboard at `/admin` — includes ✉️ Outreach tab |
-| `public/profile.html` | Creator public profile at `/u/:slug` |
-| `public/embed.html` | Embeddable widget at `/embed/:slug` (iframeable, themed) |
-| `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` — includes acquisition CTA |
-| `public/templates.html` | Market template gallery at `/templates` — 12 niches, 72 markets, SEO-friendly |
-| `public/nominate.html` | "Nominate your creator" fan-facing page at `/nominate` |
+| File | Route | What it is |
+|------|-------|-----------|
+| `public/explore.html` | `/` (landing) | **Landing page + feed preview.** Intelligence briefing, top edges, live stats, feed preview. `/explore` redirects here. ⚠️ NOT the full feed — that's feed.html. |
+| `public/feed.html` | `/feed` | **FLEX Feed (full).** Two tabs: For You + Trending. Influencer posts (X/Reddit) interleaved with user takes. ⚠️ SEPARATE from explore.html. |
+| `public/member.html` | `/m/:userId` | **Member profile.** Tier card, takes, trades, track record, passport link. |
+| `public/passport.html` | `/passport/:userId` | **Prediction Passport.** Shareable credential page. Embeddable via iframe. |
+| `public/market.html` | `/market/:slug` | **Market page.** Polymarket trading, CLOB orders, community takes, stop-loss. |
+| `public/alpha-live.html` | `/alpha-live` | **Alpha Terminal.** Live edge cards ranked by Edge Score (8 signals). |
+| `public/predictors.html` | `/predictors` | **Predictor leaderboard.** Ranked by sharp scores, grid/list view. |
+| `public/creator-dashboard.html` | `/creator/dashboard` | **Dashboard.** Portfolio, Polymarket trading, analytics, settings. |
+| `public/creator-login.html` | `/creator/login` | Login / signup page. |
+| `public/admin.html` | `/admin` | **Admin ops.** Users, analytics, builder fees, influencer sweep. |
+| `public/community.html` | `/:slug` | Legacy community prediction market page (pre-pivot, still routed). |
+| `public/profile.html` | `/u/:slug` | Legacy creator profile (redirects to `/m/:userId` when possible). |
+| `public/embed.html` | `/embed/:slug` | Embeddable widget (iframeable). |
+| `public/win-card.html` | `/win/:mkt/:uid` | Shareable win card with acquisition CTA. |
 | `server.js` | Express backend — all API routes, Claude scanner, settlement cron |
 | `index.html` | ⚠️ OLD React trading app at project root — NOT served, ignore |
 | `HYPERFLEX_Brief.md` | Full detailed brief — read this for deep context |
