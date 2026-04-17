@@ -329,9 +329,32 @@
     { href: '/arbitrage', label: 'Arbitrage', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/feed', label: '💬 Feed', gold: true },
-    { href: _navUserId ? '/m/' + _navUserId : '/creator/login', label: '👤 Profile', show: isLoggedIn }
+    { href: '/feed', label: '💬 Feed', gold: true }
   ];
+
+  // Profile navigation helper — reads JWT at click time, not at page load
+  window._goToMyProfile = function() {
+    var tokens = [localStorage.getItem('hf_token'), localStorage.getItem('hf_creator_token')].filter(Boolean);
+    for (var i = 0; i < tokens.length; i++) {
+      try {
+        var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        var uid = p.userId || p.sub || p.id;
+        if (uid) { window.location.href = '/m/' + uid; return; }
+      } catch (e) {}
+    }
+    window.location.href = '/creator/login';
+  };
+  window._goToMyPassport = function() {
+    var tokens = [localStorage.getItem('hf_token'), localStorage.getItem('hf_creator_token')].filter(Boolean);
+    for (var i = 0; i < tokens.length; i++) {
+      try {
+        var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        var uid = p.userId || p.sub || p.id;
+        if (uid) { window.location.href = '/passport/' + uid; return; }
+      } catch (e) {}
+    }
+    window.location.href = '/creator/login';
+  };
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
     { href: '/rewards', label: '💰 Rewards', gold: true },
@@ -376,12 +399,13 @@
   nav.innerHTML =
     '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
-      primaryLinks.filter(function(l) { return l.show !== false; }).map(function(l) {
-        var isActive = path === l.href || (l.href.indexOf('/m/') === 0 && path.indexOf('/m/') === 0);
+      primaryLinks.map(function(l) {
+        var isActive = path === l.href;
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
       }).join('') +
+      (isLoggedIn ? '<a href="#" onclick="event.preventDefault();_goToMyProfile()" class="nav-link' + (path.indexOf('/m/') === 0 ? ' active' : '') + '">👤 Profile</a>' : '') +
       '<div class="nav-more-wrap">' +
         '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More">' +
           '<svg viewBox="0 0 24 24" style="width:18px;height:18px"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>' +
@@ -429,8 +453,8 @@
     // Tier 1 — Your Stuff (logged-in only)
     allLinks.push({ href: '#', label: '🔗 Connect Wallet', id: 'navMobileWalletLink', gold: true });
     if (isLoggedIn) {
-      allLinks.push({ href: _navUserId ? '/m/' + _navUserId : '/creator/login', label: '👤 My Profile', gold: true });
-      allLinks.push({ href: _navUserId ? '/passport/' + _navUserId : '#', label: '🛂 Prediction Passport', gold: true });
+      allLinks.push({ href: '#', label: '👤 My Profile', gold: true, onclick: '_goToMyProfile()' });
+      allLinks.push({ href: '#', label: '🛂 Prediction Passport', gold: true, onclick: '_goToMyPassport()' });
       allLinks.push({ href: '/rewards', label: '💰 Rewards', gold: true });
     }
     allLinks.push({ sep: true });
@@ -451,7 +475,8 @@
       var isActive = path === l.href;
       var cls = 'nav-mobile-link' + (isActive ? ' active' : '') + (l.gold && !isActive ? ' gold' : '');
       var idAttr = l.id ? ' id="' + l.id + '"' : '';
-      return '<a href="' + l.href + '" class="' + cls + '"' + idAttr + '>' + l.label + '</a>';
+      var onclickAttr = l.onclick ? ' onclick="event.preventDefault();' + l.onclick + '"' : '';
+      return '<a href="' + l.href + '" class="' + cls + '"' + idAttr + onclickAttr + '>' + l.label + '</a>';
     }).join('');
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
