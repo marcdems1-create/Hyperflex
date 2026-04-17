@@ -15293,13 +15293,14 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     // then influencer content. Within each tier sort by posted_at DESC.
     // the hour.
     const postedDesc = (a, b) => new Date(b.posted_at) - new Date(a.posted_at);
-    const merged = [
-      ...normalizedPromoted,
-      ...userPosts.sort(postedDesc),
-      ...normalizedUserTakes.sort(postedDesc),
-      ...normalizedInfluencer.sort(postedDesc),
-      ...normalizedTakes.sort(postedDesc),
-    ].slice(0, lim);
+    // Promoted pinned first, then everything else sorted by time (newest first)
+    const allPosts = [
+      ...userPosts,
+      ...normalizedUserTakes,
+      ...normalizedInfluencer,
+      ...normalizedTakes,
+    ].sort(postedDesc);
+    const merged = [...normalizedPromoted, ...allPosts].slice(0, lim);
 
     // Attach live market prices/volume for every card that has a market_id.
     // Read from the warm screener cache (_screenerCache.data populated by
