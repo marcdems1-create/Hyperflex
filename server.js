@@ -15246,15 +15246,55 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       disagree_count: t.disagree_count || 0,
     }));
 
+    // ── 2d. Promoted posts — pinned to top of For You ──────────────────
+    let promotedPosts = [];
+    if (pool && !cursor) {
+      promotedPosts = await dbQuery(
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+                t.question, t.side, t.entry_price, t.thesis, t.source,
+                t.agree_count, t.disagree_count, t.is_correct, t.created_at,
+                t.promotion_impressions
+         FROM takes t
+         WHERE t.is_promoted = true
+           AND (t.promotion_expires_at IS NULL OR t.promotion_expires_at > NOW())
+         ORDER BY t.promoted_at DESC LIMIT 3`,
+        []
+      ).catch(() => []);
+      // Increment impression count
+      if (promotedPosts.length) {
+        const ids = promotedPosts.map(p => p.id);
+        dbQuery('UPDATE takes SET promotion_impressions = COALESCE(promotion_impressions, 0) + 1 WHERE id = ANY($1)', [ids]).catch(() => {});
+      }
+    }
+
+    const normalizedPromoted = promotedPosts.map(t => ({
+      id: 'promo_' + t.id,
+      _source: t.source || 'user',
+      _promoted: true,
+      user_id: t.user_id,
+      market_id: t.market_slug,
+      market_title: t.question,
+      direction: (t.side || '').toUpperCase(),
+      entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
+      thesis_text: t.thesis,
+      outcome: t.is_correct === true ? 'correct' : t.is_correct === false ? 'incorrect' : 'pending',
+      posted_at: t.created_at,
+      author: {
+        id: t.user_id,
+        display_name: (t.display_name && !t.display_name.startsWith('0x')) ? t.display_name : 'Anonymous',
+        avatar_url: t.avatar_url,
+      },
+      agree_count: t.agree_count || 0,
+      disagree_count: t.disagree_count || 0,
+    }));
+
     // ── 3. Merge everything + attach live market data ──────────────────
-    // Real-user predictions ALWAYS rank above influencer posts and
-    // influencer takes, even if an influencer post is newer. Within each
-    // tier, sort by posted_at DESC. That way a post from a human user
-    // lands at the top of the feed as soon as they hit Post, rather than
-    // competing with auto-ingested influencer content from earlier in
+    // Promoted posts first (pinned), then user predictions, then takes,
+    // then influencer content. Within each tier sort by posted_at DESC.
     // the hour.
     const postedDesc = (a, b) => new Date(b.posted_at) - new Date(a.posted_at);
     const merged = [
+      ...normalizedPromoted,
       ...userPosts.sort(postedDesc),
       ...normalizedUserTakes.sort(postedDesc),
       ...normalizedInfluencer.sort(postedDesc),
@@ -35916,6 +35956,68 @@ async function computeLocalBuilderFees(windowDays) {
     return { available: false, reason: err.message };
   }
 }
+
+// ── ADMIN: Promoted Posts Management ──────────────────────────────────────────
+
+// GET /api/admin/promotions — list all promoted + recent takes eligible for promotion
+app.get('/api/admin/promotions', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.json({ promoted: [], recent: [] });
+    const [promoted, recent] = await Promise.all([
+      dbQuery(`SELECT t.id, t.user_id, t.display_name, t.question, t.side, t.market_slug,
+                      t.thesis, t.agree_count, t.disagree_count, t.is_promoted,
+                      t.promoted_at, t.promoted_by, t.promotion_budget_usd,
+                      t.promotion_impressions, t.promotion_clicks, t.promotion_expires_at,
+                      t.created_at
+               FROM takes t WHERE t.is_promoted = true ORDER BY t.promoted_at DESC LIMIT 20`).catch(() => []),
+      dbQuery(`SELECT t.id, t.user_id, t.display_name, t.question, t.side, t.market_slug,
+                      t.thesis, t.agree_count, t.disagree_count, t.created_at
+               FROM takes t WHERE t.source IN ('user','whale','consensus') AND t.is_promoted IS NOT TRUE
+               ORDER BY (COALESCE(t.agree_count,0) + COALESCE(t.disagree_count,0)) DESC, t.created_at DESC LIMIT 30`).catch(() => []),
+    ]);
+    res.json({ promoted, recent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/promotions/:takeId — promote a take
+app.post('/api/admin/promotions/:takeId', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(400).json({ error: 'No DB pool' });
+    const { takeId } = req.params;
+    const { budget_usd, expires_hours } = req.body || {};
+    const expiresAt = expires_hours ? new Date(Date.now() + expires_hours * 3600000).toISOString() : null;
+    await dbQuery(
+      `UPDATE takes SET is_promoted = true, promoted_at = NOW(), promoted_by = $2,
+       promotion_budget_usd = $3, promotion_expires_at = $4
+       WHERE id = $1`,
+      [takeId, req.admin?.email || 'admin', budget_usd || 0, expiresAt]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/promotions/:takeId — remove promotion from a take
+app.delete('/api/admin/promotions/:takeId', requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(400).json({ error: 'No DB pool' });
+    await dbQuery('UPDATE takes SET is_promoted = false, promoted_at = NULL WHERE id = $1', [req.params.takeId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/promotions/:takeId/click — track click (called from feed card)
+app.post('/api/admin/promotions/:takeId/click', async (req, res) => {
+  try {
+    if (pool) await dbQuery('UPDATE takes SET promotion_clicks = COALESCE(promotion_clicks, 0) + 1 WHERE id = $1 AND is_promoted = true', [req.params.takeId]);
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false }); }
+});
 
 // GET /api/admin/builder-fees/local — always-available fee estimate
 // from our own polymarket_trades log. Doesn't call CLOB at all.

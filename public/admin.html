@@ -682,6 +682,7 @@
       <button class="admin-tab" id="tabBtnFinancials" onclick="showAdminTab('financials')">Financials</button>
       <button class="admin-tab" id="tabBtnBuilder" onclick="showAdminTab('builder')">Builder Fees</button>
       <button class="admin-tab" id="tabBtnInfluencers" onclick="showAdminTab('influencers')">📣 Influencers</button>
+      <button class="admin-tab" id="tabBtnPromotions" onclick="showAdminTab('promotions')">📌 Promotions</button>
     </div>
 
     <!-- Creators tab -->
@@ -1347,6 +1348,25 @@
       </div>
     </div>
 
+    <!-- Promotions tab -->
+    <div id="adminTabPromotions" style="display:none">
+      <div class="section-header" style="margin-bottom:16px">
+        <div class="section-title">📌 Promoted Posts</div>
+        <button class="refresh-btn" onclick="loadPromotions()">Refresh</button>
+      </div>
+
+      <div class="analytics-card" style="margin-bottom:16px">
+        <div class="card-title">Currently Promoted</div>
+        <div id="promotedList" style="font-size:12px;color:var(--dim)">Click Refresh to load</div>
+      </div>
+
+      <div class="analytics-card">
+        <div class="card-title">Recent Takes (eligible for promotion)</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:10px">Click "Promote" to pin a take to the top of For You feed</div>
+        <div id="promotableList" style="font-size:12px;color:var(--dim)">Click Refresh to load</div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1453,7 +1473,7 @@ async function loadCreators() {
 }
 
 // -- Admin tabs --
-const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials','builder','influencers'];
+const ALL_TABS = ['creators','users','analytics','flex','outreach','rewards','financials','builder','influencers','promotions'];
 
 function showAdminTab(tab) {
   ALL_TABS.forEach(t => {
@@ -1470,6 +1490,7 @@ function showAdminTab(tab) {
   if (tab === 'financials') loadFinancials();
   if (tab === 'builder') loadBuilderFees();
   if (tab === 'influencers') { loadInfluencers(); loadRecentTakes(); }
+  if (tab === 'promotions') loadPromotions();
 }
 
 // -- Outreach --
@@ -3268,7 +3289,72 @@ function quickImport(handle) {
   // Scroll to import form
   document.getElementById('tweetText').scrollIntoView({ behavior: 'smooth' });
 }
-</script>
 </body>
 </html>
+// ── Promotions ──
+async function loadPromotions() {
+  var pl = document.getElementById('promotedList');
+  var el = document.getElementById('promotableList');
+  pl.innerHTML = '<span class="spinner-inline"></span> Loading...';
+  el.innerHTML = '';
+  try {
+    var r = await fetch(API + '/api/admin/promotions?secret=' + encodeURIComponent(adminSecret));
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+
+    // Render currently promoted
+    if (!d.promoted || !d.promoted.length) {
+      pl.innerHTML = '<div style="padding:8px 0;color:var(--dim)">No promoted posts. Promote a take below to pin it to the top of For You.</div>';
+    } else {
+      pl.innerHTML = d.promoted.map(function(t) {
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(30,30,42,.3)">' +
+          '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(0,230,138,0.1);color:#00e68a">' + ((t.side||'').toUpperCase()) + '</span>' +
+          '<span style="flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (t.question||'').slice(0,80) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + (t.promotion_impressions||0) + ' imp · ' + (t.promotion_clicks||0) + ' clicks</span>' +
+          '<button onclick="unpromote(\'' + t.id + '\')" style="background:rgba(255,77,106,0.1);color:#ff4d6a;border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Remove</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Render promotable takes
+    if (!d.recent || !d.recent.length) {
+      el.innerHTML = '<div style="padding:8px 0;color:var(--dim)">No recent takes found</div>';
+    } else {
+      el.innerHTML = d.recent.map(function(t) {
+        var eng = (t.agree_count||0) + (t.disagree_count||0);
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(30,30,42,.3)">' +
+          '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:' + ((t.side||'').toUpperCase()==='YES' ? 'rgba(0,230,138,0.1);color:#00e68a' : 'rgba(255,77,106,0.1);color:#ff4d6a') + '">' + ((t.side||'').toUpperCase()) + '</span>' +
+          '<span style="flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (t.question||'').slice(0,70) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + (t.display_name||'Anon').slice(0,15) + ' · ' + eng + ' eng</span>' +
+          '<button onclick="promoteTake(\'' + t.id + '\')" style="background:rgba(201,146,13,0.15);color:var(--gold);border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Promote</button>' +
+        '</div>';
+      }).join('');
+    }
+  } catch (err) {
+    pl.innerHTML = 'Error: ' + err.message;
+  }
+}
+
+async function promoteTake(takeId) {
+  var hours = prompt('Promotion duration (hours, blank = no expiry):');
+  try {
+    var r = await fetch(API + '/api/admin/promotions/' + takeId + '?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expires_hours: hours ? parseInt(hours) : null })
+    });
+    if (!r.ok) throw new Error('Failed');
+    showToast('Take promoted — pinned to top of For You');
+    loadPromotions();
+  } catch (e) { showToast('Error: ' + e.message); }
+}
+
+async function unpromote(takeId) {
+  try {
+    await fetch(API + '/api/admin/promotions/' + takeId + '?secret=' + encodeURIComponent(adminSecret), { method: 'DELETE' });
+    showToast('Promotion removed');
+    loadPromotions();
+  } catch (e) { showToast('Error: ' + e.message); }
+}
+</script>
 <!-- deploy Tue Mar 31 21:15:51 EDT 2026 -->
