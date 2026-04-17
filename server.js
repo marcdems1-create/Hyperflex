@@ -15065,10 +15065,9 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     // so the frontend renders them through the same card.
     let influencerPosts = [];
     if (pool) {
-      // X/Twitter only — reddit/substack/youtube posts are background signals,
-      // not shown directly on the feed. Also require market_slug so every
-      // card has a linked market (the whole premise of the feature).
-      const infConditions = ["p.published_at IS NOT NULL", "i.platform = 'x'", "p.market_slug IS NOT NULL"];
+      // Include X and Reddit influencer posts — both have market-matched content.
+      // Require market_slug so every card has a linked market.
+      const infConditions = ["p.published_at IS NOT NULL", "i.platform IN ('x','reddit')", "p.market_slug IS NOT NULL"];
       const infParams = [];
       if (cursor) { infParams.push(cursor); infConditions.push(`p.published_at < $${infParams.length}`); }
       infParams.push(lim);
@@ -15205,6 +15204,48 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
         };
       });
 
+    // ── 2c. User + whale takes from `takes` table (source != 'influencer') ──
+    let userTakes = [];
+    if (pool) {
+      const tParams = [];
+      let tWhere = "WHERE t.source IN ('user','whale','consensus')";
+      if (mode === 'following' && userId) {
+        tParams.push(userId);
+        tWhere += ` AND (t.user_id = $${tParams.length}::text OR t.user_id IN (SELECT following_id::text FROM predictor_follows WHERE follower_id = $${tParams.length}::text))`;
+      }
+      if (cursor) { tParams.push(cursor); tWhere += ` AND t.created_at < $${tParams.length}`; }
+      tParams.push(lim);
+      userTakes = await dbQuery(
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+                t.question, t.side, t.entry_price, t.thesis, t.source,
+                t.agree_count, t.disagree_count, t.is_correct, t.created_at
+         FROM takes t ${tWhere}
+         ORDER BY t.created_at DESC LIMIT $${tParams.length}`,
+        tParams
+      ).catch(() => []);
+    }
+
+    const normalizedUserTakes = userTakes.map(t => ({
+      id: 'utake_' + t.id,
+      _source: t.source === 'whale' ? 'whale' : t.source === 'consensus' ? 'consensus' : 'user',
+      user_id: t.user_id,
+      market_id: t.market_slug,
+      market_title: t.question,
+      direction: (t.side || '').toUpperCase(),
+      entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
+      conviction: null,
+      thesis_text: t.thesis,
+      outcome: t.is_correct === true ? 'correct' : t.is_correct === false ? 'incorrect' : 'pending',
+      posted_at: t.created_at,
+      author: {
+        id: t.user_id,
+        display_name: (t.display_name && !t.display_name.startsWith('0x')) ? t.display_name : 'Anonymous',
+        avatar_url: t.avatar_url,
+      },
+      agree_count: t.agree_count || 0,
+      disagree_count: t.disagree_count || 0,
+    }));
+
     // ── 3. Merge everything + attach live market data ──────────────────
     // Real-user predictions ALWAYS rank above influencer posts and
     // influencer takes, even if an influencer post is newer. Within each
@@ -15215,6 +15256,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     const postedDesc = (a, b) => new Date(b.posted_at) - new Date(a.posted_at);
     const merged = [
       ...userPosts.sort(postedDesc),
+      ...normalizedUserTakes.sort(postedDesc),
       ...normalizedInfluencer.sort(postedDesc),
       ...normalizedTakes.sort(postedDesc),
     ].slice(0, lim);
@@ -43980,61 +44022,9 @@ app.post('/api/predictions', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/predictions/feed — following feed, chronological (auth required)
-app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-    const before = req.query.before || null;
-
-    if (!req.userId) {
-      // Public: recent pending predictions
-      let q = supabase.from('predictions').select('*').eq('outcome', 'pending').order('posted_at', { ascending: false }).limit(limit);
-      if (before) q = q.lt('posted_at', before);
-      const { data, error } = await q;
-      if (error) throw error;
-      return res.json({ predictions: await enrichPredictions(data || []), next_cursor: null, empty: false });
-    }
-
-    // Get followed user IDs (+ self so own predictions always show)
-    const { data: followRows } = await supabase.from('follows').select('following_id').eq('follower_id', req.userId);
-    const followedIds = (followRows || []).map(f => f.following_id);
-    followedIds.push(req.userId); // always include own predictions
-    const hasFollows = followRows && followRows.length > 0;
-    const isFollowingMode = req.query.mode === 'following';
-
-    if (!hasFollows) {
-      // No follows: For You shows all recent predictions; Following shows own only
-      let q;
-      if (isFollowingMode) {
-        q = supabase.from('predictions').select('*').eq('user_id', req.userId).order('posted_at', { ascending: false }).limit(limit + 1);
-      } else {
-        q = supabase.from('predictions').select('*').eq('outcome', 'pending').order('posted_at', { ascending: false }).limit(limit + 1);
-      }
-      if (before) q = q.lt('posted_at', before);
-      const { data, error } = await q;
-      if (error) throw error;
-      const rows = data || [];
-      const hasMore = rows.length > limit;
-      const page = rows.slice(0, limit);
-      const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
-      return res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: rows.length === 0, reason: rows.length === 0 ? 'no_predictions' : null });
-    }
-
-    let q = supabase.from('predictions').select('*').in('user_id', followedIds).order('posted_at', { ascending: false }).limit(limit + 1);
-    if (before) q = q.lt('posted_at', before);
-
-    const { data, error } = await q;
-    if (error) throw error;
-    const rows = data || [];
-    const hasMore = rows.length > limit;
-    const page = rows.slice(0, limit);
-    const nextCursor = hasMore ? page[page.length - 1].posted_at : null;
-
-    res.json({ predictions: await enrichPredictions(page, req.userId), next_cursor: nextCursor, empty: false });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+// REMOVED: duplicate /api/predictions/feed that was shadowing the enriched
+// version at line ~14992. That version merges user predictions + influencer
+// posts + takes into one feed. This Supabase-only fallback was from pre-pivot.
 
 // GET /api/predictions/user/:userId — all predictions for a user
 app.get('/api/predictions/user/:userId', async (req, res) => {
