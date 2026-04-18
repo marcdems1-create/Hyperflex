@@ -41,8 +41,12 @@ CREATE INDEX IF NOT EXISTS idx_sentiment_snapshots_divergence ON sentiment_snaps
 
 -- Per-user sharpness rating. Recomputed nightly from realized P&L, take
 -- accuracy, and volume. Used to weight reactions in snapshots.
+--
+-- user_id is TEXT (not UUID) because Railway's users.id column is TEXT.
+-- A UUID column here would fail every join and every seed INSERT with
+-- 'operator does not exist: text = uuid'.
 CREATE TABLE IF NOT EXISTS wallet_scores (
-  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT PRIMARY KEY,
   -- 0..100. Composite of (P&L tier × take accuracy × volume).
   sharpness_score NUMERIC NOT NULL DEFAULT 0,
   -- Individual components (for transparency / API sale):
