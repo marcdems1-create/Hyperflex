@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HYPERFLEX — Prediction Market Intelligence</title>
-<meta name="description" content="Live prediction market intelligence — whale trades, edge scores, and market signals across all platforms."/>
+<title>HYPERFLEX — The Times Square of Polymarket</title>
+<meta name="description" content="The hub for Polymarket traders. Track your accuracy, climb the leaderboard, and trade alpha with sharps. When we work together, we all get rich."/>
 <link rel="canonical" href="https://hyperflex.network/"/>
 <!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/"/>
-<meta property="og:title" content="HYPERFLEX — Prediction Market Intelligence"/>
-<meta property="og:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
+<meta property="og:title" content="HYPERFLEX — The Times Square of Polymarket"/>
+<meta property="og:description" content="Track your accuracy. Climb the leaderboard. Trade alpha with sharps. When we work together, we all get rich."/>
 <meta property="og:image" content="https://hyperflex.network/og-default.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@HyperFlexApp"/>
-<meta name="twitter:title" content="Explore — HYPERFLEX"/>
-<meta name="twitter:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
+<meta name="twitter:title" content="HYPERFLEX — The Times Square of Polymarket"/>
+<meta name="twitter:description" content="Track your accuracy. Climb the leaderboard. Trade alpha with sharps. When we work together, we all get rich."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -1083,23 +1083,28 @@ nav {
 </div>
 
 <div class="hero">
-  <div class="live-badge">Live Intelligence Feed</div>
-  <h1>Where smart money<br><span>is moving right now</span></h1>
-  <p>Signal-based edge detection across Polymarket, Kalshi, and sportsbooks.</p>
+  <div class="live-badge">The Times Square of Polymarket</div>
+  <h1>Track your accuracy.<br><span>Trade with sharps.</span></h1>
+  <p>HYPERFLEX is the hub where Polymarket traders rank up on the leaderboard, share takes, and compound edge together. <strong style="color:var(--text)">When we work together, we all get rich.</strong></p>
+  <div class="hero-cta-row" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:30px">
+    <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#0f0f0d;padding:13px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:.2px;transition:opacity .15s" onmouseenter="this.style.opacity='.88'" onmouseleave="this.style.opacity='1'">🎯 Track my accuracy →</a>
+    <a href="/predictors" style="display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--text);padding:13px 22px;border-radius:8px;font-weight:600;font-size:14px;text-decoration:none;border:1px solid var(--border-hover);transition:border-color .15s" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border-hover)'">🏆 See top sharps</a>
+    <a href="/feed" style="display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--text-soft);padding:13px 18px;border-radius:8px;font-weight:600;font-size:14px;text-decoration:none">💬 Open the feed</a>
+  </div>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
-      <div class="stat-pill-label">Markets Tracked</div>
+      <div class="stat-pill-label">Markets Live</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statWhaleCapital">—</div>
-      <div class="stat-pill-label">Whale Capital</div>
+      <div class="stat-pill-label">Smart Money Tracked</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statLiveMarkets">—</div>
-      <div class="stat-pill-label">Whale Positions</div>
+      <div class="stat-pill-label">Sharp Positions</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
@@ -1109,12 +1114,93 @@ nav {
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTopROI">—</div>
-      <div class="stat-pill-label">Top Max ROI</div>
+      <div class="stat-pill-label">Top ROI Today</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statCommunities">—</div>
-      <div class="stat-pill-label">Live Signals</div>
+      <div class="stat-pill-label">Active Signals</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOP SHARPS THIS WEEK — accuracy leaderboard preview ═══ -->
+<div style="max-width:1200px;margin:0 auto 28px;padding:0 40px" id="topSharpsSection">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px">
+        <span style="display:inline-block;width:6px;height:6px;background:var(--gold);border-radius:50%;animation:pulse-dot 1.8s infinite"></span>
+        ACCURACY LEADERBOARD · LAST 30 DAYS
+      </div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:-.6px;color:var(--text)">Top sharps on Polymarket right now</div>
+      <div style="font-size:13px;color:var(--text-soft);margin-top:4px">Follow them. Copy their thesis. Beat them. <strong style="color:var(--gold)">When we work together, we all get rich.</strong></div>
+    </div>
+    <a href="/predictors" style="font-family:var(--mono);font-size:12px;color:var(--gold);text-decoration:none;font-weight:700;padding:8px 14px;border:1px solid var(--gold);border-radius:6px">Full leaderboard →</a>
+  </div>
+  <div id="topSharpsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+    <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px">Loading top sharps…</div>
+  </div>
+</div>
+<script>
+(async function loadTopSharps(){
+  var grid = document.getElementById('topSharpsGrid');
+  if (!grid) return;
+  function _esc(s){var d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
+  function _money(n){var a=Math.abs(n||0);var s=n<0?'-$':'$';if(a>=1e6)return s+(a/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(a>=1e3)return s+(a/1e3).toFixed(1).replace(/\.0$/,'')+'K';return s+Math.round(a)}
+  try {
+    var r = await fetch('/api/leaderboard?period=30d');
+    var rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) { document.getElementById('topSharpsSection').style.display='none'; return; }
+    var top = rows.slice(0,5);
+    grid.innerHTML = top.map(function(t,i){
+      var rank = t.rank || (i+1);
+      var rankColor = rank===1?'#c9920d':rank===2?'#a0a0b4':rank===3?'#cd7f32':'var(--muted)';
+      var pnlPos = (t.total_pnl||0) >= 0;
+      var roi = (typeof t.roi==='number') ? t.roi : 0;
+      var name = _esc(t.display_name || 'Trader');
+      var url = t.wallet ? '/m/' + encodeURIComponent(t.wallet) : '/predictors';
+      return '<a href="'+url+'" style="display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;transition:transform .15s,border-color .15s" onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.transform=\'\';this.style.borderColor=\'var(--border)\'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+          '<div style="font-family:var(--mono);font-size:14px;font-weight:800;color:'+rankColor+'">#'+rank+'</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:var(--gold-dim);padding:2px 7px;border-radius:4px">SHARP '+(t.sharp_score||0)+'</div>' +
+        '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+name+'</div>' +
+        '<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px">' +
+          '<div><div style="color:var(--muted);font-size:9px;letter-spacing:.5px">PnL</div><div style="color:'+(pnlPos?'var(--green)':'var(--red)')+';font-weight:700">'+_money(t.total_pnl)+'</div></div>' +
+          '<div style="text-align:right"><div style="color:var(--muted);font-size:9px;letter-spacing:.5px">ROI</div><div style="color:'+(roi>=0?'var(--green)':'var(--red)')+';font-weight:700">'+(roi>=0?'+':'')+roi+'%</div></div>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch(e){ document.getElementById('topSharpsSection').style.display='none'; }
+})();
+</script>
+
+<!-- ═══ ALPHA TOGETHER MANIFESTO BAND ═══ -->
+<div style="max-width:1200px;margin:0 auto 28px;padding:0 40px">
+  <div style="background:linear-gradient(135deg,rgba(201,146,13,0.10) 0%,rgba(168,85,247,0.06) 100%);border:1px solid rgba(201,146,13,0.30);border-radius:14px;padding:28px;position:relative;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;margin-bottom:22px">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:1.5px;color:var(--gold);font-weight:700;margin-bottom:6px">THE HYPERFLEX MANIFESTO</div>
+        <div style="font-size:24px;font-weight:800;letter-spacing:-.6px;color:var(--text);line-height:1.15">When we work together,<br><span style="color:var(--gold)">we all get rich.</span></div>
+      </div>
+      <a href="/feed" style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#0f0f0d;padding:13px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:.2px;transition:opacity .15s" onmouseenter="this.style.opacity='.88'" onmouseleave="this.style.opacity='1'">💬 Open the FLEX Feed →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+      <div style="background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:18px">
+        <div style="font-size:22px;margin-bottom:8px">🎯</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Verified accuracy</div>
+        <div style="font-size:12px;color:var(--text-soft);line-height:1.5">Every prediction scored on resolution. Your track record becomes your reputation — permanent, public, portable.</div>
+      </div>
+      <div style="background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:18px">
+        <div style="font-size:22px;margin-bottom:8px">🏆</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Climb the leaderboard</div>
+        <div style="font-size:12px;color:var(--text-soft);line-height:1.5">Compete with the sharpest Polymarket traders alive. Tier up — Speculator → Solid → Sharp → Oracle. "Top 50 on HYPERFLEX" lives in your bio.</div>
+      </div>
+      <div style="background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:18px">
+        <div style="font-size:22px;margin-bottom:8px">⚡</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Trade alpha, not noise</div>
+        <div style="font-size:12px;color:var(--text-soft);line-height:1.5">Post takes. Quote-predict. Argue thesis. Find the sharps before the market does — and bring your community with you.</div>
+      </div>
     </div>
   </div>
 </div>
