@@ -3548,6 +3548,11 @@ window.hfxOpenDeposit = function() {
           <span id="topbarFlexBadge" style="color:var(--text);font-weight:700">0 FP</span>
           <span id="topbarFlexTier" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:800"></span>
         </div>
+        <div id="topbarSharpBadge" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(201,146,13,0.10);border:1px solid rgba(201,146,13,0.30);border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer" onclick="openMyProfile()" title="Your Sharp Score — click to view profile">
+          <span style="color:var(--gold);font-weight:700">🎯</span>
+          <span id="topbarSharpScore" style="color:var(--text);font-weight:700">—</span>
+          <span id="topbarSharpTier" style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(201,146,13,0.18);color:var(--gold);font-weight:800;letter-spacing:.3px"></span>
+        </div>
         <a href="/" class="btn-explore">⚡ Explore</a>
       </div>
     </div>
@@ -3654,6 +3659,46 @@ window.hfxOpenDeposit = function() {
           <button class="btn-secondary" onclick="showTab('share')" style="font-size:12px;padding:6px 12px;white-space:nowrap">Share →</button>
         </div>
 
+        <!-- ═══ TRADER HUB — your accuracy + standing ═══ -->
+        <div id="traderHubCard" style="background:linear-gradient(135deg,rgba(201,146,13,0.12) 0%,rgba(168,85,247,0.06) 100%);border:1px solid rgba(201,146,13,0.30);border-radius:14px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px">
+            <div style="flex:1;min-width:240px">
+              <div style="font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:var(--gold);font-weight:700;margin-bottom:6px">YOUR TRADER PROFILE · LIVE</div>
+              <div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.5px;line-height:1.15">Your accuracy is your reputation.</div>
+              <div style="font-size:13px;color:var(--soft);margin-top:6px">Every prediction scored. Climb the Polymarket leaderboard. <strong style="color:var(--text)">When we work together, we all get rich.</strong></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-secondary" style="font-size:13px;padding:10px 16px" onclick="openMyProfile()">👤 My public profile</button>
+              <a href="/predictors" class="btn-primary" style="font-size:13px;padding:10px 16px;text-decoration:none;display:inline-block">🏆 See where I rank →</a>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:18px">
+            <div style="background:rgba(0,0,0,0.30);border:1px solid var(--border);border-radius:10px;padding:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px">SHARP SCORE</div>
+              <div style="display:flex;align-items:baseline;gap:8px">
+                <div style="font-family:var(--mono);font-size:26px;font-weight:800;color:var(--gold)" id="thSharpScore">—</div>
+                <div style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--gold-dim,rgba(201,146,13,0.15));color:var(--gold)" id="thSharpTier">—</div>
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.30);border:1px solid var(--border);border-radius:10px;padding:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px">WIN RATE</div>
+              <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--text)" id="thWinRate">—</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.30);border:1px solid var(--border);border-radius:10px;padding:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px">PREDICTIONS</div>
+              <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--text)" id="thPreds">—</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.30);border:1px solid var(--border);border-radius:10px;padding:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px">WIN STREAK</div>
+              <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--green)" id="thStreak">—</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.30);border:1px solid var(--border);border-radius:10px;padding:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px">TRACKED PnL</div>
+              <div style="font-family:var(--mono);font-size:22px;font-weight:800" id="thPnl">—</div>
+            </div>
+          </div>
+        </div>
+
         <div class="stats-row">
           <div class="stat-card">
             <div class="stat-card-icon">👥</div>
@@ -3740,6 +3785,20 @@ window.hfxOpenDeposit = function() {
           </div>
           <div class="leaderboard" id="overviewLeaderboard">
             <div class="loading-row">Loading...</div>
+          </div>
+        </div>
+
+        <!-- ═══ TOP SHARPS ON POLYMARKET — global accuracy leaderboard preview ═══ -->
+        <div class="section" id="dashTopSharpsSection">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🏆 Top sharps on Polymarket</div>
+              <div class="section-subtitle">Last 30 days — follow them, copy their thesis, beat them.</div>
+            </div>
+            <a href="/predictors" class="btn-secondary" style="text-decoration:none;display:inline-block">Full leaderboard →</a>
+          </div>
+          <div id="dashTopSharpsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+            <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--dim);font-family:var(--mono);font-size:11px">Loading top sharps…</div>
           </div>
         </div>
 
@@ -21080,6 +21139,105 @@ document.addEventListener('DOMContentLoaded', function() {
   if (exEl) exEl.addEventListener('change', updateSizeToggleStyle);
   if (raEl) raEl.addEventListener('change', updateSizeToggleStyle);
 });
+</script>
+
+<script>
+// ═══ TRADER HUB — Sharp Score, accuracy, top sharps ═══
+(function() {
+  function _getToken() { return localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || ''; }
+  function _getUser() { try { return JSON.parse(localStorage.getItem('hf_user') || 'null'); } catch(e) { return null; } }
+  function _money(n) { var a = Math.abs(n||0); var s = n<0?'-$':'$'; if (a>=1e6) return s+(a/1e6).toFixed(1).replace(/\.0$/,'')+'M'; if (a>=1e3) return s+(a/1e3).toFixed(1).replace(/\.0$/,'')+'K'; return s+Math.round(a); }
+  function _esc(s) { var d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+  function _tier(score) {
+    if (score >= 70) return { label: 'ORACLE', color: '#a855f7' };
+    if (score >= 60) return { label: 'SHARP',  color: '#c9920d' };
+    if (score >= 50) return { label: 'SOLID',  color: '#00e68a' };
+    return { label: 'SPECULATOR', color: '#8888a0' };
+  }
+
+  window.openMyProfile = function() {
+    var u = _getUser();
+    if (u && u.id) { window.location.href = '/m/' + encodeURIComponent(u.id); return; }
+    if (u && u.slug) { window.location.href = '/u/' + encodeURIComponent(u.slug); return; }
+    window.location.href = '/predictors';
+  };
+
+  async function loadTraderHub() {
+    var token = _getToken();
+    if (!token) return;
+    try {
+      var r = await fetch('/api/predictors/me/score', { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) return;
+      var d = await r.json();
+      var sharp = d.sharp_score || 0;
+      var winRate = Math.round((d.win_rate || 0) * 100);
+      var preds = d.total_predictions || 0;
+      var streak = d.win_streak || 0;
+      var pnlPts = d.pnl_pts || 0;
+      var t = _tier(sharp);
+
+      var el;
+      el = document.getElementById('thSharpScore'); if (el) el.textContent = sharp;
+      el = document.getElementById('thSharpTier');  if (el) { el.textContent = t.label; el.style.color = t.color; el.style.background = t.color + '22'; }
+      el = document.getElementById('thWinRate');    if (el) el.textContent = winRate + '%';
+      el = document.getElementById('thPreds');      if (el) el.textContent = preds.toLocaleString();
+      el = document.getElementById('thStreak');     if (el) el.textContent = streak > 0 ? '🔥 ' + streak : '—';
+      el = document.getElementById('thPnl');        if (el) { el.textContent = pnlPts >= 0 ? '+' + pnlPts.toLocaleString() : pnlPts.toLocaleString(); el.style.color = pnlPts >= 0 ? 'var(--green)' : 'var(--red)'; }
+
+      // Topbar badge
+      var badge = document.getElementById('topbarSharpBadge');
+      if (badge) {
+        badge.style.display = 'inline-flex';
+        var sc = document.getElementById('topbarSharpScore'); if (sc) sc.textContent = sharp;
+        var tr = document.getElementById('topbarSharpTier');  if (tr) { tr.textContent = t.label; tr.style.color = t.color; tr.style.background = t.color + '22'; }
+      }
+    } catch(e) {}
+  }
+
+  async function loadDashTopSharps() {
+    var grid = document.getElementById('dashTopSharpsGrid');
+    if (!grid) return;
+    try {
+      var r = await fetch('/api/leaderboard?period=30d');
+      var rows = await r.json();
+      if (!Array.isArray(rows) || !rows.length) {
+        var sec = document.getElementById('dashTopSharpsSection');
+        if (sec) sec.style.display = 'none';
+        return;
+      }
+      grid.innerHTML = rows.slice(0, 5).map(function(t, i) {
+        var rank = t.rank || (i + 1);
+        var rankColor = rank === 1 ? '#c9920d' : rank === 2 ? '#a0a0b4' : rank === 3 ? '#cd7f32' : 'var(--dim)';
+        var pnl = t.total_pnl || 0;
+        var roi = typeof t.roi === 'number' ? t.roi : 0;
+        var url = t.wallet ? '/m/' + encodeURIComponent(t.wallet) : '/predictors';
+        return '<a href="' + url + '" style="display:block;text-decoration:none;color:inherit;background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:12px;transition:transform .15s,border-color .15s" onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.borderColor=\'rgba(201,146,13,0.5)\'" onmouseleave="this.style.transform=\'\';this.style.borderColor=\'var(--border)\'">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+            '<span style="font-family:var(--mono);font-size:13px;font-weight:800;color:' + rankColor + '">#' + rank + '</span>' +
+            '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.15);padding:2px 6px;border-radius:4px">SHARP ' + (t.sharp_score || 0) + '</span>' +
+          '</div>' +
+          '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(t.display_name || 'Trader') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px">' +
+            '<span style="color:' + (pnl >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:700">' + _money(pnl) + '</span>' +
+            '<span style="color:' + (roi >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:700">' + (roi >= 0 ? '+' : '') + roi + '%</span>' +
+          '</div>' +
+        '</a>';
+      }).join('');
+    } catch(e) {
+      var sec = document.getElementById('dashTopSharpsSection');
+      if (sec) sec.style.display = 'none';
+    }
+  }
+
+  function _kick() {
+    loadTraderHub();
+    loadDashTopSharps();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _kick);
+  else _kick();
+  // Refresh after dashboard init has had a chance to seed hf_user
+  setTimeout(_kick, 1500);
+})();
 </script>
 
 </body>
