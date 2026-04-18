@@ -650,6 +650,209 @@ body {
   padding: 0 4px;
 }
 
+/* ── Alpha Feed — market signal cards, matches premium glass system ── */
+.alpha-stats-strip {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.alpha-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  flex: 1 1 auto;
+  min-width: 140px;
+  transition: border-color 0.14s;
+}
+.alpha-stat:hover { border-color: rgba(255,255,255,0.12); }
+.alpha-stat-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.alpha-stat-lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.alpha-stat-hot .alpha-stat-val { color: var(--green); }
+.alpha-stat-whale .alpha-stat-val { color: #a855f7; }
+.alpha-stat-new .alpha-stat-val { color: var(--blue, #4d9fff); }
+.alpha-stat-tracked .alpha-stat-val { color: var(--gold); }
+
+.alpha-list {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 12px 28px -14px rgba(0,0,0,0.4);
+}
+.alpha-card {
+  display: flex;
+  align-items: stretch;
+  text-decoration: none;
+  color: inherit;
+  padding: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.12s;
+}
+.alpha-card:last-child { border-bottom: none; }
+.alpha-card:hover { background: rgba(255,255,255,0.025); }
+.alpha-card-stripe {
+  width: 3px;
+  flex-shrink: 0;
+  background: transparent;
+}
+.alpha-card.hot .alpha-card-stripe { background: var(--green); box-shadow: 0 0 12px rgba(0,230,138,0.3); }
+.alpha-card.warm .alpha-card-stripe { background: #4d9fff; }
+.alpha-card-body {
+  flex: 1;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.alpha-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.alpha-edge {
+  text-align: center;
+  flex-shrink: 0;
+  width: 50px;
+}
+.alpha-edge-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.alpha-card.hot .alpha-edge-val { color: var(--green); }
+.alpha-card.warm .alpha-edge-val { color: #4d9fff; }
+.alpha-edge-lbl {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 3px;
+}
+.alpha-mid {
+  flex: 1;
+  min-width: 0;
+}
+.alpha-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.alpha-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.alpha-tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.alpha-tag.whale { background: rgba(168,85,247,0.1); color: #c4a3ff; border-color: rgba(168,85,247,0.28); }
+.alpha-tag.new   { background: rgba(0,230,138,0.1); color: var(--green); border-color: rgba(0,230,138,0.3); }
+.alpha-tag.depth { background: rgba(77,159,255,0.1); color: #86b7ff; border-color: rgba(77,159,255,0.3); }
+.alpha-tag.mom   { background: rgba(245,158,11,0.1); color: #f5c842; border-color: rgba(245,158,11,0.3); }
+.alpha-tag.expiry{ background: rgba(255,107,107,0.1); color: var(--red); border-color: rgba(255,107,107,0.28); }
+.alpha-age {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.alpha-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.alpha-ascore {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.alpha-ascore.strong { background: var(--green); color: #042018; }
+.alpha-ascore.medium { background: rgba(77,159,255,0.2); color: #86b7ff; }
+.alpha-ascore.weak   { background: rgba(255,255,255,0.06); color: var(--soft); }
+.alpha-yes {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.alpha-yes.bullish { color: var(--green); }
+.alpha-yes.bearish { color: var(--red); }
+.alpha-yes.neutral { color: var(--text); }
+
+.alpha-trade {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.alpha-trade.yes { background: rgba(0,230,138,0.08); border: 1px solid rgba(0,230,138,0.18); }
+.alpha-trade.no  { background: rgba(255,77,106,0.08); border: 1px solid rgba(255,77,106,0.18); }
+.alpha-trade-side { font-weight: 800; letter-spacing: 0.04em; }
+.alpha-trade.yes .alpha-trade-side { color: var(--green); }
+.alpha-trade.no  .alpha-trade-side { color: var(--red); }
+.alpha-trade-arr { color: var(--muted); }
+.alpha-trade-val { color: var(--text); }
+.alpha-trade-roi { font-weight: 800; margin-left: auto; }
+.alpha-trade.yes .alpha-trade-roi { color: var(--green); }
+.alpha-trade.no  .alpha-trade-roi { color: var(--red); }
+.alpha-trade-whale { color: var(--muted); font-size: 10.5px; }
+
+@media (max-width: 600px) {
+  .alpha-stat { min-width: 100px; padding: 9px 12px; }
+  .alpha-stat-val { font-size: 18px; }
+  .alpha-stat-lbl { font-size: 11px; }
+  .alpha-card-body { padding: 14px 14px; }
+  .alpha-card-row { gap: 10px; }
+  .alpha-edge { width: 42px; }
+  .alpha-edge-val { font-size: 20px; }
+  .alpha-q { font-size: 13.5px; }
+  .alpha-yes { font-size: 16px; }
+}
+
 /* More toggle */
 .nav-more-toggle .nav-icon {
   transition: transform 0.2s;
@@ -9416,29 +9619,29 @@ function renderAlphaCards() {
   function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   function fmtVol(v) { if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'; if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K'; return '$' + Math.round(v); }
 
-  el.innerHTML = showing.map(function(m, i) {
+  var cards = showing.map(function(m) {
     var edge = m.edge_score || 0;
     var alpha = m.alpha_score || 0;
     var t = m.trade || {};
     var side = (t.side || 'YES').toUpperCase();
-    var sideColor = side === 'YES' ? '#00e68a' : '#ff4d6a';
-    var sideBg = side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
     var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
     var ec = m.edge_components || {};
     var url = m.slug ? '/market/' + m.slug + (m.market_id ? '?outcome=' + encodeURIComponent(m.market_id) : '') : '/alpha';
-    var borderLeft = edge >= 60 ? '3px solid #00e68a' : edge >= 35 ? '3px solid #4d9fff' : '3px solid transparent';
+    var cardCls = edge >= 60 ? 'alpha-card hot' : edge >= 35 ? 'alpha-card warm' : 'alpha-card';
 
-    // Alpha badge
-    var alphaBg = alpha >= 7 ? '#00e68a' : alpha >= 4 ? '#4d9fff' : '#4a4760';
-    var alphaText = alpha >= 7 ? '#000' : '#fff';
-
-    // Signal tags
+    // Signal tags (now class-based)
     var tags = [];
-    if (m.whale_count > 0) tags.push('<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(168,85,247,0.1);color:#a855f7;border:1px solid rgba(168,85,247,0.2)">🐋 ' + m.whale_count + '</span>');
-    if (m.is_new) tags.push('<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(0,230,138,0.1);color:#00e68a;border:1px solid rgba(0,230,138,0.2)">⚡ NEW</span>');
-    if (m.depth_ratio != null) { var imb = Math.max(m.depth_ratio, 1 / m.depth_ratio); if (imb >= 1.5) tags.push('<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(77,159,255,0.1);color:#4d9fff;border:1px solid rgba(77,159,255,0.2)">📊 ' + (m.depth_side === 'bid' ? 'Bid' : 'Ask') + ' ' + imb.toFixed(1) + 'x</span>'); }
-    if ((ec.momentum || 0) >= 8) { var pc = m.price_change_24h || 0; tags.push('<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)">' + (pc > 0 ? '📈 +' : '📉 ') + Math.round(pc) + '%</span>'); }
-    if ((ec.decay || 0) > 0) tags.push('<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(255,107,107,0.1);color:#ff6b6b;border:1px solid rgba(255,107,107,0.2)">⏱ ' + (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') + '</span>');
+    if (m.whale_count > 0) tags.push('<span class="alpha-tag whale">🐋 ' + m.whale_count + '</span>');
+    if (m.is_new) tags.push('<span class="alpha-tag new">⚡ NEW</span>');
+    if (m.depth_ratio != null) {
+      var imb = Math.max(m.depth_ratio, 1 / m.depth_ratio);
+      if (imb >= 1.5) tags.push('<span class="alpha-tag depth">📊 ' + (m.depth_side === 'bid' ? 'Bid' : 'Ask') + ' ' + imb.toFixed(1) + 'x</span>');
+    }
+    if ((ec.momentum || 0) >= 8) {
+      var pc = m.price_change_24h || 0;
+      tags.push('<span class="alpha-tag mom">' + (pc > 0 ? '📈 +' : '📉 ') + Math.round(pc) + '%</span>');
+    }
+    if ((ec.decay || 0) > 0) tags.push('<span class="alpha-tag expiry">⏱ ' + (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') + '</span>');
 
     // Age
     var ageStr = '';
@@ -9447,40 +9650,50 @@ function renderAlphaCards() {
       ageStr = mins < 60 ? mins + 'm ago' : mins < 1440 ? Math.floor(mins / 60) + 'h ago' : Math.floor(mins / 1440) + 'd ago';
     }
 
-    return '<a href="' + url + '" style="display:flex;align-items:stretch;text-decoration:none;color:inherit;padding:0;border-bottom:1px solid #1a1917;transition:background .15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseleave="this.style.background=\'transparent\'">' +
-      '<div style="width:3px;flex-shrink:0;background:' + (edge >= 60 ? '#00e68a' : edge >= 35 ? '#4d9fff' : 'transparent') + '"></div>' +
-      '<div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:8px">' +
-        // Row 1: Score + Question + Alpha badge
-        '<div style="display:flex;align-items:flex-start;gap:12px">' +
-          '<div style="text-align:center;flex-shrink:0;width:44px">' +
-            '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:' + (edge >= 60 ? '#00e68a' : edge >= 35 ? '#4d9fff' : 'var(--text)') + ';line-height:1">' + edge + '</div>' +
-            '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Edge</div>' +
+    // α badge strength
+    var ascoreCls = alpha >= 7 ? 'strong' : alpha >= 4 ? 'medium' : 'weak';
+
+    // Yes% color
+    var yesCls = yesPct >= 70 ? 'bullish' : yesPct <= 30 ? 'bearish' : 'neutral';
+
+    // Trade strip
+    var tradeStrip = '';
+    if (t.entry_cost != null) {
+      var tradeCls = side === 'YES' ? 'yes' : 'no';
+      tradeStrip = '<div class="alpha-trade ' + tradeCls + '">' +
+        '<span class="alpha-trade-side">' + side + '</span>' +
+        '<span class="alpha-trade-val">Pay ' + t.entry_cost + '\u00A2</span>' +
+        '<span class="alpha-trade-arr">→</span>' +
+        '<span class="alpha-trade-val">Win ' + t.potential_profit + '\u00A2</span>' +
+        '<span class="alpha-trade-roi">+' + t.roi_pct + '% ROI</span>' +
+        (m.total_whale_capital ? '<span class="alpha-trade-whale">' + fmtVol(m.total_whale_capital) + ' whale $</span>' : '') +
+      '</div>';
+    }
+
+    return '<a href="' + url + '" class="' + cardCls + '">' +
+      '<div class="alpha-card-stripe"></div>' +
+      '<div class="alpha-card-body">' +
+        '<div class="alpha-card-row">' +
+          '<div class="alpha-edge">' +
+            '<div class="alpha-edge-val">' + edge + '</div>' +
+            '<div class="alpha-edge-lbl">Edge</div>' +
           '</div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:14px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:4px">' + esc(m.question || '') + '</div>' +
-            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-              tags.join('') +
-              (ageStr ? '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' + ageStr + '</span>' : '') +
+          '<div class="alpha-mid">' +
+            '<div class="alpha-q">' + esc(m.question || '') + '</div>' +
+            '<div class="alpha-tags">' + tags.join('') +
+              (ageStr ? '<span class="alpha-age">' + ageStr + '</span>' : '') +
             '</div>' +
           '</div>' +
-          '<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">' +
-            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:' + alphaBg + ';color:' + alphaText + ';white-space:nowrap">\u03B1 ' + alpha.toFixed(1) + '</span>' +
-            (yesPct != null ? '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (yesPct >= 70 ? '#00e68a' : yesPct <= 30 ? '#ff4d6a' : 'var(--text)') + ';line-height:1">' + yesPct + '%</span>' : '') +
+          '<div class="alpha-right">' +
+            '<span class="alpha-ascore ' + ascoreCls + '">α ' + alpha.toFixed(1) + '</span>' +
+            (yesPct != null ? '<span class="alpha-yes ' + yesCls + '">' + yesPct + '%</span>' : '') +
           '</div>' +
         '</div>' +
-        // Row 2: Trade context strip
-        (t.entry_cost != null ? '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:' + sideBg + ';border-radius:6px;font-family:var(--mono);font-size:11px">' +
-          '<span style="font-weight:700;color:' + sideColor + '">' + side + '</span>' +
-          '<span style="color:var(--muted)">Pay ' + t.entry_cost + '\u00A2</span>' +
-          '<span style="color:var(--muted)">\u2192</span>' +
-          '<span style="color:var(--text)">Win ' + t.potential_profit + '\u00A2</span>' +
-          '<span style="color:var(--muted)">\u2192</span>' +
-          '<span style="font-weight:700;color:' + sideColor + '">+' + t.roi_pct + '% ROI</span>' +
-          (m.total_whale_capital ? '<span style="margin-left:auto;color:var(--muted)">' + fmtVol(m.total_whale_capital) + ' whale $</span>' : '') +
-        '</div>' : '') +
+        tradeStrip +
       '</div>' +
     '</a>';
   }).join('');
+  el.innerHTML = '<div class="alpha-list">' + cards + '</div>';
 }
 
 function loadAlphaTab() {
@@ -9498,11 +9711,12 @@ function loadAlphaTab() {
     var hotCount = mkts.filter(function(m) { return (m.edge_score || 0) >= 60; }).length;
     var whaleCount = mkts.filter(function(m) { return (m.whale_count || 0) >= 3; }).length;
     var newCount = mkts.filter(function(m) { return m.is_new; }).length;
+    statsEl.className = 'alpha-stats-strip';
     statsEl.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#00e68a">' + hotCount + '</span><span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Hot edges</span></div>' +
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#a855f7">' + whaleCount + '</span><span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Whale clusters</span></div>' +
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#4d9fff">' + newCount + '</span><span style="font-family:var(--sans);font-size:11px;color:var(--muted)">New signals</span></div>' +
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--gold)">' + mkts.length + '</span><span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Markets tracked</span></div>';
+      '<div class="alpha-stat alpha-stat-hot"><span class="alpha-stat-val">' + hotCount + '</span><span class="alpha-stat-lbl">Hot edges</span></div>' +
+      '<div class="alpha-stat alpha-stat-whale"><span class="alpha-stat-val">' + whaleCount + '</span><span class="alpha-stat-lbl">Whale clusters</span></div>' +
+      '<div class="alpha-stat alpha-stat-new"><span class="alpha-stat-val">' + newCount + '</span><span class="alpha-stat-lbl">New signals</span></div>' +
+      '<div class="alpha-stat alpha-stat-tracked"><span class="alpha-stat-val">' + mkts.length + '</span><span class="alpha-stat-lbl">Markets tracked</span></div>';
 
     renderAlphaCards();
   }).catch(function(err) {
