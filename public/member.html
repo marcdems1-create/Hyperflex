@@ -756,7 +756,15 @@ async function enrichFromLivePolymarket() {
 
     let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
     for (const p of positions) {
-      vol += Math.abs(p.cost_basis || 0);
+      // Volume fallback: Polymarket's data-api sometimes returns cost_basis=0
+      // for closed positions. Use the largest plausible size signal available.
+      const size = Math.max(
+        Math.abs(p.cost_basis || 0),
+        Math.abs(p.cash_value || 0),
+        Math.abs(p.pnl || 0),
+        (p.shares || 0) * (p.current_price || 0)
+      );
+      vol += size;
       pnl += p.pnl || 0;
       if ((p.cash_value || 0) > 0.01) open++;
       if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
@@ -772,6 +780,11 @@ async function enrichFromLivePolymarket() {
     if (vSub) vSub.textContent = positions.length + ' positions';
     if (pEl) { pEl.textContent = pnlFmt; pEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
     if (pSub) pSub.textContent = wins + 'W / ' + losses + 'L';
+
+    // Recompute tier from live data and re-render the tier card. The initial
+    // template uses DB stats (often empty for newly-connected wallets) —
+    // without this, users stuck on 'Building track record · 0/5' forever.
+    recomputeTierFromLive({ pnl, wins, losses, positionCount: positions.length, isTopWhale: data.user.is_whale && data.user.whale_rank && data.user.whale_rank <= 50 });
 
     // Also render the Trades tab with live positions
     const list = document.getElementById('tradesList');
@@ -809,6 +822,82 @@ async function enrichFromLivePolymarket() {
       tradesTabBtn.insertAdjacentHTML('beforeend', ` <span class="tab-count">${positions.length}</span>`);
     }
   } catch (e) { console.warn('[live-polymarket]', e); }
+}
+
+// Recompute + re-render tier using live Polymarket numbers. Mirrors the
+// logic in load()'s template but runs after enrichFromLivePolymarket so
+// the card reflects actual positions, not an empty polymarket_trades table.
+function recomputeTierFromLive({ pnl, wins, losses, positionCount, isTopWhale }) {
+  const closedCount = wins + losses;
+  const closeRate = closedCount > 0 ? Math.round((wins / closedCount) * 100) : 0;
+  let tierEmoji, tierLabel, tierColorCss, rankDesc, tierProgress = null;
+  if (pnl >= 200000) {
+    tierEmoji = '💎'; tierLabel = 'FLEXIN'; tierColorCss = 'var(--gold)';
+    rankDesc = 'Quarter-million+ realized P&L. Top 0.05% of Polymarket.';
+  } else if (pnl >= 100000 || isTopWhale) {
+    tierEmoji = '🐋'; tierLabel = 'WHALE'; tierColorCss = 'var(--purple)';
+    rankDesc = 'Six-figure P&L or top-50 Polymarket all-time.';
+  } else if (pnl >= 25000 && closeRate >= 60 && positionCount >= 50) {
+    tierEmoji = '🦈'; tierLabel = 'SHARK'; tierColorCss = 'var(--blue)';
+    rankDesc = 'Institutional-sized moves with sharp exit discipline.';
+  } else if (pnl >= 5000 && closeRate >= 60 && positionCount >= 25) {
+    tierEmoji = '🎯'; tierLabel = 'SHARP'; tierColorCss = 'var(--green)';
+    rankDesc = 'Consistent profits, strong market reads.';
+  } else if (pnl >= 500 && closeRate >= 55 && positionCount >= 10) {
+    tierEmoji = '✅'; tierLabel = 'PROFITABLE'; tierColorCss = 'var(--green)';
+    rankDesc = 'Trading at a real profit — the track record is working.';
+  } else if (closedCount >= 5) {
+    tierEmoji = '📊'; tierLabel = 'TRADER'; tierColorCss = 'var(--text-soft)';
+    rankDesc = 'Actively trading Polymarket — building toward profit.';
+  } else {
+    tierEmoji = '🌱'; tierLabel = 'Building track record'; tierColorCss = 'var(--text-soft)';
+    tierProgress = { current: closedCount, target: 5 };
+    rankDesc = `${closedCount}/5 closed positions before your first tier unlocks`;
+  }
+  const isBuilding = !!tierProgress;
+
+  // Re-render the tier card's inner body
+  const card = document.querySelector('.tier-card');
+  const inner = document.querySelector('.tier-card .tier-inner');
+  if (card) card.style.setProperty('--tier-color', tierColorCss);
+  if (!inner) return;
+
+  const pnlBody = pnl >= 0 ? '+' : '-';
+  const pnlAbs = Math.abs(pnl);
+  const pnlFmt = pnlBody + '$' + (pnlAbs >= 1000000 ? (pnlAbs/1000000).toFixed(1)+'M' : pnlAbs >= 1000 ? Math.round(pnlAbs/1000)+'K' : Math.round(pnlAbs));
+  const barPct = isBuilding ? Math.round((tierProgress.current / tierProgress.target) * 100) : Math.min(100, closeRate);
+
+  inner.innerHTML = `
+    <div class="tier-emoji">${tierEmoji}</div>
+    <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
+    ${isBuilding
+      ? `<div class="tier-pct" style="color:${tierColorCss};font-size:44px">${tierProgress.current}<span style="opacity:0.45">/${tierProgress.target}</span></div>
+         <div class="tier-desc">Close ${tierProgress.target - tierProgress.current} more position${(tierProgress.target - tierProgress.current) === 1 ? '' : 's'} to unlock your first tier.</div>
+         <div class="tier-record">Tiers measure realized P&amp;L, close-at-profit rate, and trading volume.</div>`
+      : `<div class="tier-pct" style="color:${tierColorCss}">${pnlFmt}</div>
+         <div class="tier-desc">${rankDesc}</div>
+         <div class="tier-record">${closeRate}% close-at-profit · ${closedCount} closed · ${positionCount} total positions</div>`}
+    <div class="tier-bar"><div class="tier-bar-fill" style="width:${barPct}%;background:${tierColorCss}"></div></div>
+    <div class="tier-actions">
+      <a href="/passport/${window._profileUserId || userId}" class="btn btn-gold">🛂 Passport</a>
+      <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isBuilding ? 'Building my Polymarket track record on HYPERFLEX' : 'I&apos;m ' + tierLabel + ' on HYPERFLEX' + (pnl > 0 ? ' · +$' + Math.round(pnl).toLocaleString() + ' realized P&L' : '')}\\n\\nhyperflex.network/m/${window._profileUserId || userId}'),'_blank')">🐦 Flex on X</button>
+    </div>
+  `;
+
+  // Also inject/refresh the inline tier pill next to the display_name
+  if (!isBuilding) {
+    const name = document.querySelector('.hero-name');
+    const existing = name && name.querySelector('.tier-pill');
+    if (existing) existing.remove();
+    if (name) {
+      const tint = tierColorCss === 'var(--gold)' ? ['rgba(245,166,35,0.15)','rgba(245,166,35,0.4)']
+                 : tierColorCss === 'var(--purple)' ? ['rgba(168,85,247,0.15)','rgba(168,85,247,0.4)']
+                 : tierColorCss === 'var(--blue)' ? ['rgba(77,159,255,0.15)','rgba(77,159,255,0.4)']
+                 : tierColorCss === 'var(--green)' ? ['rgba(0,230,138,0.15)','rgba(0,230,138,0.4)']
+                 : ['rgba(255,255,255,0.06)','var(--border)'];
+      name.insertAdjacentHTML('beforeend', `<span class="tier-pill" style="background:${tint[0]};color:${tierColorCss};border:1px solid ${tint[1]};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>`);
+    }
+  }
 }
 
 function showCreatorDashPill() {
