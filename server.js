@@ -15098,6 +15098,47 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
 // GET /api/data/sentiment/:marketSlug
 // Latest snapshot for a market, plus the last 24h time-series. Pro tier
 // strips out sharp-weighted columns (Premium upsell).
+// GET /api/data/stats — public inventory snapshot. Feeds the live counters
+// on /datafeed (buyer marketing page). Safe to expose because it only
+// surfaces aggregate counts, no per-market or per-wallet detail.
+const _dataStatsCache = { at: 0, payload: null };
+app.get('/api/data/stats', async (req, res) => {
+  const now = Date.now();
+  if (_dataStatsCache.payload && (now - _dataStatsCache.at) < 60_000) {
+    return res.json(_dataStatsCache.payload);
+  }
+  try {
+    const q = pool ? dbQuery : null;
+    const payload = { generated_at: new Date().toISOString() };
+
+    if (q) {
+      const [snapCounts, walletCounts, lastBucket, marketCount] = await Promise.all([
+        q(`SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE bucket_start > now() - interval '24 hours')::int AS last_24h,
+             COUNT(DISTINCT market_slug)::int AS markets_covered
+           FROM sentiment_snapshots`).catch(() => [{}]),
+        q(`SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE sharpness_score >= 60)::int AS sharps
+           FROM wallet_scores`).catch(() => [{}]),
+        q(`SELECT MAX(bucket_start) AS latest FROM sentiment_snapshots`).catch(() => [{}]),
+        q(`SELECT COUNT(*)::int AS n FROM takes WHERE source='user'`).catch(() => [{}]),
+      ]);
+      payload.snapshots_total = snapCounts[0]?.total || 0;
+      payload.snapshots_last_24h = snapCounts[0]?.last_24h || 0;
+      payload.markets_covered = snapCounts[0]?.markets_covered || 0;
+      payload.wallets_scored = walletCounts[0]?.total || 0;
+      payload.sharp_wallets = walletCounts[0]?.sharps || 0;
+      payload.latest_snapshot = lastBucket[0]?.latest || null;
+      payload.user_takes = marketCount[0]?.n || 0;
+    }
+    _dataStatsCache.at = now;
+    _dataStatsCache.payload = payload;
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/data/sentiment/:marketSlug', apiKeyAuth, async (req, res) => {
   try {
     const isPremium = req.apiUser && req.apiUser.plan === 'platinum';
@@ -24909,6 +24950,8 @@ app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 
 // GET /data — premium data dashboard
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
+// /datafeed — buyer-facing marketing page for the paid sentiment API
+app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
