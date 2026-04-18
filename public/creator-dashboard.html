@@ -484,40 +484,104 @@ body.plan-premium .main {
   flex: 1;
   min-height: 100vh;
 }
+/* ── Topbar — premium sticky header with blur, matches sidebar design
+   Goals: strong tab title for context, roomy CTA, pill-style action
+   cluster, mobile-first scroll behavior ─────────────────────────── */
 .topbar {
-  padding: 16px 40px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--paper);
+  gap: 14px;
+  background: rgba(14,14,23,0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   position: sticky;
   top: 0;
   z-index: 50;
-  backdrop-filter: blur(8px);
+  min-height: 60px;
 }
 .topbar-title {
-  font-size: 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 22px;
   font-weight: 800;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  margin-right: auto;
 }
-.topbar-actions { display: flex; gap: 10px; align-items: center; }
-.btn-explore {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--mono); font-size: 12px; font-weight: 700;
-  padding: 8px 16px; border-radius: 8px;
-  background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.4);
-  color: var(--gold); cursor: pointer; transition: all 0.15s;
-  letter-spacing: 0.03em; white-space: nowrap; text-decoration: none;
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
 }
-.btn-explore:hover { background: rgba(201,146,13,0.22); border-color: var(--gold); }
 
-/* ── Notification bell ── */
-.notif-wrap { position:relative;flex-shrink:0 }
-.notif-bell { background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px;line-height:1;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:5px }
-.notif-bell:hover { border-color:var(--gold);background:rgba(201,146,13,0.07) }
-.notif-badge { background:var(--gold);color:#0a0a0f;font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center }
+/* Explore button — gold-outlined pill */
+.btn-explore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 100px;
+  background: rgba(245,166,35,0.08);
+  border: 1px solid rgba(245,166,35,0.3);
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-decoration: none;
+  min-height: 38px;
+}
+.btn-explore:hover {
+  background: rgba(245,166,35,0.18);
+  border-color: rgba(245,166,35,0.55);
+}
+
+/* Notification bell */
+.notif-wrap { position: relative; flex-shrink: 0; }
+.notif-bell {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 100px;
+  padding: 0;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.notif-bell:hover {
+  border-color: rgba(245,166,35,0.4);
+  background: rgba(245,166,35,0.08);
+}
+.notif-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  height: 16px;
+  text-align: center;
+  line-height: 12px;
+  border: 2px solid #0e0e17;
+  box-sizing: content-box;
+}
 .notif-dropdown { display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-width:92vw;background:#1c1b19;border:1px solid rgba(255,255,255,0.1);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden }
 .notif-dropdown.show { display:block }
 .notif-dropdown-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.07) }
@@ -568,21 +632,92 @@ body.plan-premium .main {
 }
 .view-toggle-btn:hover:not(.active) { color: var(--text); }
 .btn-primary {
-  font-family: var(--sans);
+  font-family: 'Inter', sans-serif;
   font-weight: 700;
   font-size: 13px;
-  color: var(--ink);
-  background: var(--gold);
+  letter-spacing: -0.005em;
+  color: #0a0a0f;
+  background: linear-gradient(180deg, #f5c842 0%, #c9920d 100%);
   border: none;
-  padding: 9px 18px;
-  border-radius: 6px;
+  padding: 10px 18px;
+  border-radius: 100px;
   cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
+  transition: all 0.15s;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 38px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.1) inset, 0 4px 12px -4px rgba(201,146,13,0.5);
 }
-.btn-primary:hover { background: var(--gold-bright); }
+.btn-primary:hover {
+  background: linear-gradient(180deg, #ffd95a 0%, #e0a820 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 6px 16px -4px rgba(245,200,66,0.6);
+}
+
+/* Topbar status pills — compact chips for wallet / flex points */
+.tb-pill {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border-radius: 100px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  min-height: 38px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tb-pill-wallet {
+  background: rgba(0,230,138,0.08);
+  border: 1px solid rgba(0,230,138,0.28);
+  color: var(--green);
+}
+.tb-pill-wallet:hover {
+  background: rgba(0,230,138,0.16);
+  border-color: rgba(0,230,138,0.5);
+}
+.tb-pill-wallet .tb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(0,230,138,0.7);
+  flex-shrink: 0;
+}
+.tb-pill-wallet #topbarWalletAddr {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tb-pill-flex {
+  background: rgba(168,85,247,0.08);
+  border: 1px solid rgba(168,85,247,0.25);
+  color: var(--text);
+}
+.tb-pill-flex:hover {
+  background: rgba(168,85,247,0.18);
+  border-color: rgba(168,85,247,0.5);
+}
+.tb-pill-flex .tb-flex-bolt {
+  color: #c4a3ff;
+  font-weight: 700;
+  font-size: 12px;
+}
+.tb-flex-tier {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: rgba(168,85,247,0.22);
+  color: #d4b8ff;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .btn-secondary {
   font-family: var(--mono);
   font-size: 12px;
@@ -2737,16 +2872,21 @@ input[type="date"].form-input { color-scheme:dark; }
   justify-content: center;
   gap: 5px;
   cursor: pointer;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: var(--cream);
-  border: 1px solid var(--border);
+  width: 40px;
+  height: 40px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.hamburger:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.14);
 }
 .hamburger span {
   display: block;
-  width: 18px;
+  width: 16px;
   height: 2px;
   background: var(--text);
   border-radius: 2px;
@@ -3622,14 +3762,14 @@ window.hfxOpenDeposit = function() {
             <div class="notif-list" id="notifList"><div class="notif-empty">All caught up ✓</div></div>
           </div>
         </div>
-        <div id="topbarWalletBadge" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);border-radius:8px;cursor:pointer;font-family:var(--mono);font-size:11px;color:#00e68a" onclick="showTab('portfolio')" title="Connected wallet">
-          <span style="width:8px;height:8px;border-radius:50%;background:#00e68a;flex-shrink:0"></span>
-          <span id="topbarWalletAddr" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <div id="topbarWalletBadge" class="tb-pill tb-pill-wallet" onclick="showTab('portfolio')" title="Connected wallet">
+          <span class="tb-dot"></span>
+          <span id="topbarWalletAddr"></span>
         </div>
-        <div id="topbarFlexPoints" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer" onclick="showTab('flexpoints')" title="Your FLEX Points">
-          <span style="color:#a855f7;font-weight:700">⚡</span>
-          <span id="topbarFlexBadge" style="color:var(--text);font-weight:700">0 FP</span>
-          <span id="topbarFlexTier" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:800"></span>
+        <div id="topbarFlexPoints" class="tb-pill tb-pill-flex" onclick="showTab('flexpoints')" title="Your FLEX Points">
+          <span class="tb-flex-bolt">⚡</span>
+          <span id="topbarFlexBadge">0 FP</span>
+          <span id="topbarFlexTier" class="tb-flex-tier"></span>
         </div>
         <a href="/" class="btn-explore">⚡ Explore</a>
       </div>
