@@ -14923,18 +14923,53 @@ app.get('/api/takes/:id/comments', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/takes/:id/comments
+// POST /api/takes/:id/comments — reaction-gated: caller MUST pick a side.
+// Policy: every comment is backed by an agree/disagree vote. This keeps
+// the feed high-signal — replies can't just be chatter, they have to
+// stake a position on the underlying market. The reaction is upserted
+// into take_reactions (so reply-without-prior-reaction still counts in
+// the agree/disagree tally) and stored alongside the comment.
 app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
   try {
-    const { body } = req.body;
+    const { body, reaction } = req.body;
     if (!body || !body.trim()) return res.status(400).json({ error: 'Comment text required' });
-    // Get user display name
+    if (reaction !== 'agree' && reaction !== 'disagree') {
+      return res.status(400).json({ error: 'Must agree or disagree before commenting', gate: 'reaction_required' });
+    }
+    const takeId = req.params.id;
     const userRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
     const displayName = userRows[0]?.display_name || 'Anonymous';
+
+    // Upsert the reaction on the take (idempotent — re-replying updates the side)
+    await dbQuery(
+      `INSERT INTO take_reactions (take_id, user_id, reaction) VALUES ($1, $2, $3)
+       ON CONFLICT (take_id, user_id) DO UPDATE SET reaction = EXCLUDED.reaction`,
+      [takeId, req.userId, reaction]
+    ).catch(() => {}); // table may be absent on fresh deploys — comment still works
+
+    // Insert the comment row
     const rows = await dbQuery(
-      'INSERT INTO take_comments (take_id, user_id, display_name, body) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.params.id, req.userId, displayName, String(body).trim().slice(0, 500)]
+      'INSERT INTO take_comments (take_id, user_id, display_name, body, reaction) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [takeId, req.userId, displayName, String(body).trim().slice(0, 500), reaction]
     );
+
+    // Recompute + denormalise counts on the parent take
+    try {
+      const counts = await dbQuery(
+        `SELECT
+          (SELECT COUNT(*) FROM take_reactions WHERE take_id = $1 AND reaction = 'agree')::int as agrees,
+          (SELECT COUNT(*) FROM take_reactions WHERE take_id = $1 AND reaction = 'disagree')::int as disagrees,
+          (SELECT COUNT(*) FROM take_comments WHERE take_id = $1)::int as comments`,
+        [takeId]
+      );
+      if (counts[0]) {
+        await dbQuery(
+          `UPDATE takes SET agree_count = $1, disagree_count = $2, comment_count = $3 WHERE id = $4`,
+          [counts[0].agrees, counts[0].disagrees, counts[0].comments, takeId]
+        );
+      }
+    } catch {}
+
     res.json({ ok: true, comment: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
