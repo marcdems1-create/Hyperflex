@@ -19394,7 +19394,9 @@ function openTradeModal(posDataJson, mode, options) {
   // Set mode
   setTradeMode(mode || 'buy');
   document.getElementById('tradeAmount').value = '0';
-  document.getElementById('tradeModalError').style.display = 'none';
+  const errEl = document.getElementById('tradeModalError');
+  errEl.style.display = 'none';
+  errEl.style.color = '';
   document.getElementById('tradeConfirmBtn').disabled = false;
   _updateQuickBtnLabels();
   updateTradeConfirmBtn();
@@ -19404,6 +19406,26 @@ function openTradeModal(posDataJson, mode, options) {
   const toWinEl = document.getElementById('tradeToWin');
   if (totalEl) totalEl.textContent = '$0';
   if (toWinEl) toWinEl.textContent = '$0';
+
+  // Dust-position warning for SELL: if the whole position is worth less
+  // than Polymarket's $1 CLOB minimum, surface that up front — otherwise
+  // the user fiddles with amounts and gets a confusing rejection at submit.
+  // Shown as a gold info banner, not a red error — they CAN still try
+  // once price moves, so we don't disable the button.
+  if (mode === 'sell') {
+    const posValue = parseFloat(pos.cash_value) || 0;
+    const posShares = parseFloat(pos.shares) || 0;
+    if (posShares > 0 && posValue > 0 && posValue < 1.00) {
+      const cpc = posShares > 0 ? Math.ceil((1 / posShares) * 100) : null;
+      errEl.innerHTML = '⚠ Dust position — below Polymarket\'s $1 CLOB minimum.<br>' +
+        '<span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">' +
+        'Position worth $' + posValue.toFixed(2) + '. Can\'t sell until the price moves' +
+        (cpc ? ' to ~' + cpc + '\u00a2 or higher' : '') + '. Dust positions resolve for free when the market closes.' +
+        '</span>';
+      errEl.style.color = '#f5a623';
+      errEl.style.display = 'block';
+    }
+  }
 
   // Fetch orderbook
   loadOrderbook(pos);
@@ -19701,6 +19723,22 @@ async function confirmTrade() {
   }
 
   const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
+
+  // ── $1 MINIMUM ORDER TOTAL (both sides) ───────────────────────────────────
+  // Polymarket CLOB rejects orders whose takerAmount (USDC for BUY, USDC
+  // received for SELL) is under $1.00. Catch it locally so the user sees
+  // why instead of a generic CLOB 400. Dust positions = stuck until price
+  // moves enough to clear the threshold.
+  if (amount < 1.00) {
+    const pctNeeded = clobSide === 'SELL' && _tradeModalData.shares > 0
+      ? Math.ceil((1 / _tradeModalData.shares) * 100)
+      : null;
+    errEl.innerHTML = clobSide === 'SELL'
+      ? 'Below Polymarket\'s $1 minimum order.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Your position is worth $' + amount.toFixed(2) + '. You can\'t sell until the price moves' + (pctNeeded ? ' (need ~' + pctNeeded + '\u00a2 for the whole position to clear $1)' : '') + '.</span>'
+      : 'Order must be at least $1.00 (Polymarket minimum).';
+    errEl.style.display = 'block';
+    return;
+  }
 
   // ── PRE-SUBMIT SHARE BALANCE CHECK (SELL only) ────────────────────────────
   // Polymarket's data-api lags after a sell. Without this guard, the user
