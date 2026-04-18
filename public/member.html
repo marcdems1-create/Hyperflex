@@ -288,7 +288,13 @@ async function load() {
   try {
     const res = await fetch(`${API}/api/member/${userId}`);
     if (res.status === 404) {
-      page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
+      let reason = null;
+      try { reason = (await res.json()).reason; } catch {}
+      if (reason === 'no_wallet') {
+        page.innerHTML = `<div class="error-state"><div class="error-icon">🔒</div><div class="error-msg">Profile not available</div><div class="error-sub">Every Hyperflex profile is backed by a verified Polymarket wallet. This user hasn't connected one yet.</div><div style="margin-top:20px"><a href="/creator/dashboard" class="btn btn-gold">Connect yours →</a></div></div>`;
+      } else {
+        page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
+      }
       return;
     }
     if (!res.ok) throw new Error('API error');

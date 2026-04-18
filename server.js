@@ -12177,6 +12177,13 @@ app.get('/api/member/:userId', async (req, res) => {
 
     if (!userData) return res.status(404).json({ error: 'User not found' });
 
+    // Policy: a Hyperflex user is identified by their connected on-chain
+    // wallet. Profiles without a Polymarket address are hidden — the social
+    // graph is built on verified traders, not unconnected accounts.
+    if (!userData.polymarket_address) {
+      return res.status(404).json({ error: 'Profile not available', reason: 'no_wallet' });
+    }
+
     const positions = positionsData || [];
     const settled   = positions.filter(p => p.settled);
     const wins      = settled.filter(p => p.won);
