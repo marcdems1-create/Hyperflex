@@ -19702,6 +19702,33 @@ async function confirmTrade() {
 
   const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
 
+  // ── PRE-SUBMIT SHARE BALANCE CHECK (SELL only) ────────────────────────────
+  // Polymarket's data-api lags after a sell — positions can still show with
+  // old sizes for a window. Without this guard, the user clicks Sell, signs
+  // the order in MetaMask, waits for the CLOB round-trip, then gets
+  // "Insufficient share balance" with zero useful diagnostics. This check
+  // compares the requested sell against the cached position and bails early
+  // with a specific, actionable error, no wallet signature wasted.
+  //
+  // Shares held comes from _tradeModalData.shares (populated from window.
+  // _polyPositionsData when the modal opened). Uses a 0.0001 epsilon for
+  // float rounding.
+  if (clobSide === 'SELL') {
+    const ownedShares = parseFloat(_tradeModalData.shares) || 0;
+    if (ownedShares <= 0.01) {
+      errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You may have already sold them, or you\'re on the opposite side (Yes vs No). Refreshing positions…</span>';
+      errEl.style.display = 'block';
+      // Refresh so the OPEN grid drops this ghost row
+      if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+      return;
+    }
+    if (shares > ownedShares + 0.0001) {
+      errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
+      errEl.style.display = 'block';
+      return;
+    }
+  }
+
   // Get stored CLOB API credentials
   const apiKey = localStorage.getItem('poly_api_key');
   const apiSecret = localStorage.getItem('poly_api_secret');
@@ -20165,9 +20192,15 @@ async function confirmTrade() {
         }
         errEl.textContent = 'API keys expired — sign in MetaMask popup, then click the trade button.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
-        errEl.textContent = clobSide === 'SELL'
-          ? 'Insufficient share balance — you may not hold enough shares of this outcome to sell.'
-          : 'Insufficient USDC balance on Polymarket. Deposit funds first.';
+        if (clobSide === 'SELL') {
+          errEl.innerHTML = 'Insufficient share balance.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Polymarket\'s balance disagrees with what we cached. Refreshing positions — this ghost row should disappear.</span>';
+          // The cache was stale. Refresh positions so the OPEN grid reflects
+          // real on-chain state, and the ghost row this sell came from drops
+          // off. Prevents the user from hitting the same 400 twice in a row.
+          if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+        } else {
+          errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
+        }
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
       } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
