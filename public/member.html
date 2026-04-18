@@ -288,13 +288,7 @@ async function load() {
   try {
     const res = await fetch(`${API}/api/member/${userId}`);
     if (res.status === 404) {
-      let reason = null;
-      try { reason = (await res.json()).reason; } catch {}
-      if (reason === 'no_wallet') {
-        page.innerHTML = `<div class="error-state"><div class="error-icon">🔒</div><div class="error-msg">Profile not available</div><div class="error-sub">Every Hyperflex profile is backed by a verified Polymarket wallet. This user hasn't connected one yet.</div><div style="margin-top:20px"><a href="/creator/dashboard" class="btn btn-gold">Connect yours →</a></div></div>`;
-      } else {
-        page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
-      }
+      page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
       return;
     }
     if (!res.ok) throw new Error('API error');
@@ -392,6 +386,16 @@ async function load() {
     const flexScoreFmt = stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—';
 
     page.innerHTML = `
+      ${!user.polymarket_address ? `
+        <div class="card" style="margin-bottom:20px;padding:20px 22px;background:linear-gradient(135deg,rgba(245,166,35,0.08),rgba(168,85,247,0.06));border:1px solid rgba(245,166,35,0.3);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="font-size:28px;flex-shrink:0">🔒</div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px">${isOwner ? 'Activate your profile' : 'Unverified predictor'}</div>
+            <div style="font-size:13px;color:var(--text-soft);line-height:1.45">${isOwner ? 'Sign in and connect a Polymarket wallet to unlock your stats, Passport, and take-posting.' : 'This user hasn&apos;t connected a wallet yet. Their stats aren&apos;t verifiable on-chain.'}</div>
+          </div>
+          <a href="${isOwner ? '/creator/dashboard' : '/creator/login'}" class="btn btn-gold">${isOwner ? 'Connect wallet' : 'Sign in'} →</a>
+        </div>
+      ` : ''}
       <div class="hero">
         <div class="avatar ${isWhale ? 'avatar-whale' : ''}">${isWhale ? '🐋' : initials}</div>
         <div class="hero-info">
