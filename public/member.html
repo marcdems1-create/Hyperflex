@@ -347,27 +347,7 @@ async function load() {
         }).join('')}</div>`
       : `<div class="empty"><div class="empty-emoji">🎯</div><div class="empty-title">No wins yet</div><div class="empty-sub">Keep predicting — every resolved market scores your takes.</div></div>`;
 
-    // Prediction rank tier
-    const wr = stats.win_rate || 0;
-    const settled = stats.settled_predictions || 0;
-    let rankTier, rankClass, rankColor, rankDesc;
-    if (wr >= 70 && settled >= 10)      { rankTier = '🎯 ORACLE';      rankClass = 'oracle';  rankColor = '#c9920d'; rankDesc = 'Top 5% of predictors — consistently ahead of the crowd'; }
-    else if (wr >= 60 && settled >= 5)  { rankTier = '🎯 SHARP';       rankClass = 'sharp';   rankColor = '#22c55e'; rankDesc = 'Above average predictor — reads markets better than most'; }
-    else if (wr >= 50 && settled >= 5)  { rankTier = '📊 SOLID';       rankClass = 'solid';   rankColor = '#60a5fa'; rankDesc = 'Reliable predictor — more right than wrong'; }
-    else if (settled >= 3)              { rankTier = '🎲 SPECULATOR';  rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Still building their track record'; }
-    else                                { rankTier = '🆕 NEWCOMER';    rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Just getting started — more predictions needed'; }
-
-    const scoreCardHTML = settled >= 3 ? `
-      <div class="pred-score-card ${rankClass}">
-        <div class="pred-score-pct" style="color:${rankColor}">${wr}%</div>
-        <div class="pred-score-body">
-          <div class="pred-score-rank" style="color:${rankColor}">${rankTier}</div>
-          <div class="pred-score-sub">${rankDesc}<br>${stats.wins || 0} correct out of ${settled} settled predictions</div>
-          <div class="pred-score-bar"><div class="pred-score-bar-fill" style="width:${wr}%;background:${rankColor}"></div></div>
-        </div>
-      </div>` : '';
-
-    // Whale-specific data
+    // Whale-specific data (needed for tier calculation)
     const isWhale = user.is_whale || false;
     const whaleRank = user.whale_rank;
     const whalePnl = user.whale_pnl;
@@ -377,9 +357,44 @@ async function load() {
     const whaleAvatarBg = isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : avatarBg;
     const whaleAvatarColor = isWhale ? '#fff' : avgColor;
 
-    const tierEmoji = rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕';
-    const tierLabel = rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim();
-    const tierColorCss = rankClass === 'oracle' ? 'var(--gold)' : rankClass === 'sharp' ? 'var(--green)' : rankClass === 'solid' ? 'var(--blue)' : 'var(--text-soft)';
+    // Polymarket-native tier system — optimised for how real traders behave.
+    // Measures: realized P&L × close-at-profit rate × sample size. Does NOT
+    // penalise traders for exiting before resolution (that's capital efficiency,
+    // not weakness). FLEXIN is the top tier for six-figure P&L or top-50 whales.
+    const polyPnl       = pStats.pnl_usd || 0;
+    const closedCount   = (pStats.closed_wins || 0) + (pStats.closed_losses || 0);
+    const closeRate     = closedCount > 0 ? Math.round((pStats.closed_wins / closedCount) * 100) : 0;
+    const positionCount = pStats.total_trades || 0;
+    const isTopWhale    = isWhale && whaleRank && whaleRank <= 50;
+
+    let tierEmoji, tierLabel, tierColorCss, rankDesc, rankClass;
+    let tierProgress = null; // { current, target } only set for 'building' state
+
+    if (polyPnl >= 100000 || isTopWhale) {
+      tierEmoji = '💎'; tierLabel = 'FLEXIN'; tierColorCss = 'var(--gold)'; rankClass = 'flexin';
+      rankDesc = 'Six-figure realized P&L. The top 0.1% of Polymarket traders.';
+    } else if (polyPnl >= 25000 && closeRate >= 60 && positionCount >= 50) {
+      tierEmoji = '🦈'; tierLabel = 'SHARK'; tierColorCss = 'var(--blue)'; rankClass = 'shark';
+      rankDesc = 'Institutional-sized moves with sharp exit discipline.';
+    } else if (polyPnl >= 5000 && closeRate >= 60 && positionCount >= 25) {
+      tierEmoji = '🎯'; tierLabel = 'SHARP'; tierColorCss = 'var(--green)'; rankClass = 'sharp';
+      rankDesc = 'Consistent profits, strong market reads.';
+    } else if (polyPnl >= 500 && closeRate >= 55 && positionCount >= 10) {
+      tierEmoji = '✅'; tierLabel = 'PROFITABLE'; tierColorCss = 'var(--green)'; rankClass = 'profitable';
+      rankDesc = 'Trading at a real profit — the track record is working.';
+    } else if (closedCount >= 5) {
+      tierEmoji = '📊'; tierLabel = 'TRADER'; tierColorCss = 'var(--text-soft)'; rankClass = 'trader';
+      rankDesc = 'Actively trading Polymarket — building toward profit.';
+    } else {
+      tierEmoji = '🌱'; tierLabel = 'Building track record'; tierColorCss = 'var(--text-soft)'; rankClass = 'building';
+      tierProgress = { current: closedCount, target: 5 };
+      rankDesc = `${closedCount}/5 closed positions before your first tier unlocks`;
+    }
+    const isBuilding = rankClass === 'building';
+
+    // Legacy aliases (still referenced in a couple of share-CTA strings below)
+    const rankTier = tierEmoji + ' ' + tierLabel;
+    const rankColor = tierColorCss;
     const volFmt = pStats.volume_usd >= 1000000 ? '$' + (pStats.volume_usd/1000000).toFixed(1) + 'M' : pStats.volume_usd >= 1000 ? '$' + Math.round(pStats.volume_usd/1000) + 'K' : '$' + Math.round(pStats.volume_usd);
     const pnlFmt = (pStats.pnl_usd >= 0 ? '+$' : '-$') + (Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000) + 'K' : Math.round(Math.abs(pStats.pnl_usd)));
     const flexPointsFmt = (stats.flex_points || 0) >= 1000 ? ((stats.flex_points/1000).toFixed(1) + 'K') : (stats.flex_points || 0);
@@ -402,6 +417,7 @@ async function load() {
           <div class="hero-name">
             ${user.display_name}
             ${user.wallet_verified ? '<span class="hero-verify" title="Verified Wallet">✓</span>' : ''}
+            ${!isBuilding ? `<span class="tier-pill" style="background:${tierColorCss === 'var(--gold)' ? 'rgba(245,166,35,0.15)' : tierColorCss === 'var(--blue)' ? 'rgba(77,159,255,0.15)' : tierColorCss === 'var(--green)' ? 'rgba(0,230,138,0.15)' : 'rgba(255,255,255,0.06)'};color:${tierColorCss};border:1px solid ${tierColorCss === 'var(--gold)' ? 'rgba(245,166,35,0.4)' : tierColorCss === 'var(--blue)' ? 'rgba(77,159,255,0.4)' : tierColorCss === 'var(--green)' ? 'rgba(0,230,138,0.4)' : 'var(--border)'};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>` : ''}
           </div>
           ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
           ${isWhale ? `
@@ -442,13 +458,20 @@ async function load() {
         <div class="tier-inner">
           <div class="tier-emoji">${tierEmoji}</div>
           <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
-          <div class="tier-pct" style="color:${tierColorCss}">${winPct}%</div>
-          <div class="tier-desc">${rankDesc}</div>
-          <div class="tier-record">${stats.wins || 0} correct / ${settled} predictions</div>
-          <div class="tier-bar"><div class="tier-bar-fill" style="width:${winPct}%;background:${tierColorCss}"></div></div>
+          ${isBuilding ? `
+            <div class="tier-pct" style="color:${tierColorCss};font-size:44px">${tierProgress.current}<span style="opacity:0.45">/${tierProgress.target}</span></div>
+            <div class="tier-desc">Close ${tierProgress.target - tierProgress.current} more position${(tierProgress.target - tierProgress.current) === 1 ? '' : 's'} to unlock your first tier.</div>
+            <div class="tier-record">Tiers measure realized P&amp;L, close-at-profit rate, and trading volume.</div>
+            <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.round((tierProgress.current / tierProgress.target) * 100)}%;background:${tierColorCss}"></div></div>
+          ` : `
+            <div class="tier-pct" style="color:${tierColorCss}">${pStats.pnl_usd >= 0 ? '+' : '-'}$${Math.abs(pStats.pnl_usd) >= 1000000 ? (Math.abs(pStats.pnl_usd)/1000000).toFixed(1)+'M' : Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000)+'K' : Math.round(Math.abs(pStats.pnl_usd))}</div>
+            <div class="tier-desc">${rankDesc}</div>
+            <div class="tier-record">${closeRate}% close-at-profit · ${closedCount} closed · ${positionCount} total positions</div>
+            <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.min(100, closeRate)}%;background:${tierColorCss}"></div></div>
+          `}
           <div class="tier-actions">
             <a href="/passport/${userId}" class="btn btn-gold">🛂 Passport</a>
-            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I&apos;m a ${tierLabel} predictor with ${winPct}% accuracy on HYPERFLEX\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')">🐦 Flex on X</button>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isBuilding ? 'Building my Polymarket track record on HYPERFLEX' : 'I&apos;m ' + tierLabel + ' on HYPERFLEX' + (pStats.pnl_usd > 0 ? ' · +$' + Math.round(pStats.pnl_usd).toLocaleString() + ' realized P&L' : '')}\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Flex on X</button>
           </div>
         </div>
       </div>
