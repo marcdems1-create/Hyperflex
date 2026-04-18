@@ -1759,6 +1759,7 @@ function renderCard(p) {
     tagsHtml +
     '<div class="pred-foot">' +
       '<span class="pred-foot-time">' + timeAgo(p.posted_at) + '</span>' +
+      (p.id ? '<a href="/takes/' + esc(p.id) + '" style="font-size:11px;color:var(--text-faint);margin-left:auto;display:inline-flex;align-items:center;gap:4px;text-decoration:none" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'" title="View replies">💬 ' + (p.comment_count || 0) + ' ' + (p.comment_count === 1 ? 'reply' : 'replies') + ' →</a>' : '') +
     '</div>' +
   '</div>';
 }

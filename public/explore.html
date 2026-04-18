@@ -3691,7 +3691,7 @@ function renderTakeCard(t) {
       '<div class="take-header">' +
         authorHtml +
         badge + flexBadge + sharp + correctBadge +
-        '<span class="take-time">' + timeAgo(t.created_at) + '</span>' +
+        '<a href="/takes/' + t.id + '" class="take-time" style="text-decoration:none;color:inherit" title="View take">' + timeAgo(t.created_at) + '</a>' +
       '</div>' +
       marketLink + thesis + amount + quotedTake +
       '<div class="take-actions">' +
