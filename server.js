@@ -17420,6 +17420,172 @@ async function syncUserPositions(user) {
       } catch (e) { console.warn('[copy-trade notify]', e.message); }
     }
   }
+
+  // Realized-PnL ledger — Polymarket only. Runs after positions sync so the
+  // proxy has been derived and cached. Failure here doesn't block the rest
+  // of the sync.
+  if (user.polymarket_address) {
+    try { await syncRealizedTrades(user); }
+    catch (e) { console.warn('[realized-trades] sync failed for', user.id, e.message); }
+  }
+}
+
+// ── REALIZED TRADES SYNC (Flex Score B, Phase 1) ─────────────────────────────
+// For each Polymarket-connected user, pull their full trade activity from
+// data-api.polymarket.com, FIFO-match sells against prior buys, and write
+// one row per closed lot into `realized_trades`. Phase 2 will blend the
+// median realized ROI into the Flex Score formula so capturing +40c of
+// edge pre-resolution counts as skill, not just held-to-resolution Brier.
+//
+// Idempotent: external_sync_id = {conditionId}::{tokenId}::{sellTxHash}::{lotIdx}
+// is UNIQUE in the table, so repeated runs skip already-recorded lots.
+async function syncRealizedTrades(user) {
+  if (!user || !user.polymarket_address) return { inserted: 0, skipped: 0 };
+
+  const eoa = user.polymarket_address.toLowerCase();
+  let proxy = user.polymarket_proxy || null;
+  if (!proxy) {
+    try { proxy = await derivePolymarketProxy(eoa); } catch {}
+  }
+
+  // Positions live on the proxy but the activity endpoint keys off whichever
+  // address actually placed the transaction. Query both and union by txHash.
+  const addrs = proxy && proxy !== eoa ? [proxy, eoa] : [eoa];
+
+  let fills = [];
+  for (const addr of addrs) {
+    try {
+      const r = await _nodeFetch(
+        `https://data-api.polymarket.com/activity?user=${addr}&limit=500&type=TRADE`,
+        { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+      );
+      if (!r.ok) continue;
+      const data = await r.json().catch(() => []);
+      if (Array.isArray(data)) fills.push(...data);
+    } catch (e) { /* fetch failed, try next addr */ }
+  }
+  if (!fills.length) return { inserted: 0, skipped: 0 };
+
+  // Dedup fills by transactionHash (same fill may appear under both eoa + proxy queries)
+  const byTx = new Map();
+  for (const f of fills) {
+    const k = f.transactionHash || f.hash || (f.conditionId + ':' + f.timestamp + ':' + f.side);
+    if (!byTx.has(k)) byTx.set(k, f);
+  }
+  fills = Array.from(byTx.values());
+
+  // Normalize + sort chronologically (oldest first). Polymarket returns
+  // timestamp as unix seconds — handle both seconds and ISO just in case.
+  const normFills = fills.map(f => ({
+    txHash:      f.transactionHash || f.hash || '',
+    conditionId: f.conditionId || '',
+    tokenId:     f.asset || f.tokenId || '',
+    side:        (f.side || '').toUpperCase(), // 'BUY' | 'SELL'
+    outcome:     f.outcome || '',              // 'Yes' | 'No'
+    question:    f.title || f.market || '',
+    price:       parseFloat(f.price) || 0,
+    shares:      parseFloat(f.size) || 0,
+    usdcSize:    parseFloat(f.usdcSize) || (parseFloat(f.size) || 0) * (parseFloat(f.price) || 0),
+    ts:          typeof f.timestamp === 'number'
+                   ? (f.timestamp > 2e10 ? f.timestamp : f.timestamp * 1000)
+                   : new Date(f.timestamp || Date.now()).getTime(),
+  })).filter(f => f.conditionId && f.tokenId && f.shares > 0).sort((a, b) => a.ts - b.ts);
+
+  if (!normFills.length) return { inserted: 0, skipped: 0 };
+
+  // Group by (conditionId, tokenId) since each outcome token is its own position
+  const groups = new Map();
+  for (const f of normFills) {
+    const k = f.conditionId + '::' + f.tokenId;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(f);
+  }
+
+  // FIFO match: for each group, maintain a queue of open lots [{shares, price, ts}]
+  // Each SELL fill is split across the oldest lots first, emitting one
+  // realized_trades row per matched lot-slice.
+  const realizedRows = [];
+  for (const [_key, gFills] of groups) {
+    const openLots = []; // { shares, price, openedTs }
+    let lotCounter = 0;
+    for (const fill of gFills) {
+      if (fill.side === 'BUY') {
+        openLots.push({ shares: fill.shares, price: fill.price, openedTs: fill.ts });
+      } else if (fill.side === 'SELL') {
+        let remaining = fill.shares;
+        while (remaining > 0 && openLots.length > 0) {
+          const lot = openLots[0];
+          const matched = Math.min(lot.shares, remaining);
+          const entryCost = matched * lot.price;
+          const exitValue = matched * fill.price;
+          const pnl = exitValue - entryCost;
+          const roi = entryCost > 0 ? pnl / entryCost : 0;
+          lotCounter++;
+          realizedRows.push({
+            user_id:            user.id,
+            polymarket_address: proxy || eoa,
+            condition_id:       fill.conditionId,
+            token_id:           fill.tokenId,
+            market_question:    (fill.question || '').slice(0, 500),
+            side:               fill.outcome || '',
+            shares:             Math.round(matched * 1e6) / 1e6,
+            entry_price:        Math.round(lot.price * 1e6) / 1e6,
+            exit_price:         Math.round(fill.price * 1e6) / 1e6,
+            entry_cost_usd:     Math.round(entryCost * 1e4) / 1e4,
+            exit_value_usd:     Math.round(exitValue * 1e4) / 1e4,
+            realized_pnl:       Math.round(pnl * 1e4) / 1e4,
+            realized_roi:       Math.round(roi * 1e6) / 1e6,
+            opened_at:          new Date(lot.openedTs).toISOString(),
+            closed_at:          new Date(fill.ts).toISOString(),
+            close_reason:       'sold',
+            external_sync_id:   `${fill.conditionId}::${fill.tokenId}::${fill.txHash || fill.ts}::${lotCounter}`,
+          });
+          lot.shares -= matched;
+          remaining -= matched;
+          if (lot.shares <= 1e-9) openLots.shift();
+        }
+        // remaining > 0 with no open lots means we're seeing a sell without
+        // a tracked buy (e.g. history beyond our 500-fill window). Safe to drop.
+      }
+    }
+  }
+
+  if (!realizedRows.length) return { inserted: 0, skipped: 0 };
+
+  // Upsert — external_sync_id UNIQUE constraint dedupes across runs.
+  let inserted = 0, skipped = 0;
+  if (pool) {
+    for (const row of realizedRows) {
+      try {
+        const cols = Object.keys(row);
+        const vals = Object.values(row);
+        const phs  = cols.map((_, i) => `$${i + 1}`).join(', ');
+        const res = await pool.query(
+          `INSERT INTO realized_trades (${cols.join(', ')}) VALUES (${phs})
+           ON CONFLICT (external_sync_id) DO NOTHING RETURNING id`,
+          vals
+        );
+        if (res.rowCount > 0) inserted++; else skipped++;
+      } catch (e) {
+        if (/relation "realized_trades" does not exist/i.test(e.message)) {
+          console.warn('[realized-trades] table missing — run supabase_migration_realized_trades.sql');
+          return { inserted: 0, skipped: 0, error: 'missing_table' };
+        }
+        skipped++;
+      }
+    }
+  } else if (supabase) {
+    const { error } = await supabase.from('realized_trades').upsert(realizedRows, { onConflict: 'external_sync_id', ignoreDuplicates: true });
+    if (error) {
+      if (/does not exist/i.test(error.message || '')) return { inserted: 0, skipped: 0, error: 'missing_table' };
+      console.warn('[realized-trades] upsert error:', error.message);
+    } else {
+      inserted = realizedRows.length; // supabase upsert doesn't return per-row counts cheaply
+    }
+  }
+
+  if (inserted > 0) console.log(`[realized-trades] user=${user.id} inserted=${inserted} skipped=${skipped}`);
+  return { inserted, skipped };
 }
 
 // ── WEEKLY MEMBER DIGEST EMAIL ───────────────────────────────────────────────
