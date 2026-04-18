@@ -15073,6 +15073,147 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
   await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_comments_take ON take_comments(take_id, created_at DESC)').catch(() => {});
 })();
 
+// ─────────────────────────────────────────────────────────────────────────
+// DATA API — paid / API-key-gated sentiment feed
+// Pricing:
+//   Pro  ($29/mo):     raw counts only, 60 req/min
+//   Premium ($99/mo):  sharp-weighted + divergence + historical, 300 req/min
+//   Enterprise (TBD):  webhook push, dedicated, no rate limit
+// All endpoints require Authorization: Bearer <api_key> from creator_settings.
+// ─────────────────────────────────────────────────────────────────────────
+
+// GET /api/data/sentiment/:marketSlug
+// Latest snapshot for a market, plus the last 24h time-series. Pro tier
+// strips out sharp-weighted columns (Premium upsell).
+app.get('/api/data/sentiment/:marketSlug', apiKeyAuth, async (req, res) => {
+  try {
+    const isPremium = req.apiUser && req.apiUser.plan === 'platinum';
+    const rows = await dbQuery(`
+      SELECT bucket_start, agree_count, disagree_count, comment_count, unique_voters,
+             sharp_agrees, sharp_disagrees, sharp_weighted_score, net_sentiment,
+             market_yes_price, divergence
+        FROM sentiment_snapshots
+       WHERE market_slug = $1
+       ORDER BY bucket_start DESC LIMIT 24`,
+      [req.params.marketSlug]
+    );
+    const payload = rows.map(r => {
+      const base = {
+        t: r.bucket_start,
+        agree: r.agree_count,
+        disagree: r.disagree_count,
+        comments: r.comment_count,
+        voters: r.unique_voters,
+        net_sentiment: r.net_sentiment != null ? parseFloat(r.net_sentiment) : null,
+      };
+      if (isPremium) {
+        base.sharp_agree = r.sharp_agrees;
+        base.sharp_disagree = r.sharp_disagrees;
+        base.sharp_score = r.sharp_weighted_score != null ? parseFloat(r.sharp_weighted_score) : null;
+        base.market_price = r.market_yes_price != null ? parseFloat(r.market_yes_price) : null;
+        base.divergence = r.divergence != null ? parseFloat(r.divergence) : null;
+      }
+      return base;
+    });
+    res.json({
+      market_slug: req.params.marketSlug,
+      tier: isPremium ? 'premium' : 'pro',
+      snapshots: payload,
+      notice: isPremium ? null : 'Upgrade to Premium for sharp-weighted sentiment + divergence.',
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/data/sentiment/:marketSlug/history?from=&to=
+// Full time-series. Premium only — this is the chart buyers will show to
+// their PM. Max 30 days per call.
+app.get('/api/data/sentiment/:marketSlug/history', apiKeyAuth, async (req, res) => {
+  if (!req.apiUser || req.apiUser.plan !== 'platinum') {
+    return res.status(402).json({ error: 'Premium plan required', upgrade_url: '/pricing' });
+  }
+  const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 86400000);
+  const to = req.query.to ? new Date(req.query.to) : new Date();
+  if (isNaN(from) || isNaN(to) || (to - from) > 30 * 86400000) {
+    return res.status(400).json({ error: 'Invalid range (max 30 days per call)' });
+  }
+  try {
+    const rows = await dbQuery(`
+      SELECT bucket_start, agree_count, disagree_count, comment_count,
+             sharp_agrees, sharp_disagrees, sharp_weighted_score,
+             net_sentiment, market_yes_price, divergence
+        FROM sentiment_snapshots
+       WHERE market_slug = $1 AND bucket_start >= $2 AND bucket_start <= $3
+       ORDER BY bucket_start ASC`,
+      [req.params.marketSlug, from.toISOString(), to.toISOString()]
+    );
+    res.json({ market_slug: req.params.marketSlug, from, to, snapshots: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/data/contrarian?limit=20&min_divergence=0.10
+// Markets where sharp-weighted consensus most diverges from current price.
+// Premium only — the headline feed for hedge-fund subscribers.
+app.get('/api/data/contrarian', apiKeyAuth, async (req, res) => {
+  if (!req.apiUser || req.apiUser.plan !== 'platinum') {
+    return res.status(402).json({ error: 'Premium plan required', upgrade_url: '/pricing' });
+  }
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const minDiv = parseFloat(req.query.min_divergence) || 0.10;
+  try {
+    const rows = await dbQuery(`
+      SELECT DISTINCT ON (market_slug) market_slug, condition_id, bucket_start,
+             agree_count, disagree_count, sharp_agrees, sharp_disagrees,
+             sharp_weighted_score, market_yes_price, divergence,
+             net_sentiment, unique_voters
+        FROM sentiment_snapshots
+       WHERE divergence >= $1 AND bucket_start > now() - interval '24 hours'
+       ORDER BY market_slug, bucket_start DESC`,
+      [minDiv]
+    );
+    rows.sort((a, b) => (b.divergence || 0) - (a.divergence || 0));
+    res.json({
+      generated_at: new Date(),
+      min_divergence: minDiv,
+      count: rows.length,
+      markets: rows.slice(0, limit),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/data/sharps/leaderboard?limit=50
+// Top sharpest wallets by sharpness_score. Pro tier gets masked addresses.
+app.get('/api/data/sharps/leaderboard', apiKeyAuth, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const isPremium = req.apiUser && req.apiUser.plan === 'platinum';
+  try {
+    const rows = await dbQuery(`
+      SELECT ws.user_id, ws.sharpness_score, ws.realized_pnl_usd, ws.take_accuracy,
+             ws.closed_positions, ws.total_volume_usd, u.polymarket_address,
+             u.display_name, u.whale_rank
+        FROM wallet_scores ws JOIN users u ON u.id = ws.user_id
+       WHERE ws.sharpness_score > 0
+       ORDER BY ws.sharpness_score DESC, ws.realized_pnl_usd DESC
+       LIMIT $1`,
+      [limit]
+    );
+    res.json({
+      generated_at: new Date(),
+      tier: isPremium ? 'premium' : 'pro',
+      sharps: rows.map(r => ({
+        user_id: r.user_id,
+        display_name: r.display_name,
+        sharpness_score: parseFloat(r.sharpness_score),
+        realized_pnl_usd: parseFloat(r.realized_pnl_usd),
+        take_accuracy: r.take_accuracy != null ? parseFloat(r.take_accuracy) : null,
+        closed_positions: r.closed_positions,
+        total_volume_usd: parseFloat(r.total_volume_usd),
+        whale_rank: r.whale_rank,
+        wallet: r.polymarket_address ? (isPremium ? r.polymarket_address : r.polymarket_address.slice(0, 6) + '…' + r.polymarket_address.slice(-4)) : null,
+      })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/takes/:id — single take by id (public, for permalink pages)
 app.get('/api/takes/:id', async (req, res) => {
   try {
