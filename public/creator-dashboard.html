@@ -3275,15 +3275,18 @@ body.nav-open .hamburger span:nth-child(1) { transform: translateY(7px) rotate(4
 body.nav-open .hamburger span:nth-child(2) { opacity: 0; transform: scaleX(0); }
 body.nav-open .hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-/* Backdrop — always in DOM, controlled by opacity */
+/* Backdrop — frosted glass blur matches the trade modal / info popovers.
+   Premium rather than a flat black curtain. */
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.65);
+  background: rgba(5,5,10,0.6);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
   z-index: 999;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .28s;
+  transition: opacity .24s ease, backdrop-filter .24s ease;
 }
 body.nav-open .sidebar-backdrop {
   opacity: 1;
@@ -3294,24 +3297,32 @@ body.nav-open .sidebar-backdrop {
 @media (max-width: 1024px) {
   .hamburger { display: flex; }
 
-  /* Larger tap targets in sidebar nav */
-  .nav-item { padding: 13px 22px; font-size: 14px; min-height: 48px; }
+  /* Larger tap targets in sidebar nav — override the slim 40px desktop
+     nav rows with roomier 48px rows that match the 44px Apple HIG min */
+  .nav-item { padding: 12px 14px; font-size: 14.5px; min-height: 48px; }
   .nav-icon { font-size: 17px; }
   .sidebar-footer .btn-upgrade,
   .sidebar-footer .signout-btn { min-height: 44px; font-size: 13px; }
 
-  /* Sidebar becomes slide-over drawer */
+  /* Sidebar becomes a slide-over drawer with drop-shadow when open */
   .sidebar {
     position: fixed;
     top: 0; left: 0; bottom: 0;
-    width: 260px;
+    width: 280px;
+    max-width: 86vw;
     transform: translateX(-100%);
-    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    transition: transform .26s cubic-bezier(.22,.8,.3,1);
     z-index: 1000;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
-  body.nav-open .sidebar { transform: translateX(0); }
+  body.nav-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 40px -8px rgba(0,0,0,0.6),
+                0 0 80px -20px rgba(245,166,35,0.15);
+  }
   body.nav-open { overflow: hidden; }
 
   .main { margin-left: 0; }
@@ -3346,13 +3357,43 @@ body.nav-open .sidebar-backdrop {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
   .content { padding: 14px; }
-  .topbar { padding: 10px 14px; gap: 8px; }
-  .topbar-title { font-size: 15px; letter-spacing: 0; }
+  .topbar {
+    padding: 10px 14px env(safe-area-inset-bottom, 10px);
+    gap: 8px;
+    min-height: 56px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0));
+  }
+  .topbar-title { font-size: 17px; letter-spacing: -0.015em; }
 
-  /* Topbar: hamburger + title + explore + new market */
-  .topbar-actions .btn-secondary { display: none; }
+  /* Topbar action cluster: compress to essentials */
+  .topbar-actions .btn-secondary,
   .topbar-actions .btn-explore { display: none; }
-  .topbar-actions .btn-primary { font-size: 13px; padding: 9px 14px; white-space: nowrap; }
+  .topbar-actions .tb-pill-flex #topbarFlexTier { display: none; }
+  .tb-pill { padding: 0 10px; min-height: 34px; font-size: 10.5px; }
+  .tb-pill-wallet #topbarWalletAddr { max-width: 72px; }
+  .notif-bell { width: 34px; height: 34px; font-size: 13px; }
+  .btn-primary { padding: 9px 14px; font-size: 12px; min-height: 34px; }
+
+  /* Content pages breathe — the new glass cards already have 18px radius */
+  .ps-card { padding: 18px 18px; }
+  .ps-hero { font-size: 26px; letter-spacing: -0.03em; }
+  .ps-footer { gap: 8px; padding-top: 12px; }
+  .ps-foot-lbl { font-size: 10px; }
+  .ps-ring { width: 30px; height: 30px; }
+  .ps-ring-inner { width: 20px; height: 20px; }
+  .ps-ring-inner span { font-size: 9.5px; }
+  .ps-sharp { min-width: 34px; padding: 5px 9px; }
+  .ps-sharp span { font-size: 13px; }
+  .ps-roi { font-size: 16px; }
+
+  /* Platform tab bar — inherits horizontal scroll */
+  .ptab { padding: 8px 14px; font-size: 12.5px; min-height: 36px; }
+
+  /* Position rows tighten up but stay tappable */
+  .pos-row { padding: 12px 14px; }
+  .pos-icon, .pos-icon-fallback { width: 28px; height: 28px; border-radius: 7px; }
+  .pos-q { font-size: 13px; }
+  .pos-btn { padding: 6px 12px; font-size: 11px; min-height: 30px; }
 
   /* Stats */
   .stats-row { gap: 8px; }
