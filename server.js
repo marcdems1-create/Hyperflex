@@ -34682,6 +34682,60 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
   if (!address || !signature || !timestamp) {
     return res.status(400).json({ error: 'address, signature, and timestamp required' });
   }
+
+  // ── Pre-flight: is the user's Polymarket proxy deployed? ─────────────────
+  // CLOB's /auth/api-key and /auth/derive-api-key both return garbage for EOAs
+  // without an activated proxy (observed in prod: POST 400 "Could not create
+  // api key", GET 200 with keys that immediately 401 on verification). The
+  // retry loop then burns through MetaMask signatures without recovering.
+  // Catching this here short-circuits the whole mess with an actionable error.
+  //
+  // The relayer check is fast (~100ms), fails open on network errors so we
+  // don't block legitimate traffic, and only triggers the early-bail when
+  // Polymarket explicitly confirms the proxy doesn't exist.
+  try {
+    const eoa = address.toLowerCase();
+    // Compute proxy via Safe factory (same call as /api/proxy/deployed L35797)
+    let proxyAddr = null;
+    try {
+      const calldata = '0x4d0c6cdb' + '000000000000000000000000' + eoa.replace('0x','').slice(-40);
+      const rpcRes = await fetch('https://polygon-bor-rpc.publicnode.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc:'2.0', method:'eth_call', params:[{ to:'0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data:calldata },'latest'], id:1 }),
+        signal: AbortSignal.timeout(3000),
+      });
+      const rpcData = await rpcRes.json().catch(() => ({}));
+      if (rpcData.result && rpcData.result.length >= 42) {
+        proxyAddr = '0x' + rpcData.result.slice(-40);
+      }
+    } catch {}
+    if (proxyAddr) {
+      try {
+        const relayerRes = await fetch(
+          'https://relayer-v2.polymarket.com/deployed?address=' + encodeURIComponent(proxyAddr),
+          { signal: AbortSignal.timeout(3000) }
+        );
+        if (relayerRes.ok) {
+          const relayerData = await relayerRes.json().catch(() => ({}));
+          // Polymarket returns { deployed: false } for unactivated proxies
+          if (relayerData.deployed === false) {
+            console.log('[derive-api-key] proxy not deployed for', eoa.slice(0, 8), '— short-circuit with wallet_not_activated');
+            return res.status(409).json({
+              error: 'wallet_not_activated',
+              message: 'Your Polymarket account hasn\'t been activated yet. Visit polymarket.com, sign in with this wallet, and deposit any amount (even $1) — that activates your proxy. Then come back here to trade.',
+              eoa,
+              proxy: proxyAddr,
+              deployed: false,
+              activate_url: 'https://polymarket.com',
+            });
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  // End pre-flight. Continue with the existing create-then-derive flow.
+
   try {
     const l1Headers = {
       'POLY_ADDRESS': address,

@@ -2966,13 +2966,28 @@ async function enableTrading() {
       } else {
         var errData = await proxyRes.json().catch(function() { return {}; });
         tradeDebug('server-proxy FAIL', { status: proxyRes.status, error: errData });
-        
+
+        // 409 wallet_not_activated — user never signed in on polymarket.com
+        // so no Safe proxy exists for their EOA. No amount of retrying will
+        // make CLOB issue working keys. Surface an activation prompt and
+        // throw so the trade flow stops here.
+        if (proxyRes.status === 409 && errData.error === 'wallet_not_activated') {
+          var msg = errData.message || 'Activate your Polymarket account first. Visit polymarket.com, sign in with this wallet, and deposit any amount.';
+          if (typeof showTradeStatus === 'function') showTradeStatus(msg, 'error');
+          else alert(msg);
+          if (errData.activate_url) window.open(errData.activate_url, '_blank', 'noopener');
+          var waErr = new Error(msg);
+          waErr.code = 'wallet_not_activated';
+          throw waErr;
+        }
+
         // Provide specific error for server proxy failures
         if (proxyRes.status === 400 && errData.error && errData.error.includes('derive')) {
           tradeDebug('server-proxy DERIVE ERROR', 'server also failed to derive - will try browser-direct');
         }
       }
     } catch (proxyErr) {
+      if (proxyErr.code === 'wallet_not_activated') throw proxyErr;
       tradeDebug('server-proxy ERROR', proxyErr.message);
     }
 

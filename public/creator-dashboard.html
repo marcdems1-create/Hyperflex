@@ -20156,6 +20156,19 @@ async function derivePolymarketApiKey() {
     });
     const data = await res.json();
     console.log('[derive-api-key] response:', JSON.stringify(data));
+    // 409 wallet_not_activated — the user has never signed in on polymarket.com,
+    // so their Safe proxy isn't deployed and CLOB will never issue working keys
+    // for this EOA. Surface a clear activation CTA instead of burning through
+    // more MetaMask signatures in a retry loop.
+    if (res.status === 409 && data.error === 'wallet_not_activated') {
+      const msg = data.message || 'Activate on polymarket.com first.';
+      if (typeof showToast === 'function') showToast(msg, 'error');
+      else alert(msg);
+      if (data.activate_url) window.open(data.activate_url, '_blank', 'noopener');
+      const err = new Error(msg);
+      err.code = 'wallet_not_activated';
+      throw err;
+    }
     if (!res.ok) {
       throw new Error(data.error || data.message || 'CLOB returned ' + res.status);
     }
