@@ -449,15 +449,15 @@ async function load() {
           <div class="stat-lbl">Flex Score <span style="font-size:9px">ⓘ</span></div>
           <div class="stat-val" style="color:var(--gold)">${flexScoreFmt}</div>
         </button>
-        <div class="stat">
+        <div class="stat" id="statVolumeCard">
           <div class="stat-lbl">Volume</div>
-          <div class="stat-val" style="color:var(--green)">${volFmt}</div>
-          <div class="stat-sub">${pStats.total_trades} trades</div>
+          <div class="stat-val" id="statVolume" style="color:var(--green)">${volFmt}</div>
+          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades} trades</div>
         </div>
-        <div class="stat">
+        <div class="stat" id="statPnlCard">
           <div class="stat-lbl">P&amp;L</div>
-          <div class="stat-val" style="color:${pStats.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
-          ${pStats.total_trades > 0 ? `<div class="stat-sub">${pStats.closed_wins}W / ${pStats.closed_losses}L</div>` : ''}
+          <div class="stat-val" id="statPnl" style="color:${pStats.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
+          <div class="stat-sub" id="statPnlSub">${pStats.total_trades > 0 ? `${pStats.closed_wins}W / ${pStats.closed_losses}L` : ''}</div>
         </div>
         <button class="stat interactive" onclick="showFlexPointsInfo()">
           <div class="stat-lbl">⚡ Flex Pts <span style="font-size:9px">ⓘ</span></div>
@@ -514,8 +514,8 @@ async function load() {
 
       <!-- TRADES (Polymarket) -->
       <div id="tab-trades" class="tab-pane">
-        ${pStats.total_trades > 0 ? `
-          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <div id="tradesList">${pStats.total_trades > 0 ? `
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap" id="tradesSummary">
             <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${pStats.win_rate}% win rate</span>
             <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${pStats.open_positions} open</span>
             <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${pStats.total_trades} total</span>
@@ -540,7 +540,7 @@ async function load() {
               </div>
             </div>`;
           }).join('')}
-        ` : `<div class="empty"><div class="empty-emoji">💹</div><div class="empty-title">No Polymarket trades yet</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Connect + trade on Polymarket to see your history here.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}
+        ` : `<div class="empty" id="tradesEmpty"><div class="empty-emoji">💹</div><div class="empty-title">${user.polymarket_address ? 'Loading live trades…' : 'No Polymarket trades yet'}</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Fetching from Polymarket directly.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner && !user.polymarket_address ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}</div>
       </div>
 
       <!-- TRACK RECORD -->
@@ -641,7 +641,92 @@ async function load() {
   }
 }
 
-load().then(loadFollowStatus).then(showCreatorDashPill);
+load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); });
+
+// Defensive: a stray "Edit Name" button has been showing up on some
+// deploys (likely from a cached or injected override). Strip it if present.
+function stripEditName() {
+  document.querySelectorAll('button, a').forEach(el => {
+    const t = (el.textContent || '').trim().toLowerCase();
+    if (t === '✏️ edit name' || t === 'edit name' || t.endsWith('edit name')) el.remove();
+  });
+}
+
+// If the DB has zero Polymarket trades but the user has a connected wallet,
+// fetch live positions from Polymarket's data API and update the stat grid
+// + Trades tab. Keeps the profile truthful when sync hasn't caught up yet.
+async function enrichFromLivePolymarket() {
+  try {
+    const res = await fetch(`${API}/api/member/${userId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const addr = data?.user?.polymarket_address;
+    if (!addr) return;
+    // Only enrich if our DB has no trade data — otherwise the normal path
+    // already populated the stats.
+    if ((data.polymarket_stats?.total_trades || 0) > 0) return;
+
+    const posRes = await fetch(`${API}/api/polymarket/positions/${addr}`);
+    if (!posRes.ok) return;
+    const { positions } = await posRes.json();
+    if (!Array.isArray(positions) || !positions.length) return;
+
+    let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
+    for (const p of positions) {
+      vol += Math.abs(p.cost_basis || 0);
+      pnl += p.pnl || 0;
+      if ((p.cash_value || 0) > 0.01) open++;
+      if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
+    }
+    const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
+    const pnlFmt = (pnl >= 0 ? '+$' : '-$') + (Math.abs(pnl) >= 1e3 ? Math.round(Math.abs(pnl)/1e3) + 'K' : Math.round(Math.abs(pnl)));
+
+    const vEl = document.getElementById('statVolume');
+    const vSub = document.getElementById('statVolumeSub');
+    const pEl = document.getElementById('statPnl');
+    const pSub = document.getElementById('statPnlSub');
+    if (vEl) vEl.textContent = volFmt;
+    if (vSub) vSub.textContent = positions.length + ' positions';
+    if (pEl) { pEl.textContent = pnlFmt; pEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+    if (pSub) pSub.textContent = wins + 'W / ' + losses + 'L';
+
+    // Also render the Trades tab with live positions
+    const list = document.getElementById('tradesList');
+    if (list) {
+      const wr = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+      list.innerHTML = `
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${wr}% win rate</span>
+          <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${open} open</span>
+          <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${positions.length} positions</span>
+          <span class="badge" style="background:rgba(168,85,247,0.12);color:var(--purple);border-color:rgba(168,85,247,0.3)">🔴 LIVE</span>
+        </div>
+        ${positions.slice(0, 40).map(p => {
+          const sideUp = (p.side || '').toUpperCase();
+          const pct = Math.round((p.current_price || 0) * 100);
+          return `<div class="card">
+            <a href="${p.market_url || '#'}" target="_blank" rel="noopener">
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                <span class="card-q">${(p.question || '(market)').replace(/</g,'&lt;')}</span>
+              </div>
+            </a>
+            <div class="card-meta">
+              <span>$${Math.round(p.cash_value || 0).toLocaleString()}</span>
+              <span>@${pct}¢</span>
+              <span class="badge" style="background:${p.pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${p.pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${p.pnl >= 0 ? '+' : ''}$${Math.round(p.pnl || 0).toLocaleString()}</span>
+            </div>
+          </div>`;
+        }).join('')}`;
+    }
+
+    // Update the tab count badge
+    const tradesTabBtn = document.querySelector('.tab-btn[onclick*="trades"]');
+    if (tradesTabBtn && !tradesTabBtn.querySelector('.tab-count')) {
+      tradesTabBtn.insertAdjacentHTML('beforeend', ` <span class="tab-count">${positions.length}</span>`);
+    }
+  } catch (e) { console.warn('[live-polymarket]', e); }
+}
 
 function showCreatorDashPill() {
   const creatorToken = localStorage.getItem('hf_token');
