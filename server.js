@@ -10594,6 +10594,9 @@ app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 // GET /passport/:userId — Prediction Passport (shareable credential page)
 app.get('/passport/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'passport.html')));
 
+// GET /takes/:id — single take permalink page (full thread, reply UI)
+app.get('/takes/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'take.html')));
+
 // GET /api/verify/:userId — Public verification API (no auth required)
 // Returns a predictor's verified credential data for third-party consumption.
 // Hedge funds, DAOs, media outlets, and hiring platforms use this to verify
@@ -14911,6 +14914,21 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
   )`).catch(() => {});
   await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_comments_take ON take_comments(take_id, created_at DESC)').catch(() => {});
 })();
+
+// GET /api/takes/:id — single take by id (public, for permalink pages)
+app.get('/api/takes/:id', async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      `SELECT t.*, u.display_name AS user_display_name, u.polymarket_address AS user_polymarket_address,
+              u.avatar_url AS user_avatar_url, u.is_whale AS user_is_whale, u.whale_rank AS user_whale_rank
+         FROM takes t LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Take not found' });
+    res.json({ take: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // GET /api/takes/:id/comments
 app.get('/api/takes/:id/comments', async (req, res) => {
