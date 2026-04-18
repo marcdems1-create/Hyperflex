@@ -3392,6 +3392,164 @@ async function expireTrials() {
 }
 cron.schedule('30 * * * *', safeCron('expireTrials', expireTrials));
 
+// ── DATA ENGINE: sentiment snapshots + wallet scores ───────────────────────
+// Hourly: roll every market's raw reactions + comments from the prior hour
+// into a single sentiment_snapshots row. Nightly: refresh wallet_scores so
+// the snapshot cron can join in sharp-weighted columns in O(1).
+// These tables are the inventory for the paid data API.
+
+function _scoreWallet(pnl, accuracy, volume, positions, takes) {
+  let s = 0;
+  if (pnl >= 100000) s += 40;
+  else if (pnl >= 25000) s += 30;
+  else if (pnl >= 5000) s += 20;
+  else if (pnl >= 500) s += 10;
+  else if (pnl > 0) s += 5;
+  if (takes >= 5 && accuracy != null) s += Math.max(0, Math.round((accuracy - 0.5) * 60));
+  if (volume >= 100000) s += 20;
+  else if (volume >= 10000) s += 12;
+  else if (volume >= 1000) s += 6;
+  else if (volume >= 100) s += 2;
+  if (positions >= 50) s += 10;
+  else if (positions >= 10) s += 6;
+  else if (positions >= 3) s += 3;
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
+
+async function computeWalletScores() {
+  if (!pool) return;
+  // Active wallets = anyone who has a polymarket_address OR has posted a take.
+  const rows = await dbQuery(`
+    SELECT u.id AS user_id,
+      COALESCE((SELECT SUM(pnl) FROM polymarket_trades WHERE eoa_address = u.polymarket_address AND status='closed'), 0)::numeric AS pnl,
+      COALESCE((SELECT COUNT(*) FROM polymarket_trades WHERE eoa_address = u.polymarket_address AND status='closed'), 0)::int AS closed_positions,
+      COALESCE((SELECT SUM(amount_usd) FROM polymarket_trades WHERE eoa_address = u.polymarket_address), 0)::numeric AS volume,
+      (SELECT COUNT(*) FILTER (WHERE is_correct IS NOT NULL) FROM takes WHERE user_id = u.id AND source='user')::int AS resolved_takes,
+      CASE WHEN (SELECT COUNT(*) FILTER (WHERE is_correct IS NOT NULL) FROM takes WHERE user_id = u.id AND source='user') > 0
+        THEN (SELECT COUNT(*) FILTER (WHERE is_correct = true)::numeric
+                   / NULLIF(COUNT(*) FILTER (WHERE is_correct IS NOT NULL), 0)
+              FROM takes WHERE user_id = u.id AND source='user')
+        ELSE NULL END AS take_accuracy
+    FROM users u
+    WHERE u.polymarket_address IS NOT NULL OR EXISTS (SELECT 1 FROM takes WHERE user_id = u.id)
+  `).catch(e => { console.warn('[wallet-scores]', e.message); return []; });
+
+  let updated = 0;
+  for (const r of rows) {
+    const pnl = parseFloat(r.pnl) || 0;
+    const vol = parseFloat(r.volume) || 0;
+    const acc = r.take_accuracy != null ? parseFloat(r.take_accuracy) : null;
+    const score = _scoreWallet(pnl, acc, vol, r.closed_positions, r.resolved_takes);
+    await dbQuery(`
+      INSERT INTO wallet_scores (user_id, sharpness_score, realized_pnl_usd, take_accuracy, resolved_takes, closed_positions, total_volume_usd, computed_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        sharpness_score = EXCLUDED.sharpness_score,
+        realized_pnl_usd = EXCLUDED.realized_pnl_usd,
+        take_accuracy = EXCLUDED.take_accuracy,
+        resolved_takes = EXCLUDED.resolved_takes,
+        closed_positions = EXCLUDED.closed_positions,
+        total_volume_usd = EXCLUDED.total_volume_usd,
+        computed_at = EXCLUDED.computed_at
+    `, [r.user_id, score, pnl, acc, r.resolved_takes, r.closed_positions, vol]).catch(() => {});
+    updated++;
+  }
+  console.log('[wallet-scores]', updated, 'wallets scored');
+}
+
+async function computeSentimentSnapshots() {
+  if (!pool) return;
+  // Bucket = hour just closed (e.g. at 14:05 UTC we snapshot 13:00..14:00)
+  const bucketRows = await dbQuery(
+    `SELECT date_trunc('hour', now() - interval '1 hour') AS bucket_start`
+  );
+  const bucketStart = bucketRows[0].bucket_start;
+
+  // Every market that saw any reaction or comment activity in the bucket
+  const markets = await dbQuery(`
+    SELECT DISTINCT t.market_slug, t.condition_id
+    FROM takes t
+    WHERE t.id IN (
+      SELECT take_id FROM take_reactions WHERE created_at >= $1 AND created_at < $1 + interval '1 hour'
+      UNION
+      SELECT take_id FROM take_comments  WHERE created_at >= $1 AND created_at < $1 + interval '1 hour'
+    )
+  `, [bucketStart]).catch(e => { console.warn('[sentiment]', e.message); return []; });
+
+  let inserted = 0;
+  for (const m of markets) {
+    // Aggregate the bucket's reactions weighted by wallet sharpness
+    const agg = await dbQuery(`
+      WITH bucket_reactions AS (
+        SELECT r.user_id, r.reaction, COALESCE(ws.sharpness_score, 0) AS sharpness
+        FROM take_reactions r
+        JOIN takes t ON t.id = r.take_id
+        LEFT JOIN wallet_scores ws ON ws.user_id = r.user_id
+        WHERE r.created_at >= $1 AND r.created_at < $1 + interval '1 hour'
+          AND ((t.market_slug = $2 AND $2 IS NOT NULL) OR (t.condition_id = $3 AND $3 IS NOT NULL))
+      ),
+      bucket_comments AS (
+        SELECT COUNT(*)::int AS n
+        FROM take_comments c JOIN takes t ON t.id = c.take_id
+        WHERE c.created_at >= $1 AND c.created_at < $1 + interval '1 hour'
+          AND ((t.market_slug = $2 AND $2 IS NOT NULL) OR (t.condition_id = $3 AND $3 IS NOT NULL))
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE reaction='agree')::int AS agrees,
+        COUNT(*) FILTER (WHERE reaction='disagree')::int AS disagrees,
+        COUNT(DISTINCT user_id)::int AS uniq,
+        COUNT(*) FILTER (WHERE reaction='agree' AND sharpness >= 60)::int AS sharp_agrees,
+        COUNT(*) FILTER (WHERE reaction='disagree' AND sharpness >= 60)::int AS sharp_disagrees,
+        SUM(CASE WHEN reaction='agree' THEN sharpness ELSE -sharpness END)::numeric AS signed_weight,
+        SUM(sharpness)::numeric AS total_weight,
+        (SELECT n FROM bucket_comments) AS comments
+      FROM bucket_reactions
+    `, [bucketStart, m.market_slug, m.condition_id]);
+
+    const a = agg[0];
+    if (!a || ((a.agrees | 0) + (a.disagrees | 0) + (a.comments | 0)) === 0) continue;
+
+    const total = (a.agrees | 0) + (a.disagrees | 0);
+    const net = total > 0 ? ((a.agrees - a.disagrees) / total) : 0;
+    const sharpW = (parseFloat(a.total_weight) || 0) > 0
+      ? Math.round((parseFloat(a.signed_weight) / parseFloat(a.total_weight)) * 100)
+      : null;
+
+    // Try to pull the market's current YES price from the alpha cache so we
+    // can compute divergence without an extra API call.
+    let marketPrice = null, divergence = null;
+    try {
+      const cache = _screenerCache && _screenerCache.data;
+      if (Array.isArray(cache)) {
+        const hit = cache.find(x => (m.market_slug && x.slug === m.market_slug) || (m.condition_id && x.conditionId === m.condition_id));
+        if (hit && hit.yes_price != null) {
+          marketPrice = parseFloat(hit.yes_price);
+          if (sharpW != null) {
+            const sharpProb = (sharpW + 100) / 200; // -100..+100 → 0..1
+            divergence = Math.abs(marketPrice - sharpProb);
+          }
+        }
+      }
+    } catch {}
+
+    await dbQuery(`
+      INSERT INTO sentiment_snapshots (market_slug, condition_id, bucket_start, agree_count, disagree_count, comment_count, unique_voters, sharp_agrees, sharp_disagrees, sharp_weighted_score, net_sentiment, market_yes_price, divergence)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      ON CONFLICT (market_slug, condition_id, bucket_start) DO UPDATE SET
+        agree_count = EXCLUDED.agree_count, disagree_count = EXCLUDED.disagree_count,
+        comment_count = EXCLUDED.comment_count, unique_voters = EXCLUDED.unique_voters,
+        sharp_agrees = EXCLUDED.sharp_agrees, sharp_disagrees = EXCLUDED.sharp_disagrees,
+        sharp_weighted_score = EXCLUDED.sharp_weighted_score, net_sentiment = EXCLUDED.net_sentiment,
+        market_yes_price = EXCLUDED.market_yes_price, divergence = EXCLUDED.divergence
+    `, [m.market_slug, m.condition_id, bucketStart, a.agrees | 0, a.disagrees | 0, a.comments | 0, a.uniq | 0, a.sharp_agrees | 0, a.sharp_disagrees | 0, sharpW, net, marketPrice, divergence]).catch(() => {});
+    inserted++;
+  }
+  console.log('[sentiment]', inserted, 'snapshots for', bucketStart);
+}
+
+cron.schedule('5 * * * *',  safeCron('sentimentSnapshots', computeSentimentSnapshots));
+cron.schedule('0 3 * * *',  safeCron('walletScores', computeWalletScores));
+
 // ── EMAIL QUEUE PROCESSOR ─────────────────────────────────────────────────
 // Picks up any pending_emails where send_after <= now, sends them, marks sent
 async function processPendingEmails() {
