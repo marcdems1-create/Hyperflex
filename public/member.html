@@ -370,9 +370,12 @@ async function load() {
     let tierEmoji, tierLabel, tierColorCss, rankDesc, rankClass;
     let tierProgress = null; // { current, target } only set for 'building' state
 
-    if (polyPnl >= 100000 || isTopWhale) {
+    if (polyPnl >= 200000) {
       tierEmoji = '💎'; tierLabel = 'FLEXIN'; tierColorCss = 'var(--gold)'; rankClass = 'flexin';
-      rankDesc = 'Six-figure realized P&L. The top 0.1% of Polymarket traders.';
+      rankDesc = 'Quarter-million+ realized P&L. Top 0.05% of Polymarket.';
+    } else if (polyPnl >= 100000 || isTopWhale) {
+      tierEmoji = '🐋'; tierLabel = 'WHALE'; tierColorCss = 'var(--purple)'; rankClass = 'whale';
+      rankDesc = 'Six-figure P&L or top-50 Polymarket all-time.';
     } else if (polyPnl >= 25000 && closeRate >= 60 && positionCount >= 50) {
       tierEmoji = '🦈'; tierLabel = 'SHARK'; tierColorCss = 'var(--blue)'; rankClass = 'shark';
       rankDesc = 'Institutional-sized moves with sharp exit discipline.';
@@ -417,7 +420,14 @@ async function load() {
           <div class="hero-name">
             ${user.display_name}
             ${user.wallet_verified ? '<span class="hero-verify" title="Verified Wallet">✓</span>' : ''}
-            ${!isBuilding ? `<span class="tier-pill" style="background:${tierColorCss === 'var(--gold)' ? 'rgba(245,166,35,0.15)' : tierColorCss === 'var(--blue)' ? 'rgba(77,159,255,0.15)' : tierColorCss === 'var(--green)' ? 'rgba(0,230,138,0.15)' : 'rgba(255,255,255,0.06)'};color:${tierColorCss};border:1px solid ${tierColorCss === 'var(--gold)' ? 'rgba(245,166,35,0.4)' : tierColorCss === 'var(--blue)' ? 'rgba(77,159,255,0.4)' : tierColorCss === 'var(--green)' ? 'rgba(0,230,138,0.4)' : 'var(--border)'};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>` : ''}
+            ${!isBuilding ? (() => {
+              const tint = tierColorCss === 'var(--gold)' ? ['rgba(245,166,35,0.15)','rgba(245,166,35,0.4)']
+                         : tierColorCss === 'var(--purple)' ? ['rgba(168,85,247,0.15)','rgba(168,85,247,0.4)']
+                         : tierColorCss === 'var(--blue)' ? ['rgba(77,159,255,0.15)','rgba(77,159,255,0.4)']
+                         : tierColorCss === 'var(--green)' ? ['rgba(0,230,138,0.15)','rgba(0,230,138,0.4)']
+                         : ['rgba(255,255,255,0.06)','var(--border)'];
+              return `<span class="tier-pill" style="background:${tint[0]};color:${tierColorCss};border:1px solid ${tint[1]};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>`;
+            })() : ''}
           </div>
           ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
           ${isWhale ? `
