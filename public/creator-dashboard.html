@@ -14633,7 +14633,11 @@ function renderBestWorstCalls() {
   const allResolved = positions.filter(p => p._isResolved).concat(closedTrades);
 
   if (allResolved.length === 0) {
-    const openPositions = positions.filter(p => !p._isResolved);
+    // Open = not resolved AND still holding shares. Polymarket's data-api
+    // keeps sold positions in the response for a window (size=0, pnl set)
+    // so filter by shares, not just resolution state. Same fix applied at
+    // L17839 and L17986.
+    const openPositions = positions.filter(p => !p._isResolved && (p.shares || 0) > 0.01);
     if (openPositions.length > 0) {
       // === "Positions to Watch" mode ===
       container.style.display = 'block';
@@ -17836,7 +17840,7 @@ function renderPosCalendar() {
   if (label) label.textContent = monthNames[_posCalMonth] + ' ' + _posCalYear;
 
   // Get all open positions with end dates
-  var positions = getAllPositionsFlat().filter(function(p) { return !p._isResolved; });
+  var positions = getAllPositionsFlat().filter(function(p) { return !p._isResolved && (p.shares || 0) > 0.01; });
 
   // Group by date string (YYYY-MM-DD)
   var byDate = {};
@@ -17983,7 +17987,12 @@ function updateAllPositionsTab() {
     }
   }
 
-  const open = positions.filter(p => !p._isResolved);
+  // Open positions = not resolved AND still holding shares. Sold positions
+  // stay in Polymarket's data-api for a window with size=0 + pnl set, which
+  // is what caused the dashboard to display 25 "active" positions a chunk
+  // of which were already sold — and Sell then failed with "Insufficient
+  // share balance" because the shares weren't actually there on-chain.
+  const open = positions.filter(p => !p._isResolved && (p.shares || 0) > 0.01);
   const resolved = positions.filter(p => p._isResolved);
 
   // Open Positions
