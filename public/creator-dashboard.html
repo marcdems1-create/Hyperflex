@@ -853,6 +853,67 @@ body {
   .alpha-yes { font-size: 16px; }
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+   LEGACY-CARD RETROFITS — non-invasive visual upgrade
+   ────────────────────────────────────────────────────────────────────────
+   Many tabs (Performance, AI Portfolio, Find Markets, etc.) use hundreds
+   of inline-styled "card" containers built on two recurring patterns:
+
+     1. background:#0f0e0c + border:1px solid #2a2825 (dark card)
+     2. background:var(--cream) + border:1px solid var(--border) (glass-ish)
+
+   Rewriting each one costs hundreds of lines of markup churn. Instead,
+   attribute selectors retrofit the old patterns to the new glass system
+   — gradient surfaces, rgba-white hairlines, 14px radius. Every legacy
+   card now looks like a proper glass panel without touching the HTML.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Pattern 1: dark hex-coded cards */
+.content [style*="background:#0f0e0c"][style*="border:1px solid #2a2825"],
+.content [style*="background: #0f0e0c"][style*="border: 1px solid #2a2825"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01)) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  border-radius: 14px !important;
+}
+
+/* Pattern 2: var(--cream) cards */
+.content [style*="background:var(--cream)"][style*="border:1px solid var(--border)"],
+.content [style*="background: var(--cream)"][style*="border: 1px solid var(--border)"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01)) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  border-radius: 14px !important;
+}
+
+/* Dividers inside retrofitted cards — soften the hard internal borders
+   so the card reads as one surface instead of stacked rectangles */
+.content [style*="background:#0f0e0c"] [style*="border-bottom:1px solid #2a2825"],
+.content [style*="background:#0f0e0c"] [style*="border-bottom: 1px solid #2a2825"],
+.content [style*="background:var(--cream)"] [style*="border-bottom:1px solid var(--border)"],
+.content [style*="background:var(--cream)"] [style*="border-bottom: 1px solid var(--border)"] {
+  border-bottom-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Hero banners on AI Portfolio / FLEX Points — the big gradient headers.
+   Give them the new 18px radius + a softer outer glow so they anchor the
+   page instead of feeling like blocks. */
+.content [style*="linear-gradient(135deg,#06060d"] {
+  border-radius: 18px !important;
+  box-shadow: 0 18px 40px -16px rgba(0,0,0,0.5), 0 0 80px -40px rgba(168,85,247,0.15) !important;
+}
+
+/* Section titles: bump legibility. Targets "UPPERCASE labels" with
+   letter-spacing and Inter-ish sizing that appear inside retrofitted cards. */
+.content [style*="background:#0f0e0c"] [style*="font-family:var(--sans)"][style*="font-size:13px"][style*="text-transform:uppercase"],
+.content [style*="background:var(--cream)"] [style*="font-family:var(--sans)"][style*="font-size:13px"][style*="text-transform:uppercase"] {
+  letter-spacing: 0.04em !important;
+  color: var(--text) !important;
+}
+
+/* Secondary-button legacy pattern — rounded, pill-shaped now */
+.content [style*="background:var(--gold)"][style*="color:#0a0a0f"][style*="border-radius:8px"] {
+  border-radius: 100px !important;
+}
+
 /* More toggle */
 .nav-more-toggle .nav-icon {
   transition: transform 0.2s;
