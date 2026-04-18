@@ -3848,27 +3848,6 @@ async function fetchRedditHot(subreddit, limit = 20) {
   }
 }
 
-async function fetchXTrending() {
-  const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) return [];
-  try {
-    const res = await fetch('https://api.twitterapi.io/twitter/trends', {
-      headers: { 'X-API-Key': apiKey },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data?.trends || data?.data || []).slice(0, 20).map(t => ({
-      title: t.name || t.trend_name || '',
-      link: `https://x.com/search?q=${encodeURIComponent(t.name || '')}`,
-      source: 'X Trending'
-    })).filter(t => t.title.length > 2);
-  } catch (e) {
-    console.warn('[news] X trending fetch failed:', e.message);
-    return [];
-  }
-}
-
 async function extractDominantNarratives(headlines, categoryFilter) {
   if (!headlines.length) return [];
   const headlineText = headlines
@@ -3934,7 +3913,7 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
 
   // ── 1. Fetch all news sources in parallel ──────────────────
   const [googleTop, googleWorld, googleBiz, googleTech, googleEnt,
-         redditNews, redditWorldnews, redditCrypto, xTrends] = await Promise.all([
+         redditNews, redditWorldnews, redditCrypto] = await Promise.all([
     fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 20),
     fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', 15),
     fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en', 15),
@@ -3942,14 +3921,12 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
     fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=en-US&gl=US&ceid=US:en', 10),
     fetchRedditHot('news', 15),
     fetchRedditHot('worldnews', 15),
-    fetchRedditHot('CryptoCurrency', 10),
-    fetchXTrending()
+    fetchRedditHot('CryptoCurrency', 10)
   ]);
 
   const allHeadlines = [
     ...googleTop, ...googleWorld, ...googleBiz, ...googleTech, ...googleEnt,
-    ...redditNews, ...redditWorldnews, ...redditCrypto,
-    ...xTrends.map(t => ({ ...t, title: `TRENDING ON X: ${t.title}` }))
+    ...redditNews, ...redditWorldnews, ...redditCrypto
   ];
 
   // Deduplicate by title similarity (simple prefix match)
@@ -12953,170 +12930,6 @@ const INFLUENCER_SEED = [
   } catch (e) { console.warn('[influencer-seed]', e.message); }
 })();
 
-// ── Auto-fetch influencer tweets via public Twitter endpoints ──
-// Uses publish.twitter.com/oembed (no auth required) + syndication API
-// Cron: every 30 minutes
-
-let _lastInfluencerFetch = 0;
-// 4h between cycles (was 30 min). With 20 influencers per cycle and a
-// 1 call = 1 tweet-list response billing model, 30-min cadence was
-// ~960 calls/day. 4h drops it to ~120 calls/day — well below the
-// cheapest twitterapi.io tier and still fresh enough for a daily-ish
-// tweet feed. Flip TWITTERAPI_FETCH_ENABLED=false to stop entirely.
-const INFLUENCER_FETCH_INTERVAL = 4 * 60 * 60 * 1000;
-
-async function fetchInfluencerTweets() {
-  if (!pool) return;
-  // Default OFF (flipped 2026-04-16). Railway logs proved the twitterapi.io
-  // /user/last_tweets endpoint was returning 0 tweets for every handle in
-  // our influencer list — burning credits for zero stored content. The
-  // cron no longer runs unless TWITTERAPI_FETCH_ENABLED is *explicitly*
-  // set to 'true' in Railway. Interactive endpoints (handle-verify,
-  // manual import-tweet) still work since those read TWITTERAPI_IO_KEY
-  // directly and aren't gated by this flag.
-  if (process.env.TWITTERAPI_FETCH_ENABLED !== 'true') {
-    console.log('[influencer-fetch] Skipped \u2014 set TWITTERAPI_FETCH_ENABLED=true to enable');
-    return;
-  }
-  const now = Date.now();
-  if (now - _lastInfluencerFetch < INFLUENCER_FETCH_INTERVAL) return;
-  _lastInfluencerFetch = now;
-
-  try {
-    // Get active influencers
-    const influencers = await dbQuery('SELECT id, x_handle, display_name, user_id, avatar_url, category FROM influencers WHERE is_active = true ORDER BY follower_count DESC NULLS LAST LIMIT 20');
-    if (!influencers.length) return;
-
-    console.log(`[influencer-fetch] Checking ${influencers.length} influencers for new tweets`);
-    let imported = 0;
-    // Credit-burn metrics: count twitterapi.io calls + tweets fetched
-    // so cron logs show how much spend produced how much stored data.
-    let apiCalls = 0, tweetsFetched = 0, predictionRelevant = 0, marketMatched = 0;
-    const twitterApiKey = process.env.TWITTERAPI_IO_KEY;
-
-    for (const inf of influencers) {
-      try {
-        let tweetTexts = [];
-
-        // Fetch tweets via twitterapi.io
-        if (twitterApiKey) {
-          try {
-            const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 12000);
-            const res = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(inf.x_handle)}`, {
-              headers: { 'X-API-Key': twitterApiKey },
-              signal: ctrl.signal
-            }).finally(() => clearTimeout(tid));
-            apiCalls++;
-            if (res.ok) {
-              const data = await res.json();
-              for (const tw of (data.tweets || [])) {
-                if (tw.type === 'retweet') continue;
-                if (tw.text && tw.text.length > 20) {
-                  tweetTexts.push({
-                    id: tw.id,
-                    text: tw.text,
-                    url: tw.url || `https://x.com/${inf.x_handle}/status/${tw.id}`
-                  });
-                  tweetsFetched++;
-                }
-              }
-            } else {
-              console.warn(`[influencer-fetch] twitterapi.io ${res.status} for @${inf.x_handle}`);
-            }
-          } catch (e) { /* twitterapi.io failed */ }
-        }
-
-        if (!tweetTexts.length) continue;
-
-        // Filter for prediction-relevant content and require market match
-        for (const tw of tweetTexts.slice(0, 5)) {
-          if (!isPredictionRelevant(tw.text)) continue;
-          predictionRelevant++;
-
-          // Dedupe
-          const textPrefix = tw.text.substring(0, 80);
-          const dupe = await dbQuery(
-            "SELECT id FROM takes WHERE source = 'influencer' AND user_id = $1 AND LEFT(thesis, 80) = $2 LIMIT 1",
-            [inf.user_id, textPrefix]
-          ).catch(() => []);
-          if (dupe.length) continue;
-
-          // Match to Polymarket market — REQUIRED (no match = skip)
-          let matchedSlug = null, matchedQuestion = null, matchedConditionId = null;
-          if (_screenerCache && _screenerCache.data) {
-            const tweetLower = tw.text.toLowerCase();
-            let bestMatch = null, bestScore = 0;
-            for (const m of _screenerCache.data) {
-              const qLower = (m.question || '').toLowerCase();
-              const qWords = qLower.split(/\s+/).filter(w => w.length >= 4);
-              if (!qWords.length) continue;
-              const hits = qWords.filter(w => tweetLower.includes(w)).length;
-              const ratio = hits / qWords.length;
-              if (ratio > bestScore && ratio >= 0.5 && hits >= 3) { bestScore = ratio; bestMatch = m; }
-            }
-            if (bestMatch) {
-              matchedSlug = bestMatch.slug || bestMatch.event_slug;
-              matchedQuestion = bestMatch.question;
-              matchedConditionId = bestMatch.market_id || bestMatch.condition_id;
-            }
-          }
-
-          // No market match = skip this tweet (every take must link to a real market)
-          if (!matchedSlug) continue;
-          marketMatched++;
-
-          const textLower = tw.text.toLowerCase();
-          const side = /\byes\b|\bbuy\b|\blong\b|\bbullish\b|\bwill happen\b|\bgoing to\b|\bbet on\b|\bagree\b/i.test(textLower) ? 'YES' : 'NO';
-          const tweetUrl = tw.url || (tw.id ? `https://x.com/${inf.x_handle}/status/${tw.id}` : null);
-          const thesis = tw.text + (tweetUrl ? '\n\n' + tweetUrl : '');
-          const avatar = inf.avatar_url || `https://unavatar.io/x/${inf.x_handle}`;
-
-          await dbQuery(
-            `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, thesis, source)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'influencer')`,
-            [inf.user_id, inf.display_name || ('@' + inf.x_handle), avatar, matchedSlug, matchedConditionId, matchedQuestion, side, thesis]
-          ).catch(e => console.warn('[influencer-import]', e.message));
-          imported++;
-        }
-
-        await new Promise(r => setTimeout(r, 1500));
-      } catch (e) { /* skip this influencer */ }
-    }
-
-    // Always log the summary — a zero-import cycle is the signal that
-    // credits are being spent without producing any stored content.
-    // Line format chosen to grep easily in Railway: [influencer-fetch-summary] apiCalls=N tweetsFetched=N relevant=N marketMatched=N imported=N
-    console.log(
-      `[influencer-fetch-summary] apiCalls=${apiCalls} ` +
-      `tweetsFetched=${tweetsFetched} relevant=${predictionRelevant} ` +
-      `marketMatched=${marketMatched} imported=${imported}`
-    );
-  } catch (e) { console.warn('[influencer-fetch] Error:', e.message); }
-}
-
-// Prediction relevance filter: is this tweet about a prediction/market/bet?
-function isPredictionRelevant(text) {
-  if (!text || text.length < 20) return false;
-  const lower = text.toLowerCase();
-  // Must contain at least one prediction signal word
-  const predictionWords = /\bpredict|\bbet\b|\bwager|\bfavor|\bodds\b|\bprobab|\bforecast|\bexpect|\bwill win|\bwon't win|\bgoing to|\bnot going|\bbullish|\bbearish|\blong\b|\bshort\b|\bbuy\b|\bsell\b|\byes\b|\bno\b|\bover\b|\bunder\b|\bspread|\b%\s*chance|\blikely|\bunlikely|\binevitable|\bimpossible|\bcalling it|\bmy take|\bhottest take|\bbold call|\btrade\b|\bmarket\b|\bpolymarket|\bkalshi|\belection|\bwinner|\bloser|\bchampion/i;
-  if (!predictionWords.test(lower)) return false;
-  // Filter out retweets, replies, ads
-  if (lower.startsWith('rt @')) return false;
-  if (lower.startsWith('@')) return false; // replies
-  if (/\bsponsored\b|\bad\b|\bpromo\b|\bgiveaway\b|\bairdrop\b/i.test(lower)) return false;
-  return true;
-}
-
-// Cron: fire at every 4h boundary; the INFLUENCER_FETCH_INTERVAL guard
-// inside fetchInfluencerTweets() enforces the actual spacing so back-
-// to-back container restarts don't trigger extra calls.
-cron.schedule('0 */4 * * *', () => {
-  fetchInfluencerTweets().catch(e => console.warn('[influencer-cron]', e.message));
-});
-// Also run on boot after a delay
-setTimeout(() => fetchInfluencerTweets().catch(() => {}), 60000);
 
 // ── MARKET-FIRST INFLUENCER TAKES ──────────────────────────────────────────
 // Flipped approach: scan Polymarket markets → match to influencer categories → create takes.
@@ -13227,12 +13040,9 @@ async function generateInfluencerTakesFromMarkets() {
 // ("Bullish here. Current odds: 72% YES. Worth tracking."). Users called
 // them out as fake. The feed now strictly serves:
 //   (a) real user predictions (predictions table)
-//   (b) real influencer tweets with a URL (takes, source='influencer')
-//       — written only by fetchInfluencerTweets() via twitterapi.io
-//   (c) influencer_posts table (monitorPolymarketInfluencers, when X
-//       bearer token is set)
-// If the real tweet pipeline is down the feed goes thin — that's better
-// than faking activity.
+//   (b) real influencer posts from Reddit / YouTube / Substack
+//       (takes + influencer_posts table, written by monitorPolymarketInfluencers)
+// If the real pipeline is thin the feed goes thin — better than faking it.
 // Keeping the generateInfluencerTakesFromMarkets() function itself in
 // place (not called) so the code diff is minimal and it can be revived
 // if we ever want a gated "curated takes" mode behind a config flag.
@@ -15122,23 +14932,18 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     }));
 
     // ── 2b. Influencer takes from `takes` table (source='influencer') ──
-    // The fetchInfluencerTweets() cron writes here (has Nitter fallback
-    // so it works without a paid X API tier). influencer_posts only gets
-    // populated by monitorPolymarketInfluencers() which requires X_BEARER_
-    // TOKEN and hits 402 in practice, so this is where most tweet data
-    // actually lives. Dedup'd against influencer_posts by thesis prefix.
+    // Dedup'd against influencer_posts by thesis prefix.
     let takeInfluencerPosts = [];
     if (pool) {
       const params = [];
       // Feed only surfaces REAL influencer tweets, defined as:
       //   1. source = 'influencer'
-      //   2. thesis contains a URL (fetchInfluencerTweets appends the
-      //      tweet URL; the synthetic generator didn't) — filters out
-      //      legacy "Bullish here. Current odds: X%" template rows.
+      //   2. thesis contains a URL — filters out legacy synthetic
+      //      "Bullish here. Current odds: X%" template rows
       //   3. display_name is non-empty (was leaking "Anonymous" for
-      //      rows with a NULL name).
+      //      rows with a NULL name)
       //   4. market_slug is set — every tweet on the feed must link to
-      //      a live market, that's the whole premise of the product.
+      //      a live market, that's the whole premise of the product
       let where = `WHERE t.source = 'influencer'
                      AND t.thesis ~ 'https?://'
                      AND t.display_name IS NOT NULL
@@ -15171,8 +14976,8 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
         return true;
       })
       .map(t => {
-        // Pull the URL out of the thesis body if present (fetchInfluencerTweets
-        // appends the tweet URL on a newline at the end)
+        // Pull the URL out of the thesis body if present (URL appended
+        // on a newline at the end by legacy ingestion)
         let externalUrl = null;
         let bodyText = t.thesis || '';
         const urlMatch = bodyText.match(/\n\n(https?:\/\/[^\s]+)\s*$/);
@@ -16431,71 +16236,8 @@ function _isPolyContent(text, handle) {
   return false;
 }
 
-// ── X/Twitter via twitterapi.io — resolve handle → user info ────────────────
-async function _resolveXUserId(handle) {
-  const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) return null;
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 10000);
-    const r = await _nodeFetch(
-      `https://api.twitterapi.io/twitter/user/info?userName=${encodeURIComponent(handle)}`,
-      { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
-    ).finally(() => clearTimeout(tid));
-    if (!r.ok) return null;
-    const d = await r.json();
-    // twitterapi.io returns { id, userName, name, profilePicture, followers, ... }
-    return d || null;
-  } catch { return null; }
-}
-
-// ── X/Twitter via twitterapi.io — fetch recent tweets for a handle ──────────
-// Heavily logged — silent failures here were the reason X tweets never
-// appeared on the feed despite Reddit working: 401s / 402s / empty
-// responses all turned into []. Every failure now surfaces in Railway
-// logs so we can diagnose credit-burn vs real outages.
-async function _fetchXTimeline(handle) {
-  const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey) {
-    console.warn('[x-timeline] TWITTERAPI_IO_KEY not set \u2014 X pipeline disabled');
-    return [];
-  }
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 12000);
-    const r = await _nodeFetch(
-      `https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(handle)}`,
-      { headers: { 'X-API-Key': apiKey }, signal: ctrl.signal }
-    ).finally(() => clearTimeout(tid));
-    if (!r.ok) {
-      let body = '';
-      try { body = (await r.text() || '').slice(0, 200); } catch {}
-      console.warn(`[x-timeline] @${handle} \u2014 twitterapi.io ${r.status}${body ? ' ' + body : ''}`);
-      return [];
-    }
-    // Capture the raw payload so a zero-tweet response shows us what the
-    // API actually returned — error string buried inside a 200, missing
-    // field, wrong shape, etc. Previous version only logged total=0 which
-    // hid the root cause.
-    const rawText = await r.text().catch(() => '');
-    let d = {};
-    try { d = JSON.parse(rawText); } catch {}
-    const total = (d.tweets || []).length;
-    const nonRetweet = (d.tweets || []).filter(t => t.type !== 'retweet');
-    if (total === 0) {
-      // Dump the first 300 chars of the body so we can see what fields
-      // the API actually returned (maybe `data.tweets`, `statuses`,
-      // `code: 88`, etc).
-      console.log(`[x-timeline] @${handle} total=0 rawBody=${rawText.slice(0, 300)}`);
-    } else {
-      console.log(`[x-timeline] @${handle} total=${total} nonRT=${nonRetweet.length}`);
-    }
-    return nonRetweet;
-  } catch (e) {
-    console.warn(`[x-timeline] @${handle} \u2014 fetch error: ${e.message}`);
-    return [];
-  }
-}
+// ── X/Twitter handle → user info / timeline fetchers REMOVED
+// (dropped along with the paid X scraper — Reddit + YouTube + Substack only)
 
 // ── YouTube: channel RSS feed (no API key needed) ────────────────────────────
 async function _fetchYouTubeChannelRSS(channelId) {
@@ -16741,13 +16483,9 @@ async function _saveInfluencerPost(influencer, post, prediction) {
 
 // ── Main monitoring function ──────────────────────────────────────────────────
 async function monitorPolymarketInfluencers() {
-  // Reddit/YouTube/Substack use free public APIs — always run.
-  // X/Twitter requires twitterapi.io credits — skip X handles when disabled.
-  const xEnabled = process.env.TWITTERAPI_FETCH_ENABLED === 'true';
-  if (!xEnabled) {
-    console.log('[influencer] X/Twitter disabled (TWITTERAPI_FETCH_ENABLED!=true) — fetching Reddit/YouTube/Substack only');
-  }
-  console.log('[influencer] Starting influencer monitoring sweep');
+  // Reddit / YouTube / Substack only — X/Twitter was dropped along with the
+  // paid X scraper subscription (see Tier 3 cost-cut, April 2026).
+  console.log('[influencer] Starting influencer monitoring sweep (Reddit/YouTube/Substack only)');
 
   // Load active influencers from DB
   let influencers = [];
@@ -16777,47 +16515,13 @@ async function monitorPolymarketInfluencers() {
     if (Date.now() - lastFetch < 25 * 60 * 1000) continue;
     _influencerFetchCache.set(cacheKey, Date.now());
 
+    // X/Twitter branch removed with paid X scraper dependency; skip any X rows.
+    if (inf.platform === 'x') continue;
+
     let rawPosts = [];
 
-    // ── X/Twitter (via twitterapi.io) ───────────────────────────────────
-    if (inf.platform === 'x') {
-      if (!xEnabled || !process.env.TWITTERAPI_IO_KEY) continue;
-      // Update profile info if not cached
-      if (!inf.platform_id || !inf.avatar_url) {
-        const userData = await _resolveXUserId(inf.handle);
-        if (userData) {
-          try {
-            if (pool) {
-              await dbQuery(
-                'UPDATE external_influencers SET platform_id=COALESCE(platform_id,$1), avatar_url=COALESCE(avatar_url,$2), follower_count=COALESCE(NULLIF(follower_count,0),$3) WHERE id=$4',
-                [userData.id || null, userData.profilePicture || null, userData.followers || 0, inf.id]
-              );
-            }
-          } catch {}
-        }
-      }
-      const tweets = await _fetchXTimeline(inf.handle);
-      if (tweets.length) {
-        console.log(`[influencer] @${inf.handle}: ${tweets.length} tweets fetched`);
-      }
-      rawPosts = tweets
-        .filter(t => _isPolyContent(t.text, inf.handle))
-        .map(t => ({
-          platform:     'x',
-          external_id:  t.id,
-          url:          t.url || `https://x.com/${inf.handle}/status/${t.id}`,
-          text:         t.text,
-          published_at: t.createdAt || new Date().toISOString(),
-        }));
-      if (tweets.length && !rawPosts.length) {
-        console.log(`[influencer] @${inf.handle}: all ${tweets.length} tweets filtered out by keyword check`);
-      } else if (rawPosts.length) {
-        console.log(`[influencer] @${inf.handle}: ${rawPosts.length} tweets passed keyword filter`);
-      }
-    }
-
     // ── YouTube ────────────────────────────────────────────────────────────
-    else if (inf.platform === 'youtube') {
+    if (inf.platform === 'youtube') {
       const channelId = inf.platform_id || inf.handle;
       const videos = await _fetchYouTubeChannelRSS(channelId);
       rawPosts = videos
@@ -16940,8 +16644,7 @@ app.get('/api/admin/influencer-sweep-report', requireAdmin, async (req, res) => 
       recentPosts: recent,
       totalsByPlatform: totals,
       config: {
-        twitterapi_key_set: !!process.env.TWITTERAPI_IO_KEY,
-        twitterapi_fetch_enabled: process.env.TWITTERAPI_FETCH_ENABLED !== 'false',
+        // paid X scraper dependency removed (Tier 3 cost-cut).
       },
     });
   } catch (err) {
@@ -16950,8 +16653,7 @@ app.get('/api/admin/influencer-sweep-report', requireAdmin, async (req, res) => 
 });
 
 // Admin: force-run the sweep now. Ignores the 25-min per-handle cache
-// so every active influencer is re-fetched. Use sparingly — each X
-// handle still costs one twitterapi.io call.
+// so every active influencer is re-fetched.
 app.post('/api/admin/influencer-sweep-run', requireAdmin, async (req, res) => {
   try {
     // Clear the per-handle rate-gate so we don't skip everything.
@@ -16967,10 +16669,8 @@ app.post('/api/admin/influencer-sweep-run', requireAdmin, async (req, res) => {
   }
 });
 
-// Run every 4 hours (was every 30 min) — reduces twitterapi.io burn
-// when the filters are producing few matches. The sweep still runs on
-// boot so fresh data appears quickly after a deploy.
-// Full sweep every 4 hours (all platforms — X only when TWITTERAPI_FETCH_ENABLED)
+// Run every 4 hours. The sweep still runs on boot so fresh data appears
+// quickly after a deploy. Reddit/YouTube/Substack only (X path removed).
 cron.schedule('0 */4 * * *', () => {
   monitorPolymarketInfluencers().catch(err => console.error('[influencer] Cron error:', err.message));
 });
@@ -38858,52 +38558,6 @@ function recordTweet(text, market) {
   if (_tweetHistory.length > 50) _tweetHistory.splice(0, 25);
 }
 
-// ── Seed tweet history from X timeline on startup (prevents post-deploy duplicate spam) ──
-async function _seedTweetHistoryFromTimeline() {
-  const apiKey = process.env.TWITTERAPI_IO_KEY;
-  const xHandle = process.env.X_HANDLE || 'HyperFlexapp';
-  if (!apiKey) {
-    console.log('[tweet-seed] Skipped: TWITTERAPI_IO_KEY not set');
-    return;
-  }
-  try {
-    const res = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(xHandle)}`, {
-      headers: { 'X-API-Key': apiKey },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!res.ok) {
-      console.warn('[tweet-seed] twitterapi.io returned', res.status);
-      return;
-    }
-    const data = await res.json();
-    const tweets = data.tweets || [];
-    const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-    let seeded = 0;
-    for (const t of tweets) {
-      const ts = new Date(t.createdAt).getTime();
-      // Only seed tweets from last 48h
-      if (Date.now() - ts > 48 * 60 * 60 * 1000) continue;
-      const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
-      if (!alreadyTracked) {
-        _tweetHistory.push({ text: t.text, market: '', ts });
-        seeded++;
-      }
-    }
-    // Also seed _tweetLog timestamps so rate limiter is aware of recent posts
-    const last24h = tweets.filter(t => Date.now() - new Date(t.createdAt).getTime() < 24 * 60 * 60 * 1000);
-    for (const t of last24h) {
-      const ts = new Date(t.createdAt).getTime();
-      if (!_tweetLog.some(l => Math.abs(l - ts) < 60000)) _tweetLog.push(ts);
-    }
-    _tweetLog.sort((a, b) => a - b);
-    console.log(`[tweet-seed] Seeded ${seeded} tweets from timeline, ${_tweetLog.length} in rate limiter`);
-  } catch (e) {
-    console.warn('[tweet-seed] Failed:', e.message);
-  }
-}
-// Fire on startup (non-blocking)
-_seedTweetHistoryFromTimeline().catch(() => {});
-
 // ── Event-driven tweets (fire-and-forget, rate-limited) ──
 
 async function tweetWhaleAlert() { /* DISABLED — was posting garbage tweets with wallet hashes */ }
@@ -39274,397 +38928,9 @@ cron.schedule('0 18 * * *', safeCron('rewardsTweet', ...));
 DISABLED — account flagged */
 
 // ══════════════════════════════════════════════════════════════════════
-// REPLY BOT REMOVED — got account suspended. DO NOT re-enable.
+// REPLY BOT REMOVED — account suspended + paid X scraper dependency cut.
 // ══════════════════════════════════════════════════════════════════════
 
-// REPLY BOT REMOVED — got account suspended
-// (deleted ~400 lines of reply bot code)
-
-// ════════════════════════════════════════════════════════════
-// [placeholder — see real ACCURACY TRACKING below]
-// ════════════════════════════════════════════════════════════
-const _replyLog = [];
-const _replyDraftQueue = [];
-let _replyDraftId = 0;
-let _replyCountToday = 0;
-let _replyCountResetDay = new Date().toDateString();
-let _replySinceLastLink = 0; // track link cadence (every 3-4 replies)
-
-async function replyToTweet(tweetId, text) {
-  const url = 'https://api.x.com/2/tweets';
-  const body = JSON.stringify({ text, reply: { in_reply_to_tweet_id: tweetId } });
-  const auth = _xOAuthSign('POST', url, {});
-  if (!auth) throw new Error('X API keys not configured');
-  const res = await fetch(url, { method: 'POST', headers: { 'Authorization': auth, 'Content-Type': 'application/json' }, body });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
-  console.log('[reply-bot] Replied to', tweetId);
-  return data;
-}
-
-async function searchAndDraftReplies() {
-  const apiKey = process.env.TWITTERAPI_IO_KEY;
-  if (!apiKey && !_xOAuthSign) return;
-  try {
-    const queries = [
-      'polymarket odds',
-      'kalshi prediction',
-      '"prediction market" whale',
-    ];
-    const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
-    const res = await fetch(`https://api.twitterapi.io/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&queryType=Latest`, {
-      headers: { 'X-API-Key': apiKey },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!res.ok) { console.warn('[reply-bot] Search failed:', res.status); return; }
-    const data = await res.json();
-    const tweets = data.tweets || [];
-    if (!tweets.length) return;
-    const worthy = tweets.filter(t => {
-      if (t.type === 'retweet') return false;
-      if (t.author?.userName === 'HyperFlexapp') return false;
-      return ((t.likeCount || 0) + (t.retweetCount || 0) * 3 + (t.replyCount || 0) * 2) >= 1 && !_replyLog.includes(t.id);
-    });
-    if (!worthy.length) return;
-    const target = worthy.sort((a, b) => {
-      const aE = (a.likeCount || 0) + (a.retweetCount || 0) * 3;
-      const bE = (b.likeCount || 0) + (b.retweetCount || 0) * 3;
-      return bE - aE;
-    })[0];
-
-    // ── Gather rich data for the reply ──
-    const tLower = (target.text || '').toLowerCase();
-    let dataPoint = '';
-    let marketSlug = '';
-
-    // Pull whale data
-    let whaleMatch = null;
-    if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
-      whaleMatch = _whaleIndexCache.data.picks.find(p => {
-        if ((p.total_capital || 0) < 50000) return false;
-        if ((p.whale_count || 0) < 2) return false;
-        const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
-        return mWords.some(w => tLower.includes(w));
-      });
-    }
-
-    // Pull screener data (edge score, price, volume)
-    let screenerMatch = null;
-    if (_screenerCache && _screenerCache.data) {
-      screenerMatch = _screenerCache.data.find(m => {
-        if ((m.volume || 0) < 50000) return false;
-        const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
-        return mWords.some(w => tLower.includes(w));
-      });
-    }
-
-    // Fear & greed
-    const fg = (_fearGreedCache && _fearGreedCache.data) ? _fearGreedCache.data : null;
-
-    // Build rich data context — as many real numbers as possible
-    const stats = [];
-
-    // Fallback: if no text-match, use the top edge score market from screener
-    if (!whaleMatch && !screenerMatch && _screenerCache && _screenerCache.data && _screenerCache.data.length) {
-      const sorted = [..._screenerCache.data].filter(m => (m.edge_score || 0) >= 50 && (m.volume || 0) >= 50000).sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
-      if (sorted.length) screenerMatch = sorted[0];
-    }
-    if (!whaleMatch && !screenerMatch && _whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
-      const topWhale = _whaleIndexCache.data.picks.filter(p => (p.total_capital || 0) >= 50000 && (p.whale_count || 0) >= 2).sort((a, b) => (b.total_capital || 0) - (a.total_capital || 0))[0];
-      if (topWhale) whaleMatch = topWhale;
-    }
-
-    const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
-    if (!marketName) {
-      console.log(`[reply-bot] Skipping tweet ${target.id} — no market data available at all`);
-      return;
-    }
-
-    if (whaleMatch) {
-      const cap = whaleMatch.total_capital >= 1000000 ? '$' + (whaleMatch.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1000) + 'K';
-      stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
-      stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
-    }
-    if (screenerMatch) {
-      if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
-      if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
-      if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
-      const vol = screenerMatch.volume >= 1000000 ? '$' + (screenerMatch.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1000) + 'K';
-      stats.push(`volume: ${vol}`);
-      if (screenerMatch.trade && screenerMatch.trade.roi_pct) stats.push(`potential ROI: ${screenerMatch.trade.roi_pct}%`);
-      marketSlug = screenerMatch.slug || '';
-    }
-    if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
-
-    dataPoint = `Market: "${marketName}". ${stats.join('. ')}.`;
-
-    // ── Daily cap: max 8 replies/day ──
-    const today = new Date().toDateString();
-    if (_replyCountResetDay !== today) { _replyCountToday = 0; _replyCountResetDay = today; }
-    if (_replyCountToday >= 8) {
-      console.log('[reply-bot] Daily cap reached (8 replies) — skipping');
-      return;
-    }
-
-    // ── Decide if this reply gets a link (every 3-4 replies) ──
-    const includeLink = _replySinceLastLink >= 3 && marketSlug;
-    const linkLine = includeLink ? `\nhyperflex.network/market/${marketSlug}` : '';
-
-    // ── Pick a random tone variation ──
-    const tones = [
-      'degen trader casually dropping alpha in a group chat',
-      'sharp bettor who just spotted something interesting on a dashboard',
-      'crypto-native who talks in numbers, not opinions',
-      'seasoned trader reacting to breaking data, slightly amused',
-      'prediction market nerd who gets excited about edge scores and whale flow',
-    ];
-    const tone = tones[Math.floor(Math.random() * tones.length)];
-
-    const anthropic = new Anthropic();
-    const replyRes = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 280,
-      system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
-
-Rules:
-1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
-2. Name the specific market naturally — don't use quotes or formal phrasing.
-3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
-4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
-5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
-6. 2-3 sentences max. Under 260 chars (excluding any link).
-7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
-8. NEVER use hashtags or emojis.
-9. Output ONLY the tweet text, nothing else.
-
-Good examples:
-- "Whales hammering the hotter CPI side with $1.2M at edge score 71. 60-point gap vs crowd pricing rn. You think this kills rate cuts or already priced in?"
-- "Heavy NO flow on softer print expectations. Crystal Ball sitting at 2.6%. You riding the whale consensus or fading it?"
-- "3 wallets just dropped $397K on Iran ceasefire YES at 58 cents. Fear & Greed at 61. Anyone else seeing this as the play?"`,
-      messages: [{ role: 'user', content: `Someone posted this on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
-    });
-    let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-    if (reply.length > 260) reply = reply.substring(0, reply.lastIndexOf(' ', 260)) || reply.substring(0, 260);
-    // Append link if this is a link-cadence reply
-    if (includeLink) reply += linkLine;
-
-    // Reply-only mode — no quote tweets, no standalone posts
-    let postResult = null;
-
-    // Check dedup before posting
-    if (isTweetTooSimilar(reply)) {
-      console.log(`[reply-bot] Skipping — reply too similar to recent tweet: "${reply.substring(0, 60)}..."`);
-      _replyLog.push(target.id);
-      if (_replyLog.length > 200) _replyLog.splice(0, 100);
-      return;
-    }
-
-    try {
-      // Reply directly to the tweet — no quote tweets, no standalone posts
-      postResult = await replyToTweet(target.id, reply);
-      recordTweet(reply, marketSlug);
-      _replyCountToday++;
-      _replySinceLastLink = includeLink ? 0 : _replySinceLastLink + 1;
-      console.log(`[reply-bot] REPLIED to ${target.id} (${_replyCountToday}/8 today${includeLink ? ', with link' : ''}): "${reply.substring(0, 80)}..."`);
-      _replyLog.push(target.id);
-      if (_replyLog.length > 200) _replyLog.splice(0, 100);
-    } catch (postErr) {
-      console.warn(`[reply-bot] Reply failed: ${postErr.message}`);
-      // X 403 "not mentioned/engaged" = conversation-level restriction not detectable from reply_settings
-      // These are expected; don't pollute health endpoint's recent_errors
-      if (!postErr.message.includes('not been mentioned or otherwise engaged')) {
-        _logError('reply-bot/post', postErr);
-      }
-    }
-
-    _replyDraftQueue.push({
-      id: ++_replyDraftId, tweet_id: target.id, tweet_text: (target.text||'').substring(0, 200),
-      tweet_author: target.author_id, tweet_metrics: target.public_metrics,
-      reply_text: reply, data_used: dataPoint, created_at: new Date().toISOString(),
-      status: postResult ? 'posted' : 'failed',
-      posted_at: postResult ? new Date().toISOString() : null,
-      reply_id: postResult?.data?.id || null
-    });
-    if (_replyDraftQueue.length > 50) _replyDraftQueue.shift();
-  } catch (e) { console.warn('[reply-bot]', e.message); }
-}
-
-app.get('/api/reply-queue', (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  res.json({ drafts: _replyDraftQueue.filter(r => r.status === 'draft'), posted: _replyDraftQueue.filter(r => r.status === 'posted').slice(-10), failed: _replyDraftQueue.filter(r => r.status === 'failed').slice(-10), total: _replyDraftQueue.length });
-});
-app.post('/api/reply-queue/:id/post', async (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
-  if (!entry) return res.status(404).json({ error: 'Draft not found' });
-  try {
-    const result = await replyToTweet(entry.tweet_id, entry.reply_text);
-    entry.status = 'posted'; entry.posted_at = new Date().toISOString();
-    _replyLog.push(entry.tweet_id);
-    if (_replyLog.length > 200) _replyLog.splice(0, 100);
-    res.json({ ok: true, reply_id: result.data?.id, text: entry.reply_text });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.post('/api/reply-queue/:id/edit', (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
-  if (!entry) return res.status(404).json({ error: 'Draft not found' });
-  const newText = (req.body.text || '').trim();
-  if (!newText) return res.status(400).json({ error: 'Text required' });
-  entry.reply_text = newText;
-  res.json({ ok: true, updated: entry });
-});
-app.post('/api/reply-queue/:id/delete', (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  const idx = _replyDraftQueue.findIndex(r => r.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: 'Draft not found' });
-  _replyDraftQueue.splice(idx, 1);
-  res.json({ ok: true });
-});
-
-// Reply to a specific tweet by URL — admin only
-app.post('/api/reply-to', async (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  const { url, text: customText } = req.body || {};
-  if (!url) return res.status(400).json({ error: 'url required (tweet URL)' });
-
-  // Extract tweet ID from URL
-  const tweetIdMatch = url.match(/status\/(\d+)/);
-  if (!tweetIdMatch) return res.status(400).json({ error: 'Could not extract tweet ID from URL' });
-  const tweetId = tweetIdMatch[1];
-
-  try {
-    // Fetch the tweet text so we can generate a data-rich reply
-    let tweetText = '';
-    const twitterKey = process.env.TWITTERAPI_IO_KEY;
-    if (twitterKey) {
-      try {
-        const tweetRes = await fetch(`https://api.twitterapi.io/twitter/tweets?tweet_ids=${tweetId}`, {
-          headers: { 'X-API-Key': twitterKey },
-          signal: AbortSignal.timeout(10000)
-        });
-        if (tweetRes.ok) {
-          const tweetData = await tweetRes.json();
-          const tweets = tweetData.tweets || [];
-          tweetText = tweets[0]?.text || '';
-        }
-      } catch (e) { /* tweet fetch failed, will use fallback */ }
-    }
-    // If we couldn't fetch, use the text from the request body if provided
-    if (!tweetText) tweetText = req.body.tweet_text || '';
-
-    let replyText = customText;
-
-    if (!replyText) {
-      // Generate a reply using live data
-      const tLower = tweetText.toLowerCase();
-      const queryWords = tLower.split(/\s+/).filter(w => w.length > 4);
-
-      // Gather data
-      const stats = [];
-      let whaleMatch = null;
-      if (_whaleIndexCache?.data?.picks) {
-        whaleMatch = _whaleIndexCache.data.picks.find(p => {
-          if ((p.total_capital || 0) < 50000 || (p.whale_count || 0) < 2) return false;
-          const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
-          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
-        });
-      }
-      let screenerMatch = null;
-      if (_screenerCache?.data) {
-        screenerMatch = _screenerCache.data.find(m => {
-          if ((m.volume || 0) < 50000) return false;
-          const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
-          return mWords.some(w => queryWords.some(qw => w.includes(qw) || qw.includes(w)));
-        });
-      }
-      const fg = _fearGreedCache?.data;
-
-      if (whaleMatch) {
-        const cap = whaleMatch.total_capital >= 1e6 ? '$' + (whaleMatch.total_capital/1e6).toFixed(1) + 'M' : '$' + Math.round(whaleMatch.total_capital/1e3) + 'K';
-        stats.push(`${whaleMatch.whale_count} whale wallets with ${cap} total capital`);
-        stats.push(`whale consensus: ${whaleMatch.consensus_pct}% ${whaleMatch.consensus_side}`);
-      }
-      if (screenerMatch) {
-        if (screenerMatch.edge_score) stats.push(`edge score: ${screenerMatch.edge_score}/100`);
-        if (screenerMatch.yes_price != null) stats.push(`current price: ${Math.round(screenerMatch.yes_price * 100)}% YES`);
-        if (screenerMatch.price_change_24h) stats.push(`24h shift: ${screenerMatch.price_change_24h > 0 ? '+' : ''}${screenerMatch.price_change_24h.toFixed(1)}%`);
-        const vol = screenerMatch.volume >= 1e6 ? '$' + (screenerMatch.volume/1e6).toFixed(1) + 'M' : '$' + Math.round(screenerMatch.volume/1e3) + 'K';
-        stats.push(`volume: ${vol}`);
-      }
-      if (fg) stats.push(`Fear & Greed: ${fg.score}/100 (${fg.label})`);
-
-      const marketName = (whaleMatch ? whaleMatch.market : screenerMatch ? screenerMatch.question : '').substring(0, 80);
-      const dataPoint = stats.length ? `Market: "${marketName}". ${stats.join('. ')}.` : `General market context: Fear & Greed at ${fg ? fg.score : '?'}/100.`;
-
-      const tones = [
-        'degen trader casually dropping alpha in a group chat',
-        'sharp bettor who just spotted something interesting on a dashboard',
-        'crypto-native who talks in numbers, not opinions',
-        'seasoned trader reacting to breaking data, slightly amused',
-        'prediction market nerd who gets excited about edge scores and whale flow',
-      ];
-      const tone = tones[Math.floor(Math.random() * tones.length)];
-
-      const anthropic = new Anthropic();
-      const aiRes = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 280,
-        system: `You're a fellow degen dropping real intel from your prediction market dashboard (HyperFlex). Your vibe: ${tone}.
-
-Rules:
-1. Pull at least ONE specific number from the data (whale $, edge score, odds %, consensus %, ROI, Fear & Greed). Use the EXACT number.
-2. Name the specific market naturally — don't use quotes or formal phrasing.
-3. ALWAYS end with a real question that invites a reply (not rhetorical — something someone would actually answer).
-4. Sound like a sharp trader in a group chat, NOT a news anchor or brand account.
-5. Vary your structure: sometimes lead with data, sometimes lead with a take, sometimes lead with the question.
-6. 2-3 sentences max. Under 260 chars (excluding any link).
-7. NEVER say "Check out", "our dashboard", "we track", "at HyperFlex". You're just a trader who happens to see this data.
-8. NEVER use hashtags or emojis.
-9. Output ONLY the tweet text, nothing else.`,
-        messages: [{ role: 'user', content: `Someone posted this on X:\n"${tweetText.substring(0, 400)}"\n\nYour live dashboard data:\n${dataPoint}\n\nReply to their tweet with specific data and a question:` }]
-      });
-      replyText = (aiRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-      if (replyText.length > 260) replyText = replyText.substring(0, replyText.lastIndexOf(' ', 260)) || replyText.substring(0, 260);
-    }
-
-    // Post the reply
-    const result = await replyToTweet(tweetId, replyText);
-    recordTweet(replyText, '');
-    _replyDraftQueue.push({
-      id: ++_replyDraftId, tweet_id: tweetId, tweet_text: tweetText.substring(0, 200),
-      tweet_author: 'manual', tweet_metrics: {},
-      reply_text: replyText, data_used: 'manual trigger', created_at: new Date().toISOString(),
-      status: 'posted', posted_at: new Date().toISOString(), reply_id: result?.data?.id || null
-    });
-    res.json({ ok: true, tweet_id: tweetId, reply_text: replyText, reply_id: result?.data?.id });
-  } catch (e) {
-    console.error('[reply-to]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Manual trigger for reply bot
-app.post('/api/reply-queue/trigger', async (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    await searchAndDraftReplies();
-    const drafts = _replyDraftQueue.filter(r => r.status === 'draft');
-    res.json({ ok: true, drafts_generated: drafts.length, drafts });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Reply engagement bot — reply-only mode, max 8/day, degen tone
-// REPLY BOT DISABLED — got account suspended. DO NOT re-enable.
-// cron.schedule('15 */3 * * *', safeCron('replyBot', searchAndDraftReplies));
-// setTimeout(() => searchAndDraftReplies().catch(() => {}), 120000);
-console.log('[boot] Reply engagement bot DISABLED (account suspended)');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
@@ -41532,62 +40798,6 @@ setInterval(async () => {
         .then(() => console.log('[watchdog] Signals cache refreshed'))
         .catch(e => _logError('watchdog/signals', e));
     }
-
-    // ── TWITTER GUARDIAN — detect & prevent spam/duplicate posting ──
-    // Fetch our own recent tweets and check for duplicates that slipped through
-    try {
-      const twitterKey = process.env.TWITTERAPI_IO_KEY;
-      const xHandle = process.env.X_HANDLE || 'HyperFlexapp';
-      if (twitterKey) {
-        const tlRes = await fetch(`https://api.twitterapi.io/twitter/user/last_tweets?userName=${encodeURIComponent(xHandle)}`, {
-          headers: { 'X-API-Key': twitterKey },
-          signal: AbortSignal.timeout(8000)
-        });
-        if (tlRes.ok) {
-          const tlData = await tlRes.json();
-          const recentTweets = (tlData.tweets || []);
-
-          // Check for duplicate tweets in timeline (same text within 6h)
-          const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString();
-          const recentSixH = recentTweets.filter(t => t.createdAt > sixHoursAgo);
-
-          // Build word sets for similarity comparison
-          const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-          const wordSet = t => new Set(normalize(t).split(' ').filter(w => w.length > 3));
-
-          let duplicatesFound = 0;
-          for (let i = 0; i < recentSixH.length; i++) {
-            for (let j = i + 1; j < recentSixH.length; j++) {
-              const ws1 = wordSet(recentSixH[i].text);
-              const ws2 = wordSet(recentSixH[j].text);
-              const inter = [...ws1].filter(w => ws2.has(w)).length;
-              const union = new Set([...ws1, ...ws2]).size;
-              if (union > 0 && inter / union > 0.55) duplicatesFound++;
-            }
-          }
-
-          if (duplicatesFound > 0) {
-            console.warn(`[guardian] ⚠ DUPLICATE TWEETS DETECTED on timeline: ${duplicatesFound} similar pairs in last 6h`);
-            _logError('guardian/twitter-spam', new Error(`${duplicatesFound} similar tweet pairs detected in last 6h — auto-pausing bot for 12h`));
-            // Auto-pause: fill rate limiter to prevent more posting
-            const pauseUntil = now + 12 * 60 * 60 * 1000;
-            while (_tweetLog.length < 5) _tweetLog.push(pauseUntil);
-            _healthTimestamps.twitterGuardianPause = new Date().toISOString();
-            _healthTimestamps.twitterGuardianReason = `${duplicatesFound} duplicate pairs detected`;
-          }
-
-          // Sync timeline into _tweetHistory so we catch cross-restart duplication
-          for (const t of recentTweets) {
-            const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
-            if (!alreadyTracked) {
-              _tweetHistory.push({ text: t.text, market: '', ts: new Date(t.createdAt).getTime() });
-            }
-          }
-          // Keep history bounded
-          if (_tweetHistory.length > 60) _tweetHistory.splice(0, 30);
-        }
-      }
-    } catch (e) { _logError('guardian/twitter-check', e); }
 
     // ── SITE HEALTH SELF-CHECK — verify critical pages respond ──
     // Skip for first 10 min after boot to avoid false timeouts during cache warm-up
