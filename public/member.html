@@ -3,260 +3,1156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Profile — HYPERFLEX</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<title>Member Profile — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0a0a0f;--surface:#111118;--card:#16161f;--border:#1e1e2a;--text:#f0f0f5;--soft:#8888a0;--muted:#55556a;--gold:#d4a017;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--mono:'Space Mono',monospace;--sans:'Inter',sans-serif}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
-a{color:var(--gold);text-decoration:none}
-.page{max-width:640px;margin:0 auto;padding:24px 20px 80px}
-
-/* Hero */
-.hero{padding:32px 0 24px;border-bottom:1px solid var(--border);margin-bottom:0}
-.hero-top{display:flex;align-items:center;gap:16px;margin-bottom:16px}
-.avatar{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:24px;font-weight:800;flex-shrink:0;border:2px solid var(--border)}
-.name{font-size:22px;font-weight:800;letter-spacing:-0.03em}
-.handle{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
-.bio{font-size:14px;color:var(--soft);line-height:1.5;margin-bottom:12px;max-width:460px}
-.social-row{display:flex;gap:20px;font-size:13px;margin-bottom:14px}
-.social-row strong{color:var(--text);font-weight:700}
-.social-row span{color:var(--muted)}
-.action-row{display:flex;gap:8px;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:none;color:var(--text);transition:all .15s;font-family:var(--sans)}
-.btn:hover{background:rgba(255,255,255,.06)}
-.btn-gold{border-color:rgba(212,160,23,.4);color:var(--gold)}
-.btn-gold:hover{background:rgba(212,160,23,.1)}
-.btn-fill{background:var(--text);color:var(--bg);border:none}
-.btn-fill:hover{opacity:.85}
-
-/* Tier */
-.tier{text-align:center;padding:28px 0;border-bottom:1px solid var(--border)}
-.tier-icon{font-size:40px;margin-bottom:4px}
-.tier-label{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
-.tier-pct{font-family:var(--mono);font-size:56px;font-weight:700;line-height:1}
-.tier-sub{font-size:12px;color:var(--muted);margin-top:6px}
-.tier-bar{height:3px;background:var(--border);border-radius:2px;margin:12px auto 0;max-width:200px;overflow:hidden}
-.tier-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
-
-/* Stats */
-.stats{display:flex;border-bottom:1px solid var(--border)}
-.stat{flex:1;text-align:center;padding:16px 8px;border-right:1px solid var(--border)}
-.stat:last-child{border-right:none}
-.stat-val{font-family:var(--mono);font-size:18px;font-weight:700}
-.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-@media(max-width:480px){.stats{flex-wrap:wrap}.stat{flex:1 1 50%;border-bottom:1px solid var(--border)}.stat:nth-child(3),.stat:nth-child(4){border-bottom:none}}
-
-/* Tabs */
-.tabs{display:flex;border-bottom:1px solid var(--border)}
-.tab{flex:1;text-align:center;padding:14px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s;font-family:var(--sans)}
-.tab:hover{color:var(--soft)}
-.tab.active{color:var(--text);border-bottom-color:var(--gold)}
-.tab-content{display:none}.tab-content.active{display:block}
-
-/* Take cards */
-.take{padding:16px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.take:hover{background:rgba(255,255,255,.01)}
-.take a{text-decoration:none;color:inherit}
-.take-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
-.take-side{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;flex-shrink:0}
-.take-side.yes{background:rgba(0,230,138,.1);color:var(--green)}
-.take-side.no{background:rgba(255,77,106,.1);color:var(--red)}
-.take-q{font-size:15px;font-weight:600;line-height:1.4}
-.take-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
-.take-thesis{font-size:14px;color:var(--soft);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.take-actions{display:flex;gap:16px;margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
-.badge-correct{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px}
-.badge-correct.win{background:rgba(0,230,138,.1);color:var(--green)}
-.badge-correct.loss{background:rgba(255,77,106,.1);color:var(--red)}
-
-/* Trade rows */
-.trade{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.trade-info{flex:1;min-width:0}
-.trade-q{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.trade-detail{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
-.trade-pnl{font-family:var(--mono);font-size:13px;font-weight:700;flex-shrink:0}
-
-/* CTA */
-.challenge{background:linear-gradient(135deg,rgba(212,160,23,.06),rgba(212,160,23,.02));border:1px solid rgba(212,160,23,.2);border-radius:16px;padding:24px;text-align:center;margin-top:24px}
-.challenge-title{font-size:17px;font-weight:800;margin-bottom:4px}
-.challenge-sub{font-size:13px;color:var(--muted);margin-bottom:14px}
-
-/* Loading */
-.loading{color:var(--muted);text-align:center;padding:80px 20px;font-size:13px}
-.empty{text-align:center;padding:40px 16px;color:var(--muted);font-size:13px}
-
-/* Mobile */
-@media(max-width:480px){.page{padding:16px 16px 60px}.name{font-size:18px}.avatar{width:56px;height:56px;font-size:20px}.tier-pct{font-size:44px}}
+:root{
+  --paper:#0b0b12;--paper-2:#0e0e17;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--gold-soft:#c9920d;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --shadow-lg:0 24px 60px -20px rgba(0,0,0,0.6),0 12px 32px -8px rgba(0,0,0,0.4);
+  --shadow-glow:0 0 48px -12px rgba(245,166,35,0.35);
+}
+html,body{background:var(--paper);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body{min-height:100vh;background:radial-gradient(ellipse 1200px 800px at 50% -200px,rgba(245,166,35,0.08),transparent 60%),radial-gradient(ellipse 800px 600px at 90% 20%,rgba(168,85,247,0.05),transparent 60%),var(--paper)}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+/* ── Nav ── */
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;position:sticky;top:0;z-index:50;background:rgba(11,11,18,0.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
+.nav-logo{font-family:'Inter',sans-serif;font-size:17px;font-weight:800;color:var(--text);display:inline-flex;align-items:center;gap:8px;letter-spacing:-0.02em}
+.nav-logo:hover{color:var(--gold)}
+.nav-back{color:var(--muted);font-size:13px;display:inline-flex;align-items:center;min-height:44px;padding:0 6px;transition:color .15s}
+.nav-back:hover{color:var(--text)}
+/* ── Page shell ── */
+.page{max-width:720px;margin:0 auto;padding:28px 18px 80px}
+/* ── Glass cards ── */
+.glass{background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015));border:1px solid var(--border);border-radius:18px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-lg)}
+.glass-inset{background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:14px}
+/* ── Hero ── */
+.hero{display:flex;align-items:flex-start;gap:18px;margin-bottom:20px}
+.avatar{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:28px;font-weight:800;flex-shrink:0;border:2px solid var(--border-strong);background:linear-gradient(135deg,rgba(245,166,35,0.18),rgba(168,85,247,0.12));box-shadow:0 8px 28px -8px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.1);position:relative;overflow:hidden}
+.avatar::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 50%,rgba(255,255,255,0.08) 100%);pointer-events:none}
+.avatar-whale{background:linear-gradient(135deg,#a855f7,#6d28d9);color:#fff;border-color:rgba(168,85,247,0.5);box-shadow:0 8px 28px -8px rgba(168,85,247,0.5),inset 0 1px 0 rgba(255,255,255,0.2)}
+.hero-info{flex:1;min-width:0}
+.hero-name{font-family:'Inter',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.15;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hero-verify{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;background:var(--blue);border-radius:50%;color:#000;font-size:11px;font-weight:900}
+.hero-username{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px}
+.hero-bio{font-size:13.5px;color:var(--text-soft);line-height:1.5;margin:6px 0 10px;max-width:460px}
+.hero-whale-meta{display:flex;align-items:center;gap:8px;margin:6px 0 4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px}
+.whale-pill{font-size:10px;font-weight:700;color:var(--purple);background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);padding:3px 10px;border-radius:100px;letter-spacing:0.5px;text-transform:uppercase}
+.whale-rank{color:var(--gold);font-weight:700}
+.whale-pnl{font-weight:700}
+.whale-pnl.pos{color:var(--green)}
+.whale-pnl.neg{color:var(--red)}
+.wallet-row{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wallet-row button,.wallet-row a{font-family:var(--mono);font-size:10px;color:var(--text-soft);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;transition:all .15s}
+.wallet-row button:hover,.wallet-row a:hover{border-color:var(--border-strong);color:var(--text)}
+/* ── Follow strip ── */
+.social-row{display:flex;align-items:center;gap:18px;margin:8px 0 12px;font-family:var(--mono);font-size:12px}
+.social-row strong{color:var(--text);font-size:15px;font-family:'Inter',sans-serif;font-weight:800}
+.social-row .lbl{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;margin-left:4px}
+.action-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:100px;transition:all .15s;min-height:38px;white-space:nowrap;border:1px solid transparent}
+.btn-primary{background:var(--text);color:#000}
+.btn-primary:hover{background:#fff}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text-soft)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text);background:var(--surface-2)}
+.btn-gold{background:linear-gradient(180deg,rgba(245,166,35,0.16),rgba(245,166,35,0.08));border-color:rgba(245,166,35,0.4);color:var(--gold)}
+.btn-gold:hover{background:linear-gradient(180deg,rgba(245,166,35,0.28),rgba(245,166,35,0.14));border-color:rgba(245,166,35,0.6)}
+.btn-purple{background:linear-gradient(180deg,rgba(168,85,247,0.16),rgba(168,85,247,0.08));border-color:rgba(168,85,247,0.35);color:#c4a3ff}
+.btn-purple:hover{background:linear-gradient(180deg,rgba(168,85,247,0.28),rgba(168,85,247,0.14));border-color:rgba(168,85,247,0.55)}
+.btn-challenge{background:linear-gradient(135deg,rgba(255,77,106,0.15),rgba(245,166,35,0.12));border-color:rgba(255,77,106,0.35);color:#ff8a9e}
+.btn-challenge:hover{background:linear-gradient(135deg,rgba(255,77,106,0.28),rgba(245,166,35,0.22));border-color:rgba(255,77,106,0.55);color:#fff}
+.btn.following{background:var(--surface-2);border-color:var(--border-strong);color:var(--text)}
+/* ── Tier hero card ── */
+.tier-card{position:relative;border-radius:20px;padding:28px 24px 26px;margin:24px 0 18px;overflow:hidden;border:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))}
+.tier-card::before{content:'';position:absolute;inset:-1px;border-radius:20px;padding:1px;background:linear-gradient(135deg,var(--tier-color,var(--gold)) 0%,transparent 50%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.5}
+.tier-glow{position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:420px;height:320px;background:radial-gradient(ellipse at center,var(--tier-color,var(--gold)) 0%,transparent 60%);opacity:.18;pointer-events:none;animation:tierPulse 4s ease-in-out infinite}
+@keyframes tierPulse{0%,100%{opacity:.14;transform:translateX(-50%) scale(1)}50%{opacity:.24;transform:translateX(-50%) scale(1.08)}}
+.tier-inner{position:relative;text-align:center}
+.tier-emoji{font-size:40px;margin-bottom:6px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4))}
+.tier-label{font-family:var(--mono);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;margin-bottom:10px}
+.tier-pct{font-family:'Inter',sans-serif;font-size:72px;font-weight:900;line-height:1;letter-spacing:-0.04em;background:linear-gradient(180deg,currentColor,color-mix(in srgb,currentColor 70%,transparent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.tier-desc{font-size:13px;color:var(--text-soft);margin-top:10px;line-height:1.45}
+.tier-record{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+.tier-bar{margin:16px auto 0;max-width:260px;height:4px;background:rgba(255,255,255,0.06);border-radius:100px;overflow:hidden}
+.tier-bar-fill{height:100%;border-radius:100px;transition:width .6s cubic-bezier(.2,.9,.3,1)}
+.tier-actions{display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+/* ── Stats grid ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
+@media(max-width:640px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+.stat{padding:14px 14px 12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;text-align:left;cursor:default;transition:border-color .15s,background .15s;position:relative;overflow:hidden}
+.stat.interactive{cursor:pointer}
+.stat.interactive:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.stat-lbl{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.stat-val{font-family:'Inter',sans-serif;font-size:22px;font-weight:800;line-height:1.05;letter-spacing:-0.02em}
+.stat-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+/* ── Tabs ── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin:8px 0 18px;position:sticky;top:64px;background:rgba(11,11,18,0.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:20;padding:0 2px}
+.tab-btn{flex:1;background:none;border:none;padding:14px 12px;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s,border-color .15s;min-height:48px;letter-spacing:-0.01em}
+.tab-btn:hover{color:var(--text-soft)}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--gold)}
+.tab-btn .tab-count{color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:500;margin-left:4px}
+.tab-pane{display:none;animation:fadeIn .25s ease}
+.tab-pane.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* ── Take / Trade cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;transition:border-color .15s,background .15s}
+.card:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.card a{color:inherit}
+.card-q{font-size:14px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px}
+.card-thesis{font-size:13px;color:var(--text-soft);line-height:1.55;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.card-actions{display:flex;gap:14px;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.side{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:100px;letter-spacing:0.04em;display:inline-block}
+.side-yes{background:rgba(0,230,138,0.12);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
+.side-no{background:rgba(255,77,106,0.12);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
+.badge-correct{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(0,230,138,0.12);color:var(--green)}
+.badge-wrong{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(255,77,106,0.12);color:var(--red)}
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 20px;border:1px dashed var(--border);border-radius:16px;background:rgba(255,255,255,0.01)}
+.empty-emoji{font-size:32px;margin-bottom:8px}
+.empty-title{font-size:15px;font-weight:700;margin-bottom:6px;color:var(--text)}
+.empty-sub{font-size:13px;color:var(--muted);margin-bottom:18px;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.5}
+/* ── Loading/error states ── */
+.loading{text-align:center;padding:80px 20px;color:var(--muted);font-size:13px}
+.loading-spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-state{text-align:center;padding:80px 20px}
+.error-icon{font-size:40px;margin-bottom:12px}
+.error-msg{font-size:15px;font-weight:700;margin-bottom:6px}
+.error-sub{font-size:13px;color:var(--muted)}
+/* ── Badges on hero ── */
+.hero-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:100px;letter-spacing:0.04em;text-transform:uppercase;border:1px solid transparent}
+.badge-streak{background:rgba(255,140,0,0.12);color:#ff9a3c;border-color:rgba(255,140,0,0.3)}
+.badge-oracle{background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)}
+.badge-sharp{background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)}
+.badge-verified{background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)}
+/* ── Mobile ── */
+@media(max-width:600px){
+  .page{padding:20px 14px 60px}
+  .hero{gap:14px}
+  .avatar{width:62px;height:62px;font-size:22px}
+  .hero-name{font-size:20px}
+  .tier-pct{font-size:56px}
+  .tier-card{padding:24px 18px 22px}
+  .btn{font-size:12px;padding:9px 14px}
+  input,textarea,select{font-size:16px!important}
+}
 </style>
 </head>
 <body>
-<div id="nav-root"></div>
-<script src="/nav.js?v=20"></script>
-<div class="page" id="page"><div class="loading">Loading profile...</div></div>
+<nav>
+  <a href="/" class="nav-logo">
+    <svg viewBox="0 0 32 32" fill="none" style="width:24px;height:24px;margin-right:8px;vertical-align:middle">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+    </svg>HYPERFLEX
+  </a>
+  <div style="display:flex;align-items:center;gap:10px">
+    <a href="/predictors" class="nav-back" style="border:none">Predictors</a>
+    <a href="/" class="nav-back" style="border:none">Explore</a>
+    <a id="creatorDashPill" href="/creator/dashboard" style="display:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);padding:6px 14px;border-radius:20px;text-decoration:none;transition:background 0.15s;min-height:44px;align-items:center" onmouseover="this.style.background='rgba(201,146,13,0.2)'" onmouseout="this.style.background='rgba(201,146,13,0.1)'">Dashboard</a>
+    <a href="javascript:history.back()" class="nav-back">← Back</a>
+  </div>
+</nav>
+<div class="page" id="page">
+  <div class="loading">Loading profile...</div>
+</div>
+
 <script>
-var userId = location.pathname.split('/').pop();
-var API = location.origin;
+const userId = location.pathname.split('/').pop();
+window._profileUserId = userId;
+const API = location.origin;
 
-function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d.endsWith('Z')?d:d+'Z'))/1000);if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';if(s<2592000)return Math.floor(s/86400)+'d';return new Date(d).toLocaleDateString(undefined,{month:'short',year:'numeric'})}
-function fmtK(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n)}
-function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
-function getToken(){return localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||''}
-
-function switchTab(id,btn){
-  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
-  var el=document.getElementById('tab-'+id);if(el)el.classList.add('active');
-  if(btn)btn.classList.add('active');
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const ts   = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (diff < 0)    return 'just now';
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  if (diff < 86400*30) return `${Math.floor(diff/86400)}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
-async function toggleFollow(){
-  var t=getToken();if(!t)return;
-  try{
-    var r=await fetch(API+'/api/predictors/'+userId+'/follow',{method:'POST',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'}});
-    var d=await r.json();
-    var btn=document.getElementById('followBtn');
-    if(btn){btn.textContent=d.following?'Following':'Follow';btn.className=d.following?'btn btn-gold':'btn btn-fill'}
-  }catch(e){}
+function getInitials(name) {
+  return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-async function loadFollowStatus(){
-  var t=getToken();if(!t)return;
-  try{
-    var r=await fetch(API+'/api/predictors/'+userId+'/follow-status',{headers:{'Authorization':'Bearer '+t}});
-    var d=await r.json();
-    var btn=document.getElementById('followBtn');
-    if(btn&&d.is_following){btn.textContent='Following';btn.className='btn btn-gold'}
-  }catch(e){}
+function tierBadge(winRate, streak) {
+  let badges = '';
+  if (streak >= 7)       badges += `<span class="badge badge-oracle">⚡ ${streak} STREAK</span>`;
+  else if (streak >= 3)  badges += `<span class="badge badge-streak">🔥 ${streak} WIN STREAK</span>`;
+  if (winRate >= 70)     badges += `<span class="badge badge-oracle">🎯 ORACLE</span>`;
+  else if (winRate >= 60) badges += `<span class="badge badge-sharp">🎯 SHARP</span>`;
+  return badges;
 }
 
-async function promptSetName(){
-  var name=prompt('Enter your display name:');
-  if(!name||!name.trim())return;
-  var t=getToken();if(!t)return;
-  try{
-    var r=await fetch(API+'/api/user/display-name',{method:'PUT',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({display_name:name.trim()})});
-    if(r.ok){location.reload()}else{alert('Failed to update name')}
-  }catch(e){alert('Error: '+e.message)}
+function shareProfile() {
+  const url = location.href;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('shareBtn');
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy profile link', 2000); }
+  });
 }
 
-async function load(){
-  var page=document.getElementById('page');
-  try{
-    var res=await fetch(API+'/api/member/'+userId);
-    if(!res.ok){page.innerHTML='<div class="loading">Profile not found</div>';return}
-    var data=await res.json();
-    var u=data.user,s=data.stats,ts=data.take_stats||{},takes=data.recent_takes||[];
-    var ps=data.polymarket_stats||{},trades=data.recent_trades||[];
+// Minimal info modal — no deps, no CSS class pollution. Used by the ⓘ
+// buttons next to Flex Score and FLEX Points in the stats grid so visitors
+// actually understand what the gold and purple numbers mean.
+function _showInfoModal(title, bodyHtml) {
+  // Dismiss any prior instance so repeated clicks don't stack.
+  const prior = document.getElementById('hfxInfoModal');
+  if (prior) prior.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'hfxInfoModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(5,5,10,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.innerHTML = `
+    <div style="background:#15151d;border:1px solid #2a2a36;border-radius:14px;max-width:420px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,0.6)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${title}</div>
+        <button onclick="document.getElementById('hfxInfoModal').remove()" aria-label="Close" style="background:none;border:0;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px">×</button>
+      </div>
+      <div style="font-size:13px;line-height:1.55;color:var(--text-soft)">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+}
 
-    var isOwner=false;
-    try{var tok=getToken();if(tok){var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if((p.userId||p.sub||p.id)==userId)isOwner=true}}catch(e){}
+function switchProfileTab(tabId, btn) {
+  document.querySelectorAll('.tab-pane').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  var el = document.getElementById('tab-' + tabId);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (tabId === 'record') { setTimeout(() => loadAnalytics(window._profileUserId), 60); }
+}
 
-    var winPct=s.settled_predictions>0?Math.round((s.wins/s.settled_predictions)*100):0;
-    var polyWinPct=ps.win_rate||0;
-    var bestWin=Math.max(winPct,polyWinPct);
-    var initials=(u.display_name||'?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2);
+// ── Challenge flow — opens modal for counter-prediction, posts to X ──
+function openChallenge() {
+  const m = document.getElementById('challengeModal');
+  if (!m) return;
+  m.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  m.onclick = e => { if (e.target === m) closeChallenge(); };
+  setTimeout(() => { const t = document.getElementById('challengeThesis'); if (t) t.focus(); }, 50);
+}
+function closeChallenge() {
+  const m = document.getElementById('challengeModal');
+  if (!m) return;
+  m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+function submitChallenge() {
+  const input = document.getElementById('challengeThesis');
+  const thesis = (input?.value || '').trim();
+  if (!thesis) { input?.focus(); return; }
+  const u = document.querySelector('.hero-name')?.childNodes[0]?.textContent?.trim() || 'this predictor';
+  const handle = (document.querySelector('.hero-username')?.textContent || '').trim();
+  const tag = handle.startsWith('@') ? handle : '';
+  const text = `⚔️ Challenging ${tag || u} on @hyperflex:\n\n"${thesis}"\n\nWinner takes the track record.\nhyperflex.network/m/${window._profileUserId}`;
+  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+  closeChallenge();
+  if (input) input.value = '';
+}
 
-    // Tier
-    var tier,tierIcon,tierColor;
-    if(bestWin>=70&&(s.settled_predictions>=10||ps.total_trades>=10)){tier='ORACLE';tierIcon='🎯';tierColor='#d4a017'}
-    else if(bestWin>=60&&(s.settled_predictions>=5||ps.total_trades>=5)){tier='SHARP';tierIcon='🎯';tierColor='#00e68a'}
-    else if(bestWin>=50&&(s.settled_predictions>=5||ps.total_trades>=5)){tier='SOLID';tierIcon='📊';tierColor='#4d9fff'}
-    else if(s.settled_predictions>=3||ps.total_trades>=3){tier='SPECULATOR';tierIcon='🎲';tierColor='#8888a0'}
-    else{tier='NEWCOMER';tierIcon='🆕';tierColor='#8888a0'}
+function showFlexScoreInfo() {
+  _showInfoModal('Flex Score', `
+    <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
+    <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
+    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
+      70+ → 🎯 Oracle tier<br>
+      60+ → 🎯 Sharp<br>
+      50+ → 📊 Solid<br>
+      &lt;50 → 🎲 Speculator
+    </div>
+    <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
+  `);
+}
 
-    document.title=u.display_name+' — HYPERFLEX';
+function showFlexPointsInfo() {
+  _showInfoModal('⚡ FLEX Points', `
+    <p style="margin:0 0 10px">Reputation currency earned by posting takes, winning predictions, and getting agrees from other traders.</p>
+    <p style="margin:0 0 10px;color:var(--text-soft)">Every correct call pays out in FLEX. Every take that racks up agrees earns FLEX. It's a running score of how much signal you've contributed to the network.</p>
+    <p style="margin:0;color:var(--muted);font-size:12px">Can't be bought — only earned.</p>
+  `);
+}
 
-    var volStr=ps.volume_usd?fmtK(ps.volume_usd):'$0';
-    var pnlVal=ps.pnl_usd||0;
-    var pnlColor=pnlVal>=0?'var(--green)':'var(--red)';
-    var pnlStr=pnlVal>=0?'+'+fmtK(pnlVal):'-'+fmtK(Math.abs(pnlVal));
+async function load() {
+  const page = document.getElementById('page');
+  try {
+    const res = await fetch(`${API}/api/member/${userId}`);
+    if (res.status === 404) {
+      page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">This profile doesn't exist or has been removed.</div></div>`;
+      return;
+    }
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    const { user, stats, communities, recent_wins, take_stats, recent_takes, polymarket_stats, recent_trades } = data;
+    const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
+    const pTrades = recent_trades || [];
 
-    // Takes HTML
-    var takesHtml=takes.length?takes.map(function(t){
-      var side=(t.side||'').toUpperCase();
-      var href=t.market_slug?'/market/'+t.market_slug:'#';
-      var correctBadge=t.is_correct===true?'<span class="badge-correct win">✓ CORRECT</span>':t.is_correct===false?'<span class="badge-correct loss">✗ WRONG</span>':'';
-      return '<div class="take"><a href="'+href+'"><div class="take-head"><span class="take-side '+(side==='YES'?'yes':'no')+'">'+side+'</span><span class="take-q">'+esc(t.question||'')+'</span></div></a>'+
-        '<div class="take-meta">'+(t.entry_price?'<span>'+Math.round(t.entry_price*100)+'¢</span>':'')+
-        '<span>'+timeAgo(t.created_at)+'</span>'+correctBadge+'</div>'+
-        (t.thesis?'<div class="take-thesis">'+esc(t.thesis)+'</div>':'')+
-        '<div class="take-actions"><span style="color:var(--green)">↑ '+(t.agree_count||0)+'</span><span style="color:var(--red)">↓ '+(t.disagree_count||0)+'</span></div></div>'
-    }).join(''):(isOwner?'<div class="empty"><div style="font-size:28px;margin-bottom:8px">✍️</div><div style="font-weight:600;margin-bottom:6px">Share your first prediction</div><div style="margin-bottom:16px">Every take is scored when the market resolves.</div><a href="/feed" class="btn btn-gold">Post a take →</a></div>':'<div class="empty">No predictions yet</div>');
+    // Synchronous owner check — decoded JWT's userId must match the profile
+    // we're rendering. Used to show the "post your first take" empty-state
+    // for the profile owner only (visitors see nothing if there are no takes).
+    let isOwner = false;
+    try {
+      const ownTok = localStorage.getItem('hf_token');
+      if (ownTok) {
+        const payload = JSON.parse(atob(ownTok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const selfId = payload.userId || payload.sub || payload.id;
+        if (selfId && String(selfId) === String(userId)) isOwner = true;
+      }
+    } catch {}
 
-    // Trades HTML
-    var tradesHtml=trades.length?trades.map(function(t){
-      var side=(t.side||'').toUpperCase();
-      var pnl=t.pnl!=null?parseFloat(t.pnl):null;
-      var pnlC=pnl!=null?(pnl>=0?'var(--green)':'var(--red)'):'var(--muted)';
-      var pnlS=pnl!=null?(pnl>=0?'+':'')+'$'+Math.abs(pnl).toFixed(2):(t.status==='open'?'OPEN':'—');
-      return '<div class="trade"><span class="take-side '+(side==='YES'?'yes':'no')+'">'+side+'</span>'+
-        '<div class="trade-info"><div class="trade-q">'+esc(t.market_question||'')+'</div>'+
-        '<div class="trade-detail">$'+parseFloat(t.amount_usd||0).toFixed(2)+' · '+(t.entry_price?Math.round(t.entry_price*100)+'¢':'—')+' · '+timeAgo(t.created_at)+'</div></div>'+
-        '<div class="trade-pnl" style="color:'+pnlC+'">'+pnlS+'</div></div>'
-    }).join(''):'<div class="empty">No trades yet</div>';
+    const winPct = stats.settled_predictions > 0 ? Math.round((stats.wins / stats.settled_predictions) * 100) : 0;
+    const avgColor = winPct >= 70 ? '#c9920d' : winPct >= 55 ? '#22c55e' : winPct >= 40 ? '#60a5fa' : '#ef4444';
+    const initials = getInitials(user.display_name);
+    const avatarBg = '#1e1e1b';
 
-    var passportUrl='https://hyperflex.network/passport/'+userId;
+    document.title = `${user.display_name} — HYPERFLEX`;
 
-    page.innerHTML=
-      '<div class="hero">'+
-        '<div class="hero-top">'+
-          '<div class="avatar" style="background:var(--card);color:'+tierColor+';border-color:'+tierColor+'44">'+initials+'</div>'+
-          '<div><div class="name">'+esc(u.display_name)+'</div>'+(u.username?'<div class="handle">@'+esc(u.username)+'</div>':'')+'</div>'+
-        '</div>'+
-        (u.bio?'<div class="bio">'+esc(u.bio)+'</div>':'')+
-        '<div class="social-row">'+
-          '<div><strong>'+(s.followers||0)+'</strong> <span>Followers</span></div>'+
-          '<div><strong>'+(s.following||0)+'</strong> <span>Following</span></div>'+
-          (ts.total_agrees?'<div><strong>'+ts.total_agrees+'</strong> <span>Agrees</span></div>':'')+
-        '</div>'+
-        '<div class="action-row">'+
-          '<button class="btn btn-fill" id="followBtn" onclick="toggleFollow()">Follow</button>'+
-          (isOwner?'<button class="btn btn-gold" onclick="promptSetName()">✏️ Edit Name</button>':'')+
-          '<button class="btn" onclick="navigator.clipboard.writeText(location.href);this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'📋 Copy\',2000)">📋 Copy</button>'+
-          '<button class="btn" onclick="window.open(\'https://x.com/intent/tweet?text=\'+encodeURIComponent(\'Check out \'+\''+esc(u.display_name)+'\'+ \' on HYPERFLEX\\n\\n\'+location.href),\'_blank\')">🐦 Share</button>'+
-          '<a href="/passport/'+userId+'" class="btn btn-gold">🛂 Passport</a>'+
-        '</div>'+
-      '</div>'+
+    // Build community chips (use btn-ghost styling)
+    const commHtml = communities.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:8px">${communities.map(c =>
+          `<a href="/${c.slug}" class="btn btn-ghost" style="padding:6px 12px 6px 10px;font-weight:600;text-transform:none;letter-spacing:0">
+            <span style="width:8px;height:8px;border-radius:50%;background:${c.primary_color || '#c9920d'};display:inline-block;margin-right:6px"></span>
+            ${c.display_name || c.slug}
+          </a>`
+        ).join('')}</div>`
+      : `<div style="color:var(--muted);font-size:13px">No communities yet.</div>`;
 
-      '<div class="tier" style="background:radial-gradient(ellipse at center top,'+tierColor+'08,transparent 70%)">'+
-        '<div class="tier-icon">'+tierIcon+'</div>'+
-        '<div class="tier-label" style="color:'+tierColor+'">'+tier+'</div>'+
-        '<div class="tier-pct" style="color:'+tierColor+'">'+bestWin+'%</div>'+
-        '<div class="tier-sub">'+(ps.total_trades>0?ps.closed_wins+' wins / '+(ps.closed_wins+ps.closed_losses)+' closed trades':s.wins+' correct / '+(s.settled_predictions||0)+' predictions')+'</div>'+
-        '<div class="tier-bar"><div class="tier-bar-fill" style="width:'+bestWin+'%;background:'+tierColor+'"></div></div>'+
-      '</div>'+
+    // Build wins list as premium cards
+    const winsHtml = recent_wins.length
+      ? `<div style="display:flex;flex-direction:column;gap:8px">${recent_wins.map(w => {
+          const sideUp = (w.side || '').toUpperCase();
+          return `<a href="/${w.community_slug}" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+            <div style="width:30px;height:30px;border-radius:50%;background:rgba(0,230,138,0.12);border:1px solid rgba(0,230,138,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--green);flex-shrink:0">✓</div>
+            <div style="flex:1;min-width:0">
+              <div class="card-q" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${w.question}</div>
+              <div class="card-meta" style="margin-top:2px">
+                <span style="color:${w.community_color || '#c9920d'}">${w.community_name}</span>
+                <span>·</span>
+                <span>${timeAgo(w.resolved_at)}</span>
+                ${w.payout > 0 ? `<span>· <strong style="color:var(--green)">+${w.payout.toLocaleString()}</strong></span>` : ''}
+              </div>
+            </div>
+            <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+          </a>`;
+        }).join('')}</div>`
+      : `<div class="empty"><div class="empty-emoji">🎯</div><div class="empty-title">No wins yet</div><div class="empty-sub">Keep predicting — every resolved market scores your takes.</div></div>`;
 
-      '<div class="stats">'+
-        '<div class="stat"><div class="stat-val" style="color:var(--gold)">'+(s.flex_score_alltime!=null?s.flex_score_alltime:s.flex_score_90d!=null?s.flex_score_90d:'—')+'</div><div class="stat-lbl">Flex Score</div></div>'+
-        '<div class="stat"><div class="stat-val" style="color:var(--green)">'+volStr+'</div><div class="stat-lbl">Volume</div></div>'+
-        '<div class="stat"><div class="stat-val" style="color:'+pnlColor+'">'+pnlStr+'</div><div class="stat-lbl">P&L</div></div>'+
-        '<div class="stat"><div class="stat-val" style="color:var(--purple)">'+(s.flex_points>=1000?(s.flex_points/1000).toFixed(1)+'K':s.flex_points||0)+'</div><div class="stat-lbl">FLEX Pts</div></div>'+
-      '</div>'+
+    // Prediction rank tier
+    const wr = stats.win_rate || 0;
+    const settled = stats.settled_predictions || 0;
+    let rankTier, rankClass, rankColor, rankDesc;
+    if (wr >= 70 && settled >= 10)      { rankTier = '🎯 ORACLE';      rankClass = 'oracle';  rankColor = '#c9920d'; rankDesc = 'Top 5% of predictors — consistently ahead of the crowd'; }
+    else if (wr >= 60 && settled >= 5)  { rankTier = '🎯 SHARP';       rankClass = 'sharp';   rankColor = '#22c55e'; rankDesc = 'Above average predictor — reads markets better than most'; }
+    else if (wr >= 50 && settled >= 5)  { rankTier = '📊 SOLID';       rankClass = 'solid';   rankColor = '#60a5fa'; rankDesc = 'Reliable predictor — more right than wrong'; }
+    else if (settled >= 3)              { rankTier = '🎲 SPECULATOR';  rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Still building their track record'; }
+    else                                { rankTier = '🆕 NEWCOMER';    rankClass = 'default'; rankColor = 'var(--muted)'; rankDesc = 'Just getting started — more predictions needed'; }
 
-      '<div class="tabs">'+
-        '<button class="tab active" onclick="switchTab(\'takes\',this)">Takes'+(ts.total?' ('+ts.total+')':'')+'</button>'+
-        '<button class="tab" onclick="switchTab(\'trades\',this)">Trades'+(ps.total_trades?' ('+ps.total_trades+')':'')+'</button>'+
-        '<button class="tab" onclick="switchTab(\'record\',this)">Track Record</button>'+
-      '</div>'+
+    const scoreCardHTML = settled >= 3 ? `
+      <div class="pred-score-card ${rankClass}">
+        <div class="pred-score-pct" style="color:${rankColor}">${wr}%</div>
+        <div class="pred-score-body">
+          <div class="pred-score-rank" style="color:${rankColor}">${rankTier}</div>
+          <div class="pred-score-sub">${rankDesc}<br>${stats.wins || 0} correct out of ${settled} settled predictions</div>
+          <div class="pred-score-bar"><div class="pred-score-bar-fill" style="width:${wr}%;background:${rankColor}"></div></div>
+        </div>
+      </div>` : '';
 
-      '<div id="tab-takes" class="tab-content active">'+takesHtml+'</div>'+
-      '<div id="tab-trades" class="tab-content">'+tradesHtml+'</div>'+
-      '<div id="tab-record" class="tab-content"><div class="empty" style="padding:40px 16px">Track record details coming soon</div></div>'+
+    // Whale-specific data
+    const isWhale = user.is_whale || false;
+    const whaleRank = user.whale_rank;
+    const whalePnl = user.whale_pnl;
+    const walletAddr = user.polymarket_address || '';
+    const shortWallet = walletAddr ? (walletAddr.slice(0, 6) + '...' + walletAddr.slice(-4)) : '';
+    const pnlDisplay = whalePnl != null ? (whalePnl >= 0 ? '+$' + (whalePnl >= 1000000 ? (whalePnl/1000000).toFixed(1) + 'M' : whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl)) : '-$' + Math.abs(whalePnl >= 1000 ? Math.round(whalePnl/1000) + 'K' : Math.round(whalePnl))) : null;
+    const whaleAvatarBg = isWhale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : avatarBg;
+    const whaleAvatarColor = isWhale ? '#fff' : avgColor;
 
-      '<div class="challenge">'+
-        '<div class="challenge-title">⚔️ Challenge '+esc(u.display_name)+'</div>'+
-        '<div class="challenge-sub">Think you can predict better? Challenge them to a prediction duel.</div>'+
-        '<button class="btn btn-gold" onclick="window.location.href=\'/feed\'">Challenge →</button>'+
-      '</div>';
+    const tierEmoji = rankClass === 'oracle' ? '🎯' : rankClass === 'sharp' ? '🎯' : rankClass === 'solid' ? '📊' : settled >= 3 ? '🎲' : '🆕';
+    const tierLabel = rankTier.replace(/🎯|📊|🎲|🆕/g,'').trim();
+    const tierColorCss = rankClass === 'oracle' ? 'var(--gold)' : rankClass === 'sharp' ? 'var(--green)' : rankClass === 'solid' ? 'var(--blue)' : 'var(--text-soft)';
+    const volFmt = pStats.volume_usd >= 1000000 ? '$' + (pStats.volume_usd/1000000).toFixed(1) + 'M' : pStats.volume_usd >= 1000 ? '$' + Math.round(pStats.volume_usd/1000) + 'K' : '$' + Math.round(pStats.volume_usd);
+    const pnlFmt = (pStats.pnl_usd >= 0 ? '+$' : '-$') + (Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000) + 'K' : Math.round(Math.abs(pStats.pnl_usd)));
+    const flexPointsFmt = (stats.flex_points || 0) >= 1000 ? ((stats.flex_points/1000).toFixed(1) + 'K') : (stats.flex_points || 0);
+    const flexScoreFmt = stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—';
 
-    loadFollowStatus();
-  }catch(err){
+    page.innerHTML = `
+      ${!user.polymarket_address ? `
+        <div class="card" style="margin-bottom:20px;padding:20px 22px;background:linear-gradient(135deg,rgba(245,166,35,0.08),rgba(168,85,247,0.06));border:1px solid rgba(245,166,35,0.3);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="font-size:28px;flex-shrink:0">🔒</div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px">${isOwner ? 'Activate your profile' : 'Unverified predictor'}</div>
+            <div style="font-size:13px;color:var(--text-soft);line-height:1.45">${isOwner ? 'Sign in and connect a Polymarket wallet to unlock your stats, Passport, and take-posting.' : 'This user hasn&apos;t connected a wallet yet. Their stats aren&apos;t verifiable on-chain.'}</div>
+          </div>
+          <a href="${isOwner ? '/creator/dashboard' : '/creator/login'}" class="btn btn-gold">${isOwner ? 'Connect wallet' : 'Sign in'} →</a>
+        </div>
+      ` : ''}
+      <div class="hero">
+        <div class="avatar ${isWhale ? 'avatar-whale' : ''}">${isWhale ? '🐋' : initials}</div>
+        <div class="hero-info">
+          <div class="hero-name">
+            ${user.display_name}
+            ${user.wallet_verified ? '<span class="hero-verify" title="Verified Wallet">✓</span>' : ''}
+          </div>
+          ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
+          ${isWhale ? `
+            <div class="hero-whale-meta">
+              <span class="whale-pill">Polymarket Whale</span>
+              ${whaleRank ? `<span class="whale-rank">Rank #${whaleRank}</span>` : ''}
+              ${pnlDisplay ? `<span class="whale-pnl ${whalePnl >= 0 ? 'pos' : 'neg'}">${pnlDisplay} PnL</span>` : ''}
+            </div>
+            ${walletAddr ? `<div class="wallet-row">
+              <span>${shortWallet}</span>
+              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
+            </div>` : ''}
+          ` : (user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-username">Joined ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : '')}
+          ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
+          <div class="hero-badges">
+            ${tierBadge(stats.win_rate, stats.streak)}
+            <span id="sharpBadge" class="badge" style="display:none;background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)"></span>
+          </div>
+          <div class="social-row">
+            <span><strong>${(stats.followers || 0).toLocaleString()}</strong><span class="lbl">Followers</span></span>
+            <span><strong>${(stats.following || 0).toLocaleString()}</strong><span class="lbl">Following</span></span>
+            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold)">${take_stats.total_agrees.toLocaleString()}</strong><span class="lbl">Agrees</span></span>` : ''}
+          </div>
+          <div class="action-row">
+            <button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>
+            <button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">🔔 Copy</button>
+            ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">⚔️ Challenge</button>` : ''}
+            <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">📋 Copy link</button>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tier Hero Card -->
+      <div class="tier-card" style="--tier-color:${tierColorCss}">
+        <div class="tier-glow"></div>
+        <div class="tier-inner">
+          <div class="tier-emoji">${tierEmoji}</div>
+          <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
+          <div class="tier-pct" style="color:${tierColorCss}">${winPct}%</div>
+          <div class="tier-desc">${rankDesc}</div>
+          <div class="tier-record">${stats.wins || 0} correct / ${settled} predictions</div>
+          <div class="tier-bar"><div class="tier-bar-fill" style="width:${winPct}%;background:${tierColorCss}"></div></div>
+          <div class="tier-actions">
+            <a href="/passport/${userId}" class="btn btn-gold">🛂 Passport</a>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('I&apos;m a ${tierLabel} predictor with ${winPct}% accuracy on HYPERFLEX\\n\\nVerify my track record:\\nhyperflex.network/passport/${userId}'),'_blank')">🐦 Flex on X</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4-stat grid -->
+      <div class="stats-grid">
+        <button class="stat interactive" onclick="showFlexScoreInfo()">
+          <div class="stat-lbl">Flex Score <span style="font-size:9px">ⓘ</span></div>
+          <div class="stat-val" style="color:var(--gold)">${flexScoreFmt}</div>
+        </button>
+        <div class="stat" id="statVolumeCard">
+          <div class="stat-lbl">Volume</div>
+          <div class="stat-val" id="statVolume" style="color:var(--green)">${volFmt}</div>
+          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades} trades</div>
+        </div>
+        <div class="stat" id="statPnlCard">
+          <div class="stat-lbl">P&amp;L</div>
+          <div class="stat-val" id="statPnl" style="color:${pStats.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
+          <div class="stat-sub" id="statPnlSub">${pStats.total_trades > 0 ? `${pStats.closed_wins}W / ${pStats.closed_losses}L` : ''}</div>
+        </div>
+        <button class="stat interactive" onclick="showFlexPointsInfo()">
+          <div class="stat-lbl">⚡ Flex Pts <span style="font-size:9px">ⓘ</span></div>
+          <div class="stat-val" style="color:var(--purple)">${flexPointsFmt}</div>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('trades',this)">Trades${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('record',this)">Track Record</button>
+      </div>
+
+      <!-- TAKES -->
+      <div id="tab-takes" class="tab-pane active">
+        ${(take_stats && take_stats.total > 0) ? `
+          ${take_stats.accuracy > 0 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <span class="badge" style="background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};color:${take_stats.accuracy >= 60 ? 'var(--green)' : take_stats.accuracy >= 50 ? 'var(--blue)' : 'var(--red)'};border-color:transparent">${take_stats.accuracy}% take accuracy</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${take_stats.correct || 0}W / ${take_stats.incorrect || 0}L</span>
+          </div>` : ''}
+          ${(recent_takes || []).map(t => {
+            const sideUp = (t.side || '').toUpperCase();
+            const href = t.market_slug ? '/market/' + t.market_slug : '#';
+            const correctBadge = t.is_correct === true ? '<span class="badge-correct">✓ CORRECT</span>' : t.is_correct === false ? '<span class="badge-wrong">✗ WRONG</span>' : '';
+            return `<div class="card">
+              <a href="${href}">
+                <div style="display:flex;align-items:flex-start;gap:8px">
+                  <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                  <span class="card-q">${t.question || ''}</span>
+                </div>
+              </a>
+              <div class="card-meta">
+                ${t.entry_price ? `<span>Entry ${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                <span>${timeAgo(t.created_at)}</span>
+                ${correctBadge}
+              </div>
+              ${t.thesis ? `<div class="card-thesis">${t.thesis.replace(/</g,'&lt;')}</div>` : ''}
+              <div class="card-actions">
+                <span style="color:var(--green)">↑ ${t.agree_count || 0}</span>
+                <span style="color:var(--red)">↓ ${t.disagree_count || 0}</span>
+              </div>
+            </div>`;
+          }).join('')}
+        ` : (isOwner ? `
+          <div class="empty">
+            <div class="empty-emoji">✍️</div>
+            <div class="empty-title">Post your first take</div>
+            <div class="empty-sub">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
+            <a href="/feed" class="btn btn-gold">Post a take →</a>
+          </div>
+        ` : `<div class="empty"><div class="empty-emoji">💭</div><div class="empty-title">No takes yet</div><div class="empty-sub">${user.display_name} hasn't posted any takes yet.</div></div>`)}
+      </div>
+
+      <!-- TRADES (Polymarket) -->
+      <div id="tab-trades" class="tab-pane">
+        <div id="tradesList">${pStats.total_trades > 0 ? `
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap" id="tradesSummary">
+            <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${pStats.win_rate}% win rate</span>
+            <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${pStats.open_positions} open</span>
+            <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${pStats.total_trades} total</span>
+          </div>
+          ${pTrades.map(t => {
+            const sideUp = (t.side || '').toUpperCase();
+            const isOpen = t.status === 'open';
+            const pnl = t.pnl;
+            const href = t.market_slug ? '/market/' + t.market_slug : '#';
+            return `<div class="card">
+              <a href="${href}">
+                <div style="display:flex;align-items:flex-start;gap:8px">
+                  <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                  <span class="card-q">${t.market_question || '(market)'}</span>
+                </div>
+              </a>
+              <div class="card-meta">
+                <span>$${Math.round(t.amount_usd || 0).toLocaleString()}</span>
+                ${t.entry_price ? `<span>@${Math.round(t.entry_price * 100)}¢</span>` : ''}
+                <span>${timeAgo(t.created_at)}</span>
+                ${isOpen ? `<span class="badge" style="background:rgba(77,159,255,0.1);color:var(--blue);border-color:transparent;padding:1px 6px">OPEN</span>` : pnl != null ? `<span class="badge" style="background:${pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${pnl >= 0 ? '+' : ''}$${Math.round(pnl).toLocaleString()}</span>` : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        ` : `<div class="empty" id="tradesEmpty"><div class="empty-emoji">💹</div><div class="empty-title">${user.polymarket_address ? 'Loading live trades…' : 'No Polymarket trades yet'}</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Fetching from Polymarket directly.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner && !user.polymarket_address ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}</div>
+      </div>
+
+      <!-- TRACK RECORD -->
+      <div id="tab-record" class="tab-pane">
+        <div id="trophyCard" class="card" style="display:none;border-color:rgba(245,166,35,0.35);background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.02));padding:18px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px">🏆 Best Call</div>
+          <div id="trophyQuestion" style="font-size:15px;font-weight:600;margin-bottom:10px;line-height:1.4"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span id="trophySide" class="side"></span>
+            <span id="trophyMultiplier" style="color:var(--gold);font-weight:700;font-family:var(--mono);font-size:14px"></span>
+            <button class="btn btn-ghost" style="margin-left:auto" onclick="shareTrophyOnX()">🐦 Share</button>
+          </div>
+        </div>
+
+        ${recent_wins.length ? `
+        <div style="margin-top:18px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Recent Wins</div>
+          ${winsHtml}
+        </div>` : ''}
+
+        <div id="analyticsSection" style="margin:24px 0;display:none">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px" id="platformCards"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div class="card" style="padding:16px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">Calibration</div>
+              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Predicted vs actual</div>
+              <canvas id="calibrationChart" width="300" height="160"></canvas>
+            </div>
+            <div class="card" style="padding:16px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">P&amp;L (30d)</div>
+              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Cumulative</div>
+              <canvas id="pnlChart" width="300" height="160"></canvas>
+            </div>
+          </div>
+        </div>
+
+        ${communities.length ? `
+        <div style="margin-top:20px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Active Communities</div>
+          ${commHtml}
+        </div>` : ''}
+
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:18px 0;border-top:1px solid var(--border);margin-top:22px">
+          ${stats.settled_predictions || 0} settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
+        </div>
+      </div>
+
+      <!-- Owner tools -->
+      <div id="ownerTools" style="display:none;margin:22px 0">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="btn btn-ghost" style="display:none;color:var(--green);border-color:rgba(0,230,138,0.3)">🔗 Verify Wallet</button>
+          <button id="editBioBtn" onclick="toggleBioEdit()" class="btn btn-ghost">✏️ Edit Bio</button>
+        </div>
+        <div id="bioEditArea" style="display:none">
+          <textarea id="bioInput" maxlength="280" placeholder="Write a short bio (280 chars max)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:60px;margin:6px 0;transition:border-color .15s" onfocus="this.style.borderColor='var(--border-strong)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onclick="saveBio()" class="btn btn-primary">Save</button>
+            <button onclick="toggleBioEdit()" class="btn btn-ghost">Cancel</button>
+            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto;font-family:var(--mono)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invite section (owner only) -->
+      <div id="inviteSection" style="display:none;margin-top:24px" class="card">
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">📣 Grow Your Following</div>
+        <div style="font-size:13px;color:var(--text-soft);margin-bottom:14px">Share your profile to build your audience:</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
+          <button onclick="copyInviteUrl()" id="inviteCopyBtn" class="btn btn-gold" style="min-height:36px">Copy</button>
+        </div>
+        <button onclick="shareProfileOnX()" class="btn btn-ghost">🐦 Share on X</button>
+        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
+      </div>
+
+      <!-- Challenge modal -->
+      <div id="challengeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px">
+        <div onclick="event.stopPropagation()" style="background:linear-gradient(180deg,#16161f,#0e0e17);border:1px solid var(--border-strong);border-radius:20px;padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg),0 0 120px -40px rgba(255,77,106,0.3)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-0.01em">⚔️ Challenge ${user.display_name}</div>
+            <button onclick="closeChallenge()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px">×</button>
+          </div>
+          <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
+          <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:90px;margin-bottom:12px;transition:border-color .15s" onfocus="this.style.borderColor='rgba(255,77,106,0.4)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button onclick="closeChallenge()" class="btn btn-ghost">Cancel</button>
+            <button onclick="submitChallenge()" class="btn btn-challenge">Post Challenge →</button>
+          </div>
+        </div>
+      </div>
+    `;
+    loadAnalytics(userId);
+    loadTrophyCard(userId);
+    loadInviteSection(userId);
+  } catch (err) {
     console.error(err);
-    page.innerHTML='<div class="loading">Failed to load profile</div>';
+    page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
   }
 }
-load();
+
+load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); });
+
+// Defensive: a stray "Edit Name" button has been showing up on some
+// deploys (likely from a cached or injected override). Strip it if present.
+function stripEditName() {
+  document.querySelectorAll('button, a').forEach(el => {
+    const t = (el.textContent || '').trim().toLowerCase();
+    if (t === '✏️ edit name' || t === 'edit name' || t.endsWith('edit name')) el.remove();
+  });
+}
+
+// If the DB has zero Polymarket trades but the user has a connected wallet,
+// fetch live positions from Polymarket's data API and update the stat grid
+// + Trades tab. Keeps the profile truthful when sync hasn't caught up yet.
+async function enrichFromLivePolymarket() {
+  try {
+    const res = await fetch(`${API}/api/member/${userId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const addr = data?.user?.polymarket_address;
+    if (!addr) return;
+    // Only enrich if our DB has no trade data — otherwise the normal path
+    // already populated the stats.
+    if ((data.polymarket_stats?.total_trades || 0) > 0) return;
+
+    const posRes = await fetch(`${API}/api/polymarket/positions/${addr}`);
+    if (!posRes.ok) return;
+    const { positions } = await posRes.json();
+    if (!Array.isArray(positions) || !positions.length) return;
+
+    let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
+    for (const p of positions) {
+      vol += Math.abs(p.cost_basis || 0);
+      pnl += p.pnl || 0;
+      if ((p.cash_value || 0) > 0.01) open++;
+      if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
+    }
+    const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
+    const pnlFmt = (pnl >= 0 ? '+$' : '-$') + (Math.abs(pnl) >= 1e3 ? Math.round(Math.abs(pnl)/1e3) + 'K' : Math.round(Math.abs(pnl)));
+
+    const vEl = document.getElementById('statVolume');
+    const vSub = document.getElementById('statVolumeSub');
+    const pEl = document.getElementById('statPnl');
+    const pSub = document.getElementById('statPnlSub');
+    if (vEl) vEl.textContent = volFmt;
+    if (vSub) vSub.textContent = positions.length + ' positions';
+    if (pEl) { pEl.textContent = pnlFmt; pEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+    if (pSub) pSub.textContent = wins + 'W / ' + losses + 'L';
+
+    // Also render the Trades tab with live positions
+    const list = document.getElementById('tradesList');
+    if (list) {
+      const wr = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+      list.innerHTML = `
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${wr}% win rate</span>
+          <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${open} open</span>
+          <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${positions.length} positions</span>
+          <span class="badge" style="background:rgba(168,85,247,0.12);color:var(--purple);border-color:rgba(168,85,247,0.3)">🔴 LIVE</span>
+        </div>
+        ${positions.slice(0, 40).map(p => {
+          const sideUp = (p.side || '').toUpperCase();
+          const pct = Math.round((p.current_price || 0) * 100);
+          return `<div class="card">
+            <a href="${p.market_url || '#'}" target="_blank" rel="noopener">
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+                <span class="card-q">${(p.question || '(market)').replace(/</g,'&lt;')}</span>
+              </div>
+            </a>
+            <div class="card-meta">
+              <span>$${Math.round(p.cash_value || 0).toLocaleString()}</span>
+              <span>@${pct}¢</span>
+              <span class="badge" style="background:${p.pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${p.pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${p.pnl >= 0 ? '+' : ''}$${Math.round(p.pnl || 0).toLocaleString()}</span>
+            </div>
+          </div>`;
+        }).join('')}`;
+    }
+
+    // Update the tab count badge
+    const tradesTabBtn = document.querySelector('.tab-btn[onclick*="trades"]');
+    if (tradesTabBtn && !tradesTabBtn.querySelector('.tab-count')) {
+      tradesTabBtn.insertAdjacentHTML('beforeend', ` <span class="tab-count">${positions.length}</span>`);
+    }
+  } catch (e) { console.warn('[live-polymarket]', e); }
+}
+
+function showCreatorDashPill() {
+  const creatorToken = localStorage.getItem('hf_token');
+  if (!creatorToken) return;
+  try {
+    const payload = JSON.parse(atob(creatorToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId === window._profileUserId) {
+      const pill = document.getElementById('creatorDashPill');
+      if (pill) pill.style.display = 'inline-flex';
+    }
+  } catch {}
+}
+
+// ── P&L ANALYTICS ─────────────────────────────────────────────────────────────
+async function loadAnalytics(userId) {
+  try {
+    const res = await fetch(`/api/predictors/${userId}/analytics`);
+    const data = await res.json();
+    if (!data.platforms) return;
+    document.getElementById('analyticsSection').style.display = 'block';
+
+    // Platform stat cards
+    const platformColors = { hyperflex: '#c9920d', polymarket: '#6366f1', kalshi: '#8b5cf6', manifold: '#10b981' };
+    const platformLabels = { hyperflex: 'HYPERFLEX', polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold' };
+    document.getElementById('platformCards').innerHTML = Object.entries(data.platforms)
+      .filter(([, p]) => p.total > 0)
+      .map(([name, p]) => {
+        const wr = (p.wins + p.losses) > 0 ? Math.round(p.wins / (p.wins + p.losses) * 100) : 0;
+        const pnlColor = p.pnl >= 0 ? '#10b981' : '#ef4444';
+        return `<div style="background:#1a1916;border:1px solid ${platformColors[name]}44;border-radius:10px;padding:14px 18px;min-width:130px">
+          <div style="font-size:11px;color:${platformColors[name]};font-weight:700;margin-bottom:6px">${platformLabels[name] || name}</div>
+          <div style="font-size:22px;font-weight:700;color:#fff">${wr}%</div>
+          <div style="font-size:11px;color:#888">win rate</div>
+          <div style="font-size:13px;font-weight:700;color:${pnlColor};margin-top:4px">${p.pnl >= 0 ? '+' : ''}${Math.round(p.pnl)} pts</div>
+          <div style="font-size:11px;color:#555">${p.total} positions</div>
+        </div>`;
+      }).join('');
+
+    // Sharp score badge
+    const sharpEl = document.getElementById('sharpBadge');
+    if (sharpEl) {
+      sharpEl.textContent = `⚡ ${data.sharp_score} Sharp Score`;
+      sharpEl.style.display = 'inline-block';
+    }
+
+    // Calibration chart — simple bar chart using canvas
+    const calCtx = document.getElementById('calibrationChart')?.getContext('2d');
+    if (calCtx) {
+      const calData = data.calibration.filter(c => c.predicted > 0);
+      const barW = calData.length > 0 ? 240 / calData.length : 30;
+      calCtx.clearRect(0, 0, 300, 180);
+      calData.forEach((c, i) => {
+        const x = 30 + i * (barW + 4);
+        const expectedH = (c.predicted / 100) * 140;
+        const actualH = c.actual !== null ? (c.actual / 100) * 140 : 0;
+        calCtx.fillStyle = '#c9920d44';
+        calCtx.fillRect(x, 150 - actualH, barW - 2, actualH);
+        calCtx.fillStyle = '#888';
+        calCtx.fillRect(x, 150 - expectedH, barW - 2, 2);
+        calCtx.fillStyle = '#666';
+        calCtx.font = '9px monospace';
+        calCtx.fillText(c.predicted + '%', x, 165);
+      });
+      calCtx.fillStyle = '#888';
+      calCtx.font = '10px monospace';
+      calCtx.fillText('gold=actual  gray=expected', 10, 178);
+    }
+
+    // P&L line chart
+    const pnlCtx = document.getElementById('pnlChart')?.getContext('2d');
+    if (pnlCtx && data.timeline.length > 1) {
+      const vals = data.timeline.map(t => t.pnl);
+      const min = Math.min(...vals, 0);
+      const max = Math.max(...vals, 0);
+      const range = max - min || 1;
+      pnlCtx.clearRect(0, 0, 300, 180);
+      pnlCtx.strokeStyle = data.total_pnl >= 0 ? '#10b981' : '#ef4444';
+      pnlCtx.lineWidth = 2;
+      pnlCtx.beginPath();
+      data.timeline.forEach((t, i) => {
+        const x = 10 + (i / (data.timeline.length - 1)) * 280;
+        const y = 160 - ((t.pnl - min) / range) * 140;
+        i === 0 ? pnlCtx.moveTo(x, y) : pnlCtx.lineTo(x, y);
+      });
+      pnlCtx.stroke();
+      // Zero line
+      const zeroY = 160 - ((0 - min) / range) * 140;
+      pnlCtx.strokeStyle = '#333';
+      pnlCtx.lineWidth = 1;
+      pnlCtx.setLineDash([4, 4]);
+      pnlCtx.beginPath();
+      pnlCtx.moveTo(10, zeroY);
+      pnlCtx.lineTo(290, zeroY);
+      pnlCtx.stroke();
+    }
+  } catch(e) { console.warn('analytics', e); }
+}
+
+// ── FOLLOW SYSTEM ─────────────────────────────────────────────────────────────
+let _isFollowing = false;
+
+async function loadFollowStatus() {
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+    const r = await fetch(`${API}/api/predictors/${userId}/follow-status`, { headers });
+    if (!r.ok) return;
+    const d = await r.json();
+    _isFollowing = d.is_following;
+    const btn = document.getElementById('followBtn');
+    const countEl = document.getElementById('followerCount');
+    if (btn) {
+      btn.textContent = _isFollowing ? 'Following' : 'Follow';
+      btn.classList.toggle('following', _isFollowing);
+      btn.classList.toggle('btn-primary', !_isFollowing);
+      btn.classList.toggle('btn-ghost', _isFollowing);
+    }
+    if (countEl && d.follower_count > 0) {
+      countEl.textContent = `${d.follower_count} follower${d.follower_count !== 1 ? 's' : ''}`;
+    }
+    // Also load copy trade status
+    const cr = await fetch(`${API}/api/predictors/${userId}/copy-status`, { headers });
+    if (cr.ok) {
+      const cd = await cr.json();
+      const copyBtn = document.getElementById('copyTradeBtn');
+      if (copyBtn && cd.is_subscribed) {
+        copyBtn.textContent = '🔔 Copying';
+        copyBtn.dataset.subscribed = '1';
+      }
+    }
+  } catch (e) {
+    console.warn('[follow-status]', e);
+  }
+}
+
+async function toggleFollow() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to follow predictors'); return; }
+  const btn = document.getElementById('followBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/predictors/${userId}/follow`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    _isFollowing = d.following;
+    if (btn) {
+      btn.textContent = _isFollowing ? 'Following' : 'Follow';
+      btn.classList.toggle('following', _isFollowing);
+      btn.classList.toggle('btn-primary', !_isFollowing);
+      btn.classList.toggle('btn-ghost', _isFollowing);
+    }
+    // Refresh count
+    await loadFollowStatus();
+  } catch (e) {
+    console.warn('[toggle-follow]', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function toggleCopyTrade() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to copy trades'); return; }
+  const btn = document.getElementById('copyTradeBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/predictors/${userId}/copy-trade`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    if (btn) {
+      btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy';
+      btn.dataset.subscribed = d.subscribed ? '1' : '';
+    }
+  } catch (e) {
+    console.warn('[toggle-copy-trade]', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// loadFollowStatus() is called after load() resolves (button is injected by load())
+
+// ── TROPHY CARD ───────────────────────────────────────────────────────────────
+async function loadTrophyCard(userId) {
+  try {
+    const res = await fetch(`/api/predictors/${userId}/best-call`);
+    const data = await res.json();
+    if (!data.best) return;
+    const b = data.best;
+    document.getElementById('trophyCard').style.display = 'block';
+    document.getElementById('trophyQuestion').textContent = b.question;
+    const sideEl = document.getElementById('trophySide');
+    sideEl.textContent = b.side;
+    sideEl.style.background = b.side === 'YES' ? '#10b98122' : '#ef444422';
+    sideEl.style.color = b.side === 'YES' ? '#10b981' : '#ef4444';
+    document.getElementById('trophyMultiplier').textContent = b.multiplier ? `${b.multiplier}× payout` : '';
+    window._trophyData = b;
+  } catch (e) { console.warn('trophy', e); }
+}
+
+function shareTrophyOnX() {
+  const b = window._trophyData;
+  if (!b) return;
+  const text = `My best prediction call:\n\n"${b.question}"\n\nCalled ${b.side} → ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+}
+
+// ── INVITE / SHARE SECTION (owner only) ──────────────────────────────────────
+async function loadInviteSection(profileUserId) {
+  // Only show to the profile owner
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) return;
+  try {
+    // Decode JWT payload to get current user id (no signature verify needed client-side)
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId !== profileUserId) return;
+
+    const section = document.getElementById('inviteSection');
+    if (section) section.style.display = 'block';
+
+    // Load stats
+    const r = await fetch('/api/user/profile-share-stats', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) {
+      const d = await r.json();
+      const statsEl = document.getElementById('inviteStats');
+      if (statsEl && d.followers > 0) {
+        statsEl.textContent = `${d.followers} follower${d.followers !== 1 ? 's' : ''} · Share to grow your audience`;
+      }
+    }
+  } catch (e) { /* silent — token parse failed or fetch failed */ }
+}
+
+function copyInviteUrl() {
+  const input = document.getElementById('inviteUrlInput');
+  const btn = document.getElementById('inviteCopyBtn');
+  if (!input || !btn) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+function shareProfileOnX() {
+  const text = `I'm tracking predictions across Polymarket & Kalshi on HYPERFLEX — follow my calls: hyperflex.network/m/${window._profileUserId}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+}
+
+// ── SOCIAL PREDICTIONS ──────────────────────────────────────────────────────
+async function loadSocialPredictions(profileUserId) {
+  try {
+    const r = await fetch(`/api/social/user/${profileUserId}/predictions?limit=10`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.predictions?.length) return;
+
+    const section = document.getElementById('socialPredictions');
+    if (section) section.style.display = 'block';
+    document.getElementById('socialPredCount').textContent = `${d.stats?.total || d.predictions.length} total · ${d.stats?.win_rate != null ? d.stats.win_rate + '% win rate' : ''}`;
+
+    document.getElementById('socialPredList').innerHTML = d.predictions.map(p => {
+      const sideColor = p.side === 'YES' ? '#22c55e' : '#ef4444';
+      const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+      const statusClass = p.status || 'active';
+      const statusLabel = statusClass === 'resolved_win' ? 'Won' : statusClass === 'resolved_loss' ? 'Lost' : statusClass === 'active' ? 'Active' : 'Closed';
+      return `<div class="social-pred-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="social-pred-status ${statusClass}">${statusLabel}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${p.side}</span>
+          ${p.entry_price ? `<span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)">${Math.round(p.entry_price * 100)}¢</span>` : ''}
+          ${p.pnl != null ? `<span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${p.pnl >= 0 ? '#22c55e' : '#ef4444'}">${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(0)}</span>` : ''}
+          <span style="font-size:10px;color:var(--muted);margin-left:auto">${timeAgo(p.created_at)}</span>
+        </div>
+        <a href="/discuss/${p.market_slug || ''}" style="font-size:13px;font-weight:600;color:var(--text);text-decoration:none;line-height:1.3;display:block">${p.market_title || ''}</a>
+        ${p.thesis ? `<div class="social-pred-thesis">${p.thesis.replace(/</g,'&lt;')}</div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted)">
+          <span>👍 ${p.reaction_count || 0}</span>
+          <span>💬 ${p.comment_count || 0}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) { console.warn('[social-predictions]', e); }
+}
+
+// ── WALLET VERIFICATION ─────────────────────────────────────────────────────
+async function startWalletVerify() {
+  const btn = document.getElementById('verifyWalletBtn');
+  if (!btn) return;
+  if (!window.ethereum) { alert('MetaMask or a Web3 wallet is required'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const address = accounts[0];
+
+    btn.textContent = 'Getting challenge...';
+    const token = localStorage.getItem('hf_token');
+    const cr = await fetch('/api/wallet/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ address })
+    });
+    if (!cr.ok) { const e = await cr.json(); throw new Error(e.error || 'Challenge failed'); }
+    const { message } = await cr.json();
+
+    btn.textContent = 'Sign in wallet...';
+    const signature = await window.ethereum.request({
+      method: 'personal_sign',
+      params: [message, address]
+    });
+
+    btn.textContent = 'Verifying...';
+    const vr = await fetch('/api/wallet/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ signature })
+    });
+    if (!vr.ok) { const e = await vr.json(); throw new Error(e.error || 'Verification failed'); }
+
+    btn.textContent = '✓ Verified!';
+    btn.style.borderColor = '#22c55e';
+    btn.style.color = '#22c55e';
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    btn.textContent = '🔗 Verify Wallet';
+    btn.disabled = false;
+    if (e.code !== 4001) alert(e.message || 'Verification failed');
+  }
+}
+
+// ── BIO EDIT ────────────────────────────────────────────────────────────────
+let _bioEditOpen = false;
+function toggleBioEdit() {
+  _bioEditOpen = !_bioEditOpen;
+  const area = document.getElementById('bioEditArea');
+  if (area) area.style.display = _bioEditOpen ? 'block' : 'none';
+  if (_bioEditOpen) {
+    const bioEl = document.querySelector('.hero-bio');
+    const input = document.getElementById('bioInput');
+    if (input && bioEl) input.value = bioEl.textContent.trim();
+    if (input) {
+      input.focus();
+      updateBioCount();
+      input.addEventListener('input', updateBioCount);
+    }
+  }
+}
+
+function updateBioCount() {
+  const input = document.getElementById('bioInput');
+  const count = document.getElementById('bioCharCount');
+  if (input && count) count.textContent = `${input.value.length}/280`;
+}
+
+async function saveBio() {
+  const input = document.getElementById('bioInput');
+  if (!input) return;
+  const bio = input.value.trim();
+  const token = localStorage.getItem('hf_token');
+  try {
+    const r = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ bio })
+    });
+    if (r.ok) {
+      toggleBioEdit();
+      location.reload();
+    } else {
+      const e = await r.json();
+      alert(e.error || 'Failed to save');
+    }
+  } catch (e) { alert('Network error'); }
+}
+
+// ── SHOW OWNER TOOLS ────────────────────────────────────────────────────────
+function showOwnerTools(profileUserId, walletVerified) {
+  const token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId !== profileUserId) return;
+
+    const tools = document.getElementById('ownerTools');
+    if (tools) tools.style.display = 'block';
+
+    if (!walletVerified) {
+      const vBtn = document.getElementById('verifyWalletBtn');
+      if (vBtn) vBtn.style.display = 'inline-flex';
+    }
+  } catch {}
+}
+
+// Wire up social predictions + owner tools after main load
+const _origLoad = load;
+load = async function() {
+  await _origLoad();
+  loadSocialPredictions(userId);
+  // Check if owner should see tools
+  try {
+    const r = await fetch(`${API}/api/member/${userId}`);
+    if (r.ok) {
+      const d = await r.json();
+      showOwnerTools(userId, d.user?.wallet_verified);
+    }
+  } catch {}
+};
 </script>
 </body>
 </html>
