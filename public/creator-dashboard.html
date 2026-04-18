@@ -271,6 +271,174 @@ body {
 .sb-stat-fp .sb-stat-val { color: #a855f7; }
 .sb-stat-open .sb-stat-val { color: var(--gold); }
 
+/* ── Portfolio summary cards — premium glass hero at the top of /portfolio
+   Inspired by Polymarket's portfolio header but with Hyperflex's dark
+   glass + ambient glow. Hidden by JS until wallet is connected. ── */
+.ps-wrap { display: none; margin-bottom: 24px; }
+.ps-wrap.show { display: block; }
+.ps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) {
+  .ps-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+.ps-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 18px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 28px -12px rgba(0,0,0,0.4);
+}
+.ps-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  pointer-events: none;
+}
+.ps-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ps-lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ps-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ps-avail {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--text);
+}
+.ps-hero {
+  font-family: 'Inter', sans-serif;
+  font-size: 38px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+@media (max-width: 720px) { .ps-hero { font-size: 30px; } }
+.ps-hero-sub {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 16px;
+  min-height: 18px;
+}
+.ps-footer {
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 14px;
+  margin-top: auto;
+}
+.ps-foot-item { flex: 1; }
+.ps-foot-right { text-align: right; }
+.ps-foot-lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ps-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: conic-gradient(rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.08) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ps-ring-inner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #13131a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ps-ring-inner span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 900;
+  color: var(--muted);
+}
+.ps-sharp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 6px 12px;
+  border-radius: 100px;
+  background: rgba(245,166,35,0.1);
+  border: 1px solid rgba(245,166,35,0.28);
+}
+.ps-sharp span {
+  font-family: var(--mono);
+  font-size: 14.5px;
+  font-weight: 900;
+  color: var(--gold);
+  letter-spacing: -0.01em;
+}
+.ps-roi {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--muted);
+  letter-spacing: -0.02em;
+}
+
+/* Period tabs inside P&L card */
+.ps-period-tabs {
+  display: flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 100px;
+  padding: 2px;
+  gap: 2px;
+}
+.pnl-tab {
+  padding: 4px 11px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 100px;
+  transition: all 0.14s;
+  letter-spacing: 0.04em;
+}
+.pnl-tab:hover { color: var(--text); }
+.pnl-tab.active {
+  color: #0a0a0f;
+  background: linear-gradient(180deg, #f5c842, #c9920d);
+  box-shadow: 0 2px 6px -2px rgba(245,200,66,0.5);
+}
+
 /* More toggle */
 .nav-more-toggle .nav-icon {
   transition: transform 0.2s;
@@ -5850,54 +6018,54 @@ window.hfxOpenDeposit = function() {
               </div>
             </div>
             <!-- Two-card Polymarket-style portfolio summary -->
-            <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                <!-- LEFT CARD: Portfolio Value + Available Balance -->
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
-                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px">
-                    <div id="psSummaryValueLabel" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--dim)">Portfolio</div>
-                    <div style="font-family:var(--sans);font-size:12px;color:var(--dim)">Available to trade <span id="psAvailBalance" style="font-family:var(--mono);font-weight:700;color:var(--text)">—</span></div>
+            <div id="portfolioSummaryBar" class="ps-wrap">
+              <div class="ps-grid">
+                <!-- LEFT: Portfolio value + win-rate / sharp / ROI footer -->
+                <div class="ps-card">
+                  <div class="ps-card-head">
+                    <div id="psSummaryValueLabel" class="ps-lbl">Portfolio</div>
+                    <div class="ps-sub">Available <span id="psAvailBalance" class="ps-avail">—</span></div>
                   </div>
-                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:36px;font-weight:900;color:var(--text);letter-spacing:-0.03em;margin-bottom:6px">—</div>
-                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--dim);margin-bottom:20px"></div>
-                  <div style="display:flex;gap:16px;border-top:1px solid var(--border);padding-top:16px">
-                    <div style="flex:1">
-                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Win Rate</div>
-                      <div style="display:flex;align-items:center;gap:6px">
-                        <div id="psWinRateRing" style="width:32px;height:32px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                          <div style="width:22px;height:22px;border-radius:50%;background:var(--cream);display:flex;align-items:center;justify-content:center">
-                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:11px;font-weight:900;color:var(--dim)">—</span>
+                  <div id="psSummaryValue" class="ps-hero">—</div>
+                  <div id="psSummaryPnlPct" class="ps-hero-sub"></div>
+                  <div class="ps-footer">
+                    <div class="ps-foot-item">
+                      <div class="ps-foot-lbl">Win Rate</div>
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div id="psWinRateRing" class="ps-ring">
+                          <div class="ps-ring-inner">
+                            <span id="psWinRateVal">—</span>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div style="flex:1">
-                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Sharp</div>
-                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:36px;padding:5px 10px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
-                        <span id="psSharpVal" style="font-family:var(--mono);font-size:15px;font-weight:900;color:var(--gold)">—</span>
+                    <div class="ps-foot-item">
+                      <div class="ps-foot-lbl">Sharp</div>
+                      <div id="psSharpBadge" class="ps-sharp">
+                        <span id="psSharpVal">—</span>
                       </div>
                     </div>
-                    <div style="flex:1;text-align:right">
-                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">ROI</div>
-                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--dim)">—</div>
+                    <div class="ps-foot-item ps-foot-right">
+                      <div class="ps-foot-lbl">ROI</div>
+                      <div id="psSummaryROI" class="ps-roi">—</div>
                     </div>
                   </div>
                 </div>
-                <!-- RIGHT CARD: Profit/Loss + Chart -->
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                    <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--dim)">Profit / Loss</div>
-                    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">1D</button>
-                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">1W</button>
-                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer;transition:all .15s">1M</button>
-                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">ALL</button>
+                <!-- RIGHT: P&L + sparkline + period tabs -->
+                <div class="ps-card">
+                  <div class="ps-card-head">
+                    <div class="ps-lbl">Profit / Loss</div>
+                    <div class="ps-period-tabs">
+                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d">1D</button>
+                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w">1W</button>
+                      <button onclick="setPnlPeriod('1m')" class="pnl-tab active" id="pnlTab1m">1M</button>
+                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball">ALL</button>
                     </div>
                   </div>
-                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:36px;font-weight:900;color:var(--dim);letter-spacing:-0.03em;margin-bottom:4px">—</div>
-                  <div id="psPnlPeriodLabel" style="font-family:var(--sans);font-size:12px;color:var(--dim);margin-bottom:12px">Past Month</div>
-                  <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end">
-                    <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;padding:0"></div>
+                  <div id="psSummaryPnl" class="ps-hero">—</div>
+                  <div id="psPnlPeriodLabel" class="ps-hero-sub">Past Month</div>
+                  <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end;margin-top:8px">
+                    <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%"></div>
                   </div>
                 </div>
               </div>
