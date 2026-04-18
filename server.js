@@ -3420,8 +3420,9 @@ async function computeWalletScores() {
   if (!pool) return;
   // Active wallets = anyone who has a polymarket_address OR has posted a take.
   const rows = await dbQuery(`
-    SELECT u.id AS user_id,
-      COALESCE((SELECT SUM(pnl) FROM polymarket_trades WHERE eoa_address = u.polymarket_address AND status='closed'), 0)::numeric AS pnl,
+    SELECT u.id AS user_id, u.is_whale, u.whale_rank,
+      COALESCE(u.whale_pnl, 0)::numeric AS whale_pnl,
+      COALESCE((SELECT SUM(pnl) FROM polymarket_trades WHERE eoa_address = u.polymarket_address AND status='closed'), 0)::numeric AS trade_pnl,
       COALESCE((SELECT COUNT(*) FROM polymarket_trades WHERE eoa_address = u.polymarket_address AND status='closed'), 0)::int AS closed_positions,
       COALESCE((SELECT SUM(amount_usd) FROM polymarket_trades WHERE eoa_address = u.polymarket_address), 0)::numeric AS volume,
       (SELECT COUNT(*) FILTER (WHERE is_correct IS NOT NULL) FROM takes WHERE user_id = u.id AND source='user')::int AS resolved_takes,
@@ -3431,15 +3432,27 @@ async function computeWalletScores() {
               FROM takes WHERE user_id = u.id AND source='user')
         ELSE NULL END AS take_accuracy
     FROM users u
-    WHERE u.polymarket_address IS NOT NULL OR EXISTS (SELECT 1 FROM takes WHERE user_id = u.id)
+    WHERE (u.polymarket_address IS NOT NULL AND u.polymarket_address <> '')
+       OR EXISTS (SELECT 1 FROM takes WHERE user_id = u.id)
   `).catch(e => { console.warn('[wallet-scores]', e.message); return []; });
 
   let updated = 0;
   for (const r of rows) {
-    const pnl = parseFloat(r.pnl) || 0;
+    // Prefer polymarket_trades (our internal log) but fall back to whale_pnl
+    // from the leaderboard sync — many wallets have no trades logged yet but
+    // do have the aggregated whale_pnl populated.
+    const tradePnl = parseFloat(r.trade_pnl) || 0;
+    const whalePnl = parseFloat(r.whale_pnl) || 0;
+    const pnl = Math.abs(tradePnl) >= 1 ? tradePnl : whalePnl;
     const vol = parseFloat(r.volume) || 0;
     const acc = r.take_accuracy != null ? parseFloat(r.take_accuracy) : null;
-    const score = _scoreWallet(pnl, acc, vol, r.closed_positions, r.resolved_takes);
+    let score = _scoreWallet(pnl, acc, vol, r.closed_positions, r.resolved_takes);
+    // Top-50 whale override: these are known sharps regardless of our internal
+    // trade log depth. Lifts them into sharp-weighted territory (>=60) from
+    // day one so the snapshot cron has signal.
+    if (r.is_whale && r.whale_rank != null && r.whale_rank <= 50) {
+      score = Math.max(score, 80 - Math.min(r.whale_rank - 1, 20));
+    }
     await dbQuery(`
       INSERT INTO wallet_scores (user_id, sharpness_score, realized_pnl_usd, take_accuracy, resolved_takes, closed_positions, total_volume_usd, computed_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
