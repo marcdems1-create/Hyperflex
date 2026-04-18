@@ -3110,12 +3110,26 @@ async function loadBuilderFees(force) {
 }
 
 // -- Init: resume session if secret in sessionStorage --
-(function() {
+// Verifies the stored secret against the server BEFORE hiding the auth
+// gate. A stale secret (rotated / wrong / empty) previously left users
+// stuck on a broken dashboard with no way back to the login screen,
+// because showApp() fired unconditionally and loadCreators() silently
+// 403'd into an error toast. Now: test first, then show.
+(async function() {
   const stored = sessionStorage.getItem('hf_admin_secret');
-  if (stored) {
+  if (!stored) return;
+  try {
+    const r = await fetch('/api/admin/creators?secret=' + encodeURIComponent(stored));
+    if (r.status === 403 || r.status === 401 || !r.ok) {
+      sessionStorage.removeItem('hf_admin_secret');
+      return; // auth gate stays visible
+    }
     adminSecret = stored;
     showApp();
-    loadCreators();
+    const data = await r.json();
+    renderCreators(data);
+  } catch {
+    sessionStorage.removeItem('hf_admin_secret');
   }
 })();
 
