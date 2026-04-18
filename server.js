@@ -20962,17 +20962,42 @@ app.put('/api/user/display-name', requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/user/profile — update display_name + bio
+// PUT /api/user/profile — update display_name, bio, username, banner_url
+// Handles missing columns gracefully (bio/username/banner_url require
+// supabase_migration_social_profiles.sql to have been run on Railway).
 app.put('/api/user/profile', requireAuth, async (req, res) => {
   try {
-    const { display_name, bio } = req.body || {};
+    const { display_name, bio, username, banner_url } = req.body || {};
     if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'display_name required' });
     const name    = display_name.trim().slice(0, 50);
-    const bioText = (bio || '').trim().slice(0, 160);
+    const bioText = bio !== undefined ? (bio || '').trim().slice(0, 280) : undefined;
+
     if (pool) {
-      await dbQuery('UPDATE users SET display_name = $1, bio = $2 WHERE id = $3', [name, bioText, req.user.id]);
+      // Try full update first; fall back column-by-column if bio/username don't exist yet
+      const sets = ['display_name = $2'];
+      const vals = [name];
+      if (bioText !== undefined) { sets.push(`bio = $${vals.length + 2}`); vals.push(bioText); }
+      if (username !== undefined) {
+        const clean = String(username || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+        if (clean.length >= 3) { sets.push(`username = $${vals.length + 2}`); vals.push(clean); }
+      }
+      if (banner_url !== undefined) { sets.push(`banner_url = $${vals.length + 2}`); vals.push(banner_url || null); }
+      try {
+        await dbQuery(`UPDATE users SET ${sets.join(', ')} WHERE id = $1`, [req.user.id, ...vals]);
+      } catch (colErr) {
+        // Column(s) not yet added by migration — retry with only display_name
+        if (colErr.message && colErr.message.includes('does not exist')) {
+          await dbQuery('UPDATE users SET display_name = $1 WHERE id = $2', [name, req.user.id]);
+        } else {
+          throw colErr;
+        }
+      }
     } else {
-      const { error } = await supabase.from('users').update({ display_name: name, bio: bioText }).eq('id', req.user.id);
+      const updates = { display_name: name };
+      if (bioText !== undefined) updates.bio = bioText;
+      if (username !== undefined) updates.username = username;
+      if (banner_url !== undefined) updates.banner_url = banner_url || null;
+      const { error } = await supabase.from('users').update(updates).eq('id', req.user.id);
       if (error) return res.status(500).json({ error: error.message });
     }
     res.json({ ok: true, display_name: name, bio: bioText });
@@ -43326,35 +43351,7 @@ app.get('/api/social/user/:userId/predictions', async (req, res) => {
 // SOCIAL PROFILES — username, bio, wallet verification, stats
 // ════════════════════════════════════════════════════════════
 
-// PUT /api/user/profile — update social profile fields
-app.put('/api/user/profile', requireAuth, async (req, res) => {
-  try {
-    const { username, bio, banner_url } = req.body;
-    const updates = {};
-
-    if (username !== undefined) {
-      const clean = String(username).toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
-      if (clean.length < 3) return res.status(400).json({ error: 'Username must be 3+ characters (a-z, 0-9, _)' });
-      // Check uniqueness
-      const existing = await dbQuery('SELECT id FROM users WHERE username = $1 AND id != $2', [clean, req.userId]);
-      if (existing.length) return res.status(409).json({ error: 'Username already taken' });
-      updates.username = clean;
-    }
-    if (bio !== undefined) updates.bio = String(bio || '').slice(0, 280);
-    if (banner_url !== undefined) updates.banner_url = banner_url || null;
-
-    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
-
-    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`).join(', ');
-    const vals = Object.values(updates);
-    await dbQuery(`UPDATE users SET ${setClauses} WHERE id = $1`, [req.userId, ...vals]);
-
-    res.json({ ok: true, ...updates });
-  } catch (e) {
-    console.error('[profile] PUT error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
+// PUT /api/user/profile — duplicate removed; handled by the canonical route above (~line 20966)
 
 // GET /api/user/:userId/social-profile — full public profile with prediction stats
 app.get('/api/user/:userId/social-profile', optionalAuth, async (req, res) => {
