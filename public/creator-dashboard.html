@@ -19445,8 +19445,9 @@ function setTradeSide(side) {
   _tradeModalData.selectedSide = side;
   const yesBtn = document.getElementById('tradeYesBtn');
   const noBtn = document.getElementById('tradeNoBtn');
-  if (yesBtn) { yesBtn.style.background = side === 'YES' ? '#00e68a' : '#2d2d44'; yesBtn.style.border = side === 'YES' ? 'none' : '1px solid #3d3d54'; }
-  if (noBtn) { noBtn.style.background = side === 'NO' ? '#ff6b6b' : '#2d2d44'; noBtn.style.border = side === 'NO' ? 'none' : '1px solid #3d3d54'; }
+  // Class-based active state — see setTradeMode comment for why
+  if (yesBtn) { yesBtn.classList.toggle('active', side === 'YES'); yesBtn.removeAttribute('style'); }
+  if (noBtn)  { noBtn.classList.toggle('active',  side === 'NO');  noBtn.removeAttribute('style'); }
   // Update limit price from CLOB orderbook when side changes
   _updateLimitFromOrderbook();
   updateTradeEstimate();
@@ -19597,15 +19598,22 @@ function setTradeMode(mode) {
   _tradeModalData.mode = mode;
   const buyBtn = document.getElementById('tradeBuyBtn');
   const sellBtn = document.getElementById('tradeSellBtn');
+  // Use class-based active state — inline styles would fight the new tm-tab
+  // redesign (rounded glass tabs). Clear any stale inline style set by earlier
+  // versions of this function.
   if (buyBtn) {
-    buyBtn.style.background = mode === 'buy' ? '#00e68a' : 'transparent';
-    buyBtn.style.color = mode === 'buy' ? '#fff' : '#00e68a';
-    buyBtn.style.border = mode === 'buy' ? '1px solid #00e68a' : '1px solid #2a2825';
+    buyBtn.classList.toggle('active', mode === 'buy');
+    buyBtn.removeAttribute('style');
   }
   if (sellBtn) {
-    sellBtn.style.background = mode === 'sell' ? '#ff6b6b' : 'transparent';
-    sellBtn.style.color = mode === 'sell' ? '#fff' : '#ff6b6b';
-    sellBtn.style.border = mode === 'sell' ? '1px solid #ff6b6b' : '1px solid #2a2825';
+    sellBtn.classList.toggle('active', mode === 'sell');
+    sellBtn.removeAttribute('style');
+  }
+  // Flip the primary CTA color + label
+  const cta = document.getElementById('tradeConfirmBtn');
+  if (cta) {
+    cta.classList.remove('buy', 'sell');
+    cta.classList.add(mode === 'sell' ? 'sell' : 'buy');
   }
   // Show Max button only in sell mode
   const maxBtn = document.getElementById('tradeMaxBtn');
@@ -20833,96 +20841,181 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
 </script>
 
 <!-- Trade Modal -->
-<div id="tradeModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeTradeModal()">
-  <div style="background:#1a1a2e;border:1px solid #2d2d44;border-radius:16px;width:95%;max-width:380px;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.5)">
-    <div style="padding:24px 24px 20px">
-      <!-- Market name + close -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-          <div id="tradeModalIcon" style="width:36px;height:36px;border-radius:8px;background:#2d2d44;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📊</div>
-          <div id="tradeModalQuestion" style="font-size:14px;font-weight:700;color:#fff;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">—</div>
+<!-- ── Trade Modal styles — mobile-first premium glass, matches /m/:userId ── -->
+<style>
+.tm-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(5,5,10,0.72);backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);display:none;align-items:flex-end;justify-content:center;padding:0}
+.tm-backdrop.open{display:flex}
+.tm-sheet{width:100%;max-width:440px;background:linear-gradient(180deg,#14141c,#0e0e17);border:1px solid rgba(255,255,255,0.08);border-radius:22px 22px 0 0;box-shadow:0 -24px 60px -10px rgba(0,0,0,0.7),0 0 120px -40px rgba(245,166,35,0.15);max-height:94vh;overflow-y:auto;overscroll-behavior:contain;animation:tmSlide .22s cubic-bezier(.2,.9,.3,1)}
+@keyframes tmSlide{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media (min-width:640px){
+  .tm-backdrop{align-items:center;padding:20px}
+  .tm-sheet{border-radius:22px;max-height:88vh;animation:tmFade .2s ease}
+  @keyframes tmFade{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+}
+.tm-grip{display:block;width:44px;height:4px;background:rgba(255,255,255,0.14);border-radius:100px;margin:10px auto 2px}
+@media (min-width:640px){.tm-grip{display:none}}
+.tm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 20px 12px}
+.tm-head-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.tm-icon{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,rgba(245,166,35,0.16),rgba(168,85,247,0.10));border:1px solid rgba(255,255,255,0.08)}
+.tm-icon img{width:100%;height:100%;border-radius:10px;object-fit:cover}
+.tm-q{font-size:14.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tm-close{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--muted);width:34px;height:34px;border-radius:10px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.tm-close:hover{background:rgba(255,255,255,0.1);color:var(--text)}
+.tm-body{padding:4px 20px 20px}
+@media (max-width:480px){.tm-body{padding:4px 16px 24px}}
+.tm-row{margin-bottom:16px}
+.tm-tabs{display:flex;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:3px;gap:3px;margin-bottom:14px;position:relative}
+.tm-tab{flex:1;background:none;border:none;padding:11px 14px;font-family:var(--sans);font-size:13.5px;font-weight:700;color:var(--muted);border-radius:9px;cursor:pointer;transition:all .14s;letter-spacing:-0.01em}
+.tm-tab.active{background:rgba(255,255,255,0.08);color:var(--text)}
+.tm-tab[data-mode=buy].active{color:var(--green)}
+.tm-tab[data-mode=sell].active{color:var(--red)}
+.tm-ot{margin-left:auto;padding:6px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--soft);font-family:var(--mono);font-size:11px;font-weight:700;border-radius:8px;cursor:pointer;transition:all .12s;flex-shrink:0;align-self:center;margin-right:3px}
+.tm-ot:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.tm-side-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tm-side{padding:13px 12px;border-radius:12px;font-family:var(--sans);font-size:14px;font-weight:800;cursor:pointer;border:1px solid transparent;transition:all .14s;text-align:center;letter-spacing:-0.01em;min-height:48px}
+.tm-side .tm-side-price{display:block;font-family:var(--mono);font-size:13px;font-weight:700;margin-top:2px;opacity:0.85}
+.tm-side.yes{background:rgba(0,230,138,0.08);color:var(--green);border-color:rgba(0,230,138,0.22)}
+.tm-side.yes.active{background:rgba(0,230,138,0.22);border-color:rgba(0,230,138,0.6);box-shadow:0 0 32px -10px rgba(0,230,138,0.4)}
+.tm-side.no{background:rgba(255,107,107,0.08);color:var(--red);border-color:rgba(255,107,107,0.22)}
+.tm-side.no.active{background:rgba(255,107,107,0.22);border-color:rgba(255,107,107,0.6);box-shadow:0 0 32px -10px rgba(255,107,107,0.4)}
+.tm-field{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:14px 16px;transition:border-color .14s}
+.tm-field-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.tm-field-lbl{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em}
+.tm-field-sub{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tm-field-sub.max{color:var(--green);cursor:pointer;font-weight:700;letter-spacing:0.04em}
+.tm-field-sub.max:hover{text-decoration:underline}
+.tm-stepper{display:flex;align-items:center;gap:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden}
+.tm-step-btn{background:none;border:none;color:var(--text);font-size:20px;font-weight:700;min-width:48px;min-height:48px;cursor:pointer;transition:background .1s;line-height:1;padding:0}
+.tm-step-btn:active{background:rgba(255,255,255,0.08)}
+.tm-step-val{font-family:var(--mono);font-size:18px;font-weight:800;min-width:72px;text-align:center;color:var(--text);letter-spacing:-0.02em}
+.tm-amt-row{display:flex;align-items:center;gap:10px}
+.tm-amt-input{flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 16px;font-family:var(--mono);font-size:22px;font-weight:800;color:var(--text);outline:none;text-align:right;letter-spacing:-0.02em;min-height:48px;-moz-appearance:textfield;transition:border-color .14s}
+.tm-amt-input::-webkit-outer-spin-button,.tm-amt-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.tm-amt-input:focus{border-color:rgba(245,166,35,0.4)}
+.tm-amt-prefix{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--muted);padding-left:6px}
+.tm-qk-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.tm-qk{padding:8px 4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--soft);cursor:pointer;transition:all .12s;min-height:36px}
+.tm-qk:hover{background:rgba(255,255,255,0.08);color:var(--text);border-color:rgba(255,255,255,0.14)}
+.tm-tot{display:flex;flex-direction:column;gap:6px;padding:12px 16px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px}
+.tm-tot-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px}
+.tm-tot-row .lbl{color:var(--soft)}
+.tm-tot-row .val{font-family:var(--mono);font-weight:800;font-size:15px;letter-spacing:-0.02em}
+.tm-err{display:none;padding:11px 14px;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.22);border-radius:12px;color:var(--red);font-size:12.5px;line-height:1.5}
+.tm-cta{width:100%;padding:16px;border:none;border-radius:14px;font-family:var(--sans);font-size:15.5px;font-weight:800;cursor:pointer;min-height:54px;transition:all .15s;letter-spacing:-0.01em;margin-top:4px}
+.tm-cta.buy{background:linear-gradient(180deg,#00e68a,#00b86d);color:#042018}
+.tm-cta.buy:hover{background:linear-gradient(180deg,#00f590,#00c876);box-shadow:0 0 32px -8px rgba(0,230,138,0.55)}
+.tm-cta.sell{background:linear-gradient(180deg,#ff7d7d,#e45050);color:#2a0a0a}
+.tm-cta.sell:hover{background:linear-gradient(180deg,#ff8a8a,#ef5a5a);box-shadow:0 0 32px -8px rgba(255,107,107,0.55)}
+.tm-cta:disabled{opacity:0.5;cursor:not-allowed;box-shadow:none!important}
+.tm-foot{text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:10px;letter-spacing:0.04em}
+.tm-mkt-link{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--gold);text-decoration:none;transition:background .12s;margin-top:10px}
+.tm-mkt-link:hover{background:rgba(201,146,13,0.08)}
+.tm-ob{padding:10px 14px;background:rgba(255,255,255,0.025);border-radius:10px;font-family:var(--mono);font-size:11px;color:var(--soft);margin-top:10px;line-height:1.6}
+input, textarea, select.tm-input{font-size:16px !important}
+</style>
+<!-- ── Trade Modal ── mobile-first bottom sheet, same IDs as before so all
+     existing JS (confirmTrade / setTradeMode / adjustPrice / setMaxShares /
+     quickAmount / toggleOrderType / loadOrderbook …) continues to work -->
+<div id="tradeModal" class="tm-backdrop" onclick="if(event.target===this)closeTradeModal()">
+  <div class="tm-sheet" onclick="event.stopPropagation()">
+    <div class="tm-grip"></div>
+    <div class="tm-head">
+      <div class="tm-head-left">
+        <div id="tradeModalIcon" class="tm-icon">📊</div>
+        <div id="tradeModalQuestion" class="tm-q">—</div>
+      </div>
+      <button onclick="closeTradeModal()" class="tm-close" aria-label="Close">×</button>
+    </div>
+
+    <div class="tm-body">
+      <!-- Buy / Sell + order type -->
+      <div class="tm-tabs">
+        <button id="tradeBuyBtn" data-mode="buy" onclick="setTradeMode('buy')" class="tm-tab active">Buy</button>
+        <button id="tradeSellBtn" data-mode="sell" onclick="setTradeMode('sell')" class="tm-tab">Sell</button>
+        <button id="tradeOrderTypeBtn" onclick="toggleOrderType()" class="tm-ot">Market ▾</button>
+      </div>
+
+      <!-- Yes / No side picker -->
+      <div class="tm-row">
+        <div class="tm-side-row">
+          <button id="tradeYesBtn" onclick="setTradeSide('YES')" class="tm-side yes active">
+            Yes<span class="tm-side-price" id="tradeYesPrice">—</span>
+          </button>
+          <button id="tradeNoBtn" onclick="setTradeSide('NO')" class="tm-side no">
+            No<span class="tm-side-price" id="tradeNoPrice">—</span>
+          </button>
         </div>
-        <button onclick="closeTradeModal()" style="background:none;border:none;font-size:18px;color:#666;cursor:pointer;padding:4px;margin-left:8px">&times;</button>
       </div>
 
-      <!-- Buy / Sell tab -->
-      <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #2d2d44">
-        <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#fff;border-bottom:2px solid #fff;margin-bottom:-2px">Buy</button>
-        <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px">Sell</button>
-        <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
-          <button id="tradeOrderTypeBtn" onclick="toggleOrderType()" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#3d3d54'" onmouseout="this.style.background='#2d2d44'">Market ▾</button>
+      <!-- Limit price (stepper) -->
+      <div class="tm-row">
+        <div class="tm-field">
+          <div class="tm-field-head">
+            <div>
+              <div id="tradePriceLabel" class="tm-field-lbl">Market Price</div>
+              <div id="tradeBalance" class="tm-field-sub" style="margin-top:3px">Balance $0.00</div>
+            </div>
+            <div class="tm-stepper">
+              <button onclick="adjustPrice(-1)" class="tm-step-btn" aria-label="decrease">−</button>
+              <span id="tradeLimitPrice" class="tm-step-val">0.0¢</span>
+              <button onclick="adjustPrice(1)" class="tm-step-btn" aria-label="increase">+</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- YES / NO price buttons -->
-      <div style="display:flex;gap:8px;margin-bottom:20px">
-        <button id="tradeYesBtn" onclick="setTradeSide('YES')" style="flex:1;background:#00e68a;border:none;border-radius:10px;padding:12px;text-align:center;cursor:pointer;min-height:44px">
-          <span style="font-family:var(--sans);font-size:14px;font-weight:700;color:#fff">Yes <span id="tradeYesPrice">—</span></span>
-        </button>
-        <button id="tradeNoBtn" onclick="setTradeSide('NO')" style="flex:1;background:#2d2d44;border:1px solid #3d3d54;border-radius:10px;padding:12px;text-align:center;cursor:pointer;min-height:44px">
-          <span style="font-family:var(--sans);font-size:14px;font-weight:700;color:#ccc">No <span id="tradeNoPrice">—</span></span>
-        </button>
-      </div>
-
-      <!-- Limit Price with stepper -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div>
-          <div id="tradePriceLabel" style="font-size:14px;font-weight:600;color:#fff">Market Price</div>
-          <div id="tradeBalance" style="font-family:var(--mono);font-size:11px;color:#888">Balance $0.00</div>
+      <!-- Amount (USD) -->
+      <div class="tm-row">
+        <div class="tm-field">
+          <div class="tm-field-head">
+            <div>
+              <div id="tradeAmountLabel" class="tm-field-lbl">Amount (USD)</div>
+              <div id="tradeMaxBtn" class="tm-field-sub max" onclick="setMaxShares()" style="display:none;margin-top:3px">MAX</div>
+            </div>
+            <div class="tm-amt-row">
+              <span class="tm-amt-prefix">$</span>
+              <input id="tradeAmount" class="tm-amt-input tm-input" type="number" step="1" min="0" value="0" inputmode="decimal" oninput="updateTradeEstimate()" style="max-width:130px"/>
+            </div>
+          </div>
+          <div id="tradeQuickBtns" class="tm-qk-row">
+            <button id="qb1" onclick="quickAmount(1)" class="tm-qk">+$10</button>
+            <button id="qb2" onclick="quickAmount(2)" class="tm-qk">+$50</button>
+            <button id="qb3" onclick="quickAmount(3)" class="tm-qk">+$100</button>
+            <button id="qb4" onclick="quickAmount(4)" class="tm-qk">+$250</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:0;background:#2d2d44;border-radius:8px;overflow:hidden;user-select:none">
-          <button onclick="adjustPrice(-1)" style="background:none;border:none;color:#fff;font-size:20px;padding:10px 16px;cursor:pointer;font-weight:700;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onmousedown="this.style.background='#3d3d54'" onmouseup="this.style.background='none'">−</button>
-          <span id="tradeLimitPrice" style="font-family:var(--mono);font-size:15px;font-weight:700;color:#fff;min-width:65px;text-align:center">0.0¢</span>
-          <button onclick="adjustPrice(1)" style="background:none;border:none;color:#fff;font-size:20px;padding:10px 16px;cursor:pointer;font-weight:700;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onmousedown="this.style.background='#3d3d54'" onmouseup="this.style.background='none'">+</button>
-        </div>
       </div>
-
-      <div style="height:1px;background:#2d2d44;margin:16px 0"></div>
-
-      <!-- Amount (USD) input -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div>
-          <div id="tradeAmountLabel" style="font-size:14px;font-weight:600;color:#fff">Amount (USD)</div>
-          <div id="tradeMaxBtn" style="font-family:var(--mono);font-size:11px;color:#00e68a;cursor:pointer;display:none" onclick="setMaxShares()">Max</div>
-        </div>
-        <input id="tradeAmount" type="number" step="1" min="0" value="0" oninput="updateTradeEstimate()" style="width:100px;background:#2d2d44;border:1px solid #3d3d54;border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:16px;font-weight:700;color:#fff;outline:none;text-align:right;box-sizing:border-box" onfocus="this.style.borderColor='#00e68a'" onblur="this.style.borderColor='#3d3d54'"/>
-      </div>
-      <!-- Quick amount buttons — switch between USD (buy) and % (sell) -->
-      <div id="tradeQuickBtns" style="display:flex;gap:6px;margin:10px 0 16px;justify-content:flex-end">
-        <button id="qb1" onclick="quickAmount(1)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$10</button>
-        <button id="qb2" onclick="quickAmount(2)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$50</button>
-        <button id="qb3" onclick="quickAmount(3)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$100</button>
-        <button id="qb4" onclick="quickAmount(4)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$250</button>
-      </div>
-
-      <div style="height:1px;background:#2d2d44;margin:0 0 16px"></div>
 
       <!-- Total + To Win -->
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-        <span style="font-size:14px;color:#fff">Total</span>
-        <span id="tradeTotal" style="font-family:var(--mono);font-size:14px;font-weight:700;color:#00e68a">$0</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:20px">
-        <span style="font-size:14px;color:#fff">To win 🪙</span>
-        <span id="tradeToWin" style="font-family:var(--mono);font-size:14px;font-weight:700;color:#00e68a">$0</span>
-      </div>
-
-      <!-- Error -->
-      <div id="tradeModalError" style="display:none;color:#ff6b6b;font-size:12px;font-family:var(--mono);padding:8px 12px;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.2);border-radius:8px;margin-bottom:12px"></div>
-
-      <!-- Buy button -->
-      <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:#3b82f6;color:#fff;border:none;border-radius:12px;padding:16px;font-family:var(--sans);font-size:15px;font-weight:800;cursor:pointer;min-height:52px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Buy Yes</button>
-      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:11px;color:#555">Orders signed via HMAC. We never store your keys.</div>
-
-      <!-- View Market link -->
-      <a id="tradeMarketLink" href="#" style="display:block;text-align:center;margin-top:10px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold,#c9920d);text-decoration:none;padding:8px;border:1px solid rgba(201,146,13,0.25);border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(201,146,13,0.08)'" onmouseout="this.style.background='none'">📊 View Market Page</a>
-
-      <!-- Orderbook info (collapsed) -->
-      <div id="tradeOrderbookInfo" style="margin-top:12px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px">
-        <span style="color:#555;font-family:var(--mono);font-size:11px">Loading orderbook...</span>
+      <div class="tm-row">
+        <div class="tm-tot">
+          <div class="tm-tot-row">
+            <span class="lbl">Total</span>
+            <span id="tradeTotal" class="val" style="color:var(--green)">$0</span>
+          </div>
+          <div class="tm-tot-row">
+            <span class="lbl">To win 🪙</span>
+            <span id="tradeToWin" class="val" style="color:var(--green)">$0</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Hidden fields for compatibility -->
+      <!-- Inline error / dust warning / rejection message -->
+      <div id="tradeModalError" class="tm-err"></div>
+
+      <!-- Primary action -->
+      <button id="tradeConfirmBtn" onclick="confirmTrade()" class="tm-cta buy">Buy Yes</button>
+      <div class="tm-foot">Orders signed via HMAC. We never store your keys.</div>
+
+      <!-- View Market permalink -->
+      <a id="tradeMarketLink" href="#" target="_blank" rel="noopener" class="tm-mkt-link">📊 View Market Page</a>
+
+      <!-- Orderbook snapshot -->
+      <div id="tradeOrderbookInfo" class="tm-ob">
+        <span style="color:var(--muted)">Loading orderbook…</span>
+      </div>
+
+      <!-- Hidden fields kept for legacy JS paths that still read them -->
       <div id="tradeModalSide" style="display:none">—</div>
       <div id="tradeModalShares" style="display:none">—</div>
       <div id="tradeModalPrice" style="display:none">—</div>
