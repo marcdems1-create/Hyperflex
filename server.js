@@ -34733,37 +34733,43 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
   }
 });
 
-// ── Builder attribution via @polymarket/builder-signing-sdk ──────────────────
-// BuilderConfig is ESM-only, so we load it via dynamic import into a module-
-// level variable that all order handlers share. The variable is set within
-// ~50 ms of boot; in the rare case an order arrives before it resolves the
-// handler logs a warning and falls through to the existing HMAC fallback.
-let _builderConfig = null;
-(async () => {
-  try {
-    const { BuilderConfig } = await import('@polymarket/builder-signing-sdk');
-    const key        = process.env.POLY_BUILDER_API_KEY;
-    const secret     = process.env.POLY_BUILDER_SECRET;
-    const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
-    if (key && secret && passphrase) {
-      _builderConfig = new BuilderConfig({ localBuilderCreds: { key, secret, passphrase } });
-      console.log('[boot] Builder attribution enabled via BuilderConfig (POLY_BUILDER_API_KEY set)');
-    } else {
-      console.warn('[boot] POLY_BUILDER_* env vars missing — orders will NOT earn builder fees');
-    }
-  } catch (e) {
-    console.warn('[boot] BuilderConfig init failed:', e.message);
+// ── Builder attribution — direct HMAC (no SDK dependency) ────────────────────
+// Signature: HMAC-SHA256 over (timestamp + METHOD + path + body) using the
+// builder secret. Identical scheme to user CLOB auth (POLY_SIGNATURE) but
+// using builder credentials and POLY_BUILDER_* header names.
+// Logs on boot so Railway logs confirm credential status immediately.
+(function _checkBuilderCreds() {
+  const k = process.env.POLY_BUILDER_API_KEY;
+  const s = process.env.POLY_BUILDER_SECRET;
+  const p = process.env.POLY_BUILDER_PASSPHRASE;
+  if (k && s && p) {
+    console.log(`[boot] Builder attribution ready — key=${k.slice(0,8)}… (POLY_BUILDER_* set)`);
+  } else {
+    console.warn('[boot] POLY_BUILDER_* env vars missing — orders will NOT earn builder fees');
   }
 })();
 
-// Returns POLY_BUILDER_* headers for an order, or {} if credentials aren't ready.
-async function getBuilderHeaders(method, path, body) {
-  if (!_builderConfig) return {};
+// Returns POLY_BUILDER_* headers for an order, or {} if credentials aren't set.
+function getBuilderHeaders(method, path, body) {
+  const key        = process.env.POLY_BUILDER_API_KEY;
+  const secret     = process.env.POLY_BUILDER_SECRET;
+  const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  if (!key || !secret || !passphrase) return {};
   try {
-    const headers = await _builderConfig.generateBuilderHeaders(method, path, body);
-    return headers || {};
+    const ts  = Math.floor(Date.now() / 1000).toString();
+    let msg = ts + method.toUpperCase() + path;
+    if (body !== undefined && body !== null && body !== '') msg += body;
+    const secretBuf = Buffer.from(secret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const sig = crypto.createHmac('sha256', secretBuf).update(msg).digest('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_');
+    return {
+      POLY_BUILDER_API_KEY:   key,
+      POLY_BUILDER_PASSPHRASE: passphrase,
+      POLY_BUILDER_TIMESTAMP:  ts,
+      POLY_BUILDER_SIGNATURE:  sig,
+    };
   } catch (e) {
-    console.warn('[builder] generateBuilderHeaders error:', e.message);
+    console.warn('[builder] getBuilderHeaders error:', e.message);
     return {};
   }
 }
@@ -34795,8 +34801,7 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
       .replace(/\+/g, '-').replace(/\//g, '_');
 
-    // Builder attribution via BuilderConfig SDK — generates fresh POLY_BUILDER_* headers
-    const builderHeaders = await getBuilderHeaders('POST', '/order', signed_body);
+    const builderHeaders = getBuilderHeaders('POST', '/order', signed_body);
     if (Object.keys(builderHeaders).length) {
       const keyPrefix = (builderHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
       console.log(`[builder] Attribution headers attached (clob-order path) | key=${keyPrefix}… | headers=${Object.keys(builderHeaders).join(',')}`);
@@ -35669,8 +35674,7 @@ app.post('/api/polymarket/order', async (req, res) => {
     }
     // If the client didn't provide builder headers, generate fresh ones server-side
     if (!hasClientBuilder) {
-      const builderHeaders = await getBuilderHeaders('POST', '/order', orderBody);
-      Object.assign(clobHeaders, builderHeaders);
+      Object.assign(clobHeaders, getBuilderHeaders('POST', '/order', orderBody));
     }
 
     // Log what we're sending for debugging
@@ -35709,33 +35713,22 @@ app.post('/api/polymarket/order', async (req, res) => {
 });
 
 // POST /api/polymarket/builder-sign — remote signing endpoint
-// Client (browser / Cloudflare Worker) sends { method, path, body } and gets
-// back POLY_BUILDER_* headers to include in the CLOB order POST.
-// Uses BuilderConfig from @polymarket/builder-signing-sdk for signing.
-app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
-  if (!_builderConfig) {
-    _trackBuilderSign(503, 'Builder credentials not configured', req);
-    return res.status(503).json({ error: 'Builder credentials not configured' });
-  }
+// Client (browser) sends { method, path, body } and gets back POLY_BUILDER_*
+// headers to include in the CLOB order POST.
+app.post('/api/polymarket/builder-sign', optionalAuth, (req, res) => {
   const { method, path, body } = req.body;
   if (!method || !path) {
     _trackBuilderSign(400, 'method and path required', req);
     return res.status(400).json({ error: 'method and path required' });
   }
-  try {
-    const headers = await _builderConfig.generateBuilderHeaders(
-      method.toUpperCase(), path, body || undefined
-    );
-    if (!headers) throw new Error('BuilderConfig returned no headers');
-    _trackBuilderSign(200, null, req);
-    const keyPrefix = (headers.POLY_BUILDER_API_KEY || '').slice(0, 8);
-    console.log(`[builder-sign] issued headers | key=${keyPrefix}… | method=${method} | path=${path}`);
-    res.json(headers);
-  } catch (err) {
-    console.error('[builder-sign]', err.message);
-    _trackBuilderSign(500, err.message, req);
-    res.status(500).json({ error: 'Failed to generate builder signature' });
+  const headers = getBuilderHeaders(method.toUpperCase(), path, body || undefined);
+  if (!Object.keys(headers).length) {
+    _trackBuilderSign(503, 'Builder credentials not configured', req);
+    return res.status(503).json({ error: 'Builder credentials not configured' });
   }
+  _trackBuilderSign(200, null, req);
+  console.log(`[builder-sign] issued headers | key=${(headers.POLY_BUILDER_API_KEY||'').slice(0,8)}… | method=${method} | path=${path}`);
+  res.json(headers);
 });
 
 // GET /api/admin/builder-sign-stats — read the builder-sign counter. If this
@@ -35754,7 +35747,7 @@ app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
 // GET /api/admin/builder-attribution-probe — single-shot end-to-end health check
 // Answers "is our builder key actually being credited by Polymarket?" by:
 //   1. Reporting whether env vars are set (redacted)
-//   2. Confirming BuilderConfig initialized at boot (_builderConfig !== null)
+//   2. Confirming POLY_BUILDER_* env vars are set
 //   3. Generating a sample POLY_BUILDER_* header set so you can verify format
 //   4. Calling GET /builder/trades on Polymarket CLOB with our credentials —
 //      if it returns 200 with trades, attribution IS working; if it returns
@@ -35775,7 +35768,7 @@ app.get('/api/admin/builder-attribution-probe', requireAdmin, async (req, res) =
       POLY_BUILDER_SECRET: secret ? `SET (len=${secret.length}, b64-like=${/^[A-Za-z0-9+/=_-]+$/.test(secret)})` : 'MISSING',
       POLY_BUILDER_PASSPHRASE: passphrase ? `SET (len=${passphrase.length})` : 'MISSING',
     },
-    builder_config_initialized: !!_builderConfig,
+    builder_config_initialized: !!(key && secret && passphrase),
     builder_sign_stats: {
       total: _builderSignStats.total,
       success: _builderSignStats.success,
@@ -35792,13 +35785,11 @@ app.get('/api/admin/builder-attribution-probe', requireAdmin, async (req, res) =
     suggested_next_steps: [],
   };
 
-  // 1. Generate a sample header set so the user can see what we'd send on a
-  // real trade. Uses the SAME BuilderConfig the order handlers use — if this
-  // fails, the handlers fail too.
-  if (_builderConfig) {
-    try {
-      const sampleBody = JSON.stringify({ order: { tokenId: 'probe', maker: '0x0', signer: '0x0' }, owner: 'probe-owner', orderType: 'GTC', deferExec: false });
-      const sampleHeaders = await _builderConfig.generateBuilderHeaders('POST', '/order', sampleBody);
+  // 1. Generate a sample header set to verify signing works end-to-end.
+  {
+    const sampleBody = JSON.stringify({ order: { tokenId: 'probe', maker: '0x0', signer: '0x0' }, owner: 'probe-owner', orderType: 'GTC', deferExec: false });
+    const sampleHeaders = getBuilderHeaders('POST', '/order', sampleBody);
+    if (Object.keys(sampleHeaders).length) {
       report.sample_headers = {
         POLY_BUILDER_API_KEY: sampleHeaders.POLY_BUILDER_API_KEY ? (sampleHeaders.POLY_BUILDER_API_KEY.slice(0, 8) + '…') : null,
         POLY_BUILDER_TIMESTAMP: sampleHeaders.POLY_BUILDER_TIMESTAMP || null,
@@ -35806,12 +35797,10 @@ app.get('/api/admin/builder-attribution-probe', requireAdmin, async (req, res) =
         POLY_BUILDER_SIGNATURE: sampleHeaders.POLY_BUILDER_SIGNATURE ? (sampleHeaders.POLY_BUILDER_SIGNATURE.slice(0, 12) + '…') : null,
         all_four_present: ['POLY_BUILDER_API_KEY','POLY_BUILDER_TIMESTAMP','POLY_BUILDER_PASSPHRASE','POLY_BUILDER_SIGNATURE'].every(h => !!sampleHeaders[h]),
       };
-    } catch (e) {
-      report.sample_headers = { error: e.message };
-      report.diagnosis.push('❌ BuilderConfig.generateBuilderHeaders() threw — SDK init is broken');
+    } else {
+      report.sample_headers = { error: 'no headers generated — env vars missing' };
+      report.diagnosis.push('❌ POLY_BUILDER_* env vars missing — set them in Railway Variables tab');
     }
-  } else {
-    report.diagnosis.push('❌ _builderConfig is null — env vars missing OR BuilderConfig import failed at boot');
   }
 
   // 2. Call Polymarket's /builder/trades with our key — this is the DEFINITIVE
