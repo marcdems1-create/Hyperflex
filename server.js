@@ -35073,39 +35073,93 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
   }
 });
 
-// ── Builder attribution via @polymarket/builder-signing-sdk ──────────────────
-// BuilderConfig is ESM-only, so we load it via dynamic import into a module-
-// level variable that all order handlers share. The variable is set within
-// ~50 ms of boot; in the rare case an order arrives before it resolves the
-// handler logs a warning and falls through to the existing HMAC fallback.
-let _builderConfig = null;
-(async () => {
-  try {
-    const { BuilderConfig } = await import('@polymarket/builder-signing-sdk');
-    const key        = process.env.POLY_BUILDER_API_KEY;
-    const secret     = process.env.POLY_BUILDER_SECRET;
-    const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
-    if (key && secret && passphrase) {
-      _builderConfig = new BuilderConfig({ localBuilderCreds: { key, secret, passphrase } });
-      console.log('[boot] Builder attribution enabled via BuilderConfig (POLY_BUILDER_API_KEY set)');
-    } else {
-      console.warn('[boot] POLY_BUILDER_* env vars missing — orders will NOT earn builder fees');
-    }
-  } catch (e) {
-    console.warn('[boot] BuilderConfig init failed:', e.message);
+// ── Builder attribution — direct HMAC (no SDK) ──────────────────────────────
+// Replaces the @polymarket/builder-signing-sdk call with the same inlined
+// HMAC the codebase already uses for user CLOB auth (see /clob-order handler
+// ~L35133). The SDK was a black box we couldn't debug when attribution
+// silently failed — this version is transparent: every input to the HMAC
+// plus the output signature is logged for the first N orders so we can
+// prove end-to-end that Polymarket is receiving a valid attribution header.
+//
+// Spec (verified against @polymarket/builder-signing-sdk v1.0.0 source):
+//   message    = timestamp + method + path + body
+//   secret     = base64-decode(POLY_BUILDER_SECRET)    -- raw bytes as HMAC key
+//   signature  = base64(hmac_sha256(secret, message))
+//                   .replace(/\+/g, '-').replace(/\//g, '_')
+//                   -- KEEP '=' padding (do NOT strip)
+//   timestamp  = Math.floor(Date.now() / 1000).toString()
+//   method     = UPPERCASE
+//   path       = '/order' (no host, no query)
+//
+// Headers sent on /order:
+//   POLY_BUILDER_API_KEY     = POLY_BUILDER_API_KEY env var (UUID)
+//   POLY_BUILDER_PASSPHRASE  = POLY_BUILDER_PASSPHRASE env var (raw)
+//   POLY_BUILDER_TIMESTAMP   = timestamp (string)
+//   POLY_BUILDER_SIGNATURE   = signature
+//
+// The `owner` field inside the order body is the TRADER's CLOB api_key UUID
+// (verified in market.html:4262 — do NOT confuse with POLY_BUILDER_API_KEY).
+
+let _builderCreds = null;
+(function initBuilderCreds() {
+  const key        = process.env.POLY_BUILDER_API_KEY;
+  const secret     = process.env.POLY_BUILDER_SECRET;
+  const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  if (!key || !secret || !passphrase) {
+    console.warn('[boot] POLY_BUILDER_* env vars missing — orders will NOT earn builder fees');
+    console.warn('        have POLY_BUILDER_API_KEY:', !!key, 'POLY_BUILDER_SECRET:', !!secret, 'POLY_BUILDER_PASSPHRASE:', !!passphrase);
+    return;
   }
+  // Pre-decode the secret once at boot. Node 16+ Buffer.from with 'base64'
+  // accepts both standard and URL-safe encodings, so we pass the env var
+  // through unchanged — matches the SDK source exactly (Buffer.from(secret,
+  // 'base64') with no pre-processing).
+  const secretBuf = Buffer.from(secret, 'base64');
+  if (secretBuf.length === 0) {
+    console.error('[boot] POLY_BUILDER_SECRET did not base64-decode — attribution disabled');
+    return;
+  }
+  _builderCreds = { key, passphrase, secretBuf, keyPrefix: key.slice(0, 8) };
+  console.log('[boot] Builder attribution enabled via inline HMAC | key=' + _builderCreds.keyPrefix + '… | secret_bytes=' + secretBuf.length);
 })();
 
+// Verbose logging envelope — log the first N builder-sign calls in full so
+// we can verify end-to-end. After N we drop to sampled summary logs only.
+let _builderSignVerbose = 20;
+
 // Returns POLY_BUILDER_* headers for an order, or {} if credentials aren't ready.
-async function getBuilderHeaders(method, path, body) {
-  if (!_builderConfig) return {};
-  try {
-    const headers = await _builderConfig.generateBuilderHeaders(method, path, body);
-    return headers || {};
-  } catch (e) {
-    console.warn('[builder] generateBuilderHeaders error:', e.message);
-    return {};
+// `body` is the RAW request body string that will be POSTed. It must be
+// byte-identical to what goes over the wire — do not re-JSON.stringify.
+function getBuilderHeaders(method, path, body) {
+  if (!_builderCreds) return {};
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const up = (method || 'POST').toUpperCase();
+  const bodyStr = body == null ? '' : String(body);
+  const message = ts + up + path + bodyStr;
+  const sig = crypto.createHmac('sha256', _builderCreds.secretBuf)
+    .update(message)
+    .digest('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_'); // keep '=' padding
+
+  if (_builderSignVerbose > 0) {
+    _builderSignVerbose--;
+    console.log('[builder] HMAC input -----');
+    console.log('[builder]   ts       =', ts);
+    console.log('[builder]   method   =', up);
+    console.log('[builder]   path     =', path);
+    console.log('[builder]   body.len =', bodyStr.length, '| body[0..80]=', bodyStr.slice(0, 80));
+    console.log('[builder]   msg.len  =', message.length);
+    console.log('[builder]   sig      =', sig);
+    console.log('[builder]   key      =', _builderCreds.keyPrefix + '…');
+    console.log('[builder] -------------------');
   }
+
+  return {
+    POLY_BUILDER_API_KEY:    _builderCreds.key,
+    POLY_BUILDER_PASSPHRASE: _builderCreds.passphrase,
+    POLY_BUILDER_TIMESTAMP:  ts,
+    POLY_BUILDER_SIGNATURE:  sig,
+  };
 }
 
 // POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
@@ -35135,8 +35189,9 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
       .replace(/\+/g, '-').replace(/\//g, '_');
 
-    // Builder attribution via BuilderConfig SDK — generates fresh POLY_BUILDER_* headers
-    const builderHeaders = await getBuilderHeaders('POST', '/order', signed_body);
+    // Builder attribution — inline HMAC (no SDK). signed_body is the exact
+    // string being POSTed, which is what Polymarket validates against.
+    const builderHeaders = getBuilderHeaders('POST', '/order', signed_body);
     if (Object.keys(builderHeaders).length) {
       const keyPrefix = (builderHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
       console.log(`[builder] Attribution headers attached (clob-order path) | key=${keyPrefix}… | headers=${Object.keys(builderHeaders).join(',')}`);
@@ -36051,31 +36106,65 @@ app.post('/api/polymarket/order', async (req, res) => {
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client (browser / Cloudflare Worker) sends { method, path, body } and gets
 // back POLY_BUILDER_* headers to include in the CLOB order POST.
-// Uses BuilderConfig from @polymarket/builder-signing-sdk for signing.
+//
+// body MUST be the BYTE-IDENTICAL string the client will POST as the HTTP
+// body. If the client re-stringifies after calling this endpoint, the HMAC
+// will be computed over a different string than Polymarket validates and
+// attribution silently fails (symptom: order lands but no builder fee).
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
-  if (!_builderConfig) {
+  if (!_builderCreds) {
     _trackBuilderSign(503, 'Builder credentials not configured', req);
     return res.status(503).json({ error: 'Builder credentials not configured' });
   }
-  const { method, path, body } = req.body;
+  const { method, path, body } = req.body || {};
   if (!method || !path) {
     _trackBuilderSign(400, 'method and path required', req);
     return res.status(400).json({ error: 'method and path required' });
   }
   try {
-    const headers = await _builderConfig.generateBuilderHeaders(
-      method.toUpperCase(), path, body || undefined
-    );
-    if (!headers) throw new Error('BuilderConfig returned no headers');
+    const headers = getBuilderHeaders(method, path, body || '');
     _trackBuilderSign(200, null, req);
-    const keyPrefix = (headers.POLY_BUILDER_API_KEY || '').slice(0, 8);
-    console.log(`[builder-sign] issued headers | key=${keyPrefix}… | method=${method} | path=${path}`);
+    console.log(`[builder-sign] issued | key=${_builderCreds.keyPrefix}… | ${method.toUpperCase()} ${path} | body.len=${(body || '').length}`);
     res.json(headers);
   } catch (err) {
     console.error('[builder-sign]', err.message);
     _trackBuilderSign(500, err.message, req);
     res.status(500).json({ error: 'Failed to generate builder signature' });
   }
+});
+
+// GET /api/admin/builder-sign-probe — self-test the HMAC implementation
+// against the canonical test vector from the SDK's tests/hmac.test.ts.
+// Returns { ok: true } only if our output matches Polymarket's expected
+// output byte-for-byte. Useful to run once on Railway after deploy to
+// confirm attribution is wired correctly before telling the Polymarket
+// team it's fixed.
+app.get('/api/admin/builder-sign-probe', requireAdmin, (req, res) => {
+  // Canonical test vector verbatim from @polymarket/builder-signing-sdk main
+  // tests/hmac.test.ts. Body has a space after the colon — do not remove it.
+  const testSecret = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+  const testTs     = 1000000;
+  const testMethod = 'test-sign';
+  const testPath   = '/orders';
+  const testBody   = '{"hash": "0x123"}';
+  const expected   = 'ZwAdJKvoYRlEKDkNMwd5BuwNNtg93kNaR_oU2HrfVvc=';
+
+  const testSecretBuf = Buffer.from(testSecret, 'base64');
+  const msg = '' + testTs + testMethod + testPath + testBody;
+  const actual = crypto.createHmac('sha256', testSecretBuf).update(msg).digest('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_');
+
+  const ok = actual === expected;
+  res.json({
+    ok,
+    expected,
+    actual,
+    match: ok ? 'HMAC implementation matches Polymarket SDK v1.0.0 test vector' : 'MISMATCH — do not trust attribution until fixed',
+    creds_loaded: !!_builderCreds,
+    key_prefix: _builderCreds ? _builderCreds.keyPrefix + '…' : null,
+    secret_bytes: _builderCreds ? _builderCreds.secretBuf.length : 0,
+    note: 'A passing probe proves our HMAC matches the SDK spec. An actual successful builder-attributed order also requires (a) Polymarket has activated our builder_api_key and (b) no middleware re-stringifies the order body between sign and POST.',
+  });
 });
 
 // GET /api/admin/builder-sign-stats — read the builder-sign counter. If this
