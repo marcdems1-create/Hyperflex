@@ -4391,7 +4391,8 @@ window.hfxOpenDeposit = function() {
       <a class="nav-item" data-nav-section="trading" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
       </a>
-      <a class="nav-item" data-nav-section="trading" onclick="showTab('arbitrage')">
+      <!-- Arbitrage nav hidden — feature currently broken, Polymarket-first focus -->
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('arbitrage')" style="display:none">
         <span class="nav-icon">⚖️</span><span class="nav-label">Arbitrage</span>
       </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('calendar')">
@@ -6490,8 +6491,8 @@ window.hfxOpenDeposit = function() {
                     <button onclick="document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block';switchPortfolioTab('poly');setTimeout(function(){var el=document.getElementById('poly-wallet-input');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.focus();}},200)" style="width:100%;background:var(--gold);color:#0a0a0f;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Polymarket</button>
                   </div>
 
-                  <!-- Kalshi welcome card -->
-                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)';this.style.boxShadow='0 0 20px rgba(139,92,246,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                  <!-- Kalshi welcome card — hidden, Polymarket-first focus -->
+                  <div style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)';this.style.boxShadow='0 0 20px rgba(139,92,246,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
                     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
                       <div style="width:40px;height:40px;border-radius:10px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟡</div>
                       <div>
@@ -6503,8 +6504,8 @@ window.hfxOpenDeposit = function() {
                     <button onclick="document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block';switchPortfolioTab('kalshi');setTimeout(()=>document.getElementById('kalshiApiKeyInput').focus(),50)" style="width:100%;background:var(--gold);color:#0a0a0f;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Kalshi</button>
                   </div>
 
-                  <!-- Manifold welcome card -->
-                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(16,185,129,0.5)';this.style.boxShadow='0 0 20px rgba(16,185,129,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                  <!-- Manifold welcome card — hidden, Polymarket-first focus -->
+                  <div style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(16,185,129,0.5)';this.style.boxShadow='0 0 20px rgba(16,185,129,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
                     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
                       <div style="width:40px;height:40px;border-radius:10px;background:rgba(16,185,129,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟢</div>
                       <div>
@@ -6592,7 +6593,8 @@ window.hfxOpenDeposit = function() {
               <button id="ptab-poly" class="ptab" data-platform="polymarket" onclick="switchPortfolioTab('poly')">
                 <span id="ptab-poly-dot" class="ptab-dot"></span>Polymarket
               </button>
-              <button id="ptab-kalshi" class="ptab" data-platform="kalshi" onclick="switchPortfolioTab('kalshi')">
+              <!-- Kalshi tab hidden — Polymarket-first focus. Un-hide when cross-venue is back on the roadmap. -->
+              <button id="ptab-kalshi" class="ptab" data-platform="kalshi" onclick="switchPortfolioTab('kalshi')" style="display:none">
                 <span id="ptab-kalshi-dot" class="ptab-dot"></span>Kalshi
               </button>
               <!-- Manifold hidden — play money, not useful for real traders -->
@@ -6700,7 +6702,8 @@ window.hfxOpenDeposit = function() {
                   <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Track all your prediction market positions in one place.</div>
                   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
                     <button onclick="showInlinePolyConnect()" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#x1F7E3; Connect Polymarket</button>
-                    <button onclick="switchPortfolioTab('kalshi')" style="background:rgba(217,119,6,0.12);border:1px solid rgba(217,119,6,0.3);color:#fbbf24;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#x1F7E1; Connect Kalshi</button>
+                    <!-- Connect Kalshi hidden — Polymarket-first focus -->
+                    <button onclick="switchPortfolioTab('kalshi')" style="display:none;background:rgba(217,119,6,0.12);border:1px solid rgba(217,119,6,0.3);color:#fbbf24;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;align-items:center;gap:8px">&#x1F7E1; Connect Kalshi</button>
                   </div>
                 </div>
               </div>
