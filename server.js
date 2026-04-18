@@ -12141,7 +12141,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved, flex_brier_component, flex_pnl_component, realized_roi_median, realized_trade_count').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -12313,10 +12313,14 @@ app.get('/api/member/:userId', async (req, res) => {
         total_bet: Math.round(totalBet / 100),
         total_won: Math.round(totalWon / 100),
         streak,
-        // Flex score (Brier-based) + denormalized prediction totals — used
-        // for the primary clout badge on the profile hero.
+        // Flex Score — blended 0.7·Brier + 0.3·realizedROI, with component
+        // breakdown so the profile modal can explain where the score comes from.
         flex_score_90d:     userData.flex_score_90d != null ? parseInt(userData.flex_score_90d) : null,
         flex_score_alltime: userData.flex_score_alltime != null ? parseInt(userData.flex_score_alltime) : null,
+        flex_brier_component: userData.flex_brier_component != null ? parseInt(userData.flex_brier_component) : null,
+        flex_pnl_component:   userData.flex_pnl_component   != null ? parseInt(userData.flex_pnl_component)   : null,
+        realized_roi_median:  userData.realized_roi_median  != null ? parseFloat(userData.realized_roi_median) : null,
+        realized_trade_count: userData.realized_trade_count != null ? parseInt(userData.realized_trade_count)  : 0,
         predictions_resolved: userData.predictions_resolved != null ? parseInt(userData.predictions_resolved) : 0,
         // FLEX Points balance (rep currency)
         flex_points: flexPoints,

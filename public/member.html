@@ -86,14 +86,43 @@ a{color:var(--gold);text-decoration:none}
 .loading{color:var(--muted);text-align:center;padding:80px 20px;font-size:13px}
 .empty{text-align:center;padding:40px 16px;color:var(--muted);font-size:13px}
 
+/* Flex Score clickable + modal */
+.stat.clickable{cursor:pointer;transition:background .15s}
+.stat.clickable:hover{background:rgba(212,160,23,.05)}
+.stat-hint{font-family:var(--mono);font-size:9px;color:var(--gold);opacity:.7;margin-top:2px;letter-spacing:.5px}
+.flex-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:20px}
+.flex-modal-bg.open{display:flex}
+.flex-modal{background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:14px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto;position:relative;padding:24px}
+.flex-modal-close{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1}
+.flex-modal-title{font-size:20px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.flex-modal-body p{font-size:14px;color:var(--soft);line-height:1.55;margin-bottom:14px}
+.flex-modal-body strong{color:var(--gold)}
+.flex-components{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+.flex-comp{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:12px}
+.flex-comp-label{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:4px}
+.flex-comp-val{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1;margin-bottom:6px}
+.flex-comp-sub{font-size:11px;color:var(--soft);line-height:1.4}
+.flex-tiers{background:rgba(212,160,23,.04);border:1px solid rgba(212,160,23,.2);border-radius:10px;padding:12px 16px;font-family:var(--mono);font-size:12px;line-height:1.8;margin:14px 0}
+.flex-tiers-row{display:flex;align-items:center;gap:8px}
+.flex-tiers-range{color:var(--muted);width:50px}
+.flex-tiers-arrow{color:var(--muted)}
+.flex-formula{font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,.02);border-radius:8px;padding:10px 14px;line-height:1.7;border:1px dashed var(--border)}
+.flex-lock-note{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+
 /* Mobile */
-@media(max-width:480px){.page{padding:16px 16px 60px}.name{font-size:18px}.avatar{width:56px;height:56px;font-size:20px}.tier-pct{font-size:44px}}
+@media(max-width:480px){.page{padding:16px 16px 60px}.name{font-size:18px}.avatar{width:56px;height:56px;font-size:20px}.tier-pct{font-size:44px}.flex-modal{padding:20px;border-radius:12px 12px 0 0;align-self:flex-end;max-height:85vh}.flex-modal-bg{align-items:flex-end;padding:0}.flex-components{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div id="nav-root"></div>
 <script src="/nav.js?v=20"></script>
 <div class="page" id="page"><div class="loading">Loading profile...</div></div>
+<div class="flex-modal-bg" id="flexModalBg" onclick="if(event.target===this)closeFlexModal()">
+  <div class="flex-modal" id="flexModal">
+    <button class="flex-modal-close" onclick="closeFlexModal()" aria-label="Close">×</button>
+    <div id="flexModalInner"></div>
+  </div>
+</div>
 <script>
 var userId = location.pathname.split('/').pop();
 var API = location.origin;
@@ -139,6 +168,47 @@ async function promptSetName(){
     if(r.ok){location.reload()}else{alert('Failed to update name')}
   }catch(e){alert('Error: '+e.message)}
 }
+
+function renderFlexModal(s){
+  var inner=document.getElementById('flexModalInner');if(!inner)return;
+  var brier=s.flex_brier_component!=null?s.flex_brier_component:null;
+  var pnl=s.flex_pnl_component!=null?s.flex_pnl_component:null;
+  var resolved=s.predictions_resolved||0;
+  var closed=s.realized_trade_count||0;
+  var roiMed=s.realized_roi_median;
+  var locked=(resolved+closed)>=3;
+  var roiPct=roiMed!=null?Math.round(roiMed*1000)/10:null; // decimals → %
+  var brierSub=resolved>0?('Across '+resolved+' resolved '+(resolved===1?'take':'takes')):'No resolved takes yet';
+  var pnlSub=closed>0?('Median '+(roiPct>=0?'+':'')+roiPct+'% on '+closed+' closed '+(closed===1?'trade':'trades')):'No closed trades yet';
+  inner.innerHTML =
+    '<div class="flex-modal-title">Flex Score</div>'+
+    '<div class="flex-modal-body">'+
+      '<p>A single 0–100 number measuring how sharp a trader is — both at <strong>calling outcomes right</strong> and at <strong>closing trades profitably before resolution</strong>.</p>'+
+      '<div class="flex-components">'+
+        '<div class="flex-comp">'+
+          '<div class="flex-comp-label">BRIER · CALLS</div>'+
+          '<div class="flex-comp-val" style="color:var(--gold)">'+(brier!=null?brier:'—')+'</div>'+
+          '<div class="flex-comp-sub">'+brierSub+'</div>'+
+        '</div>'+
+        '<div class="flex-comp">'+
+          '<div class="flex-comp-label">REALIZED PnL</div>'+
+          '<div class="flex-comp-val" style="color:var(--green)">'+(pnl!=null?pnl:'—')+'</div>'+
+          '<div class="flex-comp-sub">'+pnlSub+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="flex-formula">Flex Score = <strong style="color:var(--text)">0.7 × Brier</strong> + <strong style="color:var(--text)">0.3 × PnL</strong><br>'+
+        '<span style="color:var(--soft)">Single-source when you only have one kind of data</span></div>'+
+      '<div class="flex-tiers">'+
+        '<div class="flex-tiers-row"><span class="flex-tiers-range">70+</span><span class="flex-tiers-arrow">→</span><span style="color:#d4a017">🎯 Oracle</span></div>'+
+        '<div class="flex-tiers-row"><span class="flex-tiers-range">60+</span><span class="flex-tiers-arrow">→</span><span style="color:#00e68a">🎯 Sharp</span></div>'+
+        '<div class="flex-tiers-row"><span class="flex-tiers-range">50+</span><span class="flex-tiers-arrow">→</span><span style="color:#4d9fff">📊 Solid</span></div>'+
+        '<div class="flex-tiers-row"><span class="flex-tiers-range">&lt;50</span><span class="flex-tiers-arrow">→</span><span style="color:#8888a0">🎲 Speculator</span></div>'+
+      '</div>'+
+      '<div class="flex-lock-note">'+(locked?('Locked in · '+(resolved+closed)+' scored events'):('Needs at least 3 resolved takes or closed trades to lock in · '+(resolved+closed)+'/3 so far'))+'</div>'+
+    '</div>';
+}
+function openFlexModal(){var bg=document.getElementById('flexModalBg');if(bg)bg.classList.add('open')}
+function closeFlexModal(){var bg=document.getElementById('flexModalBg');if(bg)bg.classList.remove('open')}
 
 async function load(){
   var page=document.getElementById('page');
@@ -228,7 +298,7 @@ async function load(){
       '</div>'+
 
       '<div class="stats">'+
-        '<div class="stat"><div class="stat-val" style="color:var(--gold)">'+(s.flex_score_alltime!=null?s.flex_score_alltime:s.flex_score_90d!=null?s.flex_score_90d:'—')+'</div><div class="stat-lbl">Flex Score</div></div>'+
+        '<div class="stat clickable" onclick="openFlexModal()"><div class="stat-val" style="color:var(--gold)">'+(s.flex_score_alltime!=null?s.flex_score_alltime:s.flex_score_90d!=null?s.flex_score_90d:'—')+'</div><div class="stat-lbl">Flex Score</div><div class="stat-hint">TAP ⓘ</div></div>'+
         '<div class="stat"><div class="stat-val" style="color:var(--green)">'+volStr+'</div><div class="stat-lbl">Volume</div></div>'+
         '<div class="stat"><div class="stat-val" style="color:'+pnlColor+'">'+pnlStr+'</div><div class="stat-lbl">P&L</div></div>'+
         '<div class="stat"><div class="stat-val" style="color:var(--purple)">'+(s.flex_points>=1000?(s.flex_points/1000).toFixed(1)+'K':s.flex_points||0)+'</div><div class="stat-lbl">FLEX Pts</div></div>'+
@@ -249,6 +319,11 @@ async function load(){
         '<div class="challenge-sub">Think you can predict better? Challenge them to a prediction duel.</div>'+
         '<button class="btn btn-gold" onclick="window.location.href=\'/feed\'">Challenge →</button>'+
       '</div>';
+
+    // Stash the stats for the Flex Score modal — rendered on first open so
+    // we don't pay the cost if the user never taps.
+    window._flexStats = s;
+    renderFlexModal(s);
 
     loadFollowStatus();
   }catch(err){
