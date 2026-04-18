@@ -701,18 +701,58 @@ function stripEditName() {
 async function enrichFromLivePolymarket() {
   try {
     const res = await fetch(`${API}/api/member/${userId}`);
-    if (!res.ok) return;
+    if (!res.ok) { console.log('[enrich] member fetch failed', res.status); return; }
     const data = await res.json();
     const addr = data?.user?.polymarket_address;
-    if (!addr) return;
-    // Only enrich if our DB has no trade data — otherwise the normal path
-    // already populated the stats.
-    if ((data.polymarket_stats?.total_trades || 0) > 0) return;
+    console.log('[enrich] userId=', userId, 'addr=', addr, 'db_trades=', data?.polymarket_stats?.total_trades);
+    if (!addr) { console.log('[enrich] no polymarket_address — skipping'); return; }
 
-    const posRes = await fetch(`${API}/api/polymarket/positions/${addr}`);
-    if (!posRes.ok) return;
-    const { positions } = await posRes.json();
-    if (!Array.isArray(positions) || !positions.length) return;
+    // Always attempt a live fetch. The DB reflects only what our internal
+    // sync has logged (polymarket_trades table), which is often incomplete
+    // for newly-connected wallets. Live data from the Polymarket data-api
+    // is the source of truth.
+    let positions = [];
+    try {
+      const posRes = await fetch(`${API}/api/polymarket/positions/${addr}`);
+      if (posRes.ok) {
+        const body = await posRes.json();
+        if (Array.isArray(body.positions)) positions = body.positions;
+      } else {
+        console.log('[enrich] polymarket positions fetch', posRes.status);
+      }
+    } catch (e) { console.warn('[enrich] polymarket fetch error', e); }
+
+    // Fallback: cached_positions from our hourly sync (same source the dashboard reads)
+    if (!positions.length) {
+      try {
+        const pRes = await fetch(`${API}/api/predictors/${userId}/portfolio`);
+        if (pRes.ok) {
+          const pBody = await pRes.json();
+          const cached = (pBody.cached_positions || []).filter(p => (p.platform || '').toLowerCase() === 'polymarket');
+          positions = cached.map(p => ({
+            question: p.market_title || p.question,
+            side: p.side,
+            shares: parseFloat(p.shares) || 0,
+            current_price: parseFloat(p.current_price) || 0,
+            cash_value: parseFloat(p.cash_value || p.current_value) || 0,
+            cost_basis: parseFloat(p.cost_basis || p.initial_value) || 0,
+            pnl: parseFloat(p.pnl) || 0,
+            market_url: p.market_url || null,
+          }));
+          console.log('[enrich] fallback to cached_positions, count=', positions.length);
+        }
+      } catch (e) { console.warn('[enrich] cached portfolio error', e); }
+    }
+
+    console.log('[enrich] final position count=', positions.length);
+    if (!positions.length) {
+      // Truthful empty state: the user has a connected wallet but no positions.
+      const vSub = document.getElementById('statVolumeSub');
+      const pSub = document.getElementById('statPnlSub');
+      if (vSub) vSub.textContent = 'No positions yet';
+      if (pSub) pSub.textContent = '';
+      return;
+    }
 
     let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
     for (const p of positions) {
