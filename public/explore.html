@@ -3699,10 +3699,25 @@ function renderTakeCard(t) {
           '<span class="icon">\u2191</span> <span class="count">' + (t.agree_count || 0) + '</span></button>' +
         '<button class="take-action-btn disagree' + disagreeActive + '" onclick="reactToTake(\'' + t.id + '\',\'disagree\',this)">' +
           '<span class="icon">\u2193</span> <span class="count">' + (t.disagree_count || 0) + '</span></button>' +
+        '<button class="take-action-btn reply" onclick="toggleReply(\'' + t.id + '\')" title="Reply">' +
+          '<span class="icon">\u{1F4AC}</span> <span class="count">' + (t.comment_count || 0) + '</span></button>' +
         '<button class="take-action-btn quote" onclick="openQuotePredictModal(\'' + t.id + '\')" title="Quote-predict">' +
           '<span class="icon">\u21A9</span> <span class="count">' + (quoteCount || '') + '</span></button>' +
         '<button class="take-action-btn share" onclick="shareTake(\'' + t.id + '\')" title="Share">' +
           '<span class="icon">\u2197</span></button>' +
+      '</div>' +
+      '<div class="take-reply-wrap" id="reply-wrap-' + t.id + '" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06)">' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">Pick a side to reply</div>' +
+        '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+          '<button class="gate-btn" data-take="' + t.id + '" data-reaction="agree" onclick="setReplyReaction(\'' + t.id + '\',\'agree\')" style="flex:1;padding:8px 12px;border-radius:20px;background:rgba(0,230,138,0.08);color:#00e68a;border:1px solid rgba(0,230,138,0.3);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.12s">\u{1F44D} Agree</button>' +
+          '<button class="gate-btn" data-take="' + t.id + '" data-reaction="disagree" onclick="setReplyReaction(\'' + t.id + '\',\'disagree\')" style="flex:1;padding:8px 12px;border-radius:20px;background:rgba(255,77,106,0.08);color:#ff4d6a;border:1px solid rgba(255,77,106,0.3);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.12s">\u{1F44E} Disagree</button>' +
+        '</div>' +
+        '<textarea id="reply-body-' + t.id + '" disabled placeholder="Pick a side to reply..." maxlength="500" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;color:#f0f0f5;font-family:inherit;font-size:13px;resize:none;min-height:60px;opacity:0.5;outline:none"></textarea>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px">' +
+          '<span id="reply-count-' + t.id + '" style="font-family:monospace;font-size:11px;color:#6b6b80">0/500</span>' +
+          '<button id="reply-submit-' + t.id + '" disabled onclick="submitReply(\'' + t.id + '\')" style="padding:7px 18px;border-radius:20px;background:#f0f0f5;color:#000;font-size:12px;font-weight:700;cursor:pointer;opacity:0.4;border:none;transition:opacity 0.12s">Post reply</button>' +
+        '</div>' +
+        '<div id="comments-list-' + t.id + '" style="margin-top:12px"></div>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -3745,6 +3760,124 @@ function shareTake(takeId) {
   var text = q ? q.textContent : 'Check out this prediction take on HYPERFLEX';
   var url = 'https://hyperflex.network/explore';
   window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text + '\n\n' + url), '_blank');
+}
+
+// ── Reply / Comment system (reaction-gated) ──────────────────────────
+// Policy: you can't comment on a take without first picking a side.
+// The reaction is stored alongside the comment (and upserted into
+// take_reactions so it counts in the tally too).
+var _replyReaction = {}; // takeId -> 'agree' | 'disagree'
+
+function toggleReply(takeId) {
+  var token = getToken();
+  if (!token) { alert('Sign in to reply'); return; }
+  var wrap = document.getElementById('reply-wrap-' + takeId);
+  if (!wrap) return;
+  var isOpen = wrap.style.display === 'block';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) loadComments(takeId);
+}
+
+function setReplyReaction(takeId, reaction) {
+  _replyReaction[takeId] = reaction;
+  var wrap = document.getElementById('reply-wrap-' + takeId);
+  if (wrap) {
+    wrap.querySelectorAll('.gate-btn[data-take="' + takeId + '"]').forEach(function(b) {
+      var active = b.dataset.reaction === reaction;
+      b.style.background = active
+        ? (reaction === 'agree' ? 'rgba(0,230,138,0.28)' : 'rgba(255,77,106,0.28)')
+        : (b.dataset.reaction === 'agree' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)');
+      b.style.borderWidth = active ? '2px' : '1px';
+    });
+  }
+  var ta = document.getElementById('reply-body-' + takeId);
+  if (ta) {
+    ta.disabled = false;
+    ta.style.opacity = '1';
+    ta.placeholder = reaction === 'agree' ? 'Why do you agree?' : 'Why do you disagree?';
+    ta.focus();
+    ta.oninput = function() { updateReplyUi(takeId); };
+  }
+  updateReplyUi(takeId);
+}
+
+function updateReplyUi(takeId) {
+  var ta = document.getElementById('reply-body-' + takeId);
+  var submit = document.getElementById('reply-submit-' + takeId);
+  var count = document.getElementById('reply-count-' + takeId);
+  if (count && ta) count.textContent = ta.value.length + '/500';
+  if (submit && ta) {
+    var ok = ta.value.trim().length > 0 && _replyReaction[takeId];
+    submit.disabled = !ok;
+    submit.style.opacity = ok ? '1' : '0.4';
+    submit.style.cursor = ok ? 'pointer' : 'not-allowed';
+  }
+}
+
+async function submitReply(takeId) {
+  var token = getToken();
+  if (!token) { alert('Sign in to reply'); return; }
+  var ta = document.getElementById('reply-body-' + takeId);
+  var reaction = _replyReaction[takeId];
+  if (!ta || !reaction) return;
+  var body = ta.value.trim();
+  if (!body) return;
+  var submit = document.getElementById('reply-submit-' + takeId);
+  if (submit) { submit.disabled = true; submit.textContent = 'Posting…'; }
+  try {
+    var r = await fetch('/api/takes/' + takeId + '/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ body: body, reaction: reaction })
+    });
+    var d = await r.json();
+    if (!r.ok) { alert(d.error || 'Failed to post'); if (submit) { submit.disabled = false; submit.textContent = 'Post reply'; } return; }
+    ta.value = '';
+    updateReplyUi(takeId);
+    loadComments(takeId);
+    // Bump visible counters on the card
+    var card = document.getElementById('take-' + takeId);
+    if (card) {
+      var rb = card.querySelector('.take-action-btn.reply .count');
+      if (rb) rb.textContent = (parseInt(rb.textContent, 10) || 0) + 1;
+      // Don't double-increment the reaction count — reactToTake already
+      // owns that button state. The server has upserted the reaction,
+      // so refetching on next render will reconcile if it was new.
+    }
+  } catch (e) { console.warn('[submit-reply]', e); }
+  if (submit) { submit.disabled = false; submit.textContent = 'Post reply'; }
+}
+
+async function loadComments(takeId) {
+  try {
+    var r = await fetch('/api/takes/' + takeId + '/comments');
+    if (!r.ok) return;
+    var d = await r.json();
+    var list = document.getElementById('comments-list-' + takeId);
+    if (!list) return;
+    if (!d.comments || !d.comments.length) {
+      list.innerHTML = '<div style="font-size:12px;color:#6b6b80;padding:10px 0;text-align:center">Be the first to reply.</div>';
+      return;
+    }
+    list.innerHTML = d.comments.map(function(c) {
+      var rxn = c.reaction === 'agree'
+        ? '<span style="font-size:10px;font-weight:700;color:#00e68a;background:rgba(0,230,138,0.1);padding:1px 6px;border-radius:4px;letter-spacing:0.04em">\u{1F44D} AGREE</span>'
+        : c.reaction === 'disagree'
+          ? '<span style="font-size:10px;font-weight:700;color:#ff4d6a;background:rgba(255,77,106,0.1);padding:1px 6px;border-radius:4px;letter-spacing:0.04em">\u{1F44E} DISAGREE</span>'
+          : '';
+      var name = escHtml(c.display_name || 'Anonymous');
+      var nameHtml = c.user_id
+        ? '<a href="/m/' + c.user_id + '" style="color:#f0f0f5;text-decoration:none;font-weight:700;font-size:13px">' + name + '</a>'
+        : '<span style="font-weight:700;font-size:13px">' + name + '</span>';
+      return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">' +
+          nameHtml + rxn +
+          '<span style="font-size:11px;color:#6b6b80;margin-left:auto">' + timeAgo(c.created_at) + '</span>' +
+        '</div>' +
+        '<div style="font-size:13px;color:#b4b4c4;line-height:1.5;white-space:pre-wrap;word-break:break-word">' + escHtml(c.body || '') + '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) { console.warn('[load-comments]', e); }
 }
 
 // ── Compose modal ──
