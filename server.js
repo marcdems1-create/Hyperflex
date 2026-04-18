@@ -15312,9 +15312,11 @@ async function scorePredictionsForMarket(marketTitle, marketId, outcome) {
 async function recomputeFlexScore(userId) {
   try {
     const since90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+
+    // ── Brier component: accuracy at resolution ──
     let allPreds, recentPreds;
     if (pool) {
-      allPreds = await dbQuery(`SELECT brier_contribution FROM predictions WHERE user_id=$1 AND outcome IN ('correct','incorrect')`, [userId]);
+      allPreds    = await dbQuery(`SELECT brier_contribution FROM predictions WHERE user_id=$1 AND outcome IN ('correct','incorrect')`, [userId]);
       recentPreds = await dbQuery(`SELECT brier_contribution FROM predictions WHERE user_id=$1 AND outcome IN ('correct','incorrect') AND resolved_at > $2`, [userId, since90]);
     } else {
       const { data: a } = await supabase.from('predictions').select('brier_contribution').eq('user_id', userId).in('outcome', ['correct','incorrect']);
@@ -15322,14 +15324,80 @@ async function recomputeFlexScore(userId) {
       allPreds = a || []; recentPreds = r || [];
     }
     const avgBrier = arr => arr.length ? arr.reduce((s, r) => s + (parseFloat(r.brier_contribution) || 0), 0) / arr.length : null;
-    const toScore = b => b !== null ? Math.round(Math.max(0, Math.min(100, (1 - b) * 100))) : null;
-    const scoreAll = toScore(avgBrier(allPreds));
-    const score90 = toScore(avgBrier(recentPreds));
+    const brierToScore = b => b !== null ? Math.round(Math.max(0, Math.min(100, (1 - b) * 100))) : null;
+    const brierAll = brierToScore(avgBrier(allPreds));
+    const brier90  = brierToScore(avgBrier(recentPreds));
+
+    // ── PnL component: profit-taking on realized Polymarket trades ──
+    // Median (not mean) so a single outlier lot doesn't lift a sloppy
+    // trader into Oracle tier. Clamp so median-ROI of +100% saturates
+    // the component at 100 and -100% pins it at 0.
+    let allRoi = [], recentRoi = [];
+    try {
+      if (pool) {
+        allRoi    = await dbQuery(`SELECT realized_roi FROM realized_trades WHERE user_id=$1`, [userId]);
+        recentRoi = await dbQuery(`SELECT realized_roi FROM realized_trades WHERE user_id=$1 AND closed_at > $2`, [userId, since90]);
+      } else if (supabase) {
+        const { data: a } = await supabase.from('realized_trades').select('realized_roi').eq('user_id', userId);
+        const { data: r } = await supabase.from('realized_trades').select('realized_roi').eq('user_id', userId).gt('closed_at', since90);
+        allRoi = a || []; recentRoi = r || [];
+      }
+    } catch (e) {
+      // realized_trades table missing — treat as no realized data, keep Brier-only
+      if (!/does not exist/i.test(e.message)) console.warn('[flex] realized_trades lookup:', e.message);
+    }
+    const median = arr => {
+      if (!arr.length) return null;
+      const s = arr.map(r => parseFloat(r.realized_roi) || 0).sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+    const roiToScore = roi => roi === null ? null : Math.round(Math.max(0, Math.min(100, 50 + roi * 50)));
+    const medAll = median(allRoi);
+    const med90  = median(recentRoi);
+    const pnlAll = roiToScore(medAll);
+    const pnl90  = roiToScore(med90);
+
+    // ── Blend: 0.7 × brier + 0.3 × pnl when both exist; otherwise whichever is non-null ──
+    const blend = (b, p) => {
+      if (b !== null && p !== null) return Math.round(0.7 * b + 0.3 * p);
+      return b !== null ? b : (p !== null ? p : null);
+    };
+    const finalAll = blend(brierAll, pnlAll);
+    const final90  = blend(brier90,  pnl90);
+
+    // Component snapshot for the profile UI (Phase 3 reads these)
+    const brierForSnapshot = brierAll;            // alltime component shown on card
+    const pnlForSnapshot   = pnlAll;
+    const roiMedianForSnapshot = medAll !== null ? Math.round(medAll * 1e6) / 1e6 : null;
+
     if (pool) {
-      await pool.query(`UPDATE users SET flex_score_alltime=$1,flex_score_90d=$2,predictions_resolved=$3 WHERE id=$4`,
-        [scoreAll, score90, allPreds.length, userId]);
+      // Write the component columns separately so they land on schemas that
+      // predate the flex_components migration (silently ignored there).
+      await pool.query(
+        `UPDATE users SET flex_score_alltime=$1, flex_score_90d=$2, predictions_resolved=$3 WHERE id=$4`,
+        [finalAll, final90, allPreds.length, userId]
+      );
+      try {
+        await pool.query(
+          `UPDATE users SET flex_brier_component=$1, flex_pnl_component=$2,
+                             realized_roi_median=$3, realized_trade_count=$4 WHERE id=$5`,
+          [brierForSnapshot, pnlForSnapshot, roiMedianForSnapshot, allRoi.length, userId]
+        );
+      } catch (e) {
+        if (!/column .* does not exist/i.test(e.message)) throw e;
+        // Run supabase_migration_flex_components.sql to enable component persistence.
+      }
     } else {
-      await supabase.from('users').update({ flex_score_alltime: scoreAll, flex_score_90d: score90, predictions_resolved: allPreds.length }).eq('id', userId);
+      await supabase.from('users').update({ flex_score_alltime: finalAll, flex_score_90d: final90, predictions_resolved: allPreds.length }).eq('id', userId);
+      try {
+        await supabase.from('users').update({
+          flex_brier_component: brierForSnapshot,
+          flex_pnl_component:   pnlForSnapshot,
+          realized_roi_median:  roiMedianForSnapshot,
+          realized_trade_count: allRoi.length
+        }).eq('id', userId);
+      } catch (e) { /* columns may not exist yet */ }
     }
   } catch (err) { console.warn('[predictions] recomputeFlexScore error:', err.message); }
 }
@@ -16034,7 +16102,12 @@ async function syncRealizedTrades(user) {
     }
   }
 
-  if (inserted > 0) console.log(`[realized-trades] user=${user.id} inserted=${inserted} skipped=${skipped}`);
+  if (inserted > 0) {
+    console.log(`[realized-trades] user=${user.id} inserted=${inserted} skipped=${skipped}`);
+    // New closed lots → Flex Score may have moved. Fire-and-forget so sync
+    // latency doesn't inherit the recompute cost.
+    recomputeFlexScore(user.id).catch(e => console.warn('[realized-trades] recompute failed:', e.message));
+  }
   return { inserted, skipped };
 }
 
