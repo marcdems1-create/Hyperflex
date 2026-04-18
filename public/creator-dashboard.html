@@ -2840,6 +2840,80 @@ body.nav-open .sidebar-backdrop {
   /* Bottom sheet modal enforcement */
   .modal-overlay { padding: 0 !important; align-items: flex-end !important; }
   .modal { border-radius: 20px 20px 0 0 !important; max-width: 100% !important; max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Trade modal: bottom sheet on mobile ── */
+  /* The tradeModal uses inline styles so we need !important overrides */
+  #tradeModal {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  #tradeModal > div {
+    border-radius: 20px 20px 0 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.6) !important;
+  }
+  /* Drag handle */
+  #tradeModal > div::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+    margin: 12px auto 4px;
+  }
+  /* Close button: larger tap target */
+  .trade-modal-close {
+    width: 44px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    font-size: 22px !important;
+    background: rgba(255,255,255,0.06) !important;
+    color: #aaa !important;
+    transition: background .15s !important;
+  }
+  .trade-modal-close:hover, .trade-modal-close:active {
+    background: rgba(255,255,255,0.12) !important;
+  }
+
+  /* ── Poly trade action buttons: full-width when wrapped ── */
+  .poly-trade-actions {
+    margin-left: 0 !important;
+    width: 100% !important;
+    justify-content: stretch !important;
+  }
+  .poly-trade-actions button,
+  .poly-trade-actions a {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    text-align: center !important;
+    min-height: 44px !important;
+  }
+
+  /* ── Quick trade market grid: single column ── */
+  #qtHotGrid, #qtNewGrid { grid-template-columns: 1fr !important; }
+
+  /* ── Position card expanded body actions ── */
+  .pos-card-body > div > div:last-child {
+    flex-wrap: wrap !important;
+  }
+  .pos-card-body > div > div:last-child > a,
+  .pos-card-body > div > div:last-child > button {
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* ── Market row action buttons ── */
+  .market-row-actions { flex-wrap: wrap !important; gap: 6px !important; }
 }
 /* ── Narrow phone ≤480px ── */
 @media (max-width: 480px) {
@@ -20719,7 +20793,7 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
           <div id="tradeModalIcon" style="width:36px;height:36px;border-radius:8px;background:#2d2d44;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📊</div>
           <div id="tradeModalQuestion" style="font-size:14px;font-weight:700;color:#fff;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">—</div>
         </div>
-        <button onclick="closeTradeModal()" style="background:none;border:none;font-size:18px;color:#666;cursor:pointer;padding:4px;margin-left:8px">&times;</button>
+        <button onclick="closeTradeModal()" class="trade-modal-close" style="background:none;border:none;font-size:18px;color:#666;cursor:pointer;padding:4px;margin-left:8px;flex-shrink:0">&times;</button>
       </div>
 
       <!-- Buy / Sell tab -->
