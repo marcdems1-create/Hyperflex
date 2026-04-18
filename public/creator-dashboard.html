@@ -19703,29 +19703,72 @@ async function confirmTrade() {
   const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
 
   // ── PRE-SUBMIT SHARE BALANCE CHECK (SELL only) ────────────────────────────
-  // Polymarket's data-api lags after a sell — positions can still show with
-  // old sizes for a window. Without this guard, the user clicks Sell, signs
-  // the order in MetaMask, waits for the CLOB round-trip, then gets
-  // "Insufficient share balance" with zero useful diagnostics. This check
-  // compares the requested sell against the cached position and bails early
-  // with a specific, actionable error, no wallet signature wasted.
+  // Polymarket's data-api lags after a sell. Without this guard, the user
+  // clicks Sell, signs in MetaMask, waits for CLOB, then gets "Insufficient
+  // share balance" with zero actionable info. This check bails early when
+  // shares are missing — but ONLY after confirming on-chain, so a stale
+  // cache (shares actually exist, our data hasn't caught up) doesn't show
+  // a false error. User never sees "insufficient shares" unless on-chain
+  // balance really is insufficient.
   //
-  // Shares held comes from _tradeModalData.shares (populated from window.
-  // _polyPositionsData when the modal opened). Uses a 0.0001 epsilon for
-  // float rounding.
+  // Flow:
+  //   1. Check cached _tradeModalData.shares
+  //   2. If cache looks fine → proceed (fast path, no RPC)
+  //   3. If cache looks insufficient → on-chain balanceOf(proxy, tokenId)
+  //      on the CTF Conditional Tokens contract (authoritative)
+  //   4. On-chain confirms empty → show error + refresh
+  //   5. On-chain has enough → silently update cache, proceed
   if (clobSide === 'SELL') {
     const ownedShares = parseFloat(_tradeModalData.shares) || 0;
-    if (ownedShares <= 0.01) {
-      errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You may have already sold them, or you\'re on the opposite side (Yes vs No). Refreshing positions…</span>';
-      errEl.style.display = 'block';
-      // Refresh so the OPEN grid drops this ghost row
-      if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
-      return;
-    }
-    if (shares > ownedShares + 0.0001) {
-      errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
-      errEl.style.display = 'block';
-      return;
+    const cacheLooksInsufficient = ownedShares <= 0.01 || shares > ownedShares + 0.0001;
+    if (cacheLooksInsufficient) {
+      // Verify against on-chain before blocking. CTF Conditional Tokens on
+      // Polygon: balanceOf(address owner, uint256 id) → uint256 (1:1 shares,
+      // no decimals since Polymarket issues whole-share ERC-1155).
+      const CTF_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+      try {
+        const provider = await getDashboardPublicProvider();
+        const ctf = new ethers.Contract(
+          CTF_CONDITIONAL_TOKENS,
+          ['function balanceOf(address owner, uint256 id) view returns (uint256)'],
+          provider
+        );
+        const owner = proxyAddress || eoaAddress;
+        const onchainRaw = await ctf.balanceOf(owner, tokenId);
+        // Polymarket CTF shares use 6-decimal fixed point (USDC collateral)
+        const onchainShares = parseFloat(ethers.formatUnits(onchainRaw, 6));
+        console.log('[pre-sell] on-chain balance:', onchainShares, 'requested:', shares, 'cache:', ownedShares);
+        if (onchainShares < shares - 0.0001) {
+          // Truly insufficient — show the accurate on-chain number
+          if (onchainShares <= 0.01) {
+            errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Confirmed on-chain. You may have sold them elsewhere. Refreshing positions…</span>';
+          } else {
+            errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">On-chain balance: ' + onchainShares.toFixed(2) + ' shares. Reduce the amount or tap MAX.</span>';
+          }
+          errEl.style.display = 'block';
+          if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+          return;
+        }
+        // On-chain confirmed — cache was stale, let the sell through.
+        // Patch the cached position so the MAX button and other UI catch up.
+        _tradeModalData.shares = onchainShares;
+      } catch (onchainErr) {
+        // RPC failed — fall back to cache. If cache says zero, still block
+        // (accurate enough) but note in console. Better than blocking when
+        // RPC is flaky and shares genuinely exist.
+        console.warn('[pre-sell] on-chain check failed, falling back to cache:', onchainErr.message);
+        if (ownedShares <= 0.01) {
+          errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You may have already sold them, or you\'re on the opposite side (Yes vs No). Refreshing positions…</span>';
+          errEl.style.display = 'block';
+          if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+          return;
+        }
+        if (shares > ownedShares + 0.0001) {
+          errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
+          errEl.style.display = 'block';
+          return;
+        }
+      }
     }
   }
 
