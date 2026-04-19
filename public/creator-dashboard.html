@@ -3505,6 +3505,15 @@ input[type="date"].form-input { color-scheme:dark; }
 }
 .field select option { background: #14141d; color: var(--text); }
 
+/* ── Tab fade — ship/test smoothness pass #1 ────────────────────────────────
+   showTab() re-triggers this animation every time the active tab changes,
+   fading in + lifting the new tab body ~160ms. Feel free to tune the
+   timing (120-200ms is the usable range) if it reads too slow/fast. */
+@keyframes hfxTabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* Toggle pill for boolean settings */
 .toggle-pill {
   width: 40px; height: 22px;
@@ -9960,6 +9969,19 @@ function showTab(tab) {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
+  // Fade-in the newly active tab. Resetting animation to 'none' + forcing
+  // a reflow lets the browser re-trigger it on every tab switch instead
+  // of just on first mount.
+  const activeEl = document.getElementById('tab-' + tab);
+  if (activeEl) {
+    activeEl.style.animation = 'none';
+    // eslint-disable-next-line no-unused-expressions
+    activeEl.offsetHeight;
+    activeEl.style.animation = 'hfxTabFadeIn .16s cubic-bezier(.2,.9,.3,1)';
+  }
+  // Also auto-close the mobile drawer on tab change so the user sees the
+  // new tab content without an extra tap to dismiss the sidebar.
+  document.body.classList.remove('nav-open');
   // Re-sync the onboarding card whenever the user lands on portfolio —
   // state may have changed (wallet connected, positions synced, etc).
   if (tab === 'portfolio' && typeof updateOnboardingCard === 'function') {
