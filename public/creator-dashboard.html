@@ -782,6 +782,161 @@ body {
   margin-bottom: 22px;
 }
 
+/* ── AI Portfolio buckets — matches Alpha Feed visual language but with a
+   Kelly-sized allocation bar and a hedge-pair chip where relevant ── */
+.ai-list {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 12px 28px -14px rgba(0,0,0,0.4);
+}
+.ai-bucket { }
+.ai-bucket + .ai-bucket { border-top: 1px solid rgba(255,255,255,0.06); }
+.ai-bucket-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px;
+  background: rgba(255,255,255,0.025);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-wrap: wrap;
+}
+.ai-bucket-emoji { font-size: 16px; flex-shrink: 0; }
+.ai-bucket-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.ai-bucket-alloc {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+}
+.ai-bucket-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ai-bucket-avg-edge { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+.ai-pos {
+  display: block;
+  padding: 14px 22px;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.12s;
+}
+.ai-pos:last-child { border-bottom: none; }
+.ai-pos:hover { background: rgba(255,255,255,0.025); }
+.ai-pos-row { display: flex; align-items: flex-start; gap: 14px; }
+.ai-edge-col { text-align: center; flex-shrink: 0; width: 54px; }
+.ai-edge-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.ai-edge-val.hot  { color: var(--green); }
+.ai-edge-val.warm { color: #4d9fff; }
+.ai-edge-lbl {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.ai-kelly-track {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.ai-kelly-fill { height: 100%; border-radius: 100px; }
+.ai-kelly-pct {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+.ai-mid { flex: 1; min-width: 0; }
+.ai-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  margin-bottom: 8px;
+}
+.ai-trade {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.ai-trade.yes { background: rgba(0,230,138,0.08); border: 1px solid rgba(0,230,138,0.2); }
+.ai-trade.no  { background: rgba(255,77,106,0.08); border: 1px solid rgba(255,77,106,0.2); }
+.ai-trade-side { font-weight: 800; letter-spacing: 0.04em; }
+.ai-trade.yes .ai-trade-side { color: var(--green); }
+.ai-trade.no  .ai-trade-side { color: var(--red); }
+.ai-trade-arr { color: var(--muted); }
+.ai-trade-win { font-weight: 800; }
+.ai-trade.yes .ai-trade-win { color: var(--green); }
+.ai-trade.no  .ai-trade-win { color: var(--red); }
+.ai-trade-whale { color: #c4a3ff; font-weight: 700; }
+.ai-trade-hedge {
+  padding: 1px 7px;
+  border-radius: 100px;
+  background: rgba(168,85,247,0.14);
+  color: #c4a3ff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.ai-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.ai-alpha {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+}
+.ai-alpha.strong { background: var(--green); color: #042018; }
+.ai-alpha.medium { background: rgba(77,159,255,0.2); color: #86b7ff; }
+.ai-alpha.weak   { background: rgba(255,255,255,0.06); color: var(--soft); }
+.ai-yes-price {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.ai-yes-price.bullish { color: var(--green); }
+.ai-yes-price.bearish { color: var(--red); }
+.ai-yes-price.neutral { color: var(--text); }
+.ai-expiry { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+@media (max-width: 600px) {
+  .ai-bucket-head { padding: 12px 14px; }
+  .ai-pos { padding: 12px 14px; }
+  .ai-edge-col { width: 44px; }
+  .ai-edge-val { font-size: 18px; }
+  .ai-q { font-size: 13px; }
+  .ai-yes-price { font-size: 14px; }
+}
+
 /* ── Alpha Feed — market signal cards, matches premium glass system ── */
 .alpha-stats-strip {
   display: flex;
@@ -10488,68 +10643,68 @@ function renderAIPortfolioWarnings(warnings) {
 function renderAIPortfolioBuckets(buckets) {
   var el = document.getElementById('aiPortfolioBuckets');
   if (!buckets || !buckets.length) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">No positions meet portfolio criteria right now</div>';
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--muted);font-size:13px">No positions meet portfolio criteria right now</div>';
     return;
   }
-
   function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-  el.innerHTML = buckets.map(function(b) {
+  var bucketsHtml = buckets.map(function(b) {
     var color = _catColors[b.category] || '#888';
     var emoji = _catEmojis[b.category] || '📊';
     var catLabel = (b.category || 'other').charAt(0).toUpperCase() + (b.category || 'other').slice(1);
+    var allocBg = color + '22';
 
     var positionsHtml = b.positions.map(function(p) {
-      var sideColor = p.side === 'YES' ? '#00e68a' : '#ff4d6a';
-      var sideBg = p.side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
       var url = p.slug ? '/market/' + p.slug + (p.market_id ? '?outcome=' + encodeURIComponent(p.market_id) : '') : '/alpha';
-      var alphaBg = (p.alpha_score || 0) >= 7 ? '#00e68a' : (p.alpha_score || 0) >= 4 ? '#4d9fff' : '#4a4760';
-      var alphaText = (p.alpha_score || 0) >= 7 ? '#000' : '#fff';
+      var edgeCls = p.edge_score >= 60 ? 'hot' : p.edge_score >= 35 ? 'warm' : '';
+      var ascoreCls = (p.alpha_score || 0) >= 7 ? 'strong' : (p.alpha_score || 0) >= 4 ? 'medium' : 'weak';
+      var yesPct = p.yes_price != null ? Math.round(p.yes_price * 100) : null;
+      var yesCls = yesPct >= 70 ? 'bullish' : yesPct <= 30 ? 'bearish' : 'neutral';
+      var tradeCls = p.side === 'YES' ? 'yes' : 'no';
+      var kellyPct = Math.min(100, (p.kelly_size_pct || 0) * 5);
 
-      return '<a href="' + url + '" style="display:block;text-decoration:none;color:inherit;padding:14px 20px;border-bottom:1px solid #1a1917;transition:background .15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseleave="this.style.background=\'transparent\'">' +
-        '<div style="display:flex;align-items:flex-start;gap:12px">' +
-          // Left: edge + kelly bar
-          '<div style="flex-shrink:0;width:50px;text-align:center">' +
-            '<div style="font-family:var(--mono);font-size:18px;font-weight:900;color:' + (p.edge_score >= 60 ? '#00e68a' : p.edge_score >= 35 ? '#4d9fff' : 'var(--text)') + ';line-height:1">' + p.edge_score + '</div>' +
-            '<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">EDGE</div>' +
-            '<div style="margin-top:4px;height:3px;border-radius:2px;background:#1a1917;overflow:hidden"><div style="width:' + Math.min(100, p.kelly_size_pct * 5) + '%;height:100%;background:' + color + '"></div></div>' +
-            '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">' + p.kelly_size_pct + '%</div>' +
+      return '<a href="' + url + '" class="ai-pos">' +
+        '<div class="ai-pos-row">' +
+          '<div class="ai-edge-col">' +
+            '<div class="ai-edge-val ' + edgeCls + '">' + p.edge_score + '</div>' +
+            '<div class="ai-edge-lbl">Edge</div>' +
+            '<div class="ai-kelly-track"><div class="ai-kelly-fill" style="width:' + kellyPct + '%;background:' + color + '"></div></div>' +
+            '<div class="ai-kelly-pct">' + p.kelly_size_pct + '%</div>' +
           '</div>' +
-          // Center: question + trade context
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:6px">' + esc(p.question || '') + '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:' + sideBg + ';border-radius:5px;font-family:var(--mono);font-size:11px;flex-wrap:wrap">' +
-              '<span style="font-weight:700;color:' + sideColor + '">' + p.side + '</span>' +
-              '<span style="color:var(--muted)">$' + (p.bet_amount || 0).toFixed(0) + ' bet</span>' +
-              '<span style="color:var(--muted)">→</span>' +
-              '<span style="font-weight:700;color:' + sideColor + '">+$' + (p.potential_win || 0).toFixed(0) + '</span>' +
-              '<span style="color:var(--muted)">(' + p.roi_pct + '% ROI)</span>' +
-              (p.whale_count > 0 ? '<span style="color:#a855f7">🐋 ' + p.whale_count + '</span>' : '') +
-              (p.hedge_pair_id ? '<span style="padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.1);color:#a855f7;font-size:11px">🔗 HEDGED</span>' : '') +
+          '<div class="ai-mid">' +
+            '<div class="ai-q">' + esc(p.question || '') + '</div>' +
+            '<div class="ai-trade ' + tradeCls + '">' +
+              '<span class="ai-trade-side">' + p.side + '</span>' +
+              '<span class="ai-trade-arr">$' + (p.bet_amount || 0).toFixed(0) + ' bet</span>' +
+              '<span class="ai-trade-arr">→</span>' +
+              '<span class="ai-trade-win">+$' + (p.potential_win || 0).toFixed(0) + '</span>' +
+              '<span class="ai-trade-arr">(' + p.roi_pct + '% ROI)</span>' +
+              (p.whale_count > 0 ? '<span class="ai-trade-whale">🐋 ' + p.whale_count + '</span>' : '') +
+              (p.hedge_pair_id ? '<span class="ai-trade-hedge">🔗 HEDGED</span>' : '') +
             '</div>' +
           '</div>' +
-          // Right: alpha badge + odds
-          '<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
-            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:' + alphaBg + ';color:' + alphaText + '">\u03B1 ' + (p.alpha_score || 0).toFixed(1) + '</span>' +
-            (p.yes_price != null ? '<span style="font-family:var(--mono);font-size:16px;font-weight:800;color:' + (Math.round(p.yes_price * 100) >= 70 ? '#00e68a' : Math.round(p.yes_price * 100) <= 30 ? '#ff4d6a' : 'var(--text)') + '">' + Math.round(p.yes_price * 100) + '%</span>' : '') +
-            (p.days_until_expiry != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' + (p.days_until_expiry === 0 ? 'Today' : p.days_until_expiry + 'd') + '</span>' : '') +
+          '<div class="ai-right">' +
+            '<span class="ai-alpha ' + ascoreCls + '">α ' + (p.alpha_score || 0).toFixed(1) + '</span>' +
+            (yesPct != null ? '<span class="ai-yes-price ' + yesCls + '">' + yesPct + '%</span>' : '') +
+            (p.days_until_expiry != null ? '<span class="ai-expiry">' + (p.days_until_expiry === 0 ? 'Today' : p.days_until_expiry + 'd') + '</span>' : '') +
           '</div>' +
         '</div>' +
       '</a>';
     }).join('');
 
-    return '<div>' +
-      // Bucket header
-      '<div style="display:flex;align-items:center;gap:10px;padding:12px 20px;background:rgba(255,255,255,0.01);border-bottom:1px solid #1a1917">' +
-        '<span style="font-size:14px">' + emoji + '</span>' +
-        '<span style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text)">' + catLabel + '</span>' +
-        '<span style="font-family:var(--mono);font-size:11px;color:' + color + ';font-weight:700">' + b.allocation_pct + '% allocation</span>' +
-        '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' + b.position_count + ' position' + (b.position_count !== 1 ? 's' : '') + '</span>' +
-        '<span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)">avg edge ' + b.avg_edge_score + '</span>' +
+    return '<div class="ai-bucket">' +
+      '<div class="ai-bucket-head">' +
+        '<span class="ai-bucket-emoji">' + emoji + '</span>' +
+        '<span class="ai-bucket-name">' + catLabel + '</span>' +
+        '<span class="ai-bucket-alloc" style="background:' + allocBg + ';color:' + color + '">' + b.allocation_pct + '% alloc</span>' +
+        '<span class="ai-bucket-count">' + b.position_count + ' position' + (b.position_count !== 1 ? 's' : '') + '</span>' +
+        '<span class="ai-bucket-avg-edge">avg edge ' + b.avg_edge_score + '</span>' +
       '</div>' +
       positionsHtml +
     '</div>';
   }).join('');
+
+  el.innerHTML = '<div class="ai-list">' + bucketsHtml + '</div>';
 }
 
 // ── SEASONS ──────────────────────────────────────────────────────────────────
