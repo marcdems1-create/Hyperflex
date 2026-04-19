@@ -4882,8 +4882,12 @@ window.hfxOpenDeposit = function() {
 
         <!-- ── Connected Accounts ── -->
         <div class="section" style="padding:20px 24px">
-          <div style="font-size:15px;font-weight:700;margin-bottom:4px">Connected Accounts</div>
-          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);margin-bottom:16px">Link your trading platforms and social profiles</div>
+          <div class="tab-head">
+            <div class="tab-head-text">
+              <div class="tab-head-title">🔗 Connected Accounts</div>
+              <div class="tab-head-sub">Link your trading platforms and social profiles</div>
+            </div>
+          </div>
           <div class="social-accounts-grid" id="socialAccountsGrid">
             <!-- Polymarket -->
             <div class="social-account-card" id="socialCardPoly">
@@ -7318,13 +7322,15 @@ window.hfxOpenDeposit = function() {
       <div id="tab-briefing" style="display:none">
         <div class="section">
           <div style="max-width:960px">
-            <div style="margin-bottom:20px">
-              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">📋 Daily Intelligence Brief</div>
-              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="briefingDate">Loading...</div>
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">📋 Daily Intelligence Brief</div>
+                <div class="tab-head-sub" id="briefingDate">Loading…</div>
+              </div>
             </div>
             <div id="briefingSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px"></div>
             <div id="briefingSections" style="display:flex;flex-direction:column;gap:20px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Generating brief...</div>
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--muted)">Generating brief…</div>
             </div>
           </div>
         </div>
@@ -7335,8 +7341,12 @@ window.hfxOpenDeposit = function() {
       <div id="tab-ta" style="display:none">
         <div class="section">
           <div style="padding:20px">
-            <h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Technical Analysis</h2>
-            <p style="font-size:13px;color:var(--dim);margin-bottom:20px">Select a position to view its price chart with technical indicators.</p>
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">📊 Technical Analysis</div>
+                <div class="tab-head-sub">Select a position to view its price chart with technical indicators.</div>
+              </div>
+            </div>
 
             <!-- Position selector -->
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -7381,7 +7391,12 @@ window.hfxOpenDeposit = function() {
       <div id="tab-account" style="display:none">
         <div class="section">
           <div class="markets-table" style="padding:28px;max-width:520px">
-            <h2 style="font-size:18px;font-weight:800;margin-bottom:24px">My Account</h2>
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">👤 My Account</div>
+                <div class="tab-head-sub">Profile, display name, password, account actions</div>
+              </div>
+            </div>
 
             <!-- Display Name -->
             <div style="margin-bottom:20px">
