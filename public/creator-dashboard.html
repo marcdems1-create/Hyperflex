@@ -650,6 +650,138 @@ body {
   padding: 0 4px;
 }
 
+/* ── Shared tab-page primitives — used across Find Markets / Catalysts /
+   Watchlist / Briefing / Arbitrage. Replaces the same 5-line inline-style
+   buttons + headers + pill filters that were copy-pasted everywhere. ── */
+
+/* Back-to-portfolio button at the top of secondary tabs */
+.tab-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 100px;
+  background: rgba(245,166,35,0.06);
+  border: 1px solid rgba(245,166,35,0.22);
+  color: var(--gold);
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+  margin-bottom: 18px;
+  min-height: 34px;
+}
+.tab-back:hover {
+  background: rgba(245,166,35,0.16);
+  border-color: rgba(245,166,35,0.45);
+}
+
+/* Page-style header: icon + title + subtitle (vs. Polymarket's clean
+   intro pattern). Use inside .section, above the main content. */
+.tab-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.tab-head-text { min-width: 0; flex: 1 1 auto; }
+.tab-head-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  line-height: 1.1;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.tab-head-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.tab-head-cta {
+  flex-shrink: 0;
+}
+
+/* Prominent search input — Find Markets uses this, Watchlist could too */
+.tab-search-wrap { position: relative; margin-bottom: 22px; }
+.tab-search-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.tab-search-input {
+  width: 100%;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 14px 18px 14px 46px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.14s, background 0.14s;
+}
+.tab-search-input::placeholder { color: var(--muted); }
+.tab-search-input:focus {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(245,166,35,0.4);
+}
+
+/* Category filter pills — already had `.mkt-cat-pill` and `.ta-btn` but
+   they were styled inline. New `.cat-pill` is the canonical class; the
+   existing JS keeps targeting the old class names so we add aliases. */
+.cat-pill, .mkt-cat-pill, .ta-btn {
+  padding: 8px 16px !important;
+  border-radius: 100px !important;
+  border: 1px solid var(--border) !important;
+  background: rgba(255,255,255,0.025) !important;
+  color: var(--text-soft, #b4b4c4) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.005em !important;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s !important;
+  white-space: nowrap;
+  min-height: 34px;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+}
+.cat-pill:hover, .mkt-cat-pill:hover, .ta-btn:hover {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+  color: var(--text) !important;
+}
+.cat-pill.active, .mkt-cat-pill.active, .ta-btn.active {
+  background: linear-gradient(180deg, #f5c842, #c9920d) !important;
+  color: #0a0a0f !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px -2px rgba(245,200,66,0.5);
+}
+.cat-pill-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
 /* ── Alpha Feed — market signal cards, matches premium glass system ── */
 .alpha-stats-strip {
   display: flex;
@@ -7085,28 +7217,23 @@ window.hfxOpenDeposit = function() {
       <div id="tab-findmarkets" style="display:none">
         <div class="section">
           <div style="max-width:900px">
-            <div style="margin-bottom:16px"><button onclick="showTab('portfolio')" style="background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:8px;padding:6px 14px;font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gold);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px" onmouseover="this.style.background='rgba(201,146,13,0.15)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">← My Positions</button></div>
-            <!-- Search bar — Polymarket style -->
-            <div style="position:relative;margin-bottom:20px">
-              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--dim);pointer-events:none">🔍</span>
-              <input type="text" id="mktSearchInput" placeholder="Search markets"
-                style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:14px;padding:16px 18px 16px 44px;font-family:var(--sans);font-size:15px;font-weight:500;color:var(--text);outline:none;box-sizing:border-box;transition:all .2s"
-                onfocus="this.style.borderColor='rgba(201,146,13,0.5)';this.style.boxShadow='0 0 0 3px rgba(201,146,13,0.08)'" onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
+            <button onclick="showTab('portfolio')" class="tab-back">← My Positions</button>
+            <div class="tab-search-wrap">
+              <span class="tab-search-icon">🔍</span>
+              <input type="text" id="mktSearchInput" class="tab-search-input" placeholder="Search markets"
                 oninput="debouncedMktSearch()" onkeydown="if(event.key==='Enter')runMarketSearch()"/>
             </div>
-            <!-- Category pills -->
-            <div id="mktCategoryPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-              <button onclick="searchCategory('all')" class="mkt-cat-pill active" data-cat="all" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:var(--gold);color:var(--ink);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap">All</button>
-              <button onclick="searchCategory('politics')" class="mkt-cat-pill" data-cat="politics" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">🏛 Politics</button>
-              <button onclick="searchCategory('crypto')" class="mkt-cat-pill" data-cat="crypto" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">₿ Crypto</button>
-              <button onclick="searchCategory('sports')" class="mkt-cat-pill" data-cat="sports" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">⚽ Sports</button>
-              <button onclick="searchCategory('culture')" class="mkt-cat-pill" data-cat="culture" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">🎬 Culture</button>
-              <button onclick="searchCategory('economy')" class="mkt-cat-pill" data-cat="economy" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">📈 Economy</button>
-              <button onclick="searchCategory('science')" class="mkt-cat-pill" data-cat="science" style="padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">🔬 Science</button>
+            <div id="mktCategoryPills" class="cat-pill-row">
+              <button onclick="searchCategory('all')" class="mkt-cat-pill active" data-cat="all">All</button>
+              <button onclick="searchCategory('politics')" class="mkt-cat-pill" data-cat="politics">🏛 Politics</button>
+              <button onclick="searchCategory('crypto')" class="mkt-cat-pill" data-cat="crypto">₿ Crypto</button>
+              <button onclick="searchCategory('sports')" class="mkt-cat-pill" data-cat="sports">⚽ Sports</button>
+              <button onclick="searchCategory('culture')" class="mkt-cat-pill" data-cat="culture">🎬 Culture</button>
+              <button onclick="searchCategory('economy')" class="mkt-cat-pill" data-cat="economy">📈 Economy</button>
+              <button onclick="searchCategory('science')" class="mkt-cat-pill" data-cat="science">🔬 Science</button>
             </div>
-            <!-- Results -->
             <div id="mktSearchResults">
-              <div style="text-align:center;padding:32px 0;color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.06em">LOADING TRENDING MARKETS…</div>
+              <div style="text-align:center;padding:32px 0;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.06em">LOADING TRENDING MARKETS…</div>
             </div>
           </div>
         </div>
@@ -7146,11 +7273,13 @@ window.hfxOpenDeposit = function() {
       <div id="tab-calendar" style="display:none">
         <div class="section">
           <div style="max-width:960px">
-            <div style="margin-bottom:20px">
-              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">📅 Catalyst Calendar</div>
-              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Upcoming events that move prediction markets — mapped to tradeable opportunities</div>
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">📅 Catalyst Calendar</div>
+                <div class="tab-head-sub">Upcoming events that move prediction markets — mapped to tradeable opportunities</div>
+              </div>
             </div>
-            <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap" id="calFilterPills">
+            <div class="cat-pill-row" id="calFilterPills">
               <button class="ta-btn active" onclick="filterCalendar('all',this)">All</button>
               <button class="ta-btn" onclick="filterCalendar('macro',this)">Macro</button>
               <button class="ta-btn" onclick="filterCalendar('politics',this)">Politics</button>
@@ -7160,7 +7289,7 @@ window.hfxOpenDeposit = function() {
               <button class="ta-btn" onclick="filterCalendar('geopolitics',this)">Geopolitics</button>
             </div>
             <div id="calList" style="display:flex;flex-direction:column;gap:10px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading catalysts...</div>
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--muted)">Loading catalysts…</div>
             </div>
           </div>
         </div>
@@ -7170,16 +7299,16 @@ window.hfxOpenDeposit = function() {
       <div id="tab-watchlist" style="display:none">
         <div class="section">
           <div style="max-width:960px">
-            <div style="margin-bottom:16px"><button onclick="showTab('portfolio')" style="background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:8px;padding:6px 14px;font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gold);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px" onmouseover="this.style.background='rgba(201,146,13,0.15)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">← My Positions</button></div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-              <div>
-                <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">👁️ Watchlist</div>
-                <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Track markets and set price alerts</div>
+            <button onclick="showTab('portfolio')" class="tab-back">← My Positions</button>
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">👁️ Watchlist</div>
+                <div class="tab-head-sub">Track markets and set price alerts</div>
               </div>
-              <button onclick="openAddWatchlist()" style="padding:8px 16px;background:var(--gold);color:#0a0a0f;border:none;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">+ Add Market</button>
+              <button onclick="openAddWatchlist()" class="btn-primary tab-head-cta">+ Add Market</button>
             </div>
             <div id="watchlistList" style="display:flex;flex-direction:column;gap:10px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading watchlist...</div>
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--muted)">Loading watchlist…</div>
             </div>
           </div>
         </div>
