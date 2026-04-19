@@ -2637,9 +2637,55 @@ body.plan-premium .main {
 }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.03); }
 /* Form field primitives (used in season modal + reward modal) */
-.form-label { display:block; font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
-.form-input { display:block; width:100%; box-sizing:border-box; background:var(--paper); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--sans); font-size:13px; padding:10px 14px; outline:none; transition:border-color .15s; }
-.form-input:focus { border-color:rgba(201,146,13,0.5); }
+/* Forms — premium inputs matching the rest of the glass system. Used in
+   Account, Settings, any form field. Paired with .form-label above. */
+.form-label {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.form-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  padding: 12px 16px;
+  outline: none;
+  transition: background 0.14s, border-color 0.14s, box-shadow 0.14s;
+  min-height: 44px;
+}
+.form-input::placeholder { color: var(--muted); }
+.form-input:hover {
+  background: rgba(255,255,255,0.045);
+  border-color: rgba(255,255,255,0.14);
+}
+.form-input:focus {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(245,166,35,0.5);
+  box-shadow: 0 0 0 3px rgba(245,200,66,0.12);
+}
+.form-input:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Textarea variant — .form-input used as <textarea> inherits everything */
+textarea.form-input {
+  min-height: 72px;
+  line-height: 1.5;
+  resize: vertical;
+  padding-top: 12px;
+}
+/* Password field should render dots at consistent size across browsers */
+input[type="password"].form-input { letter-spacing: 0.18em; }
 textarea.form-input { resize:vertical; min-height:80px; }
 input[type="date"].form-input { color-scheme:dark; }
 .stat-card-icon {
@@ -3415,33 +3461,49 @@ input[type="date"].form-input { color-scheme:dark; }
   justify-content: flex-end;
 }
 
-.field { margin-bottom: 18px; }
+/* .field — legacy form-field wrapper used in Settings. Upgraded to match
+   the new .form-input aesthetic (glass bg, 12px radius, focus ring). */
+.field { margin-bottom: 20px; }
 .field label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dim);
-  margin-bottom: 6px;
-  letter-spacing: 0.03em;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .field input, .field select, .field textarea {
   width: 100%;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 12px;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
   color: var(--text);
   outline: none;
-  transition: border-color 0.2s;
+  transition: background 0.14s, border-color 0.14s, box-shadow 0.14s;
+  min-height: 44px;
   resize: none;
 }
-.field input:focus, .field select:focus, .field textarea:focus {
-  border-color: var(--gold);
+.field input::placeholder,
+.field textarea::placeholder { color: var(--muted); }
+.field textarea { min-height: 72px; line-height: 1.5; resize: vertical; }
+.field input:hover, .field select:hover, .field textarea:hover {
+  background: rgba(255,255,255,0.045);
+  border-color: rgba(255,255,255,0.14);
 }
-.field select option { background: var(--cream); }
+.field input:focus, .field select:focus, .field textarea:focus {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(245,166,35,0.5);
+  box-shadow: 0 0 0 3px rgba(245,200,66,0.12);
+}
+.field select option { background: #14141d; color: var(--text); }
 
 /* Toggle pill for boolean settings */
 .toggle-pill {
@@ -5391,6 +5453,12 @@ window.hfxOpenDeposit = function() {
       <div id="tab-settings" style="display:none">
         <div class="section">
           <div class="markets-table" style="padding:28px">
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">⚙️ Community Settings</div>
+                <div class="tab-head-sub">Name, colors, branding, AI scanning cadence, Discord webhooks</div>
+              </div>
+            </div>
             <div class="field">
               <label>Community Display Name</label>
               <input type="text" id="settingName" placeholder="Your community name"/>
