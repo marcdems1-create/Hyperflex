@@ -14419,10 +14419,26 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
     const offset = parseInt(req.query.offset) || 0;
     const category = req.query.category; // optional filter
 
-    // Trending score: (agree + disagree) * recency_decay * (1 + sharp_score/100)
+    // Trending score: (base_boost + agree + disagree) * recency_decay * (1 + sharp_score/100)
+    //
+    // Base boost per source so sharp-money-signal takes surface without
+    // needing user reactions. User takes still have to earn attention via
+    // engagement; whale/consensus/influencer content seeds the feed:
+    //   consensus   → 5 (multiple whales aligned = highest signal)
+    //   whale       → 3 (single whale $50k+ position)
+    //   influencer  → 2 (Reddit/YouTube/Substack content matched to a market)
+    //   user        → 0 (pure engagement gating)
     // Recency decay: 1 / (1 + hours_old/12)
     let sql = `SELECT t.*,
-      (t.agree_count + t.disagree_count) *
+      (
+        CASE t.source
+          WHEN 'consensus'  THEN 5
+          WHEN 'whale'      THEN 3
+          WHEN 'influencer' THEN 2
+          ELSE 0
+        END
+        + t.agree_count + t.disagree_count
+      ) *
       (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
       (1.0 + COALESCE(t.sharp_score, 0) / 100.0) AS trending_score
       FROM takes t

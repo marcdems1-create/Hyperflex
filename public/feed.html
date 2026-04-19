@@ -1294,13 +1294,16 @@ async function loadFeed(append) {
     }
   }
 
-  // Trending: merge social trending + influencer posts
+  // Trending: merge trending takes (incl. whale/consensus) + influencer posts
+  // /api/takes/trending surfaces user takes by engagement + whale/consensus/
+  // influencer takes by source-boost (server-side formula). /api/influencer-feed
+  // adds Reddit/YouTube/Substack content matched to markets.
   if (currentTab === 'trending') {
     try {
-      var trendRes = fetch(API + '/api/social/feed/trending?limit=15', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]}}).catch(function(){return {posts:[]}});
+      var trendRes = fetch(API + '/api/takes/trending?limit=20', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{takes:[]}}).catch(function(){return {takes:[]}});
       var infRes = fetch(API + '/api/influencer-feed?limit=10', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]}}).catch(function(){return {posts:[]}});
       var results = await Promise.all([trendRes, infRes]);
-      var trendItems = (results[0].posts || results[0].predictions || []).map(normalisePost);
+      var trendItems = (results[0].takes || results[0].posts || results[0].predictions || []).map(normalisePost);
       var infItems = (results[1].posts || []).map(normaliseInfluencer);
       var merged = [];
       var ti = 0, ii = 0;
@@ -1311,10 +1314,14 @@ async function loadFeed(append) {
       }
       if (!append) feedData = merged; else feedData = feedData.concat(merged);
       nextCursor = null;
-      renderFeed(false);
+      if (!merged.length) {
+        document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔥</div><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Be first — post a take, or see <a href="/predictors" style="color:var(--gold);text-decoration:underline">who is topping the leaderboard</a> and <a href="/alpha-live" style="color:var(--gold);text-decoration:underline">where sharp money is moving</a>.</div></div>';
+      } else {
+        renderFeed(false);
+      }
       document.getElementById('loadMoreBtn').style.display = 'none';
     } catch(e) {
-      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔥</div><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Check back soon for trending predictions and influencer posts.</div></div>';
+      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔥</div><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Be first — post a take, or see <a href="/predictors" style="color:var(--gold);text-decoration:underline">who is topping the leaderboard</a> and <a href="/alpha-live" style="color:var(--gold);text-decoration:underline">where sharp money is moving</a>.</div></div>';
     }
     return;
   }
@@ -1468,6 +1475,49 @@ function normaliseLegacy(p) {
 }
 
 // Normalise influencer posts from /api/influencer-feed
+// Normalise a `takes` row (or a legacy social_predictions row) into the
+// shape renderFeed() expects. Handles whale-generated takes, consensus
+// takes, and user takes transparently — the _source badge lets the
+// card renderer tag them visually.
+function normalisePost(p) {
+  var src = p.source || p._source || 'user';
+  var side = (p.side || p.direction || '').toUpperCase();
+  var name = p.display_name || p.author_display_name || (p.author && p.author.display_name) || (src === 'whale' ? 'Whale' : src === 'consensus' ? 'Consensus' : 'Trader');
+  var avatar = p.avatar_url || (p.author && p.author.avatar_url) || '';
+  return {
+    id: p.id,
+    _type: 'take',
+    _source: src,
+    _take_id: p.id,
+    _market_slug: p.market_slug || null,
+    _market_question: p.question || p.market_title || null,
+    _predicted_side: side,
+    _sharp_score: p.sharp_score != null ? p.sharp_score : null,
+    _agree_count: p.agree_count || 0,
+    _disagree_count: p.disagree_count || 0,
+    _is_correct: p.is_correct,
+    _my_reaction: p.my_reaction || null,
+    _quote_count: p.quote_count || 0,
+    author: {
+      id: p.user_id || (p.author && p.author.id) || null,
+      display_name: name,
+      avatar_url: avatar,
+    },
+    market_title: p.question || p.market_title || '',
+    market_id: p.market_slug || p.market_id || null,
+    direction: side,
+    entry_price: p.entry_price != null ? parseFloat(p.entry_price) : null,
+    conviction: null,
+    thesis: p.thesis || p.thesis_text || '',
+    category_tags: p.category_tags || [],
+    outcome: p.is_correct === true ? 'correct' : p.is_correct === false ? 'incorrect' : 'pending',
+    pnl_usd: null,
+    posted_at: p.created_at || p.posted_at || null,
+    is_following: false,
+    size_display: 'range',
+  };
+}
+
 function normaliseInfluencer(p) {
   var inf = p.external_influencers || {};
   var name = p.influencer_name || inf.name || 'Unknown';
