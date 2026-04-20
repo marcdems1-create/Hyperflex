@@ -95,8 +95,22 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); -
 </div>
 
 <script>
-var userId = location.pathname.split('/').pop();
+// /@handle/passport → resolve handle → user_id. /passport/:userId → path segment.
+var userId = null;
 var API = location.origin;
+async function _resolvePassportUserId() {
+  var path = location.pathname;
+  if (path.indexOf('/@') === 0) {
+    var handle = path.slice(2).split('/')[0];
+    if (!handle) return null;
+    try {
+      var r = await fetch(API + '/api/user-by-handle/' + encodeURIComponent(handle));
+      if (r.ok) { var d = await r.json(); return d && d.id ? d.id : null; }
+    } catch (e) {}
+    return null;
+  }
+  return path.split('/').pop() || null;
+}
 
 function timeAgo(d) {
   if (!d) return '';
@@ -232,7 +246,20 @@ async function load() {
   }
 }
 
-load();
+(async function boot() {
+  userId = await _resolvePassportUserId();
+  if (!userId) {
+    var handleFromPath = location.pathname.indexOf('/@') === 0
+      ? location.pathname.slice(2).split('/')[0] : null;
+    var msg = handleFromPath
+      ? 'Passport for @' + handleFromPath + ' not found.'
+      : 'Passport not found.';
+    document.body.insertAdjacentHTML('beforeend',
+      '<div style="text-align:center;padding:80px 20px;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:15px;font-weight:700">' + msg + '</div></div>');
+    return;
+  }
+  load();
+})();
 </script>
 </body>
 </html>

@@ -219,6 +219,14 @@ body::before {
   cursor: pointer;
 }
 .oauth-btn:hover { border-color: rgba(201,146,13,0.4); }
+.oauth-btn.primary { background: var(--gold, #f5a623); border-color: transparent; color: #0b0b12; font-weight: 800; }
+.oauth-btn.primary:hover { opacity: .9; border-color: transparent; }
+.oauth-btn.primary svg path { fill: #0b0b12 !important; }
+.auth-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.install-hint { display: none; font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin: -2px 0 10px; line-height: 1.5; }
+.install-hint a { color: var(--gold); text-decoration: none; }
+.install-hint a:hover { text-decoration: underline; }
 
 .divider {
   display: flex;
@@ -435,17 +443,23 @@ body::before {
             <div style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.5">You're in an in-app browser. Copy this link and open it in Chrome or Safari for the best experience.</div>
             <button onclick="navigator.clipboard.writeText(window.location.href).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy link',2000)})" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">Copy link</button>
           </div>
-          <!-- OAuth -->
+          <!-- Wallet Connect (primary per brief §5 — townsquare is on-chain first) -->
+          <button id="walletConnectBtn" onclick="connectWallet()" class="oauth-btn primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg>
+            Sign in with Wallet
+          </button>
+          <div id="walletInstallHint" class="install-hint">
+            No wallet detected — <a href="https://metamask.io/download/" target="_blank" rel="noopener">install MetaMask</a> or open this page in your wallet's browser.
+          </div>
+          <div id="walletStatus" style="display:none;text-align:center;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)"></div>
+
+          <div class="auth-divider">or</div>
+
+          <!-- Google OAuth (secondary) -->
           <a href="/auth/oauth?provider=google" class="oauth-btn" id="googleOauthBtn">
             <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.08 7.08 0 0 0 2.18-5.05z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.4 4.4 0 0 1-2.7.94 4.43 4.43 0 0 1-4.15-3.06H1.83v2.07A7 7 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.13 10.59a4.33 4.33 0 0 1 0-2.82V5.7H1.83a7 7 0 0 0 0 6.42l2.3-1.78z"/><path fill="#EA4335" d="M8.98 4.58c1.2 0 2.27.41 3.11 1.23l2.33-2.33A6.8 6.8 0 0 0 8.98 1a7 7 0 0 0-6.15 3.56L4.13 5.7a4.35 4.35 0 0 1 4.85-2.12z"/></svg>
             Continue with Google
           </a>
-          <!-- Wallet Connect Button -->
-          <button id="walletConnectBtn" onclick="connectWallet()" class="oauth-btn" style="display:none;background:rgba(245,133,60,0.1);border-color:rgba(245,133,60,0.3)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg>
-            Sign in with Wallet
-          </button>
-          <div id="walletStatus" style="display:none;text-align:center;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)"></div>
           <script>
           (function(){
             var ua = navigator.userAgent;
@@ -459,11 +473,15 @@ body::before {
               if (g) g.style.display = 'none';
             }
 
-            // Show wallet button if ethereum provider detected (MetaMask browser, injected wallet)
-            if (hasEthereum) {
-              var wb = document.getElementById('walletConnectBtn');
-              if (wb) wb.style.display = 'flex';
-              // Hide the in-app warning since wallet is available
+            // Wallet button is always visible now (primary per brief §5).
+            // If no ethereum provider is injected, show an install hint under
+            // the button instead of hiding it — users should know HYPERFLEX
+            // is wallet-first even if they haven't installed MetaMask yet.
+            if (!hasEthereum) {
+              var hint = document.getElementById('walletInstallHint');
+              if (hint) hint.style.display = 'block';
+            } else {
+              // Wallet available — hide any in-app warning.
               var w2 = document.getElementById('inAppWarning');
               if (w2) w2.style.display = 'none';
             }
@@ -472,7 +490,12 @@ body::before {
           async function connectWallet() {
             var btn = document.getElementById('walletConnectBtn');
             var status = document.getElementById('walletStatus');
-            if (!window.ethereum) { alert('No wallet detected'); return; }
+            if (!window.ethereum) {
+              // Surface the install hint inline instead of an ugly alert.
+              var hint = document.getElementById('walletInstallHint');
+              if (hint) { hint.style.display = 'block'; hint.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+              return;
+            }
 
             btn.textContent = 'Connecting...';
             btn.disabled = true;

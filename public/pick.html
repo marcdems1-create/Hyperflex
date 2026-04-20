@@ -190,7 +190,7 @@ async function load(){
 
 function render(p, v){
   const main = document.getElementById('mainEl');
-  const handle = p.user_tipster_handle || null;
+  const handle = p.user_handle || null;
   const avatarInitials = getInitials(handle || p.user_display_name || 'HF');
 
   // Set doc title + OG title for share cards

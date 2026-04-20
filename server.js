@@ -5833,12 +5833,12 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       settings = sRows[0] || null;
       if (!settings) {
         // Wallet-only user — return minimal dashboard data (portfolio mode)
-        const uRows2 = await dbQuery('SELECT id, display_name, email, polymarket_address FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+        const uRows2 = await dbQuery('SELECT id, handle, display_name, email, polymarket_address FROM users WHERE id = $1 LIMIT 1', [creatorId]);
         const walletUser = uRows2[0] || null;
         clearTimeout(dashTimeout);
         return res.json({
           wallet_only: true,
-          creator: { id: creatorId, display_name: walletUser?.display_name || 'Trader', email: walletUser?.email || null },
+          creator: { id: creatorId, handle: walletUser?.handle || null, display_name: walletUser?.display_name || 'Trader', email: walletUser?.email || null },
           settings: { plan: 'platinum', community_name: 'My Portfolio', slug: null },
           markets: [], stats: { total_markets: 0, active_markets: 0, total_predictions: 0, total_members: 0 }
         });
@@ -5847,7 +5847,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         'SELECT * FROM markets WHERE creator_id = $1 OR tenant_slug = $2 ORDER BY created_at DESC',
         [creatorId, settings.slug]
       );
-      const uRows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+      const uRows = await dbQuery('SELECT display_name, email, handle FROM users WHERE id = $1 LIMIT 1', [creatorId]);
       creatorUser = uRows[0] || null;
     } else {
       const { data: s, error: settingsErr } = await supabase
@@ -5864,7 +5864,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       markets = m;
       let u;
       if (pool) {
-        const _rows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+        const _rows = await dbQuery('SELECT display_name, email, handle FROM users WHERE id = $1 LIMIT 1', [creatorId]);
         u = _rows[0] || null;
       } else {
         const { data: u } = await supabase.from('users').select('display_name, email') .eq('id', creatorId).maybeSingle();
@@ -6014,6 +6014,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
     res.json({
       creator: {
         id: creatorId,
+        handle: creatorUser?.handle || null,
         display_name: creatorUser?.display_name || settings.display_name,
         email: creatorUser?.email,
         slug: settings.slug,
@@ -7079,6 +7080,33 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
         await supabase .from('users') .update({ display_name }) .eq('id', req.creator.id);
       }
     }
+
+    // Auto-claim the existing creator slug as the user's @handle. This
+    // bridges the gap for legacy creators (pre-S1.a) whose `users.handle`
+    // was never populated: their `creator_settings.slug` already matches
+    // our handle format (lowercase alnum + underscore) so we reuse it.
+    // Only fires when users.handle IS NULL and the slug passes validation
+    // + isn't reserved + isn't already taken. Silent on any conflict.
+    try {
+      if (pool) {
+        const uRows = await dbQuery(
+          'SELECT u.handle AS handle, cs.slug AS slug FROM users u LEFT JOIN creator_settings cs ON cs.creator_id = u.id WHERE u.id = $1 LIMIT 1',
+          [req.creator.id]
+        ).catch(() => []);
+        const row = uRows[0];
+        if (row && !row.handle && row.slug) {
+          const candidate = String(row.slug).toLowerCase();
+          const valid = /^[a-z0-9_]{3,30}$/.test(candidate);
+          const reserved = valid ? await _isHandleReserved(candidate) : true;
+          if (valid && !reserved) {
+            await dbQuery(
+              'UPDATE users SET handle = $1 WHERE id = $2 AND handle IS NULL',
+              [candidate, req.creator.id]
+            ).catch(() => {});  // silent — unique violation is fine
+          }
+        }
+      }
+    } catch {}
 
     res.json({ ok: true });
   } catch (err) {
@@ -11016,33 +11044,215 @@ async function maybeFireMilestoneEmail(slug) {
 // their takes, flex score, followers and track record live.
 // If no creator_settings row exists for the slug we still fall back to
 // the old page so nothing 404s during the transition.
+// GET /u/:slug — legacy creator-community URL; 301 → /@{handle}.
+// Resolves the slug to a user_id via creator_settings, then to the user's
+// handle. Falls through to the legacy profile page only if no match — which
+// will itself disappear when the community deprecation rip lands (Sprint 2).
 app.get('/u/:slug', async (req, res) => {
   try {
     const slug = req.params.slug;
+    let creatorId = null;
     if (pool) {
-      // creator_settings.slug → creator_id is the user's id
-      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
-      if (rows[0] && rows[0].creator_id) {
-        return res.redirect(302, '/m/' + encodeURIComponent(rows[0].creator_id));
-      }
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]).catch(() => []);
+      if (rows[0]) creatorId = rows[0].creator_id;
     } else if (supabase) {
       const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
-      if (data && data.creator_id) {
-        return res.redirect(302, '/m/' + encodeURIComponent(data.creator_id));
-      }
+      if (data) creatorId = data.creator_id;
+    }
+    if (creatorId) {
+      const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [creatorId]).catch(() => []);
+      if (hRows[0] && hRows[0].handle) return res.redirect(302, '/@' + hRows[0].handle);
+      return res.redirect(302, '/m/' + encodeURIComponent(creatorId));
     }
   } catch (err) {
     console.warn('[u-redirect]', err.message);
   }
-  // Fallback: legacy community page for any slug that doesn't map to a user
   res.sendFile(path.join(__dirname, 'public', 'profile.html'));
 });
 
-// GET /m/:userId — public member (trader) profile page
-app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
+// ── @USERNAME CANONICAL PROFILE URL (Sprint 1.a) ───────────────────────────
+// /@:handle is the single canonical profile URL. All other shapes
+// (/m/:userId, /u/:slug, /t/:handle, /trader/:address, /passport/:userId)
+// 301 here. member.html resolves handle → user via /api/user-by-handle.
 
-// GET /passport/:userId — Prediction Passport (shareable credential page)
-app.get('/passport/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'passport.html')));
+// Reserved words that can't be claimed as handles. Synced with the
+// reserved_handles table at boot.
+const _HANDLE_RESERVED_FALLBACK = new Set([
+  'admin','api','auth','dashboard','feed','home','landing','login','logout','me',
+  'predictors','picks','profile','settings','signup','terminal','alpha','alpha-live',
+  'arbitrage','brief','community','compare','creator','crystal-ball','data','embed',
+  'events','explore','flex','leaderboard','market','markets','nominate','odds','onboard',
+  'passport','privacy','rewards','screener','search','share','signals','sports',
+  'sports-predictors','spread-scanner','t','templates','terms','trader','u','win',
+  'whales','whale-index','hyperflex','hf','official','support','help','team','security',
+  'staff','system','root','moderator','mod','null','undefined','test'
+]);
+async function _isHandleReserved(handle) {
+  try {
+    const rows = await dbQuery('SELECT 1 FROM reserved_handles WHERE LOWER(handle) = LOWER($1) LIMIT 1', [handle]).catch(() => []);
+    if (rows.length) return true;
+  } catch {}
+  return _HANDLE_RESERVED_FALLBACK.has(handle.toLowerCase());
+}
+
+function _validateHandleFormat(handle) {
+  if (typeof handle !== 'string') return 'must be a string';
+  const h = handle.trim().replace(/^@+/, '');
+  if (!/^[a-z0-9_]{3,30}$/i.test(h)) return 'must be 3-30 chars, lowercase alphanumeric + underscore';
+  return null;
+}
+
+// GET /@:handle — canonical profile URL. Serves member.html; page-side JS
+// reads /api/user-by-handle/:handle to resolve → user_id and render.
+app.get('/@:handle', (req, res) => {
+  // Early-exit with 404 if the handle shape is obviously wrong so Google
+  // doesn't index /@null /@undefined /@admin etc.
+  if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.sendFile(path.join(__dirname, 'public', 'member.html'));
+});
+
+// GET /api/user-by-handle/:handle — resolve handle → public profile fields.
+// Used by member.html to hydrate the profile page when the URL is /@handle.
+// SELECT * so schema drift (missing is_whale/avatar_url/etc from a skipped
+// migration) doesn't cause a silent 404.
+app.get('/api/user-by-handle/:handle', async (req, res) => {
+  try {
+    const handle = String(req.params.handle || '').trim().replace(/^@+/, '').toLowerCase();
+    if (_validateHandleFormat(handle)) return res.status(404).json({ error: 'invalid handle' });
+    let rows;
+    try {
+      rows = await dbQuery('SELECT * FROM users WHERE LOWER(handle) = $1 LIMIT 1', [handle]);
+    } catch (qe) {
+      // Surface real DB errors instead of silently pretending the user
+      // doesn't exist — helps diagnose schema/connection issues remotely.
+      console.warn('[user-by-handle] query failed:', qe.message);
+      return res.status(500).json({ error: 'lookup failed', detail: qe.message });
+    }
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    const r = rows[0];
+    res.json({
+      id:                 r.id,
+      handle:             r.handle             || null,
+      display_name:       r.display_name       || null,
+      avatar_url:         r.avatar_url         || null,
+      polymarket_address: r.polymarket_address || null,
+      is_whale:           r.is_whale           || false,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/user/handle — authed user claims or changes their handle.
+// Validates format + reserved + uniqueness. Returns the canonical URL.
+app.post('/api/user/handle', requireAuth, async (req, res) => {
+  try {
+    const raw = req.body && req.body.handle;
+    const fmtErr = _validateHandleFormat(raw);
+    if (fmtErr) return res.status(400).json({ error: fmtErr });
+    const handle = String(raw).trim().replace(/^@+/, '').toLowerCase();
+    if (await _isHandleReserved(handle)) return res.status(409).json({ error: 'That handle is reserved' });
+    // Uniqueness (case-insensitive) — the UNIQUE index enforces this at
+    // the DB level; we return a clean error instead of the raw 23505.
+    const clash = await dbQuery(
+      'SELECT id FROM users WHERE LOWER(handle) = $1 AND id <> $2 LIMIT 1',
+      [handle, req.userId]
+    ).catch(() => []);
+    if (clash.length) return res.status(409).json({ error: 'That handle is taken' });
+    await dbQuery('UPDATE users SET handle = $1 WHERE id = $2', [handle, req.userId]);
+    res.json({ ok: true, handle, url: '/@' + handle });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return res.status(409).json({ error: 'That handle is taken' });
+    if (/users_handle_format_check/i.test(e.message)) return res.status(400).json({ error: 'invalid handle format' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/user/handle/available?handle=… — live availability check for the
+// handle-picker UI. Returns { available, reason? }.
+app.get('/api/user/handle/available', async (req, res) => {
+  try {
+    const raw = String(req.query.handle || '');
+    const fmtErr = _validateHandleFormat(raw);
+    if (fmtErr) return res.json({ available: false, reason: fmtErr });
+    const handle = raw.trim().replace(/^@+/, '').toLowerCase();
+    if (await _isHandleReserved(handle)) return res.json({ available: false, reason: 'reserved' });
+    const rows = await dbQuery('SELECT 1 FROM users WHERE LOWER(handle) = $1 LIMIT 1', [handle]).catch(() => []);
+    if (rows.length) return res.json({ available: false, reason: 'taken' });
+    res.json({ available: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Self-healing: on cold start, auto-populate handles for users where
+// handle IS NULL. Derives from display_name (if safe) or user_id prefix.
+// Runs 90s after boot so other init has settled. Logs count.
+async function _seedNullHandles() {
+  if (!pool) return;
+  try {
+    const rows = await dbQuery(
+      "SELECT id, display_name, polymarket_address FROM users WHERE handle IS NULL LIMIT 500"
+    ).catch(() => []);
+    if (!rows.length) return;
+    let filled = 0;
+    for (const u of rows) {
+      // Derive candidate: prefer display_name sanitised, fall back to
+      // address prefix, fall back to user_ prefix of id.
+      let cand = '';
+      if (u.display_name && !/^0x[0-9a-f]/i.test(u.display_name)) {
+        cand = u.display_name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 26);
+      }
+      if (!cand && u.polymarket_address) {
+        cand = 'w_' + u.polymarket_address.slice(2, 10).toLowerCase();
+      }
+      if (!cand || cand.length < 3) cand = 'user_' + String(u.id).slice(0, 8);
+      if (await _isHandleReserved(cand)) cand = 'user_' + String(u.id).slice(0, 8);
+      // Collision: append _<id prefix> until unique
+      let tryHandle = cand;
+      let attempt = 0;
+      while (attempt < 5) {
+        const taken = await dbQuery('SELECT 1 FROM users WHERE LOWER(handle)=$1 AND id<>$2 LIMIT 1', [tryHandle, u.id]).catch(() => []);
+        if (!taken.length) break;
+        tryHandle = (cand + '_' + String(u.id).slice(0, 4 + attempt)).slice(0, 30);
+        attempt++;
+      }
+      try {
+        await dbQuery('UPDATE users SET handle = $1 WHERE id = $2 AND handle IS NULL', [tryHandle, u.id]);
+        filled++;
+      } catch { /* CHECK / UNIQUE violation — skip this row, next boot retries */ }
+    }
+    if (filled) console.log('[handle-seed] populated ' + filled + ' / ' + rows.length + ' null handles');
+  } catch (e) { console.warn('[handle-seed] error:', e.message); }
+}
+setTimeout(() => { _seedNullHandles().catch(() => {}); }, 90 * 1000);
+
+// GET /m/:userId — legacy shape, 301 → /@{handle}. Kept working so old
+// shared links don't break.
+app.get('/m/:userId', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
+    const handle = rows[0]?.handle;
+    if (handle) return res.redirect(302, '/@' + handle);
+  } catch {}
+  // Fall through: if the user has no handle yet, serve the page so the
+  // UI can render and either prompt for handle claim (if owner) or show
+  // a wallet-stub identity.
+  res.sendFile(path.join(__dirname, 'public', 'member.html'));
+});
+
+// GET /passport/:userId — Prediction Passport (shareable credential page).
+// Redirects to /@{handle}/passport when the user has a handle; otherwise
+// serves the page directly so existing shared links keep working.
+app.get('/passport/:userId', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
+    if (rows[0] && rows[0].handle) return res.redirect(302, '/@' + rows[0].handle + '/passport');
+  } catch {}
+  res.sendFile(path.join(__dirname, 'public', 'passport.html'));
+});
+
+// GET /@:handle/passport — handle-based passport route (canonical).
+app.get('/@:handle/passport', (req, res) => {
+  if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.sendFile(path.join(__dirname, 'public', 'passport.html'));
+});
 
 // GET /takes/:id — single take permalink page (full thread, reply UI)
 app.get('/takes/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'take.html')));
@@ -11449,7 +11659,24 @@ app.get('/api/trader-profile/:username', async (req, res) => {
 });
 
 // ── MULTI-PLATFORM TRADER PROFILE (/trader/:address) ─────────────────────
-app.get('/trader/:address', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trader.html')));
+// Legacy shape, 301 → /@{handle} via ensureWhaleProfile for any active
+// wallet. ensureWhaleProfile either returns an existing user_id or creates
+// a whale-style one; we then look up the handle.
+app.get('/trader/:address', async (req, res) => {
+  const addr = (req.params.address || '').toLowerCase();
+  if (/^0x[0-9a-f]{40}$/.test(addr)) {
+    try {
+      const shortName = addr.slice(0, 6) + '…' + addr.slice(-4);
+      const uid = await ensureWhaleProfile(addr, shortName, null, null);
+      if (uid) {
+        const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [uid]).catch(() => []);
+        if (hRows[0] && hRows[0].handle) return res.redirect(302, '/@' + hRows[0].handle);
+      }
+    } catch {}
+  }
+  // Fall through to legacy trader page for any address that can't be resolved.
+  res.sendFile(path.join(__dirname, 'public', 'trader.html'));
+});
 
 const _traderProfileCache = new Map();
 app.get('/api/trader/:address/profile', async (req, res) => {
@@ -11654,6 +11881,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports-predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 app.get('/rewards', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rewards.html')));
 
@@ -14963,24 +15191,9 @@ function validatePickShape(bet_type, side, line) {
 app.post('/api/picks', requireAuth, async (req, res) => {
   try {
     if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'Pick signing not configured' });
-    // Gate: picks are tipster-only. Users must be approved via the founding-
-    // tipster application funnel first. Belt-and-suspenders check: status
-    // must be 'approved' AND revoked_at must be NULL. Protects against any
-    // write path that flips status without clearing the timestamp (or vice
-    // versa) and against brief race windows during a revoke flow.
-    const tipRows = await dbQuery(
-      'SELECT tipster_status, tipster_revoked_at FROM users WHERE id = $1',
-      [req.userId]
-    );
-    const tipStatus = tipRows[0]?.tipster_status || 'none';
-    const revokedAt = tipRows[0]?.tipster_revoked_at || null;
-    if (tipStatus !== 'approved' || revokedAt != null) {
-      return res.status(403).json({
-        error: 'Picks are in founding-tipster beta. Apply at /picks.',
-        tipster_status: tipStatus,
-        revoked: revokedAt != null,
-      });
-    }
+    // Any signed-in user can post a pick. Quality is enforced by the Flex
+    // Score math (sample minimum, CLV weighting, time decay) not by a
+    // permission gate.
     const { game_id, bet_type, side, line = null, odds, units, thesis = null } = req.body || {};
     if (!game_id) return res.status(400).json({ error: 'game_id required' });
     if (!Number.isFinite(Number(odds))) return res.status(400).json({ error: 'odds must be numeric (American odds)' });
@@ -15073,7 +15286,7 @@ app.get('/api/picks/:id', async (req, res) => {
     const rows = await dbQuery(
       `SELECT p.*,
               u.display_name AS user_display_name, u.polymarket_address AS user_wallet,
-              u.tipster_handle AS user_tipster_handle,
+              u.handle AS user_handle,
               g.starts_at, g.status AS game_status, g.home_score, g.away_score, g.period,
               home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
               away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
@@ -15159,10 +15372,9 @@ app.get('/api/tipster/:handle', async (req, res) => {
     if (!/^[a-z0-9_]{1,30}$/.test(handle)) return res.status(404).json({ error: 'Tipster not found' });
 
     const userRows = await dbQuery(
-      `SELECT id, display_name, tipster_handle, tipster_specialty, tipster_approved_at,
-              tipster_status, tipster_revoked_at, polymarket_address, avatar_url, is_whale, whale_rank
+      `SELECT id, display_name, handle, polymarket_address, avatar_url, is_whale, whale_rank, created_at
          FROM users
-        WHERE tipster_handle = $1 AND tipster_status = 'approved'
+        WHERE handle = $1
         LIMIT 1`,
       [handle]
     );
@@ -15210,10 +15422,9 @@ app.get('/api/tipster/:handle', async (req, res) => {
 
     res.json({
       tipster: {
-        handle: u.tipster_handle,
+        handle: u.handle,
         display_name: u.display_name,
-        specialty: u.tipster_specialty,
-        approved_at: u.tipster_approved_at,
+        joined_at: u.created_at,
         avatar_url: u.avatar_url,
         is_whale: u.is_whale || false,
       },
@@ -15239,11 +15450,11 @@ app.get('/api/tipster/:handle', async (req, res) => {
 
 // GET /api/tipsters/leaderboard — ranked tipster list.
 //
-// Supply-gated per Charter NORTH STAR (Forbidden anti-patterns): the page
-// that consumes this surface shouldn't render a leaderboard on empty data.
-// Threshold: ≥ 3 approved tipsters AND at least 3 of them with ≥ 5 resolved
-// picks. Below that, endpoint returns { gated: true, reason } so the UI can
-// route to a "cohort forming" state instead of a desperate-looking board.
+// One account type: every user with at least one pick is a potential tipster.
+// Statistical supply gate remains (≥ 3 tipsters with ≥ min_picks resolved)
+// so the leaderboard doesn't render on near-empty data per Charter §1. That
+// gate is about sample quality, not permission — it clears automatically
+// once enough picks resolve.
 //
 // Ranking: net_units desc, tie-broken by ROI desc, tie-broken by sample size.
 // Optional ?sport=nba filter (future-proof). ?min_picks=N lets the page
@@ -15254,14 +15465,13 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
     const minPicks = Math.max(3, parseInt(req.query.min_picks, 10) || 5);
 
     // Single query: per-tipster aggregates from picks, joined to the user row
-    // for identity + specialty. FILTER clauses keep it to one scan.
-    // sport filter applies via picks.sport = $1 when provided; otherwise all.
+    // for identity. FILTER clauses keep it to one scan. sport filter applies
+    // via picks.sport = $1 when provided; otherwise all.
     const params = [];
     let whereSport = '';
     if (sport) { params.push(sport); whereSport = 'AND p.sport = $1'; }
     const sql = (
-      "SELECT u.tipster_handle AS handle, u.display_name, u.tipster_specialty AS specialty, " +
-             "u.tipster_approved_at AS approved_at, " +
+      "SELECT u.handle AS handle, u.display_name, u.created_at AS joined_at, " +
              "COUNT(p.*)::int AS total_picks, " +
              "COUNT(p.*) FILTER (WHERE p.settlement_status = 'win')::int  AS wins, " +
              "COUNT(p.*) FILTER (WHERE p.settlement_status = 'loss')::int AS losses, " +
@@ -15271,24 +15481,17 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
              "COALESCE(SUM(p.settled_units), 0)::numeric AS net_units, " +
              "COALESCE(SUM(p.units) FILTER (WHERE p.settlement_status IS NOT NULL AND p.settlement_status <> 'void'), 0)::numeric AS units_risked " +
         "FROM users u " +
-        "LEFT JOIN picks p ON p.user_id = u.id " + whereSport + " " +
-       "WHERE u.tipster_status = 'approved' AND u.tipster_revoked_at IS NULL " +
-             "AND u.tipster_handle IS NOT NULL " +
-       "GROUP BY u.id, u.tipster_handle, u.display_name, u.tipster_specialty, u.tipster_approved_at"
+        "INNER JOIN picks p ON p.user_id = u.id " + whereSport + " " +
+       "WHERE u.handle IS NOT NULL " +
+       "GROUP BY u.id, u.handle, u.display_name, u.created_at"
     );
     const rows = await dbQuery(sql, params);
 
-    // Supply gate on the endpoint itself: if fewer than 3 approved tipsters
-    // exist, no leaderboard makes sense regardless of pick count.
-    const approvedCount = rows.length;
-    if (approvedCount < 3) {
-      return res.json({ gated: true, reason: 'cohort_forming', approved: approvedCount });
-    }
+    // Statistical gate: need at least 3 tipsters with ≥ min_picks resolved
+    // picks or the ranking is noise. Every pick-posting user is present in
+    // the result set — the gate is about sample, not permission.
+    const activeCount = rows.length;
 
-    // Qualifying tipsters = min_picks resolved picks. Everyone below stays in
-    // the response as "building" so the UI can show both states, but the
-    // ranked list only promotes qualifiers. Second supply gate: at least 3
-    // tipsters must qualify or we treat the board as still forming.
     const enriched = rows.map(r => {
       const resolved    = parseInt(r.resolved || 0, 10);
       const unitsRisked = parseFloat(r.units_risked || 0);
@@ -15300,8 +15503,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
       return {
         handle:        r.handle,
         display_name:  r.display_name,
-        specialty:     r.specialty,
-        approved_at:   r.approved_at,
+        joined_at:     r.joined_at,
         total_picks:   parseInt(r.total_picks || 0, 10),
         wins:          r.wins,
         losses:        r.losses,
@@ -15321,7 +15523,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
       return res.json({
         gated: true,
         reason: 'insufficient_sample',
-        approved: approvedCount,
+        active: activeCount,
         qualifying: qualifiers.length,
         min_picks: minPicks,
       });
@@ -15345,7 +15547,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
 
     res.json({
       gated:     false,
-      approved:  approvedCount,
+      active:    activeCount,
       min_picks: minPicks,
       sport:     sport,
       leaders:   qualifiers,
@@ -15357,296 +15559,815 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
   }
 });
 
-// ── TIPSTER APPLICATIONS (founding cohort) ─────────────────────────────────
-// The /picks page is gated: 25 founding tipsters get picked up front, anyone
-// else applies and waits. Applications are append-only (rejected apps stay
-// on record); approving sets users.tipster_status = 'approved'.
+// ── T2 · MARKET SPORT TAGS ─────────────────────────────────────────────────
+// Classifies external (Polymarket + Kalshi) markets by sport/league so T4
+// (CLV) and T5 (Flex Score for Sports) can filter to sports-only trades.
 //
-// GET  /api/tipster-applications/stats   — public counter for landing page
-// POST /api/tipster-applications          — submit (authed or email-only)
-// GET  /api/admin/tipster-applications    — admin list
-// POST /api/admin/tipster-applications/:id/decide — approve or reject
+// Two classifiers:
+//   classifyKalshiTicker(ticker)    — ticker prefix parse, high confidence
+//   classifyPolymarketTitle(title)  — regex on question text, variable conf
+//
+// sweepMarketSportTags() walks all (source, external_id) pairs present in
+// cached_positions / realized_trades / polymarket_trades that aren't yet in
+// market_sport_tags, classifies them, and inserts. Manual overrides
+// (tagged_by='manual') are never overwritten.
 
-const FOUNDING_TIPSTER_CAP = 25;
+// Sport vocab — aligned with existing picks.sport values on main (nba, nfl…).
+// Adding the rest that Kalshi + Polymarket actually list as markets.
+const SPORT_VOCAB = ['nba','nfl','mlb','nhl','soccer','ncaaf','ncaab','ufc','boxing','tennis','golf','f1','esports','other'];
 
-app.get('/api/tipster-applications/stats', async (req, res) => {
-  try {
-    const [approvedRows, pendingRows] = await Promise.all([
-      dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'"),
-      dbQuery("SELECT COUNT(*)::int AS n FROM tipster_applications WHERE status = 'pending'"),
-    ]);
-    const claimed = approvedRows[0]?.n || 0;
-    const inReview = pendingRows[0]?.n || 0;
-    res.json({
-      cap: FOUNDING_TIPSTER_CAP,
-      claimed,
-      in_review: inReview,
-      spots_left: Math.max(0, FOUNDING_TIPSTER_CAP - claimed),
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// Team names → sport. Lowercase, anchored to word boundaries at match time.
+// Ambiguous names (Cardinals = NFL+MLB, Giants = NFL+MLB, Jaguars = NFL+NCAAF)
+// resolve via league keywords in the title; fall back to lower confidence.
+const NFL_TEAMS = 'cardinals|falcons|ravens|bills|panthers|bears|bengals|browns|cowboys|broncos|lions|packers|texans|colts|jaguars|chiefs|raiders|chargers|rams|dolphins|vikings|patriots|saints|giants|jets|eagles|steelers|49ers|seahawks|buccaneers|titans|commanders';
+const NBA_TEAMS = 'hawks|celtics|nets|hornets|bulls|cavaliers|mavericks|nuggets|pistons|warriors|rockets|pacers|clippers|lakers|grizzlies|heat|bucks|timberwolves|pelicans|knicks|thunder|magic|76ers|sixers|suns|trail blazers|blazers|kings|spurs|raptors|jazz|wizards';
+const MLB_TEAMS = 'diamondbacks|braves|orioles|red sox|cubs|white sox|reds|guardians|rockies|tigers|astros|royals|angels|dodgers|marlins|brewers|twins|yankees|mets|athletics|phillies|pirates|padres|mariners|rays|rangers|blue jays|nationals';
+const NHL_TEAMS = 'ducks|coyotes|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue jackets|stars|red wings|oilers|panthers|kings|wild|canadiens|predators|devils|islanders|senators|flyers|penguins|sharks|kraken|blues|lightning|maple leafs|canucks|golden knights|capitals|jets';
+const SOCCER_LEAGUES = 'premier league|epl\\b|champions league|uefa|la liga|bundesliga|serie a|ligue 1|mls\\b|liga mx|copa america|world cup|euros?\\b|fa cup|concacaf';
+const SOCCER_CLUBS = 'arsenal|chelsea|liverpool|manchester united|man utd|manchester city|man city|tottenham|real madrid|barcelona|bayern munich|psg|paris saint|juventus|inter milan|ac milan|borussia dortmund|atletico madrid|napoli|ajax|benfica';
+const UFC_KW = 'ufc|mma|dana white|fight night|conor mcgregor|jon jones|khabib|islam makhachev|alex pereira|sean o\\W*malley';
+const TENNIS_KW = 'wimbledon|us open|french open|australian open|atp\\b|wta\\b|grand slam|novak djokovic|carlos alcaraz|jannik sinner|iga swiatek|coco gauff';
+const GOLF_KW = 'masters tournament|pga championship|british open|ryder cup|presidents cup|scottie scheffler|rory mcilroy|xander schauffele|liv golf';
+const BOXING_KW = 'boxing\\b|heavyweight title|canelo|tyson fury|oleksandr usyk|terence crawford|gervonta davis';
+const F1_KW = 'formula 1|formula one|f1 grand prix|verstappen|lando norris|charles leclerc|lewis hamilton|grand prix';
+const ESPORTS_KW = 'league of legends|lcs\\b|valorant|counter.?strike|csgo|cs2\\b|dota\\b|twi\\w+\\b|worlds championship.*(league|valorant|dota)';
+const NCAAF_KW = 'college football|ncaa football|ncaaf|cfb\\b|bowl game|playoff.*college';
+const NCAAB_KW = 'march madness|ncaa tournament|college basketball|ncaab|cbb\\b|final four|elite eight';
 
-app.post('/api/tipster-applications', optionalAuth, async (req, res) => {
-  try {
-    const { handle, email, picks_link, units_tracked_90d, specialty, reach_screenshot_url, failure_mode, why_me } = req.body || {};
-    if (!handle || typeof handle !== 'string' || handle.length > 80) {
-      return res.status(400).json({ error: 'handle required (your X/Twitter handle)' });
-    }
-    if (!specialty || typeof specialty !== 'string' || specialty.length > 40) {
-      return res.status(400).json({ error: 'specialty required (pick one sport or bet type)' });
-    }
-    if (why_me && String(why_me).length > 500) return res.status(400).json({ error: 'why_me max 500 chars' });
-    if (failure_mode && String(failure_mode).length > 500) return res.status(400).json({ error: 'failure_mode max 500 chars' });
-    const userId = req.userId || null;
-    if (!userId && !email) return res.status(400).json({ error: 'email required when not signed in' });
+function _rx(pattern, flags) { try { return new RegExp(pattern, flags || 'i'); } catch { return null; } }
+const _RX = {
+  nba_league:   _rx('\\bnba\\b|nba finals|nba playoffs'),
+  nfl_league:   _rx('\\bnfl\\b|super bowl|nfl playoffs|afc championship|nfc championship'),
+  mlb_league:   _rx('\\bmlb\\b|world series|major league baseball'),
+  nhl_league:   _rx('\\bnhl\\b|stanley cup|national hockey league'),
+  soccer_lg:    _rx(SOCCER_LEAGUES),
+  soccer_clubs: _rx(SOCCER_CLUBS),
+  ufc:          _rx(UFC_KW),
+  tennis:       _rx(TENNIS_KW),
+  golf:         _rx(GOLF_KW),
+  boxing:       _rx(BOXING_KW),
+  f1:           _rx(F1_KW),
+  esports:      _rx(ESPORTS_KW),
+  ncaaf:        _rx(NCAAF_KW),
+  ncaab:        _rx(NCAAB_KW),
+  nfl_teams:    _rx('\\b(' + NFL_TEAMS + ')\\b'),
+  nba_teams:    _rx('\\b(' + NBA_TEAMS + ')\\b'),
+  mlb_teams:    _rx('\\b(' + MLB_TEAMS + ')\\b'),
+  nhl_teams:    _rx('\\b(' + NHL_TEAMS + ')\\b'),
+};
 
-    // Normalise handle: strip leading @ and whitespace.
-    const cleanHandle = handle.replace(/^@+/, '').trim();
+// classifyPolymarketTitle — regex priority: league keywords > team+league
+// hints > team names > event keywords. Returns { sport, league, confidence }
+// or null when the title is clearly non-sports (elections, crypto, weather…).
+function classifyPolymarketTitle(title) {
+  if (!title || typeof title !== 'string') return null;
+  const t = title.toLowerCase();
 
-    // Block a second pending application from the same user (partial unique
-    // index enforces it; we surface a friendly error instead of the raw 23505).
-    if (userId) {
-      const existing = await dbQuery(
-        "SELECT id FROM tipster_applications WHERE user_id = $1 AND status = 'pending' LIMIT 1",
-        [userId]
-      );
-      if (existing.length) return res.status(409).json({ error: 'You already have a pending application' });
-    }
+  // League keyword (highest confidence — league name is explicit)
+  if (_RX.nba_league && _RX.nba_league.test(t)) return { sport: 'nba',    league: 'NBA',    confidence: 0.98 };
+  if (_RX.nfl_league && _RX.nfl_league.test(t)) return { sport: 'nfl',    league: 'NFL',    confidence: 0.98 };
+  if (_RX.mlb_league && _RX.mlb_league.test(t)) return { sport: 'mlb',    league: 'MLB',    confidence: 0.98 };
+  if (_RX.nhl_league && _RX.nhl_league.test(t)) return { sport: 'nhl',    league: 'NHL',    confidence: 0.98 };
+  if (_RX.ncaaf      && _RX.ncaaf.test(t))      return { sport: 'ncaaf',  league: 'NCAAF',  confidence: 0.95 };
+  if (_RX.ncaab      && _RX.ncaab.test(t))      return { sport: 'ncaab',  league: 'NCAAB',  confidence: 0.95 };
+  if (_RX.ufc        && _RX.ufc.test(t))        return { sport: 'ufc',    league: 'UFC',    confidence: 0.95 };
+  if (_RX.tennis     && _RX.tennis.test(t))     return { sport: 'tennis', league: null,     confidence: 0.92 };
+  if (_RX.golf       && _RX.golf.test(t))       return { sport: 'golf',   league: 'PGA',    confidence: 0.92 };
+  if (_RX.boxing     && _RX.boxing.test(t))     return { sport: 'boxing', league: null,     confidence: 0.9  };
+  if (_RX.f1         && _RX.f1.test(t))         return { sport: 'f1',     league: 'F1',     confidence: 0.92 };
+  if (_RX.esports    && _RX.esports.test(t))    return { sport: 'esports',league: null,     confidence: 0.85 };
+  if (_RX.soccer_lg  && _RX.soccer_lg.test(t))  return { sport: 'soccer', league: null,     confidence: 0.93 };
+  if (_RX.soccer_clubs && _RX.soccer_clubs.test(t)) return { sport: 'soccer', league: null, confidence: 0.9 };
 
-    const rows = await dbQuery(
-      `INSERT INTO tipster_applications
-         (user_id, email, handle, picks_link, units_tracked_90d, specialty,
-          reach_screenshot_url, failure_mode, why_me)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, created_at, status`,
-      [userId, email || null, cleanHandle, picks_link || null,
-       units_tracked_90d != null ? Number(units_tracked_90d) : null,
-       specialty, reach_screenshot_url || null,
-       failure_mode ? String(failure_mode).trim() : null,
-       why_me ? String(why_me).trim() : null]
-    );
+  // Team-name fallbacks with sport hint word. Because "Cardinals"/"Giants"
+  // are ambiguous NFL vs MLB, we use the presence of 'football'/'baseball'/
+  // 'hockey' as the tiebreaker before lowering confidence.
+  const footballHint = /\bfootball\b|\btouchdown\b|\bplayoff\b/.test(t);
+  const baseballHint = /\bbaseball\b|\bhome run\b|\bbullpen\b/.test(t);
+  const hockeyHint   = /\bhockey\b|\bpowerplay\b|\bovertime.*goal\b/.test(t);
+  const basketHint   = /\bbasketball\b|\bthree.pointer\b|\blebron\b|\bsteph\b|\bdurant\b/.test(t);
 
-    // Mark the user as 'applied' so the gate can surface the pending state
-    // instead of re-prompting the application form.
-    if (userId) {
-      await dbQuery(
-        "UPDATE users SET tipster_status = 'applied' WHERE id = $1 AND tipster_status IS NULL",
-        [userId]
-      );
-    }
+  if (_RX.nba_teams && _RX.nba_teams.test(t)) return { sport: 'nba', league: 'NBA', confidence: basketHint ? 0.85 : 0.7 };
+  if (_RX.nhl_teams && _RX.nhl_teams.test(t)) return { sport: 'nhl', league: 'NHL', confidence: hockeyHint ? 0.85 : 0.7 };
+  if (_RX.nfl_teams && _RX.nfl_teams.test(t)) return { sport: 'nfl', league: 'NFL', confidence: footballHint ? 0.85 : 0.7 };
+  if (_RX.mlb_teams && _RX.mlb_teams.test(t)) return { sport: 'mlb', league: 'MLB', confidence: baseballHint ? 0.85 : 0.7 };
 
-    res.json({ ok: true, application: rows[0] });
-  } catch (err) {
-    console.error('[tipster-app] create error:', err.message);
-    res.status(500).json({ error: 'Failed to submit application' });
-  }
-});
-
-// ── Admin endpoints (existing ADMIN_SECRET header gate pattern) ──────────
-function requireAdminSecret(req, res, next) {
-  const expected = process.env.ADMIN_SECRET || '';
-  const given = req.headers['x-admin-secret'] || req.query.admin_secret || '';
-  if (!expected || given !== expected) return res.status(403).json({ error: 'forbidden' });
-  next();
+  return null; // not sports
 }
 
-app.get('/api/admin/tipster-applications', requireAdminSecret, async (req, res) => {
+// classifyKalshiTicker — Kalshi event tickers carry the sport in the prefix.
+// Pattern: `KX<SPORT>-<series>-<sub>` or older `<SPORT>GAME-...`. Map common
+// prefixes to our sport vocab; anything unmatched returns null (sweep leaves
+// it untagged, doesn't guess).
+function classifyKalshiTicker(ticker) {
+  if (!ticker || typeof ticker !== 'string') return null;
+  const t = ticker.toUpperCase();
+  const PREFIX = [
+    { re: /^KX?NFL[-_]/,        sport: 'nfl',    league: 'NFL' },
+    { re: /^KX?NBA[-_]/,        sport: 'nba',    league: 'NBA' },
+    { re: /^KX?MLB[-_]/,        sport: 'mlb',    league: 'MLB' },
+    { re: /^KX?NHL[-_]/,        sport: 'nhl',    league: 'NHL' },
+    { re: /^KX?UFC[-_]/,        sport: 'ufc',    league: 'UFC' },
+    { re: /^KX?CFB[-_]|^KX?NCAAF[-_]/,   sport: 'ncaaf',  league: 'NCAAF' },
+    { re: /^KX?CBB[-_]|^KX?NCAAB[-_]/,   sport: 'ncaab',  league: 'NCAAB' },
+    { re: /^KX?F1[-_]|^KX?GP[-_]/,       sport: 'f1',     league: 'F1' },
+    { re: /^KX?BOX[-_]|^KX?BOXING[-_]/,  sport: 'boxing', league: null },
+    { re: /^KX?PGA[-_]|^KX?GOLF[-_]/,    sport: 'golf',   league: 'PGA' },
+    { re: /^KX?TENNIS[-_]|^KX?ATP[-_]|^KX?WTA[-_]|^KX?WIMB|^KX?USOPEN|^KX?AUSOPEN|^KX?FRENCH/, sport: 'tennis', league: null },
+    { re: /^KX?EPL[-_]|^KX?UCL[-_]|^KX?MLS[-_]|^KX?SOCCER[-_]|^KX?WC[-_]|^KX?FIFA/, sport: 'soccer', league: null },
+    { re: /^(NFL|NBA|MLB|NHL)GAME[-_]/,  sport: (function(){})(), league: null }, // legacy; handled below
+  ];
+  for (const p of PREFIX) {
+    if (p.re.test(t)) {
+      if (p.sport) return { sport: p.sport, league: p.league, confidence: 0.98 };
+    }
+  }
+  // Legacy SPORTGAME- prefix
+  const legacy = t.match(/^(NFL|NBA|MLB|NHL)GAME[-_]/);
+  if (legacy) return { sport: legacy[1].toLowerCase(), league: legacy[1], confidence: 0.98 };
+  return null;
+}
+
+// Upsert a classification. ON CONFLICT: only overwrite when the existing row
+// isn't manual (manual overrides are sacred) AND the new confidence is at
+// least as high as the stored one.
+async function upsertSportTag(source, externalId, title, cls, taggedBy) {
+  if (!pool || !cls) return false;
   try {
-    const status = req.query.status || 'pending';
-    const rows = await dbQuery(
-      `SELECT a.*, u.display_name AS user_display_name, u.polymarket_address AS user_wallet
-         FROM tipster_applications a
-         LEFT JOIN users u ON u.id = a.user_id
-        WHERE a.status = $1
-        ORDER BY a.created_at DESC LIMIT 200`,
-      [status]
+    const res = await pool.query(
+      `INSERT INTO market_sport_tags (source, external_id, market_title, sport, league, confidence, tagged_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (source, external_id) DO UPDATE SET
+         market_title = EXCLUDED.market_title,
+         sport        = EXCLUDED.sport,
+         league       = EXCLUDED.league,
+         confidence   = EXCLUDED.confidence,
+         tagged_by    = EXCLUDED.tagged_by,
+         tagged_at    = now()
+       WHERE market_sport_tags.tagged_by <> 'manual'
+         AND EXCLUDED.confidence >= market_sport_tags.confidence
+       RETURNING sport`,
+      [source, externalId, (title || '').slice(0, 500), cls.sport, cls.league, cls.confidence, taggedBy]
     );
-    res.json({ applications: rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    return res.rowCount > 0;
+  } catch (e) {
+    if (/relation "market_sport_tags" does not exist/i.test(e.message)) {
+      console.warn('[market-sport-tags] table missing — run supabase_migration_market_sport_tags.sql');
+    } else {
+      console.warn('[market-sport-tags] upsert error:', e.message);
+    }
+    return false;
+  }
+}
+
+// Sweep every untagged (source, external_id) pair in cached_positions +
+// realized_trades + polymarket_trades; classify and insert. Idempotent —
+// already-tagged pairs are filtered out via LEFT JOIN.
+async function sweepMarketSportTags() {
+  if (!pool) return { scanned: 0, tagged: 0 };
+  let scanned = 0, tagged = 0, skipped = 0;
+  try {
+    const unionSql = `
+      SELECT DISTINCT ON (source, external_id) source, external_id, market_title FROM (
+        SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM realized_trades   WHERE condition_id IS NOT NULL
+        UNION ALL
+        SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM polymarket_trades WHERE condition_id IS NOT NULL
+        UNION ALL
+        SELECT platform::text      AS source, external_id   AS external_id, market_title    AS market_title FROM cached_positions  WHERE platform IN ('polymarket','kalshi') AND external_id IS NOT NULL
+      ) t
+      LEFT JOIN market_sport_tags mst USING (source, external_id)
+      WHERE mst.source IS NULL
+      LIMIT 2000`;
+    let rows = [];
+    try { rows = await dbQuery(unionSql); }
+    catch (e) {
+      if (/relation "(realized_trades|polymarket_trades|cached_positions|market_sport_tags)" does not exist/i.test(e.message)) {
+        console.warn('[market-sport-tags] sweep skipped — dependency table missing:', e.message);
+        return { scanned: 0, tagged: 0, skipped: 0, error: 'missing_table' };
+      }
+      throw e;
+    }
+    scanned = rows.length;
+    for (const r of rows) {
+      const cls = r.source === 'kalshi'
+        ? classifyKalshiTicker(r.external_id)
+        : classifyPolymarketTitle(r.market_title);
+      if (!cls) { skipped++; continue; }
+      const taggedBy = r.source === 'kalshi' ? 'kalshi_taxonomy' : 'regex';
+      const ok = await upsertSportTag(r.source, r.external_id, r.market_title, cls, taggedBy);
+      if (ok) tagged++;
+    }
+    if (scanned) console.log(`[market-sport-tags] sweep scanned=${scanned} tagged=${tagged} skipped=${skipped}`);
+    return { scanned, tagged, skipped };
+  } catch (e) {
+    console.error('[market-sport-tags] sweep error:', e.message);
+    return { scanned, tagged, skipped, error: e.message };
+  }
+}
+
+// Nightly at 03:00 UTC — picks up newly-seen markets overnight.
+cron.schedule('0 3 * * *', () => { sweepMarketSportTags().catch(() => {}); });
+// Boot-time run (2 min after start so the rest of boot settles first).
+setTimeout(() => { sweepMarketSportTags().catch(() => {}); }, 2 * 60 * 1000);
+
+// GET /api/markets/sport-tag?source=polymarket&external_id=0x…
+// Returns the tag for a single market, or { tagged: false } if untagged.
+app.get('/api/markets/sport-tag', async (req, res) => {
+  try {
+    const source = String(req.query.source || '').toLowerCase();
+    const externalId = String(req.query.external_id || '').trim();
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!externalId) return res.status(400).json({ error: 'external_id required' });
+    const rows = await dbQuery(
+      'SELECT source, external_id, sport, league, confidence, tagged_by, tagged_at FROM market_sport_tags WHERE source=$1 AND external_id=$2 LIMIT 1',
+      [source, externalId]
+    ).catch(() => []);
+    if (!rows.length) return res.json({ tagged: false });
+    res.json({ tagged: true, ...rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/admin/tipster-applications/:id/decide', requireAdminSecret, async (req, res) => {
+// POST /api/admin/markets/sport-tag — manual override (admin-secret gated).
+// Body: { source, external_id, sport, league? }. sport must be in SPORT_VOCAB.
+app.post('/api/admin/markets/sport-tag', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const { decision, notes, specialty } = req.body || {};
-    if (!['approve', 'reject'].includes(decision)) {
-      return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+    const { source, external_id, sport, league } = req.body || {};
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!external_id || !SPORT_VOCAB.includes(sport)) return res.status(400).json({ error: 'external_id + valid sport required' });
+    await pool.query(
+      `INSERT INTO market_sport_tags (source, external_id, sport, league, confidence, tagged_by)
+       VALUES ($1, $2, $3, $4, 1.00, 'manual')
+       ON CONFLICT (source, external_id) DO UPDATE SET
+         sport=$3, league=$4, confidence=1.00, tagged_by='manual', tagged_at=now()`,
+      [source, external_id, sport, league || null]
+    );
+    res.json({ ok: true, source, external_id, sport, league: league || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /admin/markets/sport-tag/sweep — trigger a sweep on demand (admin).
+app.post('/api/admin/markets/sport-tag/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepMarketSportTags();
+  res.json(result);
+});
+
+// ── T3 · CLOSING-PRICE SNAPSHOTS ────────────────────────────────────────────
+// Bedrock for CLV. For every sports-tagged market (from T2), snapshot the
+// book midprice as it approaches close. One row per market, primary keyed
+// on (source, external_id). T4 reads this table to compute cents-beaten
+// vs close per trade.
+//
+// MVP scope: binary markets only. Multi-outcome slices are deferred.
+
+function _midprice(book) {
+  // Polymarket CLOB /book returns { bids: [...], asks: [...] } sorted best-
+  // first. Each side is [{ price: '0.xx', size: '...' }, ...]. Price is a
+  // string 0..1. Midpoint = avg(best bid, best ask); fall back to whichever
+  // side exists; null if both empty (dead book).
+  if (!book) return null;
+  const bestBid = book.bids && book.bids.length ? parseFloat(book.bids[0].price) : null;
+  const bestAsk = book.asks && book.asks.length ? parseFloat(book.asks[0].price) : null;
+  if (bestBid != null && bestAsk != null) return Math.round(((bestBid + bestAsk) / 2) * 1e6) / 1e6;
+  if (bestBid != null) return bestBid;
+  if (bestAsk != null) return bestAsk;
+  return null;
+}
+
+// Fetch Polymarket market metadata by condition_id via gamma API.
+// Returns { endDate, clobTokenIds: [yes, no], closed, active } or null.
+async function _fetchPolymarketMeta(conditionId) {
+  try {
+    const r = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}&limit=1`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const arr = await r.json();
+    const m = Array.isArray(arr) ? arr[0] : null;
+    if (!m) return null;
+    let tokens = [];
+    try { tokens = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : (m.clobTokenIds || []); } catch {}
+    return {
+      endDate: m.endDate || m.end_date || null,
+      tokens,
+      closed: !!m.closed,
+      active: m.active !== false,
+    };
+  } catch { return null; }
+}
+
+// Fetch both YES + NO book midprices for a Polymarket binary market.
+async function _fetchPolymarketCloseBooks(tokens) {
+  if (!tokens || tokens.length < 2) return null;
+  try {
+    const [yRes, nRes] = await Promise.all([
+      fetch(`https://clob.polymarket.com/book?token_id=${tokens[0]}`, { signal: AbortSignal.timeout(6000) }),
+      fetch(`https://clob.polymarket.com/book?token_id=${tokens[1]}`, { signal: AbortSignal.timeout(6000) }),
+    ]);
+    const yBook = yRes.ok ? await yRes.json() : null;
+    const nBook = nRes.ok ? await nRes.json() : null;
+    return { yes_price: _midprice(yBook), no_price: _midprice(nBook) };
+  } catch { return null; }
+}
+
+// Fetch Kalshi market by ticker. Public endpoint — no auth required for
+// reading market status + quoted bid/ask.
+async function _fetchKalshiMeta(ticker) {
+  try {
+    const r = await fetch(`https://trading-api.kalshi.com/trade-api/v2/markets/${encodeURIComponent(ticker)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const m = d.market || d;
+    if (!m) return null;
+    // Kalshi returns prices in cents (0..100). Normalise to 0..1.
+    const yBid = m.yes_bid  != null ? parseFloat(m.yes_bid)  / 100 : null;
+    const yAsk = m.yes_ask  != null ? parseFloat(m.yes_ask)  / 100 : null;
+    const nBid = m.no_bid   != null ? parseFloat(m.no_bid)   / 100 : null;
+    const nAsk = m.no_ask   != null ? parseFloat(m.no_ask)   / 100 : null;
+    const yes_price = (yBid != null && yAsk != null) ? (yBid + yAsk) / 2 : (yBid != null ? yBid : yAsk);
+    const no_price  = (nBid != null && nAsk != null) ? (nBid + nAsk) / 2 : (nBid != null ? nBid : nAsk);
+    return {
+      close_ts: m.close_time || m.expiration_time || null,
+      status: m.status,   // 'active' | 'closed' | 'settled' | 'finalized' | 'determined'
+      yes_price: yes_price != null ? Math.round(yes_price * 1e6) / 1e6 : null,
+      no_price:  no_price  != null ? Math.round(no_price  * 1e6) / 1e6 : null,
+    };
+  } catch { return null; }
+}
+
+// Sweep pending sports markets, snapshot those nearing/past close.
+// Window: close_ts within next 15 min OR already in past (up to 48h back)
+// AND no snapshot row yet. Capped at 40 markets per run so one sweep
+// doesn't pound the APIs.
+async function sweepClosingPrices() {
+  if (!pool) return { scanned: 0, snapped: 0 };
+  let scanned = 0, snapped = 0, skipped = 0;
+  try {
+    let pending;
+    try {
+      pending = await dbQuery(`
+        SELECT mst.source, mst.external_id, mst.market_title
+        FROM market_sport_tags mst
+        LEFT JOIN market_closing_prices cp
+          ON cp.source = mst.source AND cp.external_id = mst.external_id
+        WHERE cp.external_id IS NULL
+          AND mst.sport <> 'other'
+        ORDER BY mst.tagged_at DESC
+        LIMIT 40`);
+    } catch (e) {
+      if (/relation "(market_sport_tags|market_closing_prices)" does not exist/i.test(e.message)) {
+        console.warn('[closing-prices] sweep skipped — dependency table missing');
+        return { scanned: 0, snapped: 0, error: 'missing_table' };
+      }
+      throw e;
     }
-    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
-
-    // Load the application. 404 if missing.
-    const appRows = await dbQuery('SELECT * FROM tipster_applications WHERE id = $1', [req.params.id]);
-    if (!appRows.length) return res.status(404).json({ error: 'Application not found' });
-    const app = appRows[0];
-    if (app.status !== 'pending') return res.status(409).json({ error: 'Application already decided' });
-
-    // Cap check on approve: stop if 25 are already approved, regardless of
-    // pending count. Race-safe because we re-read inside a transaction would
-    // be cleaner, but at cohort-of-25 scale a short-window read is fine.
-    if (decision === 'approve') {
-      const cnt = await dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'");
-      if ((cnt[0]?.n || 0) >= FOUNDING_TIPSTER_CAP) {
-        return res.status(409).json({ error: 'Founding cohort already full (' + FOUNDING_TIPSTER_CAP + ')' });
+    scanned = pending.length;
+    for (const row of pending) {
+      try {
+        if (row.source === 'polymarket') {
+          const meta = await _fetchPolymarketMeta(row.external_id);
+          if (!meta || !meta.endDate || !meta.tokens || meta.tokens.length < 2) { skipped++; continue; }
+          const endTs = Date.parse(meta.endDate);
+          if (!Number.isFinite(endTs)) { skipped++; continue; }
+          const now = Date.now();
+          const windowMs = 15 * 60 * 1000;
+          const backfillMs = 48 * 60 * 60 * 1000;
+          const inWindow = (endTs - now <= windowMs) && (now - endTs <= backfillMs);
+          if (!inWindow && meta.active && !meta.closed) { skipped++; continue; }
+          const prices = await _fetchPolymarketCloseBooks(meta.tokens);
+          if (!prices || prices.yes_price == null) { skipped++; continue; }
+          await pool.query(
+            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
+             VALUES ('polymarket', $1, $2, $3, $4, now())
+             ON CONFLICT (source, external_id) DO NOTHING`,
+            [row.external_id, prices.yes_price, prices.no_price, new Date(endTs).toISOString()]
+          );
+          snapped++;
+        } else if (row.source === 'kalshi') {
+          const meta = await _fetchKalshiMeta(row.external_id);
+          if (!meta || !meta.close_ts) { skipped++; continue; }
+          const closeTs = Date.parse(meta.close_ts);
+          if (!Number.isFinite(closeTs)) { skipped++; continue; }
+          const now = Date.now();
+          const windowMs = 15 * 60 * 1000;
+          const backfillMs = 48 * 60 * 60 * 1000;
+          const isFinal = /closed|settled|finalized|determined/.test(meta.status || '');
+          const inWindow = (closeTs - now <= windowMs) && (now - closeTs <= backfillMs);
+          if (!inWindow && !isFinal) { skipped++; continue; }
+          if (meta.yes_price == null) { skipped++; continue; }
+          await pool.query(
+            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
+             VALUES ('kalshi', $1, $2, $3, $4, now())
+             ON CONFLICT (source, external_id) DO NOTHING`,
+            [row.external_id, meta.yes_price, meta.no_price, new Date(closeTs).toISOString()]
+          );
+          snapped++;
+        }
+        // Small pause between markets so we don't hammer the upstream APIs.
+        await new Promise(res => setTimeout(res, 250));
+      } catch (e) {
+        console.warn('[closing-prices] per-market error:', row.source, row.external_id, e.message);
+        skipped++;
       }
     }
-
-    await dbQuery(
-      `UPDATE tipster_applications
-          SET status = $1, reviewed_at = now(), review_notes = $2
-        WHERE id = $3`,
-      [newStatus, notes || null, req.params.id]
-    );
-
-    if (decision === 'approve' && app.user_id) {
-      // Normalise handle at approval: lowercase, strip @ + whitespace,
-      // replace disallowed chars with underscores, cap at 30. Matches the
-      // CHECK constraint (^[a-z0-9_]{1,30}$). Fallback to a UUID-prefixed
-      // placeholder if the source handle sanitises to empty.
-      const raw = (app.handle || '').trim().toLowerCase().replace(/^@+/, '');
-      let handle = raw.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
-      if (!handle) handle = 'tipster_' + app.user_id.slice(0, 8);
-      // Handle collision: if taken by another approved user, suffix with
-      // the first 4 chars of the user id. At cohort-of-25 scale this is
-      // near-zero probability; the fallback keeps us correct anyway.
-      const clash = await dbQuery(
-        "SELECT id FROM users WHERE tipster_handle = $1 AND tipster_status = 'approved' AND id <> $2",
-        [handle, app.user_id]
-      );
-      if (clash.length) handle = (handle + '_' + app.user_id.slice(0, 4)).slice(0, 30);
-
-      await dbQuery(
-        `UPDATE users
-            SET tipster_status = 'approved',
-                tipster_approved_at = now(),
-                tipster_specialty = COALESCE($1, tipster_specialty, $2),
-                tipster_handle = $3
-          WHERE id = $4`,
-        [specialty || null, app.specialty, handle, app.user_id]
-      );
-    } else if (decision === 'reject' && app.user_id) {
-      await dbQuery(
-        "UPDATE users SET tipster_status = 'rejected' WHERE id = $1 AND tipster_status = 'applied'",
-        [app.user_id]
-      );
-    }
-
-    // Fire decision email. Fire-and-forget — admin decide response is not
-    // gated on SMTP round-trip. Voice-compliant subject + body per Charter
-    // worked examples (approval is a warmth trigger per §2; rejection is
-    // dry register).
-    sendTipsterDecisionEmail(app, decision).catch(err => {
-      console.error('[tipster-app] decision email error:', err.message);
-    });
-
-    res.json({ ok: true, application_id: req.params.id, status: newStatus });
-  } catch (err) {
-    console.error('[tipster-app] decide error:', err.message);
-    res.status(500).json({ error: 'Failed to decide application' });
-  }
-});
-
-// POST /api/admin/tipster/:userId/revoke — freeze an already-approved tipster.
-// Distinct from the application-decide flow: that handles pending
-// applications; revoke handles tipsters who were approved and later gamed
-// the system (fake picks, stat manipulation, etc). We never delete their
-// picks history — the track record stays public, they just lose write
-// access. Reinstating is a separate (manual, DB-level) action.
-app.post('/api/admin/tipster/:userId/revoke', requireAdminSecret, async (req, res) => {
-  try {
-    const { reason } = req.body || {};
-    const userId = req.params.userId;
-    const rows = await dbQuery(
-      `UPDATE users
-          SET tipster_status = 'revoked',
-              tipster_revoked_at = now()
-        WHERE id = $1 AND tipster_status = 'approved'
-        RETURNING id, tipster_status, tipster_revoked_at`,
-      [userId]
-    );
-    if (!rows.length) return res.status(409).json({ error: 'User is not an approved tipster' });
-    console.log('[tipster-admin] revoked user=' + userId.slice(0, 8) + ' reason=' + (reason || '(none)'));
-    res.json({ ok: true, user: rows[0] });
-  } catch (err) {
-    console.error('[tipster-admin] revoke error:', err.message);
-    res.status(500).json({ error: 'Failed to revoke' });
-  }
-});
-
-// Decision email — fires after admin approve/reject on an application.
-// Voice-compliant per Charter v1:
-//   Approval uses one of the five canonical warmth triggers (§2: first
-//   locked pick moment is still to come, but cohort entry is a one-time
-//   warmth moment too — one exclamation mark max).
-//   Rejection stays in default dry register.
-async function sendTipsterDecisionEmail(app, decision) {
-  if (!app || !app.email) return;
-  const transporter = createMailTransport();
-  if (!transporter) return;
-
-  const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
-  const isApprove = decision === 'approve';
-  const handleDisplay = app.handle ? '@' + app.handle.replace(/^@+/, '') : 'tipster';
-
-  const subject = isApprove ? "You're in." : 'Application decision · HYPERFLEX';
-
-  const htmlApprove = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
-  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
-    <tr><td style="padding:32px 32px 8px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#f5a623;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
-    </td></tr>
-    <tr><td style="padding:8px 32px 8px">
-      <h1 style="font-size:32px;font-weight:900;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">You're in.</h1>
-      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Record starts on your next pick. Everything you post from here is locked before tip-off, graded from official results, and public.</p>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <a href="${APP_URL}/picks/new" style="display:inline-block;padding:14px 28px;background:#f5a623;color:#0e0e12;font-weight:800;font-size:15px;border-radius:100px;text-decoration:none">Lock your first pick →</a>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px">WHAT HAPPENS NEXT</div>
-      <ul style="font-size:13.5px;line-height:1.7;color:#b4b4c4;margin:0;padding-left:18px">
-        <li>Your profile is live at <a href="${APP_URL}/t/${encodeURIComponent((app.handle||'').replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]+/g,'_').slice(0,30))}" style="color:#f5a623;text-decoration:none">${APP_URL}/t/${handleDisplay.replace(/^@+/, '')}</a></li>
-        <li>Every pick gets a permanent receipt URL you can share anywhere</li>
-        <li>Record shows up on the public leaderboard once the cohort fills</li>
-      </ul>
-    </td></tr>
-    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
-      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
-    </td></tr>
-  </table>
-</td></tr></table></body></html>`;
-
-  const htmlReject = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
-  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
-    <tr><td style="padding:32px 32px 8px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
-    </td></tr>
-    <tr><td style="padding:8px 32px 8px">
-      <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">Not this cohort.</h1>
-      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 18px">We read every application. This one didn't make the founding 25.</p>
-      <p style="font-size:14px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Apply again in 30 days. More posting history and unit-tracked volume both help.</p>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <a href="${APP_URL}/picks" style="display:inline-block;padding:12px 22px;background:rgba(255,255,255,0.06);color:#f0f0f5;font-weight:700;font-size:14px;border-radius:100px;text-decoration:none;border:1px solid rgba(255,255,255,0.14)">Back to /picks</a>
-    </td></tr>
-    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
-      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
-    </td></tr>
-  </table>
-</td></tr></table></body></html>`;
-
-  try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-      to: app.email,
-      subject,
-      html: isApprove ? htmlApprove : htmlReject,
-    });
-    console.log('[tipster-app] ' + decision + ' email sent to ' + app.email);
-  } catch (err) {
-    console.error('[tipster-app] sendMail error:', err.message);
+    if (scanned) console.log(`[closing-prices] sweep scanned=${scanned} snapped=${snapped} skipped=${skipped}`);
+    return { scanned, snapped, skipped };
+  } catch (e) {
+    console.error('[closing-prices] sweep error:', e.message);
+    return { scanned, snapped, skipped, error: e.message };
   }
 }
+
+// Every 5 min.
+cron.schedule('*/5 * * * *', () => { sweepClosingPrices().catch(() => {}); });
+
+// GET /api/markets/closing-price?source&external_id — single lookup.
+app.get('/api/markets/closing-price', async (req, res) => {
+  try {
+    const source = String(req.query.source || '').toLowerCase();
+    const externalId = String(req.query.external_id || '').trim();
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!externalId) return res.status(400).json({ error: 'external_id required' });
+    const rows = await dbQuery(
+      'SELECT source, external_id, yes_price, no_price, close_ts, captured_at FROM market_closing_prices WHERE source=$1 AND external_id=$2 LIMIT 1',
+      [source, externalId]
+    ).catch(() => []);
+    if (!rows.length) return res.json({ captured: false });
+    res.json({ captured: true, ...rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/markets/closing-price/sweep — run on demand (admin).
+app.post('/api/admin/markets/closing-price/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepClosingPrices();
+  res.json(result);
+});
+
+// ── T4 · CLV ON POLYMARKET TRADES ───────────────────────────────────────────
+// For every settled polymarket_trades row, join against market_closing_prices
+// (T3) via condition_id and compute cents beaten vs close. Signed by side:
+// positive = got in at a better price than the market closed at.
+//
+// Scope: polymarket_trades only. The `picks` table (HFX-native sports picks)
+// needs sportsbook closing lines (OddsJam / Pinnacle) — deferred to Phase 3.
+
+// Pure helper. Given a trade's side + entry price and the market's yes/no
+// close prices, returns clv_cents rounded to 2 decimals. Null if inputs
+// are missing. Clamped to ±100 to guard against bad data.
+function computeCLVCents(side, entryPrice, closeYes, closeNo) {
+  const s = (side || '').toUpperCase();
+  const entry = parseFloat(entryPrice);
+  if (!Number.isFinite(entry)) return null;
+  let closeSide;
+  if (s === 'YES') closeSide = parseFloat(closeYes);
+  else if (s === 'NO') closeSide = parseFloat(closeNo);
+  else return null;
+  if (!Number.isFinite(closeSide)) return null;
+  const clv = (closeSide - entry) * 100;
+  // Clamp to sane range — a single row with bogus data shouldn't nuke
+  // aggregates. ±100 cents covers the full possible probability range.
+  if (clv > 100) return 100.00;
+  if (clv < -100) return -100.00;
+  return Math.round(clv * 100) / 100;
+}
+
+// Sweep: fill clv_cents for any settled polymarket_trades row that has a
+// matching market_closing_prices entry and isn't yet computed. Capped at
+// 500 per run so a massive backfill doesn't pin the DB.
+async function sweepPolymarketTradesCLV() {
+  if (!pool) return { scanned: 0, updated: 0 };
+  let scanned = 0, updated = 0, missing = 0;
+  try {
+    let rows;
+    try {
+      rows = await dbQuery(`
+        SELECT pt.id, pt.side, pt.entry_price, pt.condition_id,
+               cp.yes_price, cp.no_price
+          FROM polymarket_trades pt
+          JOIN market_closing_prices cp
+            ON cp.source = 'polymarket' AND cp.external_id = pt.condition_id
+         WHERE pt.clv_cents IS NULL
+           AND pt.condition_id IS NOT NULL
+           AND pt.entry_price IS NOT NULL
+           AND pt.status IN ('closed','won','lost')
+         LIMIT 500`);
+    } catch (e) {
+      if (/relation "(polymarket_trades|market_closing_prices)" does not exist/i.test(e.message)) {
+        console.warn('[trade-clv] sweep skipped — dependency table missing');
+        return { scanned: 0, updated: 0, error: 'missing_table' };
+      }
+      // clv_cents column missing means the migration hasn't run yet —
+      // tolerate that gracefully so deploy doesn't fail before DB is ready.
+      if (/column "clv_cents" does not exist/i.test(e.message)) {
+        console.warn('[trade-clv] sweep skipped — clv_cents column missing, run supabase_migration_polymarket_trades_clv.sql');
+        return { scanned: 0, updated: 0, error: 'missing_column' };
+      }
+      throw e;
+    }
+    scanned = rows.length;
+    for (const r of rows) {
+      const clv = computeCLVCents(r.side, r.entry_price, r.yes_price, r.no_price);
+      if (clv === null) { missing++; continue; }
+      try {
+        await pool.query(
+          `UPDATE polymarket_trades SET clv_cents=$1, clv_computed_at=now() WHERE id=$2`,
+          [clv, r.id]
+        );
+        updated++;
+      } catch (e) { console.warn('[trade-clv] update failed for', r.id, e.message); }
+    }
+    if (scanned) console.log(`[trade-clv] sweep scanned=${scanned} updated=${updated} missing=${missing}`);
+    return { scanned, updated, missing };
+  } catch (e) {
+    console.error('[trade-clv] sweep error:', e.message);
+    return { scanned, updated, missing, error: e.message };
+  }
+}
+
+// Every 15 min — fast enough that new closes pick up CLV within a cron
+// cycle, not so tight it burns cycles on empty scans.
+cron.schedule('*/15 * * * *', () => { sweepPolymarketTradesCLV().catch(() => {}); });
+// Boot-time backfill 3 min after start (gives T3 sweep a chance to run
+// first so there are closing prices to join against).
+setTimeout(() => { sweepPolymarketTradesCLV().catch(() => {}); }, 3 * 60 * 1000);
+
+// GET /api/trades/clv?eoa=0x… — per-user CLV aggregate (count, avg, best,
+// worst, trailing 30d). Public read — CLV is a verifiable public stat.
+app.get('/api/trades/clv', async (req, res) => {
+  try {
+    const eoa = String(req.query.eoa || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/i.test(eoa)) return res.status(400).json({ error: 'eoa (0x…) required' });
+    const rows = await dbQuery(`
+      SELECT
+        COUNT(*)                                                    AS n_trades,
+        AVG(clv_cents)::numeric                                     AS avg_clv,
+        MAX(clv_cents)::numeric                                     AS best_clv,
+        MIN(clv_cents)::numeric                                     AS worst_clv,
+        COUNT(*) FILTER (WHERE clv_cents > 0)                       AS beat_close,
+        AVG(clv_cents) FILTER (WHERE created_at > now() - interval '30 days')::numeric AS avg_clv_30d,
+        COUNT(*) FILTER (WHERE created_at > now() - interval '30 days' AND clv_cents IS NOT NULL) AS n_30d
+        FROM polymarket_trades
+       WHERE LOWER(eoa_address) = $1
+         AND clv_cents IS NOT NULL`,
+      [eoa]
+    ).catch(() => []);
+    const r = rows[0] || {};
+    const num = v => v == null ? null : Math.round(parseFloat(v) * 100) / 100;
+    res.json({
+      eoa,
+      n_trades:   parseInt(r.n_trades   || 0, 10),
+      avg_clv:    num(r.avg_clv),
+      best_clv:   num(r.best_clv),
+      worst_clv:  num(r.worst_clv),
+      beat_close: parseInt(r.beat_close || 0, 10),
+      avg_clv_30d: num(r.avg_clv_30d),
+      n_30d:      parseInt(r.n_30d || 0, 10),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/trades/clv/sweep — run on demand (admin).
+app.post('/api/admin/trades/clv/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepPolymarketTradesCLV();
+  res.json(result);
+});
+
+// ── T5 · FLEX SCORE FOR SPORTS ──────────────────────────────────────────────
+// Pure formula lives in lib/sports-flex-score.js (fixture-tested). This
+// section binds it to the DB: fetches per-user stats from `picks` (primary)
+// and polymarket_trades (CLV-supplementary), runs the formula, upserts the
+// score + components into sports_flex_scores. Nightly full rebuild at 04:00
+// UTC; on-demand recompute fires when a pick settles.
+
+const { computeSportsFlexScore: _computeSFS, THRESHOLDS: _SFS_THRESHOLDS } = require('./lib/sports-flex-score');
+
+// Pull per-user sports stats. One round-trip builds the full shape the
+// pure formula expects. Used by both nightly rebuild and on-demand recompute.
+async function _fetchSportsStats(userId) {
+  // Picks aggregate (settlement excludes voids per sports betting convention)
+  const pickRows = await dbQuery(`
+    SELECT
+      COUNT(*) FILTER (WHERE settlement_status IN ('win','loss','push'))::int AS settled_bets,
+      COALESCE(SUM(settled_units) FILTER (WHERE settlement_status IN ('win','loss','push')), 0)::numeric AS net_units,
+      COALESCE(SUM(units) FILTER (WHERE settlement_status IN ('win','loss','push')), 0)::numeric         AS total_staked_units,
+      COUNT(DISTINCT DATE(locked_at))::int                                                               AS active_days,
+      COUNT(DISTINCT sport) FILTER (WHERE settlement_status IN ('win','loss','push'))::int              AS distinct_sports,
+      COUNT(DISTINCT bet_type) FILTER (WHERE settlement_status IN ('win','loss','push'))::int           AS distinct_bet_types
+    FROM picks
+    WHERE user_id = $1`, [userId]).catch(() => []);
+
+  // Weekly consistency over trailing 90 days
+  const weeklyRows = await dbQuery(`
+    SELECT
+      COUNT(*)::int                                    AS weeks_active_90d,
+      COUNT(*) FILTER (WHERE week_net > 0)::int        AS weeks_profitable_90d
+    FROM (
+      SELECT DATE_TRUNC('week', settled_at) AS wk,
+             SUM(settled_units)             AS week_net
+        FROM picks
+       WHERE user_id = $1
+         AND settlement_status IN ('win','loss','push')
+         AND settled_at > NOW() - INTERVAL '90 days'
+       GROUP BY 1
+    ) w`, [userId]).catch(() => []);
+
+  // CLV signal from polymarket_trades (only sports-tagged, time-decayed).
+  // 90d = 100%, 90-180d = 50%, >180d = 25%.
+  let clvAvg = null;
+  try {
+    const wallets = await dbQuery(
+      'SELECT LOWER(polymarket_address) AS addr FROM users WHERE id = $1 AND polymarket_address IS NOT NULL',
+      [userId]
+    ).catch(() => []);
+    if (wallets.length && wallets[0].addr) {
+      const clvRows = await dbQuery(`
+        SELECT
+          SUM(pt.clv_cents * w)::numeric AS weighted_sum,
+          SUM(w)::numeric                AS weight_total
+        FROM (
+          SELECT pt.clv_cents,
+                 CASE
+                   WHEN pt.created_at > NOW() - INTERVAL '90 days'  THEN 1.0
+                   WHEN pt.created_at > NOW() - INTERVAL '180 days' THEN 0.5
+                   ELSE 0.25
+                 END AS w
+            FROM polymarket_trades pt
+            JOIN market_sport_tags mst
+              ON mst.source = 'polymarket' AND mst.external_id = pt.condition_id
+           WHERE LOWER(pt.eoa_address) = $1
+             AND pt.clv_cents IS NOT NULL
+             AND mst.sport <> 'other'
+        ) pt`, [wallets[0].addr]).catch(() => []);
+      const wSum = parseFloat(clvRows[0]?.weighted_sum || 0);
+      const wTot = parseFloat(clvRows[0]?.weight_total  || 0);
+      if (wTot > 0) clvAvg = Math.round((wSum / wTot) * 100) / 100;
+    }
+  } catch (e) {
+    // polymarket_trades / market_sport_tags may not exist yet — leave CLV null
+    if (!/relation "(polymarket_trades|market_sport_tags)" does not exist/i.test(e.message)) {
+      console.warn('[sports-flex] clv lookup:', e.message);
+    }
+  }
+
+  const p = pickRows[0] || {};
+  const w = weeklyRows[0] || {};
+  return {
+    net_units:           parseFloat(p.net_units || 0),
+    settled_bets:        parseInt(p.settled_bets || 0, 10),
+    total_staked_units:  parseFloat(p.total_staked_units || 0),
+    active_days:         parseInt(p.active_days || 0, 10),
+    distinct_sports:     parseInt(p.distinct_sports || 0, 10),
+    distinct_bet_types:  parseInt(p.distinct_bet_types || 0, 10),
+    weeks_active_90d:    parseInt(w.weeks_active_90d || 0, 10),
+    weeks_profitable_90d: parseInt(w.weeks_profitable_90d || 0, 10),
+    avg_clv_cents:       clvAvg,
+  };
+}
+
+// Recompute + upsert for a single user. Called by the cron and by the on-
+// demand hook when a pick settles. Returns the computed row.
+async function recomputeSportsFlexScore(userId) {
+  if (!pool) return null;
+  try {
+    const stats = await _fetchSportsStats(userId);
+    const result = _computeSFS(stats);
+    await pool.query(`
+      INSERT INTO sports_flex_scores (
+        user_id, score, pnl_component, volume_component, consistency_component,
+        clv_component, diversity_component, settled_bets, total_staked_units,
+        net_units, active_days, distinct_sports, distinct_bet_types,
+        avg_clv_cents, qualifies, computed_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        score=EXCLUDED.score,
+        pnl_component=EXCLUDED.pnl_component,
+        volume_component=EXCLUDED.volume_component,
+        consistency_component=EXCLUDED.consistency_component,
+        clv_component=EXCLUDED.clv_component,
+        diversity_component=EXCLUDED.diversity_component,
+        settled_bets=EXCLUDED.settled_bets,
+        total_staked_units=EXCLUDED.total_staked_units,
+        net_units=EXCLUDED.net_units,
+        active_days=EXCLUDED.active_days,
+        distinct_sports=EXCLUDED.distinct_sports,
+        distinct_bet_types=EXCLUDED.distinct_bet_types,
+        avg_clv_cents=EXCLUDED.avg_clv_cents,
+        qualifies=EXCLUDED.qualifies,
+        computed_at=now()`,
+      [
+        userId, result.score,
+        result.components.pnl, result.components.volume, result.components.consistency,
+        result.components.clv, result.components.diversity,
+        stats.settled_bets, stats.total_staked_units,
+        stats.net_units, stats.active_days, stats.distinct_sports, stats.distinct_bet_types,
+        stats.avg_clv_cents, result.qualifies,
+      ]
+    );
+    return { ...result, stats };
+  } catch (e) {
+    if (/relation "sports_flex_scores" does not exist/i.test(e.message)) {
+      console.warn('[sports-flex] table missing — run supabase_migration_sports_flex_scores.sql');
+      return null;
+    }
+    console.warn('[sports-flex] recompute error:', userId, e.message);
+    return null;
+  }
+}
+
+// Nightly full rebuild. Walks every user who has at least one settled pick
+// since the last run + every user currently in the table (so dormant users
+// still get their row refreshed — decay matters).
+async function recomputeAllSportsFlexScores() {
+  if (!pool) return { users: 0, updated: 0 };
+  let updated = 0;
+  try {
+    const users = await dbQuery(`
+      SELECT DISTINCT user_id FROM (
+        SELECT user_id FROM picks WHERE settlement_status IN ('win','loss','push')
+        UNION
+        SELECT user_id FROM sports_flex_scores
+      ) u`).catch(() => []);
+    for (const u of users) {
+      const r = await recomputeSportsFlexScore(u.user_id);
+      if (r) updated++;
+      // 25ms pause so a 10k-user batch doesn't starve the event loop
+      if (updated % 40 === 0) await new Promise(r => setTimeout(r, 25));
+    }
+    console.log(`[sports-flex] nightly rebuild: ${updated}/${users.length} users`);
+    return { users: users.length, updated };
+  } catch (e) {
+    console.error('[sports-flex] nightly rebuild error:', e.message);
+    return { users: 0, updated, error: e.message };
+  }
+}
+
+// Nightly at 04:00 UTC. Runs after the 03:00 sport-tag sweep + the 15-min
+// CLV sweep so the inputs are as fresh as possible.
+cron.schedule('0 4 * * *', () => { recomputeAllSportsFlexScores().catch(() => {}); });
+
+// GET /api/sports-predictors/leaderboard?period=all&min_score=0
+// Returns ranked list of qualifying users with their score + components.
+app.get('/api/sports-predictors/leaderboard', async (req, res) => {
+  try {
+    const limit = Math.min(200, parseInt(req.query.limit, 10) || 50);
+    const rows = await dbQuery(`
+      SELECT sfs.user_id, sfs.score, sfs.pnl_component, sfs.volume_component,
+             sfs.consistency_component, sfs.clv_component, sfs.diversity_component,
+             sfs.settled_bets, sfs.total_staked_units, sfs.net_units,
+             sfs.distinct_sports, sfs.distinct_bet_types, sfs.avg_clv_cents,
+             u.display_name, u.handle, u.avatar_url
+        FROM sports_flex_scores sfs
+        JOIN users u ON u.id = sfs.user_id
+       WHERE sfs.qualifies = TRUE AND sfs.score IS NOT NULL
+       ORDER BY sfs.score DESC, sfs.net_units DESC
+       LIMIT $1`, [limit]).catch(() => []);
+    // Statistical supply gate: no leaderboard until 3+ qualifiers
+    if (rows.length < 3) {
+      return res.json({ gated: true, reason: 'insufficient_sample', qualifying: rows.length, min_qualifiers: 3 });
+    }
+    rows.forEach((r, i) => { r.rank = i + 1; });
+    res.json({ gated: false, leaders: rows, min_score: rows[rows.length - 1]?.score || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/sports-predictors/:userId — own score + component breakdown.
+// Always returns a row (computes on-the-fly if cache is missing) so the UI
+// can render "below threshold" coaching.
+app.get('/api/sports-predictors/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    let row = (await dbQuery('SELECT * FROM sports_flex_scores WHERE user_id=$1', [userId]).catch(() => []))[0];
+    if (!row) {
+      // Cold cache: compute now so first-time readers get a real answer
+      const r = await recomputeSportsFlexScore(userId);
+      row = (await dbQuery('SELECT * FROM sports_flex_scores WHERE user_id=$1', [userId]).catch(() => []))[0] || null;
+    }
+    if (!row) return res.json({ user_id: userId, has_score: false });
+    res.json({ user_id: userId, has_score: true, thresholds: _SFS_THRESHOLDS, ...row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/sports-flex/rebuild — run nightly on demand (admin).
+app.post('/api/admin/sports-flex/rebuild', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await recomputeAllSportsFlexScores();
+  res.json(result);
+});
+
+// Hook for on-demand recompute when a pick settles. Other code paths that
+// settle a pick should call this fire-and-forget to keep the user's score
+// live without waiting for the nightly cron.
+function recomputeSportsFlexForUser(userId) {
+  recomputeSportsFlexScore(userId).catch(() => {});
+}
+module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
 
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
@@ -23032,17 +23753,34 @@ app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
 
 // ── WALLETS / CONNECTED ACCOUNTS ─────────────────────────────────────────────
 
-// GET /api/user/me — authenticated user's basic info
+// GET /api/user/me — authenticated user's basic info.
+// Uses SELECT * + explicit projection so a missing column in any schema
+// drift doesn't 500 the endpoint. Only the fields we need flow out.
 app.get('/api/user/me', requireAuth, async (req, res) => {
   try {
     const uid = req.user?.id || req.userId;
     if (!uid) return res.status(401).json({ error: 'Auth required' });
-    let user = null;
+    let row = null;
     if (pool) {
-      const rows = await dbQuery('SELECT id, display_name, username, email, avatar_url, bio, polymarket_address, wallet_verified FROM users WHERE id = $1 LIMIT 1', [uid]);
-      user = rows[0] || null;
+      const rows = await dbQuery('SELECT * FROM users WHERE id = $1 LIMIT 1', [uid]);
+      row = rows[0] || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+      row = data || null;
     }
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    const user = {
+      id:                 row.id,
+      handle:             row.handle             || null,
+      display_name:       row.display_name       || null,
+      username:           row.username           || null,
+      email:              row.email              || null,
+      avatar_url:         row.avatar_url         || null,
+      bio:                row.bio                || null,
+      polymarket_address: row.polymarket_address || null,
+      wallet_verified:    row.wallet_verified    || false,
+    };
+    user.profile_url = user.handle ? '/@' + user.handle : '/m/' + user.id;
     res.json({ user });
   } catch (err) {
     console.warn('[user-me]', err.message);
@@ -25992,8 +26730,10 @@ app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pic
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
 app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
 app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
-app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
-app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
+// /t/:handle is the legacy tipster URL. Collapse to the canonical
+// /@{handle}. Tipsters are just users now (T1 rip) so there's no separate
+// tipster profile — the @username page shows everything including picks.
+app.get('/t/:handle', (req, res) => res.redirect(302, '/@' + req.params.handle));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
