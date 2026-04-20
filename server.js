@@ -722,6 +722,12 @@ app.get('/', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'explore.html'));
 });
 
+// Preview: new "receipts layer" landing. Not the default /. Swap when approved.
+app.get('/landing-v2', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(require('path').join(__dirname, 'public', 'landing-v2.html'));
+});
+
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
     // Prevent caching of HTML and JS files so users always get latest version
