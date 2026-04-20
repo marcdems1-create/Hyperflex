@@ -15781,6 +15781,136 @@ app.post('/api/admin/markets/closing-price/sweep', async (req, res) => {
   res.json(result);
 });
 
+// ── T4 · CLV ON POLYMARKET TRADES ───────────────────────────────────────────
+// For every settled polymarket_trades row, join against market_closing_prices
+// (T3) via condition_id and compute cents beaten vs close. Signed by side:
+// positive = got in at a better price than the market closed at.
+//
+// Scope: polymarket_trades only. The `picks` table (HFX-native sports picks)
+// needs sportsbook closing lines (OddsJam / Pinnacle) — deferred to Phase 3.
+
+// Pure helper. Given a trade's side + entry price and the market's yes/no
+// close prices, returns clv_cents rounded to 2 decimals. Null if inputs
+// are missing. Clamped to ±100 to guard against bad data.
+function computeCLVCents(side, entryPrice, closeYes, closeNo) {
+  const s = (side || '').toUpperCase();
+  const entry = parseFloat(entryPrice);
+  if (!Number.isFinite(entry)) return null;
+  let closeSide;
+  if (s === 'YES') closeSide = parseFloat(closeYes);
+  else if (s === 'NO') closeSide = parseFloat(closeNo);
+  else return null;
+  if (!Number.isFinite(closeSide)) return null;
+  const clv = (closeSide - entry) * 100;
+  // Clamp to sane range — a single row with bogus data shouldn't nuke
+  // aggregates. ±100 cents covers the full possible probability range.
+  if (clv > 100) return 100.00;
+  if (clv < -100) return -100.00;
+  return Math.round(clv * 100) / 100;
+}
+
+// Sweep: fill clv_cents for any settled polymarket_trades row that has a
+// matching market_closing_prices entry and isn't yet computed. Capped at
+// 500 per run so a massive backfill doesn't pin the DB.
+async function sweepPolymarketTradesCLV() {
+  if (!pool) return { scanned: 0, updated: 0 };
+  let scanned = 0, updated = 0, missing = 0;
+  try {
+    let rows;
+    try {
+      rows = await dbQuery(`
+        SELECT pt.id, pt.side, pt.entry_price, pt.condition_id,
+               cp.yes_price, cp.no_price
+          FROM polymarket_trades pt
+          JOIN market_closing_prices cp
+            ON cp.source = 'polymarket' AND cp.external_id = pt.condition_id
+         WHERE pt.clv_cents IS NULL
+           AND pt.condition_id IS NOT NULL
+           AND pt.entry_price IS NOT NULL
+           AND pt.status IN ('closed','won','lost')
+         LIMIT 500`);
+    } catch (e) {
+      if (/relation "(polymarket_trades|market_closing_prices)" does not exist/i.test(e.message)) {
+        console.warn('[trade-clv] sweep skipped — dependency table missing');
+        return { scanned: 0, updated: 0, error: 'missing_table' };
+      }
+      // clv_cents column missing means the migration hasn't run yet —
+      // tolerate that gracefully so deploy doesn't fail before DB is ready.
+      if (/column "clv_cents" does not exist/i.test(e.message)) {
+        console.warn('[trade-clv] sweep skipped — clv_cents column missing, run supabase_migration_polymarket_trades_clv.sql');
+        return { scanned: 0, updated: 0, error: 'missing_column' };
+      }
+      throw e;
+    }
+    scanned = rows.length;
+    for (const r of rows) {
+      const clv = computeCLVCents(r.side, r.entry_price, r.yes_price, r.no_price);
+      if (clv === null) { missing++; continue; }
+      try {
+        await pool.query(
+          `UPDATE polymarket_trades SET clv_cents=$1, clv_computed_at=now() WHERE id=$2`,
+          [clv, r.id]
+        );
+        updated++;
+      } catch (e) { console.warn('[trade-clv] update failed for', r.id, e.message); }
+    }
+    if (scanned) console.log(`[trade-clv] sweep scanned=${scanned} updated=${updated} missing=${missing}`);
+    return { scanned, updated, missing };
+  } catch (e) {
+    console.error('[trade-clv] sweep error:', e.message);
+    return { scanned, updated, missing, error: e.message };
+  }
+}
+
+// Every 15 min — fast enough that new closes pick up CLV within a cron
+// cycle, not so tight it burns cycles on empty scans.
+cron.schedule('*/15 * * * *', () => { sweepPolymarketTradesCLV().catch(() => {}); });
+// Boot-time backfill 3 min after start (gives T3 sweep a chance to run
+// first so there are closing prices to join against).
+setTimeout(() => { sweepPolymarketTradesCLV().catch(() => {}); }, 3 * 60 * 1000);
+
+// GET /api/trades/clv?eoa=0x… — per-user CLV aggregate (count, avg, best,
+// worst, trailing 30d). Public read — CLV is a verifiable public stat.
+app.get('/api/trades/clv', async (req, res) => {
+  try {
+    const eoa = String(req.query.eoa || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/i.test(eoa)) return res.status(400).json({ error: 'eoa (0x…) required' });
+    const rows = await dbQuery(`
+      SELECT
+        COUNT(*)                                                    AS n_trades,
+        AVG(clv_cents)::numeric                                     AS avg_clv,
+        MAX(clv_cents)::numeric                                     AS best_clv,
+        MIN(clv_cents)::numeric                                     AS worst_clv,
+        COUNT(*) FILTER (WHERE clv_cents > 0)                       AS beat_close,
+        AVG(clv_cents) FILTER (WHERE created_at > now() - interval '30 days')::numeric AS avg_clv_30d,
+        COUNT(*) FILTER (WHERE created_at > now() - interval '30 days' AND clv_cents IS NOT NULL) AS n_30d
+        FROM polymarket_trades
+       WHERE LOWER(eoa_address) = $1
+         AND clv_cents IS NOT NULL`,
+      [eoa]
+    ).catch(() => []);
+    const r = rows[0] || {};
+    const num = v => v == null ? null : Math.round(parseFloat(v) * 100) / 100;
+    res.json({
+      eoa,
+      n_trades:   parseInt(r.n_trades   || 0, 10),
+      avg_clv:    num(r.avg_clv),
+      best_clv:   num(r.best_clv),
+      worst_clv:  num(r.worst_clv),
+      beat_close: parseInt(r.beat_close || 0, 10),
+      avg_clv_30d: num(r.avg_clv_30d),
+      n_30d:      parseInt(r.n_30d || 0, 10),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/trades/clv/sweep — run on demand (admin).
+app.post('/api/admin/trades/clv/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepPolymarketTradesCLV();
+  res.json(result);
+});
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
