@@ -21588,6 +21588,16 @@ async function confirmTrade() {
       : '0xE111180000d2663C0091e4f400237545B87B996B';  // CTF Exchange V2
     const exchangeAddr = useClobV2 ? exchangeAddrV2 : exchangeAddrV1;
 
+    // Guard: this file still builds a V1 struct below. Signing a V1 struct
+    // against a V2 contract is a guaranteed CLOB rejection — fail fast with a
+    // clear message instead of letting the user burn a MetaMask popup. Use
+    // market.html for V2 testing until the dashboard helper lands.
+    if (useClobV2) {
+      console.error('[trade] V2 not yet wired in dashboard — use /market/:slug');
+      try { window.alert && window.alert('CLOB V2 testing only available on market pages right now. Use a /market/:slug page with ?clob_v2=1.'); } catch (e) {}
+      return;
+    }
+
     // Build EIP-712 order struct
     // signatureType: 2 = POLY_GNOSIS_SAFE (Polymarket proxy wallets are Gnosis Safes)
     const orderStruct = {

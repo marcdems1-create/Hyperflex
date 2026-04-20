@@ -4292,9 +4292,6 @@ async function executeTrade() {
     console.log('[trade] On-chain: maker=' + makerAmt + ' taker=' + takerAmt + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
-    var exchangeAddr = isNegRisk
-      ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'
-      : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 
     // signatureType: 2 = POLY_GNOSIS_SAFE (proxy wallet), 0 = EOA
     // maker = proxy wallet (where funds live); signer = EOA (MetaMask key)
@@ -4302,46 +4299,32 @@ async function executeTrade() {
     var makerAddr = proxyAddress || eoaAddress;
     console.log('[trade] maker=' + makerAddr.slice(0,10) + ' signer=' + eoaAddress.slice(0,10) + ' sigType=' + sigType + ' proxy=' + (proxyAddress || 'NONE'));
 
-    var orderStruct = {
+    // V1 vs V2 routing — flag flips contracts + struct shape together via the
+    // buildOrderForClob helper. Default off; opt-in via window.HF_USE_CLOB_V2
+    // or ?clob_v2=1. Default flips before April 22 2026 cutover.
+    var clobVersion = isClobV2Enabled() ? 2 : 1;
+    var exchangeAddr = clobVersion === 2
+      ? (isNegRisk ? NEG_RISK_EXCHANGE_V2 : CTF_EXCHANGE_V2)
+      : (isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE);
+    var built = buildOrderForClob({
       salt: orderSalt,
       maker: makerAddr,
       signer: eoaAddress,
-      taker: '0x0000000000000000000000000000000000000000',
       tokenId: tokenId,
       makerAmount: makerAmt,
       takerAmount: takerAmt,
-      expiration: '0',
-      nonce: '0',
+      sideInt: sideInt,
+      sigType: sigType,
+      isNegRisk: isNegRisk,
       feeRateBps: feeRateBps,
-      side: sideInt,
-      signatureType: sigType
-    };
+      expiration: '0',
+    }, clobVersion);
+    var orderStruct = built.struct;
+    var orderDomain = built.domain;
+    var orderTypes = built.types;
 
-    console.log('[trade] Order struct:', JSON.stringify(orderStruct));
+    console.log('[trade] CLOB version:', clobVersion, 'Order struct:', JSON.stringify(orderStruct));
     console.log('[trade] Exchange:', exchangeAddr, 'negRisk:', isNegRisk, 'tickSize:', tickSize);
-
-    var orderDomain = {
-      name: 'Polymarket CTF Exchange',
-      version: '1',
-      chainId: 137,
-      verifyingContract: exchangeAddr
-    };
-    var orderTypes = {
-      Order: [
-        { name: 'salt', type: 'uint256' },
-        { name: 'maker', type: 'address' },
-        { name: 'signer', type: 'address' },
-        { name: 'taker', type: 'address' },
-        { name: 'tokenId', type: 'uint256' },
-        { name: 'makerAmount', type: 'uint256' },
-        { name: 'takerAmount', type: 'uint256' },
-        { name: 'expiration', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-        { name: 'feeRateBps', type: 'uint256' },
-        { name: 'side', type: 'uint8' },
-        { name: 'signatureType', type: 'uint8' }
-      ]
-    };
 
     // Step 3: Sign the order in MetaMask
     // Mobile-specific: be extra explicit about the state so users see progress
@@ -4382,9 +4365,27 @@ async function executeTrade() {
     // Key ordering MUST match the SDK's orderToJson() output:
     // deferExec → order → owner → orderType
     // CLOB may verify the builder HMAC against the canonical body string.
-    var requestBody = JSON.stringify({
-      deferExec: false,
-      order: {
+    // V1 and V2 wire shapes differ — V2 drops taker/nonce/feeRateBps/expiration
+    // and adds timestamp/metadata/builder. The signed struct already reflects
+    // the right shape (via buildOrderForClob), so just mirror it here.
+    var orderJson;
+    if (clobVersion === 2) {
+      orderJson = {
+        salt: parseInt(orderStruct.salt, 10),
+        maker: orderStruct.maker,
+        signer: orderStruct.signer,
+        tokenId: orderStruct.tokenId,
+        makerAmount: orderStruct.makerAmount,
+        takerAmount: orderStruct.takerAmount,
+        side: clobSide,
+        signatureType: orderStruct.signatureType,
+        timestamp: orderStruct.timestamp,
+        metadata: orderStruct.metadata,
+        builder: orderStruct.builder,
+        signature: orderSignature
+      };
+    } else {
+      orderJson = {
         salt: parseInt(orderStruct.salt, 10),
         maker: orderStruct.maker,
         signer: orderStruct.signer,
@@ -4398,7 +4399,11 @@ async function executeTrade() {
         feeRateBps: String(orderStruct.feeRateBps),
         signatureType: orderStruct.signatureType,
         signature: orderSignature
-      },
+      };
+    }
+    var requestBody = JSON.stringify({
+      deferExec: false,
+      order: orderJson,
       owner: apiKey,
       orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
     });
