@@ -344,9 +344,29 @@ Matches official SDK order.
 
 ### Contract addresses
 - USDC.e: `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- USDC native: `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`
 - Safe factory: `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
-- CTF Exchange: `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
-- NegRisk Exchange: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+- CTF Exchange (V1): `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
+- NegRisk Exchange (V1): `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+
+### CLOB V2 contract addresses (cutover April 22, 2026)
+- CTF Exchange V2: `0xE111180000d2663C0091e4f400237545B87B996B`
+- NegRisk Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
+- pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
+- CollateralOnramp (wrap): `0x93070a847efEf7F70739046A929D47a521F5B8ee` — `wrap(address asset, address to, uint256 amount)`
+- CollateralOfframp (unwrap): `0x2957922Eb93258b93368531d39fAcCA3B4dC5854` — `unwrap(address asset, address to, uint256 amount)`
+- HYPERFLEX V2 builder code (bytes32): `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8` — provisioned 3/31/2026, status Enabled, fees 0% (set non-zero at polymarket.com/settings?tab=builder once verified)
+- All addresses identical on Amoy testnet (chainId 80002)
+
+**V2 differences from V1:**
+- Order struct drops `taker`/`nonce`/`feeRateBps`/`expiration`, adds `timestamp`/`metadata`/`builder`
+- EIP-712 domain version flips `"1"` → `"2"`
+- `makerAmount` denominated in **pUSD, not USDC.e** — V2 BUY orders fail at fill if proxy lacks pUSD balance
+- Users must wrap USDC.e → pUSD via CollateralOnramp before trading V2 (no auto-conversion)
+- Wrap requires Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — NOT YET WIRED
+- POLY_BUILDER_* HMAC headers still used in V2 alongside the on-chain `order.builder` bytes32
+
+**Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default flips to V2 before April 22 cutover.
 
 ### Market vs Limit order rules — DIFFERENT decimal constraints
 

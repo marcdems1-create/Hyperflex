@@ -2630,6 +2630,20 @@ var NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // V1 negR
 // clob.polymarket.com, so we flip the default before then.
 var CTF_EXCHANGE_V2 = '0xE111180000d2663C0091e4f400237545B87B996B';
 var NEG_RISK_EXCHANGE_V2 = '0xe2222d279d744050d28e00520010520000310F59';
+// pUSD (Polymarket USD) — the V2 collateral token. Wraps USDC.e (or native
+// USDC) 1:1, 6 decimals. V2 order makerAmount is denominated in pUSD, NOT
+// USDC.e, so V2 exchange approvals must be on PMCT_ADDRESS (not USDC_ADDRESS).
+// Users hold USDC.e in their proxy and must wrap to pUSD via CollateralOnramp
+// before they can submit V2 BUY orders — there is no auto-conversion in the
+// V2 matcher.
+//
+// ⚠️ Wrap UX caveat: Onramp.wrap pulls USDC.e from msg.sender. Since user
+// funds live in the Safe proxy (not the EOA), wrap calls have to be
+// dispatched as a Safe execTransaction, not a direct EOA contract call.
+// That integration is not yet wired — flagged in the wrap helper below.
+var PMCT_ADDRESS = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
+var COLLATERAL_ONRAMP = '0x93070a847efEf7F70739046A929D47a521F5B8ee';
+var COLLATERAL_OFFRAMP = '0x2957922Eb93258b93368531d39fAcCA3B4dC5854';
 var BYTES32_ZERO = '0x' + '0'.repeat(64);
 // HYPERFLEX V2 builder code (provisioned 3/31/2026 by Polymarket).
 // Address: 0x51f0d8d8798c6d57d8c60af767000ab3df5804e9, Status: Enabled.
@@ -2822,66 +2836,74 @@ async function checkProxyDeployed(proxyAddr) {
   }
 }
 
-// Step 3: Check USDC allowance for both exchange contracts (V1 + V2 when flag on).
-// V2 contracts are completely separate from V1 — approvals do NOT carry over.
-// On April 22 cutover every user trading V2 needs new approvals for V2 addresses,
-// so we surface them through the normal setup flow when isClobV2Enabled().
+// Step 3: Check token allowance for both exchange contracts.
+//   V1 contracts spend USDC.e directly.
+//   V2 contracts spend pUSD (PMCT) — the wrapped collateral token.
+//   V1 approvals do NOT carry over to V2; cross-token approvals don't
+//   transfer either (V1 USDC.e approval ≠ V2 pUSD approval).
+// We also surface the Onramp's USDC.e allowance, which is required for the
+// wrap step (USDC.e → pUSD) before any V2 BUY can fill.
 async function checkTokenApproval() {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr) return { ctf: false, negRisk: false, ctfV2: false, negRiskV2: false };
+  var blank = { ctf: false, negRisk: false, ctfV2: false, negRiskV2: false, onramp: false };
+  if (!proxyAddr) return blank;
   try {
     var provider = await getPublicProvider();
     var abi = ['function allowance(address owner, address spender) view returns (uint256)'];
     var usdc = new ethers.Contract(USDC_ADDRESS, abi, provider);
-    var ctfAllowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE);
-    var negAllowance = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE);
-    var ctfV2Allowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE_V2);
-    var negV2Allowance = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE_V2);
-    // Consider approved if allowance > 1M USDC (generous threshold)
+    var pmct = new ethers.Contract(PMCT_ADDRESS, abi, provider);
+    var ctfAllowance     = await usdc.allowance(proxyAddr, CTF_EXCHANGE);
+    var negAllowance     = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE);
+    var ctfV2Allowance   = await pmct.allowance(proxyAddr, CTF_EXCHANGE_V2);
+    var negV2Allowance   = await pmct.allowance(proxyAddr, NEG_RISK_EXCHANGE_V2);
+    var onrampAllowance  = await usdc.allowance(proxyAddr, COLLATERAL_ONRAMP);
     var threshold = ethers.parseUnits('1000000', 6);
-    var ctfOk = ctfAllowance >= threshold;
-    var negOk = negAllowance >= threshold;
-    var ctfV2Ok = ctfV2Allowance >= threshold;
-    var negV2Ok = negV2Allowance >= threshold;
-    console.log('[setup] USDC allowance — CTF V1:', ethers.formatUnits(ctfAllowance, 6), ctfOk ? 'OK' : 'LOW',
-      '| NegRisk V1:', ethers.formatUnits(negAllowance, 6), negOk ? 'OK' : 'LOW',
-      '| CTF V2:', ethers.formatUnits(ctfV2Allowance, 6), ctfV2Ok ? 'OK' : 'LOW',
-      '| NegRisk V2:', ethers.formatUnits(negV2Allowance, 6), negV2Ok ? 'OK' : 'LOW');
-    return { ctf: ctfOk, negRisk: negOk, ctfV2: ctfV2Ok, negRiskV2: negV2Ok };
+    var ctfOk     = ctfAllowance     >= threshold;
+    var negOk     = negAllowance     >= threshold;
+    var ctfV2Ok   = ctfV2Allowance   >= threshold;
+    var negV2Ok   = negV2Allowance   >= threshold;
+    var onrampOk  = onrampAllowance  >= threshold;
+    console.log('[setup] Allowance — CTF V1 (USDC.e):', ethers.formatUnits(ctfAllowance, 6), ctfOk ? 'OK' : 'LOW',
+      '| NegRisk V1 (USDC.e):', ethers.formatUnits(negAllowance, 6), negOk ? 'OK' : 'LOW',
+      '| CTF V2 (pUSD):', ethers.formatUnits(ctfV2Allowance, 6), ctfV2Ok ? 'OK' : 'LOW',
+      '| NegRisk V2 (pUSD):', ethers.formatUnits(negV2Allowance, 6), negV2Ok ? 'OK' : 'LOW',
+      '| Onramp (USDC.e):', ethers.formatUnits(onrampAllowance, 6), onrampOk ? 'OK' : 'LOW');
+    return { ctf: ctfOk, negRisk: negOk, ctfV2: ctfV2Ok, negRiskV2: negV2Ok, onramp: onrampOk };
   } catch (e) {
     console.warn('[setup] Allowance check error:', e.message);
-    return { ctf: false, negRisk: false, ctfV2: false, negRiskV2: false };
+    return blank;
   }
 }
 
-// Step 3 action: Approve USDC for both exchange contracts (V1 always; V2 added
-// when ?clob_v2=1 / window.HF_USE_CLOB_V2 is set, since V2 contracts need
-// their own allowance grants — V1 approvals do not carry over).
+// Step 3 action: Approve token spending for required contracts.
+//   V1 (always): USDC.e → CTF V1 + NegRisk V1
+//   V2 (when flag on): pUSD → CTF V2 + NegRisk V2; USDC.e → Onramp
 async function approveTokens() {
   var btn = document.getElementById('setupBtn3');
   if (btn) { btn.disabled = true; btn.textContent = 'Approving...'; }
-  setSetupStep(3, 'active', 'Approving USDC spending...');
+  setSetupStep(3, 'active', 'Approving token spending...');
   try {
     if (!window.ethereum) throw new Error('MetaMask required');
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var abi = ['function approve(address spender, uint256 amount) returns (bool)'];
     var usdc = new ethers.Contract(USDC_ADDRESS, abi, signer);
+    var pmct = new ethers.Contract(PMCT_ADDRESS, abi, signer);
 
-    // Check which exchanges need approval
     var status = await checkTokenApproval();
     var v2On = isClobV2Enabled();
     var pending = [];
-    if (!status.ctf) pending.push({ label: 'CTF V1', addr: CTF_EXCHANGE });
-    if (!status.negRisk) pending.push({ label: 'NegRisk V1', addr: NEG_RISK_EXCHANGE });
-    if (v2On && !status.ctfV2) pending.push({ label: 'CTF V2', addr: CTF_EXCHANGE_V2 });
-    if (v2On && !status.negRiskV2) pending.push({ label: 'NegRisk V2', addr: NEG_RISK_EXCHANGE_V2 });
+    if (!status.ctf)     pending.push({ label: 'USDC.e → CTF V1',      contract: usdc, addr: CTF_EXCHANGE });
+    if (!status.negRisk) pending.push({ label: 'USDC.e → NegRisk V1',  contract: usdc, addr: NEG_RISK_EXCHANGE });
+    if (v2On && !status.ctfV2)    pending.push({ label: 'pUSD → CTF V2',      contract: pmct, addr: CTF_EXCHANGE_V2 });
+    if (v2On && !status.negRiskV2) pending.push({ label: 'pUSD → NegRisk V2', contract: pmct, addr: NEG_RISK_EXCHANGE_V2 });
+    if (v2On && !status.onramp)   pending.push({ label: 'USDC.e → Onramp',    contract: usdc, addr: COLLATERAL_ONRAMP });
 
     for (var i = 0; i < pending.length; i++) {
       var step = pending[i];
-      showTradeStatus('Approve USDC for ' + step.label + ' (' + (i + 1) + '/' + pending.length + ')...', 'info');
+      showTradeStatus('Approve ' + step.label + ' (' + (i + 1) + '/' + pending.length + ')...', 'info');
       console.log('[setup] Approving ' + step.label + ' (' + step.addr + ')...');
-      var tx = await usdc.approve(step.addr, MAX_UINT256);
+      var tx = await step.contract.approve(step.addr, MAX_UINT256);
       await tx.wait();
       console.log('[setup] ' + step.label + ' approved');
     }
@@ -2901,6 +2923,40 @@ async function approveTokens() {
     }
     return false;
   }
+}
+
+// ── pUSD (PMCT) helpers — V2 collateral ────────────────────────────────────
+
+// Read pUSD balance for an address. Returns BigInt (6 decimals atomic).
+async function getPmctBalance(addr) {
+  if (!addr) return 0n;
+  try {
+    var provider = await getPublicProvider();
+    var abi = ['function balanceOf(address) view returns (uint256)'];
+    var pmct = new ethers.Contract(PMCT_ADDRESS, abi, provider);
+    return await pmct.balanceOf(addr);
+  } catch (e) {
+    console.warn('[pmct] balanceOf failed:', e.message);
+    return 0n;
+  }
+}
+
+// Wrap USDC.e → pUSD via CollateralOnramp.wrap(asset, to, amount).
+//
+// ⚠️ NOT YET PRODUCTION READY: Onramp.wrap pulls USDC.e from msg.sender.
+// User funds live in the Safe proxy, but a direct EOA call here would pull
+// from the EOA (which is empty). The fix is to dispatch the wrap as a Safe
+// execTransaction signed by the EOA — same pattern Polymarket's UI uses.
+// Until that's wired, this helper bails with a clear console error so we
+// never silently lose funds. Wrapping is a manual prerequisite for V2 BUY
+// orders right now (do it via polymarket.com or a direct Safe call).
+//
+// Amounts in 6-decimal atomic units (BigInt or string).
+async function wrapUsdcToPmct(amountAtomic) {
+  console.error('[pmct] wrap requires Safe execTransaction — not yet wired. ' +
+    'Wrap manually at polymarket.com or via a Safe SDK call. ' +
+    'amountAtomic=' + String(amountAtomic));
+  throw new Error('Wrap-via-Safe not yet implemented — wrap USDC → pUSD on polymarket.com first');
 }
 
 // Master check: runs all 3 steps and updates the setup UI
@@ -2961,23 +3017,23 @@ async function checkTradingSetup() {
   }
 
   // Step 3: Token approval (only check if proxy is deployed). When V2 is on
-  // require V2 approvals too — V1 approvals do not carry to V2 contracts.
+  // require pUSD approvals on V2 exchanges + USDC.e approval on Onramp.
   if (deployed && proxyValid) {
     var approval = await checkTokenApproval();
     var v2On = isClobV2Enabled();
     var v1Done = approval.ctf && approval.negRisk;
-    var v2Done = !v2On || (approval.ctfV2 && approval.negRiskV2);
+    var v2Done = !v2On || (approval.ctfV2 && approval.negRiskV2 && approval.onramp);
     if (v1Done && v2Done) {
-      setSetupStep(3, 'done', 'Approve USDC Spending');
+      setSetupStep(3, 'done', 'Approve token spending');
     } else {
-      var label = 'Approve USDC Spending';
-      if (v2On && !v2Done) label += ' (V2 needed)';
+      var label = 'Approve token spending';
+      if (v2On && !v2Done) label += ' (V2 + Onramp needed)';
       setSetupStep(3, 'active', label);
       var btn3 = document.getElementById('setupBtn3');
       if (btn3) { btn3.style.display = 'inline-block'; btn3.disabled = false; btn3.textContent = 'Approve'; }
     }
   } else {
-    setSetupStep(3, '', 'Approve USDC Spending');
+    setSetupStep(3, '', 'Approve token spending');
   }
 
   // Proxy balance display
@@ -3669,11 +3725,11 @@ async function runFullSetup() {
   }
   setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
 
-  // Step 3: Approve USDC (V1 always; V2 too when flag on — V1 approvals don't carry)
+  // Step 3: Approve token spending (V1 USDC.e; V2 pUSD + Onramp USDC.e when flag on)
   var approval = await checkTokenApproval();
   var _v2On = isClobV2Enabled();
   var _v1Missing = !approval.ctf || !approval.negRisk;
-  var _v2Missing = _v2On && (!approval.ctfV2 || !approval.negRiskV2);
+  var _v2Missing = _v2On && (!approval.ctfV2 || !approval.negRiskV2 || !approval.onramp);
   if (_v1Missing || _v2Missing) {
     setSetupStep(3, 'active', 'Approving USDC spending...');
     if (cta) cta.textContent = 'Approving USDC...';
@@ -4326,6 +4382,21 @@ async function executeTrade() {
     var exchangeAddr = clobVersion === 2
       ? (isNegRisk ? NEG_RISK_EXCHANGE_V2 : CTF_EXCHANGE_V2)
       : (isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE);
+
+    // V2 BUY pre-flight: makerAmount is denominated in pUSD, not USDC.e.
+    // If the proxy doesn't have enough pUSD the order will sign + submit fine
+    // but revert at the contract on fill. Catch it here with a clear error so
+    // the user knows to wrap first instead of debugging an opaque CLOB reject.
+    if (clobVersion === 2 && clobSide === 'BUY' && makerAddr) {
+      var pUsdBal = await getPmctBalance(makerAddr);
+      if (pUsdBal < makerAmt) {
+        var have = ethers.formatUnits(pUsdBal, 6);
+        var need = ethers.formatUnits(makerAmt, 6);
+        showTradeStatus('Need ' + need + ' pUSD to place this order — you have ' + have + '. Wrap USDC → pUSD on polymarket.com first.', 'error');
+        cta.disabled = false; updateCtaButton();
+        return;
+      }
+    }
     var built = buildOrderForClob({
       salt: orderSalt,
       maker: makerAddr,
