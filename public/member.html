@@ -143,6 +143,49 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
   .btn{font-size:12px;padding:9px 14px}
   input,textarea,select{font-size:16px!important}
 }
+
+/* ── T7 · Sports tab ── */
+.sfs-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 20px 18px;background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.015));border:1px solid rgba(245,166,35,0.25);border-radius:18px;margin-bottom:14px;flex-wrap:wrap}
+.sfs-eyebrow{font-family:var(--mono);font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px}
+.sfs-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em}
+.sfs-title b{color:var(--gold)}
+.sfs-gauge{display:flex;align-items:baseline;gap:6px}
+.sfs-score{font-family:'Inter',sans-serif;font-size:56px;font-weight:900;letter-spacing:-0.04em;line-height:1}
+.sfs-score-denom{font-family:var(--mono);font-size:14px;color:var(--muted);font-weight:600}
+.sfs-tier{display:inline-block;margin-left:10px;font-family:var(--mono);font-size:10px;font-weight:800;padding:4px 10px;border-radius:100px;border:1px solid;letter-spacing:0.1em;vertical-align:middle}
+
+.sfs-comps{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+@media (max-width:520px){.sfs-comps{grid-template-columns:1fr}}
+.sfs-comp{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.sfs-comp-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.sfs-comp-label{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text-soft);letter-spacing:0.1em;text-transform:uppercase}
+.sfs-comp-val{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700}
+.sfs-comp-val b{color:var(--text);font-size:15px}
+.sfs-comp-max{color:var(--muted);font-weight:500;margin-left:2px}
+.sfs-comp-bar{height:5px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden}
+.sfs-comp-fill{height:100%;border-radius:3px;transition:width 0.7s ease-out;box-shadow:0 0 12px currentColor}
+
+.sfs-coach{padding:14px 16px;margin-bottom:14px}
+.sfs-coach-head{font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px}
+.sfs-coach-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text-soft)}
+.sfs-coach-row:last-child{border-bottom:none}
+.sfs-coach-have{font-family:var(--mono);color:var(--gold);font-weight:700}
+
+.sfs-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+@media (max-width:520px){.sfs-stats{grid-template-columns:repeat(2,1fr)}}
+.sfs-stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+.sfs-stat-l{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;margin-bottom:4px;text-transform:uppercase}
+.sfs-stat-v{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--text);line-height:1}
+
+.sfs-edu{padding:14px 16px;margin-bottom:18px}
+.sfs-edu-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sfs-edu-title{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700;letter-spacing:0.06em}
+.sfs-edu-val{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--text)}
+.sfs-edu-body{font-size:13px;color:var(--text-soft);line-height:1.6;margin-bottom:10px}
+.sfs-edu-body b{color:var(--gold)}
+.sfs-edu-foot{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
+
+.sfs-ctas{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px}
 </style>
 </head>
 <body>
@@ -231,6 +274,157 @@ function switchProfileTab(tabId, btn) {
   if (el) el.classList.add('active');
   if (btn) btn.classList.add('active');
   if (tabId === 'record') { setTimeout(() => loadAnalytics(window._profileUserId), 60); }
+  if (tabId === 'sports') { setTimeout(() => loadSportsFlexScore(window._profileUserId), 60); }
+}
+
+// Lazy-load the Sports tab content. Reads /api/sports-predictors/:userId
+// (T5) and renders the Flex Score for Sports + five-component breakdown.
+// Re-entrant: if already loaded, no-op on subsequent tab switches.
+var _sportsFlexLoaded = false;
+async function loadSportsFlexScore(userId) {
+  if (_sportsFlexLoaded || !userId) return;
+  _sportsFlexLoaded = true;
+  const host = document.getElementById('tab-sports');
+  if (!host) return;
+  try {
+    const res = await fetch(`/api/sports-predictors/${encodeURIComponent(userId)}`);
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    host.innerHTML = renderSportsTab(data);
+  } catch (e) {
+    host.innerHTML = '<div class="empty"><div class="empty-emoji">⚡</div><div class="empty-title">Could not load sports record</div><div class="empty-sub">Try again in a minute.</div></div>';
+  }
+}
+
+function _fmtSigned(n, suffix) {
+  if (n == null || !isFinite(n)) return '—';
+  const v = parseFloat(n);
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + (suffix || '');
+}
+function _fmtPct(n) {
+  if (n == null || !isFinite(n)) return '—';
+  return parseFloat(n).toFixed(1) + '%';
+}
+function _fmtCLV(n) {
+  if (n == null || !isFinite(n)) return '—';
+  const v = parseFloat(n);
+  return (v >= 0 ? '+' : '') + v.toFixed(1) + '¢';
+}
+function _sportsTier(score) {
+  if (score == null) return { label: 'UNRANKED', color: 'var(--muted)' };
+  if (score >= 90) return { label: 'ORACLE',  color: 'var(--gold)' };
+  if (score >= 70) return { label: 'SHARP',   color: 'var(--green)' };
+  if (score >= 50) return { label: 'SOLID',   color: 'var(--blue)' };
+  return { label: 'SPECULATOR', color: 'var(--text-soft)' };
+}
+
+function _componentBar(label, value, max, color) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+  return `
+    <div class="sfs-comp">
+      <div class="sfs-comp-head">
+        <span class="sfs-comp-label">${label}</span>
+        <span class="sfs-comp-val"><b>${(+value).toFixed(1)}</b><span class="sfs-comp-max">/${max}</span></span>
+      </div>
+      <div class="sfs-comp-bar"><div class="sfs-comp-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+}
+
+function renderSportsTab(d) {
+  if (!d.has_score) {
+    return `
+      <div class="empty" style="padding:40px 20px;text-align:center">
+        <div class="empty-emoji" style="font-size:32px;margin-bottom:12px">🏆</div>
+        <div class="empty-title" style="font-size:16px;font-weight:800;margin-bottom:6px">No sports record yet</div>
+        <div class="empty-sub" style="font-size:13px;color:var(--text-soft);max-width:360px;margin:0 auto 18px;line-height:1.55">Post a settled sports pick to start your Flex Score for Sports.</div>
+        <a href="/picks/new" class="btn btn-gold">Lock your first pick →</a>
+      </div>`;
+  }
+
+  const score = d.score;
+  const qualifies = d.qualifies;
+  const tier = _sportsTier(score);
+  const t = d.thresholds || { MIN_SETTLED_BETS: 25, MIN_STAKED_UNITS: 500, MIN_ACTIVE_DAYS: 14 };
+
+  // Gauge at the top — big score + tier
+  const scoreHtml = qualifies
+    ? `<div class="sfs-gauge">
+         <div class="sfs-score" style="color:${tier.color}">${score}</div>
+         <div class="sfs-score-denom">/100</div>
+       </div>
+       <div class="sfs-tier" style="color:${tier.color};border-color:${tier.color}40;background:${tier.color}12">${tier.label}</div>`
+    : `<div class="sfs-gauge">
+         <div class="sfs-score" style="color:var(--muted);font-size:42px">—</div>
+       </div>
+       <div class="sfs-tier" style="color:var(--muted);border-color:var(--border)">BELOW THRESHOLD</div>`;
+
+  const components = qualifies ? `
+    <div class="sfs-comps">
+      ${_componentBar('P&L',         d.pnl_component         || 0, 40, 'var(--gold)')}
+      ${_componentBar('Volume',      d.volume_component      || 0, 20, 'var(--blue)')}
+      ${_componentBar('Consistency', d.consistency_component || 0, 15, 'var(--green)')}
+      ${_componentBar('CLV',         d.clv_component         || 0, 15, 'var(--gold)')}
+      ${_componentBar('Diversity',   d.diversity_component   || 0, 10, 'var(--purple)')}
+    </div>` : '';
+
+  // Threshold coaching when below the gate
+  const coachHtml = !qualifies ? `
+    <div class="sfs-coach glass-inset">
+      <div class="sfs-coach-head">Unlocks at</div>
+      <div class="sfs-coach-row">
+        <span>${t.MIN_SETTLED_BETS} settled picks</span>
+        <span class="sfs-coach-have">${parseInt(d.settled_bets || 0, 10)} / ${t.MIN_SETTLED_BETS}</span>
+      </div>
+      <div class="sfs-coach-row">
+        <span>${t.MIN_STAKED_UNITS}u staked</span>
+        <span class="sfs-coach-have">${(parseFloat(d.total_staked_units) || 0).toFixed(0)} / ${t.MIN_STAKED_UNITS}</span>
+      </div>
+      <div class="sfs-coach-row">
+        <span>${t.MIN_ACTIVE_DAYS} active days</span>
+        <span class="sfs-coach-have">${parseInt(d.active_days || 0, 10)} / ${t.MIN_ACTIVE_DAYS}</span>
+      </div>
+    </div>` : '';
+
+  const stats = `
+    <div class="sfs-stats">
+      <div class="sfs-stat"><div class="sfs-stat-l">NET P&amp;L</div><div class="sfs-stat-v" style="color:${parseFloat(d.net_units||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${_fmtSigned(d.net_units, 'u')}</div></div>
+      <div class="sfs-stat"><div class="sfs-stat-l">SETTLED</div><div class="sfs-stat-v">${parseInt(d.settled_bets || 0, 10)}</div></div>
+      <div class="sfs-stat"><div class="sfs-stat-l">CLV (AVG)</div><div class="sfs-stat-v" style="color:${parseFloat(d.avg_clv_cents||0) > 0 ? 'var(--green)' : parseFloat(d.avg_clv_cents||0) < 0 ? 'var(--red)' : 'var(--muted)'}">${_fmtCLV(d.avg_clv_cents)}</div></div>
+      <div class="sfs-stat"><div class="sfs-stat-l">SPORTS</div><div class="sfs-stat-v">${parseInt(d.distinct_sports || 0, 10)}</div></div>
+      <div class="sfs-stat"><div class="sfs-stat-l">BET TYPES</div><div class="sfs-stat-v">${parseInt(d.distinct_bet_types || 0, 10)}</div></div>
+      <div class="sfs-stat"><div class="sfs-stat-l">ACTIVE</div><div class="sfs-stat-v">${parseInt(d.active_days || 0, 10)}d</div></div>
+    </div>`;
+
+  const clvEducation = `
+    <div class="glass-inset sfs-edu">
+      <div class="sfs-edu-head">
+        <span class="sfs-edu-title">📈 CLV · Closing Line Value</span>
+        <span class="sfs-edu-val" style="color:${parseFloat(d.avg_clv_cents||0) > 0 ? 'var(--green)' : 'var(--muted)'}">${_fmtCLV(d.avg_clv_cents)}</span>
+      </div>
+      <div class="sfs-edu-body">Beating the close by <b>${_fmtCLV(d.avg_clv_cents)}</b> means you're getting better prices than the market thinks fair. Over time, positive CLV is the single best signal of sharp picks — more predictive than win rate.</div>
+      <div class="sfs-edu-foot">Time-decayed: 90d = 100%, 90-180d = 50%, older = 25%</div>
+    </div>`;
+
+  const ctas = `
+    <div class="sfs-ctas">
+      <a href="/picks/new" class="btn btn-gold">Lock another pick →</a>
+      <a href="/sports-predictors" class="btn btn-ghost">See leaderboard</a>
+    </div>`;
+
+  return `
+    <div class="sfs-head">
+      <div>
+        <div class="sfs-eyebrow">FLEX SCORE FOR SPORTS · v1</div>
+        <div class="sfs-title">${qualifies ? 'Ranked' : 'Tracking'} across <b>${parseInt(d.distinct_sports || 0, 10)}</b> sport${(d.distinct_sports || 0) === 1 ? '' : 's'}</div>
+      </div>
+      ${scoreHtml}
+    </div>
+    ${components}
+    ${coachHtml}
+    ${stats}
+    ${clvEducation}
+    ${ctas}
+  `;
 }
 
 // ── Challenge flow — opens modal for counter-prediction, posts to X ──
@@ -513,6 +707,7 @@ async function load() {
         <button class="tab-btn active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
         <button class="tab-btn" onclick="switchProfileTab('trades',this)">Trades${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
         <button class="tab-btn" onclick="switchProfileTab('record',this)">Track Record</button>
+        <button class="tab-btn" onclick="switchProfileTab('sports',this)">🏆 Sports</button>
       </div>
 
       <!-- TAKES -->
@@ -629,6 +824,11 @@ async function load() {
         <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:18px 0;border-top:1px solid var(--border);margin-top:22px">
           ${stats.settled_predictions || 0} settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
         </div>
+      </div>
+
+      <!-- Sports tab — populated lazily by loadSportsFlexScore() -->
+      <div id="tab-sports" class="tab-pane">
+        <div class="loading" style="padding:48px 20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading sports record…</div>
       </div>
 
       <!-- Owner tools -->
