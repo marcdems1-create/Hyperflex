@@ -17490,6 +17490,47 @@ async function syncUserPositions(user) {
           }
         }
       } catch (e) { console.warn('[copy-trade notify]', e.message); }
+
+      // ── Emit takes for followed-trader positions ────────────────────────
+      // Any user whose profile is followed gets their NEW positions turned
+      // into takes, regardless of size. Keeps the For You feed populated
+      // with activity from traders you follow — the $50k+ whale-synthesis
+      // path only catches the upper tail, this catches everyone else.
+      try {
+        let hasFollowers = false;
+        if (pool) {
+          const fRows = await dbQuery('SELECT 1 FROM predictor_follows WHERE following_id = $1 LIMIT 1', [user.id]);
+          hasFollowers = fRows.length > 0;
+        } else if (supabase) {
+          const { data: f } = await supabase.from('predictor_follows').select('follower_id').eq('following_id', user.id).limit(1);
+          hasFollowers = !!(f && f.length);
+        }
+        if (hasFollowers) {
+          const polyPositions = newPositions.filter(p => p.platform === 'polymarket' && p.external_id);
+          if (polyPositions.length) {
+            const name = user.display_name || (user.polymarket_address ? user.polymarket_address.slice(0, 6) + '…' + user.polymarket_address.slice(-4) : 'Trader');
+            for (const pos of polyPositions.slice(0, 10)) {
+              // Dedup: skip if we already have a take for this user+market+side in last 6h
+              const existing = await dbQuery(
+                `SELECT id FROM takes WHERE user_id = $1 AND condition_id = $2 AND side = $3
+                 AND created_at > now() - interval '6 hours' LIMIT 1`,
+                [user.id, pos.external_id, (pos.side || '').toUpperCase()]
+              ).catch(() => []);
+              if (existing.length) continue;
+              const pricePct = pos.probability ? Math.round(pos.probability * 100) + '¢' : '';
+              const sharesStr = pos.shares ? Math.round(pos.shares).toLocaleString() + ' shares' : 'a new position';
+              const thesis = `${name} opened ${sharesStr} ${(pos.side || 'YES').toUpperCase()}${pricePct ? ' at ' + pricePct : ''} on Polymarket.`;
+              const slug = (pos.market_url || '').replace(/^https?:\/\/polymarket\.com\/event\//, '').split('?')[0] || null;
+              await dbQuery(
+                `INSERT INTO takes (user_id, display_name, market_slug, condition_id, question, side, entry_price, thesis, source)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'whale')`,
+                [user.id, name, slug, pos.external_id, pos.market_title || '', (pos.side || 'YES').toUpperCase(), pos.probability || null, thesis]
+              ).catch(() => {});
+            }
+            console.log(`[followed-takes] user=${user.id} emitted ${polyPositions.length} takes (has followers)`);
+          }
+        }
+      } catch (e) { console.warn('[followed-takes]', e.message); }
     }
   }
 
@@ -25385,10 +25426,12 @@ async function fetchWhalePositions() {
         }
       }
 
-      // Find consensus: 3+ whales on same side
+      // Find consensus: 2+ whales on same side (lowered from 3 — 2 aligned
+      // whales is already a meaningful sharp-money signal and keeps the
+      // consensus feed populated on days when fewer markets cluster hard).
       const consensusCandidates = [];
       for (const [key, c] of consensusMap.entries()) {
-        if (c.whales.size >= 3) {
+        if (c.whales.size >= 2) {
           const avgPrice = c.priceCount > 0 ? c.priceSum / c.priceCount : null;
           consensusCandidates.push({
             market: c.market, side: c.side,
