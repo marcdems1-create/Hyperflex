@@ -332,27 +332,43 @@
     { href: '/feed', label: '💬 Feed', gold: true }
   ];
 
-  // Profile navigation helper — reads JWT at click time, not at page load
-  window._goToMyProfile = function() {
-    var tokens = [localStorage.getItem('hf_token'), localStorage.getItem('hf_creator_token')].filter(Boolean);
-    for (var i = 0; i < tokens.length; i++) {
-      try {
-        var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        var uid = p.userId || p.sub || p.id;
-        if (uid) { window.location.href = '/m/' + uid; return; }
-      } catch (e) {}
-    }
+  // Profile navigation helper — resolves canonical URL client-side via
+  // /api/user/me.profile_url (which returns /@handle when set). This
+  // bypasses the /m/:userId → /@handle 302 hop so browsers never cache
+  // a stale redirect from a previous handle.
+  window._goToMyProfile = async function() {
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!tok) { window.location.href = '/creator/login'; return; }
+    try {
+      var r = await fetch('/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
+      if (r.ok) {
+        var d = await r.json();
+        if (d && d.user && d.user.profile_url) { window.location.href = d.user.profile_url; return; }
+      }
+    } catch (e) {}
+    // Fallback: decode uid from JWT and use /m/:uid (server 302s to /@handle).
+    try {
+      var p = JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      var uid = p.userId || p.sub || p.id;
+      if (uid) { window.location.href = '/m/' + uid; return; }
+    } catch (e) {}
     window.location.href = '/creator/login';
   };
-  window._goToMyPassport = function() {
-    var tokens = [localStorage.getItem('hf_token'), localStorage.getItem('hf_creator_token')].filter(Boolean);
-    for (var i = 0; i < tokens.length; i++) {
-      try {
-        var p = JSON.parse(atob(tokens[i].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        var uid = p.userId || p.sub || p.id;
-        if (uid) { window.location.href = '/passport/' + uid; return; }
-      } catch (e) {}
-    }
+  window._goToMyPassport = async function() {
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!tok) { window.location.href = '/creator/login'; return; }
+    try {
+      var r = await fetch('/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
+      if (r.ok) {
+        var d = await r.json();
+        if (d && d.user && d.user.handle) { window.location.href = '/@' + d.user.handle + '/passport'; return; }
+      }
+    } catch (e) {}
+    try {
+      var p = JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      var uid = p.userId || p.sub || p.id;
+      if (uid) { window.location.href = '/passport/' + uid; return; }
+    } catch (e) {}
     window.location.href = '/creator/login';
   };
   // Secondary links in "More" dropdown — reordered: actionable first, meta last

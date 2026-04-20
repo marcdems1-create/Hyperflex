@@ -11061,8 +11061,8 @@ app.get('/u/:slug', async (req, res) => {
     }
     if (creatorId) {
       const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [creatorId]).catch(() => []);
-      if (hRows[0] && hRows[0].handle) return res.redirect(301, '/@' + hRows[0].handle);
-      return res.redirect(301, '/m/' + encodeURIComponent(creatorId));
+      if (hRows[0] && hRows[0].handle) return res.redirect(302, '/@' + hRows[0].handle);
+      return res.redirect(302, '/m/' + encodeURIComponent(creatorId));
     }
   } catch (err) {
     console.warn('[u-redirect]', err.message);
@@ -11229,7 +11229,7 @@ app.get('/m/:userId', async (req, res) => {
   try {
     const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
     const handle = rows[0]?.handle;
-    if (handle) return res.redirect(301, '/@' + handle);
+    if (handle) return res.redirect(302, '/@' + handle);
   } catch {}
   // Fall through: if the user has no handle yet, serve the page so the
   // UI can render and either prompt for handle claim (if owner) or show
@@ -11243,7 +11243,7 @@ app.get('/m/:userId', async (req, res) => {
 app.get('/passport/:userId', async (req, res) => {
   try {
     const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
-    if (rows[0] && rows[0].handle) return res.redirect(301, '/@' + rows[0].handle + '/passport');
+    if (rows[0] && rows[0].handle) return res.redirect(302, '/@' + rows[0].handle + '/passport');
   } catch {}
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
@@ -11670,7 +11670,7 @@ app.get('/trader/:address', async (req, res) => {
       const uid = await ensureWhaleProfile(addr, shortName, null, null);
       if (uid) {
         const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [uid]).catch(() => []);
-        if (hRows[0] && hRows[0].handle) return res.redirect(301, '/@' + hRows[0].handle);
+        if (hRows[0] && hRows[0].handle) return res.redirect(302, '/@' + hRows[0].handle);
       }
     } catch {}
   }
@@ -26733,7 +26733,7 @@ app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 // /t/:handle is the legacy tipster URL. Collapse to the canonical
 // /@{handle}. Tipsters are just users now (T1 rip) so there's no separate
 // tipster profile — the @username page shows everything including picks.
-app.get('/t/:handle', (req, res) => res.redirect(301, '/@' + req.params.handle));
+app.get('/t/:handle', (req, res) => res.redirect(302, '/@' + req.params.handle));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
