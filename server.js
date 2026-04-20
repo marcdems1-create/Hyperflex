@@ -35281,6 +35281,71 @@ function getBuilderHeaders(method, path, body) {
   };
 }
 
+// POST /api/polymarket/safe-submit — relayer-sponsored Safe execTransaction
+//
+// Frontend builds + EIP-712 signs a SafeTx (chainId=137, verifyingContract=
+// proxyWallet, no name/version — Safe v1.3.0 domain). We forward to
+// Polymarket's relayer-v2 /submit endpoint with our POLY_BUILDER_* HMAC
+// credentials. Polymarket pays gas, user signs only.
+//
+// Whitelist note: relayer-v2 documents an explicit allowlist of `to`
+// targets for builder submits (USDC.e, CTF, CTF Exchange, NegRisk).
+// CollateralOnramp's status was unverified at build time — if the relayer
+// rejects, frontend falls back to direct execTransaction (user pays MATIC).
+//
+// Body shape mirrors Polymarket's spec exactly:
+//   { from, to, proxyWallet, data, nonce, signature, signatureParams, type }
+app.post('/api/polymarket/safe-submit', optionalAuth, async (req, res) => {
+  const { from, to, proxyWallet, data, nonce, signature } = req.body || {};
+  if (!from || !to || !proxyWallet || !data || nonce == null || !signature) {
+    return res.status(400).json({ error: 'from, to, proxyWallet, data, nonce, signature required' });
+  }
+  if (!_builderCreds) {
+    return res.status(503).json({ error: 'Builder credentials not configured on server' });
+  }
+
+  // Polymarket relayer SAFE-type body. signatureParams MUST match the values
+  // the user EIP-712-signed over — change anything here and the relayer
+  // rejects with a sig-mismatch error.
+  const relayerBody = {
+    from,
+    to,
+    proxyWallet,
+    data,
+    nonce: String(nonce),
+    signature,
+    signatureParams: {
+      gasPrice: '0', operation: '0',
+      safeTxnGas: '0', baseGas: '0',
+      gasToken: '0x0000000000000000000000000000000000000000',
+      refundReceiver: '0x0000000000000000000000000000000000000000',
+    },
+    type: 'SAFE',
+  };
+  const bodyStr = JSON.stringify(relayerBody);
+  const headers = {
+    'Content-Type': 'application/json',
+    ...getBuilderHeaders('POST', '/submit', bodyStr),
+  };
+
+  try {
+    const r = await fetch('https://relayer-v2.polymarket.com/submit', {
+      method: 'POST', headers, body: bodyStr,
+    });
+    const text = await r.text();
+    let json; try { json = JSON.parse(text); } catch (e) { json = { raw: text }; }
+    if (!r.ok) {
+      console.warn('[safe-submit] relayer rejected', r.status, '-', text.slice(0, 240));
+      return res.status(r.status).json({ error: 'Relayer rejected', status: r.status, detail: json });
+    }
+    console.log('[safe-submit] OK | tx=' + (json.transactionHash || json.transactionID || '?') + ' | proxy=' + proxyWallet.slice(0, 10) + '… | to=' + to.slice(0, 10) + '…');
+    return res.json(json);
+  } catch (e) {
+    console.error('[safe-submit] fetch error:', e.message);
+    return res.status(502).json({ error: 'Relayer unreachable: ' + e.message });
+  }
+});
+
 // POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
 // The client handles EIP-712 order signing + HMAC signing; this proxy just forwards to CLOB
 // Used as CORS fallback when browser can't reach clob.polymarket.com directly

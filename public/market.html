@@ -2969,10 +2969,15 @@ var SAFE_ABI = [
 ];
 var ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 
-// Build + sign + submit a SafeTx through the Polymarket proxy. Returns the
-// transaction receipt. The EOA must (a) be an owner of the Safe and (b) have
-// MATIC to pay gas — direct execTransaction. A relayer-sponsored variant
-// will land in a follow-up commit when the relayer endpoint is confirmed.
+// Build + sign + submit a SafeTx through the Polymarket proxy.
+//
+// Dispatch strategy:
+//   1. Try Polymarket's relayer first (gas-sponsored, no MATIC needed) via
+//      our server's /api/polymarket/safe-submit endpoint. The endpoint
+//      forwards to relayer-v2.polymarket.com/submit with our builder HMAC.
+//   2. If the relayer rejects (allowlist may not include CollateralOnramp
+//      for third-party builders), fall back to direct execTransaction —
+//      EOA pays MATIC for gas. We surface a clear error if MATIC is missing.
 async function executeViaProxy(toAddr, calldata, valueWei) {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
   var eoaAddr   = localStorage.getItem('poly_eoa_address');
@@ -3011,27 +3016,64 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     refundReceiver: ZERO_ADDR,
     nonce:          nonce.toString(),
   };
+  // Safe v1.3.0 EIP-712 domain: chainId + verifyingContract ONLY (no
+  // name/version — different from Safe v1.0.0 / v1.1.x).
   var domain = { chainId: 137, verifyingContract: proxyAddr };
 
   console.log('[safe] signing SafeTx', { to: toAddr, dataLen: calldata.length, nonce: safeTx.nonce });
   var sig = await signer.signTypedData(domain, SAFE_TX_TYPES, safeTx);
 
-  // Submit. EOA pays MATIC for gas. If they have none, this throws
-  // INSUFFICIENT_FUNDS — surface a clean message instead of the raw revert.
+  // ── Path 1: relayer-sponsored ────────────────────────────────────────────
+  try {
+    var relayResp = await fetch('/api/polymarket/safe-submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: eoaAddr, to: toAddr, proxyWallet: proxyAddr,
+        data: calldata, nonce: safeTx.nonce, signature: sig,
+      }),
+    });
+    if (relayResp.ok) {
+      var relayJson = await relayResp.json();
+      var txHash = relayJson.transactionHash || relayJson.txHash || null;
+      console.log('[safe] relayer accepted | id=' + (relayJson.transactionID || '?') + ' | tx=' + (txHash || 'pending'));
+      // Poll receipt if we have a hash; otherwise return early — caller
+      // can re-check downstream balance to confirm the tx landed.
+      if (txHash) {
+        try {
+          var pubProvider = await getPublicProvider();
+          var receipt = await pubProvider.waitForTransaction(txHash, 1, 60000);
+          console.log('[safe] relayed tx mined:', txHash, 'status=' + (receipt && receipt.status));
+          return receipt;
+        } catch (waitErr) {
+          console.warn('[safe] receipt wait timed out, returning relayer ack:', waitErr.message);
+          return { transactionHash: txHash, relayed: true };
+        }
+      }
+      return { relayed: true, ack: relayJson };
+    }
+    // Non-OK → log the body and fall through to direct dispatch.
+    var relayErrText = await relayResp.text();
+    console.warn('[safe] relayer rejected — falling back to direct execTransaction. status=' + relayResp.status + ' body=' + relayErrText.slice(0, 240));
+  } catch (relayErr) {
+    console.warn('[safe] relayer unreachable — falling back to direct execTransaction:', relayErr.message);
+  }
+
+  // ── Path 2: direct execTransaction (EOA pays MATIC) ──────────────────────
   try {
     var tx = await safe.execTransaction(
       safeTx.to, safeTx.value, safeTx.data, safeTx.operation,
       safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice,
       safeTx.gasToken, safeTx.refundReceiver, sig
     );
-    console.log('[safe] execTransaction submitted:', tx.hash);
-    var receipt = await tx.wait();
-    console.log('[safe] execTransaction mined:', receipt.transactionHash || tx.hash, 'status=' + receipt.status);
-    return receipt;
+    console.log('[safe] direct execTransaction submitted:', tx.hash);
+    var receipt2 = await tx.wait();
+    console.log('[safe] direct execTransaction mined:', receipt2.transactionHash || tx.hash, 'status=' + receipt2.status);
+    return receipt2;
   } catch (e) {
     var msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
     if (e && (e.code === 'INSUFFICIENT_FUNDS' || /insufficient funds/i.test(msg))) {
-      throw new Error('You need a small amount of MATIC to wrap. Bridge ~$1 of MATIC to ' + eoaAddr.slice(0,8) + '… and try again.');
+      throw new Error('Polymarket relayer rejected this tx and your wallet has no MATIC for the fallback. Bridge ~$1 of MATIC to ' + eoaAddr.slice(0,8) + '… and try again, or wrap directly on polymarket.com.');
     }
     if (e && (e.code === 'ACTION_REJECTED' || e.code === 4001)) {
       throw new Error('Signature rejected in MetaMask — wrap cancelled.');
