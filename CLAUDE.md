@@ -363,10 +363,17 @@ Matches official SDK order.
 - EIP-712 domain version flips `"1"` → `"2"`
 - `makerAmount` denominated in **pUSD, not USDC.e** — V2 BUY orders fail at fill if proxy lacks pUSD balance
 - Users must wrap USDC.e → pUSD via CollateralOnramp before trading V2 (no auto-conversion)
-- Wrap requires Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — NOT YET WIRED
+- Wrap is dispatched as a Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — wired via `executeViaProxy()` in `market.html` + `dashExecuteViaProxy()` in `creator-dashboard.html`, with relayer-first dispatch (`POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`) and direct execTransaction fallback
 - POLY_BUILDER_* HMAC headers still used in V2 alongside the on-chain `order.builder` bytes32
 
 **Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default flips to V2 before April 22 cutover.
+
+**V2 must-do before flipping default:**
+1. Verify the Polymarket Safe singleton via `factory.masterCopy()` on Polygon — research said v1.3.0 but flagged as unverified. EIP-712 domain depends on this (v1.3.0 = `{chainId, verifyingContract}` no name/version; older versions differ).
+2. Live-test `POST /api/polymarket/safe-submit` with a real wrap to confirm relayer accepts `to = CollateralOnramp` for our builder key. Relayer-v2 allowlist documents USDC.e/CTF/Exchange targets but Onramp's status is unverified. If rejected, direct execTransaction fallback works but requires EOA MATIC.
+3. Migrate V2 approvals from EOA-signed `token.approve()` to Safe execTransaction approve dispatched via the same `executeViaProxy` path. Current code mirrors V1's EOA approve pattern, which works for V1 (probably via Polymarket's Safe fallback handler) but unverified for V2.
+4. Amoy testnet (chainId 80002) smoke test — same V2 contract addresses deterministic deploy. Test wrap + approve + order path end-to-end before mainnet flip.
+5. Get the builder profile verified at polymarket.com/settings?tab=builder and set non-zero maker/taker fee rate (currently 0% — attributed V2 trades earn nothing otherwise).
 
 ### Market vs Limit order rules — DIFFERENT decimal constraints
 
