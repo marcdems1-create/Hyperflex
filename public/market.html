@@ -2822,29 +2822,41 @@ async function checkProxyDeployed(proxyAddr) {
   }
 }
 
-// Step 3: Check USDC allowance for both exchange contracts
+// Step 3: Check USDC allowance for both exchange contracts (V1 + V2 when flag on).
+// V2 contracts are completely separate from V1 — approvals do NOT carry over.
+// On April 22 cutover every user trading V2 needs new approvals for V2 addresses,
+// so we surface them through the normal setup flow when isClobV2Enabled().
 async function checkTokenApproval() {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr) return { ctf: false, negRisk: false };
+  if (!proxyAddr) return { ctf: false, negRisk: false, ctfV2: false, negRiskV2: false };
   try {
     var provider = await getPublicProvider();
     var abi = ['function allowance(address owner, address spender) view returns (uint256)'];
     var usdc = new ethers.Contract(USDC_ADDRESS, abi, provider);
     var ctfAllowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE);
     var negAllowance = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE);
+    var ctfV2Allowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE_V2);
+    var negV2Allowance = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE_V2);
     // Consider approved if allowance > 1M USDC (generous threshold)
     var threshold = ethers.parseUnits('1000000', 6);
     var ctfOk = ctfAllowance >= threshold;
     var negOk = negAllowance >= threshold;
-    console.log('[setup] USDC allowance — CTF:', ethers.formatUnits(ctfAllowance, 6), ctfOk ? 'OK' : 'LOW', '| NegRisk:', ethers.formatUnits(negAllowance, 6), negOk ? 'OK' : 'LOW');
-    return { ctf: ctfOk, negRisk: negOk };
+    var ctfV2Ok = ctfV2Allowance >= threshold;
+    var negV2Ok = negV2Allowance >= threshold;
+    console.log('[setup] USDC allowance — CTF V1:', ethers.formatUnits(ctfAllowance, 6), ctfOk ? 'OK' : 'LOW',
+      '| NegRisk V1:', ethers.formatUnits(negAllowance, 6), negOk ? 'OK' : 'LOW',
+      '| CTF V2:', ethers.formatUnits(ctfV2Allowance, 6), ctfV2Ok ? 'OK' : 'LOW',
+      '| NegRisk V2:', ethers.formatUnits(negV2Allowance, 6), negV2Ok ? 'OK' : 'LOW');
+    return { ctf: ctfOk, negRisk: negOk, ctfV2: ctfV2Ok, negRiskV2: negV2Ok };
   } catch (e) {
     console.warn('[setup] Allowance check error:', e.message);
-    return { ctf: false, negRisk: false };
+    return { ctf: false, negRisk: false, ctfV2: false, negRiskV2: false };
   }
 }
 
-// Step 3 action: Approve USDC for both exchange contracts
+// Step 3 action: Approve USDC for both exchange contracts (V1 always; V2 added
+// when ?clob_v2=1 / window.HF_USE_CLOB_V2 is set, since V2 contracts need
+// their own allowance grants — V1 approvals do not carry over).
 async function approveTokens() {
   var btn = document.getElementById('setupBtn3');
   if (btn) { btn.disabled = true; btn.textContent = 'Approving...'; }
@@ -2858,21 +2870,20 @@ async function approveTokens() {
 
     // Check which exchanges need approval
     var status = await checkTokenApproval();
+    var v2On = isClobV2Enabled();
+    var pending = [];
+    if (!status.ctf) pending.push({ label: 'CTF V1', addr: CTF_EXCHANGE });
+    if (!status.negRisk) pending.push({ label: 'NegRisk V1', addr: NEG_RISK_EXCHANGE });
+    if (v2On && !status.ctfV2) pending.push({ label: 'CTF V2', addr: CTF_EXCHANGE_V2 });
+    if (v2On && !status.negRiskV2) pending.push({ label: 'NegRisk V2', addr: NEG_RISK_EXCHANGE_V2 });
 
-    if (!status.ctf) {
-      showTradeStatus('Approve USDC for exchange (1/2)...', 'info');
-      console.log('[setup] Approving CTF exchange...');
-      var tx1 = await usdc.approve(CTF_EXCHANGE, MAX_UINT256);
-      await tx1.wait();
-      console.log('[setup] CTF exchange approved');
-    }
-
-    if (!status.negRisk) {
-      showTradeStatus('Approve USDC for neg-risk exchange (2/2)...', 'info');
-      console.log('[setup] Approving NegRisk exchange...');
-      var tx2 = await usdc.approve(NEG_RISK_EXCHANGE, MAX_UINT256);
-      await tx2.wait();
-      console.log('[setup] NegRisk exchange approved');
+    for (var i = 0; i < pending.length; i++) {
+      var step = pending[i];
+      showTradeStatus('Approve USDC for ' + step.label + ' (' + (i + 1) + '/' + pending.length + ')...', 'info');
+      console.log('[setup] Approving ' + step.label + ' (' + step.addr + ')...');
+      var tx = await usdc.approve(step.addr, MAX_UINT256);
+      await tx.wait();
+      console.log('[setup] ' + step.label + ' approved');
     }
 
     setSetupStep(3, 'done', 'Approve USDC Spending');
@@ -2949,13 +2960,19 @@ async function checkTradingSetup() {
     if (btn2) btn2.style.display = 'inline-block';
   }
 
-  // Step 3: Token approval (only check if proxy is deployed)
+  // Step 3: Token approval (only check if proxy is deployed). When V2 is on
+  // require V2 approvals too — V1 approvals do not carry to V2 contracts.
   if (deployed && proxyValid) {
     var approval = await checkTokenApproval();
-    if (approval.ctf && approval.negRisk) {
+    var v2On = isClobV2Enabled();
+    var v1Done = approval.ctf && approval.negRisk;
+    var v2Done = !v2On || (approval.ctfV2 && approval.negRiskV2);
+    if (v1Done && v2Done) {
       setSetupStep(3, 'done', 'Approve USDC Spending');
     } else {
-      setSetupStep(3, 'active', 'Approve USDC Spending' + (!approval.ctf && !approval.negRisk ? '' : approval.ctf ? ' (neg-risk)' : ' (exchange)'));
+      var label = 'Approve USDC Spending';
+      if (v2On && !v2Done) label += ' (V2 needed)';
+      setSetupStep(3, 'active', label);
       var btn3 = document.getElementById('setupBtn3');
       if (btn3) { btn3.style.display = 'inline-block'; btn3.disabled = false; btn3.textContent = 'Approve'; }
     }
@@ -3652,9 +3669,12 @@ async function runFullSetup() {
   }
   setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
 
-  // Step 3: Approve USDC
+  // Step 3: Approve USDC (V1 always; V2 too when flag on — V1 approvals don't carry)
   var approval = await checkTokenApproval();
-  if (!approval.ctf || !approval.negRisk) {
+  var _v2On = isClobV2Enabled();
+  var _v1Missing = !approval.ctf || !approval.negRisk;
+  var _v2Missing = _v2On && (!approval.ctfV2 || !approval.negRiskV2);
+  if (_v1Missing || _v2Missing) {
     setSetupStep(3, 'active', 'Approving USDC spending...');
     if (cta) cta.textContent = 'Approving USDC...';
     var approved = await approveTokens();
