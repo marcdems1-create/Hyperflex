@@ -3731,6 +3731,115 @@ cron.schedule('* * * * *', safeCron('pollNbaGames', pollNbaGames));
 // Seed teams on boot (fire-and-forget — boot doesn't block on ESPN).
 setTimeout(() => { seedNbaTeams().catch(() => {}); }, 15000);
 
+// ── PICK RESOLUTION ────────────────────────────────────────────────────────
+// When a game goes final, score every unsettled pick on that game. Rules:
+//   - moneyline: side 'home'/'away' — higher score wins, no push
+//   - spread:    side 'home'/'away' with line — (score + line) vs opponent
+//   - total:     side 'over'/'under' vs line — (home+away) vs line
+//   - prop:      skipped here; props require manual/community resolution
+// American odds payout: +150 → 1u wins 1.5u; -200 → 1u wins 0.5u. Stored as
+// settled_units SIGNED: +1.5 for win, -1 for loss, 0 for push/void.
+
+function americanOddsPayout(units, odds) {
+  const o = Number(odds);
+  if (o > 0) return units * (o / 100);
+  if (o < 0) return units * (100 / Math.abs(o));
+  return 0;
+}
+
+function scorePick(pick, home, away) {
+  // Returns { status: 'win'|'loss'|'push'|'void', settled_units }.
+  const h = Number(home), a = Number(away);
+  if (!Number.isFinite(h) || !Number.isFinite(a)) return { status: 'void', settled_units: 0 };
+  const units = Number(pick.units);
+  const odds  = Number(pick.odds);
+  const line  = pick.line != null ? Number(pick.line) : null;
+
+  if (pick.bet_type === 'moneyline') {
+    if (h === a) return { status: 'push', settled_units: 0 };
+    const homeWon = h > a;
+    const didWin = (pick.side === 'home' && homeWon) || (pick.side === 'away' && !homeWon);
+    return didWin
+      ? { status: 'win',  settled_units: +americanOddsPayout(units, odds) }
+      : { status: 'loss', settled_units: -units };
+  }
+  if (pick.bet_type === 'spread') {
+    if (line == null) return { status: 'void', settled_units: 0 };
+    const adjusted = pick.side === 'home' ? (h + line) - a : (a + line) - h;
+    if (adjusted === 0) return { status: 'push', settled_units: 0 };
+    return adjusted > 0
+      ? { status: 'win',  settled_units: +americanOddsPayout(units, odds) }
+      : { status: 'loss', settled_units: -units };
+  }
+  if (pick.bet_type === 'total') {
+    if (line == null) return { status: 'void', settled_units: 0 };
+    const total = h + a;
+    if (total === line) return { status: 'push', settled_units: 0 };
+    const overWon = total > line;
+    const didWin = (pick.side === 'over' && overWon) || (pick.side === 'under' && !overWon);
+    return didWin
+      ? { status: 'win',  settled_units: +americanOddsPayout(units, odds) }
+      : { status: 'loss', settled_units: -units };
+  }
+  // prop: skip auto-resolution; leave unsettled for manual/community handling.
+  return null;
+}
+
+async function resolveFinishedGames() {
+  if (!pool) return;
+  try {
+    // Pull finalized games that have at least one unsettled pick.
+    const games = await dbQuery(
+      `SELECT g.id, g.home_score, g.away_score
+         FROM sport_games g
+        WHERE g.status = 'final'
+          AND EXISTS (
+            SELECT 1 FROM picks p
+             WHERE p.game_id = g.id AND p.settlement_status IS NULL
+          )
+        LIMIT 100`
+    );
+    for (const g of games) {
+      const picks = await dbQuery(
+        `SELECT id, user_id, bet_type, side, line, odds, units
+           FROM picks
+          WHERE game_id = $1 AND settlement_status IS NULL`,
+        [g.id]
+      );
+      for (const p of picks) {
+        const result = scorePick(p, g.home_score, g.away_score);
+        if (!result) continue;  // prop, skip
+        await dbQuery(
+          `UPDATE picks
+              SET settlement_status = $1, settled_units = $2, settled_at = now()
+            WHERE id = $3 AND settlement_status IS NULL`,
+          [result.status, result.settled_units, p.id]
+        );
+        // Nice-to-have: notify the picker when their call scores. Reuses the
+        // existing notifications infrastructure so the bell + email hooks
+        // fire without new plumbing.
+        try {
+          await dbQuery(
+            `INSERT INTO notifications (user_id, type, title, body, link)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [p.user_id, 'pick_' + result.status,
+             result.status === 'win'  ? 'Your pick hit ✓' :
+             result.status === 'loss' ? 'Your pick missed' :
+             result.status === 'push' ? 'Your pick pushed' : 'Your pick voided',
+             (result.settled_units >= 0 ? '+' : '') + result.settled_units.toFixed(2) + ' units',
+             '/picks/' + p.id]
+          );
+        } catch (nErr) { /* notifications table may not exist yet on a fresh deploy */ }
+      }
+    }
+    if (games.length) console.log('[picks] resolved ' + games.length + ' finished games');
+  } catch (e) { console.error('[picks] resolveFinishedGames error:', e.message); }
+}
+
+// Run every 2 min — the ingestion cron already picks up status→final within
+// ~60s, so this cron typically settles within 3 minutes of a game ending.
+cron.schedule('*/2 * * * *', safeCron('resolveFinishedGames', resolveFinishedGames));
+
 // ── EMAIL QUEUE PROCESSOR ─────────────────────────────────────────────────
 // Picks up any pending_emails where send_after <= now, sends them, marks sent
 async function processPendingEmails() {
