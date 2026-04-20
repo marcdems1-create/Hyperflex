@@ -11700,6 +11700,90 @@ app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
   }
 });
 
+// ── WALLET-BASED FOLLOW ─────────────────────────────────────────────────────
+// POST /api/follow/wallet/:address — follow (or unfollow) a Polymarket trader
+// by their wallet address. Guarantees a target user_id exists via
+// ensureWhaleProfile() so the /trader/:address page can follow any active
+// trader without depending on the frontend-passed hfx_user_id.
+app.post('/api/follow/wallet/:address', requireAuth, async (req, res) => {
+  try {
+    const addr = (req.params.address || '').trim();
+    if (!/^0x[0-9a-fA-F]{40}$/i.test(addr)) return res.status(400).json({ error: 'Invalid wallet address' });
+    const addrLower = addr.toLowerCase();
+
+    // Resolve or create the target user row. ensureWhaleProfile handles both:
+    // returns the existing user_id if one exists for this wallet, else creates
+    // a new whale-style user and returns its id. Cached in _whaleUserCache.
+    const shortName = addrLower.slice(0, 6) + '…' + addrLower.slice(-4);
+    const targetUserId = await ensureWhaleProfile(addrLower, shortName, null, null);
+    if (!targetUserId) return res.status(500).json({ error: 'Could not activate profile' });
+    if (targetUserId === req.user.id) return res.status(400).json({ error: 'Cannot follow yourself' });
+
+    // Toggle follow in predictor_follows
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [req.user.id, targetUserId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', req.user.id).eq('following_id', targetUserId).maybeSingle();
+      existing = data;
+    }
+    if (existing) {
+      if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE id = $1', [existing.id]); }
+      else { await supabase.from('predictor_follows').delete().eq('id', existing.id); }
+      return res.json({ following: false, target_user_id: targetUserId });
+    }
+    if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [req.user.id, targetUserId]); }
+    else { await supabase.from('predictor_follows').insert({ follower_id: req.user.id, following_id: targetUserId }); }
+    res.json({ following: true, target_user_id: targetUserId });
+  } catch (e) {
+    console.error('[follow-wallet]', e.message);
+    res.status(500).json({ error: 'Follow failed' });
+  }
+});
+
+// GET /api/follow/wallet/:address/status — current follow state + follower count
+app.get('/api/follow/wallet/:address/status', optionalAuth, async (req, res) => {
+  try {
+    const addr = (req.params.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-fA-F]{40}$/i.test(addr)) return res.status(400).json({ error: 'Invalid wallet address' });
+
+    // Look up target user WITHOUT creating one — status queries should be free.
+    let targetUserId = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]);
+      if (rows[0]) targetUserId = rows[0].id;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('id').ilike('polymarket_address', addr).maybeSingle();
+      if (data) targetUserId = data.id;
+    }
+    if (!targetUserId) return res.json({ is_following: false, follower_count: 0, target_user_id: null });
+
+    let isFollowing = false;
+    if (req.userId) {
+      if (pool) {
+        const rows = await dbQuery('SELECT 1 FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [req.userId, targetUserId]);
+        isFollowing = rows.length > 0;
+      } else {
+        const { data } = await supabase.from('predictor_follows').select('follower_id').eq('follower_id', req.userId).eq('following_id', targetUserId).maybeSingle();
+        isFollowing = !!data;
+      }
+    }
+    let followerCount = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT COUNT(*)::int AS c FROM predictor_follows WHERE following_id = $1', [targetUserId]);
+      followerCount = rows[0]?.c || 0;
+    } else {
+      const { count } = await supabase.from('predictor_follows').select('*', { count: 'exact', head: true }).eq('following_id', targetUserId);
+      followerCount = count || 0;
+    }
+    res.json({ is_following: isFollowing, follower_count: followerCount, target_user_id: targetUserId });
+  } catch (e) {
+    console.error('[follow-wallet status]', e.message);
+    res.status(500).json({ error: 'Status failed' });
+  }
+});
+
 // List all predictor follows for the current user
 app.get('/api/predictors/following/list', requireAuth, async (req, res) => {
   try {
@@ -14590,23 +14674,40 @@ app.get('/api/takes/hot', async (req, res) => {
   }
 });
 
-// GET /api/takes/feed — main social feed (For You includes followed users)
+// GET /api/takes/feed — main social feed (For You + Following-boost)
 app.get('/api/takes/feed', optionalAuth, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const cursor = req.query.cursor; // ISO timestamp for pagination
 
-    // "For You" — algorithmic: recency × engagement × sharp_score × source variety
+    // Fetch follower's predictor_follows so we can push followed-user takes
+    // to the top of For You. Without this, "follow" has zero effect on the
+    // feed — the whole social loop is broken.
+    let followedIds = [];
+    if (req.userId) {
+      try {
+        const fr = await dbQuery('SELECT following_id FROM predictor_follows WHERE follower_id = $1', [req.userId]);
+        followedIds = fr.map(r => r.following_id).filter(Boolean);
+      } catch (_) { /* predictor_follows may not exist — treat as no follows */ }
+    }
+
+    // "For You" — recency × engagement × sharp, plus a FOLLOW boost so
+    // takes from accounts you follow surface hard (+20), whale/consensus
+    // signal boost, and a small thesis-quality boost.
     let sql = `SELECT t.*,
       (COALESCE(t.agree_count, 0) + COALESCE(t.disagree_count, 0)) *
       (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
       (1.0 + COALESCE(t.sharp_score, 0) / 100.0) +
       CASE WHEN t.source = 'whale' THEN 5 WHEN t.source = 'consensus' THEN 8 ELSE 0 END +
-      CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END
-      AS feed_score
-      FROM takes t WHERE 1=1`;
+      CASE WHEN t.thesis IS NOT NULL AND LENGTH(t.thesis) > 20 THEN 3 ELSE 0 END`;
     let params = [];
     let paramIdx = 1;
+    if (followedIds.length) {
+      sql += ` + CASE WHEN t.user_id = ANY($${paramIdx}) THEN 20 ELSE 0 END`;
+      params.push(followedIds);
+      paramIdx++;
+    }
+    sql += ` AS feed_score FROM takes t WHERE 1=1`;
     if (cursor) {
       sql += ` AND t.created_at < $${paramIdx}`;
       params.push(cursor);
