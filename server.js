@@ -7080,6 +7080,33 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       }
     }
 
+    // Auto-claim the existing creator slug as the user's @handle. This
+    // bridges the gap for legacy creators (pre-S1.a) whose `users.handle`
+    // was never populated: their `creator_settings.slug` already matches
+    // our handle format (lowercase alnum + underscore) so we reuse it.
+    // Only fires when users.handle IS NULL and the slug passes validation
+    // + isn't reserved + isn't already taken. Silent on any conflict.
+    try {
+      if (pool) {
+        const uRows = await dbQuery(
+          'SELECT u.handle AS handle, cs.slug AS slug FROM users u LEFT JOIN creator_settings cs ON cs.creator_id = u.id WHERE u.id = $1 LIMIT 1',
+          [req.creator.id]
+        ).catch(() => []);
+        const row = uRows[0];
+        if (row && !row.handle && row.slug) {
+          const candidate = String(row.slug).toLowerCase();
+          const valid = /^[a-z0-9_]{3,30}$/.test(candidate);
+          const reserved = valid ? await _isHandleReserved(candidate) : true;
+          if (valid && !reserved) {
+            await dbQuery(
+              'UPDATE users SET handle = $1 WHERE id = $2 AND handle IS NULL',
+              [candidate, req.creator.id]
+            ).catch(() => {});  // silent — unique violation is fine
+          }
+        }
+      }
+    } catch {}
+
     res.json({ ok: true });
   } catch (err) {
     console.error('settings update error:', err);
@@ -23717,10 +23744,12 @@ app.get('/api/user/me', requireAuth, async (req, res) => {
     if (!uid) return res.status(401).json({ error: 'Auth required' });
     let user = null;
     if (pool) {
-      const rows = await dbQuery('SELECT id, display_name, username, email, avatar_url, bio, polymarket_address, wallet_verified FROM users WHERE id = $1 LIMIT 1', [uid]);
+      const rows = await dbQuery('SELECT id, handle, display_name, username, email, avatar_url, bio, polymarket_address, wallet_verified FROM users WHERE id = $1 LIMIT 1', [uid]);
       user = rows[0] || null;
     }
     if (!user) return res.status(404).json({ error: 'User not found' });
+    // Expose canonical profile URL so clients don't rebuild it inconsistently.
+    user.profile_url = user.handle ? '/@' + user.handle : '/m/' + user.id;
     res.json({ user });
   } catch (err) {
     console.warn('[user-me]', err.message);

@@ -13461,7 +13461,21 @@ async function sendDigestNow() {
 
 async function loadShareTab() {
   const userId = creatorData?.creator?.id;
-  const profileUrl = userId ? 'https://hyperflex.network/m/' + userId : '';
+  // Prefer the canonical @handle URL. /api/user/me returns profile_url
+  // pointing at /@{handle} when the user has a handle, else /m/{id}.
+  // Fire-and-forget — fall back to /m/ if the lookup fails so this never
+  // blocks the tab from rendering.
+  let profileUrl = userId ? 'https://hyperflex.network/m/' + userId : '';
+  try {
+    const tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (tok) {
+      const r = await fetch(API + '/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.user && d.user.profile_url) profileUrl = 'https://hyperflex.network' + d.user.profile_url;
+      }
+    }
+  } catch {}
   const inviteUrl  = 'https://hyperflex.network/?ref=' + (creatorData?.creator?.id || '');
 
   const profileEl = document.getElementById('profileShareLink');
