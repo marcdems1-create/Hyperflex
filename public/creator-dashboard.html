@@ -8565,21 +8565,24 @@ function renderDashboard(data) {
       ? _rawName.slice(0, 6) + '…' + _rawName.slice(-4)
       : _rawName;
   } catch(e) {}
-  // Sidebar + topbar link point to the user's predictor profile (/m/:userId),
-  // not the community landing (/:slug). Profile is the shareable track-record
-  // page; community is a separate product surface.
-  try {
+  // Sidebar + topbar link point to the user's canonical profile URL.
+  // Prefer /@handle (readable, shareable), fall back to /m/:userId (still
+  // 301s to /@handle server-side), finally /:slug for legacy.
+  window._dashboardProfilePath = function() {
+    var c = creatorData && creatorData.creator || {};
+    if (c.handle) return '/@' + c.handle;
+    if (c.id)     return '/m/' + c.id;
+    if (c.slug)   return '/' + c.slug;
+    return '/';
+  };
+  window._refreshSidebarProfileUrl = function() {
+    var path = window._dashboardProfilePath();
     var urlEl = document.getElementById('sidebarCommunityUrl');
-    var profilePath = creator.id ? '/m/' + creator.id : ('/' + (creator.slug || ''));
-    urlEl.textContent = 'hyperflex.network' + profilePath;
-    urlEl.href = profilePath;
-  } catch(e) {}
-  try {
+    if (urlEl) { urlEl.textContent = 'hyperflex.network' + path; urlEl.href = path; }
     var topUrlEl = document.getElementById('topbarCommunityUrl');
-    var topProfilePath = creator.id ? '/m/' + creator.id : ('/' + (creator.slug || ''));
-    topUrlEl.textContent = 'hyperflex.network' + topProfilePath;
-    if (topUrlEl.tagName === 'A') topUrlEl.href = topProfilePath;
-  } catch(e) {}
+    if (topUrlEl) { topUrlEl.textContent = 'hyperflex.network' + path; if (topUrlEl.tagName === 'A') topUrlEl.href = path; }
+  };
+  try { window._refreshSidebarProfileUrl(); } catch(e) {}
 
   if (data.challenge_progress) try { renderChallengeStatus(data.challenge_progress); } catch(e) {}
 
@@ -11763,6 +11766,10 @@ async function saveHandle(prefix) {
     if (r.ok && d.ok) {
       _setHandleStatus(prefix, '✓ Saved. Your profile is at hyperflex.network/@' + d.handle, 'var(--green)');
       if (typeof showToast === 'function') showToast('@' + d.handle + ' is yours', 'success');
+      // Keep the sidebar + topbar URL pills in sync so the user sees the
+      // canonical URL update immediately without a page refresh.
+      if (creatorData && creatorData.creator) creatorData.creator.handle = d.handle;
+      if (typeof window._refreshSidebarProfileUrl === 'function') window._refreshSidebarProfileUrl();
     } else {
       _setHandleStatus(prefix, '× ' + (d.error || 'Failed to save'), 'var(--red)');
     }
