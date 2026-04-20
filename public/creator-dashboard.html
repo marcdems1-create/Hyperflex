@@ -21886,9 +21886,24 @@ async function confirmTrade() {
     // because this file's ethers version differs from market.html — wait
     // until V2 cutover so we can test one surface at a time.
     const isNegRisk = _tradeModalData._negRisk !== false;
-    const useClobV2 = (typeof window !== 'undefined') &&
-      (window.HF_USE_CLOB_V2 === true ||
-       (window.location && (new URLSearchParams(window.location.search)).get('clob_v2') === '1'));
+    // V2 routing — same priority order as market.html isClobV2Enabled():
+    //   1. ?clob_v2=1 (force V2)  / ?clob_v2=0 (force V1, emergency rollback)
+    //   2. window.HF_USE_CLOB_V2 = true|false
+    //   3. Date-gated default — V2 from 2026-04-22 00:00 UTC onward
+    const _V2_CUTOVER_MS_DASH = Date.UTC(2026, 3, 22, 0, 0, 0);
+    let useClobV2 = false;
+    if (typeof window !== 'undefined') {
+      try {
+        const _qv = (new URLSearchParams(window.location.search)).get('clob_v2');
+        if (_qv === '1')      useClobV2 = true;
+        else if (_qv === '0') useClobV2 = false;
+        else if (window.HF_USE_CLOB_V2 === true)  useClobV2 = true;
+        else if (window.HF_USE_CLOB_V2 === false) useClobV2 = false;
+        else useClobV2 = Date.now() >= _V2_CUTOVER_MS_DASH;
+      } catch (e) {
+        useClobV2 = Date.now() >= _V2_CUTOVER_MS_DASH;
+      }
+    }
     const exchangeAddrV1 = isNegRisk
       ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'   // Neg Risk CTF Exchange V1
       : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';  // CTF Exchange V1
