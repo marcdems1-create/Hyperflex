@@ -1381,38 +1381,24 @@ nav {
       </div>
     </div>
 
-    <!-- ═══ FLEX FEED ═══ -->
+    <!-- ═══ FLEX FEED TEASER — top 15 consensus trades only ═══ -->
     <div class="takes-section" id="takes-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-family:var(--mono);font-size:16px;font-weight:900;color:var(--gold);letter-spacing:-0.5px">FLEX FEED</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:900;color:var(--gold);letter-spacing:-0.5px">TOP CONSENSUS TRADES</span>
           <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
         </div>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Predict. Prove. Flex.</span>
-      </div>
-      <div class="takes-tabs">
-        <div class="takes-tab active" onclick="switchTakesTab('foryou')" id="takes-tab-foryou">For You</div>
-        <div class="takes-tab" onclick="switchTakesTab('trending')" id="takes-tab-trending">Trending</div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim);display:none" class="takes-teaser-sub">Where 2+ whales align</span>
       </div>
 
-      <!-- Compose bar -->
-      <div class="takes-compose" id="takes-compose-bar">
-        <div class="takes-compose-avatar" id="takes-compose-avatar">?</div>
-        <div style="flex:1;cursor:text" onclick="openComposeModal()">
-          <span class="takes-compose-input" style="color:var(--dim);pointer-events:none">What's your take?</span>
-        </div>
-        <button class="takes-compose-btn" onclick="openComposeModal()">Post</button>
-      </div>
-
-      <!-- Feed container -->
+      <!-- Feed container: top 15 consensus takes only. No tabs, no compose,
+           no load more — this is a teaser that links through to /feed. -->
       <div id="takes-feed-container">
-        <div class="takes-loading">Loading takes...</div>
+        <div class="takes-loading">Loading consensus trades...</div>
       </div>
 
-      <!-- Load more -->
-      <div id="takes-load-more" style="display:none;text-align:center;padding:16px">
-        <button onclick="loadMoreTakes()" style="font-family:var(--mono);font-size:11px;color:var(--gold);background:transparent;border:1px solid rgba(201,146,13,0.3);border-radius:8px;padding:8px 24px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">Load more</button>
-      </div>
+      <!-- Teaser CTA — click through to the full feed -->
+      <a href="/feed" style="display:block;text-align:center;margin:16px;padding:14px 20px;background:var(--gold);color:#0f0f0d;border-radius:10px;font-family:var(--sans);font-size:14px;font-weight:800;text-decoration:none;letter-spacing:.2px;transition:opacity .15s" onmouseenter="this.style.opacity='.88'" onmouseleave="this.style.opacity='1'">See all takes in the FLEX Feed →</a>
     </div>
 
     <!-- Compose Modal -->
@@ -3456,78 +3442,41 @@ function getToken() {
   return localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
 }
 
+// Landing-page feed is a TEASER, not the full feed. Only top 15 consensus
+// takes (2+ whales aligned), no pagination, no tab switching — users click
+// through to /feed for the full For You / Trending / compose experience.
 function loadTakesFeed(append) {
-  if (_takesLoading) return;
+  if (_takesLoading || append) return;
   _takesLoading = true;
   var container = document.getElementById('takes-feed-container');
-  if (!append) container.innerHTML = '<div class="takes-loading">Loading takes...</div>';
+  container.innerHTML = '<div class="takes-loading">Loading consensus trades...</div>';
 
   var headers = { Accept: 'application/json' };
   var token = getToken();
   if (token) headers['Authorization'] = 'Bearer ' + token;
 
-  if (_takesMode === 'trending') {
-    // Trending merges trending takes + influencer posts, sorted by recency
-    var trendUrl = '/api/takes/trending?limit=20' + (_takesCursor ? '&offset=' + (_takesCursor.trendOffset || 0) : '');
-    var infUrl = '/api/influencer-feed?limit=15' + (_takesCursor ? '&offset=' + (_takesCursor.infOffset || 0) : '');
-    Promise.all([
-      fetch(trendUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : { takes: [] }; }),
-      fetch(infUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : { posts: [] }; })
-    ]).then(function(results) {
-      var takes = results[0].takes || [];
-      var posts = results[1].posts || [];
-      if (!append) container.innerHTML = '';
-      if (!takes.length && !posts.length && !append) {
-        container.innerHTML = '<div class="takes-empty"><div class="icon">\uD83D\uDD25</div><div class="msg">Nothing trending yet — check back soon</div></div>';
-        document.getElementById('takes-load-more').style.display = 'none';
-        _takesLoading = false;
-        return;
-      }
-      // Interleave: 2 takes then 1 influencer post, repeat
-      var ti = 0, pi = 0;
-      while (ti < takes.length || pi < posts.length) {
-        if (ti < takes.length) container.insertAdjacentHTML('beforeend', renderTakeCard(takes[ti++]));
-        if (ti < takes.length) container.insertAdjacentHTML('beforeend', renderTakeCard(takes[ti++]));
-        if (pi < posts.length) container.insertAdjacentHTML('beforeend', renderInfluencerCard(posts[pi++]));
-      }
-      var hasMore = takes.length >= 15 || posts.length >= 10;
-      _takesCursor = hasMore ? { trendOffset: (_takesCursor ? _takesCursor.trendOffset || 0 : 0) + takes.length, infOffset: (_takesCursor ? _takesCursor.infOffset || 0 : 0) + posts.length } : null;
-      document.getElementById('takes-load-more').style.display = hasMore ? 'block' : 'none';
-      _takesLoading = false;
-    }).catch(function() {
-      if (!append) container.innerHTML = '<div class="takes-empty"><div class="msg">Failed to load feed</div></div>';
-      _takesLoading = false;
-    });
-    return;
-  }
-
-  // For You — includes followed users via server-side boost
-  var url = '/api/takes/feed?mode=foryou&limit=30' + (_takesCursor ? '&cursor=' + encodeURIComponent(_takesCursor) : '');
-  fetch(url, { headers: headers })
-    .then(function(r){ return r.ok ? r.json() : { takes: [] }; })
+  fetch('/api/takes/trending?limit=15&source=consensus', { headers: headers })
+    .then(function(r) { return r.ok ? r.json() : { takes: [] }; })
     .then(function(data) {
       var takes = data.takes || [];
-      if (!append) container.innerHTML = '';
-      if (!takes.length && !append) {
-        container.innerHTML = '<div class="takes-empty"><div class="icon">\uD83D\uDCA1</div><div class="msg">No takes yet — be the first to post your prediction</div></div>';
-        document.getElementById('takes-load-more').style.display = 'none';
+      container.innerHTML = '';
+      if (!takes.length) {
+        container.innerHTML = '<div class="takes-empty"><div class="icon">\uD83D\uDC0B</div><div class="msg">No consensus trades yet — whales are scattered today. Check back soon.</div></div>';
         _takesLoading = false;
         return;
       }
       for (var i = 0; i < takes.length; i++) {
         container.insertAdjacentHTML('beforeend', renderTakeCard(takes[i]));
       }
-      _takesCursor = data.cursor || null;
-      document.getElementById('takes-load-more').style.display = takes.length >= 20 ? 'block' : 'none';
       _takesLoading = false;
     })
     .catch(function() {
-      if (!append) container.innerHTML = '<div class="takes-empty"><div class="msg">Failed to load feed</div></div>';
+      container.innerHTML = '<div class="takes-empty"><div class="msg">Failed to load consensus feed</div></div>';
       _takesLoading = false;
     });
 }
 
-function loadMoreTakes() { loadTakesFeed(true); }
+function loadMoreTakes() { /* teaser only — load more lives on /feed */ }
 
 // Infinite scroll — auto-fire loadMoreTakes when the Load more button
 // enters the viewport. Keeps the button in DOM as fallback; users on

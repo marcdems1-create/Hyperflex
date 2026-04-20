@@ -15718,6 +15718,10 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const offset = parseInt(req.query.offset) || 0;
     const category = req.query.category; // optional filter
+    // Optional source filter — comma-separated list of 'consensus'|'whale'|
+    // 'influencer'|'user'. Used by the landing-page teaser to show only
+    // consensus takes ("Top consensus trades" preview of the full feed).
+    const sourceFilter = (req.query.source || '').split(',').map(s => s.trim()).filter(s => ['consensus','whale','influencer','user'].includes(s));
 
     // Trending score: (agree + disagree) * recency_decay * (1 + sharp_score/100)
     // Recency decay: 1 / (1 + hours_old/12)
@@ -15729,6 +15733,12 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
       WHERE t.created_at > now() - interval '7 days'`;
     const params = [];
     let paramIdx = 1;
+
+    if (sourceFilter.length) {
+      sql += ` AND t.source = ANY($${paramIdx})`;
+      params.push(sourceFilter);
+      paramIdx++;
+    }
 
     if (category) {
       sql += ` AND LOWER(t.question) ~ $${paramIdx}`;
