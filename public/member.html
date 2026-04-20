@@ -262,16 +262,44 @@ function submitChallenge() {
 }
 
 function showFlexScoreInfo() {
+  // Pull the two-component breakdown if the user has any data. Phase 2 of
+  // Flex Score B blended Brier (calibration on resolved takes) with realized
+  // ROI on closed Polymarket lots — the modal now shows both components
+  // with the raw numbers behind them. Falls back to the single-component
+  // explanation if the user has no data yet.
+  var s = window._memberStats || {};
+  var brier = s.flex_brier_component != null ? s.flex_brier_component : null;
+  var pnl = s.flex_pnl_component != null ? s.flex_pnl_component : null;
+  var resolved = s.predictions_resolved || 0;
+  var closed = s.realized_trade_count || 0;
+  var roiMed = s.realized_roi_median;
+  var locked = (resolved + closed) >= 3;
+  var roiPct = roiMed != null ? Math.round(roiMed * 1000) / 10 : null;
+  var brierSub = resolved > 0 ? ('Across ' + resolved + ' resolved ' + (resolved === 1 ? 'take' : 'takes')) : 'No resolved takes yet';
+  var pnlSub = closed > 0 ? ('Median ' + (roiPct >= 0 ? '+' : '') + roiPct + '% on ' + closed + ' closed ' + (closed === 1 ? 'trade' : 'trades')) : 'No closed trades yet';
+
   _showInfoModal('Flex Score', `
-    <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
-    <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
+    <p style="margin:0 0 10px">A 0–100 score measuring how sharp a trader is — both at <strong style="color:var(--gold)">calling outcomes right</strong> and at <strong style="color:var(--green)">closing trades profitably pre-resolution</strong>.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">BRIER · CALLS</div>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold);line-height:1;margin-bottom:6px">${brier != null ? brier : '—'}</div>
+        <div style="font-size:11px;color:var(--text-soft);line-height:1.4">${brierSub}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">REALIZED PnL</div>
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--green);line-height:1;margin-bottom:6px">${pnl != null ? pnl : '—'}</div>
+        <div style="font-size:11px;color:var(--text-soft);line-height:1.4">${pnlSub}</div>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,0.02);border:1px dashed var(--border);border-radius:8px;padding:10px 14px;margin:10px 0;line-height:1.6">Flex Score = <strong style="color:var(--text)">0.7 × Brier</strong> + <strong style="color:var(--text)">0.3 × PnL</strong><br><span>Single-source when you only have one kind of data</span></div>
     <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
       70+ → 🎯 Oracle tier<br>
       60+ → 🎯 Sharp<br>
       50+ → 📊 Solid<br>
       &lt;50 → 🎲 Speculator
     </div>
-    <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
+    <p style="margin:0;color:var(--muted);font-size:12px">${locked ? 'Locked in · ' + (resolved + closed) + ' scored events' : 'Needs at least 3 resolved takes or closed trades to lock in · ' + (resolved + closed) + '/3 so far'}</p>
   `);
 }
 
@@ -294,6 +322,10 @@ async function load() {
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const { user, stats, communities, recent_wins, take_stats, recent_takes, polymarket_stats, recent_trades } = data;
+    // Stash so the Flex Score info modal can read the new component
+    // breakdown (flex_brier_component, flex_pnl_component, realized_roi_median,
+    // realized_trade_count) that /api/member/:userId now returns.
+    window._memberStats = stats;
     const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
     const pTrades = recent_trades || [];
 
