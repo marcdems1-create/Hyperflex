@@ -15331,6 +15331,260 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
   }
 });
 
+// ── T2 · MARKET SPORT TAGS ─────────────────────────────────────────────────
+// Classifies external (Polymarket + Kalshi) markets by sport/league so T4
+// (CLV) and T5 (Flex Score for Sports) can filter to sports-only trades.
+//
+// Two classifiers:
+//   classifyKalshiTicker(ticker)    — ticker prefix parse, high confidence
+//   classifyPolymarketTitle(title)  — regex on question text, variable conf
+//
+// sweepMarketSportTags() walks all (source, external_id) pairs present in
+// cached_positions / realized_trades / polymarket_trades that aren't yet in
+// market_sport_tags, classifies them, and inserts. Manual overrides
+// (tagged_by='manual') are never overwritten.
+
+// Sport vocab — aligned with existing picks.sport values on main (nba, nfl…).
+// Adding the rest that Kalshi + Polymarket actually list as markets.
+const SPORT_VOCAB = ['nba','nfl','mlb','nhl','soccer','ncaaf','ncaab','ufc','boxing','tennis','golf','f1','esports','other'];
+
+// Team names → sport. Lowercase, anchored to word boundaries at match time.
+// Ambiguous names (Cardinals = NFL+MLB, Giants = NFL+MLB, Jaguars = NFL+NCAAF)
+// resolve via league keywords in the title; fall back to lower confidence.
+const NFL_TEAMS = 'cardinals|falcons|ravens|bills|panthers|bears|bengals|browns|cowboys|broncos|lions|packers|texans|colts|jaguars|chiefs|raiders|chargers|rams|dolphins|vikings|patriots|saints|giants|jets|eagles|steelers|49ers|seahawks|buccaneers|titans|commanders';
+const NBA_TEAMS = 'hawks|celtics|nets|hornets|bulls|cavaliers|mavericks|nuggets|pistons|warriors|rockets|pacers|clippers|lakers|grizzlies|heat|bucks|timberwolves|pelicans|knicks|thunder|magic|76ers|sixers|suns|trail blazers|blazers|kings|spurs|raptors|jazz|wizards';
+const MLB_TEAMS = 'diamondbacks|braves|orioles|red sox|cubs|white sox|reds|guardians|rockies|tigers|astros|royals|angels|dodgers|marlins|brewers|twins|yankees|mets|athletics|phillies|pirates|padres|mariners|rays|rangers|blue jays|nationals';
+const NHL_TEAMS = 'ducks|coyotes|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue jackets|stars|red wings|oilers|panthers|kings|wild|canadiens|predators|devils|islanders|senators|flyers|penguins|sharks|kraken|blues|lightning|maple leafs|canucks|golden knights|capitals|jets';
+const SOCCER_LEAGUES = 'premier league|epl\\b|champions league|uefa|la liga|bundesliga|serie a|ligue 1|mls\\b|liga mx|copa america|world cup|euros?\\b|fa cup|concacaf';
+const SOCCER_CLUBS = 'arsenal|chelsea|liverpool|manchester united|man utd|manchester city|man city|tottenham|real madrid|barcelona|bayern munich|psg|paris saint|juventus|inter milan|ac milan|borussia dortmund|atletico madrid|napoli|ajax|benfica';
+const UFC_KW = 'ufc|mma|dana white|fight night|conor mcgregor|jon jones|khabib|islam makhachev|alex pereira|sean o\\W*malley';
+const TENNIS_KW = 'wimbledon|us open|french open|australian open|atp\\b|wta\\b|grand slam|novak djokovic|carlos alcaraz|jannik sinner|iga swiatek|coco gauff';
+const GOLF_KW = 'masters tournament|pga championship|british open|ryder cup|presidents cup|scottie scheffler|rory mcilroy|xander schauffele|liv golf';
+const BOXING_KW = 'boxing\\b|heavyweight title|canelo|tyson fury|oleksandr usyk|terence crawford|gervonta davis';
+const F1_KW = 'formula 1|formula one|f1 grand prix|verstappen|lando norris|charles leclerc|lewis hamilton|grand prix';
+const ESPORTS_KW = 'league of legends|lcs\\b|valorant|counter.?strike|csgo|cs2\\b|dota\\b|twi\\w+\\b|worlds championship.*(league|valorant|dota)';
+const NCAAF_KW = 'college football|ncaa football|ncaaf|cfb\\b|bowl game|playoff.*college';
+const NCAAB_KW = 'march madness|ncaa tournament|college basketball|ncaab|cbb\\b|final four|elite eight';
+
+function _rx(pattern, flags) { try { return new RegExp(pattern, flags || 'i'); } catch { return null; } }
+const _RX = {
+  nba_league:   _rx('\\bnba\\b|nba finals|nba playoffs'),
+  nfl_league:   _rx('\\bnfl\\b|super bowl|nfl playoffs|afc championship|nfc championship'),
+  mlb_league:   _rx('\\bmlb\\b|world series|major league baseball'),
+  nhl_league:   _rx('\\bnhl\\b|stanley cup|national hockey league'),
+  soccer_lg:    _rx(SOCCER_LEAGUES),
+  soccer_clubs: _rx(SOCCER_CLUBS),
+  ufc:          _rx(UFC_KW),
+  tennis:       _rx(TENNIS_KW),
+  golf:         _rx(GOLF_KW),
+  boxing:       _rx(BOXING_KW),
+  f1:           _rx(F1_KW),
+  esports:      _rx(ESPORTS_KW),
+  ncaaf:        _rx(NCAAF_KW),
+  ncaab:        _rx(NCAAB_KW),
+  nfl_teams:    _rx('\\b(' + NFL_TEAMS + ')\\b'),
+  nba_teams:    _rx('\\b(' + NBA_TEAMS + ')\\b'),
+  mlb_teams:    _rx('\\b(' + MLB_TEAMS + ')\\b'),
+  nhl_teams:    _rx('\\b(' + NHL_TEAMS + ')\\b'),
+};
+
+// classifyPolymarketTitle — regex priority: league keywords > team+league
+// hints > team names > event keywords. Returns { sport, league, confidence }
+// or null when the title is clearly non-sports (elections, crypto, weather…).
+function classifyPolymarketTitle(title) {
+  if (!title || typeof title !== 'string') return null;
+  const t = title.toLowerCase();
+
+  // League keyword (highest confidence — league name is explicit)
+  if (_RX.nba_league && _RX.nba_league.test(t)) return { sport: 'nba',    league: 'NBA',    confidence: 0.98 };
+  if (_RX.nfl_league && _RX.nfl_league.test(t)) return { sport: 'nfl',    league: 'NFL',    confidence: 0.98 };
+  if (_RX.mlb_league && _RX.mlb_league.test(t)) return { sport: 'mlb',    league: 'MLB',    confidence: 0.98 };
+  if (_RX.nhl_league && _RX.nhl_league.test(t)) return { sport: 'nhl',    league: 'NHL',    confidence: 0.98 };
+  if (_RX.ncaaf      && _RX.ncaaf.test(t))      return { sport: 'ncaaf',  league: 'NCAAF',  confidence: 0.95 };
+  if (_RX.ncaab      && _RX.ncaab.test(t))      return { sport: 'ncaab',  league: 'NCAAB',  confidence: 0.95 };
+  if (_RX.ufc        && _RX.ufc.test(t))        return { sport: 'ufc',    league: 'UFC',    confidence: 0.95 };
+  if (_RX.tennis     && _RX.tennis.test(t))     return { sport: 'tennis', league: null,     confidence: 0.92 };
+  if (_RX.golf       && _RX.golf.test(t))       return { sport: 'golf',   league: 'PGA',    confidence: 0.92 };
+  if (_RX.boxing     && _RX.boxing.test(t))     return { sport: 'boxing', league: null,     confidence: 0.9  };
+  if (_RX.f1         && _RX.f1.test(t))         return { sport: 'f1',     league: 'F1',     confidence: 0.92 };
+  if (_RX.esports    && _RX.esports.test(t))    return { sport: 'esports',league: null,     confidence: 0.85 };
+  if (_RX.soccer_lg  && _RX.soccer_lg.test(t))  return { sport: 'soccer', league: null,     confidence: 0.93 };
+  if (_RX.soccer_clubs && _RX.soccer_clubs.test(t)) return { sport: 'soccer', league: null, confidence: 0.9 };
+
+  // Team-name fallbacks with sport hint word. Because "Cardinals"/"Giants"
+  // are ambiguous NFL vs MLB, we use the presence of 'football'/'baseball'/
+  // 'hockey' as the tiebreaker before lowering confidence.
+  const footballHint = /\bfootball\b|\btouchdown\b|\bplayoff\b/.test(t);
+  const baseballHint = /\bbaseball\b|\bhome run\b|\bbullpen\b/.test(t);
+  const hockeyHint   = /\bhockey\b|\bpowerplay\b|\bovertime.*goal\b/.test(t);
+  const basketHint   = /\bbasketball\b|\bthree.pointer\b|\blebron\b|\bsteph\b|\bdurant\b/.test(t);
+
+  if (_RX.nba_teams && _RX.nba_teams.test(t)) return { sport: 'nba', league: 'NBA', confidence: basketHint ? 0.85 : 0.7 };
+  if (_RX.nhl_teams && _RX.nhl_teams.test(t)) return { sport: 'nhl', league: 'NHL', confidence: hockeyHint ? 0.85 : 0.7 };
+  if (_RX.nfl_teams && _RX.nfl_teams.test(t)) return { sport: 'nfl', league: 'NFL', confidence: footballHint ? 0.85 : 0.7 };
+  if (_RX.mlb_teams && _RX.mlb_teams.test(t)) return { sport: 'mlb', league: 'MLB', confidence: baseballHint ? 0.85 : 0.7 };
+
+  return null; // not sports
+}
+
+// classifyKalshiTicker — Kalshi event tickers carry the sport in the prefix.
+// Pattern: `KX<SPORT>-<series>-<sub>` or older `<SPORT>GAME-...`. Map common
+// prefixes to our sport vocab; anything unmatched returns null (sweep leaves
+// it untagged, doesn't guess).
+function classifyKalshiTicker(ticker) {
+  if (!ticker || typeof ticker !== 'string') return null;
+  const t = ticker.toUpperCase();
+  const PREFIX = [
+    { re: /^KX?NFL[-_]/,        sport: 'nfl',    league: 'NFL' },
+    { re: /^KX?NBA[-_]/,        sport: 'nba',    league: 'NBA' },
+    { re: /^KX?MLB[-_]/,        sport: 'mlb',    league: 'MLB' },
+    { re: /^KX?NHL[-_]/,        sport: 'nhl',    league: 'NHL' },
+    { re: /^KX?UFC[-_]/,        sport: 'ufc',    league: 'UFC' },
+    { re: /^KX?CFB[-_]|^KX?NCAAF[-_]/,   sport: 'ncaaf',  league: 'NCAAF' },
+    { re: /^KX?CBB[-_]|^KX?NCAAB[-_]/,   sport: 'ncaab',  league: 'NCAAB' },
+    { re: /^KX?F1[-_]|^KX?GP[-_]/,       sport: 'f1',     league: 'F1' },
+    { re: /^KX?BOX[-_]|^KX?BOXING[-_]/,  sport: 'boxing', league: null },
+    { re: /^KX?PGA[-_]|^KX?GOLF[-_]/,    sport: 'golf',   league: 'PGA' },
+    { re: /^KX?TENNIS[-_]|^KX?ATP[-_]|^KX?WTA[-_]|^KX?WIMB|^KX?USOPEN|^KX?AUSOPEN|^KX?FRENCH/, sport: 'tennis', league: null },
+    { re: /^KX?EPL[-_]|^KX?UCL[-_]|^KX?MLS[-_]|^KX?SOCCER[-_]|^KX?WC[-_]|^KX?FIFA/, sport: 'soccer', league: null },
+    { re: /^(NFL|NBA|MLB|NHL)GAME[-_]/,  sport: (function(){})(), league: null }, // legacy; handled below
+  ];
+  for (const p of PREFIX) {
+    if (p.re.test(t)) {
+      if (p.sport) return { sport: p.sport, league: p.league, confidence: 0.98 };
+    }
+  }
+  // Legacy SPORTGAME- prefix
+  const legacy = t.match(/^(NFL|NBA|MLB|NHL)GAME[-_]/);
+  if (legacy) return { sport: legacy[1].toLowerCase(), league: legacy[1], confidence: 0.98 };
+  return null;
+}
+
+// Upsert a classification. ON CONFLICT: only overwrite when the existing row
+// isn't manual (manual overrides are sacred) AND the new confidence is at
+// least as high as the stored one.
+async function upsertSportTag(source, externalId, title, cls, taggedBy) {
+  if (!pool || !cls) return false;
+  try {
+    const res = await pool.query(
+      `INSERT INTO market_sport_tags (source, external_id, market_title, sport, league, confidence, tagged_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (source, external_id) DO UPDATE SET
+         market_title = EXCLUDED.market_title,
+         sport        = EXCLUDED.sport,
+         league       = EXCLUDED.league,
+         confidence   = EXCLUDED.confidence,
+         tagged_by    = EXCLUDED.tagged_by,
+         tagged_at    = now()
+       WHERE market_sport_tags.tagged_by <> 'manual'
+         AND EXCLUDED.confidence >= market_sport_tags.confidence
+       RETURNING sport`,
+      [source, externalId, (title || '').slice(0, 500), cls.sport, cls.league, cls.confidence, taggedBy]
+    );
+    return res.rowCount > 0;
+  } catch (e) {
+    if (/relation "market_sport_tags" does not exist/i.test(e.message)) {
+      console.warn('[market-sport-tags] table missing — run supabase_migration_market_sport_tags.sql');
+    } else {
+      console.warn('[market-sport-tags] upsert error:', e.message);
+    }
+    return false;
+  }
+}
+
+// Sweep every untagged (source, external_id) pair in cached_positions +
+// realized_trades + polymarket_trades; classify and insert. Idempotent —
+// already-tagged pairs are filtered out via LEFT JOIN.
+async function sweepMarketSportTags() {
+  if (!pool) return { scanned: 0, tagged: 0 };
+  let scanned = 0, tagged = 0, skipped = 0;
+  try {
+    const unionSql = `
+      SELECT DISTINCT ON (source, external_id) source, external_id, market_title FROM (
+        SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM realized_trades   WHERE condition_id IS NOT NULL
+        UNION ALL
+        SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM polymarket_trades WHERE condition_id IS NOT NULL
+        UNION ALL
+        SELECT platform::text      AS source, external_id   AS external_id, market_title    AS market_title FROM cached_positions  WHERE platform IN ('polymarket','kalshi') AND external_id IS NOT NULL
+      ) t
+      LEFT JOIN market_sport_tags mst USING (source, external_id)
+      WHERE mst.source IS NULL
+      LIMIT 2000`;
+    let rows = [];
+    try { rows = await dbQuery(unionSql); }
+    catch (e) {
+      if (/relation "(realized_trades|polymarket_trades|cached_positions|market_sport_tags)" does not exist/i.test(e.message)) {
+        console.warn('[market-sport-tags] sweep skipped — dependency table missing:', e.message);
+        return { scanned: 0, tagged: 0, skipped: 0, error: 'missing_table' };
+      }
+      throw e;
+    }
+    scanned = rows.length;
+    for (const r of rows) {
+      const cls = r.source === 'kalshi'
+        ? classifyKalshiTicker(r.external_id)
+        : classifyPolymarketTitle(r.market_title);
+      if (!cls) { skipped++; continue; }
+      const taggedBy = r.source === 'kalshi' ? 'kalshi_taxonomy' : 'regex';
+      const ok = await upsertSportTag(r.source, r.external_id, r.market_title, cls, taggedBy);
+      if (ok) tagged++;
+    }
+    if (scanned) console.log(`[market-sport-tags] sweep scanned=${scanned} tagged=${tagged} skipped=${skipped}`);
+    return { scanned, tagged, skipped };
+  } catch (e) {
+    console.error('[market-sport-tags] sweep error:', e.message);
+    return { scanned, tagged, skipped, error: e.message };
+  }
+}
+
+// Nightly at 03:00 UTC — picks up newly-seen markets overnight.
+cron.schedule('0 3 * * *', () => { sweepMarketSportTags().catch(() => {}); });
+// Boot-time run (2 min after start so the rest of boot settles first).
+setTimeout(() => { sweepMarketSportTags().catch(() => {}); }, 2 * 60 * 1000);
+
+// GET /api/markets/sport-tag?source=polymarket&external_id=0x…
+// Returns the tag for a single market, or { tagged: false } if untagged.
+app.get('/api/markets/sport-tag', async (req, res) => {
+  try {
+    const source = String(req.query.source || '').toLowerCase();
+    const externalId = String(req.query.external_id || '').trim();
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!externalId) return res.status(400).json({ error: 'external_id required' });
+    const rows = await dbQuery(
+      'SELECT source, external_id, sport, league, confidence, tagged_by, tagged_at FROM market_sport_tags WHERE source=$1 AND external_id=$2 LIMIT 1',
+      [source, externalId]
+    ).catch(() => []);
+    if (!rows.length) return res.json({ tagged: false });
+    res.json({ tagged: true, ...rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/markets/sport-tag — manual override (admin-secret gated).
+// Body: { source, external_id, sport, league? }. sport must be in SPORT_VOCAB.
+app.post('/api/admin/markets/sport-tag', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { source, external_id, sport, league } = req.body || {};
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!external_id || !SPORT_VOCAB.includes(sport)) return res.status(400).json({ error: 'external_id + valid sport required' });
+    await pool.query(
+      `INSERT INTO market_sport_tags (source, external_id, sport, league, confidence, tagged_by)
+       VALUES ($1, $2, $3, $4, 1.00, 'manual')
+       ON CONFLICT (source, external_id) DO UPDATE SET
+         sport=$3, league=$4, confidence=1.00, tagged_by='manual', tagged_at=now()`,
+      [source, external_id, sport, league || null]
+    );
+    res.json({ ok: true, source, external_id, sport, league: league || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /admin/markets/sport-tag/sweep — trigger a sweep on demand (admin).
+app.post('/api/admin/markets/sport-tag/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepMarketSportTags();
+  res.json(result);
+});
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
