@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaderboard — HYPERFLEX</title>
+<meta name="description" content="Ranked tipsters by net units. Every pick locked before tip-off, graded from official results.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.55;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;position:sticky;top:0;z-index:10;background:rgba(11,11,18,0.78);backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
+.nav-logo{font-size:17px;font-weight:900;letter-spacing:-0.02em}
+.nav-logo .accent{color:var(--gold)}
+.nav-back{color:var(--muted);font-size:13px;padding:10px 14px;min-height:44px;display:inline-flex;align-items:center}
+.nav-back:hover{color:var(--text)}
+
+main{max-width:860px;margin:0 auto;padding:32px 24px 100px}
+
+.header{margin-bottom:26px}
+h1{font-size:32px;font-weight:900;letter-spacing:-0.03em;margin-bottom:6px}
+.subhead{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase}
+
+.board{display:flex;flex-direction:column;gap:6px;margin-top:20px}
+.row{display:grid;grid-template-columns:44px 1fr 90px 90px 90px 70px;gap:14px;align-items:center;padding:14px 18px;border:1px solid var(--border);border-radius:10px;background:var(--surface);transition:border-color 0.12s}
+.row:hover{border-color:var(--border-strong)}
+.row.first{border-color:rgba(245,166,35,0.35);background:rgba(245,166,35,0.04)}
+.col-rank{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--muted);letter-spacing:-0.02em}
+.row.first .col-rank{color:var(--gold)}
+.col-who{min-width:0}
+.col-who a{display:block;min-width:0}
+.handle{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)}
+.row:hover .handle{color:var(--gold)}
+.sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:2px;letter-spacing:0.04em}
+.col-num{font-family:var(--mono);font-size:14px;font-weight:700;text-align:right;letter-spacing:-0.01em}
+.col-num.pos{color:var(--green)}
+.col-num.neg{color:var(--red)}
+.col-num.mute{color:var(--muted)}
+.col-num .sub{font-size:10px;color:var(--muted);font-weight:400;margin-top:2px;letter-spacing:0.04em}
+.col-picks{font-family:var(--mono);font-size:13px;text-align:right;color:var(--text-soft)}
+.col-picks .sub{font-size:10px;color:var(--muted);font-weight:400;margin-top:2px}
+
+.col-head{display:grid;grid-template-columns:44px 1fr 90px 90px 90px 70px;gap:14px;padding:0 18px 10px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em}
+.col-head div{text-align:right}
+.col-head div:first-child{text-align:left}
+.col-head div:nth-child(2){text-align:left}
+
+.section-lbl{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin:24px 0 10px}
+
+.building{display:flex;flex-direction:column;gap:4px}
+.building-row{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border:1px dashed var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;color:var(--text-soft)}
+.building-row a{color:var(--text-soft)}
+.building-row a:hover{color:var(--text)}
+.building-row .pcount{color:var(--muted)}
+
+.gated{padding:64px 24px;text-align:center;border:1px dashed var(--border);border-radius:14px;margin-top:24px}
+.gated h2{font-size:20px;font-weight:800;letter-spacing:-0.02em;margin-bottom:10px}
+.gated p{color:var(--text-soft);font-size:14px;max-width:480px;margin:0 auto 16px;line-height:1.55}
+.gated a{color:var(--gold);border-bottom:1px solid currentColor}
+.gated .progress{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.08em;margin-top:12px}
+
+.loading,.error{padding:80px 24px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px}
+
+footer{padding:48px 24px 80px;border-top:1px solid var(--border);text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.06em;margin-top:40px}
+
+@media(max-width:640px){
+  main{padding:22px 16px 80px}
+  h1{font-size:26px}
+  .row, .col-head{grid-template-columns:36px 1fr 78px 70px;gap:10px}
+  .col-head div:nth-child(5),
+  .col-head div:nth-child(6),
+  .row > div:nth-child(5),
+  .row > div:nth-child(6){display:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span class="accent">FLEX</span></a>
+  <a href="/picks" class="nav-back">← Picks</a>
+</nav>
+
+<main id="mainEl">
+  <div class="header">
+    <h1>Tipster leaderboard.</h1>
+    <div class="subhead">NBA · Ranked by net units</div>
+  </div>
+  <div class="loading">Loading…</div>
+</main>
+
+<footer>HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</footer>
+
+<script>
+const API = location.origin;
+
+function esc(s){if(s==null)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function fmtUnits(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  const v=Number(n);
+  return (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(2) + 'u';
+}
+function fmtRoi(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  const v=Number(n);
+  return (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(1) + '%';
+}
+function fmtPct(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  return Number(n).toFixed(1) + '%';
+}
+
+async function load(){
+  const main = document.getElementById('mainEl');
+  try{
+    const r = await fetch(API + '/api/tipsters/leaderboard?sport=nba&min_picks=5');
+    if(!r.ok) throw new Error('load failed');
+    const d = await r.json();
+    if(d.gated){
+      renderGated(d);
+      return;
+    }
+    renderBoard(d);
+  }catch(e){
+    main.innerHTML = renderHeader() + '<div class="error">Our end. Try again in a minute.</div>';
+  }
+}
+
+function renderHeader(){
+  return '<div class="header"><h1>Tipster leaderboard.</h1><div class="subhead">NBA · Ranked by net units</div></div>';
+}
+
+function renderGated(d){
+  const main = document.getElementById('mainEl');
+  let title, body, progress;
+  if(d.reason === 'cohort_forming'){
+    title = 'Cohort still forming.';
+    body = 'The leaderboard opens when three founding tipsters are posting. Apply to be one of them.';
+    progress = (d.approved || 0) + ' of 3 minimum approved';
+  } else if(d.reason === 'insufficient_sample'){
+    title = 'Not enough resolved picks yet.';
+    body = 'Leaderboard opens when three tipsters have ' + (d.min_picks || 5) + '+ resolved picks each. Ranking on a thin sample is a lie.';
+    progress = (d.qualifying || 0) + ' of 3 tipsters past ' + (d.min_picks || 5) + '-pick threshold · ' + (d.approved || 0) + ' approved total';
+  } else {
+    title = 'Leaderboard offline.';
+    body = 'Check back shortly.';
+    progress = '';
+  }
+  main.innerHTML = renderHeader() +
+    '<div class="gated">' +
+      '<h2>' + esc(title) + '</h2>' +
+      '<p>' + esc(body) + '</p>' +
+      '<a href="/picks">Apply as a founding tipster →</a>' +
+      (progress ? '<div class="progress">' + esc(progress) + '</div>' : '') +
+    '</div>';
+}
+
+function renderBoard(d){
+  const main = document.getElementById('mainEl');
+  const leaders = d.leaders || [];
+  const building = d.building || [];
+
+  const headerRow = (
+    '<div class="col-head">' +
+      '<div>#</div>' +
+      '<div>Tipster</div>' +
+      '<div>Net</div>' +
+      '<div>ROI</div>' +
+      '<div>Win%</div>' +
+      '<div>Picks</div>' +
+    '</div>'
+  );
+
+  const rows = leaders.map(t => {
+    const netCls = t.net_units > 0 ? 'pos' : t.net_units < 0 ? 'neg' : 'mute';
+    const roiCls = t.roi_pct == null ? 'mute' : t.roi_pct > 0 ? 'pos' : t.roi_pct < 0 ? 'neg' : 'mute';
+    const firstCls = t.rank === 1 ? ' first' : '';
+    const rec = t.pushes > 0 ? (t.wins + '-' + t.losses + '-' + t.pushes) : (t.wins + '-' + t.losses);
+    const spec = (t.specialty || '').toUpperCase();
+    return (
+      '<a href="/t/' + esc(t.handle) + '">' +
+        '<div class="row' + firstCls + '">' +
+          '<div class="col-rank">' + t.rank + '</div>' +
+          '<div class="col-who">' +
+            '<div class="handle">@' + esc(t.handle) + '</div>' +
+            '<div class="sub">' + (spec ? esc(spec) + ' · ' : '') + esc(rec) + '</div>' +
+          '</div>' +
+          '<div class="col-num ' + netCls + '">' + esc(fmtUnits(t.net_units)) +
+            '<div class="sub">on ' + esc(Number(t.units_risked).toFixed(2)) + 'u</div></div>' +
+          '<div class="col-num ' + roiCls + '">' + esc(fmtRoi(t.roi_pct)) + '</div>' +
+          '<div class="col-num">' + esc(fmtPct(t.win_rate)) + '</div>' +
+          '<div class="col-picks">' + esc(t.resolved) +
+            '<div class="sub">' + (t.pending > 0 ? '+' + t.pending + ' pending' : 'resolved') + '</div></div>' +
+        '</div>' +
+      '</a>'
+    );
+  }).join('');
+
+  const buildingBlock = building.length ? (
+    '<div class="section-lbl">Building record</div>' +
+    '<div class="building">' +
+      building.map(t => (
+        '<div class="building-row">' +
+          '<a href="/t/' + esc(t.handle) + '">@' + esc(t.handle) + '</a>' +
+          '<span class="pcount">' + t.resolved + ' / ' + (d.min_picks || 5) + ' resolved</span>' +
+        '</div>'
+      )).join('') +
+    '</div>'
+  ) : '';
+
+  main.innerHTML = renderHeader() +
+    '<div class="section-lbl">Leaders · ' + leaders.length + ' qualifying</div>' +
+    headerRow +
+    '<div class="board">' + rows + '</div>' +
+    buildingBlock;
+}
+
+load();
+</script>
+</body>
+</html>
