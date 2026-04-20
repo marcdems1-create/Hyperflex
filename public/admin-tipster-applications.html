@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin · Tipster applications</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+button{font-family:inherit;cursor:pointer}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:rgba(11,11,18,0.8);position:sticky;top:0;z-index:10;backdrop-filter:blur(20px)}
+.nav-title{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-soft)}
+.nav-title .accent{color:var(--gold)}
+.nav-logout{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.08em;padding:8px 14px;border:1px solid var(--border);border-radius:6px;background:none}
+.nav-logout:hover{color:var(--text);border-color:var(--border-strong)}
+
+main{max-width:900px;margin:0 auto;padding:24px}
+
+/* Auth gate */
+.gate{display:flex;align-items:center;justify-content:center;min-height:80vh}
+.gate-card{max-width:360px;width:100%;padding:32px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.gate h1{font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:6px}
+.gate p{color:var(--muted);font-size:13px;margin-bottom:20px}
+.gate input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:12px}
+.gate input:focus{border-color:var(--gold)}
+.gate button{width:100%;padding:12px;background:var(--gold);color:#0e0e12;border:none;border-radius:8px;font-size:14px;font-weight:700}
+.gate .err{color:var(--red);font-size:12px;font-family:var(--mono);margin-top:8px;display:none}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{padding:12px 18px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.tab .count{color:var(--muted);margin-left:6px;font-weight:400}
+.tab.active .count{color:var(--text-soft)}
+
+/* Application cards */
+.apps{display:flex;flex-direction:column;gap:12px}
+.app{padding:18px 20px;border:1px solid var(--border);border-radius:12px;background:var(--surface);transition:border-color 0.12s}
+.app:hover{border-color:var(--border-strong)}
+.app-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.app-handle{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text)}
+.app-specialty{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);padding:3px 10px;border:1px solid rgba(245,166,35,0.3);border-radius:100px;background:rgba(245,166,35,0.08)}
+.app-time{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+.app-row{display:grid;grid-template-columns:120px 1fr;gap:10px;padding:6px 0;font-size:13px;border-top:1px solid rgba(255,255,255,0.03)}
+.app-row:first-of-type{border-top:none}
+.app-row .label{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;padding-top:2px}
+.app-row .val{color:var(--text-soft);word-break:break-word;line-height:1.5}
+.app-row .val a{color:var(--blue);text-decoration:none}
+.app-row .val a:hover{text-decoration:underline}
+.app-row .val.num{font-family:var(--mono);color:var(--text)}
+.app-row .val.empty{color:var(--faint);font-style:italic}
+
+.app-actions{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.app-notes{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:12px;outline:none;resize:none;min-height:36px}
+.app-notes:focus{border-color:var(--gold)}
+.btn-approve, .btn-reject{padding:8px 16px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:6px;border:1px solid;cursor:pointer;transition:opacity 0.12s;min-width:100px}
+.btn-approve{background:rgba(0,230,138,0.1);color:var(--green);border-color:rgba(0,230,138,0.3)}
+.btn-approve:hover{background:rgba(0,230,138,0.2)}
+.btn-reject{background:rgba(255,77,106,0.08);color:var(--red);border-color:rgba(255,77,106,0.3)}
+.btn-reject:hover{background:rgba(255,77,106,0.18)}
+.btn-approve:disabled, .btn-reject:disabled{opacity:0.4;cursor:not-allowed}
+
+.empty{text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--mono);font-size:13px;border:1px dashed var(--border);border-radius:12px}
+
+.status-chip{display:inline-flex;padding:3px 10px;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:100px}
+.status-chip.approved{background:rgba(0,230,138,0.1);color:var(--green);border:1px solid rgba(0,230,138,0.3)}
+.status-chip.rejected{background:rgba(255,77,106,0.08);color:var(--red);border:1px solid rgba(255,77,106,0.3)}
+
+@media(max-width:600px){
+  main{padding:16px}
+  .app-row{grid-template-columns:1fr;gap:2px}
+  .app-actions{flex-direction:column}
+  .btn-approve, .btn-reject{width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- AUTH GATE -->
+<div id="gate" class="gate">
+  <div class="gate-card">
+    <h1>Admin access</h1>
+    <p>Paste ADMIN_SECRET to continue.</p>
+    <input type="password" id="gatePass" autofocus placeholder="admin secret">
+    <button onclick="unlock()">Enter</button>
+    <div class="err" id="gateErr">Wrong secret. Try again.</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main" style="display:none">
+  <nav>
+    <div class="nav-title">HYPERFLEX · <span class="accent">TIPSTER APPLICATIONS</span></div>
+    <button class="nav-logout" onclick="lock()">Log out</button>
+  </nav>
+  <main>
+    <div class="tabs">
+      <button class="tab active" data-status="pending" onclick="setTab('pending')">Pending <span class="count" id="countPending">—</span></button>
+      <button class="tab" data-status="approved" onclick="setTab('approved')">Approved <span class="count" id="countApproved">—</span></button>
+      <button class="tab" data-status="rejected" onclick="setTab('rejected')">Rejected <span class="count" id="countRejected">—</span></button>
+    </div>
+    <div id="apps" class="apps"></div>
+  </main>
+</div>
+
+<script>
+let adminSecret = sessionStorage.getItem('hf_admin_secret') || '';
+let currentTab = 'pending';
+const API = location.origin;
+
+function esc(s){if(s==null)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function fmtTime(iso){
+  if(!iso)return '—';
+  const d=new Date(iso);
+  const diff=(Date.now()-d.getTime())/1000;
+  if(diff<60)return 'just now';
+  if(diff<3600)return Math.floor(diff/60)+' min ago';
+  if(diff<86400)return Math.floor(diff/3600)+'h ago';
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+', '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+function fmtUnits(n){
+  if(n==null||n==='')return null;
+  const v=Number(n);
+  if(!Number.isFinite(v))return null;
+  return (v>=0?'+':'')+v.toFixed(2)+'u';
+}
+
+async function unlock(){
+  const pass = document.getElementById('gatePass').value.trim();
+  if(!pass)return;
+  // Probe with a status fetch to validate the secret.
+  const r = await fetch(API+'/api/admin/tipster-applications?status=pending', {
+    headers:{'x-admin-secret':pass}
+  });
+  if(!r.ok){
+    document.getElementById('gateErr').style.display='block';
+    return;
+  }
+  adminSecret = pass;
+  sessionStorage.setItem('hf_admin_secret', pass);
+  showMain();
+}
+function lock(){
+  adminSecret='';
+  sessionStorage.removeItem('hf_admin_secret');
+  document.getElementById('main').style.display='none';
+  document.getElementById('gate').style.display='flex';
+  document.getElementById('gatePass').value='';
+}
+function showMain(){
+  document.getElementById('gate').style.display='none';
+  document.getElementById('main').style.display='block';
+  loadAll();
+}
+function setTab(status){
+  currentTab=status;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.status===status));
+  loadApps(status);
+}
+
+async function loadAll(){
+  loadApps(currentTab);
+  // Counts: one request per status is cheap at cohort-of-25 scale.
+  for(const s of ['pending','approved','rejected']){
+    try{
+      const r = await fetch(API+'/api/admin/tipster-applications?status='+s, {headers:{'x-admin-secret':adminSecret}});
+      if(!r.ok)continue;
+      const d = await r.json();
+      document.getElementById('count'+s[0].toUpperCase()+s.slice(1)).textContent = (d.applications||[]).length;
+    }catch(e){}
+  }
+}
+
+async function loadApps(status){
+  const list = document.getElementById('apps');
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  try{
+    const r = await fetch(API+'/api/admin/tipster-applications?status='+status, {headers:{'x-admin-secret':adminSecret}});
+    if(!r.ok){ list.innerHTML='<div class="empty">Auth expired. Log out and back in.</div>'; return; }
+    const d = await r.json();
+    const apps = d.applications || [];
+    if(!apps.length){
+      const msg = status==='pending' ? 'No pending applications.' : status==='approved' ? 'No approvals yet.' : 'No rejections yet.';
+      list.innerHTML = '<div class="empty">'+msg+'</div>';
+      return;
+    }
+    list.innerHTML = apps.map(a=>renderApp(a, status)).join('');
+  }catch(e){
+    list.innerHTML = '<div class="empty">Load failed. Our end. Try again.</div>';
+  }
+}
+
+function renderApp(a, status){
+  const id = esc(a.id);
+  const handle = esc(a.handle || '—');
+  const specialty = esc((a.specialty||'').toUpperCase());
+  const time = fmtTime(a.created_at);
+  const email = a.email ? esc(a.email) : '<span class="empty">—</span>';
+  const picksLink = a.picks_link ? '<a href="'+esc(a.picks_link)+'" target="_blank" rel="noreferrer noopener">'+esc(a.picks_link)+'</a>' : '<span class="empty">—</span>';
+  const reach = a.reach_screenshot_url ? '<a href="'+esc(a.reach_screenshot_url)+'" target="_blank" rel="noreferrer noopener">'+esc(a.reach_screenshot_url)+'</a>' : '<span class="empty">—</span>';
+  const unitsStr = fmtUnits(a.units_tracked_90d);
+  const units = unitsStr ? '<span class="val num">'+unitsStr+'</span>' : '<span class="empty">—</span>';
+  const userDisp = a.user_display_name ? esc(a.user_display_name) : (a.user_id ? esc(a.user_id.slice(0,8))+'…' : '<span class="empty">not signed in</span>');
+  const failure = a.failure_mode ? esc(a.failure_mode) : '<span class="empty">—</span>';
+  const why = a.why_me ? esc(a.why_me) : '<span class="empty">—</span>';
+  const notes = a.review_notes ? esc(a.review_notes) : '<span class="empty">—</span>';
+
+  const statusChip = status === 'approved' ? '<span class="status-chip approved">Approved · '+fmtTime(a.reviewed_at)+'</span>'
+                    : status === 'rejected' ? '<span class="status-chip rejected">Rejected · '+fmtTime(a.reviewed_at)+'</span>'
+                    : '';
+
+  const actions = status === 'pending' ? (
+    '<textarea class="app-notes" id="notes-'+id+'" placeholder="private review notes (optional)"></textarea>'+
+    '<button class="btn-reject" onclick="decide(\''+id+'\',\'reject\')">Reject</button>'+
+    '<button class="btn-approve" onclick="decide(\''+id+'\',\'approve\')">Approve</button>'
+  ) : '';
+
+  return (
+    '<div class="app" id="app-'+id+'">'+
+      '<div class="app-head">'+
+        '<div class="app-handle">@'+handle+'</div>'+
+        '<div class="app-specialty">'+specialty+'</div>'+
+        statusChip+
+        '<div class="app-time">Applied '+time+'</div>'+
+      '</div>'+
+      '<div class="app-row"><div class="label">Account</div><div class="val">'+userDisp+'</div></div>'+
+      '<div class="app-row"><div class="label">Email</div><div class="val">'+email+'</div></div>'+
+      '<div class="app-row"><div class="label">Picks link</div><div class="val">'+picksLink+'</div></div>'+
+      '<div class="app-row"><div class="label">Reach</div><div class="val">'+reach+'</div></div>'+
+      '<div class="app-row"><div class="label">Units (90d)</div><div class="val">'+units+'</div></div>'+
+      '<div class="app-row"><div class="label">Failure mode</div><div class="val">'+failure+'</div></div>'+
+      '<div class="app-row"><div class="label">Why me</div><div class="val">'+why+'</div></div>'+
+      (status !== 'pending' ? '<div class="app-row"><div class="label">Review notes</div><div class="val">'+notes+'</div></div>' : '')+
+      (actions ? '<div class="app-actions">'+actions+'</div>' : '')+
+    '</div>'
+  );
+}
+
+async function decide(id, decision){
+  const notesEl = document.getElementById('notes-'+id);
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const confirmTxt = decision === 'approve'
+    ? 'Approve this application? Tipster will be able to post picks immediately.'
+    : 'Reject this application? They can re-apply in 30 days.';
+  if(!confirm(confirmTxt))return;
+
+  // Disable buttons on the card during the request
+  const card = document.getElementById('app-'+id);
+  if(card) card.querySelectorAll('button').forEach(b=>b.disabled=true);
+
+  try{
+    const r = await fetch(API+'/api/admin/tipster-applications/'+id+'/decide', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-admin-secret':adminSecret},
+      body: JSON.stringify({ decision, notes })
+    });
+    const d = await r.json();
+    if(!r.ok){
+      alert(d.error || 'Decide failed.');
+      if(card) card.querySelectorAll('button').forEach(b=>b.disabled=false);
+      return;
+    }
+    // Reload list + counts
+    loadAll();
+  }catch(e){
+    alert('Our end. Try again in a minute.');
+    if(card) card.querySelectorAll('button').forEach(b=>b.disabled=false);
+  }
+}
+
+// Boot
+if(adminSecret){
+  // Quick probe to verify saved secret still works.
+  fetch(API+'/api/admin/tipster-applications?status=pending',{headers:{'x-admin-secret':adminSecret}})
+    .then(r=>{ if(r.ok) showMain(); else lock(); })
+    .catch(()=>lock());
+}
+document.getElementById('gatePass').addEventListener('keydown', e=>{ if(e.key==='Enter') unlock(); });
+</script>
+
+</body>
+</html>
