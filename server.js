@@ -14727,7 +14727,8 @@ app.post('/api/takes', requireAuth, async (req, res) => {
 // POST /api/takes/:id/react — agree or disagree with a take
 app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
   try {
-    const takeId = req.params.id;
+    let takeId = req.params.id || '';
+    if (takeId.startsWith('utake_')) takeId = takeId.slice(6);
     const { reaction } = req.body;
     if (!reaction || !['agree', 'disagree'].includes(reaction)) {
       return res.status(400).json({ error: 'reaction must be "agree" or "disagree"' });
@@ -15081,10 +15082,12 @@ app.get('/api/takes/market/:slug', optionalAuth, async (req, res) => {
 // DELETE /api/takes/:id — delete own take
 app.delete('/api/takes/:id', requireAuth, async (req, res) => {
   try {
-    const rows = await dbQuery('SELECT user_id FROM takes WHERE id = $1', [req.params.id]);
+    let id = req.params.id || '';
+    if (id.startsWith('utake_')) id = id.slice(6);
+    const rows = await dbQuery('SELECT user_id FROM takes WHERE id = $1', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Take not found' });
     if (rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Not your take' });
-    await dbQuery('DELETE FROM takes WHERE id = $1', [req.params.id]);
+    await dbQuery('DELETE FROM takes WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('[takes] delete error:', err.message);
@@ -15290,15 +15293,23 @@ app.get('/api/data/sharps/leaderboard', apiKeyAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/takes/:id — single take by id (public, for permalink pages)
+// GET /api/takes/:id — single take by id (public, for permalink pages).
+// Accepts either raw UUID or the `utake_<uuid>` form the feed returns (see
+// the /api/activity/feed normaliser that prefixes IDs for namespacing).
 app.get('/api/takes/:id', async (req, res) => {
   try {
+    let id = req.params.id || '';
+    if (id.startsWith('utake_')) id = id.slice(6);
+    // Guard the UUID cast — malformed IDs should 404, not 500.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(404).json({ error: 'Take not found' });
+    }
     const rows = await dbQuery(
       `SELECT t.*, u.display_name AS user_display_name, u.polymarket_address AS user_polymarket_address,
               u.avatar_url AS user_avatar_url, u.is_whale AS user_is_whale, u.whale_rank AS user_whale_rank
          FROM takes t LEFT JOIN users u ON u.id = t.user_id
         WHERE t.id = $1 LIMIT 1`,
-      [req.params.id]
+      [id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Take not found' });
     res.json({ take: rows[0] });
@@ -15308,9 +15319,11 @@ app.get('/api/takes/:id', async (req, res) => {
 // GET /api/takes/:id/comments
 app.get('/api/takes/:id/comments', async (req, res) => {
   try {
+    let id = req.params.id || '';
+    if (id.startsWith('utake_')) id = id.slice(6);
     const rows = await dbQuery(
       'SELECT * FROM take_comments WHERE take_id = $1 ORDER BY created_at ASC LIMIT 50',
-      [req.params.id]
+      [id]
     );
     res.json({ comments: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -15329,7 +15342,8 @@ app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
     if (reaction !== 'agree' && reaction !== 'disagree') {
       return res.status(400).json({ error: 'Must agree or disagree before commenting', gate: 'reaction_required' });
     }
-    const takeId = req.params.id;
+    let takeId = req.params.id || '';
+    if (takeId.startsWith('utake_')) takeId = takeId.slice(6);
     const userRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
     const displayName = userRows[0]?.display_name || 'Anonymous';
 
