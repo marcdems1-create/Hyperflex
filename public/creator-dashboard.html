@@ -3574,6 +3574,34 @@ input[type="date"].form-input { color-scheme:dark; }
   gap: 10px;
 }
 
+/* ── Button tap feedback — smoothness pass #4 ──────────────────────────────
+   Every button momentarily shrinks on press. Tiny haptic-style signal that
+   the tap registered. Skip on form inputs and disabled buttons. */
+button:not(:disabled):active {
+  transform: scale(0.97);
+  transition: transform 80ms cubic-bezier(.2,.9,.3,1);
+}
+button {
+  transition: transform 140ms cubic-bezier(.2,.9,.3,1);
+}
+/* Don't double-transform on buttons that already animate */
+.tm-side:active, .tm-step-btn:active, .btn-primary:active,
+.pnl-tab:active, .ptab:active, .tab-back:active { transform: scale(0.96); }
+
+/* ── Modal animation parity — smoothness pass #3 ──────────────────────────
+   Any full-screen modal backdrop (.modal-backdrop, inline [style*=z-index:9999])
+   fades in 160ms; the sheet inside scales up from 97%. Matches trade modal. */
+@keyframes hfxModalFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes hfxModalSheetIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+.modal-backdrop { animation: hfxModalFade 180ms ease; }
+.modal-backdrop > * { animation: hfxModalSheetIn 200ms cubic-bezier(.2,.9,.3,1); }
+
 /* Toggle pill for boolean settings */
 .toggle-pill {
   width: 40px; height: 22px;
