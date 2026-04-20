@@ -23297,8 +23297,15 @@ app.get('/api/explore', async (req, res) => {
   }
 });
 
-// /explore is now the homepage — redirect for old bookmarks/SEO
-app.get('/explore', (req, res) => res.redirect(301, '/'));
+// /explore is first-class again — serves the intelligence/discovery surface
+// directly so the nav "Explore" tab has a stable canonical URL. The same
+// file is still served at / for now; / will be rebuilt into the townsquare
+// homepage per spec §6, at which point the intelligence surface lives at
+// /explore only.
+app.get('/explore', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(require('path').join(__dirname, 'public', 'explore.html'));
+});
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 2 — PUT /api/user/display-name

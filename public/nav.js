@@ -319,8 +319,12 @@
     document.head.appendChild(style);
   }
 
-  // Primary links shown in desktop nav bar — alpha-source order
+  // Primary links shown in desktop nav bar — alpha-source order.
+  // Explore leads now: the intelligence/discovery surface lives at /explore
+  // as a first-class route. The homepage (/) will be rebuilt into the
+  // townsquare per spec §6; once that lands the two URLs diverge.
   var primaryLinks = [
+    { href: '/explore', label: 'Explore' },
     { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/signals', label: 'Signals' },
