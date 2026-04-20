@@ -208,9 +208,26 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 </div>
 
 <script>
-const userId = location.pathname.split('/').pop();
-window._profileUserId = userId;
+// userId is resolved asynchronously for /@handle URLs (canonical). Legacy
+// /m/:userId URLs skip the lookup and use the path segment directly.
+// Set to null until resolution completes; downstream functions run inside
+// load() which is kicked by the resolver at the bottom of this script.
+let userId = null;
 const API = location.origin;
+
+async function _resolveProfileUserId() {
+  const path = location.pathname;
+  if (path.startsWith('/@')) {
+    const handle = path.slice(2).split('/')[0]; // handle or handle in "handle/passport"
+    if (!handle) return null;
+    try {
+      const r = await fetch(API + '/api/user-by-handle/' + encodeURIComponent(handle));
+      if (r.ok) { const d = await r.json(); return d && d.id ? d.id : null; }
+    } catch {}
+    return null;
+  }
+  return path.split('/').pop() || null;
+}
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -884,7 +901,22 @@ async function load() {
   }
 }
 
-load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); });
+// Resolve handle-or-userId first, then hydrate everything that depends on it.
+(async function boot() {
+  userId = await _resolveProfileUserId();
+  window._profileUserId = userId;
+  if (!userId) {
+    const handleFromPath = location.pathname.startsWith('/@')
+      ? location.pathname.slice(2).split('/')[0] : null;
+    const msg = handleFromPath
+      ? `@${handleFromPath} doesn't exist or has been removed.`
+      : `This profile doesn't exist or has been removed.`;
+    document.getElementById('page').innerHTML =
+      `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Member not found</div><div class="error-sub">${msg}</div></div>`;
+    return;
+  }
+  load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); });
+})();
 
 // Defensive: a stray "Edit Name" button has been showing up on some
 // deploys (likely from a cached or injected override). Strip it if present.

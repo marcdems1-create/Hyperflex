@@ -11016,33 +11016,200 @@ async function maybeFireMilestoneEmail(slug) {
 // their takes, flex score, followers and track record live.
 // If no creator_settings row exists for the slug we still fall back to
 // the old page so nothing 404s during the transition.
+// GET /u/:slug — legacy creator-community URL; 301 → /@{handle}.
+// Resolves the slug to a user_id via creator_settings, then to the user's
+// handle. Falls through to the legacy profile page only if no match — which
+// will itself disappear when the community deprecation rip lands (Sprint 2).
 app.get('/u/:slug', async (req, res) => {
   try {
     const slug = req.params.slug;
+    let creatorId = null;
     if (pool) {
-      // creator_settings.slug → creator_id is the user's id
-      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
-      if (rows[0] && rows[0].creator_id) {
-        return res.redirect(302, '/m/' + encodeURIComponent(rows[0].creator_id));
-      }
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]).catch(() => []);
+      if (rows[0]) creatorId = rows[0].creator_id;
     } else if (supabase) {
       const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
-      if (data && data.creator_id) {
-        return res.redirect(302, '/m/' + encodeURIComponent(data.creator_id));
-      }
+      if (data) creatorId = data.creator_id;
+    }
+    if (creatorId) {
+      const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [creatorId]).catch(() => []);
+      if (hRows[0] && hRows[0].handle) return res.redirect(301, '/@' + hRows[0].handle);
+      return res.redirect(301, '/m/' + encodeURIComponent(creatorId));
     }
   } catch (err) {
     console.warn('[u-redirect]', err.message);
   }
-  // Fallback: legacy community page for any slug that doesn't map to a user
   res.sendFile(path.join(__dirname, 'public', 'profile.html'));
 });
 
-// GET /m/:userId — public member (trader) profile page
-app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
+// ── @USERNAME CANONICAL PROFILE URL (Sprint 1.a) ───────────────────────────
+// /@:handle is the single canonical profile URL. All other shapes
+// (/m/:userId, /u/:slug, /t/:handle, /trader/:address, /passport/:userId)
+// 301 here. member.html resolves handle → user via /api/user-by-handle.
 
-// GET /passport/:userId — Prediction Passport (shareable credential page)
-app.get('/passport/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'passport.html')));
+// Reserved words that can't be claimed as handles. Synced with the
+// reserved_handles table at boot.
+const _HANDLE_RESERVED_FALLBACK = new Set([
+  'admin','api','auth','dashboard','feed','home','landing','login','logout','me',
+  'predictors','picks','profile','settings','signup','terminal','alpha','alpha-live',
+  'arbitrage','brief','community','compare','creator','crystal-ball','data','embed',
+  'events','explore','flex','leaderboard','market','markets','nominate','odds','onboard',
+  'passport','privacy','rewards','screener','search','share','signals','sports',
+  'sports-predictors','spread-scanner','t','templates','terms','trader','u','win',
+  'whales','whale-index','hyperflex','hf','official','support','help','team','security',
+  'staff','system','root','moderator','mod','null','undefined','test'
+]);
+async function _isHandleReserved(handle) {
+  try {
+    const rows = await dbQuery('SELECT 1 FROM reserved_handles WHERE LOWER(handle) = LOWER($1) LIMIT 1', [handle]).catch(() => []);
+    if (rows.length) return true;
+  } catch {}
+  return _HANDLE_RESERVED_FALLBACK.has(handle.toLowerCase());
+}
+
+function _validateHandleFormat(handle) {
+  if (typeof handle !== 'string') return 'must be a string';
+  const h = handle.trim().replace(/^@+/, '');
+  if (!/^[a-z0-9_]{3,30}$/i.test(h)) return 'must be 3-30 chars, lowercase alphanumeric + underscore';
+  return null;
+}
+
+// GET /@:handle — canonical profile URL. Serves member.html; page-side JS
+// reads /api/user-by-handle/:handle to resolve → user_id and render.
+app.get('/@:handle', (req, res) => {
+  // Early-exit with 404 if the handle shape is obviously wrong so Google
+  // doesn't index /@null /@undefined /@admin etc.
+  if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.sendFile(path.join(__dirname, 'public', 'member.html'));
+});
+
+// GET /api/user-by-handle/:handle — resolve handle → public profile fields.
+// Used by member.html to hydrate the profile page when the URL is /@handle.
+app.get('/api/user-by-handle/:handle', async (req, res) => {
+  try {
+    const handle = String(req.params.handle || '').trim().replace(/^@+/, '').toLowerCase();
+    if (_validateHandleFormat(handle)) return res.status(404).json({ error: 'invalid handle' });
+    const rows = await dbQuery(
+      'SELECT id, handle, display_name, avatar_url, polymarket_address, is_whale FROM users WHERE LOWER(handle) = $1 LIMIT 1',
+      [handle]
+    ).catch(() => []);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/user/handle — authed user claims or changes their handle.
+// Validates format + reserved + uniqueness. Returns the canonical URL.
+app.post('/api/user/handle', requireAuth, async (req, res) => {
+  try {
+    const raw = req.body && req.body.handle;
+    const fmtErr = _validateHandleFormat(raw);
+    if (fmtErr) return res.status(400).json({ error: fmtErr });
+    const handle = String(raw).trim().replace(/^@+/, '').toLowerCase();
+    if (await _isHandleReserved(handle)) return res.status(409).json({ error: 'That handle is reserved' });
+    // Uniqueness (case-insensitive) — the UNIQUE index enforces this at
+    // the DB level; we return a clean error instead of the raw 23505.
+    const clash = await dbQuery(
+      'SELECT id FROM users WHERE LOWER(handle) = $1 AND id <> $2 LIMIT 1',
+      [handle, req.userId]
+    ).catch(() => []);
+    if (clash.length) return res.status(409).json({ error: 'That handle is taken' });
+    await dbQuery('UPDATE users SET handle = $1 WHERE id = $2', [handle, req.userId]);
+    res.json({ ok: true, handle, url: '/@' + handle });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return res.status(409).json({ error: 'That handle is taken' });
+    if (/users_handle_format_check/i.test(e.message)) return res.status(400).json({ error: 'invalid handle format' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/user/handle/available?handle=… — live availability check for the
+// handle-picker UI. Returns { available, reason? }.
+app.get('/api/user/handle/available', async (req, res) => {
+  try {
+    const raw = String(req.query.handle || '');
+    const fmtErr = _validateHandleFormat(raw);
+    if (fmtErr) return res.json({ available: false, reason: fmtErr });
+    const handle = raw.trim().replace(/^@+/, '').toLowerCase();
+    if (await _isHandleReserved(handle)) return res.json({ available: false, reason: 'reserved' });
+    const rows = await dbQuery('SELECT 1 FROM users WHERE LOWER(handle) = $1 LIMIT 1', [handle]).catch(() => []);
+    if (rows.length) return res.json({ available: false, reason: 'taken' });
+    res.json({ available: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Self-healing: on cold start, auto-populate handles for users where
+// handle IS NULL. Derives from display_name (if safe) or user_id prefix.
+// Runs 90s after boot so other init has settled. Logs count.
+async function _seedNullHandles() {
+  if (!pool) return;
+  try {
+    const rows = await dbQuery(
+      "SELECT id, display_name, polymarket_address FROM users WHERE handle IS NULL LIMIT 500"
+    ).catch(() => []);
+    if (!rows.length) return;
+    let filled = 0;
+    for (const u of rows) {
+      // Derive candidate: prefer display_name sanitised, fall back to
+      // address prefix, fall back to user_ prefix of id.
+      let cand = '';
+      if (u.display_name && !/^0x[0-9a-f]/i.test(u.display_name)) {
+        cand = u.display_name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 26);
+      }
+      if (!cand && u.polymarket_address) {
+        cand = 'w_' + u.polymarket_address.slice(2, 10).toLowerCase();
+      }
+      if (!cand || cand.length < 3) cand = 'user_' + String(u.id).slice(0, 8);
+      if (await _isHandleReserved(cand)) cand = 'user_' + String(u.id).slice(0, 8);
+      // Collision: append _<id prefix> until unique
+      let tryHandle = cand;
+      let attempt = 0;
+      while (attempt < 5) {
+        const taken = await dbQuery('SELECT 1 FROM users WHERE LOWER(handle)=$1 AND id<>$2 LIMIT 1', [tryHandle, u.id]).catch(() => []);
+        if (!taken.length) break;
+        tryHandle = (cand + '_' + String(u.id).slice(0, 4 + attempt)).slice(0, 30);
+        attempt++;
+      }
+      try {
+        await dbQuery('UPDATE users SET handle = $1 WHERE id = $2 AND handle IS NULL', [tryHandle, u.id]);
+        filled++;
+      } catch { /* CHECK / UNIQUE violation — skip this row, next boot retries */ }
+    }
+    if (filled) console.log('[handle-seed] populated ' + filled + ' / ' + rows.length + ' null handles');
+  } catch (e) { console.warn('[handle-seed] error:', e.message); }
+}
+setTimeout(() => { _seedNullHandles().catch(() => {}); }, 90 * 1000);
+
+// GET /m/:userId — legacy shape, 301 → /@{handle}. Kept working so old
+// shared links don't break.
+app.get('/m/:userId', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
+    const handle = rows[0]?.handle;
+    if (handle) return res.redirect(301, '/@' + handle);
+  } catch {}
+  // Fall through: if the user has no handle yet, serve the page so the
+  // UI can render and either prompt for handle claim (if owner) or show
+  // a wallet-stub identity.
+  res.sendFile(path.join(__dirname, 'public', 'member.html'));
+});
+
+// GET /passport/:userId — Prediction Passport (shareable credential page).
+// Redirects to /@{handle}/passport when the user has a handle; otherwise
+// serves the page directly so existing shared links keep working.
+app.get('/passport/:userId', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
+    if (rows[0] && rows[0].handle) return res.redirect(301, '/@' + rows[0].handle + '/passport');
+  } catch {}
+  res.sendFile(path.join(__dirname, 'public', 'passport.html'));
+});
+
+// GET /@:handle/passport — handle-based passport route (canonical).
+app.get('/@:handle/passport', (req, res) => {
+  if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.sendFile(path.join(__dirname, 'public', 'passport.html'));
+});
 
 // GET /takes/:id — single take permalink page (full thread, reply UI)
 app.get('/takes/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'take.html')));
@@ -11449,7 +11616,24 @@ app.get('/api/trader-profile/:username', async (req, res) => {
 });
 
 // ── MULTI-PLATFORM TRADER PROFILE (/trader/:address) ─────────────────────
-app.get('/trader/:address', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trader.html')));
+// Legacy shape, 301 → /@{handle} via ensureWhaleProfile for any active
+// wallet. ensureWhaleProfile either returns an existing user_id or creates
+// a whale-style one; we then look up the handle.
+app.get('/trader/:address', async (req, res) => {
+  const addr = (req.params.address || '').toLowerCase();
+  if (/^0x[0-9a-f]{40}$/.test(addr)) {
+    try {
+      const shortName = addr.slice(0, 6) + '…' + addr.slice(-4);
+      const uid = await ensureWhaleProfile(addr, shortName, null, null);
+      if (uid) {
+        const hRows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [uid]).catch(() => []);
+        if (hRows[0] && hRows[0].handle) return res.redirect(301, '/@' + hRows[0].handle);
+      }
+    } catch {}
+  }
+  // Fall through to legacy trader page for any address that can't be resolved.
+  res.sendFile(path.join(__dirname, 'public', 'trader.html'));
+});
 
 const _traderProfileCache = new Map();
 app.get('/api/trader/:address/profile', async (req, res) => {
@@ -26486,7 +26670,10 @@ app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pic
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
 app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
 app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
-app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
+// /t/:handle is the legacy tipster URL. Collapse to the canonical
+// /@{handle}. Tipsters are just users now (T1 rip) so there's no separate
+// tipster profile — the @username page shows everything including picks.
+app.get('/t/:handle', (req, res) => res.redirect(301, '/@' + req.params.handle));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
