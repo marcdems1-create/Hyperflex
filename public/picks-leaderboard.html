@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Leaderboard — HYPERFLEX</title>
-<meta name="description" content="Ranked tipsters by net units. Every pick locked before tip-off, graded from official results.">
+<meta name="description" content="Ranked by net units. Every pick locked before tip-off, graded from official results.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -137,7 +137,7 @@ async function load(){
 }
 
 function renderHeader(){
-  return '<div class="header"><h1>Tipster leaderboard.</h1><div class="subhead">NBA · Ranked by net units</div></div>';
+  return '<div class="header"><h1>Picks leaderboard.</h1><div class="subhead">NBA · Ranked by net units</div></div>';
 }
 
 function renderGated(d){
@@ -145,8 +145,8 @@ function renderGated(d){
   let title, body, progress;
   if(d.reason === 'insufficient_sample'){
     title = 'Not enough resolved picks yet.';
-    body = 'Leaderboard opens when three tipsters have ' + (d.min_picks || 5) + '+ resolved picks each. Ranking on a thin sample is a lie.';
-    progress = (d.qualifying || 0) + ' of 3 tipsters past ' + (d.min_picks || 5) + '-pick threshold · ' + (d.active || 0) + ' posting';
+    body = 'Leaderboard opens when three predictors have ' + (d.min_picks || 5) + '+ resolved picks each. Ranking on a thin sample is a lie.';
+    progress = (d.qualifying || 0) + ' of 3 past ' + (d.min_picks || 5) + '-pick threshold · ' + (d.active || 0) + ' posting';
   } else {
     title = 'Leaderboard offline.';
     body = 'Check back shortly.';
@@ -156,7 +156,7 @@ function renderGated(d){
     '<div class="gated">' +
       '<h2>' + esc(title) + '</h2>' +
       '<p>' + esc(body) + '</p>' +
-      '<a href="/picks">Apply as a founding tipster →</a>' +
+      '<a href="/picks/new">Lock a pick →</a>' +
       (progress ? '<div class="progress">' + esc(progress) + '</div>' : '') +
     '</div>';
 }
