@@ -169,7 +169,7 @@ footer{padding:60px 24px 100px;border-top:1px solid var(--border);text-align:cen
   <div class="eyebrow">Founding Tipster Cohort · NBA first</div>
   <h1 class="headline">Receipts,<br>not <span class="accent">screenshots</span>.</h1>
   <p class="subhead">
-    HYPERFLEX is the first social network where every sports pick is locked before tip-off and graded automatically. Build a record no one can fake. Earn followers who trust what they see.
+    HYPERFLEX is the first social network where every sports pick is locked before tip-off and graded from official results. The record is public, portable, and unfakeable.
   </p>
   <div class="cta-row">
     <a href="#apply" class="btn btn-primary">Apply as a founding tipster</a>
@@ -208,8 +208,8 @@ footer{padding:60px 24px 100px;border-top:1px solid var(--border);text-align:cen
     </div>
     <div class="step">
       <div class="step-num">03 · BUILD</div>
-      <div class="step-title">Earn followers by record, not reach.</div>
-      <div class="step-body">Bettors discover you through the leaderboard, not the algorithm. Your track record is public, portable, and yours. Take it anywhere — it's your receipt.</div>
+      <div class="step-title">Discovery by record, not reach.</div>
+      <div class="step-body">Bettors find tipsters through the leaderboard, not the algorithm. Track record is public, portable, and permanent — take it anywhere.</div>
     </div>
   </div>
 </section>
@@ -245,13 +245,13 @@ footer{padding:60px 24px 100px;border-top:1px solid var(--border);text-align:cen
   <div class="founding-inner">
     <div class="founding-badge">25 Founding Tipsters</div>
     <h2>Be one of the <span style="color:var(--gold)">first 25</span>.</h2>
-    <p>We're opening HYPERFLEX Picks to a founding cohort. Your record seeds the leaderboard. Your audience gets a feed they can actually trust.</p>
+    <p>HYPERFLEX Picks opens to a founding cohort first. Your record seeds the leaderboard. Your audience gets a feed that can't be gamed.</p>
   </div>
   <div class="perks">
     <div class="perk"><strong>Verified badge</strong>Founding tipsters get a permanent role marker on every pick and profile.</div>
     <div class="perk"><strong>Leaderboard placement</strong>First-mover slots on the NBA leaderboard. Your record sets the bar.</div>
     <div class="perk"><strong>100% subscription revenue, 6 months</strong>When monetization launches, founding tipsters keep the full sub revenue for 6 months. Standard 70/30 split after.</div>
-    <div class="perk"><strong>Direct product input</strong>We build this with you. Features, leaderboards, comp tools — you shape what ships.</div>
+    <div class="perk"><strong>Direct product input</strong>Features, leaderboards, comp tools — founding cohort shapes what ships.</div>
   </div>
 </section>
 
@@ -311,7 +311,7 @@ footer{padding:60px 24px 100px;border-top:1px solid var(--border);text-align:cen
 <!-- FAQ -->
 <section class="faq">
   <h2>Questions.</h2>
-  <div class="faq-item"><div class="faq-q">How is this different from Pikkit or Betstamp?</div><div class="faq-a">Those track your bets privately for you. HYPERFLEX builds your <em>public</em> reputation — bettors discover you, follow you, and eventually subscribe to you.</div></div>
+  <div class="faq-item"><div class="faq-q">How is this different from Pikkit or Betstamp?</div><div class="faq-a">Those track bets privately. HYPERFLEX makes the record <em>public</em>. Bettors discover tipsters through the leaderboard, follow them, and — when subscription monetization ships — subscribe.</div></div>
   <div class="faq-item"><div class="faq-q">How does the timestamp work?</div><div class="faq-a">When you post a pick, the server HMAC-signs a hash of (your id, game, side, line, odds, units, the exact moment) with a secret that lives server-side. The database refuses any pick where the timestamp isn't before the game's tip-off. Anyone can hit <code style="font-family:var(--mono);font-size:12px;color:var(--gold)">/api/picks/:id/verify</code> and confirm the row is original and pre-game. No edits, no deletions, no spoofing.</div></div>
   <div class="faq-item"><div class="faq-q">Do I need to connect a sportsbook?</div><div class="faq-a">No. Picks are locked with a server-signed timestamp before tip-off — a stronger proof of timing than a screenshot, and distinct from a book-synced bet. Book integration comes later as a separate "verified bettor" tier.</div></div>
   <div class="faq-item"><div class="faq-q">Is this legal?</div><div class="faq-a">Yes. We track picks and reputations. We don't take bets, facilitate wagering, or handle funds.</div></div>
