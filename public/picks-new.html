@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lock a pick — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.55;min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;position:sticky;top:0;z-index:10;background:rgba(11,11,18,0.78);backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
+.nav-logo{font-size:17px;font-weight:900;letter-spacing:-0.02em}
+.nav-logo .accent{color:var(--gold)}
+.nav-back{color:var(--muted);font-size:13px;padding:10px 14px;min-height:44px;display:inline-flex;align-items:center}
+.nav-back:hover{color:var(--text)}
+
+main{max-width:640px;margin:0 auto;padding:32px 24px 120px}
+
+/* Gate states */
+.gate{padding:64px 20px;text-align:center;border:1px dashed var(--border);border-radius:16px;margin-top:20px}
+.gate-title{font-size:20px;font-weight:800;letter-spacing:-0.02em;margin-bottom:10px}
+.gate-body{font-size:14px;color:var(--text-soft);max-width:440px;margin:0 auto 20px;line-height:1.5}
+.gate a{color:var(--gold);border-bottom:1px solid currentColor}
+
+/* Header */
+.hdr{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:28px;gap:12px;flex-wrap:wrap}
+h1{font-size:28px;font-weight:900;letter-spacing:-0.02em}
+.hdr-note{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase}
+
+/* Form sections */
+.block{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:14px}
+.block-label{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px}
+
+/* Game picker */
+.games{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
+.games::-webkit-scrollbar{width:4px}
+.games::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+.game{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);cursor:pointer;transition:border-color 0.12s}
+.game:hover{border-color:var(--border-strong)}
+.game.selected{border-color:var(--gold);background:rgba(245,166,35,0.06)}
+.game-teams{flex:1;font-family:var(--mono);font-size:13px;font-weight:700}
+.game-teams .at{color:var(--muted);margin:0 8px;font-weight:400}
+.game-time{font-family:var(--mono);font-size:11px;color:var(--text-soft)}
+.game-time .countdown{color:var(--gold);display:block;margin-top:2px}
+
+/* Bet type segmented control */
+.bet-types{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.bet-type{padding:10px 6px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.12s;text-align:center}
+.bet-type:hover{color:var(--text)}
+.bet-type.active{background:rgba(245,166,35,0.1);color:var(--gold);border-color:rgba(245,166,35,0.35)}
+
+/* Side toggle */
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.side-btn{padding:14px;font-family:var(--mono);font-size:14px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text-soft);transition:all 0.12s}
+.side-btn:hover{color:var(--text)}
+.side-btn.active{background:rgba(245,166,35,0.1);color:var(--gold);border-color:rgba(245,166,35,0.35)}
+
+/* Number inputs row */
+.nums{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:500px){.nums{grid-template-columns:1fr}.bet-types{grid-template-columns:repeat(2,1fr)}}
+.num-field label{display:block;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
+.num-field input{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:16px;outline:none}
+.num-field input:focus{border-color:var(--gold)}
+.num-field .hint{font-size:11px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.num-field input:disabled{opacity:0.4;cursor:not-allowed}
+
+/* Thesis */
+textarea{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:14px;outline:none;resize:vertical;min-height:72px}
+textarea:focus{border-color:var(--gold)}
+.thesis-count{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right;margin-top:4px}
+
+/* Lock button */
+.lock-wrap{position:sticky;bottom:16px;margin-top:24px;padding:14px;background:linear-gradient(180deg,transparent,rgba(11,11,18,0.9) 40%);border-radius:16px}
+.lock-btn{width:100%;padding:18px;background:var(--gold);color:#0e0e12;border:none;border-radius:100px;font-size:16px;font-weight:800;letter-spacing:-0.01em;min-height:56px;transition:transform 0.12s,background 0.12s,opacity 0.12s}
+.lock-btn:hover:not(:disabled){background:#ffb833;transform:translateY(-1px)}
+.lock-btn:disabled{opacity:0.4;cursor:not-allowed}
+.lock-status{text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px}
+
+/* Banners */
+.banner{padding:14px 16px;border-radius:10px;font-size:13.5px;line-height:1.5;margin-bottom:14px;display:none}
+.banner.err{background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.3);color:var(--red)}
+.banner.ok{background:rgba(0,230,138,0.08);border:1px solid rgba(0,230,138,0.3);color:var(--green)}
+
+.empty{padding:40px 20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px;border:1px dashed var(--border);border-radius:10px}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/picks" class="nav-logo">HYPER<span class="accent">FLEX</span></a>
+  <a href="/picks" class="nav-back">← Picks</a>
+</nav>
+
+<main id="mainEl">
+  <div class="empty">Checking access…</div>
+</main>
+
+<script>
+const API = location.origin;
+const state = {
+  games: [],
+  selectedGameId: null,
+  betType: 'spread',
+  side: null,
+  line: null,
+  odds: -110,
+  units: 1,
+  thesis: '',
+};
+
+function getToken(){
+  return localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token') || '';
+}
+function esc(s){if(s==null)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function fmtCountdown(iso){
+  const diff = new Date(iso).getTime() - Date.now();
+  if(diff <= 0) return 'started';
+  const h = Math.floor(diff/3600000);
+  const m = Math.floor((diff%3600000)/60000);
+  if(h > 0) return 'Tips in ' + h + 'h ' + m + 'm';
+  return 'Tips in ' + m + 'm';
+}
+function fmtTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) + ' · ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+
+async function boot(){
+  const token = getToken();
+  if(!token){
+    renderGate('signin');
+    return;
+  }
+  // Probe the gate: send a dry-run pick request and read the 403 shape.
+  // Cheaper than a separate /api/me endpoint and uses the single source of
+  // truth for the gate logic (the real POST /api/picks).
+  try{
+    const r = await fetch(API + '/api/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({}) // empty body → 400 for approved tipsters, 403 for non-tipsters
+    });
+    if(r.status === 403){
+      const d = await r.json().catch(()=>({}));
+      renderGate(d.tipster_status || 'none', d.revoked);
+      return;
+    }
+    // 400/500 means auth + tipster status passed; we just didn't pass a valid payload (expected).
+    await loadGames();
+  }catch(e){
+    document.getElementById('mainEl').innerHTML = '<div class="empty">Our end. Try again in a minute.</div>';
+  }
+}
+
+function renderGate(status, revoked){
+  let title, body, cta;
+  if(status === 'signin'){
+    title = 'Sign in first.';
+    body = 'Picks are for approved tipsters. Sign in, then apply if you haven\u2019t yet.';
+    cta = '<a href="/creator/login">Sign in →</a>';
+  } else if(status === 'applied'){
+    title = 'Application pending.';
+    body = 'Your application is in review. Decisions go out within 7 days of the cohort window closing.';
+    cta = '<a href="/picks">Back to /picks</a>';
+  } else if(status === 'rejected'){
+    title = 'Not this cohort.';
+    body = 'Apply again in 30 days. Every application gets read.';
+    cta = '<a href="/picks">Back to /picks</a>';
+  } else if(revoked || status === 'revoked'){
+    title = 'Access paused.';
+    body = 'Posting access on this account has been paused. Reach out if you think this is a mistake.';
+    cta = '<a href="mailto:admin@hyperflex.network">Contact admin</a>';
+  } else {
+    title = 'Picks are in founding-tipster beta.';
+    body = 'Apply at /picks to join the founding cohort. 25 slots.';
+    cta = '<a href="/picks">Apply →</a>';
+  }
+  document.getElementById('mainEl').innerHTML =
+    '<div class="gate">' +
+      '<div class="gate-title">' + esc(title) + '</div>' +
+      '<div class="gate-body">' + esc(body) + '</div>' +
+      cta +
+    '</div>';
+}
+
+async function loadGames(){
+  try{
+    const r = await fetch(API + '/api/games/today?sport=nba');
+    const d = await r.json();
+    state.games = d.games || [];
+    renderComposer();
+  }catch(e){
+    document.getElementById('mainEl').innerHTML = '<div class="empty">Could not load the slate. Try again.</div>';
+  }
+}
+
+function renderComposer(){
+  const main = document.getElementById('mainEl');
+  const gameCount = state.games.length;
+  main.innerHTML = (
+    '<div class="hdr"><h1>Lock a pick.</h1>' +
+      '<div class="hdr-note">NBA · ' + gameCount + ' scheduled</div>' +
+    '</div>' +
+    '<div id="errBanner" class="banner err"></div>' +
+    '<div id="okBanner" class="banner ok"></div>' +
+    '<div class="block">' +
+      '<div class="block-label">1 · Game</div>' +
+      '<div class="games" id="gamesList">' +
+        (gameCount === 0
+          ? '<div class="empty">No NBA games in the next 36 hours.</div>'
+          : state.games.map(renderGameRow).join('')) +
+      '</div>' +
+    '</div>' +
+    '<div class="block"><div class="block-label">2 · Bet type</div>' +
+      '<div class="bet-types">' +
+        ['spread','moneyline','total','prop'].map(t =>
+          '<div class="bet-type' + (state.betType===t?' active':'') + '" data-type="' + t + '" onclick="setBetType(\'' + t + '\')">' + t + '</div>'
+        ).join('') +
+      '</div>' +
+    '</div>' +
+    '<div class="block"><div class="block-label">3 · Side</div><div id="sidesBox"></div></div>' +
+    '<div class="block"><div class="block-label">4 · Numbers</div>' +
+      '<div class="nums">' +
+        '<div class="num-field"><label>Line</label><input id="lineInp" type="number" step="0.5" placeholder="e.g. -5.5" />' +
+          '<div class="hint" id="lineHint">spread only</div></div>' +
+        '<div class="num-field"><label>Odds (American)</label><input id="oddsInp" type="number" step="5" value="-110" /></div>' +
+        '<div class="num-field"><label>Units</label><input id="unitsInp" type="number" step="0.25" min="0.25" max="10" value="1" /><div class="hint">0.25 – 10.00</div></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="block"><div class="block-label">5 · Take (optional)</div>' +
+      '<textarea id="thesisInp" maxlength="500" placeholder="One line on why. Optional but recommended."></textarea>' +
+      '<div class="thesis-count" id="thesisCount">0 / 500</div>' +
+    '</div>' +
+    '<div class="lock-wrap">' +
+      '<button id="lockBtn" class="lock-btn" onclick="submitPick()" disabled>Lock the pick</button>' +
+      '<div class="lock-status" id="lockStatus">Pick a game + side to continue.</div>' +
+    '</div>'
+  );
+  renderSides();
+  wireInputs();
+}
+
+function renderGameRow(g){
+  const away = esc((g.away_abbr || g.away_name || 'AWAY').toUpperCase());
+  const home = esc((g.home_abbr || g.home_name || 'HOME').toUpperCase());
+  const sel = state.selectedGameId === g.id ? ' selected' : '';
+  return (
+    '<div class="game' + sel + '" data-game-id="' + esc(g.id) + '" onclick="selectGame(\'' + esc(g.id) + '\')">' +
+      '<div class="game-teams">' + away + '<span class="at">@</span>' + home + '</div>' +
+      '<div class="game-time">' + esc(fmtTime(g.starts_at)) + '<span class="countdown">' + esc(fmtCountdown(g.starts_at)) + '</span></div>' +
+    '</div>'
+  );
+}
+
+function selectGame(id){
+  state.selectedGameId = id;
+  state.side = null; // reset side when game changes
+  renderComposer();
+}
+function setBetType(t){
+  state.betType = t;
+  state.side = null; // side vocab changes per bet type
+  renderComposer();
+}
+
+function renderSides(){
+  const box = document.getElementById('sidesBox');
+  const g = state.games.find(x => x.id === state.selectedGameId);
+  if(!g && state.betType !== 'prop'){
+    box.innerHTML = '<div class="empty" style="padding:20px">Pick a game first.</div>';
+    updateValidity();
+    return;
+  }
+  let left, right, lVal, rVal;
+  if(state.betType === 'spread' || state.betType === 'moneyline'){
+    left  = esc((g.away_abbr || g.away_name || 'AWAY').toUpperCase());
+    right = esc((g.home_abbr || g.home_name || 'HOME').toUpperCase());
+    lVal = 'away'; rVal = 'home';
+  } else if(state.betType === 'total'){
+    left  = 'OVER'; right = 'UNDER';
+    lVal = 'over';  rVal = 'under';
+  } else {
+    // prop: free-text — render a single input instead of the two-button toggle
+    box.innerHTML = '<input id="propSide" class="num-field" type="text" maxlength="64" placeholder="e.g. LeBron over 27.5 pts" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:14px;outline:none" />';
+    const inp = document.getElementById('propSide');
+    inp.addEventListener('input', () => { state.side = inp.value.trim() || null; updateValidity(); });
+    updateValidity();
+    return;
+  }
+  box.innerHTML = (
+    '<div class="sides">' +
+      '<button class="side-btn' + (state.side===lVal?' active':'') + '" onclick="setSide(\'' + lVal + '\')">' + left + '</button>' +
+      '<button class="side-btn' + (state.side===rVal?' active':'') + '" onclick="setSide(\'' + rVal + '\')">' + right + '</button>' +
+    '</div>'
+  );
+  updateValidity();
+}
+
+function setSide(s){ state.side = s; renderSides(); }
+
+function wireInputs(){
+  const lineInp = document.getElementById('lineInp');
+  const oddsInp = document.getElementById('oddsInp');
+  const unitsInp = document.getElementById('unitsInp');
+  const thesisInp = document.getElementById('thesisInp');
+  const lineHint = document.getElementById('lineHint');
+
+  // Line input: required for spread+total, disabled for moneyline, optional for prop
+  function refreshLineUi(){
+    if(state.betType === 'moneyline'){
+      lineInp.value = ''; lineInp.disabled = true;
+      lineHint.textContent = 'no line on moneyline';
+    } else if(state.betType === 'total'){
+      lineInp.disabled = false; lineHint.textContent = 'total points line';
+    } else if(state.betType === 'spread'){
+      lineInp.disabled = false; lineHint.textContent = 'spread (negative = favorite)';
+    } else {
+      lineInp.disabled = false; lineHint.textContent = 'optional for props';
+    }
+  }
+  refreshLineUi();
+
+  lineInp.addEventListener('input', () => { state.line = lineInp.value === '' ? null : Number(lineInp.value); updateValidity(); });
+  oddsInp.addEventListener('input', () => { state.odds = Number(oddsInp.value); updateValidity(); });
+  unitsInp.addEventListener('input', () => { state.units = Number(unitsInp.value); updateValidity(); });
+  thesisInp.addEventListener('input', () => {
+    state.thesis = thesisInp.value;
+    document.getElementById('thesisCount').textContent = thesisInp.value.length + ' / 500';
+  });
+  updateValidity();
+}
+
+function updateValidity(){
+  const btn = document.getElementById('lockBtn');
+  const status = document.getElementById('lockStatus');
+  if(!btn || !status) return;
+  const reasons = [];
+  if(!state.selectedGameId) reasons.push('pick a game');
+  if(!state.side) reasons.push('pick a side');
+  if(state.betType !== 'moneyline' && state.betType !== 'prop' && (state.line == null || !Number.isFinite(state.line))) reasons.push('enter the line');
+  if(!Number.isFinite(state.odds) || state.odds === 0) reasons.push('enter the odds');
+  if(!Number.isFinite(state.units) || state.units <= 0 || state.units > 10) reasons.push('units between 0.25 and 10');
+  btn.disabled = reasons.length > 0;
+  status.textContent = reasons.length ? reasons.join(' · ') : 'Ready. Pick locks when you confirm.';
+}
+
+async function submitPick(){
+  const errBan = document.getElementById('errBanner');
+  const okBan  = document.getElementById('okBanner');
+  const btn    = document.getElementById('lockBtn');
+  errBan.style.display = okBan.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Locking…';
+
+  const payload = {
+    game_id: state.selectedGameId,
+    bet_type: state.betType,
+    side: state.side,
+    line: state.line,
+    odds: state.odds,
+    units: state.units,
+  };
+  if(state.thesis && state.thesis.trim()) payload.thesis = state.thesis.trim();
+
+  try{
+    const r = await fetch(API + '/api/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if(!r.ok){
+      errBan.textContent = d.error || 'Lock failed. Adjust and try again.';
+      errBan.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Lock the pick';
+      return;
+    }
+    // Stay on page so tipsters can post another pick without a round-trip.
+    // Surface the receipt URL + a reset action rather than redirect.
+    okBan.innerHTML =
+      'Locked. Verify receipt: <a href="/api/picks/' + esc(d.pick.id) + '/verify" target="_blank" rel="noreferrer noopener" style="color:inherit;text-decoration:underline">/api/picks/' + esc(d.pick.id.slice(0, 8)) + '…/verify</a>';
+    okBan.style.display = 'block';
+    btn.textContent = 'Locked ✓';
+    // Reset form after a beat, ready for the next pick.
+    setTimeout(() => {
+      state.selectedGameId = null;
+      state.side = null;
+      state.line = null;
+      state.thesis = '';
+      renderComposer();
+      okBan.style.display = 'block'; // preserve the banner across re-render
+      const m = document.getElementById('mainEl');
+      m.insertBefore(okBan, m.firstChild.nextSibling);
+    }, 1500);
+  }catch(e){
+    errBan.textContent = 'Our end. Try again in a minute.';
+    errBan.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Lock the pick';
+  }
+}
+
+boot();
+</script>
+
+</body>
+</html>
