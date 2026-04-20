@@ -15071,6 +15071,7 @@ app.get('/api/picks/:id', async (req, res) => {
     const rows = await dbQuery(
       `SELECT p.*,
               u.display_name AS user_display_name, u.polymarket_address AS user_wallet,
+              u.tipster_handle AS user_tipster_handle,
               g.starts_at, g.status AS game_status, g.home_score, g.away_score, g.period,
               home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
               away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
@@ -25782,6 +25783,7 @@ app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data
 app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
 app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks.html')));
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
+app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
 app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
 app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
 

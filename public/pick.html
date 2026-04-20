@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pick — HYPERFLEX</title>
+<meta name="description" content="Locked before tip-off. Graded from official results.">
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.55;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;position:sticky;top:0;z-index:10;background:rgba(11,11,18,0.78);backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
+.nav-logo{font-size:17px;font-weight:900;letter-spacing:-0.02em}
+.nav-logo .accent{color:var(--gold)}
+.nav-back{color:var(--muted);font-size:13px;padding:10px 14px;min-height:44px;display:inline-flex;align-items:center}
+.nav-back:hover{color:var(--text)}
+
+main{max-width:560px;margin:0 auto;padding:36px 24px 100px}
+
+.byline{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.by-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,rgba(245,166,35,0.25),rgba(168,85,247,0.15));border:1px solid rgba(245,166,35,0.35);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--gold);font-size:13px}
+.by-text{flex:1;min-width:0}
+.by-handle{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)}
+.by-handle:hover{color:var(--gold)}
+.by-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+
+/* Card */
+.card{padding:24px 26px 22px;border:1px solid var(--border-strong);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.012));box-shadow:0 0 80px -30px rgba(245,166,35,0.2)}
+
+.matchup{font-family:var(--mono);font-size:12px;color:var(--text-soft);letter-spacing:0.06em;margin-bottom:14px;text-transform:uppercase}
+.matchup .dot{color:var(--faint);margin:0 8px}
+
+.call{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1.15;letter-spacing:-0.02em;color:var(--text);margin:4px 0 16px;word-break:break-word}
+.call .units{color:var(--gold);margin:0 14px;font-size:26px}
+.call .odds{color:var(--text-soft);font-size:22px}
+
+.thesis{font-size:15px;color:var(--text-soft);line-height:1.6;margin:12px 0 18px;white-space:pre-wrap;word-break:break-word;padding-left:14px;border-left:2px solid var(--border)}
+
+.state{display:flex;flex-wrap:wrap;gap:10px;padding:14px 0;border-top:1px solid var(--border);margin-top:4px;align-items:center}
+.chip{padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;border-radius:100px;letter-spacing:0.08em;text-transform:uppercase;border:1px solid}
+.chip-locked{background:var(--surface-2);color:var(--text-soft);border-color:var(--border)}
+.chip-live{background:rgba(0,230,138,0.08);color:var(--green);border-color:rgba(0,230,138,0.25)}
+.chip-live .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle;animation:lpulse 2s infinite}
+@keyframes lpulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.chip-win{background:rgba(0,230,138,0.1);color:var(--green);border-color:rgba(0,230,138,0.3)}
+.chip-loss{background:rgba(255,77,106,0.08);color:var(--red);border-color:rgba(255,77,106,0.3)}
+.chip-push,.chip-void{background:var(--surface-2);color:var(--muted);border-color:var(--border)}
+.state .gap{flex:1}
+.state .result{font-family:var(--mono);font-size:16px;font-weight:700}
+.state .result.pos{color:var(--green)}
+.state .result.neg{color:var(--red)}
+.state .result.mute{color:var(--muted)}
+
+.timestamps{display:flex;flex-direction:column;gap:4px;padding:14px 0 4px;border-top:1px solid var(--border);margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.timestamps .row{display:flex;justify-content:space-between;gap:10px}
+.timestamps .row .label{color:var(--faint)}
+.timestamps .row .val{color:var(--text-soft)}
+
+/* Verify receipt */
+.verify{margin-top:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface);font-family:var(--mono);font-size:12px}
+.verify-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-size:10.5px}
+.verify-head .ok{color:var(--green);letter-spacing:0.08em}
+.verify-head .bad{color:var(--red);letter-spacing:0.08em}
+.verify-row{display:flex;gap:10px;padding:4px 0;color:var(--text-soft)}
+.verify-row .k{color:var(--faint);min-width:110px}
+.verify-row .v{word-break:break-all;color:var(--text-soft)}
+.verify-row .v.mono{color:var(--gold)}
+
+/* Share */
+.share{margin-top:20px;display:flex;gap:10px}
+.share .btn{flex:1;padding:12px 18px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:100px;cursor:pointer;text-align:center;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);transition:all 0.12s}
+.share .btn:hover{background:var(--surface-2);border-color:var(--border-strong)}
+.share .btn.primary{background:var(--gold);color:#0e0e12;border-color:var(--gold)}
+.share .btn.primary:hover{background:#ffb833}
+
+.loading,.empty,.error{padding:60px 20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px;border:1px dashed var(--border);border-radius:12px}
+
+footer{padding:48px 24px 80px;border-top:1px solid var(--border);text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.06em;margin-top:40px}
+
+@media(max-width:520px){
+  main{padding:24px 18px 80px}
+  .card{padding:20px}
+  .call{font-size:26px}
+  .call .units{font-size:22px}
+  .call .odds{font-size:18px}
+  .share{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span class="accent">FLEX</span></a>
+  <a href="javascript:history.back()" class="nav-back">← Back</a>
+</nav>
+
+<main id="mainEl">
+  <div class="loading">Loading pick…</div>
+</main>
+
+<footer>HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</footer>
+
+<script>
+const pickId = location.pathname.replace(/^\/picks\//, '').replace(/\/$/, '');
+const API = location.origin;
+
+function esc(s){if(s==null)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function getInitials(h){return String(h||'?').replace(/[^a-z0-9]/gi,'').slice(0,2).toUpperCase()||'?'}
+
+// Charter §7 formatters
+function fmtUnits(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  const v=Number(n);
+  return (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(2) + 'u';
+}
+function fmtDurationAgo(iso){
+  if(!iso)return '';
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if(diff < 60) return Math.floor(diff) + ' sec ago';
+  if(diff < 3600) return Math.floor(diff/60) + ' min ago';
+  if(diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ', ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+function fmtAbs(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) + ' · ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+function leadTime(lockedAt, startsAt){
+  if(!lockedAt || !startsAt) return '';
+  const diff = (new Date(startsAt).getTime() - new Date(lockedAt).getTime()) / 1000;
+  if(diff <= 0) return '';
+  const h = Math.floor(diff/3600);
+  const m = Math.floor((diff%3600)/60);
+  if(h > 0) return h + 'h ' + m + 'm before tip';
+  return m + 'm before tip';
+}
+
+function fmtPickCall(p){
+  const line = p.line == null ? '' : (p.line > 0 ? '+' + p.line : String(p.line));
+  const oddsStr = Number(p.odds) > 0 ? '+' + p.odds : String(p.odds);
+  let body;
+  const homeLbl = (p.home_abbr || p.home_name || 'HOME').toUpperCase();
+  const awayLbl = (p.away_abbr || p.away_name || 'AWAY').toUpperCase();
+  if (p.bet_type === 'moneyline') {
+    body = (p.side === 'home' ? homeLbl : awayLbl) + ' ML';
+  } else if (p.bet_type === 'spread') {
+    body = (p.side === 'home' ? homeLbl : awayLbl) + (line ? ' ' + line : '');
+  } else if (p.bet_type === 'total') {
+    body = (p.side === 'over' ? 'OVER ' : 'UNDER ') + (p.line != null ? p.line : '');
+  } else {
+    body = p.side;
+  }
+  const unitsTxt = Number(p.units).toFixed(2).replace(/\.00$/, '') + 'u';
+  return esc(body) + '<span class="units">' + esc(unitsTxt) + '</span><span class="odds">' + esc(oddsStr) + '</span>';
+}
+
+async function load(){
+  const main = document.getElementById('mainEl');
+  try{
+    const [pickRes, verifyRes] = await Promise.all([
+      fetch(API + '/api/picks/' + encodeURIComponent(pickId)),
+      fetch(API + '/api/picks/' + encodeURIComponent(pickId) + '/verify'),
+    ]);
+    if(pickRes.status === 404){
+      main.innerHTML = '<div class="empty">No pick by that id.</div>';
+      return;
+    }
+    if(!pickRes.ok) throw new Error('load failed');
+    const pickData = await pickRes.json();
+    const verifyData = verifyRes.ok ? await verifyRes.json() : null;
+    render(pickData.pick, verifyData);
+  }catch(e){
+    main.innerHTML = '<div class="error">Our end. Try again in a minute.</div>';
+  }
+}
+
+function render(p, v){
+  const main = document.getElementById('mainEl');
+  const handle = p.user_tipster_handle || null;
+  const avatarInitials = getInitials(handle || p.user_display_name || 'HF');
+
+  // Set doc title + OG title for share cards
+  const callTxt = (p.side || '').toUpperCase() + (p.line != null ? ' ' + (p.line > 0 ? '+' + p.line : p.line) : '');
+  document.title = '@' + (handle || 'tipster') + ' · ' + callTxt + ' — HYPERFLEX';
+
+  // Resolution chip + result line
+  const status = p.settlement_status;
+  const gameStatus = p.game_status;
+  let chip, resultLine;
+  if (status === 'win') {
+    chip = '<span class="chip chip-win">✓ Graded · W</span>';
+    resultLine = '<span class="result pos">' + esc(fmtUnits(p.settled_units)) + '</span>';
+  } else if (status === 'loss') {
+    chip = '<span class="chip chip-loss">✗ Graded · L</span>';
+    resultLine = '<span class="result neg">' + esc(fmtUnits(p.settled_units)) + '</span>';
+  } else if (status === 'push') {
+    chip = '<span class="chip chip-push">— Push</span>';
+    resultLine = '<span class="result mute">0.00u</span>';
+  } else if (status === 'void') {
+    chip = '<span class="chip chip-void">Void</span>';
+    resultLine = '<span class="result mute">0.00u</span>';
+  } else if (gameStatus === 'live') {
+    const score = (p.home_score != null && p.away_score != null)
+      ? ' · ' + (p.away_abbr || 'AWAY') + ' ' + p.away_score + ' — ' + (p.home_abbr || 'HOME') + ' ' + p.home_score
+      : '';
+    chip = '<span class="chip chip-live"><span class="live-dot"></span>Live' + esc(score) + '</span>';
+    resultLine = '<span class="result mute">settling</span>';
+  } else {
+    chip = '<span class="chip chip-locked">🔒 Locked</span>';
+    resultLine = '<span class="result mute">pending tip-off</span>';
+  }
+
+  const matchup = (p.away_abbr && p.home_abbr)
+    ? (esc(p.away_abbr) + '<span class="dot">@</span>' + esc(p.home_abbr))
+    : '';
+  const leadStr = leadTime(p.locked_at, p.starts_at);
+  const thesis = p.thesis ? '<div class="thesis">' + esc(p.thesis) + '</div>' : '';
+
+  // Verify block. v.valid / v.pre_game are the two proofs.
+  let verifyBlock = '';
+  if (v) {
+    const valid   = v.valid === true;
+    const preGame = v.pre_game === true;
+    const okAll   = valid && preGame;
+    verifyBlock = (
+      '<div class="verify">' +
+        '<div class="verify-head">' +
+          '<span>Receipt</span>' +
+          '<span class="' + (okAll ? 'ok' : 'bad') + '">' + (okAll ? '✓ Valid · Pre-game' : (valid ? '✓ Valid · ⚠ post-tip' : '⚠ Hash mismatch')) + '</span>' +
+        '</div>' +
+        '<div class="verify-row"><span class="k">Locked</span><span class="v">' + esc(fmtAbs(v.locked_at || p.locked_at)) + '</span></div>' +
+        '<div class="verify-row"><span class="k">Tip-off</span><span class="v">' + esc(fmtAbs(v.game_starts_at || p.starts_at)) + '</span></div>' +
+        (v.recomputed_hash
+          ? '<div class="verify-row"><span class="k">Hash (recomputed)</span><span class="v mono">' + esc(v.recomputed_hash) + '</span></div>' +
+            '<div class="verify-row"><span class="k">Hash (stored)</span><span class="v mono">' + esc(v.stored_hash) + '</span></div>'
+          : '') +
+      '</div>'
+    );
+  }
+
+  main.innerHTML = (
+    (handle ? (
+      '<a href="/t/' + esc(handle) + '" class="byline">' +
+        '<div class="by-avatar">' + esc(avatarInitials) + '</div>' +
+        '<div class="by-text">' +
+          '<div class="by-handle">@' + esc(handle) + '</div>' +
+          '<div class="by-sub">Founding tipster' + (leadStr ? ' · locked ' + esc(leadStr) : '') + '</div>' +
+        '</div>' +
+      '</a>'
+    ) : '') +
+    '<div class="card">' +
+      (matchup ? '<div class="matchup">' + matchup + '<span class="dot">·</span>' + esc((p.sport || '').toUpperCase()) + '<span class="dot">·</span>' + esc(p.bet_type.toUpperCase()) + '</div>' : '') +
+      '<div class="call">' + fmtPickCall(p) + '</div>' +
+      thesis +
+      '<div class="state">' +
+        chip +
+        '<div class="gap"></div>' +
+        resultLine +
+      '</div>' +
+      '<div class="timestamps">' +
+        '<div class="row"><span class="label">Locked</span><span class="val">' + esc(fmtAbs(p.locked_at)) + '</span></div>' +
+        '<div class="row"><span class="label">Tip-off</span><span class="val">' + esc(fmtAbs(p.starts_at)) + '</span></div>' +
+        (p.settled_at ? '<div class="row"><span class="label">Settled</span><span class="val">' + esc(fmtAbs(p.settled_at)) + '</span></div>' : '') +
+      '</div>' +
+      verifyBlock +
+    '</div>' +
+    '<div class="share">' +
+      '<button class="btn primary" onclick="shareOnX()">Share on X</button>' +
+      '<button class="btn" onclick="copyLink()">Copy link</button>' +
+    '</div>'
+  );
+}
+
+function shareOnX(){
+  const url = location.href;
+  const text = 'Locked. ' + document.title.split(' — ')[0];
+  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text + '\n\n' + url), '_blank');
+}
+async function copyLink(){
+  try{
+    await navigator.clipboard.writeText(location.href);
+    const btn = document.querySelectorAll('.share .btn')[1];
+    const old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  }catch(e){}
+}
+
+load();
+</script>
+</body>
+</html>
