@@ -11137,6 +11137,22 @@ app.get('/api/user-by-handle/:handle', async (req, res) => {
       avatar_url:         r.avatar_url         || null,
       polymarket_address: r.polymarket_address || null,
       is_whale:           r.is_whale           || false,
+      // Flex Score payload — Charter §8 single-surface rule. One round trip
+      // for the profile page so the hero card can render the big number,
+      // tier, and component waterfall without a follow-up fetch.
+      flex_score:         r.flex_score != null ? parseInt(r.flex_score, 10) : null,
+      flex_tier:          r.flex_tier          || 'Building',
+      flex_qualifies:     !!r.flex_qualifies,
+      flex_settled_events: parseInt(r.flex_settled_events || 0, 10),
+      flex_raw_win_rate:  r.flex_raw_win_rate != null ? parseFloat(r.flex_raw_win_rate) : null,
+      flex_components: {
+        accuracy:    r.flex_c_accuracy    != null ? parseFloat(r.flex_c_accuracy)    : null,
+        calibration: r.flex_c_calibration != null ? parseFloat(r.flex_c_calibration) : null,
+        pnl:         r.flex_c_pnl         != null ? parseFloat(r.flex_c_pnl)         : null,
+        consistency: r.flex_c_consistency != null ? parseFloat(r.flex_c_consistency) : null,
+        breadth:     r.flex_c_breadth     != null ? parseFloat(r.flex_c_breadth)     : null,
+      },
+      flex_computed_at:   r.flex_computed_at || null,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -16542,6 +16558,10 @@ app.post('/api/admin/sports-flex/rebuild', async (req, res) => {
 // live without waiting for the nightly cron.
 function recomputeSportsFlexForUser(userId) {
   recomputeSportsFlexScore(userId).catch(() => {});
+  // Unified Flex Score on-demand refresh. Fires alongside sports so every
+  // pick settlement keeps both surfaces live without waiting for the
+  // nightly crons (sports rebuilds at 04:00, unified at 04:30).
+  recomputeFlexScore(userId).catch(() => {});
 }
 module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
 
