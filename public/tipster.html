@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tipster — HYPERFLEX</title>
+<meta name="description" content="Verified pick history. Locked before tip-off, graded from official results.">
+<meta property="og:type" content="profile">
+<meta name="twitter:card" content="summary_large_image">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.55;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;position:sticky;top:0;z-index:10;background:rgba(11,11,18,0.78);backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
+.nav-logo{font-size:17px;font-weight:900;letter-spacing:-0.02em}
+.nav-logo .accent{color:var(--gold)}
+.nav-back{color:var(--muted);font-size:13px;padding:10px 14px;min-height:44px;display:inline-flex;align-items:center}
+.nav-back:hover{color:var(--text)}
+
+main{max-width:720px;margin:0 auto;padding:32px 24px 100px}
+
+/* Header */
+.hero{margin-bottom:28px}
+.hero-top{display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.avatar{width:56px;height:56px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,rgba(245,166,35,0.25),rgba(168,85,247,0.15));border:1px solid rgba(245,166,35,0.35);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:var(--gold);letter-spacing:-0.01em}
+.ident{flex:1;min-width:0}
+.handle{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text);letter-spacing:-0.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.handle .verified{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:3px 8px;border:1px solid rgba(245,166,35,0.35);border-radius:100px;background:rgba(245,166,35,0.08);letter-spacing:0.08em}
+.submeta{display:flex;align-items:center;gap:10px;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:0.04em;flex-wrap:wrap}
+.submeta .dot{color:var(--faint)}
+
+/* Stats strip */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px}
+.stat{padding:16px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.stat-val{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:-0.01em;color:var(--text);line-height:1.1}
+.stat-val.pos{color:var(--green)}
+.stat-val.neg{color:var(--red)}
+.stat-val.mute{color:var(--muted)}
+.stat-lbl{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px}
+.stat-sub{font-family:var(--mono);font-size:10.5px;color:var(--text-soft);margin-top:2px}
+
+/* Footer */
+footer{padding:48px 24px 80px;border-top:1px solid var(--border);text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.06em;margin-top:40px}
+
+.loading,.empty,.error{padding:60px 20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px;border:1px dashed var(--border);border-radius:12px}
+
+@media(max-width:560px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .hero-top{gap:14px}
+  .avatar{width:48px;height:48px;font-size:16px}
+  .handle{font-size:17px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span class="accent">FLEX</span></a>
+  <a href="/picks" class="nav-back">← Picks</a>
+</nav>
+
+<main id="mainEl">
+  <div class="loading">Loading…</div>
+</main>
+
+<footer>HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</footer>
+
+<script>
+const handle = location.pathname.replace(/^\/t\//, '').replace(/\/$/, '').toLowerCase();
+const API = location.origin;
+
+function esc(s){if(s==null)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function getInitials(h){return String(h||'?').replace(/[^a-z0-9]/gi,'').slice(0,2).toUpperCase()||'?'}
+
+// Charter §7 formatters
+function fmtUnits(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  const v=Number(n);
+  return (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(2) + 'u';
+}
+function fmtPct(n, digits=1){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  return Number(n).toFixed(digits) + '%';
+}
+function fmtRoi(n){
+  if(n==null||!Number.isFinite(Number(n)))return '—';
+  const v=Number(n);
+  return (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(1) + '%';
+}
+function fmtJoined(iso){
+  if(!iso)return '—';
+  const d=new Date(iso);
+  return d.toLocaleDateString(undefined,{month:'short',year:'numeric'});
+}
+
+async function load(){
+  const main = document.getElementById('mainEl');
+  try{
+    const r = await fetch(API + '/api/tipster/' + encodeURIComponent(handle));
+    if(r.status === 404){
+      main.innerHTML = '<div class="empty">No tipster by that handle.</div>';
+      return;
+    }
+    if(!r.ok) throw new Error('load failed');
+    const d = await r.json();
+    render(d);
+  }catch(e){
+    main.innerHTML = '<div class="error">Our end. Try again in a minute.</div>';
+  }
+}
+
+function renderHero(d){
+  const t = d.tipster;
+  const s = d.stats;
+  const specialty = (t.specialty||'').toUpperCase();
+
+  const netCls = s.net_units > 0 ? 'pos' : s.net_units < 0 ? 'neg' : 'mute';
+  const roiCls = s.roi_pct == null ? 'mute' : s.roi_pct > 0 ? 'pos' : s.roi_pct < 0 ? 'neg' : 'mute';
+
+  // Record line: "W-L-P" — pushes included only if > 0 so casuals don't see
+  // "0-0-0" on day one. Voids stay hidden; they don't count toward anything.
+  const rec = s.pushes > 0 ? (s.wins + '-' + s.losses + '-' + s.pushes) : (s.wins + '-' + s.losses);
+  const resolved = s.wins + s.losses + s.pushes;
+  const sampleStr = resolved === 0 ? 'No resolved picks yet.' : resolved + ' resolved' + (s.pending ? ' · ' + s.pending + ' pending' : '');
+
+  document.title = '@' + t.handle + ' — HYPERFLEX';
+
+  return (
+    '<div class="hero">' +
+      '<div class="hero-top">' +
+        '<div class="avatar">' + esc(getInitials(t.handle)) + '</div>' +
+        '<div class="ident">' +
+          '<div class="handle">@' + esc(t.handle) + '<span class="verified">VERIFIED</span></div>' +
+          '<div class="submeta">' +
+            (specialty ? '<span>' + esc(specialty) + '</span><span class="dot">·</span>' : '') +
+            '<span>Founding tipster</span>' +
+            '<span class="dot">·</span>' +
+            '<span>Since ' + esc(fmtJoined(t.approved_at)) + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="stat-val">' + esc(rec) + '</div><div class="stat-lbl">Record</div>' +
+          '<div class="stat-sub">' + esc(sampleStr) + '</div></div>' +
+        '<div class="stat"><div class="stat-val ' + netCls + '">' + esc(fmtUnits(s.net_units)) + '</div>' +
+          '<div class="stat-lbl">Net units</div>' +
+          '<div class="stat-sub">' + esc(s.units_risked > 0 ? 'on ' + s.units_risked.toFixed(2) + 'u risked' : 'no action yet') + '</div></div>' +
+        '<div class="stat"><div class="stat-val ' + roiCls + '">' + esc(fmtRoi(s.roi_pct)) + '</div>' +
+          '<div class="stat-lbl">ROI</div>' +
+          '<div class="stat-sub">' + esc(s.win_rate != null ? fmtPct(s.win_rate) + ' win rate' : '—') + '</div></div>' +
+        '<div class="stat"><div class="stat-val">' + esc(s.total_picks) + '</div><div class="stat-lbl">Picks</div>' +
+          '<div class="stat-sub">' + esc(s.pending > 0 ? s.pending + ' pending' : 'all resolved') + '</div></div>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function render(d){
+  const main = document.getElementById('mainEl');
+  main.innerHTML = renderHero(d) +
+    '<div class="loading" id="picksFeed">Loading picks…</div>';
+  // Picks feed rendering in the next commit.
+  renderPicks(d.picks || []);
+}
+
+function renderPicks(picks){
+  const box = document.getElementById('picksFeed');
+  if(!box) return;
+  if(!picks.length){
+    box.outerHTML = '<div class="empty">No picks yet. Come back at tip-off.</div>';
+    return;
+  }
+  // Placeholder until the picks feed renderer lands in the next commit.
+  box.outerHTML = '<div class="empty">' + picks.length + ' picks — feed renders in the next commit.</div>';
+}
+
+load();
+</script>
+</body>
+</html>
