@@ -38344,6 +38344,12 @@ app.get('/api/admin/safe-singleton-probe', requireAdmin, async (req, res) => {
     '0x41675c099f32341bf84bfc5382af534df5c7461a': { version: 'v1.4.1', layer: 'L1', domain: 'chainId+verifyingContract' },
     '0x6851d6fdfafd08c0295c392436245e5bc78b0185': { version: 'v1.2.0', layer: 'L1', domain: 'name+version+chainId+verifyingContract' },
     '0xb6029ea3b2c51d09a50b53ca8012feeb05bda35b': { version: 'v1.1.1', layer: 'L1', domain: 'name+version+chainId+verifyingContract' },
+    // Polymarket-specific forked Safe singleton on Polygon. VERSION() returns
+    // "1.3.0" (verified 2026-04-20 via on-chain probe), so the EIP-712 domain
+    // is the canonical v1.3.0 shape (chainId + verifyingContract, no
+    // name/version). Our wrap signing in market.html executeViaProxy uses
+    // exactly that domain.
+    '0xe51abdf814f8854941b9fe8e3a4f65cab4e7a4a8': { version: 'v1.3.0 (Polymarket fork)', layer: 'L2', domain: 'chainId+verifyingContract' },
   };
   const RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon.drpc.org'];
   let lastErr = null;
@@ -38365,17 +38371,47 @@ app.get('/api/admin/safe-singleton-probe', requireAdmin, async (req, res) => {
       const ourCodeAssumes = 'v1.3.0+ (chainId + verifyingContract, no name/version)';
       const compatible = known
         ? known.domain === 'chainId+verifyingContract'
-        : null;  // unknown singleton — needs manual lookup
+        : null;  // unknown singleton — VERSION() probe below tries to resolve it
+
+      // Probe VERSION() on the singleton — auto-decoded ABI string. Resolves
+      // unknown singletons to a Safe semver so we don't need to manually
+      // crack hex in DevTools every time someone forks.
+      let onchainVersion = null;
+      try {
+        const vRes = await fetch(rpc, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 2, method: 'eth_call',
+            params: [{ to: singleton, data: '0xffa1ad74' }, 'latest'],
+          }),
+        });
+        const vJson = await vRes.json();
+        if (vJson.result && vJson.result !== '0x') {
+          // ABI string layout: 32-byte offset | 32-byte length | data (zero-padded to 32)
+          const hex = vJson.result.startsWith('0x') ? vJson.result.slice(2) : vJson.result;
+          const len = parseInt(hex.slice(64, 128), 16);
+          if (len > 0 && len < 64) {
+            const dataHex = hex.slice(128, 128 + len * 2);
+            onchainVersion = (dataHex.match(/.{2}/g) || [])
+              .map(b => String.fromCharCode(parseInt(b, 16)))
+              .join('');
+          }
+        }
+      } catch (e) { /* VERSION() not present on this contract */ }
+
       return res.json({
         factory: FACTORY,
         singleton,
         known,
+        onchain_version: onchainVersion,
         our_code_assumes: ourCodeAssumes,
         signature_compatible: compatible,
         warning: compatible === false
           ? 'EIP-712 domain mismatch — every Safe wrap signature will be rejected. DO NOT flip V2 default.'
           : compatible === null
-            ? 'Unknown singleton — verify manually before flipping V2 default.'
+            ? (onchainVersion && /^1\.[34]\./.test(onchainVersion)
+                ? 'Unknown singleton but VERSION reports ' + onchainVersion + ' — likely safe (chainId+verifyingContract domain). Verify with one live test.'
+                : 'Unknown singleton — verify manually before flipping V2 default.')
             : null,
         rpc_used: rpc,
       });
