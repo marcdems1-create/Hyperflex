@@ -15235,6 +15235,126 @@ app.get('/api/tipster/:handle', async (req, res) => {
   }
 });
 
+// GET /api/tipsters/leaderboard — ranked tipster list.
+//
+// Supply-gated per Charter NORTH STAR (Forbidden anti-patterns): the page
+// that consumes this surface shouldn't render a leaderboard on empty data.
+// Threshold: ≥ 3 approved tipsters AND at least 3 of them with ≥ 5 resolved
+// picks. Below that, endpoint returns { gated: true, reason } so the UI can
+// route to a "cohort forming" state instead of a desperate-looking board.
+//
+// Ranking: net_units desc, tie-broken by ROI desc, tie-broken by sample size.
+// Optional ?sport=nba filter (future-proof). ?min_picks=N lets the page
+// tighten the gate for casual filters; floor is 3 at the endpoint.
+app.get('/api/tipsters/leaderboard', async (req, res) => {
+  try {
+    const sport = req.query.sport || null;
+    const minPicks = Math.max(3, parseInt(req.query.min_picks, 10) || 5);
+
+    // Single query: per-tipster aggregates from picks, joined to the user row
+    // for identity + specialty. FILTER clauses keep it to one scan.
+    // sport filter applies via picks.sport = $1 when provided; otherwise all.
+    const params = [];
+    let whereSport = '';
+    if (sport) { params.push(sport); whereSport = 'AND p.sport = $1'; }
+    const sql = (
+      "SELECT u.tipster_handle AS handle, u.display_name, u.tipster_specialty AS specialty, " +
+             "u.tipster_approved_at AS approved_at, " +
+             "COUNT(p.*)::int AS total_picks, " +
+             "COUNT(p.*) FILTER (WHERE p.settlement_status = 'win')::int  AS wins, " +
+             "COUNT(p.*) FILTER (WHERE p.settlement_status = 'loss')::int AS losses, " +
+             "COUNT(p.*) FILTER (WHERE p.settlement_status = 'push')::int AS pushes, " +
+             "COUNT(p.*) FILTER (WHERE p.settlement_status IS NULL)::int  AS pending, " +
+             "COUNT(p.*) FILTER (WHERE p.settlement_status IS NOT NULL AND p.settlement_status <> 'void')::int AS resolved, " +
+             "COALESCE(SUM(p.settled_units), 0)::numeric AS net_units, " +
+             "COALESCE(SUM(p.units) FILTER (WHERE p.settlement_status IS NOT NULL AND p.settlement_status <> 'void'), 0)::numeric AS units_risked " +
+        "FROM users u " +
+        "LEFT JOIN picks p ON p.user_id = u.id " + whereSport + " " +
+       "WHERE u.tipster_status = 'approved' AND u.tipster_revoked_at IS NULL " +
+             "AND u.tipster_handle IS NOT NULL " +
+       "GROUP BY u.id, u.tipster_handle, u.display_name, u.tipster_specialty, u.tipster_approved_at"
+    );
+    const rows = await dbQuery(sql, params);
+
+    // Supply gate on the endpoint itself: if fewer than 3 approved tipsters
+    // exist, no leaderboard makes sense regardless of pick count.
+    const approvedCount = rows.length;
+    if (approvedCount < 3) {
+      return res.json({ gated: true, reason: 'cohort_forming', approved: approvedCount });
+    }
+
+    // Qualifying tipsters = min_picks resolved picks. Everyone below stays in
+    // the response as "building" so the UI can show both states, but the
+    // ranked list only promotes qualifiers. Second supply gate: at least 3
+    // tipsters must qualify or we treat the board as still forming.
+    const enriched = rows.map(r => {
+      const resolved    = parseInt(r.resolved || 0, 10);
+      const unitsRisked = parseFloat(r.units_risked || 0);
+      const netUnits    = parseFloat(r.net_units    || 0);
+      const winRate = (resolved > 0 && (r.wins + r.losses + r.pushes) > 0)
+        ? (r.wins / (r.wins + r.losses + r.pushes)) * 100
+        : null;
+      const roiPct = unitsRisked > 0 ? (netUnits / unitsRisked) * 100 : null;
+      return {
+        handle:        r.handle,
+        display_name:  r.display_name,
+        specialty:     r.specialty,
+        approved_at:   r.approved_at,
+        total_picks:   parseInt(r.total_picks || 0, 10),
+        wins:          r.wins,
+        losses:        r.losses,
+        pushes:        r.pushes,
+        pending:       r.pending,
+        resolved:      resolved,
+        net_units:     netUnits,
+        units_risked:  unitsRisked,
+        win_rate:      winRate,
+        roi_pct:       roiPct,
+        qualifies:     resolved >= minPicks,
+      };
+    });
+
+    const qualifiers = enriched.filter(t => t.qualifies);
+    if (qualifiers.length < 3) {
+      return res.json({
+        gated: true,
+        reason: 'insufficient_sample',
+        approved: approvedCount,
+        qualifying: qualifiers.length,
+        min_picks: minPicks,
+      });
+    }
+
+    qualifiers.sort((a, b) => {
+      if (b.net_units !== a.net_units) return b.net_units - a.net_units;
+      if ((b.roi_pct || -999) !== (a.roi_pct || -999)) return (b.roi_pct || -999) - (a.roi_pct || -999);
+      return b.resolved - a.resolved;
+    });
+    // Rank starts at 1, ties share the min rank (standard sports leaderboard).
+    let lastKey = null, lastRank = 0;
+    qualifiers.forEach((t, i) => {
+      const key = [t.net_units, t.roi_pct || -999, t.resolved].join('|');
+      const rank = key === lastKey ? lastRank : i + 1;
+      t.rank = rank;
+      lastKey = key; lastRank = rank;
+    });
+
+    const building = enriched.filter(t => !t.qualifies);
+
+    res.json({
+      gated:     false,
+      approved:  approvedCount,
+      min_picks: minPicks,
+      sport:     sport,
+      leaders:   qualifiers,
+      building:  building,
+    });
+  } catch (err) {
+    console.error('[tipster-leaderboard] error:', err.message);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
+  }
+});
+
 // ── TIPSTER APPLICATIONS (founding cohort) ─────────────────────────────────
 // The /picks page is gated: 25 founding tipsters get picked up front, anyone
 // else applies and waits. Applications are append-only (rejected apps stay
@@ -25783,6 +25903,7 @@ app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data
 app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
 app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks.html')));
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
+app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
 app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
 app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
 app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
