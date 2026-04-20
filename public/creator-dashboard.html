@@ -5557,6 +5557,17 @@ window.hfxOpenDeposit = function() {
               </div>
             </div>
             <div class="field">
+              <label>Your @handle <span style="font-size:11px;color:var(--dim);font-weight:400">— your public profile URL: hyperflex.network/@yourhandle</span></label>
+              <div style="display:flex;align-items:stretch;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;flex:1;min-width:200px;background:var(--paper);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                  <span style="padding:10px 2px 10px 14px;color:var(--dim);font-family:var(--mono);font-size:13px;user-select:none">@</span>
+                  <input type="text" id="settingHandle" placeholder="yourhandle" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="onHandleInput()" style="flex:1;background:none;border:none;padding:10px 12px 10px 2px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none"/>
+                </div>
+                <button class="btn-primary" type="button" onclick="saveHandle()" style="min-width:100px">Save</button>
+              </div>
+              <div id="handleStatus" style="font-family:var(--mono);font-size:11px;margin-top:6px;min-height:14px"></div>
+            </div>
+            <div class="field">
               <label>Community Display Name</label>
               <input type="text" id="settingName" placeholder="Your community name"/>
             </div>
@@ -10160,6 +10171,7 @@ function showTab(tab) {
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
   if (tab === 'share') { loadShareTab(); }
+  if (tab === 'settings') { loadHandleForSettings(); }
   if (tab === 'resolve') loadDisputes();
   // Re-render markets from cache so tab is never stuck on "Loading…"
   if (tab === 'markets') {
@@ -11657,6 +11669,86 @@ async function resolveMarket(marketId, outcome) {
 }
 
 // Settings
+// ── @handle picker — lives in the Settings tab, writes users.handle ──
+// Live availability check (debounced 300ms) + save via POST /api/user/handle.
+// Loads the user's current handle on tab open so the input is prefilled.
+var _handleCheckTimer = null;
+var _handleLastChecked = '';
+
+async function loadHandleForSettings() {
+  try {
+    const tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!tok) return;
+    const r = await fetch(API + '/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
+    if (!r.ok) return;
+    const d = await r.json();
+    const input = document.getElementById('settingHandle');
+    if (input && d.user && d.user.handle) input.value = d.user.handle;
+  } catch {}
+}
+
+function _setHandleStatus(html, color) {
+  const el = document.getElementById('handleStatus');
+  if (!el) return;
+  el.innerHTML = html || '';
+  el.style.color = color || 'var(--dim)';
+}
+
+function onHandleInput() {
+  const input = document.getElementById('settingHandle');
+  if (!input) return;
+  // Force lowercase + strip illegal chars as user types
+  const raw = input.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  if (raw !== input.value) input.value = raw;
+  const handle = raw;
+  clearTimeout(_handleCheckTimer);
+  if (!handle) { _setHandleStatus('', ''); return; }
+  if (handle.length < 3) { _setHandleStatus('At least 3 characters', 'var(--red)'); return; }
+  _setHandleStatus('Checking…', 'var(--muted)');
+  _handleCheckTimer = setTimeout(async () => {
+    if (handle === _handleLastChecked) return;
+    _handleLastChecked = handle;
+    try {
+      const r = await fetch(API + '/api/user/handle/available?handle=' + encodeURIComponent(handle));
+      const d = await r.json();
+      if (d.available) {
+        _setHandleStatus('✓ hyperflex.network/@' + handle + ' — available', 'var(--green)');
+      } else {
+        const msg = d.reason === 'taken' ? 'Taken' :
+                    d.reason === 'reserved' ? 'Reserved' :
+                    d.reason || 'Unavailable';
+        _setHandleStatus('× ' + msg, 'var(--red)');
+      }
+    } catch { _setHandleStatus('', ''); }
+  }, 300);
+}
+
+async function saveHandle() {
+  const input = document.getElementById('settingHandle');
+  if (!input) return;
+  const handle = (input.value || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!handle || handle.length < 3) { _setHandleStatus('At least 3 characters', 'var(--red)'); return; }
+  const tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!tok) { _setHandleStatus('Sign in first', 'var(--red)'); return; }
+  _setHandleStatus('Saving…', 'var(--muted)');
+  try {
+    const r = await fetch(API + '/api/user/handle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok },
+      body: JSON.stringify({ handle })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      _setHandleStatus('✓ Saved. Your profile is at hyperflex.network/@' + d.handle, 'var(--green)');
+      if (typeof showToast === 'function') showToast('@' + d.handle + ' is yours', 'success');
+    } else {
+      _setHandleStatus('× ' + (d.error || 'Failed to save'), 'var(--red)');
+    }
+  } catch (e) {
+    _setHandleStatus('× Network error', 'var(--red)');
+  }
+}
+
 async function saveSettings() {
   const payload = {
     display_name: document.getElementById('settingName').value.trim(),
