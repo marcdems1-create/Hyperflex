@@ -15585,6 +15585,202 @@ app.post('/api/admin/markets/sport-tag/sweep', async (req, res) => {
   res.json(result);
 });
 
+// ── T3 · CLOSING-PRICE SNAPSHOTS ────────────────────────────────────────────
+// Bedrock for CLV. For every sports-tagged market (from T2), snapshot the
+// book midprice as it approaches close. One row per market, primary keyed
+// on (source, external_id). T4 reads this table to compute cents-beaten
+// vs close per trade.
+//
+// MVP scope: binary markets only. Multi-outcome slices are deferred.
+
+function _midprice(book) {
+  // Polymarket CLOB /book returns { bids: [...], asks: [...] } sorted best-
+  // first. Each side is [{ price: '0.xx', size: '...' }, ...]. Price is a
+  // string 0..1. Midpoint = avg(best bid, best ask); fall back to whichever
+  // side exists; null if both empty (dead book).
+  if (!book) return null;
+  const bestBid = book.bids && book.bids.length ? parseFloat(book.bids[0].price) : null;
+  const bestAsk = book.asks && book.asks.length ? parseFloat(book.asks[0].price) : null;
+  if (bestBid != null && bestAsk != null) return Math.round(((bestBid + bestAsk) / 2) * 1e6) / 1e6;
+  if (bestBid != null) return bestBid;
+  if (bestAsk != null) return bestAsk;
+  return null;
+}
+
+// Fetch Polymarket market metadata by condition_id via gamma API.
+// Returns { endDate, clobTokenIds: [yes, no], closed, active } or null.
+async function _fetchPolymarketMeta(conditionId) {
+  try {
+    const r = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}&limit=1`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const arr = await r.json();
+    const m = Array.isArray(arr) ? arr[0] : null;
+    if (!m) return null;
+    let tokens = [];
+    try { tokens = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : (m.clobTokenIds || []); } catch {}
+    return {
+      endDate: m.endDate || m.end_date || null,
+      tokens,
+      closed: !!m.closed,
+      active: m.active !== false,
+    };
+  } catch { return null; }
+}
+
+// Fetch both YES + NO book midprices for a Polymarket binary market.
+async function _fetchPolymarketCloseBooks(tokens) {
+  if (!tokens || tokens.length < 2) return null;
+  try {
+    const [yRes, nRes] = await Promise.all([
+      fetch(`https://clob.polymarket.com/book?token_id=${tokens[0]}`, { signal: AbortSignal.timeout(6000) }),
+      fetch(`https://clob.polymarket.com/book?token_id=${tokens[1]}`, { signal: AbortSignal.timeout(6000) }),
+    ]);
+    const yBook = yRes.ok ? await yRes.json() : null;
+    const nBook = nRes.ok ? await nRes.json() : null;
+    return { yes_price: _midprice(yBook), no_price: _midprice(nBook) };
+  } catch { return null; }
+}
+
+// Fetch Kalshi market by ticker. Public endpoint — no auth required for
+// reading market status + quoted bid/ask.
+async function _fetchKalshiMeta(ticker) {
+  try {
+    const r = await fetch(`https://trading-api.kalshi.com/trade-api/v2/markets/${encodeURIComponent(ticker)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const m = d.market || d;
+    if (!m) return null;
+    // Kalshi returns prices in cents (0..100). Normalise to 0..1.
+    const yBid = m.yes_bid  != null ? parseFloat(m.yes_bid)  / 100 : null;
+    const yAsk = m.yes_ask  != null ? parseFloat(m.yes_ask)  / 100 : null;
+    const nBid = m.no_bid   != null ? parseFloat(m.no_bid)   / 100 : null;
+    const nAsk = m.no_ask   != null ? parseFloat(m.no_ask)   / 100 : null;
+    const yes_price = (yBid != null && yAsk != null) ? (yBid + yAsk) / 2 : (yBid != null ? yBid : yAsk);
+    const no_price  = (nBid != null && nAsk != null) ? (nBid + nAsk) / 2 : (nBid != null ? nBid : nAsk);
+    return {
+      close_ts: m.close_time || m.expiration_time || null,
+      status: m.status,   // 'active' | 'closed' | 'settled' | 'finalized' | 'determined'
+      yes_price: yes_price != null ? Math.round(yes_price * 1e6) / 1e6 : null,
+      no_price:  no_price  != null ? Math.round(no_price  * 1e6) / 1e6 : null,
+    };
+  } catch { return null; }
+}
+
+// Sweep pending sports markets, snapshot those nearing/past close.
+// Window: close_ts within next 15 min OR already in past (up to 48h back)
+// AND no snapshot row yet. Capped at 40 markets per run so one sweep
+// doesn't pound the APIs.
+async function sweepClosingPrices() {
+  if (!pool) return { scanned: 0, snapped: 0 };
+  let scanned = 0, snapped = 0, skipped = 0;
+  try {
+    let pending;
+    try {
+      pending = await dbQuery(`
+        SELECT mst.source, mst.external_id, mst.market_title
+        FROM market_sport_tags mst
+        LEFT JOIN market_closing_prices cp
+          ON cp.source = mst.source AND cp.external_id = mst.external_id
+        WHERE cp.external_id IS NULL
+          AND mst.sport <> 'other'
+        ORDER BY mst.tagged_at DESC
+        LIMIT 40`);
+    } catch (e) {
+      if (/relation "(market_sport_tags|market_closing_prices)" does not exist/i.test(e.message)) {
+        console.warn('[closing-prices] sweep skipped — dependency table missing');
+        return { scanned: 0, snapped: 0, error: 'missing_table' };
+      }
+      throw e;
+    }
+    scanned = pending.length;
+    for (const row of pending) {
+      try {
+        if (row.source === 'polymarket') {
+          const meta = await _fetchPolymarketMeta(row.external_id);
+          if (!meta || !meta.endDate || !meta.tokens || meta.tokens.length < 2) { skipped++; continue; }
+          const endTs = Date.parse(meta.endDate);
+          if (!Number.isFinite(endTs)) { skipped++; continue; }
+          const now = Date.now();
+          const windowMs = 15 * 60 * 1000;
+          const backfillMs = 48 * 60 * 60 * 1000;
+          const inWindow = (endTs - now <= windowMs) && (now - endTs <= backfillMs);
+          if (!inWindow && meta.active && !meta.closed) { skipped++; continue; }
+          const prices = await _fetchPolymarketCloseBooks(meta.tokens);
+          if (!prices || prices.yes_price == null) { skipped++; continue; }
+          await pool.query(
+            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
+             VALUES ('polymarket', $1, $2, $3, $4, now())
+             ON CONFLICT (source, external_id) DO NOTHING`,
+            [row.external_id, prices.yes_price, prices.no_price, new Date(endTs).toISOString()]
+          );
+          snapped++;
+        } else if (row.source === 'kalshi') {
+          const meta = await _fetchKalshiMeta(row.external_id);
+          if (!meta || !meta.close_ts) { skipped++; continue; }
+          const closeTs = Date.parse(meta.close_ts);
+          if (!Number.isFinite(closeTs)) { skipped++; continue; }
+          const now = Date.now();
+          const windowMs = 15 * 60 * 1000;
+          const backfillMs = 48 * 60 * 60 * 1000;
+          const isFinal = /closed|settled|finalized|determined/.test(meta.status || '');
+          const inWindow = (closeTs - now <= windowMs) && (now - closeTs <= backfillMs);
+          if (!inWindow && !isFinal) { skipped++; continue; }
+          if (meta.yes_price == null) { skipped++; continue; }
+          await pool.query(
+            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
+             VALUES ('kalshi', $1, $2, $3, $4, now())
+             ON CONFLICT (source, external_id) DO NOTHING`,
+            [row.external_id, meta.yes_price, meta.no_price, new Date(closeTs).toISOString()]
+          );
+          snapped++;
+        }
+        // Small pause between markets so we don't hammer the upstream APIs.
+        await new Promise(res => setTimeout(res, 250));
+      } catch (e) {
+        console.warn('[closing-prices] per-market error:', row.source, row.external_id, e.message);
+        skipped++;
+      }
+    }
+    if (scanned) console.log(`[closing-prices] sweep scanned=${scanned} snapped=${snapped} skipped=${skipped}`);
+    return { scanned, snapped, skipped };
+  } catch (e) {
+    console.error('[closing-prices] sweep error:', e.message);
+    return { scanned, snapped, skipped, error: e.message };
+  }
+}
+
+// Every 5 min.
+cron.schedule('*/5 * * * *', () => { sweepClosingPrices().catch(() => {}); });
+
+// GET /api/markets/closing-price?source&external_id — single lookup.
+app.get('/api/markets/closing-price', async (req, res) => {
+  try {
+    const source = String(req.query.source || '').toLowerCase();
+    const externalId = String(req.query.external_id || '').trim();
+    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (!externalId) return res.status(400).json({ error: 'external_id required' });
+    const rows = await dbQuery(
+      'SELECT source, external_id, yes_price, no_price, close_ts, captured_at FROM market_closing_prices WHERE source=$1 AND external_id=$2 LIMIT 1',
+      [source, externalId]
+    ).catch(() => []);
+    if (!rows.length) return res.json({ captured: false });
+    res.json({ captured: true, ...rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/markets/closing-price/sweep — run on demand (admin).
+app.post('/api/admin/markets/closing-price/sweep', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sweepClosingPrices();
+  res.json(result);
+});
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
