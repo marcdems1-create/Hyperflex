@@ -544,7 +544,8 @@
     <div class="header-right">
       <a href="/admin/relayer" style="font-family:var(--mono);font-size:11px;color:#00e68a;text-decoration:none;margin-right:10px;padding:6px 10px;border:1px solid rgba(0,230,138,0.3);border-radius:6px">⛽ Relayer</a>
       <a href="/admin/qa" style="font-family:var(--mono);font-size:11px;color:#f59e0b;text-decoration:none;margin-right:10px;padding:6px 10px;border:1px solid rgba(245,158,11,0.3);border-radius:6px">🧪 QA</a>
-      <a href="/admin/bugs" style="font-family:var(--mono);font-size:11px;color:#a855f7;text-decoration:none;margin-right:16px;padding:6px 10px;border:1px solid rgba(168,85,247,0.3);border-radius:6px">🐛 Bug Reports</a>
+      <a href="/admin/bugs" style="font-family:var(--mono);font-size:11px;color:#a855f7;text-decoration:none;margin-right:10px;padding:6px 10px;border:1px solid rgba(168,85,247,0.3);border-radius:6px">🐛 Bug Reports</a>
+      <a id="tipsterAppsLink" href="/admin/tipster-applications" style="display:none;font-family:var(--mono);font-size:11px;color:#f5a623;text-decoration:none;margin-right:16px;padding:6px 10px;border:1px solid rgba(245,166,35,0.45);border-radius:6px;background:rgba(245,166,35,0.08)">Tipster apps · <span id="tipsterAppsCount" style="font-weight:700">0</span> pending</a>
       <span class="signout-link" onclick="signOut()">Sign out</span>
     </div>
   </header>
@@ -1655,7 +1656,29 @@ function renderCreators(data) {
   updateStats(data);
   applyFilter();
   loadPlatformStats();
+  loadTipsterAppsBadge();
 }
+
+// Pending-tipster-applications badge in the header. Hidden when zero so
+// the header doesn't carry noise when nothing needs attention.
+async function loadTipsterAppsBadge() {
+  if (!adminSecret) return;
+  try {
+    const r = await fetch(API + '/api/admin/tipster-applications?status=pending', {
+      headers: { 'x-admin-secret': adminSecret }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    const n = (d.applications || []).length;
+    const link = document.getElementById('tipsterAppsLink');
+    const count = document.getElementById('tipsterAppsCount');
+    if (!link || !count) return;
+    count.textContent = n;
+    link.style.display = n > 0 ? 'inline-block' : 'none';
+  } catch (e) { /* silent — badge absence is fine */ }
+}
+// Refresh the badge every 60s so long-open admin sessions stay current.
+setInterval(() => { if (adminSecret) loadTipsterAppsBadge(); }, 60000);
 
 function updateStats(data) {
   document.getElementById('statTotal').textContent = data.length;
