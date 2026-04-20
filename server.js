@@ -14963,24 +14963,9 @@ function validatePickShape(bet_type, side, line) {
 app.post('/api/picks', requireAuth, async (req, res) => {
   try {
     if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'Pick signing not configured' });
-    // Gate: picks are tipster-only. Users must be approved via the founding-
-    // tipster application funnel first. Belt-and-suspenders check: status
-    // must be 'approved' AND revoked_at must be NULL. Protects against any
-    // write path that flips status without clearing the timestamp (or vice
-    // versa) and against brief race windows during a revoke flow.
-    const tipRows = await dbQuery(
-      'SELECT tipster_status, tipster_revoked_at FROM users WHERE id = $1',
-      [req.userId]
-    );
-    const tipStatus = tipRows[0]?.tipster_status || 'none';
-    const revokedAt = tipRows[0]?.tipster_revoked_at || null;
-    if (tipStatus !== 'approved' || revokedAt != null) {
-      return res.status(403).json({
-        error: 'Picks are in founding-tipster beta. Apply at /picks.',
-        tipster_status: tipStatus,
-        revoked: revokedAt != null,
-      });
-    }
+    // Any signed-in user can post a pick. Quality is enforced by the Flex
+    // Score math (sample minimum, CLV weighting, time decay) not by a
+    // permission gate.
     const { game_id, bet_type, side, line = null, odds, units, thesis = null } = req.body || {};
     if (!game_id) return res.status(400).json({ error: 'game_id required' });
     if (!Number.isFinite(Number(odds))) return res.status(400).json({ error: 'odds must be numeric (American odds)' });
@@ -15073,7 +15058,7 @@ app.get('/api/picks/:id', async (req, res) => {
     const rows = await dbQuery(
       `SELECT p.*,
               u.display_name AS user_display_name, u.polymarket_address AS user_wallet,
-              u.tipster_handle AS user_tipster_handle,
+              u.handle AS user_handle,
               g.starts_at, g.status AS game_status, g.home_score, g.away_score, g.period,
               home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
               away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
@@ -15159,10 +15144,9 @@ app.get('/api/tipster/:handle', async (req, res) => {
     if (!/^[a-z0-9_]{1,30}$/.test(handle)) return res.status(404).json({ error: 'Tipster not found' });
 
     const userRows = await dbQuery(
-      `SELECT id, display_name, tipster_handle, tipster_specialty, tipster_approved_at,
-              tipster_status, tipster_revoked_at, polymarket_address, avatar_url, is_whale, whale_rank
+      `SELECT id, display_name, handle, polymarket_address, avatar_url, is_whale, whale_rank, created_at
          FROM users
-        WHERE tipster_handle = $1 AND tipster_status = 'approved'
+        WHERE handle = $1
         LIMIT 1`,
       [handle]
     );
@@ -15210,10 +15194,9 @@ app.get('/api/tipster/:handle', async (req, res) => {
 
     res.json({
       tipster: {
-        handle: u.tipster_handle,
+        handle: u.handle,
         display_name: u.display_name,
-        specialty: u.tipster_specialty,
-        approved_at: u.tipster_approved_at,
+        joined_at: u.created_at,
         avatar_url: u.avatar_url,
         is_whale: u.is_whale || false,
       },
@@ -15239,11 +15222,11 @@ app.get('/api/tipster/:handle', async (req, res) => {
 
 // GET /api/tipsters/leaderboard — ranked tipster list.
 //
-// Supply-gated per Charter NORTH STAR (Forbidden anti-patterns): the page
-// that consumes this surface shouldn't render a leaderboard on empty data.
-// Threshold: ≥ 3 approved tipsters AND at least 3 of them with ≥ 5 resolved
-// picks. Below that, endpoint returns { gated: true, reason } so the UI can
-// route to a "cohort forming" state instead of a desperate-looking board.
+// One account type: every user with at least one pick is a potential tipster.
+// Statistical supply gate remains (≥ 3 tipsters with ≥ min_picks resolved)
+// so the leaderboard doesn't render on near-empty data per Charter §1. That
+// gate is about sample quality, not permission — it clears automatically
+// once enough picks resolve.
 //
 // Ranking: net_units desc, tie-broken by ROI desc, tie-broken by sample size.
 // Optional ?sport=nba filter (future-proof). ?min_picks=N lets the page
@@ -15254,14 +15237,13 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
     const minPicks = Math.max(3, parseInt(req.query.min_picks, 10) || 5);
 
     // Single query: per-tipster aggregates from picks, joined to the user row
-    // for identity + specialty. FILTER clauses keep it to one scan.
-    // sport filter applies via picks.sport = $1 when provided; otherwise all.
+    // for identity. FILTER clauses keep it to one scan. sport filter applies
+    // via picks.sport = $1 when provided; otherwise all.
     const params = [];
     let whereSport = '';
     if (sport) { params.push(sport); whereSport = 'AND p.sport = $1'; }
     const sql = (
-      "SELECT u.tipster_handle AS handle, u.display_name, u.tipster_specialty AS specialty, " +
-             "u.tipster_approved_at AS approved_at, " +
+      "SELECT u.handle AS handle, u.display_name, u.created_at AS joined_at, " +
              "COUNT(p.*)::int AS total_picks, " +
              "COUNT(p.*) FILTER (WHERE p.settlement_status = 'win')::int  AS wins, " +
              "COUNT(p.*) FILTER (WHERE p.settlement_status = 'loss')::int AS losses, " +
@@ -15271,24 +15253,17 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
              "COALESCE(SUM(p.settled_units), 0)::numeric AS net_units, " +
              "COALESCE(SUM(p.units) FILTER (WHERE p.settlement_status IS NOT NULL AND p.settlement_status <> 'void'), 0)::numeric AS units_risked " +
         "FROM users u " +
-        "LEFT JOIN picks p ON p.user_id = u.id " + whereSport + " " +
-       "WHERE u.tipster_status = 'approved' AND u.tipster_revoked_at IS NULL " +
-             "AND u.tipster_handle IS NOT NULL " +
-       "GROUP BY u.id, u.tipster_handle, u.display_name, u.tipster_specialty, u.tipster_approved_at"
+        "INNER JOIN picks p ON p.user_id = u.id " + whereSport + " " +
+       "WHERE u.handle IS NOT NULL " +
+       "GROUP BY u.id, u.handle, u.display_name, u.created_at"
     );
     const rows = await dbQuery(sql, params);
 
-    // Supply gate on the endpoint itself: if fewer than 3 approved tipsters
-    // exist, no leaderboard makes sense regardless of pick count.
-    const approvedCount = rows.length;
-    if (approvedCount < 3) {
-      return res.json({ gated: true, reason: 'cohort_forming', approved: approvedCount });
-    }
+    // Statistical gate: need at least 3 tipsters with ≥ min_picks resolved
+    // picks or the ranking is noise. Every pick-posting user is present in
+    // the result set — the gate is about sample, not permission.
+    const activeCount = rows.length;
 
-    // Qualifying tipsters = min_picks resolved picks. Everyone below stays in
-    // the response as "building" so the UI can show both states, but the
-    // ranked list only promotes qualifiers. Second supply gate: at least 3
-    // tipsters must qualify or we treat the board as still forming.
     const enriched = rows.map(r => {
       const resolved    = parseInt(r.resolved || 0, 10);
       const unitsRisked = parseFloat(r.units_risked || 0);
@@ -15300,8 +15275,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
       return {
         handle:        r.handle,
         display_name:  r.display_name,
-        specialty:     r.specialty,
-        approved_at:   r.approved_at,
+        joined_at:     r.joined_at,
         total_picks:   parseInt(r.total_picks || 0, 10),
         wins:          r.wins,
         losses:        r.losses,
@@ -15321,7 +15295,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
       return res.json({
         gated: true,
         reason: 'insufficient_sample',
-        approved: approvedCount,
+        active: activeCount,
         qualifying: qualifiers.length,
         min_picks: minPicks,
       });
@@ -15345,7 +15319,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
 
     res.json({
       gated:     false,
-      approved:  approvedCount,
+      active:    activeCount,
       min_picks: minPicks,
       sport:     sport,
       leaders:   qualifiers,
@@ -15356,297 +15330,6 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
     res.status(500).json({ error: 'Failed to load leaderboard' });
   }
 });
-
-// ── TIPSTER APPLICATIONS (founding cohort) ─────────────────────────────────
-// The /picks page is gated: 25 founding tipsters get picked up front, anyone
-// else applies and waits. Applications are append-only (rejected apps stay
-// on record); approving sets users.tipster_status = 'approved'.
-//
-// GET  /api/tipster-applications/stats   — public counter for landing page
-// POST /api/tipster-applications          — submit (authed or email-only)
-// GET  /api/admin/tipster-applications    — admin list
-// POST /api/admin/tipster-applications/:id/decide — approve or reject
-
-const FOUNDING_TIPSTER_CAP = 25;
-
-app.get('/api/tipster-applications/stats', async (req, res) => {
-  try {
-    const [approvedRows, pendingRows] = await Promise.all([
-      dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'"),
-      dbQuery("SELECT COUNT(*)::int AS n FROM tipster_applications WHERE status = 'pending'"),
-    ]);
-    const claimed = approvedRows[0]?.n || 0;
-    const inReview = pendingRows[0]?.n || 0;
-    res.json({
-      cap: FOUNDING_TIPSTER_CAP,
-      claimed,
-      in_review: inReview,
-      spots_left: Math.max(0, FOUNDING_TIPSTER_CAP - claimed),
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/tipster-applications', optionalAuth, async (req, res) => {
-  try {
-    const { handle, email, picks_link, units_tracked_90d, specialty, reach_screenshot_url, failure_mode, why_me } = req.body || {};
-    if (!handle || typeof handle !== 'string' || handle.length > 80) {
-      return res.status(400).json({ error: 'handle required (your X/Twitter handle)' });
-    }
-    if (!specialty || typeof specialty !== 'string' || specialty.length > 40) {
-      return res.status(400).json({ error: 'specialty required (pick one sport or bet type)' });
-    }
-    if (why_me && String(why_me).length > 500) return res.status(400).json({ error: 'why_me max 500 chars' });
-    if (failure_mode && String(failure_mode).length > 500) return res.status(400).json({ error: 'failure_mode max 500 chars' });
-    const userId = req.userId || null;
-    if (!userId && !email) return res.status(400).json({ error: 'email required when not signed in' });
-
-    // Normalise handle: strip leading @ and whitespace.
-    const cleanHandle = handle.replace(/^@+/, '').trim();
-
-    // Block a second pending application from the same user (partial unique
-    // index enforces it; we surface a friendly error instead of the raw 23505).
-    if (userId) {
-      const existing = await dbQuery(
-        "SELECT id FROM tipster_applications WHERE user_id = $1 AND status = 'pending' LIMIT 1",
-        [userId]
-      );
-      if (existing.length) return res.status(409).json({ error: 'You already have a pending application' });
-    }
-
-    const rows = await dbQuery(
-      `INSERT INTO tipster_applications
-         (user_id, email, handle, picks_link, units_tracked_90d, specialty,
-          reach_screenshot_url, failure_mode, why_me)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, created_at, status`,
-      [userId, email || null, cleanHandle, picks_link || null,
-       units_tracked_90d != null ? Number(units_tracked_90d) : null,
-       specialty, reach_screenshot_url || null,
-       failure_mode ? String(failure_mode).trim() : null,
-       why_me ? String(why_me).trim() : null]
-    );
-
-    // Mark the user as 'applied' so the gate can surface the pending state
-    // instead of re-prompting the application form.
-    if (userId) {
-      await dbQuery(
-        "UPDATE users SET tipster_status = 'applied' WHERE id = $1 AND tipster_status IS NULL",
-        [userId]
-      );
-    }
-
-    res.json({ ok: true, application: rows[0] });
-  } catch (err) {
-    console.error('[tipster-app] create error:', err.message);
-    res.status(500).json({ error: 'Failed to submit application' });
-  }
-});
-
-// ── Admin endpoints (existing ADMIN_SECRET header gate pattern) ──────────
-function requireAdminSecret(req, res, next) {
-  const expected = process.env.ADMIN_SECRET || '';
-  const given = req.headers['x-admin-secret'] || req.query.admin_secret || '';
-  if (!expected || given !== expected) return res.status(403).json({ error: 'forbidden' });
-  next();
-}
-
-app.get('/api/admin/tipster-applications', requireAdminSecret, async (req, res) => {
-  try {
-    const status = req.query.status || 'pending';
-    const rows = await dbQuery(
-      `SELECT a.*, u.display_name AS user_display_name, u.polymarket_address AS user_wallet
-         FROM tipster_applications a
-         LEFT JOIN users u ON u.id = a.user_id
-        WHERE a.status = $1
-        ORDER BY a.created_at DESC LIMIT 200`,
-      [status]
-    );
-    res.json({ applications: rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/admin/tipster-applications/:id/decide', requireAdminSecret, async (req, res) => {
-  try {
-    const { decision, notes, specialty } = req.body || {};
-    if (!['approve', 'reject'].includes(decision)) {
-      return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
-    }
-    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
-
-    // Load the application. 404 if missing.
-    const appRows = await dbQuery('SELECT * FROM tipster_applications WHERE id = $1', [req.params.id]);
-    if (!appRows.length) return res.status(404).json({ error: 'Application not found' });
-    const app = appRows[0];
-    if (app.status !== 'pending') return res.status(409).json({ error: 'Application already decided' });
-
-    // Cap check on approve: stop if 25 are already approved, regardless of
-    // pending count. Race-safe because we re-read inside a transaction would
-    // be cleaner, but at cohort-of-25 scale a short-window read is fine.
-    if (decision === 'approve') {
-      const cnt = await dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'");
-      if ((cnt[0]?.n || 0) >= FOUNDING_TIPSTER_CAP) {
-        return res.status(409).json({ error: 'Founding cohort already full (' + FOUNDING_TIPSTER_CAP + ')' });
-      }
-    }
-
-    await dbQuery(
-      `UPDATE tipster_applications
-          SET status = $1, reviewed_at = now(), review_notes = $2
-        WHERE id = $3`,
-      [newStatus, notes || null, req.params.id]
-    );
-
-    if (decision === 'approve' && app.user_id) {
-      // Normalise handle at approval: lowercase, strip @ + whitespace,
-      // replace disallowed chars with underscores, cap at 30. Matches the
-      // CHECK constraint (^[a-z0-9_]{1,30}$). Fallback to a UUID-prefixed
-      // placeholder if the source handle sanitises to empty.
-      const raw = (app.handle || '').trim().toLowerCase().replace(/^@+/, '');
-      let handle = raw.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
-      if (!handle) handle = 'tipster_' + app.user_id.slice(0, 8);
-      // Handle collision: if taken by another approved user, suffix with
-      // the first 4 chars of the user id. At cohort-of-25 scale this is
-      // near-zero probability; the fallback keeps us correct anyway.
-      const clash = await dbQuery(
-        "SELECT id FROM users WHERE tipster_handle = $1 AND tipster_status = 'approved' AND id <> $2",
-        [handle, app.user_id]
-      );
-      if (clash.length) handle = (handle + '_' + app.user_id.slice(0, 4)).slice(0, 30);
-
-      await dbQuery(
-        `UPDATE users
-            SET tipster_status = 'approved',
-                tipster_approved_at = now(),
-                tipster_specialty = COALESCE($1, tipster_specialty, $2),
-                tipster_handle = $3
-          WHERE id = $4`,
-        [specialty || null, app.specialty, handle, app.user_id]
-      );
-    } else if (decision === 'reject' && app.user_id) {
-      await dbQuery(
-        "UPDATE users SET tipster_status = 'rejected' WHERE id = $1 AND tipster_status = 'applied'",
-        [app.user_id]
-      );
-    }
-
-    // Fire decision email. Fire-and-forget — admin decide response is not
-    // gated on SMTP round-trip. Voice-compliant subject + body per Charter
-    // worked examples (approval is a warmth trigger per §2; rejection is
-    // dry register).
-    sendTipsterDecisionEmail(app, decision).catch(err => {
-      console.error('[tipster-app] decision email error:', err.message);
-    });
-
-    res.json({ ok: true, application_id: req.params.id, status: newStatus });
-  } catch (err) {
-    console.error('[tipster-app] decide error:', err.message);
-    res.status(500).json({ error: 'Failed to decide application' });
-  }
-});
-
-// POST /api/admin/tipster/:userId/revoke — freeze an already-approved tipster.
-// Distinct from the application-decide flow: that handles pending
-// applications; revoke handles tipsters who were approved and later gamed
-// the system (fake picks, stat manipulation, etc). We never delete their
-// picks history — the track record stays public, they just lose write
-// access. Reinstating is a separate (manual, DB-level) action.
-app.post('/api/admin/tipster/:userId/revoke', requireAdminSecret, async (req, res) => {
-  try {
-    const { reason } = req.body || {};
-    const userId = req.params.userId;
-    const rows = await dbQuery(
-      `UPDATE users
-          SET tipster_status = 'revoked',
-              tipster_revoked_at = now()
-        WHERE id = $1 AND tipster_status = 'approved'
-        RETURNING id, tipster_status, tipster_revoked_at`,
-      [userId]
-    );
-    if (!rows.length) return res.status(409).json({ error: 'User is not an approved tipster' });
-    console.log('[tipster-admin] revoked user=' + userId.slice(0, 8) + ' reason=' + (reason || '(none)'));
-    res.json({ ok: true, user: rows[0] });
-  } catch (err) {
-    console.error('[tipster-admin] revoke error:', err.message);
-    res.status(500).json({ error: 'Failed to revoke' });
-  }
-});
-
-// Decision email — fires after admin approve/reject on an application.
-// Voice-compliant per Charter v1:
-//   Approval uses one of the five canonical warmth triggers (§2: first
-//   locked pick moment is still to come, but cohort entry is a one-time
-//   warmth moment too — one exclamation mark max).
-//   Rejection stays in default dry register.
-async function sendTipsterDecisionEmail(app, decision) {
-  if (!app || !app.email) return;
-  const transporter = createMailTransport();
-  if (!transporter) return;
-
-  const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
-  const isApprove = decision === 'approve';
-  const handleDisplay = app.handle ? '@' + app.handle.replace(/^@+/, '') : 'tipster';
-
-  const subject = isApprove ? "You're in." : 'Application decision · HYPERFLEX';
-
-  const htmlApprove = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
-  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
-    <tr><td style="padding:32px 32px 8px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#f5a623;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
-    </td></tr>
-    <tr><td style="padding:8px 32px 8px">
-      <h1 style="font-size:32px;font-weight:900;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">You're in.</h1>
-      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Record starts on your next pick. Everything you post from here is locked before tip-off, graded from official results, and public.</p>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <a href="${APP_URL}/picks/new" style="display:inline-block;padding:14px 28px;background:#f5a623;color:#0e0e12;font-weight:800;font-size:15px;border-radius:100px;text-decoration:none">Lock your first pick →</a>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px">WHAT HAPPENS NEXT</div>
-      <ul style="font-size:13.5px;line-height:1.7;color:#b4b4c4;margin:0;padding-left:18px">
-        <li>Your profile is live at <a href="${APP_URL}/t/${encodeURIComponent((app.handle||'').replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]+/g,'_').slice(0,30))}" style="color:#f5a623;text-decoration:none">${APP_URL}/t/${handleDisplay.replace(/^@+/, '')}</a></li>
-        <li>Every pick gets a permanent receipt URL you can share anywhere</li>
-        <li>Record shows up on the public leaderboard once the cohort fills</li>
-      </ul>
-    </td></tr>
-    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
-      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
-    </td></tr>
-  </table>
-</td></tr></table></body></html>`;
-
-  const htmlReject = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
-  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
-    <tr><td style="padding:32px 32px 8px">
-      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
-    </td></tr>
-    <tr><td style="padding:8px 32px 8px">
-      <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">Not this cohort.</h1>
-      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 18px">We read every application. This one didn't make the founding 25.</p>
-      <p style="font-size:14px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Apply again in 30 days. More posting history and unit-tracked volume both help.</p>
-    </td></tr>
-    <tr><td style="padding:0 32px 28px">
-      <a href="${APP_URL}/picks" style="display:inline-block;padding:12px 22px;background:rgba(255,255,255,0.06);color:#f0f0f5;font-weight:700;font-size:14px;border-radius:100px;text-decoration:none;border:1px solid rgba(255,255,255,0.14)">Back to /picks</a>
-    </td></tr>
-    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
-      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
-    </td></tr>
-  </table>
-</td></tr></table></body></html>`;
-
-  try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-      to: app.email,
-      subject,
-      html: isApprove ? htmlApprove : htmlReject,
-    });
-    console.log('[tipster-app] ' + decision + ' email sent to ' + app.email);
-  } catch (err) {
-    console.error('[tipster-app] sendMail error:', err.message);
-  }
-}
 
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
@@ -25993,7 +25676,6 @@ app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
 app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
 app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
-app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE

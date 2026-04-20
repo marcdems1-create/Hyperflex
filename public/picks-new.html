@@ -138,59 +138,16 @@ function fmtTime(iso){
 async function boot(){
   const token = getToken();
   if(!token){
-    renderGate('signin');
+    // Sign-in is the only remaining gate — anyone signed in can post a pick.
+    document.getElementById('mainEl').innerHTML =
+      '<div class="gate">' +
+        '<div class="gate-title">Sign in first.</div>' +
+        '<div class="gate-body">Your picks lock to your public record. Sign in to keep them attributed.</div>' +
+        '<a href="/creator/login">Sign in →</a>' +
+      '</div>';
     return;
   }
-  // Probe the gate: send a dry-run pick request and read the 403 shape.
-  // Cheaper than a separate /api/me endpoint and uses the single source of
-  // truth for the gate logic (the real POST /api/picks).
-  try{
-    const r = await fetch(API + '/api/picks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({}) // empty body → 400 for approved tipsters, 403 for non-tipsters
-    });
-    if(r.status === 403){
-      const d = await r.json().catch(()=>({}));
-      renderGate(d.tipster_status || 'none', d.revoked);
-      return;
-    }
-    // 400/500 means auth + tipster status passed; we just didn't pass a valid payload (expected).
-    await loadGames();
-  }catch(e){
-    document.getElementById('mainEl').innerHTML = '<div class="empty">Our end. Try again in a minute.</div>';
-  }
-}
-
-function renderGate(status, revoked){
-  let title, body, cta;
-  if(status === 'signin'){
-    title = 'Sign in first.';
-    body = 'Picks are for approved tipsters. Sign in, then apply if you haven\u2019t yet.';
-    cta = '<a href="/creator/login">Sign in →</a>';
-  } else if(status === 'applied'){
-    title = 'Application pending.';
-    body = 'Your application is in review. Decisions go out within 7 days of the cohort window closing.';
-    cta = '<a href="/picks">Back to /picks</a>';
-  } else if(status === 'rejected'){
-    title = 'Not this cohort.';
-    body = 'Apply again in 30 days. Every application gets read.';
-    cta = '<a href="/picks">Back to /picks</a>';
-  } else if(revoked || status === 'revoked'){
-    title = 'Access paused.';
-    body = 'Posting access on this account has been paused. Reach out if you think this is a mistake.';
-    cta = '<a href="mailto:admin@hyperflex.network">Contact admin</a>';
-  } else {
-    title = 'Picks are in founding-tipster beta.';
-    body = 'Apply at /picks to join the founding cohort. 25 slots.';
-    cta = '<a href="/picks">Apply →</a>';
-  }
-  document.getElementById('mainEl').innerHTML =
-    '<div class="gate">' +
-      '<div class="gate-title">' + esc(title) + '</div>' +
-      '<div class="gate-body">' + esc(body) + '</div>' +
-      cta +
-    '</div>';
+  await loadGames();
 }
 
 async function loadGames(){
