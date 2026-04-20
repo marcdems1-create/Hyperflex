@@ -4912,9 +4912,9 @@ window.hfxOpenDeposit = function() {
       <a class="nav-item" onclick="showTab('share')">
         <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
       </a>
-      <div class="nav-section-label" style="margin-top:8px">Account</div>
+      <div class="nav-section-label" style="margin-top:8px">Settings</div>
       <a class="nav-item" onclick="showTab('account')">
-        <span class="nav-icon">👤</span><span class="nav-label">Account</span>
+        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
       </a>
     </nav>
 
@@ -5552,8 +5552,8 @@ window.hfxOpenDeposit = function() {
           <div class="markets-table" style="padding:28px">
             <div class="tab-head">
               <div class="tab-head-text">
-                <div class="tab-head-title">⚙️ Community Settings</div>
-                <div class="tab-head-sub">Name, colors, branding, AI scanning cadence, Discord webhooks</div>
+                <div class="tab-head-title">🏛 Community Settings <span style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--dim);margin-left:8px;letter-spacing:.06em">LEGACY · WILL BE REMOVED</span></div>
+                <div class="tab-head-sub">Legacy community-host settings. For your personal profile (@handle, name, bio) use the Settings tab in the sidebar.</div>
               </div>
             </div>
             <div class="field">
@@ -7845,14 +7845,27 @@ window.hfxOpenDeposit = function() {
           <div class="markets-table" style="padding:28px;max-width:520px">
             <div class="tab-head">
               <div class="tab-head-text">
-                <div class="tab-head-title">👤 My Account</div>
-                <div class="tab-head-sub">Profile, display name, password, account actions</div>
+                <div class="tab-head-title">⚙️ Settings</div>
+                <div class="tab-head-sub">@handle, display name, bio, password</div>
               </div>
+            </div>
+
+            <!-- @handle (canonical profile URL) -->
+            <div style="margin-bottom:20px">
+              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Your @handle <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px">— your public profile URL</span></div>
+              <div style="display:flex;align-items:stretch;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;flex:1;min-width:200px;background:var(--paper);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                  <span style="padding:10px 2px 10px 14px;color:var(--dim);font-family:var(--mono);font-size:13px;user-select:none">@</span>
+                  <input type="text" id="acHandle" placeholder="yourhandle" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="onHandleInput('ac')" style="flex:1;background:none;border:none;padding:10px 12px 10px 2px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none"/>
+                </div>
+                <button class="btn-primary" type="button" onclick="saveHandle('ac')" style="min-width:100px">Save</button>
+              </div>
+              <div id="acHandleStatus" style="font-family:var(--mono);font-size:11px;margin-top:6px;min-height:14px"></div>
             </div>
 
             <!-- Display Name -->
             <div style="margin-bottom:20px">
-              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Display Name</div>
+              <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Display Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px">— the name on your profile (not the URL)</span></div>
               <input type="text" id="acDisplayName" class="form-input" placeholder="Your name" maxlength="50" />
             </div>
 
@@ -10165,7 +10178,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'Settings', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -11669,42 +11682,50 @@ async function resolveMarket(marketId, outcome) {
 }
 
 // Settings
-// ── @handle picker — lives in the Settings tab, writes users.handle ──
-// Live availability check (debounced 300ms) + save via POST /api/user/handle.
-// Loads the user's current handle on tab open so the input is prefilled.
+// ── @handle picker — used in the Account tab ('ac' prefix) and Settings
+// tab (no prefix). Live availability check (debounced 300ms) + save via
+// POST /api/user/handle. prefix='ac' → inputs acHandle + acHandleStatus,
+// prefix='' → inputs settingHandle + handleStatus.
 var _handleCheckTimer = null;
 var _handleLastChecked = '';
 
-async function loadHandleForSettings() {
+function _handleIds(prefix) {
+  return prefix === 'ac'
+    ? { input: 'acHandle', status: 'acHandleStatus' }
+    : { input: 'settingHandle', status: 'handleStatus' };
+}
+
+async function loadHandleForSettings(prefix) {
   try {
     const tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     if (!tok) return;
     const r = await fetch(API + '/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
     if (!r.ok) return;
     const d = await r.json();
-    const input = document.getElementById('settingHandle');
+    const ids = _handleIds(prefix);
+    const input = document.getElementById(ids.input);
     if (input && d.user && d.user.handle) input.value = d.user.handle;
   } catch {}
 }
 
-function _setHandleStatus(html, color) {
-  const el = document.getElementById('handleStatus');
+function _setHandleStatus(prefix, html, color) {
+  const el = document.getElementById(_handleIds(prefix).status);
   if (!el) return;
   el.innerHTML = html || '';
   el.style.color = color || 'var(--dim)';
 }
 
-function onHandleInput() {
-  const input = document.getElementById('settingHandle');
+function onHandleInput(prefix) {
+  const ids = _handleIds(prefix);
+  const input = document.getElementById(ids.input);
   if (!input) return;
-  // Force lowercase + strip illegal chars as user types
   const raw = input.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30);
   if (raw !== input.value) input.value = raw;
   const handle = raw;
   clearTimeout(_handleCheckTimer);
-  if (!handle) { _setHandleStatus('', ''); return; }
-  if (handle.length < 3) { _setHandleStatus('At least 3 characters', 'var(--red)'); return; }
-  _setHandleStatus('Checking…', 'var(--muted)');
+  if (!handle) { _setHandleStatus(prefix, '', ''); return; }
+  if (handle.length < 3) { _setHandleStatus(prefix, 'At least 3 characters', 'var(--red)'); return; }
+  _setHandleStatus(prefix, 'Checking…', 'var(--muted)');
   _handleCheckTimer = setTimeout(async () => {
     if (handle === _handleLastChecked) return;
     _handleLastChecked = handle;
@@ -11712,25 +11733,26 @@ function onHandleInput() {
       const r = await fetch(API + '/api/user/handle/available?handle=' + encodeURIComponent(handle));
       const d = await r.json();
       if (d.available) {
-        _setHandleStatus('✓ hyperflex.network/@' + handle + ' — available', 'var(--green)');
+        _setHandleStatus(prefix, '✓ hyperflex.network/@' + handle + ' — available', 'var(--green)');
       } else {
         const msg = d.reason === 'taken' ? 'Taken' :
                     d.reason === 'reserved' ? 'Reserved' :
                     d.reason || 'Unavailable';
-        _setHandleStatus('× ' + msg, 'var(--red)');
+        _setHandleStatus(prefix, '× ' + msg, 'var(--red)');
       }
-    } catch { _setHandleStatus('', ''); }
+    } catch { _setHandleStatus(prefix, '', ''); }
   }, 300);
 }
 
-async function saveHandle() {
-  const input = document.getElementById('settingHandle');
+async function saveHandle(prefix) {
+  const ids = _handleIds(prefix);
+  const input = document.getElementById(ids.input);
   if (!input) return;
   const handle = (input.value || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
-  if (!handle || handle.length < 3) { _setHandleStatus('At least 3 characters', 'var(--red)'); return; }
+  if (!handle || handle.length < 3) { _setHandleStatus(prefix, 'At least 3 characters', 'var(--red)'); return; }
   const tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-  if (!tok) { _setHandleStatus('Sign in first', 'var(--red)'); return; }
-  _setHandleStatus('Saving…', 'var(--muted)');
+  if (!tok) { _setHandleStatus(prefix, 'Sign in first', 'var(--red)'); return; }
+  _setHandleStatus(prefix, 'Saving…', 'var(--muted)');
   try {
     const r = await fetch(API + '/api/user/handle', {
       method: 'POST',
@@ -11739,13 +11761,13 @@ async function saveHandle() {
     });
     const d = await r.json();
     if (r.ok && d.ok) {
-      _setHandleStatus('✓ Saved. Your profile is at hyperflex.network/@' + d.handle, 'var(--green)');
+      _setHandleStatus(prefix, '✓ Saved. Your profile is at hyperflex.network/@' + d.handle, 'var(--green)');
       if (typeof showToast === 'function') showToast('@' + d.handle + ' is yours', 'success');
     } else {
-      _setHandleStatus('× ' + (d.error || 'Failed to save'), 'var(--red)');
+      _setHandleStatus(prefix, '× ' + (d.error || 'Failed to save'), 'var(--red)');
     }
   } catch (e) {
-    _setHandleStatus('× Network error', 'var(--red)');
+    _setHandleStatus(prefix, '× Network error', 'var(--red)');
   }
 }
 
@@ -13838,7 +13860,9 @@ function escHtml(s) {
 }
 
 function populateAccountTab() {
-  // Pre-fill display name + bio from creatorData
+  // Pre-fill handle from /api/user/me (authoritative users.handle value),
+  // + display name + bio from creatorData.
+  loadHandleForSettings('ac');
   const c = creatorData?.creator;
   const nameEl = document.getElementById('acDisplayName');
   const bioEl  = document.getElementById('acBio');
