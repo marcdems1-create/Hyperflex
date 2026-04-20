@@ -15137,6 +15137,103 @@ app.get('/api/picks/:id/verify', async (req, res) => {
   }
 });
 
+// GET /api/tipster/:handle — public tipster profile payload.
+//
+// One round trip returns everything the profile page needs: identity,
+// aggregated lifetime stats, and the last 30 picks with joined game + team
+// info. Aggregation uses FILTER clauses so wins/losses/pushes/voids drop
+// out of a single scan — cheap at cohort-of-25 scale, fine to leave
+// uncached until we're serving real traffic.
+//
+// Units math (charter §7):
+//   settled_units is pre-signed by the resolution cron (win = +payout,
+//   loss = −units, push/void = 0), so net = SUM.
+//   units_risked = SUM(units) over resolved non-void rows = denominator
+//   for ROI.
+app.get('/api/tipster/:handle', async (req, res) => {
+  try {
+    const handle = String(req.params.handle || '').toLowerCase().replace(/^@+/, '');
+    if (!/^[a-z0-9_]{1,30}$/.test(handle)) return res.status(404).json({ error: 'Tipster not found' });
+
+    const userRows = await dbQuery(
+      `SELECT id, display_name, tipster_handle, tipster_specialty, tipster_approved_at,
+              tipster_status, tipster_revoked_at, polymarket_address, avatar_url, is_whale, whale_rank
+         FROM users
+        WHERE tipster_handle = $1 AND tipster_status = 'approved'
+        LIMIT 1`,
+      [handle]
+    );
+    if (!userRows.length) return res.status(404).json({ error: 'Tipster not found' });
+    const u = userRows[0];
+
+    const aggRows = await dbQuery(
+      `SELECT
+         COUNT(*)::int                                                       AS total_picks,
+         COUNT(*) FILTER (WHERE settlement_status = 'win')::int              AS wins,
+         COUNT(*) FILTER (WHERE settlement_status = 'loss')::int             AS losses,
+         COUNT(*) FILTER (WHERE settlement_status = 'push')::int             AS pushes,
+         COUNT(*) FILTER (WHERE settlement_status = 'void')::int             AS voids,
+         COUNT(*) FILTER (WHERE settlement_status IS NULL)::int              AS pending,
+         COALESCE(SUM(settled_units), 0)::numeric                            AS net_units,
+         COALESCE(SUM(units) FILTER (
+           WHERE settlement_status IS NOT NULL AND settlement_status <> 'void'
+         ), 0)::numeric                                                      AS units_risked
+         FROM picks WHERE user_id = $1`,
+      [u.id]
+    );
+    const a = aggRows[0] || {};
+    const resolved = (a.wins || 0) + (a.losses || 0) + (a.pushes || 0);
+    const winRate = resolved > 0 ? ((a.wins || 0) / resolved) * 100 : null;
+    const unitsRisked = parseFloat(a.units_risked || 0);
+    const netUnits    = parseFloat(a.net_units    || 0);
+    const roiPct = unitsRisked > 0 ? (netUnits / unitsRisked) * 100 : null;
+
+    const recent = await dbQuery(
+      `SELECT p.id, p.sport, p.bet_type, p.side, p.line, p.odds, p.units,
+              p.thesis, p.locked_at, p.settlement_status, p.settled_units, p.settled_at,
+              g.id AS game_id, g.starts_at, g.status AS game_status,
+              g.home_score, g.away_score,
+              home.abbreviation AS home_abbr, home.name AS home_name,
+              away.abbreviation AS away_abbr, away.name AS away_name
+         FROM picks p
+         LEFT JOIN sport_games g ON g.id = p.game_id
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE p.user_id = $1
+        ORDER BY p.locked_at DESC
+        LIMIT 30`,
+      [u.id]
+    );
+
+    res.json({
+      tipster: {
+        handle: u.tipster_handle,
+        display_name: u.display_name,
+        specialty: u.tipster_specialty,
+        approved_at: u.tipster_approved_at,
+        avatar_url: u.avatar_url,
+        is_whale: u.is_whale || false,
+      },
+      stats: {
+        total_picks:  a.total_picks || 0,
+        wins:         a.wins || 0,
+        losses:       a.losses || 0,
+        pushes:       a.pushes || 0,
+        voids:        a.voids || 0,
+        pending:      a.pending || 0,
+        win_rate:     winRate,              // null when no resolved picks yet
+        net_units:    netUnits,
+        units_risked: unitsRisked,
+        roi_pct:      roiPct,               // null when units_risked === 0
+      },
+      picks: recent,
+    });
+  } catch (err) {
+    console.error('[tipster-profile] error:', err.message);
+    res.status(500).json({ error: 'Failed to load tipster' });
+  }
+});
+
 // ── TIPSTER APPLICATIONS (founding cohort) ─────────────────────────────────
 // The /picks page is gated: 25 founding tipsters get picked up front, anyone
 // else applies and waits. Applications are append-only (rejected apps stay
@@ -15277,13 +15374,30 @@ app.post('/api/admin/tipster-applications/:id/decide', requireAdminSecret, async
     );
 
     if (decision === 'approve' && app.user_id) {
+      // Normalise handle at approval: lowercase, strip @ + whitespace,
+      // replace disallowed chars with underscores, cap at 30. Matches the
+      // CHECK constraint (^[a-z0-9_]{1,30}$). Fallback to a UUID-prefixed
+      // placeholder if the source handle sanitises to empty.
+      const raw = (app.handle || '').trim().toLowerCase().replace(/^@+/, '');
+      let handle = raw.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
+      if (!handle) handle = 'tipster_' + app.user_id.slice(0, 8);
+      // Handle collision: if taken by another approved user, suffix with
+      // the first 4 chars of the user id. At cohort-of-25 scale this is
+      // near-zero probability; the fallback keeps us correct anyway.
+      const clash = await dbQuery(
+        "SELECT id FROM users WHERE tipster_handle = $1 AND tipster_status = 'approved' AND id <> $2",
+        [handle, app.user_id]
+      );
+      if (clash.length) handle = (handle + '_' + app.user_id.slice(0, 4)).slice(0, 30);
+
       await dbQuery(
         `UPDATE users
             SET tipster_status = 'approved',
                 tipster_approved_at = now(),
-                tipster_specialty = COALESCE($1, tipster_specialty, $2)
-          WHERE id = $3`,
-        [specialty || null, app.specialty, app.user_id]
+                tipster_specialty = COALESCE($1, tipster_specialty, $2),
+                tipster_handle = $3
+          WHERE id = $4`,
+        [specialty || null, app.specialty, handle, app.user_id]
       );
     } else if (decision === 'reject' && app.user_id) {
       await dbQuery(
@@ -25668,6 +25782,7 @@ app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data
 app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
 app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks.html')));
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
+app.get('/t/:handle', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tipster.html')));
 app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
 
 // ════════════════════════════════════════════════════════════
