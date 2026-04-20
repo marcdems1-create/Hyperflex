@@ -8541,12 +8541,21 @@ function renderDashboard(data) {
       ? _rawName.slice(0, 6) + '…' + _rawName.slice(-4)
       : _rawName;
   } catch(e) {}
+  // Sidebar + topbar link point to the user's predictor profile (/m/:userId),
+  // not the community landing (/:slug). Profile is the shareable track-record
+  // page; community is a separate product surface.
   try {
     var urlEl = document.getElementById('sidebarCommunityUrl');
-    urlEl.textContent = 'hyperflex.network/' + (creator.slug || '');
-    urlEl.href = '/' + (creator.slug || '');
+    var profilePath = creator.id ? '/m/' + creator.id : ('/' + (creator.slug || ''));
+    urlEl.textContent = 'hyperflex.network' + profilePath;
+    urlEl.href = profilePath;
   } catch(e) {}
-  try { document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + (creator.slug || ''); } catch(e) {}
+  try {
+    var topUrlEl = document.getElementById('topbarCommunityUrl');
+    var topProfilePath = creator.id ? '/m/' + creator.id : ('/' + (creator.slug || ''));
+    topUrlEl.textContent = 'hyperflex.network' + topProfilePath;
+    if (topUrlEl.tagName === 'A') topUrlEl.href = topProfilePath;
+  } catch(e) {}
 
   if (data.challenge_progress) try { renderChallengeStatus(data.challenge_progress); } catch(e) {}
 
@@ -13540,7 +13549,9 @@ function shareWinCard(predictionId) {
 
 function copyLink() {
   if (!creatorData) return;
-  copyText('https://hyperflex.network/' + creatorData.creator.slug);
+  var c = creatorData.creator || {};
+  var path = c.id ? '/m/' + c.id : ('/' + (c.slug || ''));
+  copyText('https://hyperflex.network' + path);
 }
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Copied! 📋', 'success'));
