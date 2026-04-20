@@ -299,6 +299,13 @@ a:hover { text-decoration: underline; }
   <div class="rising-grid" id="risingGrid"></div>
 </section>
 
+<!-- HALL OF FAME — moved up from the bottom so it sits next to the podium,
+     not buried behind 50 rows of leaderboard scroll -->
+<section class="hof-section" id="hofSection" style="display:none;">
+  <div class="hof-title"><span>&#127942;</span> All-Time Legends</div>
+  <div class="hof-grid" id="hofGrid"></div>
+</section>
+
 <!-- CATEGORY TABS + FILTER BAR -->
 <div class="controls-section">
   <div class="cat-tab-row">
@@ -343,12 +350,6 @@ a:hover { text-decoration: underline; }
     </tbody>
   </table>
 </div>
-
-<!-- HALL OF FAME -->
-<section class="hof-section" id="hofSection" style="display:none;">
-  <div class="hof-title"><span>&#127942;</span> All-Time Legends</div>
-  <div class="hof-grid" id="hofGrid"></div>
-</section>
 
 <!-- SHARP SCORE MODAL -->
 <div class="ss-modal-overlay" id="ssModalOverlay" onclick="if(event.target===this)closeSharpModal()">
