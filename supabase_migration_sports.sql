@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_sport_games_final_unsettled
 -- ── picks ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS picks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   game_id TEXT NOT NULL REFERENCES sport_games(id) ON DELETE CASCADE,
   sport TEXT NOT NULL,
   bet_type TEXT NOT NULL CHECK (bet_type IN ('spread','moneyline','total','prop')),

@@ -48,7 +48,8 @@ CREATE INDEX IF NOT EXISTS idx_users_tipster_active
 -- ── tipster_applications ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tipster_applications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  -- users.id is TEXT in this codebase (not UUID). All user refs follow suit.
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   email TEXT,                          -- fallback if the applicant isn't signed in
   handle TEXT NOT NULL,                -- X/Twitter handle without @
   picks_link TEXT,                     -- link to last 30 days of public picks
@@ -58,7 +59,7 @@ CREATE TABLE IF NOT EXISTS tipster_applications (
   failure_mode TEXT,                   -- "what would make this platform fail for you?"
   why_me TEXT,                         -- short pitch, 500 char cap
   status TEXT NOT NULL DEFAULT 'pending',  -- pending/approved/rejected
-  reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   reviewed_at TIMESTAMPTZ,
   review_notes TEXT,                   -- private admin notes
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
