@@ -15911,6 +15911,236 @@ app.post('/api/admin/trades/clv/sweep', async (req, res) => {
   res.json(result);
 });
 
+// ── T5 · FLEX SCORE FOR SPORTS ──────────────────────────────────────────────
+// Pure formula lives in lib/sports-flex-score.js (fixture-tested). This
+// section binds it to the DB: fetches per-user stats from `picks` (primary)
+// and polymarket_trades (CLV-supplementary), runs the formula, upserts the
+// score + components into sports_flex_scores. Nightly full rebuild at 04:00
+// UTC; on-demand recompute fires when a pick settles.
+
+const { computeSportsFlexScore: _computeSFS, THRESHOLDS: _SFS_THRESHOLDS } = require('./lib/sports-flex-score');
+
+// Pull per-user sports stats. One round-trip builds the full shape the
+// pure formula expects. Used by both nightly rebuild and on-demand recompute.
+async function _fetchSportsStats(userId) {
+  // Picks aggregate (settlement excludes voids per sports betting convention)
+  const pickRows = await dbQuery(`
+    SELECT
+      COUNT(*) FILTER (WHERE settlement_status IN ('win','loss','push'))::int AS settled_bets,
+      COALESCE(SUM(settled_units) FILTER (WHERE settlement_status IN ('win','loss','push')), 0)::numeric AS net_units,
+      COALESCE(SUM(units) FILTER (WHERE settlement_status IN ('win','loss','push')), 0)::numeric         AS total_staked_units,
+      COUNT(DISTINCT DATE(locked_at))::int                                                               AS active_days,
+      COUNT(DISTINCT sport) FILTER (WHERE settlement_status IN ('win','loss','push'))::int              AS distinct_sports,
+      COUNT(DISTINCT bet_type) FILTER (WHERE settlement_status IN ('win','loss','push'))::int           AS distinct_bet_types
+    FROM picks
+    WHERE user_id = $1`, [userId]).catch(() => []);
+
+  // Weekly consistency over trailing 90 days
+  const weeklyRows = await dbQuery(`
+    SELECT
+      COUNT(*)::int                                    AS weeks_active_90d,
+      COUNT(*) FILTER (WHERE week_net > 0)::int        AS weeks_profitable_90d
+    FROM (
+      SELECT DATE_TRUNC('week', settled_at) AS wk,
+             SUM(settled_units)             AS week_net
+        FROM picks
+       WHERE user_id = $1
+         AND settlement_status IN ('win','loss','push')
+         AND settled_at > NOW() - INTERVAL '90 days'
+       GROUP BY 1
+    ) w`, [userId]).catch(() => []);
+
+  // CLV signal from polymarket_trades (only sports-tagged, time-decayed).
+  // 90d = 100%, 90-180d = 50%, >180d = 25%.
+  let clvAvg = null;
+  try {
+    const wallets = await dbQuery(
+      'SELECT LOWER(polymarket_address) AS addr FROM users WHERE id = $1 AND polymarket_address IS NOT NULL',
+      [userId]
+    ).catch(() => []);
+    if (wallets.length && wallets[0].addr) {
+      const clvRows = await dbQuery(`
+        SELECT
+          SUM(pt.clv_cents * w)::numeric AS weighted_sum,
+          SUM(w)::numeric                AS weight_total
+        FROM (
+          SELECT pt.clv_cents,
+                 CASE
+                   WHEN pt.created_at > NOW() - INTERVAL '90 days'  THEN 1.0
+                   WHEN pt.created_at > NOW() - INTERVAL '180 days' THEN 0.5
+                   ELSE 0.25
+                 END AS w
+            FROM polymarket_trades pt
+            JOIN market_sport_tags mst
+              ON mst.source = 'polymarket' AND mst.external_id = pt.condition_id
+           WHERE LOWER(pt.eoa_address) = $1
+             AND pt.clv_cents IS NOT NULL
+             AND mst.sport <> 'other'
+        ) pt`, [wallets[0].addr]).catch(() => []);
+      const wSum = parseFloat(clvRows[0]?.weighted_sum || 0);
+      const wTot = parseFloat(clvRows[0]?.weight_total  || 0);
+      if (wTot > 0) clvAvg = Math.round((wSum / wTot) * 100) / 100;
+    }
+  } catch (e) {
+    // polymarket_trades / market_sport_tags may not exist yet — leave CLV null
+    if (!/relation "(polymarket_trades|market_sport_tags)" does not exist/i.test(e.message)) {
+      console.warn('[sports-flex] clv lookup:', e.message);
+    }
+  }
+
+  const p = pickRows[0] || {};
+  const w = weeklyRows[0] || {};
+  return {
+    net_units:           parseFloat(p.net_units || 0),
+    settled_bets:        parseInt(p.settled_bets || 0, 10),
+    total_staked_units:  parseFloat(p.total_staked_units || 0),
+    active_days:         parseInt(p.active_days || 0, 10),
+    distinct_sports:     parseInt(p.distinct_sports || 0, 10),
+    distinct_bet_types:  parseInt(p.distinct_bet_types || 0, 10),
+    weeks_active_90d:    parseInt(w.weeks_active_90d || 0, 10),
+    weeks_profitable_90d: parseInt(w.weeks_profitable_90d || 0, 10),
+    avg_clv_cents:       clvAvg,
+  };
+}
+
+// Recompute + upsert for a single user. Called by the cron and by the on-
+// demand hook when a pick settles. Returns the computed row.
+async function recomputeSportsFlexScore(userId) {
+  if (!pool) return null;
+  try {
+    const stats = await _fetchSportsStats(userId);
+    const result = _computeSFS(stats);
+    await pool.query(`
+      INSERT INTO sports_flex_scores (
+        user_id, score, pnl_component, volume_component, consistency_component,
+        clv_component, diversity_component, settled_bets, total_staked_units,
+        net_units, active_days, distinct_sports, distinct_bet_types,
+        avg_clv_cents, qualifies, computed_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        score=EXCLUDED.score,
+        pnl_component=EXCLUDED.pnl_component,
+        volume_component=EXCLUDED.volume_component,
+        consistency_component=EXCLUDED.consistency_component,
+        clv_component=EXCLUDED.clv_component,
+        diversity_component=EXCLUDED.diversity_component,
+        settled_bets=EXCLUDED.settled_bets,
+        total_staked_units=EXCLUDED.total_staked_units,
+        net_units=EXCLUDED.net_units,
+        active_days=EXCLUDED.active_days,
+        distinct_sports=EXCLUDED.distinct_sports,
+        distinct_bet_types=EXCLUDED.distinct_bet_types,
+        avg_clv_cents=EXCLUDED.avg_clv_cents,
+        qualifies=EXCLUDED.qualifies,
+        computed_at=now()`,
+      [
+        userId, result.score,
+        result.components.pnl, result.components.volume, result.components.consistency,
+        result.components.clv, result.components.diversity,
+        stats.settled_bets, stats.total_staked_units,
+        stats.net_units, stats.active_days, stats.distinct_sports, stats.distinct_bet_types,
+        stats.avg_clv_cents, result.qualifies,
+      ]
+    );
+    return { ...result, stats };
+  } catch (e) {
+    if (/relation "sports_flex_scores" does not exist/i.test(e.message)) {
+      console.warn('[sports-flex] table missing — run supabase_migration_sports_flex_scores.sql');
+      return null;
+    }
+    console.warn('[sports-flex] recompute error:', userId, e.message);
+    return null;
+  }
+}
+
+// Nightly full rebuild. Walks every user who has at least one settled pick
+// since the last run + every user currently in the table (so dormant users
+// still get their row refreshed — decay matters).
+async function recomputeAllSportsFlexScores() {
+  if (!pool) return { users: 0, updated: 0 };
+  let updated = 0;
+  try {
+    const users = await dbQuery(`
+      SELECT DISTINCT user_id FROM (
+        SELECT user_id FROM picks WHERE settlement_status IN ('win','loss','push')
+        UNION
+        SELECT user_id FROM sports_flex_scores
+      ) u`).catch(() => []);
+    for (const u of users) {
+      const r = await recomputeSportsFlexScore(u.user_id);
+      if (r) updated++;
+      // 25ms pause so a 10k-user batch doesn't starve the event loop
+      if (updated % 40 === 0) await new Promise(r => setTimeout(r, 25));
+    }
+    console.log(`[sports-flex] nightly rebuild: ${updated}/${users.length} users`);
+    return { users: users.length, updated };
+  } catch (e) {
+    console.error('[sports-flex] nightly rebuild error:', e.message);
+    return { users: 0, updated, error: e.message };
+  }
+}
+
+// Nightly at 04:00 UTC. Runs after the 03:00 sport-tag sweep + the 15-min
+// CLV sweep so the inputs are as fresh as possible.
+cron.schedule('0 4 * * *', () => { recomputeAllSportsFlexScores().catch(() => {}); });
+
+// GET /api/sports-predictors/leaderboard?period=all&min_score=0
+// Returns ranked list of qualifying users with their score + components.
+app.get('/api/sports-predictors/leaderboard', async (req, res) => {
+  try {
+    const limit = Math.min(200, parseInt(req.query.limit, 10) || 50);
+    const rows = await dbQuery(`
+      SELECT sfs.user_id, sfs.score, sfs.pnl_component, sfs.volume_component,
+             sfs.consistency_component, sfs.clv_component, sfs.diversity_component,
+             sfs.settled_bets, sfs.total_staked_units, sfs.net_units,
+             sfs.distinct_sports, sfs.distinct_bet_types, sfs.avg_clv_cents,
+             u.display_name, u.handle, u.avatar_url
+        FROM sports_flex_scores sfs
+        JOIN users u ON u.id = sfs.user_id
+       WHERE sfs.qualifies = TRUE AND sfs.score IS NOT NULL
+       ORDER BY sfs.score DESC, sfs.net_units DESC
+       LIMIT $1`, [limit]).catch(() => []);
+    // Statistical supply gate: no leaderboard until 3+ qualifiers
+    if (rows.length < 3) {
+      return res.json({ gated: true, reason: 'insufficient_sample', qualifying: rows.length, min_qualifiers: 3 });
+    }
+    rows.forEach((r, i) => { r.rank = i + 1; });
+    res.json({ gated: false, leaders: rows, min_score: rows[rows.length - 1]?.score || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/sports-predictors/:userId — own score + component breakdown.
+// Always returns a row (computes on-the-fly if cache is missing) so the UI
+// can render "below threshold" coaching.
+app.get('/api/sports-predictors/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    let row = (await dbQuery('SELECT * FROM sports_flex_scores WHERE user_id=$1', [userId]).catch(() => []))[0];
+    if (!row) {
+      // Cold cache: compute now so first-time readers get a real answer
+      const r = await recomputeSportsFlexScore(userId);
+      row = (await dbQuery('SELECT * FROM sports_flex_scores WHERE user_id=$1', [userId]).catch(() => []))[0] || null;
+    }
+    if (!row) return res.json({ user_id: userId, has_score: false });
+    res.json({ user_id: userId, has_score: true, thresholds: _SFS_THRESHOLDS, ...row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/sports-flex/rebuild — run nightly on demand (admin).
+app.post('/api/admin/sports-flex/rebuild', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await recomputeAllSportsFlexScores();
+  res.json(result);
+});
+
+// Hook for on-demand recompute when a pick settles. Other code paths that
+// settle a pick should call this fire-and-forget to keep the user's score
+// live without waiting for the nightly cron.
+function recomputeSportsFlexForUser(userId) {
+  recomputeSportsFlexScore(userId).catch(() => {});
+}
+module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
