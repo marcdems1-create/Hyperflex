@@ -3586,6 +3586,151 @@ async function computeSentimentSnapshots() {
 cron.schedule('5 * * * *',  safeCron('sentimentSnapshots', computeSentimentSnapshots));
 cron.schedule('0 3 * * *',  safeCron('walletScores', computeWalletScores));
 
+// ── SPORTS INGESTION (NBA via ESPN) ───────────────────────────────────────
+// ESPN has an unpublished public API for scores/schedule. No auth, generous
+// quotas, but zero uptime SLA. We poll adaptively:
+//   - 5 min baseline (most hours, no imminent games)
+//   - 60 s when a game is live OR about to tip off within 2h OR just finalized
+//     (score confirmation window).
+// One cron runs every 60 s; each call decides whether to actually hit ESPN
+// based on the above rule. Keeps request volume ~100/day most days, ~300/day
+// on heavy game nights. Well under any reasonable rate-limit ceiling.
+//
+// ⚠️ Resolution is NOT automatic from ESPN. Game scores populate a "suggested
+// resolution" only; the community-gated voting infrastructure remains the
+// final arbiter. See /api/market/:id/votes for the existing pattern.
+const ESPN_NBA_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+const ESPN_NBA_TEAMS      = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams';
+
+let _lastNbaPoll = 0;
+let _nbaPollCount = 0;
+
+// Seed the NBA team roster once on boot. Idempotent (ON CONFLICT UPDATE).
+// Pre-populates aliases so market/pick text matching has a canonical target.
+async function seedNbaTeams() {
+  if (!pool) return;
+  try {
+    const r = await fetch(ESPN_NBA_TEAMS, { headers: { 'User-Agent': 'Hyperflex/1.0' } });
+    if (!r.ok) { console.warn('[nba-teams] ESPN returned', r.status); return; }
+    const j = await r.json();
+    const teams = (j.sports?.[0]?.leagues?.[0]?.teams || []).map(x => x.team).filter(Boolean);
+    if (!teams.length) { console.warn('[nba-teams] ESPN returned 0 teams'); return; }
+    let upserted = 0;
+    for (const t of teams) {
+      const id = String(t.id);
+      const name = t.displayName || t.name;
+      const abbr = t.abbreviation;
+      const logo = (t.logos && t.logos[0]?.href) || null;
+      // Build the alias set — all reasonable ways a pick or market might
+      // reference this team. JSONB array so we can GIN-index for @> lookups.
+      const aliases = [];
+      if (t.displayName)    aliases.push(t.displayName);
+      if (t.shortDisplayName && t.shortDisplayName !== t.displayName) aliases.push(t.shortDisplayName);
+      if (t.name && t.name !== t.displayName) aliases.push(t.name);
+      if (t.nickname && t.nickname !== t.name) aliases.push(t.nickname);
+      if (t.location) aliases.push(t.location + ' ' + (t.name || ''));
+      if (abbr) aliases.push(abbr);
+      const unique = Array.from(new Set(aliases.filter(Boolean).map(s => String(s).trim())));
+      await dbQuery(
+        `INSERT INTO sport_teams (id, sport, league, name, abbreviation, aliases, logo_url)
+         VALUES ($1, 'nba', 'NBA', $2, $3, $4::jsonb, $5)
+         ON CONFLICT (id) DO UPDATE
+           SET name = EXCLUDED.name,
+               abbreviation = EXCLUDED.abbreviation,
+               aliases = EXCLUDED.aliases,
+               logo_url = EXCLUDED.logo_url,
+               updated_at = now()`,
+        [id, name, abbr, JSON.stringify(unique), logo]
+      );
+      upserted++;
+    }
+    console.log('[nba-teams] seeded ' + upserted + ' teams');
+  } catch (e) { console.error('[nba-teams] seed error:', e.message); }
+}
+
+// Decide whether this poll tick should actually fetch. Returns true if:
+//   (a) no successful poll in the last 5 min, OR
+//   (b) any game has starts_at within [now-4h, now+2h] (live window + warmup)
+//       AND last poll was >= 60 s ago.
+async function shouldPollNba() {
+  if (!pool) return false;
+  const now = Date.now();
+  const since = now - _lastNbaPoll;
+  if (since >= 5 * 60 * 1000) return true;
+  if (since < 60 * 1000) return false;
+  try {
+    const rows = await dbQuery(
+      `SELECT 1 FROM sport_games
+        WHERE sport = 'nba'
+          AND starts_at BETWEEN (now() - INTERVAL '4 hours') AND (now() + INTERVAL '2 hours')
+        LIMIT 1`
+    );
+    return rows.length > 0;
+  } catch (e) { return false; }
+}
+
+// Map ESPN status.type.name → our canonical game status.
+function mapEspnStatus(s) {
+  const name = (s?.type?.name || '').toLowerCase();
+  if (name.includes('final')) return 'final';
+  if (name.includes('in_progress') || name.includes('halftime')) return 'live';
+  if (name.includes('postponed') || name.includes('canceled') || name.includes('suspended')) return 'postponed';
+  return 'scheduled';
+}
+
+async function pollNbaGames() {
+  if (!(await shouldPollNba())) return;
+  _lastNbaPoll = Date.now();
+  _nbaPollCount++;
+  try {
+    // Pull today AND tomorrow so late-night tip-offs that roll past midnight
+    // UTC don't disappear from the window. ESPN accepts dates=YYYYMMDD[-YYYYMMDD].
+    const today = new Date();
+    const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
+    const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const url = ESPN_NBA_SCOREBOARD + '?dates=' + fmt(today) + '-' + fmt(tomorrow);
+    const r = await fetch(url, { headers: { 'User-Agent': 'Hyperflex/1.0' } });
+    if (!r.ok) { console.warn('[nba-games] ESPN returned', r.status); return; }
+    const j = await r.json();
+    const events = j.events || [];
+    let upserted = 0;
+    for (const ev of events) {
+      try {
+        const id = String(ev.id);
+        const startsAt = ev.date;
+        const comp = (ev.competitions && ev.competitions[0]) || {};
+        const competitors = comp.competitors || [];
+        const home = competitors.find(c => c.homeAway === 'home');
+        const away = competitors.find(c => c.homeAway === 'away');
+        const status = mapEspnStatus(comp.status || ev.status);
+        const homeScore = home?.score != null ? parseInt(home.score, 10) : null;
+        const awayScore = away?.score != null ? parseInt(away.score, 10) : null;
+        const period = comp.status?.type?.shortDetail || null;
+        await dbQuery(
+          `INSERT INTO sport_games (id, sport, league, home_team_id, away_team_id, starts_at, status, home_score, away_score, period, last_polled_at)
+           VALUES ($1, 'nba', 'NBA', $2, $3, $4, $5, $6, $7, $8, now())
+           ON CONFLICT (id) DO UPDATE
+             SET status = EXCLUDED.status,
+                 home_score = EXCLUDED.home_score,
+                 away_score = EXCLUDED.away_score,
+                 period = EXCLUDED.period,
+                 starts_at = EXCLUDED.starts_at,
+                 last_polled_at = now()`,
+          [id, home?.id ? String(home.id) : null, away?.id ? String(away.id) : null, startsAt, status, homeScore, awayScore, period]
+        );
+        upserted++;
+      } catch (evErr) { /* skip malformed event, keep going */ }
+    }
+    if (_nbaPollCount === 1 || upserted > 0) {
+      console.log('[nba-games] polled ' + events.length + ' events, upserted ' + upserted + ' (call #' + _nbaPollCount + ')');
+    }
+  } catch (e) { console.error('[nba-games] poll error:', e.message); }
+}
+
+cron.schedule('* * * * *', safeCron('pollNbaGames', pollNbaGames));
+// Seed teams on boot (fire-and-forget — boot doesn't block on ESPN).
+setTimeout(() => { seedNbaTeams().catch(() => {}); }, 15000);
+
 // ── EMAIL QUEUE PROCESSOR ─────────────────────────────────────────────────
 // Picks up any pending_emails where send_after <= now, sends them, marks sent
 async function processPendingEmails() {
