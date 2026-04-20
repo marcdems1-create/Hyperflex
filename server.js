@@ -1522,6 +1522,29 @@ app.put('/api/user/email', requireAuth, async (req, res) => {
   }
 });
 
+// ── Context-aware display name ──────────────────────────────────────────────
+// Replaces the generic "Anonymous" fallback with a hookable identity based
+// on what we know about the user. Priority order:
+//   1. Actual display_name (not a raw 0x wallet that leaked through)
+//   2. @username                       → "@alice"
+//   3. Whale rank if available         → "Whale #33"   ← most hookable
+//   4. Wallet short form if on-chain    → "0x6e1d…d0fa"
+//   5. Generic fallback                 → "Trader"
+// Use this everywhere we'd otherwise write `u.display_name || 'Anonymous'`.
+function resolveDisplayName(u) {
+  if (!u) return 'Trader';
+  if (u.display_name && typeof u.display_name === 'string'
+      && !u.display_name.startsWith('0x') && u.display_name.trim()) {
+    return u.display_name.trim();
+  }
+  if (u.username) return '@' + u.username;
+  if (u.is_whale && u.whale_rank) return 'Whale #' + u.whale_rank;
+  if (u.polymarket_address && typeof u.polymarket_address === 'string' && u.polymarket_address.length >= 10) {
+    return u.polymarket_address.slice(0, 6) + '…' + u.polymarket_address.slice(-4);
+  }
+  return 'Trader';
+}
+
 // Auth middleware for protected routes
 function requireAuth(req, res, next) {
   const auth = req.headers.authorization;
@@ -11494,14 +11517,15 @@ app.get('/api/predictors', async (req, res) => {
     // Fetch display names
     let userRows;
     if (pool) {
-      userRows = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [userIds]);
+      userRows = await dbQuery('SELECT id, display_name, username, is_whale, whale_rank, polymarket_address FROM users WHERE id = ANY($1)', [userIds]);
     } else {
-      const { data } = await supabase.from('users').select('id, display_name').in('id', userIds);
+      const { data } = await supabase.from('users').select('id, display_name, username, is_whale, whale_rank, polymarket_address').in('id', userIds);
       userRows = data;
     }
 
+    // Build context-aware name map: whale rank > username > wallet short > Trader
     const nameMap = {};
-    for (const u of userRows || []) nameMap[u.id] = u.display_name;
+    for (const u of userRows || []) nameMap[u.id] = resolveDisplayName(u);
 
     // Check polymarket connections (users table)
     let csRows;
@@ -11528,7 +11552,7 @@ app.get('/api/predictors', async (req, res) => {
       const sharp_score = Math.min(99, Math.round(wr * 80 + vol_bonus + pnl_bonus + (polyMap[uid] ? 5 : 0)));
       return {
         user_id: uid,
-        display_name: nameMap[uid] || 'Anonymous',
+        display_name: nameMap[uid] || 'Trader',
         win_rate,
         total_predictions: u.total,
         win_streak: u.streak,
@@ -12482,10 +12506,8 @@ app.get('/api/member/:userId', async (req, res) => {
       } catch (e) { /* polymarket_trades table may not exist */ }
     }
 
-    // Resolve display name: display_name > username > 'Anonymous' (never raw wallet)
-    const displayName = userData.display_name && !userData.display_name.startsWith('0x')
-      ? userData.display_name
-      : userData.username || 'Anonymous';
+    // Context-aware display name — see resolveDisplayName() near L1524
+    const displayName = resolveDisplayName(userData);
 
     res.json({
       user: {
