@@ -38327,6 +38327,98 @@ app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
   });
 });
 
+// GET /api/admin/safe-singleton-probe — read Polymarket Safe factory's
+// masterCopy() and report the version. The EIP-712 domain we sign Safe
+// transactions against assumes Safe v1.3.0+ rules (chainId + verifyingContract,
+// no name/version). If Polymarket actually deploys v1.1.x or older, every
+// wrap signature gets rejected.
+//
+// Run this BEFORE flipping the V2 default flag.
+app.get('/api/admin/safe-singleton-probe', requireAdmin, async (req, res) => {
+  const FACTORY = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+  const SELECTOR_MASTERCOPY = '0xa619486e';   // masterCopy()
+  const KNOWN = {
+    '0xfb1bffc9d739b8d520daf37df666da4c687191ea': { version: 'v1.3.0', layer: 'L2', domain: 'chainId+verifyingContract' },
+    '0x3e5c63644e683549055b9be8653de26e0b4cd36e': { version: 'v1.3.0', layer: 'L1', domain: 'chainId+verifyingContract' },
+    '0x29fcb43b46531bca003ddc8fcb67ffe91900c762': { version: 'v1.4.1', layer: 'L2', domain: 'chainId+verifyingContract' },
+    '0x41675c099f32341bf84bfc5382af534df5c7461a': { version: 'v1.4.1', layer: 'L1', domain: 'chainId+verifyingContract' },
+    '0x6851d6fdfafd08c0295c392436245e5bc78b0185': { version: 'v1.2.0', layer: 'L1', domain: 'name+version+chainId+verifyingContract' },
+    '0xb6029ea3b2c51d09a50b53ca8012feeb05bda35b': { version: 'v1.1.1', layer: 'L1', domain: 'name+version+chainId+verifyingContract' },
+  };
+  const RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon.drpc.org'];
+  let lastErr = null;
+  for (const rpc of RPCS) {
+    try {
+      const r = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1, method: 'eth_call',
+          params: [{ to: FACTORY, data: SELECTOR_MASTERCOPY }, 'latest'],
+        }),
+      });
+      const j = await r.json();
+      if (j.error) { lastErr = j.error.message || JSON.stringify(j.error); continue; }
+      if (!j.result || j.result === '0x') { lastErr = 'empty result'; continue; }
+      const singleton = ('0x' + j.result.slice(-40)).toLowerCase();
+      const known = KNOWN[singleton] || null;
+      const ourCodeAssumes = 'v1.3.0+ (chainId + verifyingContract, no name/version)';
+      const compatible = known
+        ? known.domain === 'chainId+verifyingContract'
+        : null;  // unknown singleton — needs manual lookup
+      return res.json({
+        factory: FACTORY,
+        singleton,
+        known,
+        our_code_assumes: ourCodeAssumes,
+        signature_compatible: compatible,
+        warning: compatible === false
+          ? 'EIP-712 domain mismatch — every Safe wrap signature will be rejected. DO NOT flip V2 default.'
+          : compatible === null
+            ? 'Unknown singleton — verify manually before flipping V2 default.'
+            : null,
+        rpc_used: rpc,
+      });
+    } catch (e) { lastErr = e.message; }
+  }
+  res.status(502).json({ error: 'All RPCs failed', last_error: lastErr });
+});
+
+// GET /api/admin/v2-readiness — single-shot rollup of every gate that
+// blocks flipping the V2 default flag. Each item: { ok, detail }.
+app.get('/api/admin/v2-readiness', requireAdmin, async (req, res) => {
+  const checks = {};
+  // 1. Builder credentials loaded
+  checks.builder_creds = {
+    ok: !!_builderCreds,
+    detail: _builderCreds
+      ? 'Loaded (key=' + _builderCreds.keyPrefix + '… secret_bytes=' + _builderCreds.secretBuf.length + ')'
+      : 'POLY_BUILDER_API_KEY/SECRET/PASSPHRASE missing in env',
+  };
+  // 2. Pick signing secret (independent of V2 but required for any /picks flow)
+  checks.pick_signing = {
+    ok: !!process.env.HYPERFLEX_PICK_SECRET,
+    detail: process.env.HYPERFLEX_PICK_SECRET ? 'HYPERFLEX_PICK_SECRET set' : 'env var missing',
+  };
+  // 3. Days until April 22 2026 cutover
+  const cutover = new Date('2026-04-22T00:00:00Z').getTime();
+  const daysToCutover = Math.ceil((cutover - Date.now()) / (24 * 3600 * 1000));
+  checks.cutover_window = {
+    ok: daysToCutover > 0,
+    detail: daysToCutover > 0
+      ? daysToCutover + ' day(s) until April 22 cutover'
+      : 'Cutover ' + Math.abs(daysToCutover) + ' day(s) ago — V1 may already be off. Flip default NOW.',
+  };
+  // 4. Manual checklist items (we can't verify these from server)
+  checks.manual = [
+    'Live test: place ONE V2 trade with ?clob_v2=1 and confirm settlement attribution at polymarket.com/builders',
+    'Singleton probe: GET /api/admin/safe-singleton-probe to verify Safe v1.3.0 EIP-712 domain assumption',
+    'Builder fees: set non-zero maker/taker rates at polymarket.com/settings?tab=builder (currently 0%)',
+    'Amoy testnet: smoke test wrap+order on chainId 80002 before mainnet flip',
+  ];
+  res.json({ checks, cutover_iso: '2026-04-22T00:00:00Z' });
+});
+
 // GET /api/admin/builder-attribution-probe — single-shot end-to-end health check
 // Answers "is our builder key actually being credited by Polymarket?" by:
 //   1. Reporting whether env vars are set (redacted)
