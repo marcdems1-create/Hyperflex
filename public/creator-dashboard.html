@@ -3514,6 +3514,66 @@ input[type="date"].form-input { color-scheme:dark; }
   to   { opacity: 1; transform: none; }
 }
 
+/* ── Skeleton loaders — smoothness pass #2 ──────────────────────────────────
+   Replaces blank "Loading…" text with animated gray placeholder rows in
+   the shape of the content that's about to appear. The shimmer sweep
+   signals "something's coming" without jumping the layout when real
+   data arrives. */
+@keyframes hfxSkelShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skel,
+.skel-row,
+.skel-line {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: hfxSkelShimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+.skel-line {
+  height: 12px;
+  border-radius: 100px;
+  margin-bottom: 8px;
+}
+.skel-line.w-60 { width: 60%; }
+.skel-line.w-40 { width: 40%; }
+.skel-line.w-80 { width: 80%; }
+.skel-line.w-30 { width: 30%; }
+.skel-line.tall { height: 18px; }
+.skel-line.huge { height: 28px; border-radius: 6px; }
+.skel-card {
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+.skel-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: hfxSkelShimmer 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.skel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Toggle pill for boolean settings */
 .toggle-pill {
   width: 40px; height: 22px;
@@ -6618,7 +6678,47 @@ window.hfxOpenDeposit = function() {
 
             <!-- Alpha cards grid -->
             <div id="alphaCardsList" style="display:flex;flex-direction:column;gap:0;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px;overflow:hidden">
-              <div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading alpha signals...</div>
+              <div class="skel-list">
+                <div class="skel-card" style="display:flex;align-items:center;gap:14px">
+                  <div style="text-align:center;flex-shrink:0;width:50px">
+                    <div class="skel-line tall" style="width:36px;margin:0 auto 4px"></div>
+                    <div class="skel-line" style="width:28px;height:8px;margin:0 auto"></div>
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div class="skel-line tall w-80"></div>
+                    <div class="skel-line w-40" style="margin-bottom:0"></div>
+                  </div>
+                  <div style="flex-shrink:0">
+                    <div class="skel-line" style="width:40px;height:16px"></div>
+                  </div>
+                </div>
+                <div class="skel-card" style="display:flex;align-items:center;gap:14px">
+                  <div style="text-align:center;flex-shrink:0;width:50px">
+                    <div class="skel-line tall" style="width:36px;margin:0 auto 4px"></div>
+                    <div class="skel-line" style="width:28px;height:8px;margin:0 auto"></div>
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div class="skel-line tall w-60"></div>
+                    <div class="skel-line w-30" style="margin-bottom:0"></div>
+                  </div>
+                  <div style="flex-shrink:0">
+                    <div class="skel-line" style="width:40px;height:16px"></div>
+                  </div>
+                </div>
+                <div class="skel-card" style="display:flex;align-items:center;gap:14px">
+                  <div style="text-align:center;flex-shrink:0;width:50px">
+                    <div class="skel-line tall" style="width:36px;margin:0 auto 4px"></div>
+                    <div class="skel-line" style="width:28px;height:8px;margin:0 auto"></div>
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div class="skel-line tall w-80"></div>
+                    <div class="skel-line w-40" style="margin-bottom:0"></div>
+                  </div>
+                  <div style="flex-shrink:0">
+                    <div class="skel-line" style="width:40px;height:16px"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Load more -->
@@ -6669,7 +6769,26 @@ window.hfxOpenDeposit = function() {
 
             <!-- Position cards by bucket -->
             <div id="aiPortfolioBuckets" style="display:flex;flex-direction:column;gap:0;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px;overflow:hidden">
-              <div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading AI portfolio...</div>
+              <div class="skel-list" style="padding:4px">
+                <div class="skel-card">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <div class="skel-line" style="width:80px;height:14px;margin-bottom:0"></div>
+                    <div class="skel-line" style="width:60px;height:14px;margin-bottom:0"></div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center">
+                    <div style="width:50px"><div class="skel-line tall" style="width:32px;margin:0 auto 4px"></div><div class="skel-line" style="width:40px;height:6px;margin:0 auto"></div></div>
+                    <div style="flex:1"><div class="skel-line tall w-80"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div>
+                    <div class="skel-line" style="width:50px;height:16px;margin-bottom:0"></div>
+                  </div>
+                </div>
+                <div class="skel-card">
+                  <div style="display:flex;gap:12px;align-items:center">
+                    <div style="width:50px"><div class="skel-line tall" style="width:32px;margin:0 auto 4px"></div><div class="skel-line" style="width:40px;height:6px;margin:0 auto"></div></div>
+                    <div style="flex:1"><div class="skel-line tall w-60"></div><div class="skel-line w-30" style="margin-bottom:0"></div></div>
+                    <div class="skel-line" style="width:50px;height:16px;margin-bottom:0"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
           </div>
@@ -7580,7 +7699,11 @@ window.hfxOpenDeposit = function() {
               <button class="ta-btn" onclick="filterCalendar('geopolitics',this)">Geopolitics</button>
             </div>
             <div id="calList" style="display:flex;flex-direction:column;gap:10px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--muted)">Loading catalysts…</div>
+              <div class="skel-list">
+                <div class="skel-card"><div class="skel-line tall w-60"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div>
+                <div class="skel-card"><div class="skel-line tall w-80"></div><div class="skel-line w-30" style="margin-bottom:0"></div></div>
+                <div class="skel-card"><div class="skel-line tall w-60"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div>
+              </div>
             </div>
           </div>
         </div>
@@ -7599,7 +7722,10 @@ window.hfxOpenDeposit = function() {
               <button onclick="openAddWatchlist()" class="btn-primary tab-head-cta">+ Add Market</button>
             </div>
             <div id="watchlistList" style="display:flex;flex-direction:column;gap:10px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--muted)">Loading watchlist…</div>
+              <div class="skel-list">
+                <div class="skel-card"><div class="skel-line tall w-80"></div><div class="skel-line w-30" style="margin-bottom:0"></div></div>
+                <div class="skel-card"><div class="skel-line tall w-60"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div>
+              </div>
             </div>
           </div>
         </div>
@@ -16991,7 +17117,12 @@ async function loadPolymarketPositions(forceRefresh) {
   // Ensure wallet address is loaded from localStorage if not set yet
   if (!_polyWalletAddress) _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
   if (!el || !_polyWalletAddress) return;
-  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  // Skeleton rows instead of "Loading positions…" text — feels snappier
+  el.innerHTML = '<div class="skel-list" style="padding:4px 0">' +
+    '<div class="skel-card" style="display:flex;align-items:center;gap:12px"><div class="skel-circle"></div><div style="flex:1"><div class="skel-line tall w-80"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div><div class="skel-line" style="width:60px;height:16px;margin-bottom:0"></div></div>' +
+    '<div class="skel-card" style="display:flex;align-items:center;gap:12px"><div class="skel-circle"></div><div style="flex:1"><div class="skel-line tall w-60"></div><div class="skel-line w-30" style="margin-bottom:0"></div></div><div class="skel-line" style="width:60px;height:16px;margin-bottom:0"></div></div>' +
+    '<div class="skel-card" style="display:flex;align-items:center;gap:12px"><div class="skel-circle"></div><div style="flex:1"><div class="skel-line tall w-80"></div><div class="skel-line w-40" style="margin-bottom:0"></div></div><div class="skel-line" style="width:60px;height:16px;margin-bottom:0"></div></div>' +
+  '</div>';
   try {
     let positions = [];
     // Fetch directly from Polymarket client-side (avoids geo/IP restrictions on server)
