@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sports Tipster Leaderboard — HYPERFLEX</title>
+<meta name="description" content="Ranked sports tipsters scored on P&L, volume, consistency, CLV, and diversity. Every pick locked before tip-off. Receipts, not screenshots."/>
+<link rel="canonical" href="https://hyperflex.network/sports-predictors"/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://hyperflex.network/sports-predictors"/>
+<meta property="og:title" content="Sports Tipster Leaderboard — HYPERFLEX"/>
+<meta property="og:description" content="Ranked sports tipsters scored on P&L, volume, consistency, CLV, and diversity."/>
+<meta name="twitter:card" content="summary_large_image"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#0a0a0f;--surface:#111118;--card:#16161f;--card-hover:#1a1a24;
+  --border:#1e1e2a;--border-hover:#2a2a38;
+  --text:#e8e6f0;--soft:#a0a0b4;--muted:#6b6880;--dim:#4a4760;
+  --green:#00e68a;--green-dim:rgba(0,230,138,0.12);
+  --red:#ff4d6a;--red-dim:rgba(255,77,106,0.12);
+  --blue:#4d9fff;--blue-dim:rgba(77,159,255,0.12);
+  --gold:#c9920d;--gold-dim:rgba(201,146,13,0.12);
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+html{background:var(--paper);scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--paper);color:var(--text);min-height:100vh;overflow-x:hidden;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Nav */
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(10,10,15,0.9);backdrop-filter:blur(14px);z-index:50}
+.logo{font-size:18px;font-weight:900;color:var(--gold);letter-spacing:-.5px}
+.nav-links{display:flex;gap:22px}
+.nav-links a{color:var(--muted);font-size:13px;font-weight:500}
+.nav-links a:hover{color:var(--text);text-decoration:none}
+.nav-links a.on{color:var(--gold)}
+
+/* Hero */
+.hero{padding:80px 24px 36px;text-align:center;background:linear-gradient(180deg,rgba(201,146,13,0.05) 0%,transparent 60%)}
+.hero-inner{max-width:700px;margin:0 auto}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim);padding:6px 14px;border-radius:100px;border:1px solid rgba(201,146,13,0.25);margin-bottom:20px;letter-spacing:1px}
+.hero h1{font-size:clamp(32px,5vw,48px);font-weight:900;line-height:1.08;letter-spacing:-1.5px;margin-bottom:14px}
+.hero h1 .gold{color:var(--gold)}
+.hero-sub{font-size:clamp(13px,1.6vw,15px);color:var(--soft);line-height:1.6;max-width:520px;margin:0 auto}
+.hero-note{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:20px;letter-spacing:.6px;text-transform:uppercase}
+
+/* Filter bar */
+.controls{max-width:1200px;margin:0 auto;padding:12px 20px 0}
+.pills-row{display:flex;gap:8px;flex-wrap:wrap;padding:6px 0 14px;overflow-x:auto;scrollbar-width:none}
+.pills-row::-webkit-scrollbar{display:none}
+.pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 14px;border-radius:100px;border:1px solid var(--border);background:var(--card);color:var(--soft);cursor:pointer;transition:all .15s;white-space:nowrap;letter-spacing:.3px;min-height:36px}
+.pill:hover:not(.disabled){border-color:var(--border-hover);color:var(--text)}
+.pill.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.pill.disabled{opacity:.45;cursor:not-allowed;position:relative}
+.pill.disabled::after{content:'SOON';font-size:8px;margin-left:6px;color:var(--muted);letter-spacing:.5px}
+.filter-divider{height:16px;width:1px;background:var(--border);margin:auto 4px}
+
+/* Table */
+.wrap{max-width:1200px;margin:0 auto;padding:0 20px 80px}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;text-align:left;padding:14px 14px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)}
+.tbl thead th.center{text-align:center}
+.tbl thead th.right{text-align:right}
+.tbl tbody tr{border-bottom:1px solid rgba(30,30,42,0.5);cursor:pointer;transition:background .12s}
+.tbl tbody tr:hover{background:rgba(255,255,255,0.02)}
+.tbl tbody tr:last-child{border-bottom:none}
+.tbl td{padding:14px;vertical-align:middle}
+.tbl td.center{text-align:center}
+.tbl td.right{text-align:right}
+.tbl td.nowrap{white-space:nowrap}
+
+.rank{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--dim);width:40px}
+.rank.top3{color:var(--gold)}
+.rank.top10{color:var(--text)}
+
+.who{display:flex;align-items:center;gap:10px;min-width:0}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:800;color:var(--soft);flex-shrink:0}
+.who-name{min-width:0;overflow:hidden}
+.who-handle{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.2px;color:var(--text)}
+.who-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px}
+
+.score{font-family:var(--mono);font-size:18px;font-weight:800;text-align:center}
+.score.s-90{color:var(--gold)}
+.score.s-70{color:var(--green)}
+.score.s-50{color:var(--blue)}
+.score.s-low{color:var(--soft)}
+
+.pnl-pos{color:var(--green);font-family:var(--mono);font-weight:700}
+.pnl-neg{color:var(--red);font-family:var(--mono);font-weight:700}
+
+.clv{font-family:var(--mono);font-weight:700;font-size:13px}
+.clv-pos{color:var(--green)}
+.clv-neg{color:var(--red)}
+.clv-neu{color:var(--muted)}
+
+.sport-chip{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.2);margin-right:3px;letter-spacing:.3px}
+
+.you-row{background:linear-gradient(90deg,rgba(201,146,13,0.1) 0%,rgba(201,146,13,0.02) 100%);border-left:3px solid var(--gold)}
+.you-row:hover{background:linear-gradient(90deg,rgba(201,146,13,0.15) 0%,rgba(201,146,13,0.04) 100%)}
+.you-label{display:block;font-family:var(--mono);font-size:9px;font-weight:800;color:var(--gold);letter-spacing:.5px;margin-top:2px}
+
+/* Header cell with info hint (CLV education) */
+.th-info{border-bottom:1px dashed var(--muted)!important;cursor:help}
+.th-info:hover{color:var(--gold)!important;border-bottom-color:var(--gold)!important}
+
+/* States */
+.empty{padding:80px 40px;text-align:center}
+.empty-icon{font-size:32px;margin-bottom:14px}
+.empty-title{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px}
+.empty-sub{font-size:14px;color:var(--soft);max-width:440px;margin:0 auto;line-height:1.55}
+.empty-cta{display:inline-block;margin-top:20px;padding:12px 22px;background:var(--gold);color:#0e0e12;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none}
+.empty-cta:hover{opacity:.9;text-decoration:none}
+.loading{padding:60px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* Load more */
+.lm{text-align:center;padding:18px 0}
+.lm button{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);background:transparent;border:1px solid rgba(201,146,13,0.35);padding:10px 22px;border-radius:8px;cursor:pointer;letter-spacing:.5px;min-height:44px}
+.lm button:hover{background:rgba(201,146,13,0.08)}
+
+/* CLV explainer modal */
+.info-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:20px}
+.info-modal.open{display:flex}
+.info-card{background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:14px;max-width:440px;width:100%;padding:24px;position:relative}
+.info-close{position:absolute;top:10px;right:14px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1}
+.info-title{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-bottom:10px}
+.info-body p{font-size:13px;color:var(--soft);line-height:1.6;margin-bottom:10px}
+.info-body strong{color:var(--text)}
+.info-eg{font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,0.02);border:1px dashed var(--border);border-radius:8px;padding:10px 14px;line-height:1.65}
+
+@media(max-width:720px){
+  .tbl thead th.hide-m,.tbl td.hide-m{display:none}
+  .tbl td,.tbl thead th{padding:12px 8px;font-size:12px}
+  .score{font-size:16px}
+  .who-handle{font-size:13px}
+  .avatar{width:28px;height:28px;font-size:11px}
+  .hero{padding:50px 20px 28px}
+}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo">HYPERFLEX</a>
+  <div class="nav-links">
+    <a href="/predictors">Polymarket</a>
+    <a href="/sports-predictors" class="on">Sports</a>
+    <a href="/picks/leaderboard">Tipsters</a>
+    <a href="/feed">Feed</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">🏆 SPORTS · FLEX SCORE v1</div>
+    <h1>Ranked by the <span class="gold">score that matters.</span></h1>
+    <p class="hero-sub">P&amp;L, volume, consistency, CLV, and diversity — not just win rate. Every pick locked before tip-off. No screenshots.</p>
+    <div class="hero-note">LAST 90 DAYS · UPDATED NIGHTLY 04:00 UTC</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="pills-row" id="sportPills">
+    <button class="pill active" data-sport="all">All Sports</button>
+    <button class="pill disabled" data-sport="nfl">NFL</button>
+    <button class="pill disabled" data-sport="nba">NBA</button>
+    <button class="pill disabled" data-sport="mlb">MLB</button>
+    <button class="pill disabled" data-sport="nhl">NHL</button>
+    <button class="pill disabled" data-sport="soccer">Soccer</button>
+    <button class="pill disabled" data-sport="ufc">UFC</button>
+    <button class="pill disabled" data-sport="tennis">Tennis</button>
+    <span class="filter-divider"></span>
+    <button class="pill active" data-period="all">All Time</button>
+    <button class="pill disabled" data-period="30d">30D</button>
+    <button class="pill disabled" data-period="7d">7D</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Tipster</th>
+          <th class="center">Flex</th>
+          <th class="right hide-m">Net P&amp;L</th>
+          <th class="right hide-m">ROI</th>
+          <th class="right th-info" onclick="openClvInfo()" title="What is CLV?">CLV ⓘ</th>
+          <th class="right hide-m">Settled</th>
+          <th class="hide-m">Scope</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="8"><div class="loading">Loading tipsters…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="lm" id="lm" style="display:none">
+    <button onclick="loadMore()">Show 20 more · <span id="lmCount">0</span> hidden</button>
+  </div>
+</div>
+
+<div class="info-modal" id="clvInfo" onclick="if(event.target===this)closeClvInfo()">
+  <div class="info-card">
+    <button class="info-close" onclick="closeClvInfo()">×</button>
+    <div class="info-title">What is CLV?</div>
+    <div class="info-body">
+      <p><strong>Closing Line Value.</strong> The cents you beat the market's closing price by.</p>
+      <p>Bought a YES share at 30¢, market closed at 45¢? You captured <strong>+15¢ CLV</strong>. Beating the close is the strongest signal of sharp picks — it's what the market decided the right price was after everyone voted with their wallet.</p>
+      <p>Positive CLV over time = you're consistently getting better prices than the market thinks fair. Negative = you're paying up.</p>
+      <div class="info-eg">avg +3.2¢ on 87 trades · time-decayed (90d=100%, 90-180d=50%, &gt;180d=25%)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.origin;
+var _leaderData = null;
+var _renderCount = 20;
+
+function _esc(s){var d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
+function _fmt$(n){var a=Math.abs(n||0);var s=n<0?'-$':'$';if(a>=1e6)return s+(a/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(a>=1e3)return s+(a/1e3).toFixed(1).replace(/\.0$/,'')+'K';return s+Math.round(a)}
+function _fmtU(n){var v=parseFloat(n)||0;return (v>=0?'+':'')+v.toFixed(2)+'u'}
+function _fmtCLV(n){if(n==null||!isFinite(n))return '—';var v=parseFloat(n);return (v>=0?'+':'')+v.toFixed(1)+'¢'}
+function _fmtPct(n){if(n==null||!isFinite(n))return '—';var v=parseFloat(n);return (v>=0?'+':'')+v.toFixed(1)+'%'}
+function _initials(s){return String(s||'?').replace(/^@/,'').split(/\s+|_/).map(w=>w[0]).join('').slice(0,2).toUpperCase()||'?'}
+function _scoreClass(s){if(s>=90)return 's-90';if(s>=70)return 's-70';if(s>=50)return 's-50';return 's-low'}
+function _rankClass(r){if(r<=3)return 'rank top3';if(r<=10)return 'rank top10';return 'rank'}
+
+function openClvInfo(){document.getElementById('clvInfo').classList.add('open')}
+function closeClvInfo(){document.getElementById('clvInfo').classList.remove('open')}
+
+function _myUserId(){
+  try{
+    var t=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+    if(!t)return null;
+    var p=JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return p.userId||p.id||p.sub||null;
+  }catch(e){return null}
+}
+
+function renderRow(row, isPinned){
+  var rank = row.rank || '—';
+  var roi = row.total_staked_units > 0 ? (parseFloat(row.net_units)/parseFloat(row.total_staked_units))*100 : null;
+  var clv = row.avg_clv_cents;
+  var clvCls = clv == null ? 'clv clv-neu' : (parseFloat(clv) > 0 ? 'clv clv-pos' : parseFloat(clv) < 0 ? 'clv clv-neg' : 'clv clv-neu');
+  var scoreCls = _scoreClass(row.score);
+  var handle = row.handle ? '@' + row.handle : (row.display_name || 'Anonymous');
+  var displayName = row.display_name && !row.display_name.startsWith('0x') ? row.display_name : (row.handle ? '' : '—');
+  var href = row.user_id ? '/m/' + encodeURIComponent(row.user_id) : '#';
+  var rankCell = isPinned
+    ? '<td class="'+_rankClass(rank)+'">#' + rank + '<span class="you-label">YOU</span></td>'
+    : '<td class="'+_rankClass(rank)+'">' + rank + '</td>';
+  var sports = (parseInt(row.distinct_sports||0,10) || 0);
+  var betTypes = (parseInt(row.distinct_bet_types||0,10) || 0);
+  var scope = sports >= 2 ? (sports + ' sports') : (betTypes >= 2 ? (betTypes + ' bet types') : '1 vertical');
+  return '<tr class="' + (isPinned?'you-row':'') + '" onclick="location.href=\''+href+'\'">' +
+    rankCell +
+    '<td><div class="who"><div class="avatar">' + _esc(_initials(handle)) + '</div>' +
+      '<div class="who-name"><div class="who-handle">' + _esc(handle) + '</div>' +
+      (displayName?'<div class="who-sub">' + _esc(displayName) + '</div>':'') +
+    '</div></div></td>' +
+    '<td class="center"><div class="score ' + scoreCls + '">' + (row.score != null ? row.score : '—') + '</div></td>' +
+    '<td class="right hide-m"><span class="' + (parseFloat(row.net_units)>=0?'pnl-pos':'pnl-neg') + '">' + _fmtU(row.net_units) + '</span></td>' +
+    '<td class="right hide-m">' + (roi != null ? '<span class="'+(roi>=0?'pnl-pos':'pnl-neg')+'">' + _fmtPct(roi) + '</span>' : '—') + '</td>' +
+    '<td class="right"><span class="' + clvCls + '">' + _fmtCLV(clv) + '</span></td>' +
+    '<td class="right hide-m nowrap">' + parseInt(row.settled_bets||0,10) + '</td>' +
+    '<td class="hide-m"><span style="font-family:var(--mono);font-size:11px;color:var(--soft)">' + _esc(scope) + '</span></td>' +
+  '</tr>';
+}
+
+function render(){
+  var tbody = document.getElementById('tbody');
+  var lm = document.getElementById('lm');
+  if(!_leaderData){ tbody.innerHTML = '<tr><td colspan="8"><div class="loading">Loading…</div></td></tr>'; return }
+  if(_leaderData.gated){
+    var q = _leaderData.qualifying || 0;
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty">' +
+      '<div class="empty-icon">🏗</div>' +
+      '<div class="empty-title">Leaderboard forming.</div>' +
+      '<div class="empty-sub">We wait until at least 3 tipsters clear 25+ settled picks. That\'s how the ranking stops being a lie on thin data. Currently: ' + q + '/3.</div>' +
+      '<a href="/picks/new" class="empty-cta">Lock your first pick →</a>' +
+    '</div></td></tr>';
+    lm.style.display = 'none';
+    return;
+  }
+  var rows = _leaderData.leaders || [];
+  var myId = _myUserId();
+  var pinnedHtml = '';
+  if(myId){
+    var myIdx = rows.findIndex(r => r.user_id === myId);
+    if(myIdx >= _renderCount) pinnedHtml = renderRow(rows[myIdx], true);
+  }
+  var visible = rows.slice(0, _renderCount).map(r => renderRow(r, false)).join('');
+  tbody.innerHTML = pinnedHtml + visible;
+  var remaining = rows.length - _renderCount;
+  if(remaining > 0){ document.getElementById('lmCount').textContent = remaining; lm.style.display = 'block'; }
+  else lm.style.display = 'none';
+}
+
+function loadMore(){ _renderCount += 20; render(); }
+
+// Disabled pills — show a toast-ish hint, don't actually filter
+document.getElementById('sportPills').addEventListener('click', function(e){
+  var btn = e.target.closest('.pill');
+  if(!btn) return;
+  if(btn.classList.contains('disabled')){
+    btn.animate([{opacity:0.45},{opacity:0.85},{opacity:0.45}], {duration:500});
+    return;
+  }
+});
+
+fetch(API + '/api/sports-predictors/leaderboard?limit=100')
+  .then(function(r){ return r.ok ? r.json() : {gated:true, qualifying:0} })
+  .then(function(d){ _leaderData = d; render(); })
+  .catch(function(){
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-title">Could not load leaderboard.</div><div class="empty-sub">Refresh or try again in a minute.</div></div></td></tr>';
+  });
+</script>
+</body>
+</html>

@@ -11654,6 +11654,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports-predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 app.get('/rewards', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rewards.html')));
 
