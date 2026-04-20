@@ -23738,18 +23738,33 @@ app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
 
 // ── WALLETS / CONNECTED ACCOUNTS ─────────────────────────────────────────────
 
-// GET /api/user/me — authenticated user's basic info
+// GET /api/user/me — authenticated user's basic info.
+// Uses SELECT * + explicit projection so a missing column in any schema
+// drift doesn't 500 the endpoint. Only the fields we need flow out.
 app.get('/api/user/me', requireAuth, async (req, res) => {
   try {
     const uid = req.user?.id || req.userId;
     if (!uid) return res.status(401).json({ error: 'Auth required' });
-    let user = null;
+    let row = null;
     if (pool) {
-      const rows = await dbQuery('SELECT id, handle, display_name, username, email, avatar_url, bio, polymarket_address, wallet_verified FROM users WHERE id = $1 LIMIT 1', [uid]);
-      user = rows[0] || null;
+      const rows = await dbQuery('SELECT * FROM users WHERE id = $1 LIMIT 1', [uid]);
+      row = rows[0] || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+      row = data || null;
     }
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    // Expose canonical profile URL so clients don't rebuild it inconsistently.
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    const user = {
+      id:                 row.id,
+      handle:             row.handle             || null,
+      display_name:       row.display_name       || null,
+      username:           row.username           || null,
+      email:              row.email              || null,
+      avatar_url:         row.avatar_url         || null,
+      bio:                row.bio                || null,
+      polymarket_address: row.polymarket_address || null,
+      wallet_verified:    row.wallet_verified    || false,
+    };
     user.profile_url = user.handle ? '/@' + user.handle : '/m/' + user.id;
     res.json({ user });
   } catch (err) {
