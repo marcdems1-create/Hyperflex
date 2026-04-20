@@ -11113,16 +11113,31 @@ app.get('/@:handle', (req, res) => {
 
 // GET /api/user-by-handle/:handle — resolve handle → public profile fields.
 // Used by member.html to hydrate the profile page when the URL is /@handle.
+// SELECT * so schema drift (missing is_whale/avatar_url/etc from a skipped
+// migration) doesn't cause a silent 404.
 app.get('/api/user-by-handle/:handle', async (req, res) => {
   try {
     const handle = String(req.params.handle || '').trim().replace(/^@+/, '').toLowerCase();
     if (_validateHandleFormat(handle)) return res.status(404).json({ error: 'invalid handle' });
-    const rows = await dbQuery(
-      'SELECT id, handle, display_name, avatar_url, polymarket_address, is_whale FROM users WHERE LOWER(handle) = $1 LIMIT 1',
-      [handle]
-    ).catch(() => []);
+    let rows;
+    try {
+      rows = await dbQuery('SELECT * FROM users WHERE LOWER(handle) = $1 LIMIT 1', [handle]);
+    } catch (qe) {
+      // Surface real DB errors instead of silently pretending the user
+      // doesn't exist — helps diagnose schema/connection issues remotely.
+      console.warn('[user-by-handle] query failed:', qe.message);
+      return res.status(500).json({ error: 'lookup failed', detail: qe.message });
+    }
     if (!rows.length) return res.status(404).json({ error: 'not found' });
-    res.json(rows[0]);
+    const r = rows[0];
+    res.json({
+      id:                 r.id,
+      handle:             r.handle             || null,
+      display_name:       r.display_name       || null,
+      avatar_url:         r.avatar_url         || null,
+      polymarket_address: r.polymarket_address || null,
+      is_whale:           r.is_whale           || false,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
