@@ -144,6 +144,39 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
   input,textarea,select{font-size:16px!important}
 }
 
+/* ── Unified Flex Score card (Charter §8) ── */
+.flex-card{position:relative;border-radius:20px;padding:24px 24px 20px;margin:18px 0 22px;background:linear-gradient(180deg,rgba(245,166,35,0.04),rgba(245,166,35,0.008));border:1px solid rgba(245,166,35,0.16);overflow:hidden}
+.flex-card::before{content:'';position:absolute;inset:0;background:radial-gradient(60% 80% at 0% 0%,rgba(245,166,35,0.08),transparent 55%);pointer-events:none}
+.flex-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;position:relative}
+.flex-head-l{min-width:0;flex:1}
+.flex-eyebrow{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--gold);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:4px}
+.flex-score-n{font-family:'Inter',sans-serif;font-weight:900;font-size:68px;line-height:1;color:var(--text);letter-spacing:-0.035em;display:flex;align-items:baseline;gap:10px}
+.flex-score-n .out{font-size:22px;font-weight:700;color:var(--muted);letter-spacing:0}
+.flex-score-n.mute{color:var(--muted)}
+.flex-head-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
+.flex-tier{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;padding:6px 14px;border:1px solid rgba(245,166,35,0.3);border-radius:100px;background:rgba(245,166,35,0.08)}
+.flex-tier.tier-oracle{color:var(--gold)}
+.flex-tier.tier-sharp{color:var(--green);border-color:rgba(0,230,138,0.3);background:rgba(0,230,138,0.08)}
+.flex-tier.tier-solid{color:var(--blue);border-color:rgba(77,159,255,0.3);background:rgba(77,159,255,0.08)}
+.flex-tier.tier-speculator,.flex-tier.tier-building{color:var(--muted);border-color:var(--border);background:var(--surface)}
+.flex-sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.04em}
+.flex-components{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border);position:relative}
+.flex-comp{text-align:center}
+.flex-comp-label{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px}
+.flex-comp-bar{height:5px;background:var(--surface-2,rgba(255,255,255,0.05));border-radius:100px;overflow:hidden;margin-bottom:5px}
+.flex-comp-bar .fill{height:100%;background:var(--gold);border-radius:100px;transition:width 0.8s ease-out}
+.flex-comp-val{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.flex-comp-val.mute{color:var(--faint,#3a3a4a)}
+.flex-building-note{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--surface);border:1px dashed var(--border);font-size:12.5px;color:var(--text-soft);line-height:1.5;position:relative}
+.flex-building-note strong{color:var(--text)}
+
+@media(max-width:560px){
+  .flex-score-n{font-size:56px}
+  .flex-components{grid-template-columns:repeat(5,1fr);gap:6px}
+  .flex-comp-label{font-size:8.5px;letter-spacing:0.05em}
+  .flex-comp-val{font-size:11px}
+}
+
 /* ── T7 · Sports tab ── */
 .sfs-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 20px 18px;background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.015));border:1px solid rgba(245,166,35,0.25);border-radius:18px;margin-bottom:14px;flex-wrap:wrap}
 .sfs-eyebrow{font-family:var(--mono);font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px}
@@ -222,7 +255,13 @@ async function _resolveProfileUserId() {
     if (!handle) return null;
     try {
       const r = await fetch(API + '/api/user-by-handle/' + encodeURIComponent(handle));
-      if (r.ok) { const d = await r.json(); return d && d.id ? d.id : null; }
+      if (r.ok) {
+        const d = await r.json();
+        // Cache the full payload so the Flex Score card can render without
+        // re-fetching. Flex fields (score / tier / components) come back on
+        // this same endpoint per Charter §8 single-surface rule.
+        if (d && d.id) { window._profilePayload = d; return d.id; }
+      }
     } catch {}
     return null;
   }
@@ -265,6 +304,77 @@ function shareProfile() {
 // Minimal info modal — no deps, no CSS class pollution. Used by the ⓘ
 // buttons next to Flex Score and FLEX Points in the stats grid so visitors
 // actually understand what the gold and purple numbers mean.
+// Unified Flex Score hero card. Reads window._profilePayload (populated by
+// _resolveProfileUserId → /api/user-by-handle). Inserts the card at the
+// top of #profileContent so it's the first thing visible below the hero.
+// Charter §8 compliance: bounded score out of 100, single-surface, tier
+// read directly from the server-computed value.
+function renderFlexScoreCard() {
+  const p = window._profilePayload;
+  if (!p) return;  // legacy /m/:userId path — no Flex card (yet)
+  const host = document.getElementById('profileContent');
+  if (!host) return;
+  // Defensive: don't double-render if load() was called twice.
+  if (document.getElementById('flexScoreCard')) return;
+
+  const qualifies = p.flex_qualifies === true;
+  const score     = qualifies && p.flex_score != null ? p.flex_score : null;
+  const tier      = p.flex_tier || 'Building';
+  const settled   = p.flex_settled_events || 0;
+  const comps     = p.flex_components || {};
+
+  const wrCopy = (settled > 0 && p.flex_raw_win_rate != null)
+    ? `${(p.flex_raw_win_rate * 100).toFixed(1)}% win rate · ${settled} settled`
+    : `${settled} settled`;
+
+  // Building state — score null, target is 25 settled events
+  const buildingNote = !qualifies ? `
+    <div class="flex-building-note">
+      <strong>Building.</strong> Score unlocks at 25 settled events — ${Math.max(0, 25 - settled)} to go. Sample size below that makes the number a lie.
+    </div>` : '';
+
+  // Five components. Each bar shows filled / max ratio.
+  const maxes = { accuracy: 35, calibration: 25, pnl: 20, consistency: 10, breadth: 10 };
+  const labels = { accuracy: 'Accuracy', calibration: 'Calibration', pnl: 'PnL', consistency: 'Consistency', breadth: 'Breadth' };
+  const compHtml = Object.keys(maxes).map(k => {
+    const v = comps[k];
+    const hasVal = v != null && Number.isFinite(Number(v));
+    const pct = hasVal ? Math.max(0, Math.min(100, (Number(v) / maxes[k]) * 100)) : 0;
+    const valCls = hasVal ? '' : 'mute';
+    const valStr = hasVal ? Number(v).toFixed(1) : '—';
+    return `
+      <div class="flex-comp">
+        <div class="flex-comp-label">${labels[k]}</div>
+        <div class="flex-comp-bar"><div class="fill" style="width:${pct}%"></div></div>
+        <div class="flex-comp-val ${valCls}">${valStr}<span style="opacity:0.45;font-weight:400"> / ${maxes[k]}</span></div>
+      </div>`;
+  }).join('');
+
+  const tierClass = 'tier-' + tier.toLowerCase();
+  const scoreDisplay = score != null
+    ? `<div class="flex-score-n"><span>${score}</span><span class="out">/ 100</span></div>`
+    : `<div class="flex-score-n mute"><span>—</span><span class="out">/ 100</span></div>`;
+
+  const card = document.createElement('div');
+  card.id = 'flexScoreCard';
+  card.className = 'flex-card';
+  card.innerHTML = `
+    <div class="flex-head">
+      <div class="flex-head-l">
+        <div class="flex-eyebrow">Flex Score</div>
+        ${scoreDisplay}
+      </div>
+      <div class="flex-head-r">
+        <div class="flex-tier ${tierClass}">${tier}</div>
+        <div class="flex-sub">${wrCopy}</div>
+      </div>
+    </div>
+    <div class="flex-components">${compHtml}</div>
+    ${buildingNote}
+  `;
+  host.insertBefore(card, host.firstElementChild);
+}
+
 function _showInfoModal(title, bodyHtml) {
   // Dismiss any prior instance so repeated clicks don't stack.
   const prior = document.getElementById('hfxInfoModal');
@@ -922,7 +1032,7 @@ async function load() {
       `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Handle not found</div><div class="error-sub">${msg}</div></div>`;
     return;
   }
-  load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); });
+  load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); renderFlexScoreCard(); });
 })();
 
 // Defensive: a stray "Edit Name" button has been showing up on some
