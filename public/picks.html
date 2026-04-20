@@ -336,6 +336,77 @@ async function loadScarcity(){
 }
 loadScarcity();
 
+// Status-aware landing: if the visitor is a signed-in tipster with an
+// existing application record, swap the Apply form for a state-matched
+// panel so they don't re-see the form they already submitted.
+//
+// Probe pattern: POST an empty body to /api/picks. The 403 response
+// carries tipster_status + revoked fields; other statuses (400 = bad
+// body, 200 = approved but no payload — not actually possible) tell us
+// the user is approved. Single source of truth with /picks/new.
+async function detectTipsterState(){
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token') || '';
+  if(!token) return null; // not signed in — keep the default landing
+  try{
+    const r = await fetch('/api/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({})
+    });
+    if(r.status === 403){
+      const d = await r.json().catch(() => ({}));
+      return { status: d.tipster_status || 'none', revoked: !!d.revoked };
+    }
+    // Any non-403 means the gate passed — user is approved.
+    return { status: 'approved', revoked: false };
+  }catch(e){ return null; }
+}
+
+async function applyStateAwareLanding(){
+  const state = await detectTipsterState();
+  if(!state) return; // signed-out or probe failed — leave landing as is
+  const apply = document.getElementById('apply');
+  if(!apply) return;
+  let title, body, ctaHref, ctaText, tone = 'dry';
+  if(state.status === 'approved' && !state.revoked){
+    title = "You're in.";
+    body = 'Record starts on your next pick.';
+    ctaHref = '/picks/new';
+    ctaText = 'Lock your first pick →';
+    tone = 'approved';
+  } else if(state.status === 'applied'){
+    title = 'Application pending.';
+    body = 'In review. Decisions go out within 7 days of the cohort window closing.';
+    ctaHref = '#how';
+    ctaText = 'How it works →';
+  } else if(state.status === 'rejected'){
+    title = 'Not this cohort.';
+    body = 'Apply again in 30 days. More posting history and unit-tracked volume both help.';
+    ctaHref = '#apply';
+    ctaText = null;
+  } else if(state.status === 'revoked' || state.revoked){
+    title = 'Access paused.';
+    body = 'Posting access on this account has been paused. Reach out if you think this is a mistake.';
+    ctaHref = 'mailto:admin@hyperflex.network';
+    ctaText = 'Contact admin';
+  } else {
+    return; // 'none' — signed in but no application; show the normal apply form
+  }
+  const accent = tone === 'approved' ? 'var(--gold)' : 'var(--text-soft)';
+  const bg     = tone === 'approved' ? 'rgba(245,166,35,0.06)' : 'var(--surface)';
+  const border = tone === 'approved' ? 'rgba(245,166,35,0.35)' : 'var(--border)';
+  apply.innerHTML = (
+    '<div class="apply-inner">' +
+      '<div style="padding:28px 30px;border:1px solid ' + border + ';border-radius:16px;background:' + bg + '">' +
+        '<h2 style="color:' + (tone === 'approved' ? 'var(--text)' : 'var(--text)') + '">' + title + '</h2>' +
+        '<p class="lede" style="margin-bottom:' + (ctaText ? '24px' : '0') + '">' + body + '</p>' +
+        (ctaText ? '<a href="' + ctaHref + '" class="apply-submit" style="display:inline-block;text-align:center;min-width:220px;text-decoration:none">' + ctaText + '</a>' : '') +
+      '</div>' +
+    '</div>'
+  );
+}
+applyStateAwareLanding();
+
 async function submitApp(e){
   e.preventDefault();
   const form = e.target;
