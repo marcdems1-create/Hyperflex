@@ -2941,22 +2941,129 @@ async function getPmctBalance(addr) {
   }
 }
 
-// Wrap USDC.e → pUSD via CollateralOnramp.wrap(asset, to, amount).
+// ── Safe execTransaction dispatch (Gnosis Safe v1.3.0 EIP-712) ─────────────
+// Polymarket proxies are Gnosis Safes. To call a contract from the proxy
+// (so that msg.sender is the proxy, not the EOA), we have to wrap the call
+// in a SafeTx, EIP-712 sign it with an owner key, then submit via
+// `execTransaction` on the Safe.
 //
-// ⚠️ NOT YET PRODUCTION READY: Onramp.wrap pulls USDC.e from msg.sender.
-// User funds live in the Safe proxy, but a direct EOA call here would pull
-// from the EOA (which is empty). The fix is to dispatch the wrap as a Safe
-// execTransaction signed by the EOA — same pattern Polymarket's UI uses.
-// Until that's wired, this helper bails with a clear console error so we
-// never silently lose funds. Wrapping is a manual prerequisite for V2 BUY
-// orders right now (do it via polymarket.com or a direct Safe call).
-//
-// Amounts in 6-decimal atomic units (BigInt or string).
+// Safe v1.3.0+ EIP-712 typed data (canonical, do not change field order):
+var SAFE_TX_TYPES = {
+  SafeTx: [
+    { name: 'to',             type: 'address' },
+    { name: 'value',          type: 'uint256' },
+    { name: 'data',           type: 'bytes'   },
+    { name: 'operation',      type: 'uint8'   },
+    { name: 'safeTxGas',      type: 'uint256' },
+    { name: 'baseGas',        type: 'uint256' },
+    { name: 'gasPrice',       type: 'uint256' },
+    { name: 'gasToken',       type: 'address' },
+    { name: 'refundReceiver', type: 'address' },
+    { name: 'nonce',          type: 'uint256' },
+  ],
+};
+var SAFE_ABI = [
+  'function nonce() view returns (uint256)',
+  'function getThreshold() view returns (uint256)',
+  'function execTransaction(address to, uint256 value, bytes calldata data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes calldata signatures) payable returns (bool)'
+];
+var ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+
+// Build + sign + submit a SafeTx through the Polymarket proxy. Returns the
+// transaction receipt. The EOA must (a) be an owner of the Safe and (b) have
+// MATIC to pay gas — direct execTransaction. A relayer-sponsored variant
+// will land in a follow-up commit when the relayer endpoint is confirmed.
+async function executeViaProxy(toAddr, calldata, valueWei) {
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  var eoaAddr   = localStorage.getItem('poly_eoa_address');
+  if (!proxyAddr || !eoaAddr) {
+    throw new Error('Wallet not connected — connect MetaMask first');
+  }
+  if (!window.ethereum) throw new Error('MetaMask required');
+
+  var provider = new ethers.BrowserProvider(window.ethereum);
+  var signer   = await provider.getSigner();
+
+  // Sanity: the connected EOA must match the one tied to this proxy.
+  var connected = (await signer.getAddress()).toLowerCase();
+  if (connected !== eoaAddr.toLowerCase()) {
+    throw new Error('Connected wallet (' + connected.slice(0,8) + '…) does not match account on file (' + eoaAddr.slice(0,8) + '…)');
+  }
+
+  // Read current Safe nonce (incremented on every successful execTransaction).
+  var safe = new ethers.Contract(proxyAddr, SAFE_ABI, signer);
+  var nonce;
+  try {
+    nonce = await safe.nonce();
+  } catch (e) {
+    throw new Error('Could not read Safe nonce — proxy may not be deployed: ' + (e.message || e));
+  }
+
+  var safeTx = {
+    to:             toAddr,
+    value:          (valueWei || 0n).toString(),
+    data:           calldata,
+    operation:      0,    // CALL (not DELEGATECALL)
+    safeTxGas:      '0',
+    baseGas:        '0',
+    gasPrice:       '0',  // 0 = no refund handling, payer = msg.sender
+    gasToken:       ZERO_ADDR,
+    refundReceiver: ZERO_ADDR,
+    nonce:          nonce.toString(),
+  };
+  var domain = { chainId: 137, verifyingContract: proxyAddr };
+
+  console.log('[safe] signing SafeTx', { to: toAddr, dataLen: calldata.length, nonce: safeTx.nonce });
+  var sig = await signer.signTypedData(domain, SAFE_TX_TYPES, safeTx);
+
+  // Submit. EOA pays MATIC for gas. If they have none, this throws
+  // INSUFFICIENT_FUNDS — surface a clean message instead of the raw revert.
+  try {
+    var tx = await safe.execTransaction(
+      safeTx.to, safeTx.value, safeTx.data, safeTx.operation,
+      safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice,
+      safeTx.gasToken, safeTx.refundReceiver, sig
+    );
+    console.log('[safe] execTransaction submitted:', tx.hash);
+    var receipt = await tx.wait();
+    console.log('[safe] execTransaction mined:', receipt.transactionHash || tx.hash, 'status=' + receipt.status);
+    return receipt;
+  } catch (e) {
+    var msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
+    if (e && (e.code === 'INSUFFICIENT_FUNDS' || /insufficient funds/i.test(msg))) {
+      throw new Error('You need a small amount of MATIC to wrap. Bridge ~$1 of MATIC to ' + eoaAddr.slice(0,8) + '… and try again.');
+    }
+    if (e && (e.code === 'ACTION_REJECTED' || e.code === 4001)) {
+      throw new Error('Signature rejected in MetaMask — wrap cancelled.');
+    }
+    throw new Error('Wrap failed: ' + msg);
+  }
+}
+
+// Wrap USDC.e → pUSD via CollateralOnramp.wrap(asset, to, amount), dispatched
+// as a Safe execTransaction so the Onramp pulls USDC.e from the proxy
+// (where funds live), not the EOA. Amount is 6-decimal atomic units.
 async function wrapUsdcToPmct(amountAtomic) {
-  console.error('[pmct] wrap requires Safe execTransaction — not yet wired. ' +
-    'Wrap manually at polymarket.com or via a Safe SDK call. ' +
-    'amountAtomic=' + String(amountAtomic));
-  throw new Error('Wrap-via-Safe not yet implemented — wrap USDC → pUSD on polymarket.com first');
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddr) throw new Error('Proxy address missing');
+  var iface = new ethers.Interface([
+    'function wrap(address asset, address to, uint256 amount)'
+  ]);
+  var data = iface.encodeFunctionData('wrap', [USDC_ADDRESS, proxyAddr, String(amountAtomic)]);
+  console.log('[pmct] wrapping ' + ethers.formatUnits(amountAtomic, 6) + ' USDC.e → pUSD via Safe');
+  return executeViaProxy(COLLATERAL_ONRAMP, data, 0n);
+}
+
+// Unwrap pUSD → USDC.e via CollateralOfframp.unwrap(asset, to, amount).
+async function unwrapPmctToUsdc(amountAtomic) {
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddr) throw new Error('Proxy address missing');
+  var iface = new ethers.Interface([
+    'function unwrap(address asset, address to, uint256 amount)'
+  ]);
+  var data = iface.encodeFunctionData('unwrap', [USDC_ADDRESS, proxyAddr, String(amountAtomic)]);
+  console.log('[pmct] unwrapping ' + ethers.formatUnits(amountAtomic, 6) + ' pUSD → USDC.e via Safe');
+  return executeViaProxy(COLLATERAL_OFFRAMP, data, 0n);
 }
 
 // Master check: runs all 3 steps and updates the setup UI
@@ -4384,17 +4491,35 @@ async function executeTrade() {
       : (isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE);
 
     // V2 BUY pre-flight: makerAmount is denominated in pUSD, not USDC.e.
-    // If the proxy doesn't have enough pUSD the order will sign + submit fine
-    // but revert at the contract on fill. Catch it here with a clear error so
-    // the user knows to wrap first instead of debugging an opaque CLOB reject.
+    // If short, auto-wrap the shortfall via Safe execTransaction so the user
+    // doesn't have to hop to polymarket.com mid-trade. Costs the user one
+    // extra MetaMask popup (the SafeTx signature) and a small MATIC gas fee.
     if (clobVersion === 2 && clobSide === 'BUY' && makerAddr) {
       var pUsdBal = await getPmctBalance(makerAddr);
       if (pUsdBal < makerAmt) {
+        var shortfall = makerAmt - pUsdBal;
         var have = ethers.formatUnits(pUsdBal, 6);
         var need = ethers.formatUnits(makerAmt, 6);
-        showTradeStatus('Need ' + need + ' pUSD to place this order — you have ' + have + '. Wrap USDC → pUSD on polymarket.com first.', 'error');
-        cta.disabled = false; updateCtaButton();
-        return;
+        var shortfallHuman = ethers.formatUnits(shortfall, 6);
+        console.log('[trade-v2] pUSD short — have=' + have + ' need=' + need + ' wrapping=' + shortfallHuman);
+        showTradeStatus('Wrapping ' + shortfallHuman + ' USDC → pUSD before order...', 'info');
+        try {
+          await wrapUsdcToPmct(shortfall);
+          // Re-check balance after wrap (sanity — should be a no-op).
+          var bal2 = await getPmctBalance(makerAddr);
+          if (bal2 < makerAmt) {
+            showTradeStatus('Wrap completed but pUSD balance still short — try again in a moment.', 'error');
+            cta.disabled = false; updateCtaButton();
+            return;
+          }
+          showTradeStatus('Wrap done — placing order...', 'info');
+        } catch (wrapErr) {
+          var wrapMsg = (wrapErr && wrapErr.message) || 'Unknown wrap error';
+          console.error('[trade-v2] wrap failed:', wrapErr);
+          showTradeStatus('Could not wrap USDC → pUSD: ' + wrapMsg, 'error');
+          cta.disabled = false; updateCtaButton();
+          return;
+        }
       }
     }
     var built = buildOrderForClob({
