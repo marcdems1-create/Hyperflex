@@ -15529,6 +15529,14 @@ app.post('/api/admin/tipster-applications/:id/decide', requireAdminSecret, async
       );
     }
 
+    // Fire decision email. Fire-and-forget — admin decide response is not
+    // gated on SMTP round-trip. Voice-compliant subject + body per Charter
+    // worked examples (approval is a warmth trigger per §2; rejection is
+    // dry register).
+    sendTipsterDecisionEmail(app, decision).catch(err => {
+      console.error('[tipster-app] decision email error:', err.message);
+    });
+
     res.json({ ok: true, application_id: req.params.id, status: newStatus });
   } catch (err) {
     console.error('[tipster-app] decide error:', err.message);
@@ -15562,6 +15570,83 @@ app.post('/api/admin/tipster/:userId/revoke', requireAdminSecret, async (req, re
     res.status(500).json({ error: 'Failed to revoke' });
   }
 });
+
+// Decision email — fires after admin approve/reject on an application.
+// Voice-compliant per Charter v1:
+//   Approval uses one of the five canonical warmth triggers (§2: first
+//   locked pick moment is still to come, but cohort entry is a one-time
+//   warmth moment too — one exclamation mark max).
+//   Rejection stays in default dry register.
+async function sendTipsterDecisionEmail(app, decision) {
+  if (!app || !app.email) return;
+  const transporter = createMailTransport();
+  if (!transporter) return;
+
+  const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+  const isApprove = decision === 'approve';
+  const handleDisplay = app.handle ? '@' + app.handle.replace(/^@+/, '') : 'tipster';
+
+  const subject = isApprove ? "You're in." : 'Application decision · HYPERFLEX';
+
+  const htmlApprove = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
+    <tr><td style="padding:32px 32px 8px">
+      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#f5a623;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
+    </td></tr>
+    <tr><td style="padding:8px 32px 8px">
+      <h1 style="font-size:32px;font-weight:900;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">You're in.</h1>
+      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Record starts on your next pick. Everything you post from here is locked before tip-off, graded from official results, and public.</p>
+    </td></tr>
+    <tr><td style="padding:0 32px 28px">
+      <a href="${APP_URL}/picks/new" style="display:inline-block;padding:14px 28px;background:#f5a623;color:#0e0e12;font-weight:800;font-size:15px;border-radius:100px;text-decoration:none">Lock your first pick →</a>
+    </td></tr>
+    <tr><td style="padding:0 32px 28px">
+      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px">WHAT HAPPENS NEXT</div>
+      <ul style="font-size:13.5px;line-height:1.7;color:#b4b4c4;margin:0;padding-left:18px">
+        <li>Your profile is live at <a href="${APP_URL}/t/${encodeURIComponent((app.handle||'').replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]+/g,'_').slice(0,30))}" style="color:#f5a623;text-decoration:none">${APP_URL}/t/${handleDisplay.replace(/^@+/, '')}</a></li>
+        <li>Every pick gets a permanent receipt URL you can share anywhere</li>
+        <li>Record shows up on the public leaderboard once the cohort fills</li>
+      </ul>
+    </td></tr>
+    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
+      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`;
+
+  const htmlReject = `<!doctype html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#f0f0f5">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b12;padding:40px 16px"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden">
+    <tr><td style="padding:32px 32px 8px">
+      <div style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;font-weight:700;color:#6b6b80;letter-spacing:0.14em;text-transform:uppercase">HYPERFLEX · FOUNDING TIPSTER</div>
+    </td></tr>
+    <tr><td style="padding:8px 32px 8px">
+      <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.02em;color:#f0f0f5;margin:0 0 10px">Not this cohort.</h1>
+      <p style="font-size:15px;line-height:1.6;color:#b4b4c4;margin:0 0 18px">We read every application. This one didn't make the founding 25.</p>
+      <p style="font-size:14px;line-height:1.6;color:#b4b4c4;margin:0 0 24px">Apply again in 30 days. More posting history and unit-tracked volume both help.</p>
+    </td></tr>
+    <tr><td style="padding:0 32px 28px">
+      <a href="${APP_URL}/picks" style="display:inline-block;padding:12px 22px;background:rgba(255,255,255,0.06);color:#f0f0f5;font-weight:700;font-size:14px;border-radius:100px;text-decoration:none;border:1px solid rgba(255,255,255,0.14)">Back to /picks</a>
+    </td></tr>
+    <tr><td style="padding:20px 32px 28px;border-top:1px solid rgba(255,255,255,0.06)">
+      <p style="font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#6b6b80;margin:0;letter-spacing:0.06em">HYPERFLEX · RECEIPTS, NOT SCREENSHOTS</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`;
+
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+      to: app.email,
+      subject,
+      html: isApprove ? htmlApprove : htmlReject,
+    });
+    console.log('[tipster-app] ' + decision + ' email sent to ' + app.email);
+  } catch (err) {
+    console.error('[tipster-app] sendMail error:', err.message);
+  }
+}
 
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
