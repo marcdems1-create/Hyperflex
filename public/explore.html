@@ -3529,6 +3529,35 @@ function loadTakesFeed(append) {
 
 function loadMoreTakes() { loadTakesFeed(true); }
 
+// Infinite scroll — auto-fire loadMoreTakes when the Load more button
+// enters the viewport. Keeps the button in DOM as fallback; users on
+// modern browsers never have to tap it.
+(function() {
+  if (!('IntersectionObserver' in window)) return;
+  var lastFire = 0;
+  var io = new IntersectionObserver(function(entries) {
+    if (!entries[0] || !entries[0].isIntersecting) return;
+    var btn = entries[0].target;
+    if (btn.disabled) return;
+    var now = Date.now();
+    if (now - lastFire < 250) return;
+    lastFire = now;
+    loadMoreTakes();
+  }, { rootMargin: '240px 0px' });
+  // Re-scan every second for newly-rendered Load more buttons (the feed
+  // container rewrites innerHTML on tab switch, so the observer has to
+  // reattach). Cheap — single-button observer.
+  var observed = null;
+  setInterval(function() {
+    var btn = document.querySelector('button[onclick="loadMoreTakes()"]');
+    if (btn && btn !== observed) {
+      if (observed) io.unobserve(observed);
+      io.observe(btn);
+      observed = btn;
+    }
+  }, 1000);
+})();
+
 // ── Influencer post card ──────────────────────────────────────────────────────
 function renderInfluencerCard(p) {
   var platformIcon = p.platform === 'x' ? '𝕏' : p.platform === 'youtube' ? '▶' : p.platform === 'reddit' ? 'R' : '✉';

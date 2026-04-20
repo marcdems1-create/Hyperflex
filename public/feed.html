@@ -1505,6 +1505,26 @@ function normaliseInfluencer(p) {
 
 function loadMore() { loadFeed(true); }
 
+// ── Infinite scroll — smoothness pass #5 ──────────────────────────────────
+// Watches the "Load more" button; the moment it scrolls into view we
+// auto-trigger loadMore(). The button stays in the DOM as a visible
+// fallback but users on modern browsers never need to tap it. Guarded
+// so it fires at most once per 250ms in case of rapid scroll jitter.
+(function() {
+  var btn = document.getElementById('loadMoreBtn');
+  if (!btn || !('IntersectionObserver' in window)) return;
+  var lastFire = 0;
+  var io = new IntersectionObserver(function(entries) {
+    if (!entries[0].isIntersecting) return;
+    if (btn.style.display === 'none' || btn.disabled) return;
+    var now = Date.now();
+    if (now - lastFire < 250) return;
+    lastFire = now;
+    loadMore();
+  }, { rootMargin: '240px 0px' /* start loading 240px before the button hits the fold */ });
+  io.observe(btn);
+})();
+
 function renderFeed(noFollowsYet) {
   var container = document.getElementById('feedContainer');
   if (!feedData.length) {
