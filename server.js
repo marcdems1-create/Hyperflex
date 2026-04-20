@@ -14961,6 +14961,24 @@ function validatePickShape(bet_type, side, line) {
 app.post('/api/picks', requireAuth, async (req, res) => {
   try {
     if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'Pick signing not configured' });
+    // Gate: picks are tipster-only. Users must be approved via the founding-
+    // tipster application funnel first. Belt-and-suspenders check: status
+    // must be 'approved' AND revoked_at must be NULL. Protects against any
+    // write path that flips status without clearing the timestamp (or vice
+    // versa) and against brief race windows during a revoke flow.
+    const tipRows = await dbQuery(
+      'SELECT tipster_status, tipster_revoked_at FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const tipStatus = tipRows[0]?.tipster_status || 'none';
+    const revokedAt = tipRows[0]?.tipster_revoked_at || null;
+    if (tipStatus !== 'approved' || revokedAt != null) {
+      return res.status(403).json({
+        error: 'Picks are in founding-tipster beta. Apply at /picks.',
+        tipster_status: tipStatus,
+        revoked: revokedAt != null,
+      });
+    }
     const { game_id, bet_type, side, line = null, odds, units, thesis = null } = req.body || {};
     if (!game_id) return res.status(400).json({ error: 'game_id required' });
     if (!Number.isFinite(Number(odds))) return res.status(400).json({ error: 'odds must be numeric (American odds)' });
@@ -15080,6 +15098,195 @@ app.get('/api/picks/:id/verify', async (req, res) => {
   } catch (err) {
     console.error('[picks] verify error:', err.message);
     res.status(500).json({ error: 'Verify failed' });
+  }
+});
+
+// ── TIPSTER APPLICATIONS (founding cohort) ─────────────────────────────────
+// The /picks page is gated: 25 founding tipsters get picked up front, anyone
+// else applies and waits. Applications are append-only (rejected apps stay
+// on record); approving sets users.tipster_status = 'approved'.
+//
+// GET  /api/tipster-applications/stats   — public counter for landing page
+// POST /api/tipster-applications          — submit (authed or email-only)
+// GET  /api/admin/tipster-applications    — admin list
+// POST /api/admin/tipster-applications/:id/decide — approve or reject
+
+const FOUNDING_TIPSTER_CAP = 25;
+
+app.get('/api/tipster-applications/stats', async (req, res) => {
+  try {
+    const [approvedRows, pendingRows] = await Promise.all([
+      dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'"),
+      dbQuery("SELECT COUNT(*)::int AS n FROM tipster_applications WHERE status = 'pending'"),
+    ]);
+    const claimed = approvedRows[0]?.n || 0;
+    const inReview = pendingRows[0]?.n || 0;
+    res.json({
+      cap: FOUNDING_TIPSTER_CAP,
+      claimed,
+      in_review: inReview,
+      spots_left: Math.max(0, FOUNDING_TIPSTER_CAP - claimed),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/tipster-applications', optionalAuth, async (req, res) => {
+  try {
+    const { handle, email, picks_link, units_tracked_90d, specialty, reach_screenshot_url, failure_mode, why_me } = req.body || {};
+    if (!handle || typeof handle !== 'string' || handle.length > 80) {
+      return res.status(400).json({ error: 'handle required (your X/Twitter handle)' });
+    }
+    if (!specialty || typeof specialty !== 'string' || specialty.length > 40) {
+      return res.status(400).json({ error: 'specialty required (pick one sport or bet type)' });
+    }
+    if (why_me && String(why_me).length > 500) return res.status(400).json({ error: 'why_me max 500 chars' });
+    if (failure_mode && String(failure_mode).length > 500) return res.status(400).json({ error: 'failure_mode max 500 chars' });
+    const userId = req.userId || null;
+    if (!userId && !email) return res.status(400).json({ error: 'email required when not signed in' });
+
+    // Normalise handle: strip leading @ and whitespace.
+    const cleanHandle = handle.replace(/^@+/, '').trim();
+
+    // Block a second pending application from the same user (partial unique
+    // index enforces it; we surface a friendly error instead of the raw 23505).
+    if (userId) {
+      const existing = await dbQuery(
+        "SELECT id FROM tipster_applications WHERE user_id = $1 AND status = 'pending' LIMIT 1",
+        [userId]
+      );
+      if (existing.length) return res.status(409).json({ error: 'You already have a pending application' });
+    }
+
+    const rows = await dbQuery(
+      `INSERT INTO tipster_applications
+         (user_id, email, handle, picks_link, units_tracked_90d, specialty,
+          reach_screenshot_url, failure_mode, why_me)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, created_at, status`,
+      [userId, email || null, cleanHandle, picks_link || null,
+       units_tracked_90d != null ? Number(units_tracked_90d) : null,
+       specialty, reach_screenshot_url || null,
+       failure_mode ? String(failure_mode).trim() : null,
+       why_me ? String(why_me).trim() : null]
+    );
+
+    // Mark the user as 'applied' so the gate can surface the pending state
+    // instead of re-prompting the application form.
+    if (userId) {
+      await dbQuery(
+        "UPDATE users SET tipster_status = 'applied' WHERE id = $1 AND tipster_status IS NULL",
+        [userId]
+      );
+    }
+
+    res.json({ ok: true, application: rows[0] });
+  } catch (err) {
+    console.error('[tipster-app] create error:', err.message);
+    res.status(500).json({ error: 'Failed to submit application' });
+  }
+});
+
+// ── Admin endpoints (existing ADMIN_SECRET header gate pattern) ──────────
+function requireAdminSecret(req, res, next) {
+  const expected = process.env.ADMIN_SECRET || '';
+  const given = req.headers['x-admin-secret'] || req.query.admin_secret || '';
+  if (!expected || given !== expected) return res.status(403).json({ error: 'forbidden' });
+  next();
+}
+
+app.get('/api/admin/tipster-applications', requireAdminSecret, async (req, res) => {
+  try {
+    const status = req.query.status || 'pending';
+    const rows = await dbQuery(
+      `SELECT a.*, u.display_name AS user_display_name, u.polymarket_address AS user_wallet
+         FROM tipster_applications a
+         LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.status = $1
+        ORDER BY a.created_at DESC LIMIT 200`,
+      [status]
+    );
+    res.json({ applications: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/tipster-applications/:id/decide', requireAdminSecret, async (req, res) => {
+  try {
+    const { decision, notes, specialty } = req.body || {};
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+    }
+    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+
+    // Load the application. 404 if missing.
+    const appRows = await dbQuery('SELECT * FROM tipster_applications WHERE id = $1', [req.params.id]);
+    if (!appRows.length) return res.status(404).json({ error: 'Application not found' });
+    const app = appRows[0];
+    if (app.status !== 'pending') return res.status(409).json({ error: 'Application already decided' });
+
+    // Cap check on approve: stop if 25 are already approved, regardless of
+    // pending count. Race-safe because we re-read inside a transaction would
+    // be cleaner, but at cohort-of-25 scale a short-window read is fine.
+    if (decision === 'approve') {
+      const cnt = await dbQuery("SELECT COUNT(*)::int AS n FROM users WHERE tipster_status = 'approved'");
+      if ((cnt[0]?.n || 0) >= FOUNDING_TIPSTER_CAP) {
+        return res.status(409).json({ error: 'Founding cohort already full (' + FOUNDING_TIPSTER_CAP + ')' });
+      }
+    }
+
+    await dbQuery(
+      `UPDATE tipster_applications
+          SET status = $1, reviewed_at = now(), review_notes = $2
+        WHERE id = $3`,
+      [newStatus, notes || null, req.params.id]
+    );
+
+    if (decision === 'approve' && app.user_id) {
+      await dbQuery(
+        `UPDATE users
+            SET tipster_status = 'approved',
+                tipster_approved_at = now(),
+                tipster_specialty = COALESCE($1, tipster_specialty, $2)
+          WHERE id = $3`,
+        [specialty || null, app.specialty, app.user_id]
+      );
+    } else if (decision === 'reject' && app.user_id) {
+      await dbQuery(
+        "UPDATE users SET tipster_status = 'rejected' WHERE id = $1 AND tipster_status = 'applied'",
+        [app.user_id]
+      );
+    }
+
+    res.json({ ok: true, application_id: req.params.id, status: newStatus });
+  } catch (err) {
+    console.error('[tipster-app] decide error:', err.message);
+    res.status(500).json({ error: 'Failed to decide application' });
+  }
+});
+
+// POST /api/admin/tipster/:userId/revoke — freeze an already-approved tipster.
+// Distinct from the application-decide flow: that handles pending
+// applications; revoke handles tipsters who were approved and later gamed
+// the system (fake picks, stat manipulation, etc). We never delete their
+// picks history — the track record stays public, they just lose write
+// access. Reinstating is a separate (manual, DB-level) action.
+app.post('/api/admin/tipster/:userId/revoke', requireAdminSecret, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const userId = req.params.userId;
+    const rows = await dbQuery(
+      `UPDATE users
+          SET tipster_status = 'revoked',
+              tipster_revoked_at = now()
+        WHERE id = $1 AND tipster_status = 'approved'
+        RETURNING id, tipster_status, tipster_revoked_at`,
+      [userId]
+    );
+    if (!rows.length) return res.status(409).json({ error: 'User is not an approved tipster' });
+    console.log('[tipster-admin] revoked user=' + userId.slice(0, 8) + ' reason=' + (reason || '(none)'));
+    res.json({ ok: true, user: rows[0] });
+  } catch (err) {
+    console.error('[tipster-admin] revoke error:', err.message);
+    res.status(500).json({ error: 'Failed to revoke' });
   }
 });
 
@@ -25423,6 +25630,9 @@ app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
 // /datafeed — buyer-facing marketing page for the paid sentiment API
 app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
+app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks.html')));
+app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
+app.get('/admin/tipster-applications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-tipster-applications.html')));
 
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
