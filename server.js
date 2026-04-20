@@ -14793,6 +14793,187 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
   return null;
 }
 
+// ── PICKS — the sports tipster wedge ───────────────────────────────────────
+// A pick is an immutable, timestamped, server-signed call on a sport_games
+// row. Its value prop is verifiability: anyone can hit /api/picks/:id/verify
+// and confirm the row is original + was locked before the game started.
+//
+// Trust model (no book integration required):
+//   - DB trigger rejects locked_at >= games.starts_at (enforced pre-insert)
+//   - DB trigger rejects UPDATE of any core field (locked_at, side, etc.)
+//   - Server signs sha256(user_id|game_id|side|line|odds|units|locked_at|SECRET)
+//     as lock_hash. Public verifier recomputes and compares.
+//   - HYPERFLEX_PICK_SECRET env var must be set; without it we 503 on picks.
+
+const HFX_PICK_SECRET = process.env.HYPERFLEX_PICK_SECRET || '';
+if (!HFX_PICK_SECRET) {
+  console.warn('[picks] HYPERFLEX_PICK_SECRET env var missing — /api/picks will 503 until set');
+}
+
+function signPickLockHash(fields) {
+  // Canonical ordering: user_id|game_id|side|line|odds|units|locked_at
+  // `line` may be null (moneyline) — coerce to empty string so the hash is
+  // deterministic across null/undefined/explicit-null variants.
+  const msg = [
+    fields.user_id,
+    fields.game_id,
+    fields.side,
+    fields.line == null ? '' : String(fields.line),
+    String(fields.odds),
+    String(fields.units),
+    new Date(fields.locked_at).toISOString(),
+  ].join('|');
+  return crypto.createHmac('sha256', HFX_PICK_SECRET).update(msg).digest('hex');
+}
+
+// Validate side against bet_type. Each bet type has a tight allow-list so we
+// can't end up with "over" on a moneyline etc.
+function validatePickShape(bet_type, side, line) {
+  if (!['spread', 'moneyline', 'total', 'prop'].includes(bet_type)) return 'bet_type must be spread/moneyline/total/prop';
+  if (!side || typeof side !== 'string' || side.length > 64) return 'side required';
+  if (bet_type === 'moneyline') {
+    if (!['home', 'away'].includes(side)) return "moneyline side must be 'home' or 'away'";
+    if (line != null) return 'moneyline has no line';
+  } else if (bet_type === 'spread') {
+    if (!['home', 'away'].includes(side)) return "spread side must be 'home' or 'away'";
+    if (line == null || !Number.isFinite(Number(line))) return 'spread requires a numeric line';
+  } else if (bet_type === 'total') {
+    if (!['over', 'under'].includes(side)) return "total side must be 'over' or 'under'";
+    if (line == null || !Number.isFinite(Number(line)) || Number(line) <= 0) return 'total requires a positive numeric line';
+  } else if (bet_type === 'prop') {
+    // Free-form: side is the prop label (e.g. "LeBron James over 27.5"), line optional
+  }
+  return null;
+}
+
+// POST /api/picks — create an immutable pick.
+// Body: { game_id, bet_type, side, line?, odds, units, thesis? }
+// Returns: { pick: {...}, verify_url: "/api/picks/:id/verify" }
+app.post('/api/picks', requireAuth, async (req, res) => {
+  try {
+    if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'Pick signing not configured' });
+    const { game_id, bet_type, side, line = null, odds, units, thesis = null } = req.body || {};
+    if (!game_id) return res.status(400).json({ error: 'game_id required' });
+    if (!Number.isFinite(Number(odds))) return res.status(400).json({ error: 'odds must be numeric (American odds)' });
+    if (!Number.isFinite(Number(units)) || Number(units) <= 0 || Number(units) > 10) return res.status(400).json({ error: 'units must be 0 < x <= 10' });
+    const shapeErr = validatePickShape(bet_type, side, line);
+    if (shapeErr) return res.status(400).json({ error: shapeErr });
+    if (thesis && typeof thesis === 'string' && thesis.length > 500) return res.status(400).json({ error: 'thesis max 500 chars' });
+
+    // Fetch the game to validate it exists + is scheduled in the future.
+    // DB trigger double-checks this, but an explicit 400 here is a nicer error.
+    const gameRows = await dbQuery('SELECT id, sport, starts_at, status FROM sport_games WHERE id = $1', [game_id]);
+    if (!gameRows.length) return res.status(404).json({ error: 'Game not found' });
+    const g = gameRows[0];
+    if (new Date(g.starts_at).getTime() <= Date.now()) {
+      return res.status(409).json({ error: 'Too late — game has already started' });
+    }
+
+    const lockedAt = new Date();
+    const lockHash = signPickLockHash({
+      user_id: req.userId, game_id, side,
+      line: line, odds, units, locked_at: lockedAt,
+    });
+
+    const rows = await dbQuery(
+      `INSERT INTO picks (user_id, game_id, sport, bet_type, side, line, odds, units, thesis, locked_at, lock_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [req.userId, game_id, g.sport, bet_type, side,
+       line == null ? null : Number(line),
+       Number(odds), Number(units),
+       thesis ? String(thesis).trim().slice(0, 500) : null,
+       lockedAt, lockHash]
+    );
+    const pick = rows[0];
+    res.json({ pick, verify_url: '/api/picks/' + pick.id + '/verify' });
+  } catch (err) {
+    // DB trigger messages ("locked_at must be before game starts_at") bubble
+    // up here — surface them as 409 so the client can show a clean message.
+    if (err.message && /locked_at|immutable|does not exist/.test(err.message)) {
+      return res.status(409).json({ error: err.message });
+    }
+    console.error('[picks] create error:', err.message);
+    res.status(500).json({ error: 'Failed to create pick' });
+  }
+});
+
+// GET /api/picks/:id — public single-pick read, enriched with game + team info
+app.get('/api/picks/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(404).json({ error: 'Pick not found' });
+    }
+    const rows = await dbQuery(
+      `SELECT p.*,
+              u.display_name AS user_display_name, u.polymarket_address AS user_wallet,
+              g.starts_at, g.status AS game_status, g.home_score, g.away_score, g.period,
+              home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
+              away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
+         FROM picks p
+         LEFT JOIN users u ON u.id = p.user_id
+         LEFT JOIN sport_games g ON g.id = p.game_id
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE p.id = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Pick not found' });
+    // Never return lock_hash on the public read — it's recomputed by /verify
+    // from the exposed fields, so exposing it here adds no verification value
+    // and gives an attacker a target if they ever try to brute-force SECRET.
+    const r = rows[0];
+    delete r.lock_hash;
+    res.json({ pick: r });
+  } catch (err) {
+    console.error('[picks] read error:', err.message);
+    res.status(500).json({ error: 'Failed to load pick' });
+  }
+});
+
+// GET /api/picks/:id/verify — public verification receipt.
+// Returns { valid, locked_at, game_starts_at, pre_game, recomputed_hash }
+// - valid: true if our recomputed hash matches the stored lock_hash
+// - pre_game: true if locked_at < game.starts_at (should always be true; if
+//   false the DB trigger was bypassed somehow and the pick is compromised)
+app.get('/api/picks/:id/verify', async (req, res) => {
+  try {
+    if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'Pick signing not configured' });
+    const id = req.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(404).json({ error: 'Pick not found' });
+    }
+    const rows = await dbQuery(
+      `SELECT p.user_id, p.game_id, p.side, p.line, p.odds, p.units, p.locked_at, p.lock_hash,
+              g.starts_at
+         FROM picks p
+         LEFT JOIN sport_games g ON g.id = p.game_id
+        WHERE p.id = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Pick not found' });
+    const p = rows[0];
+    const recomputed = signPickLockHash({
+      user_id: p.user_id, game_id: p.game_id, side: p.side,
+      line: p.line, odds: p.odds, units: p.units, locked_at: p.locked_at,
+    });
+    const valid = recomputed === p.lock_hash;
+    const preGame = p.starts_at ? new Date(p.locked_at).getTime() < new Date(p.starts_at).getTime() : null;
+    res.json({
+      valid,
+      pre_game: preGame,
+      locked_at: p.locked_at,
+      game_starts_at: p.starts_at,
+      recomputed_hash: recomputed.slice(0, 16) + '…',   // partial hash is enough for debug; don't expose full
+      stored_hash:     p.lock_hash.slice(0, 16) + '…',
+    });
+  } catch (err) {
+    console.error('[picks] verify error:', err.message);
+    res.status(500).json({ error: 'Verify failed' });
+  }
+});
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
