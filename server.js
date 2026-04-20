@@ -15728,7 +15728,7 @@ async function sweepMarketSportTags() {
   let scanned = 0, tagged = 0, skipped = 0;
   try {
     const unionSql = `
-      SELECT DISTINCT ON (source, external_id) source, external_id, market_title FROM (
+      SELECT DISTINCT ON (t.source, t.external_id) t.source, t.external_id, t.market_title FROM (
         SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM realized_trades   WHERE condition_id IS NOT NULL
         UNION ALL
         SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM polymarket_trades WHERE condition_id IS NOT NULL
