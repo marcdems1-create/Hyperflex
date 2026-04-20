@@ -34,6 +34,7 @@ When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy ch
 - Silent background updates with no user-facing signal. If a whale moves, if their tier advances, if a streak risks breaking — SURFACE IT with a badge, notification, or toast.
 - Killing a lever to "clean up the UI." Streaks, badges, glows, counts, chips — these are not decoration, they're the product.
 - Features that only pay off monthly/quarterly. Aim for daily dopamine, not annual ROI.
+- Playful surfaces (share cards, roast cards, weekly recaps, "fade the public" feeds) firing on empty data. Gate them behind real supply thresholds — a user with 3 picks is not ready for a weekly recap. Empty playfulness reads as desperation.
 
 **When in doubt, ask:** would a degenerate Polymarket trader check this 5x a day? If the answer is no, either add a hook or don't ship it.
 
@@ -47,7 +48,16 @@ Voice is load-bearing. Every copy decision — microcopy, notifications, empty s
 
 **Four postures, locked.**
 
-1. **Dry by default, warm only when earned.** 90/10 rule. Default tone is factual + slightly approving. Reserve warmth for moments that earned it — first locked pick, comeback after a losing streak, 100th week posting. No exclamation marks on routine events. The reader does the emotional work.
+1. **Dry by default, warm only when earned.** 90/10 rule. Default tone is factual + slightly approving. No exclamation marks on routine events. The reader does the emotional work.
+
+   **Canonical warmth triggers — only these five:**
+   - First locked pick ever. Once per account, lifetime.
+   - First graded win after a 5+ loss streak. The comeback.
+   - 12-week continuous posting milestone, then every 26 weeks after. Durability.
+   - Top-decile finish in a seasonal cohort. Real achievement.
+   - Anniversary of joining (annual).
+
+   **Never warm on:** losses, fresh signups, feature discovery, completion of setup steps, routine wins, daily opens, or generic app events. Those are the moments a product manager is most tempted to sneak warmth in — preempted here.
 
 2. **Side with survivors.** Loss-followed-by-more-posting is status-conferring. The capper who ghosts at 0-4 loses the badge the survivor earns. Never hide losses; make surviving them visible and respected. Concrete surfaces: "Posted every week, 12 weeks" chip. "Survived a −12u week" chip. Both are more valuable than a hot streak.
 
@@ -55,11 +65,17 @@ Voice is load-bearing. Every copy decision — microcopy, notifications, empty s
 
 4. **Never condescending, never meme-cycle.** Assume the reader knows spreads, odds, units, CLV, fade, dog, juice. No glossaries in microcopy. No "fr fr," no all-lowercase, no Duolingo mascot energy.
 
-**Three hard rules.**
+   **Meme-cycle test:** *Would this copy still read right in two years?* If a phrase depends on current betting-Twitter slang (`cooked`, `tailing`, `chalk`, `it's giving`, `we're so back`, `lock it in 🔒`), it fails. If it depends on permanent betting vocabulary (units, spread, ML, CLV, push, cover, hedge), it passes.
 
-- **No XP, coins, badges-for-badges, or levels.** Every gamification layer bolted onto a truth product dilutes the truth signal. FLEX Points (as accumulation currency) is killed — keep only **FLEX Score**, a unified composite tied to real performance. No spend, no shop, no quests.
+   **Emoji policy:** Zero decorative emoji. Functional glyphs only — `✓` for verified, `●` for live, `—` for push, `✗` for wrong. One carve-out: `🔒` on the literal "locked" pick state, because our audience reads it as semantic shorthand, not decoration. Anywhere else an emoji appears, cut it.
+
+**Two hard rules.**
+
+- **No XP, coins, badges-for-badges, or levels.** Every gamification layer bolted onto a truth product dilutes the truth signal. FLEX Points (as accumulation currency) is killed. **FLEX Score** replaces it with three non-negotiable constraints:
+  - **Derived, not accumulated.** A function of recent performance, not a sum of actions. Post a bad pick → score drops. You cannot grind your way up by posting volume; you earn by being right.
+  - **Bounded or normalized.** 0-100, percentile, or z-score. Never a raw count like `2,847` — users read raw counts as point balances and start farming.
+  - **Single-surface.** One number per user, shown on profiles and leaderboards. Nowhere else. Not pick cards, not notifications, not emails. Ubiquity turns a rating into a scoreboard.
 - **Calibration scores stay off non-tipster/non-creator profiles.** Surfacing calibration on every user pressures casuals into gamed behavior that corrupts the data. Keep the metric for tipsters, creators, whales.
-- **Playful surfaces gate on critical mass.** Share cards, roast cards, weekly recaps, "fade the public" feeds — all require real data. Don't fire them on a user with 3 picks. Empty playfulness reads as desperation.
 
 **Worked examples.**
 
@@ -74,8 +90,29 @@ Voice is load-bearing. Every copy decision — microcopy, notifications, empty s
 | Pick graded W | "🎉 BIG WIN! +2.73u" | "Pick landed. +2.73u." |
 | Pick graded L | "Tough one. Better luck next time." | "Pick missed. −3u. On to the next." |
 
+**Meme vs. permanent vocabulary.**
+
+| ❌ Don't (dated, slang) | ✅ Do (permanent) |
+|---|---|
+| "This one's cooked." | "Resolved a loss." |
+| "Locked in 🔒" (decorative) | "Locked at 7:14 PM." |
+| "Tailing the sharps 📈" | "Following three tipsters." |
+| "We're so back" | "Four wins after four losses." |
+| "It's giving sharp energy" | "Top decile this week." |
+| "Chalky pick" | "Heavy favorite." |
+
 **Vocabulary — prefer:** units, lock, cover, push, grade, receipt, fade, dog, juice, closing line, tip-off, slate.
 **Vocabulary — avoid:** stake (book-loaded), congrats, winner, champion, VIP, exclusive, game-changer, unleash, journey, community (overused), family.
+
+**Operational rules.**
+
+- **Every error state gets a voice pass.** Timeouts, auth failures, rate limit hits, payment declines, 404, 500. Default framework copy leaks into production and reads mortifying. `Session expired. Sign in again.` — not `Oops! Something went wrong with your session.`
+- **Numeric formatting is locked.** Dry voice dies on inconsistent numbers.
+  - Units: 2 decimals, always signed. `+2.73u`, `−3.00u`. Not `+2.7u`, not `+2.732u`.
+  - ROI: signed, 1 decimal. `+14.3%`.
+  - Odds: American. `-110`, not `1.91`, not `100/110`.
+  - Time: relative inside 24h (`14 min ago`, `3h ago`); absolute after (`Apr 12 · 2:47 PM`).
+- **Platform never editorializes on content.** The platform narrates system events (`Pick locked. Cannot be edited.`). It never comments on the take itself (`Bold call!`, `🔥 Hot pick!`, `Big move.`). This is the single most common voice regression — Claude or any human adding platform opinion to user content. Block these on review, no exceptions.
 
 **When you're unsure:** re-read as the author persona. Would that person send this exact string? If it feels too warm, it is. If it feels too snarky, it is. If it feels invisible, you nailed it.
 
