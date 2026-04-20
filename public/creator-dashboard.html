@@ -11705,10 +11705,29 @@ async function loadHandleForSettings(prefix) {
     const r = await fetch(API + '/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
     if (!r.ok) return;
     const d = await r.json();
+    const u = d.user || {};
     const ids = _handleIds(prefix);
     const input = document.getElementById(ids.input);
-    if (input && d.user && d.user.handle) input.value = d.user.handle;
-  } catch {}
+    if (!input) return;
+    if (u.handle) {
+      input.value = u.handle;
+      _setHandleStatus(prefix, 'Currently: hyperflex.network/@' + u.handle, 'var(--dim)');
+    } else {
+      // No handle yet — prefill with the creator's existing slug as a
+      // suggestion so claiming it is one-click. Show explicit state so
+      // the blank input isn't mysterious.
+      const slug = (creatorData && creatorData.creator && creatorData.creator.slug) || '';
+      const validSlug = /^[a-z0-9_]{3,30}$/.test(slug);
+      if (validSlug) {
+        input.value = slug;
+        _setHandleStatus(prefix, 'Suggestion from your slug — click Save to claim @' + slug, 'var(--gold)');
+      } else {
+        _setHandleStatus(prefix, 'No @handle yet — type one to claim', 'var(--dim)');
+      }
+    }
+  } catch (e) {
+    _setHandleStatus(prefix, 'Could not load current handle', 'var(--red)');
+  }
 }
 
 function _setHandleStatus(prefix, html, color) {
@@ -11747,6 +11766,21 @@ function onHandleInput(prefix) {
   }, 300);
 }
 
+// Find the first available handle starting from `base` + 1, + 2, etc.
+// Caps at 9 tries so we don't hammer the endpoint. Returns null if nothing
+// under base+9 is free (rare — the user picks a wildly contested name).
+async function _suggestAvailableHandle(base) {
+  for (let i = 1; i <= 9; i++) {
+    const candidate = (base + i).slice(0, 30);
+    try {
+      const r = await fetch(API + '/api/user/handle/available?handle=' + encodeURIComponent(candidate));
+      const d = await r.json();
+      if (d.available) return candidate;
+    } catch {}
+  }
+  return null;
+}
+
 async function saveHandle(prefix) {
   const ids = _handleIds(prefix);
   const input = document.getElementById(ids.input);
@@ -11770,6 +11804,16 @@ async function saveHandle(prefix) {
       // canonical URL update immediately without a page refresh.
       if (creatorData && creatorData.creator) creatorData.creator.handle = d.handle;
       if (typeof window._refreshSidebarProfileUrl === 'function') window._refreshSidebarProfileUrl();
+    } else if (r.status === 409 && /taken/i.test(d.error || '')) {
+      // Offer a suggestion so the user isn't stuck. Try handle + 1, 2, 3…
+      const ids = _handleIds(prefix);
+      const suggestion = await _suggestAvailableHandle(handle);
+      if (suggestion) {
+        const html = '× Taken. Try <a href="#" style="color:var(--gold);text-decoration:underline" onclick="document.getElementById(\'' + ids.input + '\').value=\'' + suggestion + '\';onHandleInput(\'' + prefix + '\');return false;">@' + suggestion + '</a>?';
+        _setHandleStatus(prefix, html, 'var(--red)');
+      } else {
+        _setHandleStatus(prefix, '× Taken — pick a different handle', 'var(--red)');
+      }
     } else {
       _setHandleStatus(prefix, '× ' + (d.error || 'Failed to save'), 'var(--red)');
     }
