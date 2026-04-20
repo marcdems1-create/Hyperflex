@@ -40,81 +40,132 @@ When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy ch
 
 ---
 
-## 🎙️ VOICE & POSTURE (read before writing any user-facing copy)
+## 🎙️ VOICE & POSTURE (canonical — read before writing any user-facing copy)
 
-Voice is load-bearing. Every copy decision — microcopy, notifications, empty states, email subject lines, error messages — compounds into how the product feels. Locked answers here so every subsequent line of copy arrives in voice the first time.
+Canonical. Every copy decision on the platform references this document. If a surface contradicts the charter, the surface is wrong.
 
-**Author persona.** A sharp who made it, stopped posting publicly, and now runs the back room where real bettors hang out. Dry, numerate, has seen it all, respects the craft, doesn't suffer fools. Never condescending, never meme-of-the-week. Reads closer to a WSJ gambling columnist who's also a degen than to Barstool or Duolingo.
+### 1. Who writes HYPERFLEX
 
-**Four postures, locked.**
+A sharp who made it, stopped posting publicly, and runs the back room where real bettors actually hang out. Dry, numerate, controlled. Reads more like a WSJ gambling columnist who's also a degen than like anything on betting Twitter in 2026.
 
-1. **Dry by default, warm only when earned.** 90/10 rule. Default tone is factual + slightly approving. No exclamation marks on routine events. The reader does the emotional work.
+Assumes the reader knows spreads, odds, units, CLV. Never condescends. Never explains what a push is. Never links to a glossary.
 
-   **Canonical warmth triggers — only these five:**
-   - First locked pick ever. Once per account, lifetime.
-   - First graded win after a 5+ loss streak. The comeback.
-   - 12-week continuous posting milestone, then every 26 weeks after. Durability.
-   - Top-decile finish in a seasonal cohort. Real achievement.
-   - Anniversary of joining (annual).
+Does not participate in the meme cycle. No "fr fr." No all-lowercase affectation. No phrase that depends on a trend younger than 24 months. Writes like the copy will still ship in 2028.
 
-   **Never warm on:** losses, fresh signups, feature discovery, completion of setup steps, routine wins, daily opens, or generic app events. Those are the moments a product manager is most tempted to sneak warmth in — preempted here.
+### 2. Register: 90/10 dry to warm
 
-2. **Side with survivors.** Loss-followed-by-more-posting is status-conferring. The capper who ghosts at 0-4 loses the badge the survivor earns. Never hide losses; make surviving them visible and respected. Concrete surfaces: "Posted every week, 12 weeks" chip. "Survived a −12u week" chip. Both are more valuable than a hot streak.
+Default register is dry. Factual, numerate, slightly approving when earned. Reader does the emotional work.
 
-3. **Community performs the jokes.** Platform humor appears only in loading states, empty states, 404/500 copy. Everywhere else the platform is numerate and neutral; users perform the comedy in take fields, quote-picks, reactions. Platform sets the stage, users perform on it. If the platform tries humor and misses, it's cringe forever; if a user misses, it's just them.
+- ✅ "Pick landed. +2.73u."
+- ❌ "Nice hit! 🎯 +2.73u!"
+- ❌ "Finally. +2.73u."
 
-4. **Never condescending, never meme-cycle.** Assume the reader knows spreads, odds, units, CLV, fade, dog, juice. No glossaries in microcopy. No "fr fr," no all-lowercase, no Duolingo mascot energy.
+Warmth is reserved, not sprinkled. The only moments the platform speaks warmly:
 
-   **Meme-cycle test:** *Would this copy still read right in two years?* If a phrase depends on current betting-Twitter slang (`cooked`, `tailing`, `chalk`, `it's giving`, `we're so back`, `lock it in 🔒`), it fails. If it depends on permanent betting vocabulary (units, spread, ML, CLV, push, cover, hedge), it passes.
+- First locked pick ever (once per account, lifetime)
+- First graded win after a 5+ loss streak (the comeback)
+- 12-week continuous posting milestone, then every 26 weeks after (durability)
+- Top-decile finish in a seasonal cohort (real achievement)
+- Anniversary of joining (annual, "still here")
 
-   **Emoji policy:** Zero decorative emoji. Functional glyphs only — `✓` for verified, `●` for live, `—` for push, `✗` for wrong. One carve-out: `🔒` on the literal "locked" pick state, because our audience reads it as semantic shorthand, not decoration. Anywhere else an emoji appears, cut it.
+Everything else stays dry. Routine wins, daily opens, fresh signups, setup completions, feature discovery, and losses all receive default register. Tempting moments for warmth — welcome flows, onboarding, payment confirmations — are explicitly excluded.
 
-**Two hard rules.**
+### 3. Side-taking on losses
 
-- **No XP, coins, badges-for-badges, or levels.** Every gamification layer bolted onto a truth product dilutes the truth signal. FLEX Points (as accumulation currency) is killed. **FLEX Score** replaces it with three non-negotiable constraints:
-  - **Derived, not accumulated.** A function of recent performance, not a sum of actions. Post a bad pick → score drops. You cannot grind your way up by posting volume; you earn by being right.
-  - **Bounded or normalized.** 0-100, percentile, or z-score. Never a raw count like `2,847` — users read raw counts as point balances and start farming.
-  - **Single-surface.** One number per user, shown on profiles and leaderboards. Nowhere else. Not pick cards, not notifications, not emails. Ubiquity turns a rating into a scoreboard.
-- **Calibration scores stay off non-tipster/non-creator profiles.** Surfacing calibration on every user pressures casuals into gamed behavior that corrupts the data. Keep the metric for tipsters, creators, whales.
+The platform takes a position: surviving losses publicly is status-conferring. The capper who ghosts at 0-4 loses what the survivor earns.
 
-**Worked examples.**
+This is the posture Pikkit cannot copy, because their product philosophy treats a loss as private. Ours treats it as visible and, when weathered, dignified.
 
-| Surface | ❌ Don't | ✅ Do |
-|---|---|---|
-| Empty picks feed | "No picks yet — be the first!" | "Nothing locked tonight. Come back at tip-off." |
-| First locked pick | "Congrats on your first pick! 🎉" | "Locked. Record starts now." |
-| 0-5 week email | "Don't give up! Next week will be better." | "You're 0 for 5. Everyone can see. Respect for staying on the board." |
-| Tipster approved | "Welcome to HYPERFLEX Picks! 🚀" | "You're in. Record starts on your next pick." |
-| Rejected application | "Unfortunately we could not approve your application." | "Not this cohort. Apply again in 30 days — we read every one." |
-| Server error | "Oops! Something went wrong." | "Our end. Try again in a minute." |
-| Pick graded W | "🎉 BIG WIN! +2.73u" | "Pick landed. +2.73u." |
-| Pick graded L | "Tough one. Better luck next time." | "Pick missed. −3u. On to the next." |
+Concrete expressions:
 
-**Meme vs. permanent vocabulary.**
+- "Posted every week, 12 weeks" profile chip
+- "Survived a −12u week" profile chip
+- Losing cards share the same layout dignity as winning cards (different color, same weight)
+- Weekly recaps don't flinch from the ugly number
 
-| ❌ Don't (dated, slang) | ✅ Do (permanent) |
+What the platform does not do: mock losses, celebrate losses, or console losses. It records them.
+
+### 4. Platform funny vs community funny
+
+Humor lives in exactly three surfaces: loading states, empty states, and error screens (404/500/timeout/auth/rate-limit/payment-declined).
+
+Everywhere else — notifications, feed copy, profile surfaces, email, modals, tooltips, confirmations — is numerate and neutral. Users perform jokes on top of the platform; the platform sets the stage.
+
+The platform never editorializes on user content. It can narrate system events ("Pick locked. Cannot be edited.") but never comments on the take itself. No "🔥 Hot pick!", no "Bold call!", no "Interesting play." The content speaks for itself. Labels describe mechanics, never quality.
+
+### 5. The meme-cycle test
+
+Before any copy ships, ask: *Would this still read right in 2 years?*
+
+If the phrase depends on a current meme, it fails. If it depends on permanent betting vocabulary, it passes.
+
+| ❌ Don't | ✅ Do |
 |---|---|
 | "This one's cooked." | "Resolved a loss." |
 | "Locked in 🔒" (decorative) | "Locked at 7:14 PM." |
 | "Tailing the sharps 📈" | "Following three tipsters." |
-| "We're so back" | "Four wins after four losses." |
-| "It's giving sharp energy" | "Top decile this week." |
-| "Chalky pick" | "Heavy favorite." |
+| "We're so back." | "Four wins after four losses." |
+| "It's giving sharp energy." | "Top decile this week." |
+| "Chalk it up." | "Favorite covered." |
+| "Fade the public." | Allowed — permanent term. |
 
-**Vocabulary — prefer:** units, lock, cover, push, grade, receipt, fade, dog, juice, closing line, tip-off, slate.
-**Vocabulary — avoid:** stake (book-loaded), congrats, winner, champion, VIP, exclusive, game-changer, unleash, journey, community (overused), family.
+Permanent vocabulary is welcome: units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML.
 
-**Operational rules.**
+### 6. Emoji policy
 
-- **Every error state gets a voice pass.** Timeouts, auth failures, rate limit hits, payment declines, 404, 500. Default framework copy leaks into production and reads mortifying. `Session expired. Sign in again.` — not `Oops! Something went wrong with your session.`
-- **Numeric formatting is locked.** Dry voice dies on inconsistent numbers.
-  - Units: 2 decimals, always signed. `+2.73u`, `−3.00u`. Not `+2.7u`, not `+2.732u`.
-  - ROI: signed, 1 decimal. `+14.3%`.
-  - Odds: American. `-110`, not `1.91`, not `100/110`.
-  - Time: relative inside 24h (`14 min ago`, `3h ago`); absolute after (`Apr 12 · 2:47 PM`).
-- **Platform never editorializes on content.** The platform narrates system events (`Pick locked. Cannot be edited.`). It never comments on the take itself (`Bold call!`, `🔥 Hot pick!`, `Big move.`). This is the single most common voice regression — Claude or any human adding platform opinion to user content. Block these on review, no exceptions.
+Zero decorative emoji. Functional glyphs only, used for semantic meaning:
 
-**When you're unsure:** re-read as the author persona. Would that person send this exact string? If it feels too warm, it is. If it feels too snarky, it is. If it feels invisible, you nailed it.
+- `✓` verified
+- `●` live
+- `—` push / void
+- `🔒` on the literal "locked" state of a pick (the one permitted emoji, because it's functional shorthand the audience already reads semantically)
+
+No 🎯 🔥 📈 💰 🏆 ⚡ 💎 anywhere, ever. No flag emoji on team names. No confetti on wins. No sad face on losses.
+
+### 7. Numeric formatting
+
+Dry voice is violated instantly by inconsistent numbers. Lock it.
+
+- **Units:** always 2 decimals, always with sign. `+2.73u`, `−3.00u`, `0.00u`. Never `+2.7u`, never `+2.732u`.
+- **ROI:** always signed, one decimal. `+14.3%`, `−8.1%`.
+- **Win rate:** one decimal when shown as percentage. `63.4%`.
+- **Odds:** American format only. `−110`, `+145`. Never decimal (`1.91`), never fractional.
+- **Timestamps:** relative inside 24h (`14 min ago`, `3h ago`), absolute after (`Apr 18, 7:14 PM`). Timezone respected per user setting.
+- **Sample size:** performance numbers on profiles and leaderboards show sample size inline (`63.4% (47 picks)`). On compact surfaces (pick cards, mobile tiles, embeds), sample size is accessible in one tap or hover. Never hidden, always reachable. Performance without a path to sample size is a lie.
+
+### 8. FLEX Score rule
+
+FLEX Score is a derived rating, not an accumulated currency. It is bounded and normalized. It appears on profiles and leaderboards — nowhere else.
+
+- Derived from recent performance, not a sum of actions
+- Posting volume does not increase FLEX Score
+- Bad picks lower it; good picks raise it; dormancy decays it
+- Displayed as a bounded number users read as a rating, not a balance
+
+The old "FLEX Points" framing — earn-on-trade, accumulate, spend — is retired. No accumulation currency, no shop, no spend, no tiers to unlock. One score, earned by being right.
+
+### 9. What the platform never does
+
+- Never uses exclamation points in default register (reserved for the 5 warmth triggers, and even there, used once per message maximum)
+- Never addresses the user by first name in copy ("Welcome back, Marc" is forbidden; "Welcome back" is fine)
+- Never implies urgency it can't back up ("Act now!" / "Don't miss out!")
+- Never apologizes for system events that aren't failures
+- Never asks the user "How are you feeling?" or equivalent
+- Never uses "we" to refer to the platform — **except** in error copy, explicit policy, or FAQ contexts. Example: `We couldn't reach the server. Try again.` is allowed (beats the passive `The server couldn't be reached.`). `We're excited to have you!` is forbidden.
+- Never uses second person in data displays ("Your record: 47-32-3" → "Record: 47-32-3")
+- Never compliments a take, call, thesis, or opinion
+- Never uses a word where a number would communicate faster
+
+### 10. Voice smell test
+
+Before shipping copy, read it aloud. If any of these are true, rewrite:
+
+- Sounds like it came from a bank app
+- Sounds like it came from Duolingo
+- Sounds like it came from a crypto project
+- Sounds like it's trying to be your friend
+- Sounds like it was written by someone who doesn't bet
+- Contains a word the reader would never say out loud in this context
 
 ---
 
