@@ -143,14 +143,10 @@ function renderHeader(){
 function renderGated(d){
   const main = document.getElementById('mainEl');
   let title, body, progress;
-  if(d.reason === 'cohort_forming'){
-    title = 'Cohort still forming.';
-    body = 'The leaderboard opens when three founding tipsters are posting. Apply to be one of them.';
-    progress = (d.approved || 0) + ' of 3 minimum approved';
-  } else if(d.reason === 'insufficient_sample'){
+  if(d.reason === 'insufficient_sample'){
     title = 'Not enough resolved picks yet.';
     body = 'Leaderboard opens when three tipsters have ' + (d.min_picks || 5) + '+ resolved picks each. Ranking on a thin sample is a lie.';
-    progress = (d.qualifying || 0) + ' of 3 tipsters past ' + (d.min_picks || 5) + '-pick threshold · ' + (d.approved || 0) + ' approved total';
+    progress = (d.qualifying || 0) + ' of 3 tipsters past ' + (d.min_picks || 5) + '-pick threshold · ' + (d.active || 0) + ' posting';
   } else {
     title = 'Leaderboard offline.';
     body = 'Check back shortly.';
