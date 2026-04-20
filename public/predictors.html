@@ -147,6 +147,10 @@ a:hover { text-decoration: underline; }
 .lb-table tbody tr.rank-top10 .trader-name { font-size: 15px; }
 .lb-table tbody tr.rank-top10 .pnl-val { font-size: 14px; }
 .rank-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--dim); }
+/* Pinned "YOU" row — user's own rank surfaced at the top of the table */
+.lb-table tbody tr.rank-you { background: linear-gradient(90deg, rgba(201,146,13,0.10) 0%, rgba(201,146,13,0.03) 100%); border-left: 3px solid var(--gold); }
+.lb-table tbody tr.rank-you:hover { background: linear-gradient(90deg, rgba(201,146,13,0.16) 0%, rgba(201,146,13,0.06) 100%); }
+.lb-loadmore-row:hover { background: transparent !important; }
 .trader-cell { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .trader-cell:hover { text-decoration: none; }
 .trader-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--soft); flex-shrink: 0; }
@@ -396,6 +400,10 @@ var currentPeriod='30d';
 var currentPlatform='all';
 var currentCategory='all';
 var lbData=[];
+// Pagination: show 20 by default, expand on demand. Keeps the initial view
+// from being a 50-row wall of scroll and buries the Hall of Fame less.
+var _pageSize=20;
+var _lastTableData=null;
 var allTimeData=null;
 var _mySharpData=null;
 
@@ -646,61 +654,65 @@ function renderPodium(topN){
   }).join('');
 }
 
-function renderTable(data){
-  var body=document.getElementById('lbBody');
-  if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="9"><div class="state-msg">Only top performers shown above</div></td></tr>';return}
-  if(!data.length){body.innerHTML='<tr><td colspan="9"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
-  body.innerHTML=data.map(function(r,idx){
-    var rank=r._displayRank||(idx+4);
-    var dname=r.display_name||r.userName||r.name||'';
-    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
-    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
-    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
-    var initial=dname.charAt(0).toUpperCase();
-    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
-    var vol=r.volume||r.account_value||r.accountValue||0;
-    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
-    var pnlStr=formatPnl(pnl);
-    var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
-    var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
-    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
-    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
-    var uid=escHtml(r.user_id||'');
-    var streak=r.win_streak||0;
-    var streakHtml=streak>=5?'<span class="streak-badge streak-hot">'+streak+'W</span>':streak>0?'<span class="streak-badge">'+streak+'W</span>':'<span class="streak-badge">&mdash;</span>';
-    var platformHtml=(r.platforms||[]).map(function(p){
-      var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
-      return'<span class="platform-pill '+cls+'">'+p+'</span>';
-    }).join(' ');
-    var isTop10=rank<=10;
-    var trClass=isTop10?' rank-top10':'';
-    var sharpScore=r.sharp_score||0;
-    var sharpColor=sharpScore>=70?'var(--green)':sharpScore>=40?'var(--blue)':'var(--muted)';
-    var sharpHtml=sharpScore?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+sharpColor+'">'+sharpScore+'</span>':'<span style="color:var(--muted);font-family:var(--mono);font-size:11px">&mdash;</span>';
-    return'<tr class="'+trClass+'" onclick="window.location=\''+profileUrl+'\'">'+
-      '<td><span class="rank-num">'+rank+'</span></td>'+
-      '<td class="td-trader">'+
-        '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
-          '<div class="trader-avatar">'+initial+'</div>'+
-          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</span>'+
-        '</a>'+
-        '<div class="mobile-stats">'+
-          '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
-          '<span class="mobile-stat">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
-        '</div>'+
-      '</td>'+
-      '<td class="td-pnl"><span class="pnl-val '+pnlCls+'">'+pnlStr+'</span></td>'+
-      '<td class="td-vol"><span class="vol-val">'+formatMoney(vol)+'</span></td>'+
-      '<td class="td-roi"><span class="roi-val '+roiCls+'" style="color:'+(parseFloat(roi)>20?'#c9920d':parseFloat(roi)>10?'#22c55e':parseFloat(roi)>0?'#10b981':'#ef4444')+';font-weight:700">'+(pnl>=0?'+':'')+roi+'%</span></td>'+
-      '<td class="td-streak">'+streakHtml+'</td>'+
-      '<td class="td-platform">'+platformHtml+'</td>'+
-      '<td class="td-sharp">'+sharpHtml+'</td>'+
-      '<td class="td-actions">'+
-        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-table">Copy</a>'+
-        '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
-      '</td>'+
-    '</tr>';
-  }).join('');
+function _renderTableRow(r,idx,isPinned){
+  var rank=r._displayRank||(idx+4);
+  var dname=r.display_name||r.userName||r.name||'';
+  if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
+  if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
+  if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
+  var initial=dname.charAt(0).toUpperCase();
+  var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
+  var vol=r.volume||r.account_value||r.accountValue||0;
+  var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
+  var pnlStr=formatPnl(pnl);
+  var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
+  var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
+  var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
+  var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+  var uid=escHtml(r.user_id||'');
+  var streak=r.win_streak||0;
+  var streakHtml=streak>=5?'<span class="streak-badge streak-hot">'+streak+'W</span>':streak>0?'<span class="streak-badge">'+streak+'W</span>':'<span class="streak-badge">&mdash;</span>';
+  var platformHtml=(r.platforms||[]).map(function(p){
+    var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
+    return'<span class="platform-pill '+cls+'">'+p+'</span>';
+  }).join(' ');
+  var isTop10=rank<=10;
+  var trClass=isTop10?' rank-top10':'';
+  if(isPinned)trClass+=' rank-you';
+  var sharpScore=r.sharp_score||0;
+  var sharpColor=sharpScore>=70?'var(--green)':sharpScore>=40?'var(--blue)':'var(--muted)';
+  var sharpHtml=sharpScore?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+sharpColor+'">'+sharpScore+'</span>':'<span style="color:var(--muted);font-family:var(--mono);font-size:11px">&mdash;</span>';
+  var rankCell=isPinned
+    ? '<td><span class="rank-num" style="color:var(--gold)">#'+rank+'</span><span style="display:block;font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.5px;margin-top:2px">YOU</span></td>'
+    : '<td><span class="rank-num">'+rank+'</span></td>';
+  return'<tr class="'+trClass+'" onclick="window.location=\''+profileUrl+'\'">'+
+    rankCell+
+    '<td class="td-trader">'+
+      '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
+        '<div class="trader-avatar">'+initial+'</div>'+
+        '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</span>'+
+      '</a>'+
+      '<div class="mobile-stats">'+
+        '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
+        '<span class="mobile-stat">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
+      '</div>'+
+    '</td>'+
+    '<td class="td-pnl"><span class="pnl-val '+pnlCls+'">'+pnlStr+'</span></td>'+
+    '<td class="td-vol"><span class="vol-val">'+formatMoney(vol)+'</span></td>'+
+    '<td class="td-roi"><span class="roi-val '+roiCls+'" style="color:'+(parseFloat(roi)>20?'#c9920d':parseFloat(roi)>10?'#22c55e':parseFloat(roi)>0?'#10b981':'#ef4444')+';font-weight:700">'+(pnl>=0?'+':'')+roi+'%</span></td>'+
+    '<td class="td-streak">'+streakHtml+'</td>'+
+    '<td class="td-platform">'+platformHtml+'</td>'+
+    '<td class="td-sharp">'+sharpHtml+'</td>'+
+    '<td class="td-actions">'+
+      '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-table">Copy</a>'+
+      '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
+    '</td>'+
+  '</tr>';
+}
+
+function loadMorePredictors(){
+  _pageSize+=30;
+  if(_lastTableData)renderTable(_lastTableData);
 }
 
 function renderHallOfFame(){
