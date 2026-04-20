@@ -15026,6 +15026,42 @@ app.post('/api/picks', requireAuth, async (req, res) => {
 });
 
 // GET /api/picks/:id — public single-pick read, enriched with game + team info
+// GET /api/games/today — scheduled games available for pick composition.
+//
+// Returns games whose starts_at is in the next 36h window (covers late
+// tip-offs that roll past midnight UTC) with status='scheduled'. Joined
+// with sport_teams so the composer can render "Lakers @ Warriors" without
+// a second lookup. Newest tip-off last, so the soonest game is at the top.
+//
+// Optional ?sport=nba filter (future-proof; only NBA ingested today).
+//
+// Public endpoint — the composer needs this before the auth check fires
+// (UI renders the game picker before the pick is composed). The tipster
+// gate lives on POST /api/picks, not here.
+app.get('/api/games/today', async (req, res) => {
+  try {
+    const sport = req.query.sport || 'nba';
+    const rows = await dbQuery(
+      `SELECT g.id, g.sport, g.starts_at, g.status,
+              home.id AS home_id, home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
+              away.id AS away_id, away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
+         FROM sport_games g
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE g.sport = $1
+          AND g.status = 'scheduled'
+          AND g.starts_at BETWEEN now() AND (now() + INTERVAL '36 hours')
+        ORDER BY g.starts_at ASC
+        LIMIT 50`,
+      [sport]
+    );
+    res.json({ games: rows, sport });
+  } catch (err) {
+    console.error('[games-today] error:', err.message);
+    res.status(500).json({ error: 'Failed to load schedule' });
+  }
+});
+
 app.get('/api/picks/:id', async (req, res) => {
   try {
     const id = req.params.id;
