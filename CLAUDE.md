@@ -19,7 +19,7 @@ When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy ch
 5. **What's the identity attachment?** Every FLEX point, every take with a CORRECT badge, every tier upgrade is something the user can't get back once they leave. Sunk identity = retention.
 
 **Concrete mechanics already in the codebase** (keep compounding these, don't regress):
-- FLEX Points (earn on trade) — the rep currency
+- FLEX Score — domain-agnostic composite tied to real performance (accuracy + ROI + sample + dog rate + recency). Replaces the old "FLEX Points as rep currency" framing. One number, earned by being right, visible everywhere. No accumulation currency, no spend, no shop. See Voice & Posture below for why.
 - Streaks + streak-warning emails (loss aversion)
 - Tier ladder (Building → TRADER → PROFITABLE → SHARP → SHARK → WHALE → FLEXIN)
 - Take reactions + reaction-gated comments (forces commitment, creates feed)
@@ -36,6 +36,48 @@ When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy ch
 - Features that only pay off monthly/quarterly. Aim for daily dopamine, not annual ROI.
 
 **When in doubt, ask:** would a degenerate Polymarket trader check this 5x a day? If the answer is no, either add a hook or don't ship it.
+
+---
+
+## 🎙️ VOICE & POSTURE (read before writing any user-facing copy)
+
+Voice is load-bearing. Every copy decision — microcopy, notifications, empty states, email subject lines, error messages — compounds into how the product feels. Locked answers here so every subsequent line of copy arrives in voice the first time.
+
+**Author persona.** A sharp who made it, stopped posting publicly, and now runs the back room where real bettors hang out. Dry, numerate, has seen it all, respects the craft, doesn't suffer fools. Never condescending, never meme-of-the-week. Reads closer to a WSJ gambling columnist who's also a degen than to Barstool or Duolingo.
+
+**Four postures, locked.**
+
+1. **Dry by default, warm only when earned.** 90/10 rule. Default tone is factual + slightly approving. Reserve warmth for moments that earned it — first locked pick, comeback after a losing streak, 100th week posting. No exclamation marks on routine events. The reader does the emotional work.
+
+2. **Side with survivors.** Loss-followed-by-more-posting is status-conferring. The capper who ghosts at 0-4 loses the badge the survivor earns. Never hide losses; make surviving them visible and respected. Concrete surfaces: "Posted every week, 12 weeks" chip. "Survived a −12u week" chip. Both are more valuable than a hot streak.
+
+3. **Community performs the jokes.** Platform humor appears only in loading states, empty states, 404/500 copy. Everywhere else the platform is numerate and neutral; users perform the comedy in take fields, quote-picks, reactions. Platform sets the stage, users perform on it. If the platform tries humor and misses, it's cringe forever; if a user misses, it's just them.
+
+4. **Never condescending, never meme-cycle.** Assume the reader knows spreads, odds, units, CLV, fade, dog, juice. No glossaries in microcopy. No "fr fr," no all-lowercase, no Duolingo mascot energy.
+
+**Three hard rules.**
+
+- **No XP, coins, badges-for-badges, or levels.** Every gamification layer bolted onto a truth product dilutes the truth signal. FLEX Points (as accumulation currency) is killed — keep only **FLEX Score**, a unified composite tied to real performance. No spend, no shop, no quests.
+- **Calibration scores stay off non-tipster/non-creator profiles.** Surfacing calibration on every user pressures casuals into gamed behavior that corrupts the data. Keep the metric for tipsters, creators, whales.
+- **Playful surfaces gate on critical mass.** Share cards, roast cards, weekly recaps, "fade the public" feeds — all require real data. Don't fire them on a user with 3 picks. Empty playfulness reads as desperation.
+
+**Worked examples.**
+
+| Surface | ❌ Don't | ✅ Do |
+|---|---|---|
+| Empty picks feed | "No picks yet — be the first!" | "Nothing locked tonight. Come back at tip-off." |
+| First locked pick | "Congrats on your first pick! 🎉" | "Locked. Record starts now." |
+| 0-5 week email | "Don't give up! Next week will be better." | "You're 0 for 5. Everyone can see. Respect for staying on the board." |
+| Tipster approved | "Welcome to HYPERFLEX Picks! 🚀" | "You're in. Record starts on your next pick." |
+| Rejected application | "Unfortunately we could not approve your application." | "Not this cohort. Apply again in 30 days — we read every one." |
+| Server error | "Oops! Something went wrong." | "Our end. Try again in a minute." |
+| Pick graded W | "🎉 BIG WIN! +2.73u" | "Pick landed. +2.73u." |
+| Pick graded L | "Tough one. Better luck next time." | "Pick missed. −3u. On to the next." |
+
+**Vocabulary — prefer:** units, lock, cover, push, grade, receipt, fade, dog, juice, closing line, tip-off, slate.
+**Vocabulary — avoid:** stake (book-loaded), congrats, winner, champion, VIP, exclusive, game-changer, unleash, journey, community (overused), family.
+
+**When you're unsure:** re-read as the author persona. Would that person send this exact string? If it feels too warm, it is. If it feels too snarky, it is. If it feels invisible, you nailed it.
 
 ---
 
