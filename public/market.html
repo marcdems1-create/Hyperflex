@@ -3159,11 +3159,27 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
   }
   if (!window.ethereum) throw new Error('MetaMask required');
 
-  var provider = new ethers.BrowserProvider(window.ethereum);
-  var signer   = await provider.getSigner();
+  // Reuse the same cached signer the rest of the trade flow uses. Creating
+  // a fresh BrowserProvider here was producing MetaMask {code:-32006,
+  // "Unauthorized"} when called right after executeTrade already held a
+  // signature request open via HFXWallet — MetaMask treats two concurrent
+  // provider sessions from the same tab as conflicting permission
+  // contexts. HFXWallet caches + serializes, and its is32002Error path
+  // handles the EIP-1193 race.
+  var walletCtx;
+  try {
+    walletCtx = await HFXWallet.getSigner();
+  } catch (walletErr) {
+    if (HFXWallet.is32002Error && HFXWallet.is32002Error(walletErr)) {
+      HFXWallet.invalidate();
+      throw new Error('MetaMask has another request pending — open the extension, dismiss any popups, then try again.');
+    }
+    throw walletErr;
+  }
+  var signer = walletCtx.signer || walletCtx;
 
   // Sanity: the connected EOA must match the one tied to this proxy.
-  var connected = (await signer.getAddress()).toLowerCase();
+  var connected = String(walletCtx.address || (await signer.getAddress())).toLowerCase();
   if (connected !== eoaAddr.toLowerCase()) {
     throw new Error('Connected wallet (' + connected.slice(0,8) + '…) does not match account on file (' + eoaAddr.slice(0,8) + '…)');
   }
