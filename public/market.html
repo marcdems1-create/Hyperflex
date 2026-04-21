@@ -4640,51 +4640,52 @@ async function executeTrade() {
       return;
     }
 
-    // V2 convention flip for SELL: in V1, SELL orders put shares in
-    // makerAmount and USDC in takerAmount. V2 unified both sides so
-    // makerAmount is ALWAYS the collateral (USDC/pUSD) and SIDE=1 tells
-    // the matcher it's a sell. V2 rejects with:
-    //   "invalid amounts, the sell orders maker amount supports a max
-    //    accuracy of 2 decimals, taker amount a max of 4 decimals"
-    // — i.e. V2 wants maker=USDC (2 dec), taker=shares (4 dec) even on
-    // sells. Swap the two so the rest of the flow (decimal caps, struct
-    // build, sig) sees the V2-native layout.
+    // V2 kept V1's SELL maker/taker SEMANTICS (maker=shares, taker=USDC)
+    // — confirmed empirically: swapping maker↔taker on V2 SELL produced
+    // {"error":"invalid price, price must be greater than 0 and less
+    // than 1"}, meaning V2 still computes price as taker/maker for SELL.
+    // What V2 DID change is the decimal precision caps:
+    //   V1 SELL: maker (shares) ≤ 4 dec,  taker (USDC) ≤ 2 dec
+    //   V2 SELL: maker (shares) ≤ 2 dec,  taker (USDC) ≤ 4 dec
+    // Same field roles, flipped precision allowance. No struct swap
+    // needed — just adjust the caps below.
     var _preV2ClobVersion = isClobV2Enabled() ? 2 : 1;
-    if (_preV2ClobVersion === 2 && clobSide === 'SELL') {
-      var _swap = rawMakerAmt;
-      rawMakerAmt = rawTakerAmt;  // USDC (shares × price)
-      rawTakerAmt = _swap;         // shares
-    }
 
     // Final safety net: cap decimals using string truncation so no float-drift
     // noise (e.g. 28.999200000000003 masquerading as 28.9992) can sneak past
     // into parseUnits and trigger CLOB 400 "invalid amounts".
     //
-    //   V1 SELL: maker = shares (size decimals), taker = USDC (amount decimals)
-    //   V2 SELL: maker = USDC  (amount decimals), taker = shares (size decimals)
-    //   BUY    : maker = USDC  (amount decimals), taker = shares (size decimals)
+    //   BUY    : maker = USDC,   taker = shares  (2 dec / 4 dec for both V1+V2)
+    //   V1 SELL: maker = shares, taker = USDC    (4 dec / 2 dec)
+    //   V2 SELL: maker = shares, taker = USDC    (2 dec / 4 dec — flipped caps)
     //
     // Market (FOK) orders have HARDCODED decimal caps — not tick-driven — so
     // use the 2/4 pair explicitly instead of roundConfig.
     if (isMarketOrder) {
-      if (clobSide === 'BUY' || _preV2ClobVersion === 2) {
-        // Both BUY and V2-SELL: maker=USDC 2dec, taker=shares 4dec
-        rawMakerAmt = capDecimals(rawMakerAmt, 2);
-        rawTakerAmt = capDecimals(rawTakerAmt, 4);
+      if (clobSide === 'BUY') {
+        rawMakerAmt = capDecimals(rawMakerAmt, 2);  // USDC
+        rawTakerAmt = capDecimals(rawTakerAmt, 4);  // shares
+      } else if (_preV2ClobVersion === 2) {
+        // V2 SELL — caps flipped vs V1
+        rawMakerAmt = capDecimals(rawMakerAmt, 2);  // shares (was 4 in V1)
+        rawTakerAmt = capDecimals(rawTakerAmt, 4);  // USDC   (was 2 in V1)
       } else {
-        // V1 SELL: maker=shares 4dec, taker=USDC 2dec
-        rawMakerAmt = capDecimals(rawMakerAmt, 4);
-        rawTakerAmt = capDecimals(rawTakerAmt, 2);
+        // V1 SELL
+        rawMakerAmt = capDecimals(rawMakerAmt, 4);  // shares
+        rawTakerAmt = capDecimals(rawTakerAmt, 2);  // USDC
       }
     } else {
-      if (clobSide === 'BUY' || _preV2ClobVersion === 2) {
-        // BUY (both V1+V2) and V2-SELL: maker=USDC, taker=shares
-        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);
-        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);
+      if (clobSide === 'BUY') {
+        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);  // USDC
+        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);    // shares
+      } else if (_preV2ClobVersion === 2) {
+        // V2 SELL limit — same precision flip as FOK path
+        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);  // shares (using amount=2 dec)
+        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);    // USDC   (using size=4 dec)
       } else {
-        // V1 SELL: maker=shares, taker=USDC
-        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.size);
-        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.amount);
+        // V1 SELL
+        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.size);    // shares
+        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.amount);  // USDC
       }
     }
 
