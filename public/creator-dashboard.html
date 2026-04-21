@@ -21891,7 +21891,7 @@ async function confirmTrade() {
     //   2. window.HF_USE_CLOB_V2 = true|false
     //   3. Sticky localStorage hf_use_clob_v2
     //   4. Date-gated default — V2 from 2026-04-22 00:00 UTC onward
-    const _V2_CUTOVER_MS_DASH = Date.UTC(2026, 3, 22, 0, 0, 0);
+    const _V2_CUTOVER_MS_DASH = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21
     let useClobV2 = false;
     if (typeof window !== 'undefined') {
       try {

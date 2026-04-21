@@ -2664,12 +2664,13 @@ var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c09
 //                                Survives page navigation, doesn't require URL or DevTools
 //                                each time. URL override still wins so you can pin V1
 //                                temporarily even with the flag set.
-//   4. Date-gated default      — V2 from 2026-04-22 00:00 UTC onward, V1 before
-//
-// Layer 1 also writes through to layer 3 below — opting in via URL once
-// makes the choice sticky. Lets a tester click ?clob_v2=1 a single time
-// and have every subsequent navigation default to V2 without re-typing.
-var V2_CUTOVER_MS = Date.UTC(2026, 3, 22, 0, 0, 0);  // April 22 2026 00:00 UTC
+//   4. Date-gated default      — V2 active. Cutover was 2026-04-21. Live test passed
+//                                2026-04-20, Polymarket Safe v1.3.0 fork verified
+//                                EIP-712 compatible. No reason to gate any further;
+//                                ?clob_v2=0 + localStorage are the rollback path if
+//                                an edge case bites in the next 24h before Polymarket's
+//                                own April 22 00:00 UTC V1 shutoff.
+var V2_CUTOVER_MS = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21
 function isClobV2Enabled() {
   if (typeof window === 'undefined') return Date.now() >= V2_CUTOVER_MS;
   // Layer 1: URL override (and persist to layer 3 for next nav)
@@ -2698,39 +2699,22 @@ function isClobV2Enabled() {
   return Date.now() >= V2_CUTOVER_MS;
 }
 
-// V2 cutover countdown banner. Renders only on V1 (the V2 path doesn't need
-// the warning). Auto-hides after April 22 cutover so it doesn't sit there
-// stale once V1 is fully dead.
+// V2 cutover banner. With V2 now the default, this only fires for users
+// who explicitly opted out of V2 (?clob_v2=0 or sticky localStorage='0').
+// Tells them they're on the soon-to-be-dead V1 path and how to get back
+// onto V2 before Polymarket's own April 22 00:00 UTC shutoff.
 function injectV2CutoverBanner() {
   var el = document.getElementById('v2CutoverBanner');
   if (!el) return;
   if (isClobV2Enabled()) { el.style.display = 'none'; return; }
-  var cutoverMs = new Date('2026-04-22T00:00:00Z').getTime();
-  var diffMs = cutoverMs - Date.now();
-  var days = Math.ceil(diffMs / (24 * 3600 * 1000));
-  // Hide entirely once we're 7+ days past the cutover (V1 is dead, banner
-  // is irrelevant). The default flag flip should make this near-zero traffic.
-  if (days < -7) { el.style.display = 'none'; return; }
 
-  var tone, headline, body;
-  if (days > 3) {
-    tone = 'info';
-    headline = 'Polymarket V2 cutover in ' + days + ' days.';
-    body = 'V1 contracts shut off April 22. Add ?clob_v2=1 to test the new flow before then.';
-  } else if (days >= 0) {
-    tone = 'warn';
-    headline = 'V2 cutover in ' + (days === 0 ? 'hours' : days + ' day' + (days === 1 ? '' : 's')) + '.';
-    body = 'After April 22, V1 trades will fail at Polymarket. Switch to V2 with ?clob_v2=1 now.';
-  } else {
-    tone = 'urgent';
-    headline = 'V1 IS DEAD.';
-    body = 'Polymarket cut V1 over ' + Math.abs(days) + ' day(s) ago. Trades on this page may fail until V2 is wired as default. Append ?clob_v2=1 to the URL to force V2.';
-  }
-  var bg = tone === 'urgent' ? 'rgba(255,77,106,0.10)' : tone === 'warn' ? 'rgba(245,166,35,0.10)' : 'rgba(77,159,255,0.08)';
-  var border = tone === 'urgent' ? 'rgba(255,77,106,0.35)' : tone === 'warn' ? 'rgba(245,166,35,0.35)' : 'rgba(77,159,255,0.25)';
-  var color = tone === 'urgent' ? '#ff4d6a' : tone === 'warn' ? '#f5a623' : '#4d9fff';
-  el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.5;background:' + bg + ';border:1px solid ' + border + ';color:#f0f0f5';
-  el.innerHTML = '<div style="font-weight:700;color:' + color + ';margin-bottom:2px">' + headline + '</div><div style="color:#b4b4c4">' + body + '</div>';
+  // Only V1 holdouts get here. Always urgent — they've actively pinned V1
+  // and Polymarket is about to turn it off.
+  el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.5;background:rgba(255,77,106,0.10);border:1px solid rgba(255,77,106,0.35);color:#f0f0f5';
+  el.innerHTML =
+    '<div style="font-weight:700;color:#ff4d6a;margin-bottom:2px">You’re pinned to CLOB V1.</div>' +
+    '<div style="color:#b4b4c4">Polymarket shuts V1 off April 22 00:00 UTC. ' +
+    '<a href="?clob_v2=1" style="color:#f5a623;text-decoration:underline">Switch back to V2</a> to keep trading.</div>';
 }
 // Run after DOM paints so the #v2CutoverBanner anchor exists.
 if (typeof document !== 'undefined') {
