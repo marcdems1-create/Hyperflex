@@ -2774,7 +2774,14 @@ var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c09
 //                                ?clob_v2=0 + localStorage are the rollback path if
 //                                an edge case bites in the next 24h before Polymarket's
 //                                own April 22 00:00 UTC V1 shutoff.
-var V2_CUTOVER_MS = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21 (feeRateBps wire-compat fix included)
+// Rolled back from Apr 21 → Apr 22. Pre-cutover V2 submission kept failing
+// against clob.polymarket.com (V1 parser builds a V1 hash and returns
+// {"error":"invalid signature"} against a V2-signed struct). The
+// clob-v2.polymarket.com dedicated host is referenced in internal docs
+// but unverified as accepting orders pre-cutover. Safer to default V1
+// tonight and let V2 flip on its own at Polymarket's canonical cutover.
+// Users can still opt in with ?clob_v2=1 for testing the V2 path.
+var V2_CUTOVER_MS = Date.UTC(2026, 3, 22, 0, 0, 0);  // midnight UTC Apr 22 (Polymarket canonical cutover)
 function isClobV2Enabled() {
   if (typeof window === 'undefined') return Date.now() >= V2_CUTOVER_MS;
   // Layer 1: URL override (and persist to layer 3 for next nav)
