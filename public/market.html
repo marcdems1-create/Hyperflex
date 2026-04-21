@@ -3169,10 +3169,15 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
   }
 
   // Read current Safe nonce (incremented on every successful execTransaction).
-  var safe = new ethers.Contract(proxyAddr, SAFE_ABI, signer);
+  // Use the public RPC for this view call, not the MetaMask signer — MetaMask
+  // was returning {code:-32006, message:"Unauthorized"} on eth_call in some
+  // session states (wallet locked, account switched, site permission lapsed).
+  // The public RPC doesn't need wallet auth for a read.
   var nonce;
   try {
-    nonce = await safe.nonce();
+    var readProvider = await getPublicProvider();
+    var safeReader = new ethers.Contract(proxyAddr, SAFE_ABI, readProvider);
+    nonce = await safeReader.nonce();
   } catch (e) {
     throw new Error('Could not read Safe nonce — proxy may not be deployed: ' + (e.message || e));
   }
