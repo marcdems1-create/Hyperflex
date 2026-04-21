@@ -3286,16 +3286,37 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     }
     console.log('[safe] submitting direct execTransaction | gasLimit=' + gasEstimate);
 
-    var tx = await signer.sendTransaction({
-      to: proxyAddr,
-      data: calldataExec,
-      value: 0n,
-      gasLimit: gasEstimate
-    });
-    console.log('[safe] direct execTransaction submitted:', tx.hash);
-    var receipt2 = await tx.wait();
-    console.log('[safe] direct execTransaction mined:', (receipt2 && receipt2.hash) || tx.hash, 'status=' + (receipt2 && receipt2.status));
-    return receipt2;
+    // Bypass ethers' signer.sendTransaction — it internally calls
+    // eth_blockNumber through the wallet's provider, and that was hitting
+    // MetaMask's broken Polygon RPC with a 401. Go straight to MetaMask
+    // via window.ethereum.request for a single-shot eth_sendTransaction.
+    // MetaMask signs locally and broadcasts through its configured RPC;
+    // if the broadcast itself 401s, we catch and surface it below.
+    var txHash;
+    try {
+      txHash = await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: eoaAddr,
+          to: proxyAddr,
+          data: calldataExec,
+          value: '0x0',
+          gas: '0x' + gasEstimate.toString(16)
+        }]
+      });
+    } catch (sendErr) {
+      // Rethrow with original error preserved so the 401 detector below
+      // can walk it.
+      throw sendErr;
+    }
+    console.log('[safe] direct execTransaction submitted:', txHash);
+
+    // Wait for receipt via our public provider (NOT MetaMask's — same
+    // 401 issue would affect polling).
+    var waitProvider = await getPublicProvider();
+    var receipt2 = await waitProvider.waitForTransaction(txHash, 1, 120000);
+    console.log('[safe] direct execTransaction mined:', txHash, 'status=' + (receipt2 && receipt2.status));
+    return receipt2 || { transactionHash: txHash };
   } catch (e) {
     var msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
     // Ethers v6 wraps multi-attempt failures in a "coalesce" error whose
@@ -3307,6 +3328,11 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
       return x ? { code: x.code, message: x.message, httpStatus: x.data && x.data.httpStatus } : null;
     }));
     console.warn('[safe] direct exec error chain:', innerJson);
+    // Ethers v6 sometimes serializes the inner MetaMask error into the
+    // outer wrapper's message as a string (so e.errors is empty but the
+    // -32006/httpStatus:401 live inside e.message). Walk structured
+    // fields first, then fall back to a regex over the serialized form.
+    var serialized = JSON.stringify(errChain) + ' ' + String(e && e.message || '');
     var is401 = errChain.some(function(x) {
       if (!x) return false;
       if (x.code === -32006) return true;
@@ -3314,7 +3340,9 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
       var xmsg = String(x.shortMessage || x.message || '');
       if (/unauthorized/i.test(xmsg)) return true;
       return false;
-    });
+    }) || /"code"\s*:\s*-32006/.test(serialized)
+      || /"httpStatus"\s*:\s*401/.test(serialized)
+      || /unauthorized/i.test(serialized);
     if (is401) {
       throw new Error(
         'MetaMask\'s Polygon RPC returned 401. Open MetaMask → Settings → ' +
