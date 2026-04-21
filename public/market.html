@@ -3239,7 +3239,12 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
 
   // ── Path 2: direct execTransaction (EOA pays MATIC) ──────────────────────
   try {
-    var tx = await safe.execTransaction(
+    // Rebind the Safe to the MetaMask signer for the write. We read the
+    // nonce earlier through the public RPC (no wallet auth needed), but
+    // execTransaction is a state-changing call and has to come from the
+    // EOA owner via the wallet.
+    var safeWriter = new ethers.Contract(proxyAddr, SAFE_ABI, signer);
+    var tx = await safeWriter.execTransaction(
       safeTx.to, safeTx.value, safeTx.data, safeTx.operation,
       safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice,
       safeTx.gasToken, safeTx.refundReceiver, sig
@@ -3256,7 +3261,7 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     if (e && (e.code === 'ACTION_REJECTED' || e.code === 4001)) {
       throw new Error('Signature rejected in MetaMask — wrap cancelled.');
     }
-    throw new Error('Wrap failed: ' + msg);
+    throw new Error('SafeTx failed: ' + msg);
   }
 }
 
