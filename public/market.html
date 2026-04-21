@@ -1813,6 +1813,19 @@ async function setMaxShares() {
     }
   }
   console.log('[max] tokenId', (currentTokenId || '').slice(0, 12) + '… cond', String(_market && _market.conditionId || '').slice(0, 10) + '… side', _tradeSide, '→', maxShares, 'shares');
+  // Verbose diagnostic when we land on 0 — dump what's in the cache so we
+  // can see why none of the three match strategies hit. Fires only on the
+  // failure path so it doesn't clutter normal logs.
+  if (maxShares === 0 && _userPositions && Object.keys(_userPositions).length) {
+    console.log('[max-debug] looking for tokenId=', currentTokenId);
+    console.log('[max-debug] looking for cond=', String(_market && _market.conditionId || ''), 'side=', _tradeSide);
+    console.log('[max-debug] cache keys:', Object.keys(_userPositions));
+    Object.keys(_userPositions).forEach(function(k) {
+      var p = _userPositions[k];
+      if (!p) return;
+      console.log('[max-debug]   key=' + k.slice(0, 18) + '… size=' + p.size + ' side=' + (p.side || p.outcome) + ' cond=' + String(p.conditionId || '').slice(0, 18) + '…');
+    });
+  }
 
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var priceFrac = price / 100;
