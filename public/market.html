@@ -1642,12 +1642,20 @@ function setTradeMode(mode) {
   if (mode === 'sell') {
     if (label) label.textContent = 'Amount (USD)';
     if (maxBtn) maxBtn.style.display = 'inline';
+    // Sell mode: percentages of the current position, not flat $ amounts.
+    // 25/50/75/100 because "what fraction of my position" is the meaningful
+    // unit when closing — flat $50 is meaningless when the position is
+    // worth $27.
     if (quickBtns) quickBtns.innerHTML =
-      '<button class="trade-quick-btn" onclick="setAmount(10)">+$10</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>';
-    if (input) { input.value = '0'; input.step = '1'; }
+      '<button class="trade-quick-btn" onclick="setSellPct(25)">25%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(50)">50%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(75)">75%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(100)">100%</button>';
+    if (input) { input.step = '1'; }
+    // Auto-prefill with the user's max so they can confirm with one click.
+    // setMaxShares is async (may need to fetch positions); fire-and-forget,
+    // it overwrites the input when it settles.
+    try { setMaxShares(); } catch (e) {}
   } else {
     if (label) label.textContent = 'Amount (USD)';
     if (maxBtn) maxBtn.style.display = 'none';
@@ -1716,6 +1724,26 @@ function updatePricePills() {
   container.innerHTML = html;
 }
 
+// Set the Sell amount as a percentage of the user's current position. Calls
+// setMaxShares first to compute the 100% value, then scales. Async because
+// the position cache may need to load on first call. Each click recomputes
+// from scratch (rather than scaling the visible field) so 25% always means
+// 25% of the position, not 25% of whatever's already in the box.
+async function setSellPct(pct) {
+  await setMaxShares();
+  var input = document.getElementById('tradeAmount');
+  if (!input) return;
+  var max = parseFloat(input.value || 0);
+  if (!(max > 0)) return;
+  var v = (max * pct) / 100;
+  input.value = v.toFixed(2);
+  // Clear the pending-max-shares hint since we're below max — executeTrade
+  // should re-derive shares from the new USD amount, not stamp the full
+  // position size onto a partial sell.
+  if (pct < 100) _pendingMaxShares = null;
+  updateTradeCalc();
+}
+
 function setAmount(a) {
   var cur = parseFloat(document.getElementById('tradeAmount').value) || 0;
   document.getElementById('tradeAmount').value = cur + a;
@@ -1755,12 +1783,36 @@ async function setMaxShares() {
     var tokenIndex = _tradeSide === 'yes' ? 0 : 1;
     currentTokenId = String(tids[tokenIndex] || tids[0] || '');
   } catch (e) {}
-  if (currentTokenId && _userPositions && typeof _userPositions === 'object') {
-    // _userPositions keys are tokenIds, sometimes lowercased — match flexibly.
-    var pos = _userPositions[currentTokenId] || _userPositions[currentTokenId.toLowerCase()];
-    if (pos && pos.size > 0) maxShares = pos.size;
+  // Three-strategy match — tokenId formats vary between the cache writer
+  // (data-api stores as lowercased asset hex) and the market metadata
+  // (clobTokenIds is decimal-stringified uint256 in Polymarket's gamma feed).
+  // Direct token-id match is the cheap path; the conditionId+side fallback
+  // catches multi-outcome markets where formats happen to differ.
+  if (_userPositions && typeof _userPositions === 'object') {
+    // (1) direct tokenId match
+    if (currentTokenId) {
+      var pos = _userPositions[currentTokenId] || _userPositions[currentTokenId.toLowerCase()];
+      if (pos && pos.size > 0) maxShares = pos.size;
+    }
+    // (2) fallback: conditionId + side match. Each outcome on a multi-outcome
+    // market has its own conditionId, so this uniquely identifies the row.
+    if (maxShares === 0) {
+      var wantCondition = String(_market && _market.conditionId || '').toLowerCase();
+      var wantSide = _tradeSide === 'yes' ? 'YES' : 'NO';
+      var keys = Object.keys(_userPositions);
+      for (var i = 0; i < keys.length; i++) {
+        var p2 = _userPositions[keys[i]];
+        if (!p2 || !(p2.size > 0)) continue;
+        var posCond = String(p2.conditionId || '').toLowerCase();
+        var posSide = String(p2.side || p2.outcome || '').toUpperCase();
+        if (posCond === wantCondition && posSide === wantSide) {
+          maxShares = p2.size;
+          break;
+        }
+      }
+    }
   }
-  console.log('[max] Outcome tokenId', currentTokenId.slice(0, 12) + '… side', _tradeSide, '→', maxShares, 'shares');
+  console.log('[max] tokenId', (currentTokenId || '').slice(0, 12) + '… cond', String(_market && _market.conditionId || '').slice(0, 10) + '… side', _tradeSide, '→', maxShares, 'shares');
 
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var priceFrac = price / 100;
@@ -2508,10 +2560,10 @@ function sellPositionRow(outcomeIdx, sideIdx) {
     if (label) label.textContent = 'Amount (USD)';
     if (maxBtn) maxBtn.style.display = 'inline';
     if (quickBtns) quickBtns.innerHTML =
-      '<button class="trade-quick-btn" onclick="setAmount(10)">+$10</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
-      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>';
+      '<button class="trade-quick-btn" onclick="setSellPct(25)">25%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(50)">50%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(75)">75%</button>' +
+      '<button class="trade-quick-btn" onclick="setSellPct(100)">100%</button>';
   } catch (e) {}
   // 5. Prefill Max shares so the user can confirm with one click.
   try { setMaxShares(); } catch (e) {}
