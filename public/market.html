@@ -3260,22 +3260,62 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     // execTransaction is a state-changing call and has to come from the
     // EOA owner via the wallet.
     var safeWriter = new ethers.Contract(proxyAddr, SAFE_ABI, signer);
-    var tx = await safeWriter.execTransaction(
+
+    // Encode the call + estimate gas through our PUBLIC RPC, not MetaMask's.
+    // MetaMask's configured Polygon RPC has been returning:
+    //   {code:-32006, data:{httpStatus:401}, message:"Unauthorized"}
+    // on eth_estimateGas for some users (bundled Infura key out of quota,
+    // custom RPC with stale auth token). Pre-computing gas and passing an
+    // explicit gasLimit skips ethers v6's auto-estimate, so the tx goes
+    // straight to eth_sendTransaction without touching the broken path.
+    var calldataExec = safeWriter.interface.encodeFunctionData('execTransaction', [
       safeTx.to, safeTx.value, safeTx.data, safeTx.operation,
       safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice,
       safeTx.gasToken, safeTx.refundReceiver, sig
-    );
+    ]);
+    var estProvider = await getPublicProvider();
+    var gasEstimate;
+    try {
+      gasEstimate = await estProvider.estimateGas({
+        to: proxyAddr, from: eoaAddr, data: calldataExec, value: 0n
+      });
+      gasEstimate = (gasEstimate * 130n) / 100n;  // 30% headroom
+    } catch (estErr) {
+      console.warn('[safe] public-RPC gas estimate failed, using 500k fallback:', estErr.message);
+      gasEstimate = 500000n;
+    }
+    console.log('[safe] submitting direct execTransaction | gasLimit=' + gasEstimate);
+
+    var tx = await signer.sendTransaction({
+      to: proxyAddr,
+      data: calldataExec,
+      value: 0n,
+      gasLimit: gasEstimate
+    });
     console.log('[safe] direct execTransaction submitted:', tx.hash);
     var receipt2 = await tx.wait();
-    console.log('[safe] direct execTransaction mined:', receipt2.transactionHash || tx.hash, 'status=' + receipt2.status);
+    console.log('[safe] direct execTransaction mined:', (receipt2 && receipt2.hash) || tx.hash, 'status=' + (receipt2 && receipt2.status));
     return receipt2;
   } catch (e) {
     var msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
+    // -32006 / Unauthorized with httpStatus:401 is MetaMask's Polygon RPC
+    // returning 401. User can fix this in MetaMask without touching our
+    // code — surface it clearly.
+    var is401 = (e && e.code === -32006) ||
+      /unauthorized/i.test(msg) ||
+      (e && e.data && e.data.httpStatus === 401);
+    if (is401) {
+      throw new Error(
+        'MetaMask\'s Polygon RPC returned 401. Open MetaMask → Settings → ' +
+        'Networks → Polygon → edit the RPC URL to https://polygon-rpc.com ' +
+        '(or https://polygon-bor-rpc.publicnode.com), save, then try again.'
+      );
+    }
     if (e && (e.code === 'INSUFFICIENT_FUNDS' || /insufficient funds/i.test(msg))) {
       throw new Error('Polymarket relayer rejected this tx and your wallet has no MATIC for the fallback. Bridge ~$1 of MATIC to ' + eoaAddr.slice(0,8) + '… and try again, or wrap directly on polymarket.com.');
     }
     if (e && (e.code === 'ACTION_REJECTED' || e.code === 4001)) {
-      throw new Error('Signature rejected in MetaMask — wrap cancelled.');
+      throw new Error('Signature rejected in MetaMask — cancelled.');
     }
     throw new Error('SafeTx failed: ' + msg);
   }
