@@ -22055,10 +22055,13 @@ async function confirmTrade() {
         metadata: orderStruct.metadata,
         builder: orderStruct.builder,
         // Pre-cutover compat: clob.polymarket.com today still routes through
-        // V1's parser which requires feeRateBps. Without it the CLOB returns
+        // V1's parser which requires feeRateBps + nonce. Without them CLOB
+        // returns:
         //   {"error":"error parsing fee rate bps () to int64"}
-        // Not part of the V2 EIP-712 signed struct, safe to add to wire body.
+        //   {"error":"error parsing nonce () to int64"}
+        // Neither is in the V2 EIP-712 signed struct, safe to add here.
         feeRateBps: '0',
+        nonce: '0',
         signature: orderSignature,
       };
     } else {
