@@ -4817,14 +4817,17 @@ async function executeTrade() {
         // Pre-cutover compat: clob.polymarket.com today is still V1's parser
         // (the dedicated V2 host clob-v2.polymarket.com takes over the
         // canonical URL only at midnight UTC). V1's parser requires
-        // feeRateBps and nonce as strings; without them CLOB returns
+        // feeRateBps, nonce, and expiration as strings; without them CLOB
+        // returns:
         //   {"error":"error parsing fee rate bps () to int64"}
         //   {"error":"error parsing nonce () to int64"}
-        // Neither field is in the V2 EIP-712 signed struct, so adding them
-        // here doesn't break the signature. Keep through cutover; V2's
-        // parser will ignore the extra fields.
+        //   {"error":"error parsing expiration () to int64"}
+        // None of these are in the V2 EIP-712 signed struct, so adding
+        // them to the wire body doesn't break the signature. Keep through
+        // cutover; V2's parser will ignore the extra fields.
         feeRateBps: '0',
         nonce: '0',
+        expiration: '0',
         signature: orderSignature
       };
     } else {
