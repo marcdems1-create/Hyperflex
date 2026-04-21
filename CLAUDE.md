@@ -561,6 +561,10 @@ These fields are NOT in the V2 EIP-712 signed struct, so they don't break signat
 
 **6. Default V2 cutover via `V2_CUTOVER_MS` in market.html and `_V2_CUTOVER_MS_DASH` in creator-dashboard.html.** Keep aligned. URL `?clob_v2=1`/`=0` and localStorage `hf_use_clob_v2` override the date gate (sticky across navigations).
 
+**7. V2 SELL needs a fresh CTF setApprovalForAll.** The V2 exchange (`CTF_EXCHANGE_V2` / `NEG_RISK_EXCHANGE_V2`) is a new operator on the ConditionalTokens ERC-1155 contract (`0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`). V1 exchanges were auto-approved during polymarket.com onboarding, so our V1 SELL flow never had to set this. V2 rejects with `{"error":"not enough balance / allowance"}` even when the proxy holds the shares. Pre-flight in `executeTrade`: `isCtfApprovedForOperator(proxy, exchangeAddr)` → if false, dispatch `setApprovalForAll(exchangeAddr, true)` via `executeViaProxy` (one extra SafeTx MetaMask popup, one-time per exchange per proxy). Same operator pattern applies to NegRisk V2 vs non-NegRisk V2 — they're different operators and need separate approvals.
+
+**8. `checkTradingSetup` only checks ERC-20 allowances (USDC/pUSD), NOT CTF approvals.** Don't rely on the green "setup complete" banner to mean V2 SELL is ready. The CTF check fires lazily inside executeTrade. If we want to make the setup panel comprehensive, add a CTF V2 row alongside the existing 5 ERC-20 rows.
+
 ### Builder fees + Cloudflare Worker proxy
 
 Trades route through `cloudflare-trade-proxy/` (Worker) as the **primary** path to bypass geo-blocking. Direct CLOB is the fallback for non-geo-restricted users.

@@ -2715,6 +2715,13 @@ var USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
 var SAFE_FACTORY_ADDRESS = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
 var CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';        // V1 non-negRisk
 var NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // V1 negRisk
+// ConditionalTokens (ERC-1155) on Polygon — holds all outcome tokens
+// (what users call "shares"). To SELL, the holder's proxy must
+// setApprovalForAll(exchangeOperator, true) on this contract so the
+// exchange can pull the tokens at match time. V1 exchanges were
+// auto-approved during Polymarket onboarding; V2 exchanges are a new
+// operator address and need explicit approval per user.
+var CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
 
 // ── CLOB V2 migration (cutover: April 22, 2026) ────────────────────────────
 // Polymarket V2 replaces: new contracts, new EIP-712 domain version ("2"),
@@ -3272,6 +3279,38 @@ async function unwrapPmctToUsdc(amountAtomic) {
   var data = iface.encodeFunctionData('unwrap', [USDC_ADDRESS, proxyAddr, String(amountAtomic)]);
   console.log('[pmct] unwrapping ' + ethers.formatUnits(amountAtomic, 6) + ' pUSD → USDC.e via Safe');
   return executeViaProxy(COLLATERAL_OFFRAMP, data, 0n);
+}
+
+// ── CTF (ERC-1155) operator approval helpers ───────────────────────────────
+// The Polymarket exchange contracts don't hold outcome tokens directly —
+// they transfer them from the seller at match time via ERC-1155
+// transferFrom. That requires the seller's proxy to have called
+// setApprovalForAll(exchangeOperator, true) on the ConditionalTokens
+// contract. V1 exchanges were pre-approved during polymarket.com
+// onboarding; V2 exchanges are a new operator address and need a
+// fresh approval per user.
+async function isCtfApprovedForOperator(ownerAddr, operator) {
+  if (!ownerAddr || !operator) return false;
+  try {
+    var provider = await getPublicProvider();
+    var ctf = new ethers.Contract(CONDITIONAL_TOKENS, [
+      'function isApprovedForAll(address account, address operator) view returns (bool)'
+    ], provider);
+    return await ctf.isApprovedForAll(ownerAddr, operator);
+  } catch (e) {
+    console.warn('[ctf] isApprovedForAll check failed:', e.message);
+    return false;
+  }
+}
+
+async function approveCtfForOperator(operator) {
+  if (!operator) throw new Error('Operator address missing');
+  var iface = new ethers.Interface([
+    'function setApprovalForAll(address operator, bool approved)'
+  ]);
+  var data = iface.encodeFunctionData('setApprovalForAll', [operator, true]);
+  console.log('[ctf] setApprovalForAll ' + operator.slice(0,10) + '…=true via Safe');
+  return executeViaProxy(CONDITIONAL_TOKENS, data, 0n);
 }
 
 // Master check: runs all 3 steps and updates the setup UI
@@ -4742,6 +4781,38 @@ async function executeTrade() {
           cta.disabled = false; updateCtaButton();
           return;
         }
+      }
+    }
+
+    // V2 SELL pre-flight: the V2 exchange is a new operator on the CTF
+    // (ERC-1155) contract and needs setApprovalForAll from the seller's
+    // proxy before it can transfer outcome tokens at match time. V1 was
+    // auto-approved via polymarket.com onboarding; V2 isn't. Without
+    // this, CLOB-V2 rejects with "not enough balance / allowance" even
+    // though the proxy has the shares.
+    if (clobVersion === 2 && clobSide === 'SELL' && makerAddr) {
+      try {
+        var approved = await isCtfApprovedForOperator(makerAddr, exchangeAddr);
+        console.log('[trade-v2] CTF approval for', exchangeAddr.slice(0,10) + '… =', approved);
+        if (!approved) {
+          showTradeStatus('Approving V2 exchange to transfer your outcome tokens (one-time)…', 'info');
+          cta.textContent = 'Approve in wallet…';
+          await approveCtfForOperator(exchangeAddr);
+          // Re-check so we don't sign an order that would still fail.
+          var approvedAfter = await isCtfApprovedForOperator(makerAddr, exchangeAddr);
+          if (!approvedAfter) {
+            showTradeStatus('Approval submitted but not yet confirmed — try again in a few seconds.', 'error');
+            cta.disabled = false; updateCtaButton();
+            return;
+          }
+          showTradeStatus('Approval confirmed — placing order…', 'info');
+        }
+      } catch (approveErr) {
+        var approveMsg = (approveErr && approveErr.message) || 'Unknown approval error';
+        console.error('[trade-v2] CTF approval failed:', approveErr);
+        showTradeStatus('Could not approve V2 exchange for CTF transfers: ' + approveMsg, 'error');
+        cta.disabled = false; updateCtaButton();
+        return;
       }
     }
     var built = buildOrderForClob({
