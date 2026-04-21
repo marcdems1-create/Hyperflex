@@ -1768,36 +1768,37 @@ async function setMaxShares() {
     await fetchUserPositions();
   }
 
-  // Resolve the EXACT tokenId for the current outcome + side, then look up
-  // only that position. Previously we summed every position matching `side`
-  // across the whole _userPositions cache, which on multi-outcome markets
-  // (e.g. "What price will Bitcoin hit?") meant you'd get total YES shares
-  // across all sub-markets instead of just the one you're trading. That
-  // produced "Sell" amounts higher than your actual position → CLOB
-  // rejections framed as "wallet shortage."
+  // Resolve the EXACT tokenId + conditionId for the active outcome, then
+  // look up only that position. On multi-outcome markets (e.g. "What price
+  // will Bitcoin hit?"), `_market.conditionId` is the PARENT event's
+  // conditionId — but each outcome has its own child conditionId stored on
+  // _sortedEventMarkets[_activeOutcomeIndex]. Same for clobTokenIds.
+  // Reuse _getActiveTokenIdForTrade() (already handles the multi-outcome
+  // fallback) and resolve conditionId the same way.
+  var activeOutcome = (
+    _sortedEventMarkets &&
+    _sortedEventMarkets.length > 0 &&
+    typeof _activeOutcomeIndex === 'number' &&
+    _sortedEventMarkets[_activeOutcomeIndex]
+  ) ? _sortedEventMarkets[_activeOutcomeIndex] : _market;
+  var activeConditionId = String((activeOutcome && activeOutcome.conditionId) || '').toLowerCase();
+  var currentTokenId = String(_getActiveTokenIdForTrade() || '');
+
   var maxShares = 0;
-  var currentTokenId = null;
-  try {
-    var tids = _market.clobTokenIds || '[]';
-    if (typeof tids === 'string') tids = JSON.parse(tids);
-    var tokenIndex = _tradeSide === 'yes' ? 0 : 1;
-    currentTokenId = String(tids[tokenIndex] || tids[0] || '');
-  } catch (e) {}
   // Three-strategy match — tokenId formats vary between the cache writer
   // (data-api stores as lowercased asset hex) and the market metadata
   // (clobTokenIds is decimal-stringified uint256 in Polymarket's gamma feed).
   // Direct token-id match is the cheap path; the conditionId+side fallback
-  // catches multi-outcome markets where formats happen to differ.
+  // catches the case where formats happen to differ.
   if (_userPositions && typeof _userPositions === 'object') {
     // (1) direct tokenId match
     if (currentTokenId) {
       var pos = _userPositions[currentTokenId] || _userPositions[currentTokenId.toLowerCase()];
       if (pos && pos.size > 0) maxShares = pos.size;
     }
-    // (2) fallback: conditionId + side match. Each outcome on a multi-outcome
-    // market has its own conditionId, so this uniquely identifies the row.
-    if (maxShares === 0) {
-      var wantCondition = String(_market && _market.conditionId || '').toLowerCase();
+    // (2) fallback: conditionId + side match against the ACTIVE outcome's
+    // child conditionId, not the parent event's.
+    if (maxShares === 0 && activeConditionId) {
       var wantSide = _tradeSide === 'yes' ? 'YES' : 'NO';
       var keys = Object.keys(_userPositions);
       for (var i = 0; i < keys.length; i++) {
@@ -1805,20 +1806,21 @@ async function setMaxShares() {
         if (!p2 || !(p2.size > 0)) continue;
         var posCond = String(p2.conditionId || '').toLowerCase();
         var posSide = String(p2.side || p2.outcome || '').toUpperCase();
-        if (posCond === wantCondition && posSide === wantSide) {
+        if (posCond === activeConditionId && posSide === wantSide) {
           maxShares = p2.size;
           break;
         }
       }
     }
   }
-  console.log('[max] tokenId', (currentTokenId || '').slice(0, 12) + '… cond', String(_market && _market.conditionId || '').slice(0, 10) + '… side', _tradeSide, '→', maxShares, 'shares');
+  console.log('[max] tokenId', (currentTokenId || '').slice(0, 12) + '… cond', activeConditionId.slice(0, 10) + '… side', _tradeSide, '→', maxShares, 'shares');
   // Verbose diagnostic when we land on 0 — dump what's in the cache so we
-  // can see why none of the three match strategies hit. Fires only on the
-  // failure path so it doesn't clutter normal logs.
+  // can see why none of the match strategies hit. Fires only on the failure
+  // path so it doesn't clutter normal logs.
   if (maxShares === 0 && _userPositions && Object.keys(_userPositions).length) {
     console.log('[max-debug] looking for tokenId=', currentTokenId);
-    console.log('[max-debug] looking for cond=', String(_market && _market.conditionId || ''), 'side=', _tradeSide);
+    console.log('[max-debug] looking for cond=', activeConditionId, 'side=', _tradeSide);
+    console.log('[max-debug] activeOutcome=', activeOutcome && (activeOutcome.groupItemTitle || activeOutcome.question));
     console.log('[max-debug] cache keys:', Object.keys(_userPositions));
     Object.keys(_userPositions).forEach(function(k) {
       var p = _userPositions[k];
