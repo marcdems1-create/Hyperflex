@@ -4617,10 +4617,13 @@ async function executeTrade() {
     } else {
       sideInt = 1;
       if (isMarketOrder) {
-        // Market SELL (FOK): CLOB requires makerAmount (shares) ≤ 4 decimals,
-        // takerAmount (USDC) ≤ 2 decimals — hard-coded, NOT tick-driven.
-        rawMakerAmt = roundDown(shares, 4);
-        rawTakerAmt = roundDown(rawMakerAmt * rawPrice, 2);
+        // Market SELL (FOK): per SDK ROUNDING_CONFIG, maker (shares) gets
+        // size precision (2 dec at tick 0.01) and taker (USDC) gets amount
+        // precision (4 dec). V1 was lenient and accepted maker=4/taker=2;
+        // V2 rejects it. Derive at SDK precision so the safety-net cap is
+        // a no-op (avoids dust shaved off at the cap step).
+        rawMakerAmt = roundDown(shares, 2);
+        rawTakerAmt = roundDown(rawMakerAmt * rawPrice, 4);
       } else {
         // Limit SELL: maker = shares (rounded down), taker = maker × price
         rawMakerAmt = roundDown(shares, roundConfig.size);
@@ -4640,53 +4643,37 @@ async function executeTrade() {
       return;
     }
 
-    // V2 kept V1's SELL maker/taker SEMANTICS (maker=shares, taker=USDC)
-    // — confirmed empirically: swapping maker↔taker on V2 SELL produced
-    // {"error":"invalid price, price must be greater than 0 and less
-    // than 1"}, meaning V2 still computes price as taker/maker for SELL.
-    // What V2 DID change is the decimal precision caps:
-    //   V1 SELL: maker (shares) ≤ 4 dec,  taker (USDC) ≤ 2 dec
-    //   V2 SELL: maker (shares) ≤ 2 dec,  taker (USDC) ≤ 4 dec
-    // Same field roles, flipped precision allowance. No struct swap
-    // needed — just adjust the caps below.
-    var _preV2ClobVersion = isClobV2Enabled() ? 2 : 1;
+    // SDK ground truth (Polymarket/clob-client getMarketOrderRawAmounts):
+    // precision is determined by POSITION (maker vs taker), NOT asset
+    // type or side. At tick 0.01:
+    //   maker  → roundConfig.size   = 2 decimals  (USDC for BUY, shares for SELL)
+    //   taker  → roundConfig.amount = 4 decimals  (shares for BUY, USDC for SELL)
+    // This is symmetric across V1/V2/FOK/GTC. V1 was lenient and accepted
+    // prior inverted SELL caps (maker=4/taker=2); V2 enforces SDK strictly.
+    // Empirically: swapping maker↔taker on V2 SELL produced "invalid price,
+    // price must be greater than 0 and less than 1" — confirming maker is
+    // STILL shares, taker STILL USDC for SELL. Only the caps were ours to fix.
 
     // Final safety net: cap decimals using string truncation so no float-drift
     // noise (e.g. 28.999200000000003 masquerading as 28.9992) can sneak past
-    // into parseUnits and trigger CLOB 400 "invalid amounts".
-    //
-    //   BUY    : maker = USDC,   taker = shares  (2 dec / 4 dec for both V1+V2)
-    //   V1 SELL: maker = shares, taker = USDC    (4 dec / 2 dec)
-    //   V2 SELL: maker = shares, taker = USDC    (2 dec / 4 dec — flipped caps)
-    //
-    // Market (FOK) orders have HARDCODED decimal caps — not tick-driven — so
-    // use the 2/4 pair explicitly instead of roundConfig.
+    // into parseUnits and trigger CLOB 400 "invalid amounts". V2 enforces
+    // hard. V1 was lenient but applying the SDK's caps doesn't hurt it.
     if (isMarketOrder) {
-      if (clobSide === 'BUY') {
-        rawMakerAmt = capDecimals(rawMakerAmt, 2);  // USDC
-        rawTakerAmt = capDecimals(rawTakerAmt, 4);  // shares
-      } else if (_preV2ClobVersion === 2) {
-        // V2 SELL — caps flipped vs V1
-        rawMakerAmt = capDecimals(rawMakerAmt, 2);  // shares (was 4 in V1)
-        rawTakerAmt = capDecimals(rawTakerAmt, 4);  // USDC   (was 2 in V1)
-      } else {
-        // V1 SELL
-        rawMakerAmt = capDecimals(rawMakerAmt, 4);  // shares
-        rawTakerAmt = capDecimals(rawTakerAmt, 2);  // USDC
-      }
+      // FOK uses the same 2/4 split as GTC at tick 0.01 — there's no
+      // separate "FOK constraint" in the SDK (prior CLAUDE.md was wrong
+      // about this). Using 2/4 hardcoded keeps FOK independent of the
+      // tick lookup but the values match roundConfig at tick 0.01.
+      rawMakerAmt = capDecimals(rawMakerAmt, 2);
+      rawTakerAmt = capDecimals(rawTakerAmt, 4);
     } else {
-      if (clobSide === 'BUY') {
-        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);  // USDC
-        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);    // shares
-      } else if (_preV2ClobVersion === 2) {
-        // V2 SELL limit — same precision flip as FOK path
-        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.amount);  // shares (using amount=2 dec)
-        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.size);    // USDC   (using size=4 dec)
-      } else {
-        // V1 SELL
-        rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.size);    // shares
-        rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.amount);  // USDC
-      }
+      // GTC limit orders — per SDK ROUNDING_CONFIG, maker is ALWAYS
+      // rounded to roundConfig.size and taker is ALWAYS rounded to
+      // roundConfig.amount, regardless of side. The asset (USDC vs
+      // shares) flips with side but the precision rules don't.
+      // At tick 0.01 that's maker=2 dec, taker=4 dec for both BUY+SELL.
+      // (V2 needs this; V1 was lenient and accepted prior inverted caps.)
+      rawMakerAmt = capDecimals(rawMakerAmt, roundConfig.size);
+      rawTakerAmt = capDecimals(rawTakerAmt, roundConfig.amount);
     }
 
     // Re-check positivity after the cap (pathological cases like capDecimals

@@ -505,17 +505,61 @@ Matches official SDK order.
 4. Amoy testnet (chainId 80002) smoke test — same V2 contract addresses deterministic deploy. Test wrap + approve + order path end-to-end before mainnet flip.
 5. Get the builder profile verified at polymarket.com/settings?tab=builder and set non-zero maker/taker fee rate (currently 0% — attributed V2 trades earn nothing otherwise).
 
-### Market vs Limit order rules — DIFFERENT decimal constraints
+### Market vs Limit order rules — decimal constraints (corrected 2026-04-21)
 
-**Limit (GTC)**: follows the SDK's tick-size-driven `ROUNDING_CONFIG`. For tick `0.01`, `amount` decimals = 4. Use `getOrderRawAmounts()` replica in `executeTrade`.
+**SDK ground truth** (verified against `Polymarket/clob-client/src/order-builder/helpers.ts`, `getMarketOrderRawAmounts`):
 
-**Market (FOK)**: hard-coded constraints, NOT tick-driven:
-- BUY: `makerAmount` (USDC) max **2 decimals**, `takerAmount` (shares) max **4 decimals**
-- SELL: mirror — `makerAmount` (shares) max **4 decimals**, `takerAmount` (USDC) max **2 decimals**
+The SDK applies precision based on **position (maker vs taker)**, NOT asset type or side. At every tick size, `roundConfig.size` caps the maker amount and `roundConfig.amount` caps the taker amount:
 
-Build market-BUY `makerAmt` from the user-entered USDC `amount` directly (already 2 decimals), NOT from `shares × price` (the multiplication introduces 4-decimal float drift → CLOB 400 "invalid amounts").
+```js
+ROUNDING_CONFIG = {
+  "0.1":    { price: 1, size: 2, amount: 3 },
+  "0.01":   { price: 2, size: 2, amount: 4 },   // most markets
+  "0.001":  { price: 3, size: 2, amount: 5 },
+  "0.0001": { price: 4, size: 2, amount: 6 },
+}
+```
 
-Also: for market orders, **walk the live orderbook before submit** via `GET /book?token_id=` and use the worst price the order would touch as the limit (rounded UP to tick). FOK requires the FULL size to fill at ≤ limit, so a thin top-of-book causes "order couldn't be fully filled" rejections if you just use the current mid as the limit. Same pattern as the SDK's `calculateMarketPrice()` helper.
+**At tick 0.01 (the standard for most Polymarket markets):**
+
+| Side | makerAmount (size=2) | takerAmount (amount=4) |
+|------|---------------------|------------------------|
+| BUY  | USDC, 2 decimals    | shares, 4 decimals     |
+| SELL | shares, 2 decimals  | USDC, 4 decimals       |
+
+`maker = always 2 decimals, taker = always 4 decimals` at tick 0.01. The asset (USDC vs shares) flips with side. **This is the same for V1, V2, FOK, and GTC** — there's no per-side or per-version asymmetry in the SDK.
+
+**Historical note (and why this confused us)**: prior CLAUDE.md said FOK SELL had `maker=4 dec, taker=2 dec`. That was wrong but V1's CLOB was lenient and accepted it. V2 enforces SDK exactly — sending V1's inverted SELL caps produces:
+```
+{"error":"invalid amounts, the sell orders maker amount supports a max accuracy of 2 decimals, taker amount a max of 4 decimals"}
+```
+
+**SELL maker/taker semantics are NOT swapped between V1 and V2.** Empirically verified: swapping `rawMakerAmt ↔ rawTakerAmt` on a V2 SELL produced `{"error":"invalid price, price must be greater than 0 and less than 1"}` — V2 still computes SELL price as `takerAmount/makerAmount`, so maker MUST be shares and taker MUST be USDC.
+
+**Build market-BUY `makerAmt` from the user-entered USDC `amount` directly** (already 2 decimals), NOT from `shares × price` (the multiplication introduces float drift).
+
+**For market orders, walk the live orderbook before submit** via `GET /book?token_id=` and use the worst price the order would touch as the limit (rounded UP to tick). FOK requires the FULL size to fill at ≤ limit — a thin top-of-book causes "order couldn't be fully filled" rejections if you just use the current mid. Same pattern as the SDK's `calculateMarketPrice()` helper.
+
+### V2 pre-cutover lessons (2026-04-21, hard-won)
+
+When V2 was first defaulted on a day before Polymarket's canonical cutover, every error became a learning opportunity. Codifying these so a future session doesn't re-discover them in production:
+
+**1. `clob-v2.polymarket.com` IS live pre-cutover.** The dedicated V2 host accepts V2-signed orders TODAY, not just at midnight UTC Apr 22. `clob.polymarket.com` runs V1's parser until cutover; sending a V2 order there returns `{"error":"invalid signature"}` because V1 reconstructs the EIP-712 hash over V1 fields (taker/nonce/feeRateBps/expiration) and gets a different hash than what the V2 struct signed. **Route V2 orders to `clob-v2.polymarket.com`** — detect by presence of `order.builder` field in the body.
+
+**2. V1's parser demands wire-body fields V2's struct drops.** If you ever route a V2 order through V1's parser (e.g. you forget to flip the host), V1 rejects in this specific order:
+- `{"error":"error parsing fee rate bps () to int64"}` → add `feeRateBps: '0'` to wire body
+- `{"error":"error parsing nonce () to int64"}` → add `nonce: '0'`
+- `{"error":"error parsing expiration () to int64"}` → add `expiration: '0'`
+
+These fields are NOT in the V2 EIP-712 signed struct, so they don't break signature verification — they're wire-body-only compat. Keep them through cutover. After cutover, both hosts run V2 parser and the extras become harmless.
+
+**3. The local `parseUnits()` returns a string, not a BigInt.** Inside `executeTrade` there's a hand-rolled `parseUnits()` (NOT `ethers.parseUnits`) that returns a numeric string. The V2 BUY pre-flight calls `getPmctBalance()` (returns BigInt) and does `pUsdBal < makerAmt` and `makerAmt - pUsdBal`. Mixing string with BigInt throws `TypeError: Cannot mix BigInt and other types`. Coerce: `var makerAmtBI = BigInt(makerAmt)` before the comparison.
+
+**4. setMaxShares() can race against the positions cache on multi-outcome markets.** `_market.conditionId` is the PARENT event's conditionId, but cached positions key by CHILD outcome conditionId. Use `_sortedEventMarkets[_activeOutcomeIndex].conditionId` for the lookup, or — better — pass the panel's already-resolved `r.size` directly to `sellPositionRow(outcomeIdx, sideIdx, shareCount)` and skip the re-lookup entirely. The position panel walked the cache once already; re-doing it inside setMaxShares is just a way to introduce drift.
+
+**5. V2 maker/taker SEMANTICS = same as V1; only DECIMAL CAPS differ historically (because our V1 caps were wrong, see above).** Don't swap maker↔taker for V2 SELL. Just make sure caps follow SDK config at the active tick size.
+
+**6. Default V2 cutover via `V2_CUTOVER_MS` in market.html and `_V2_CUTOVER_MS_DASH` in creator-dashboard.html.** Keep aligned. URL `?clob_v2=1`/`=0` and localStorage `hf_use_clob_v2` override the date gate (sticky across navigations).
 
 ### Builder fees + Cloudflare Worker proxy
 
