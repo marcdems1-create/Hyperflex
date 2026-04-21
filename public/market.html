@@ -3298,12 +3298,23 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     return receipt2;
   } catch (e) {
     var msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
-    // -32006 / Unauthorized with httpStatus:401 is MetaMask's Polygon RPC
-    // returning 401. User can fix this in MetaMask without touching our
-    // code — surface it clearly.
-    var is401 = (e && e.code === -32006) ||
-      /unauthorized/i.test(msg) ||
-      (e && e.data && e.data.httpStatus === 401);
+    // Ethers v6 wraps multi-attempt failures in a "coalesce" error whose
+    // inner errors live on e.errors[]. The original -32006 / 401 metadata
+    // lives on one of those inner errors. Walk them + the outer error
+    // uniformly so our 401 detection fires regardless of wrap depth.
+    var errChain = [e].concat((e && e.errors) || []);
+    var innerJson = JSON.stringify(errChain.map(function(x) {
+      return x ? { code: x.code, message: x.message, httpStatus: x.data && x.data.httpStatus } : null;
+    }));
+    console.warn('[safe] direct exec error chain:', innerJson);
+    var is401 = errChain.some(function(x) {
+      if (!x) return false;
+      if (x.code === -32006) return true;
+      if (x.data && x.data.httpStatus === 401) return true;
+      var xmsg = String(x.shortMessage || x.message || '');
+      if (/unauthorized/i.test(xmsg)) return true;
+      return false;
+    });
     if (is401) {
       throw new Error(
         'MetaMask\'s Polygon RPC returned 401. Open MetaMask → Settings → ' +
