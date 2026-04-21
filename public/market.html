@@ -4707,10 +4707,15 @@ async function executeTrade() {
     // extra MetaMask popup (the SafeTx signature) and a small MATIC gas fee.
     if (clobVersion === 2 && clobSide === 'BUY' && makerAddr) {
       var pUsdBal = await getPmctBalance(makerAddr);
-      if (pUsdBal < makerAmt) {
-        var shortfall = makerAmt - pUsdBal;
+      // makerAmt here is a NUMERIC STRING from the local parseUnits() helper,
+      // while pUsdBal is a BigInt from the on-chain balanceOf(). Mixing BigInt
+      // with string in arithmetic throws TypeError — coerce makerAmt into a
+      // BigInt once and reuse it for the comparison + subtraction below.
+      var makerAmtBI = BigInt(makerAmt);
+      if (pUsdBal < makerAmtBI) {
+        var shortfall = makerAmtBI - pUsdBal;
         var have = ethers.formatUnits(pUsdBal, 6);
-        var need = ethers.formatUnits(makerAmt, 6);
+        var need = ethers.formatUnits(makerAmtBI, 6);
         var shortfallHuman = ethers.formatUnits(shortfall, 6);
         console.log('[trade-v2] pUSD short — have=' + have + ' need=' + need + ' wrapping=' + shortfallHuman);
         showTradeStatus('Wrapping ' + shortfallHuman + ' USDC → pUSD before order...', 'info');
@@ -4718,7 +4723,7 @@ async function executeTrade() {
           await wrapUsdcToPmct(shortfall);
           // Re-check balance after wrap (sanity — should be a no-op).
           var bal2 = await getPmctBalance(makerAddr);
-          if (bal2 < makerAmt) {
+          if (bal2 < makerAmtBI) {
             showTradeStatus('Wrap completed but pUSD balance still short — try again in a moment.', 'error');
             cta.disabled = false; updateCtaButton();
             return;
