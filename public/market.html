@@ -1740,24 +1740,27 @@ async function setMaxShares() {
     await fetchUserPositions();
   }
 
+  // Resolve the EXACT tokenId for the current outcome + side, then look up
+  // only that position. Previously we summed every position matching `side`
+  // across the whole _userPositions cache, which on multi-outcome markets
+  // (e.g. "What price will Bitcoin hit?") meant you'd get total YES shares
+  // across all sub-markets instead of just the one you're trading. That
+  // produced "Sell" amounts higher than your actual position → CLOB
+  // rejections framed as "wallet shortage."
   var maxShares = 0;
-  // _userPositions is { tokenId: { size, avgPrice, side, conditionId } }
-  if (_userPositions && typeof _userPositions === 'object') {
-    var keys = Object.keys(_userPositions);
-    console.log('[max] Checking', keys.length, 'positions for side', _tradeSide);
-    for (var i = 0; i < keys.length; i++) {
-      var pos = _userPositions[keys[i]];
-      if (pos && pos.size > 0) {
-        var posSide = (pos.side || pos.outcome || '').toUpperCase();
-        console.log('[max] Position:', posSide, 'size:', pos.size);
-        if (posSide === _tradeSide.toUpperCase()) {
-          maxShares += pos.size; // sum all positions on this side
-        }
-      }
-    }
+  var currentTokenId = null;
+  try {
+    var tids = _market.clobTokenIds || '[]';
+    if (typeof tids === 'string') tids = JSON.parse(tids);
+    var tokenIndex = _tradeSide === 'yes' ? 0 : 1;
+    currentTokenId = String(tids[tokenIndex] || tids[0] || '');
+  } catch (e) {}
+  if (currentTokenId && _userPositions && typeof _userPositions === 'object') {
+    // _userPositions keys are tokenIds, sometimes lowercased — match flexibly.
+    var pos = _userPositions[currentTokenId] || _userPositions[currentTokenId.toLowerCase()];
+    if (pos && pos.size > 0) maxShares = pos.size;
   }
-
-  console.log('[max] Total shares for', _tradeSide, ':', maxShares);
+  console.log('[max] Outcome tokenId', currentTokenId.slice(0, 12) + '… side', _tradeSide, '→', maxShares, 'shares');
 
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var priceFrac = price / 100;
@@ -2654,29 +2657,44 @@ var BYTES32_ZERO = '0x' + '0'.repeat(64);
 // ⚠️ Maker + Taker fee rates default to 0% — set a non-zero rate at
 //    polymarket.com/settings?tab=builder before any flow earns revenue.
 var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
-// V2 routing decision. Three layers, in priority order:
-//   1. Explicit URL override     — ?clob_v2=1 (force V2) | ?clob_v2=0 (force V1, emergency rollback)
-//   2. Explicit window flag      — window.HF_USE_CLOB_V2 = true|false
-//   3. Date-gated default        — V2 from 2026-04-22 00:00 UTC onward, V1 before
+// V2 routing decision. Four layers, in priority order:
+//   1. Explicit URL override   — ?clob_v2=1 (force V2) | ?clob_v2=0 (force V1, emergency rollback)
+//   2. Explicit window flag    — window.HF_USE_CLOB_V2 = true|false
+//   3. Sticky localStorage     — localStorage.hf_use_clob_v2 = '1' | '0'
+//                                Survives page navigation, doesn't require URL or DevTools
+//                                each time. URL override still wins so you can pin V1
+//                                temporarily even with the flag set.
+//   4. Date-gated default      — V2 from 2026-04-22 00:00 UTC onward, V1 before
 //
-// The date gate auto-flips at the Polymarket cutover with no manual deploy
-// required. Live test on 2026-04-20 confirmed the V2 path works end-to-end
-// (Safe wrap + order signature + fill + builder attribution), so the gate
-// is the safety net rather than the primary control.
+// Layer 1 also writes through to layer 3 below — opting in via URL once
+// makes the choice sticky. Lets a tester click ?clob_v2=1 a single time
+// and have every subsequent navigation default to V2 without re-typing.
 var V2_CUTOVER_MS = Date.UTC(2026, 3, 22, 0, 0, 0);  // April 22 2026 00:00 UTC
 function isClobV2Enabled() {
   if (typeof window === 'undefined') return Date.now() >= V2_CUTOVER_MS;
-  // Layer 1: URL override (works in either direction)
+  // Layer 1: URL override (and persist to layer 3 for next nav)
   try {
     var qs = new URLSearchParams(window.location.search);
     var qv = qs.get('clob_v2');
-    if (qv === '1') return true;
-    if (qv === '0') return false;
+    if (qv === '1') {
+      try { localStorage.setItem('hf_use_clob_v2', '1'); } catch (e) {}
+      return true;
+    }
+    if (qv === '0') {
+      try { localStorage.setItem('hf_use_clob_v2', '0'); } catch (e) {}
+      return false;
+    }
   } catch (e) {}
   // Layer 2: window flag override
   if (window.HF_USE_CLOB_V2 === true)  return true;
   if (window.HF_USE_CLOB_V2 === false) return false;
-  // Layer 3: date-gated default
+  // Layer 3: sticky localStorage
+  try {
+    var lv = localStorage.getItem('hf_use_clob_v2');
+    if (lv === '1') return true;
+    if (lv === '0') return false;
+  } catch (e) {}
+  // Layer 4: date-gated default
   return Date.now() >= V2_CUTOVER_MS;
 }
 
