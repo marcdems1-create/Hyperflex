@@ -4,374 +4,105 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>HYPERFLEX — Sign In</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
 <style>
-:root {
-  --ink: #0e0e0c;
-  --paper: #141412;
-  --cream: #1c1c19;
-  --text: #ddd8cc;
-  --gold: #c9920d;
-  --gold-lt: #e0a820;
-  --gold-bright: #f5c842;
-  --border: #2a2a26;
-  --dim: #7a7870;
-  --green: #2d9b5f;
-  --red: #c0392b;
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#0b0b12;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
+  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--dim:#3a3a4a;
+  --gold:#f5a623;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --shadow-lg:0 24px 60px -20px rgba(0,0,0,0.6),0 12px 32px -8px rgba(0,0,0,0.4);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-::-webkit-scrollbar { display: none; }
+html,body{background:var(--paper);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body{background:radial-gradient(ellipse 1200px 800px at 50% -200px,rgba(245,166,35,0.08),transparent 60%),radial-gradient(ellipse 800px 600px at 90% 20%,rgba(168,85,247,0.05),transparent 60%),var(--paper)}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--paper)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
-body {
-  background: var(--paper);
-  color: var(--text);
-  font-family: var(--sans);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
+.page{min-height:100vh;display:flex;flex-direction:column}
+.header{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,18,0.72);backdrop-filter:blur(14px);position:sticky;top:0;z-index:50}
+.logo{display:inline-flex;align-items:center;gap:10px;color:var(--text)}
+.logo-name{font-size:17px;font-weight:800;letter-spacing:-0.02em}
+.logo svg{width:26px;height:26px}
+.header-tag{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);padding:4px 10px;border-radius:100px;letter-spacing:0.14em;text-transform:uppercase}
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
-}
+.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:64px;max-width:1200px;margin:0 auto;padding:60px 36px;align-items:center;width:100%}
+@media (max-width:880px){.main{grid-template-columns:1fr;gap:40px;padding:40px 20px}}
 
-.page {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+/* Left — pitch */
+.pitch{max-width:520px}
+.pitch-logo{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.pitch-logo svg{width:28px;height:28px}
+.pitch-logo span{font-size:20px;font-weight:900;letter-spacing:-0.03em}
+.pitch-tagline{font-size:clamp(24px,3.2vw,34px);font-weight:800;letter-spacing:-0.03em;line-height:1.1;margin-bottom:8px}
+.pitch-tagline .gold{color:var(--gold)}
+.pitch-sub{font-size:15px;color:var(--text-soft);line-height:1.55;margin-bottom:28px;max-width:440px}
+.stat-row{display:flex;flex-direction:column;gap:12px;margin-bottom:24px}
+.stat-item{display:flex;align-items:flex-start;gap:14px;padding:16px 18px;background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015));border:1px solid var(--border);border-radius:14px;transition:border-color .15s}
+.stat-item:hover{border-color:var(--border-strong)}
+.stat-icon{font-size:22px;flex-shrink:0;margin-top:-2px}
+.stat-text strong{display:block;font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:3px;letter-spacing:-0.01em}
+.stat-text span{font-size:12.5px;color:var(--text-soft);line-height:1.45}
+.early-access{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);background:rgba(0,230,138,0.08);border:1px solid rgba(0,230,138,0.22);padding:6px 12px;border-radius:100px;letter-spacing:0.12em;text-transform:uppercase}
+.early-access::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(0,230,138,0.15)}
 
-/* Header */
-.header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-.logo-hex { width: 32px; height: 32px; }
-.logo-name {
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  color: var(--text);
-}
-.header-tag {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--gold);
-  background: rgba(201,146,13,0.1);
-  border: 1px solid rgba(201,146,13,0.3);
-  padding: 3px 8px;
-  border-radius: 2px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* Main */
-.main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  max-width: 1100px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 80px 24px;
-  gap: 80px;
-  align-items: center;
-}
-
-/* Left pitch */
-.pitch { position: sticky; top: 80px; }
-.pitch-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 32px;
-}
-.pitch-logo svg { width: 40px; height: 40px; }
-.pitch-logo span {
-  font-weight: 800;
-  font-size: 22px;
-  letter-spacing: 0.08em;
-  color: var(--text);
-}
-.pitch-tagline {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--dim);
-  letter-spacing: 0.04em;
-  margin-bottom: 36px;
-}
-
-.stat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 36px;
-}
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.stat-icon {
-  font-size: 18px;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(201,146,13,0.08);
-  border: 1px solid rgba(201,146,13,0.15);
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.stat-text strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
-}
-.stat-text span {
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.early-access {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--gold);
-  background: rgba(201,146,13,0.08);
-  border: 1px solid rgba(201,146,13,0.2);
-  padding: 10px 14px;
-  border-radius: 6px;
-  display: inline-block;
-  letter-spacing: 0.06em;
-}
-
-/* Form card */
-.form-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.form-header {
-  padding: 24px 28px;
-  border-bottom: 1px solid var(--border);
-}
-.form-header h2 {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.form-header p {
-  font-size: 13px;
-  color: var(--dim);
-}
-
-.form-body { padding: 28px; }
+/* Right — auth card */
+.form-card{background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015));border:1px solid var(--border);border-radius:20px;padding:32px;box-shadow:var(--shadow-lg);max-width:440px;width:100%}
+.form-header{margin-bottom:22px}
+.form-header h2{font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1.2;margin-bottom:4px}
+.form-header p{font-size:13.5px;color:var(--text-soft)}
+.form-body{display:flex;flex-direction:column}
 
 /* OAuth buttons */
-.oauth-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 13px 14px;
-  min-height: 48px;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  margin-bottom: 10px;
-  transition: border-color 0.2s;
-  cursor: pointer;
-}
-.oauth-btn:hover { border-color: rgba(201,146,13,0.4); }
-.oauth-btn.primary { background: var(--gold, #f5a623); border-color: transparent; color: #0b0b12; font-weight: 800; }
-.oauth-btn.primary:hover { opacity: .9; border-color: transparent; }
-.oauth-btn.primary svg path { fill: #0b0b12 !important; }
-.auth-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.install-hint { display: none; font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin: -2px 0 10px; line-height: 1.5; }
-.install-hint a { color: var(--gold); text-decoration: none; }
-.install-hint a:hover { text-decoration: underline; }
+.oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:13px 14px;min-height:48px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:10px;transition:all .15s;cursor:pointer}
+.oauth-btn:hover{border-color:var(--border-strong);background:rgba(255,255,255,0.08);text-decoration:none}
+.oauth-btn.primary{background:linear-gradient(180deg,var(--gold),#d4841a);border-color:transparent;color:#0b0b12;font-weight:800;box-shadow:0 6px 24px -6px rgba(245,166,35,0.4)}
+.oauth-btn.primary:hover{filter:brightness(1.08);border-color:transparent}
+.oauth-btn.primary svg path{fill:#0b0b12 !important}
+.auth-divider{display:flex;align-items:center;gap:10px;margin:12px 0;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.install-hint{display:none;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin:-2px 0 10px;line-height:1.5}
+.install-hint a{color:var(--gold);text-decoration:none}
+.install-hint a:hover{text-decoration:underline}
 
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.divider-line { flex: 1; height: 1px; background: var(--border); }
-.divider-text {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
-}
+/* Divider between OAuth and email */
+.or-divider{display:flex;align-items:center;gap:12px;margin:14px 0;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase}
+.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:var(--border)}
 
-.field { margin-bottom: 20px; }
-.field label {
-  display: block;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-.field input {
-  width: 100%;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 13px 14px;
-  min-height: 48px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.field input:focus { border-color: var(--gold); }
-.field input.error { border-color: var(--red); }
+/* Form fields */
+.field{margin-bottom:14px}
+.field label{display:block;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px}
+.field input{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .15s;min-height:46px}
+.field input:focus{border-color:var(--gold);background:rgba(255,255,255,0.05)}
+.field input::placeholder{color:var(--muted)}
 
-/* Signup-only fields */
-.signup-fields {
-  display: none;
-  overflow: hidden;
-}
-.signup-fields.show { display: block; }
+.primary-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:13px 14px;min-height:48px;background:linear-gradient(180deg,var(--gold),#d4841a);color:#0b0b12;font-family:'Inter',sans-serif;font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;letter-spacing:0.01em;margin-top:4px;transition:filter .15s;box-shadow:0 6px 24px -6px rgba(245,166,35,0.4)}
+.primary-btn:hover{filter:brightness(1.08)}
+.primary-btn:disabled{opacity:0.6;cursor:not-allowed}
 
-.global-error {
-  padding: 11px 14px;
-  background: rgba(192,57,43,0.1);
-  border: 1px solid rgba(192,57,43,0.3);
-  border-radius: 6px;
-  font-size: 12px;
-  color: #e74c3c;
-  margin-bottom: 20px;
-  display: none;
-  line-height: 1.4;
-}
-.global-error.show { display: block; }
+.forgot-link{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;margin-left:2px;letter-spacing:0.02em;cursor:pointer}
+.forgot-link:hover{color:var(--text)}
 
-.success-banner {
-  padding: 12px 14px;
-  background: rgba(45,155,95,0.1);
-  border: 1px solid rgba(45,155,95,0.3);
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--green);
-  margin-bottom: 20px;
-  display: none;
-  align-items: center;
-  gap: 8px;
-}
-.success-banner.show { display: flex; }
+/* Signup / signin toggle */
+.form-switch{margin-top:20px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--text-soft);text-align:center}
+.form-switch a{color:var(--gold);font-weight:700;cursor:pointer}
+.form-switch a:hover{text-decoration:underline}
 
-.btn-submit {
-  width: 100%;
-  padding: 14px;
-  min-height: 48px;
-  background: var(--gold);
-  border: none;
-  border-radius: 6px;
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--ink);
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  letter-spacing: 0.01em;
-}
-.btn-submit:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.success-banner{display:none;background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--green);font-weight:600}
+.success-banner.show{display:flex;align-items:center;gap:8px}
+.global-error{color:var(--red);font-size:12.5px;margin-bottom:14px;min-height:18px;font-weight:500}
+.field-error{color:var(--red);font-size:11.5px;margin-top:4px;min-height:14px}
 
-.forgot-link {
-  display: block;
-  text-align: right;
-  font-size: 12px;
-  color: var(--dim);
-  text-decoration: none;
-  margin-top: -12px;
-  margin-bottom: 20px;
-}
-.forgot-link:hover { color: var(--gold); }
+.signup-fields{display:none}
+.signup-fields.show{display:block}
 
-.form-footer {
-  padding: 20px 28px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-}
-.toggle-link {
-  font-size: 13px;
-  color: var(--dim);
-}
-.toggle-link a {
-  color: var(--gold);
-  text-decoration: none;
-  font-weight: 700;
-  cursor: pointer;
-}
-.toggle-link a:hover { text-decoration: underline; }
+.forgot-panel{display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-top:14px}
+.forgot-panel.show{display:block}
 
-/* Spinner */
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(14,14,12,0.3);
-  border-top-color: var(--ink);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  display: inline-block;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 768px) {
-  .main { grid-template-columns: 1fr; gap: 40px; padding: 40px 16px; }
-  .pitch { display: none; }
-  .form-body { padding: 20px; }
-  .form-footer { padding: 16px 20px; }
-}
+.field-help{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px;letter-spacing:0.02em}
 </style>
 </head>
 <body>
@@ -380,8 +111,8 @@ body::before {
   <header class="header">
     <a href="/" class="logo">
       <svg class="logo-hex" viewBox="0 0 32 32" fill="none">
-        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#f5a623" stroke-width="1.5" fill="rgba(245,166,35,0.1)"/>
+        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#f5a623" opacity="0.7"/>
       </svg>
       <span class="logo-name">HYPERFLEX</span>
     </a>
@@ -394,38 +125,39 @@ body::before {
     <div class="pitch">
       <div class="pitch-logo">
         <svg viewBox="0 0 32 32" fill="none">
-          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#f5a623" stroke-width="1.5" fill="rgba(245,166,35,0.1)"/>
+          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#f5a623" opacity="0.7"/>
         </svg>
         <span>HYPERFLEX</span>
       </div>
-      <p class="pitch-tagline">Prediction market intelligence.</p>
+      <p class="pitch-tagline">The receipts<br>are <span class="gold">public.</span></p>
+      <p class="pitch-sub">Every prediction scored on resolution. Sports + Polymarket. One Flex Score that follows you anywhere you share it.</p>
 
       <div class="stat-row">
         <div class="stat-item">
-          <div class="stat-icon">&#x1F40B;</div>
+          <div class="stat-icon">🎯</div>
           <div class="stat-text">
-            <strong>Track $161M+ in whale positions</strong>
-            <span>Follow the biggest wallets on Polymarket</span>
+            <strong>Your track record, verified</strong>
+            <span>Every pick locked pre-event, graded automatically. No screenshots.</span>
           </div>
         </div>
         <div class="stat-item">
-          <div class="stat-icon">&#x1F52E;</div>
+          <div class="stat-icon">🏆</div>
           <div class="stat-text">
-            <strong>AI-powered trade signals</strong>
-            <span>Market analysis and opportunity detection driven by real data</span>
+            <strong>Compete on the leaderboard</strong>
+            <span>Sharp score, win rate, CLV — grade yourself against the best.</span>
           </div>
         </div>
         <div class="stat-item">
-          <div class="stat-icon">&#x1F3C6;</div>
+          <div class="stat-icon">📈</div>
           <div class="stat-text">
-            <strong>Verified trader leaderboard</strong>
-            <span>Compete on sharp score, prove your edge, build your reputation</span>
+            <strong>Follow sharps, see edge</strong>
+            <span>Tail verified track records. Copy top traders on-platform.</span>
           </div>
         </div>
       </div>
 
-      <div class="early-access">Free during Early Access</div>
+      <div class="early-access">Free · Early Access</div>
     </div>
 
     <!-- Right: Auth Form -->
@@ -433,7 +165,7 @@ body::before {
       <div class="form-card">
         <div class="form-header">
           <h2 id="formTitle">Sign in to HYPERFLEX</h2>
-          <p id="formSubtitle">Track whales. Get signals. Prove your edge.</p>
+          <p id="formSubtitle">Get your Flex Score. Build your record. Prove your edge.</p>
         </div>
 
         <div class="form-body">
@@ -755,7 +487,7 @@ function toggleMode(newMode) {
   if (mode === 'signup') {
     signupFields.forEach(el => el.classList.add('show'));
     formTitle.textContent = 'Create your account';
-    formSubtitle.textContent = 'Track whales. Get signals. Prove your edge.';
+    formSubtitle.textContent = 'Get your Flex Score. Build your record. Prove your edge.';
     submitBtn.innerHTML = 'Create account &rarr;';
     toggleText.innerHTML = 'Already have an account? <a onclick="toggleMode(\'login\')">Sign in &rarr;</a>';
     forgotLink.style.display = 'none';
@@ -764,7 +496,7 @@ function toggleMode(newMode) {
   } else {
     signupFields.forEach(el => el.classList.remove('show'));
     formTitle.textContent = 'Sign in to HYPERFLEX';
-    formSubtitle.textContent = 'Track whales. Get signals. Prove your edge.';
+    formSubtitle.textContent = 'Get your Flex Score. Build your record. Prove your edge.';
     submitBtn.innerHTML = 'Sign in &rarr;';
     toggleText.innerHTML = 'New here? <a onclick="toggleMode(\'signup\')">Create account &rarr;</a>';
     forgotLink.style.display = '';
