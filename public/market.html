@@ -5126,6 +5126,21 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   var hmacMessage = ts + 'POST' + '/order' + requestBody;
   var enc = new TextEncoder();
 
+  // V2 orders must go to clob-v2.polymarket.com — clob.polymarket.com
+  // today still routes through V1's parser, which computes the EIP-712
+  // hash over V1 fields (taker/nonce/feeRateBps/expiration) and returns
+  // {"error":"invalid signature"} against a V2-signed struct. The V1→V2
+  // switchover on the canonical URL lands at midnight UTC 2026-04-22;
+  // until then the dedicated V2 host is the only way V2 orders verify.
+  // Detect V2 by the presence of `builder` in the body (V1 has no such
+  // field) — avoids threading a clobVersion arg through the call site.
+  var isV2Body = false;
+  try {
+    var _parsedBody = JSON.parse(requestBody);
+    isV2Body = !!(_parsedBody && _parsedBody.order && _parsedBody.order.builder);
+  } catch (_e) {}
+  var clobHost = isV2Body ? 'https://clob-v2.polymarket.com' : 'https://clob.polymarket.com';
+
   // Decode API secret (base64url → raw bytes)
   var b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
   while (b64std.length % 4) b64std += '=';
@@ -5191,8 +5206,8 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   // 1) DIRECT CLOB
   try {
-    tradeDebug('submitting via direct CLOB (primary)', 'clob.polymarket.com/order');
-    var res = await fetch('https://clob.polymarket.com/order', {
+    tradeDebug('submitting via direct CLOB (primary)', clobHost + '/order');
+    var res = await fetch(clobHost + '/order', {
       method: 'POST',
       headers: orderHeaders,
       body: requestBody

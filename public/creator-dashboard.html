@@ -22141,6 +22141,17 @@ async function confirmTrade() {
       if (builderHeaders.hasOwnProperty(bk)) clobHeaders[bk] = builderHeaders[bk];
     }
 
+    // V2 orders must hit clob-v2.polymarket.com — clob.polymarket.com
+    // still computes EIP-712 hash over V1 fields pre-cutover, which
+    // returns {"error":"invalid signature"} against V2-signed structs.
+    // Detect via presence of `builder` in the body (V1 has no such field).
+    let _qtIsV2 = false;
+    try {
+      const _parsedQtBody = JSON.parse(requestBody);
+      _qtIsV2 = !!(_parsedQtBody && _parsedQtBody.order && _parsedQtBody.order.builder);
+    } catch (_e) {}
+    const clobHost = _qtIsV2 ? 'https://clob-v2.polymarket.com' : 'https://clob.polymarket.com';
+
     // Order of attempts:
     // 1. Direct CLOB — works if user's IP is in an allowed region
     // 2. CF Worker — runs at nearest Cloudflare edge to user
@@ -22148,7 +22159,7 @@ async function confirmTrade() {
     console.log('[qt-trade] Submitting via direct CLOB (primary)');
     let res, data;
     try {
-      res = await fetch('https://clob.polymarket.com/order', {
+      res = await fetch(clobHost + '/order', {
         method: 'POST',
         headers: clobHeaders,
         body: requestBody
