@@ -21891,7 +21891,7 @@ async function confirmTrade() {
     //   2. window.HF_USE_CLOB_V2 = true|false
     //   3. Sticky localStorage hf_use_clob_v2
     //   4. Date-gated default — V2 from 2026-04-22 00:00 UTC onward
-    const _V2_CUTOVER_MS_DASH = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21
+    const _V2_CUTOVER_MS_DASH = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21 (feeRateBps wire-compat fix included)
     let useClobV2 = false;
     if (typeof window !== 'undefined') {
       try {
@@ -22054,6 +22054,11 @@ async function confirmTrade() {
         timestamp: orderStruct.timestamp,
         metadata: orderStruct.metadata,
         builder: orderStruct.builder,
+        // Pre-cutover compat: clob.polymarket.com today still routes through
+        // V1's parser which requires feeRateBps. Without it the CLOB returns
+        //   {"error":"error parsing fee rate bps () to int64"}
+        // Not part of the V2 EIP-712 signed struct, safe to add to wire body.
+        feeRateBps: '0',
         signature: orderSignature,
       };
     } else {

@@ -2670,7 +2670,7 @@ var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c09
 //                                ?clob_v2=0 + localStorage are the rollback path if
 //                                an edge case bites in the next 24h before Polymarket's
 //                                own April 22 00:00 UTC V1 shutoff.
-var V2_CUTOVER_MS = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21
+var V2_CUTOVER_MS = Date.UTC(2026, 3, 21, 0, 0, 0);  // V2 default ON since 2026-04-21 (feeRateBps wire-compat fix included)
 function isClobV2Enabled() {
   if (typeof window === 'undefined') return Date.now() >= V2_CUTOVER_MS;
   // Layer 1: URL override (and persist to layer 3 for next nav)
@@ -4705,6 +4705,15 @@ async function executeTrade() {
         timestamp: orderStruct.timestamp,
         metadata: orderStruct.metadata,
         builder: orderStruct.builder,
+        // Pre-cutover compat: clob.polymarket.com today is still V1's parser
+        // (the dedicated V2 host clob-v2.polymarket.com takes over the
+        // canonical URL only at midnight UTC). V1's parser requires
+        // feeRateBps as a string; without it CLOB returns
+        //   {"error":"error parsing fee rate bps () to int64"}
+        // The field is NOT in the V2 EIP-712 signed struct, so adding it
+        // here doesn't break the signature. Keep through cutover; V2's
+        // parser will ignore the extra field.
+        feeRateBps: '0',
         signature: orderSignature
       };
     } else {
