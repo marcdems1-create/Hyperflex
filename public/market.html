@@ -1730,16 +1730,34 @@ function updatePricePills() {
 // from scratch (rather than scaling the visible field) so 25% always means
 // 25% of the position, not 25% of whatever's already in the box.
 async function setSellPct(pct) {
-  await setMaxShares();
   var input = document.getElementById('tradeAmount');
   if (!input) return;
-  var max = parseFloat(input.value || 0);
-  if (!(max > 0)) return;
-  var v = (max * pct) / 100;
-  input.value = v.toFixed(2);
-  // Clear the pending-max-shares hint since we're below max — executeTrade
-  // should re-derive shares from the new USD amount, not stamp the full
-  // position size onto a partial sell.
+  // Prefer _pendingMaxShares (exact share count from the panel row) over
+  // re-running setMaxShares, which has been flaky on multi-outcome events.
+  // If _pendingMaxShares isn't set (user opened the sell modal via the
+  // tab, not a row button), fall back to setMaxShares to populate it.
+  if (!(typeof _pendingMaxShares === 'number' && _pendingMaxShares > 0)) {
+    await setMaxShares();
+  }
+  var maxShares = (typeof _pendingMaxShares === 'number' && _pendingMaxShares > 0)
+    ? _pendingMaxShares : 0;
+  if (maxShares <= 0) {
+    // Last-ditch: read whatever setMaxShares left in the input (USD) and
+    // scale that — keeps the old behavior when the pre-fill path worked.
+    var maxUsd = parseFloat(input.value || 0);
+    if (!(maxUsd > 0)) return;
+    input.value = ((maxUsd * pct) / 100).toFixed(2);
+    if (pct < 100) _pendingMaxShares = null;
+    updateTradeCalc();
+    return;
+  }
+  var priceCents = parseFloat(document.getElementById('tradePrice').value) || 0;
+  var shares = (maxShares * pct) / 100;
+  var usd = shares * priceCents / 100;
+  input.value = usd > 0 ? usd.toFixed(2) : '0';
+  // On <100% sells, clear the latch so executeTrade re-derives shares
+  // from the partial USD amount rather than stamping the full position.
+  // On 100%, keep the latch so we sell the EXACT share count (no dust).
   if (pct < 100) _pendingMaxShares = null;
   updateTradeCalc();
 }
@@ -2531,7 +2549,7 @@ function renderTradePositionsPanel() {
         escH(outLabel) +
         '<div style="font-size:10px;color:var(--soft);margin-top:1px">' + r.size.toFixed(1) + ' shares \u00b7 avg ' + avgCents + '\u00a2</div>' +
       '</div>' +
-      '<button onclick="sellPositionRow(' + r.outcomeIdx + ',' + r.sideIdx + ')" ' +
+      '<button onclick="sellPositionRow(' + r.outcomeIdx + ',' + r.sideIdx + ',' + r.size + ')" ' +
         'style="background:#ff4d6a;border:0;color:#fff;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.04em;padding:7px 14px;border-radius:6px;cursor:pointer;min-height:34px;flex-shrink:0;transition:filter .15s" ' +
         'onmouseover="this.style.filter=\'brightness(1.12)\'" onmouseout="this.style.filter=\'\'">\u2193 Sell</button>' +
     '</div>';
@@ -2548,7 +2566,12 @@ function renderTradePositionsPanel() {
 //   - trade side (YES/NO) matches the row
 //   - amount = max (all owned shares at current price)
 //   - Buy tab visually de-emphasised, Sell tab is the CTA
-function sellPositionRow(outcomeIdx, sideIdx) {
+// `shareCount` is the exact share size that the positions panel already
+// resolved for this row. Using it directly avoids a second cache lookup
+// inside setMaxShares, which has been racing against fetchUserPositions
+// and tokenId format drift on multi-outcome events (user saw amount → 0
+// even when the panel found the position correctly).
+function sellPositionRow(outcomeIdx, sideIdx, shareCount) {
   try {
     // 1. Activate the right outcome row so trade-side data points at it.
     //    switchOutcome() is the project's canonical setter — it handles
@@ -2580,8 +2603,22 @@ function sellPositionRow(outcomeIdx, sideIdx) {
       '<button class="trade-quick-btn" onclick="setSellPct(75)">75%</button>' +
       '<button class="trade-quick-btn" onclick="setSellPct(100)">100%</button>';
   } catch (e) {}
-  // 5. Prefill Max shares so the user can confirm with one click.
-  try { setMaxShares(); } catch (e) {}
+  // 5. Prefill the exact share count the panel already resolved for this
+  //    row. Skip the setMaxShares re-lookup when we have it — it's async
+  //    and has been racing against the cache on multi-outcome events.
+  try {
+    if (typeof shareCount === 'number' && shareCount > 0) {
+      var priceCents = parseFloat(document.getElementById('tradePrice').value) || 0;
+      var usd = shareCount * priceCents / 100;
+      var input = document.getElementById('tradeAmount');
+      if (input) input.value = usd > 0 ? usd.toFixed(2) : '0';
+      // Tell executeTrade to use this exact share count instead of
+      // re-deriving from amount/price (avoids flooring dust).
+      _pendingMaxShares = shareCount;
+    } else {
+      setMaxShares();
+    }
+  } catch (e) {}
   try { updateTradeCalc(); } catch (e) {}
   try { updateCtaButton(); } catch (e) {}
   try { updateSellBalanceBadge(); } catch (e) {}
