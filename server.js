@@ -11644,10 +11644,10 @@ app.get('/api/trader-profile/:username', async (req, res) => {
     let followerCount = 0;
     try {
       if (pool) {
-        const rows = await dbQuery('SELECT COUNT(*)::int as count FROM predictor_follows WHERE followed_id = $1', [userId]);
+        const rows = await dbQuery('SELECT COUNT(*)::int as count FROM predictor_follows WHERE following_id = $1', [userId]);
         followerCount = rows[0]?.count || 0;
       } else {
-        const { count } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('followed_id', userId);
+        const { count } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('following_id', userId);
         followerCount = count || 0;
       }
     } catch (e) { /* predictor_follows may not exist yet */ }
@@ -44322,12 +44322,30 @@ if (pool) {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
 
+      // Column name unification: earlier versions of this auto-create used
+      // `followed_id`, but the POST /follow endpoint and the rest of the
+      // codebase use `following_id` (matches the migration .sql file).
+      // Create the canonical schema, then add a compat migration for any
+      // existing DB that still has the old column name. Without this the
+      // follow POST was hitting "column following_id does not exist" and
+      // surfacing as a generic "Follow failed" alert.
       await dbQuery(`CREATE TABLE IF NOT EXISTS predictor_follows (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        follower_id TEXT, followed_id TEXT,
+        follower_id TEXT, following_id TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(follower_id, followed_id)
+        UNIQUE(follower_id, following_id)
       )`).catch(() => {});
+      // Idempotent migration: if the table was previously created with
+      // `followed_id`, rename it. Harmless no-op on fresh/correct DBs.
+      await dbQuery(`DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='predictor_follows' AND column_name='followed_id')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='predictor_follows' AND column_name='following_id') THEN
+            ALTER TABLE predictor_follows RENAME COLUMN followed_id TO following_id;
+          END IF;
+        END $$;`).catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS cached_positions (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
