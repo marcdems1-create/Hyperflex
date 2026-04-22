@@ -692,6 +692,22 @@ async function load() {
     const positionCount = pStats.total_trades || 0;
     const isTopWhale    = isWhale && whaleRank && whaleRank <= 50;
 
+    // Hero P&L resolution — if a verified top-50 whale is momentarily red
+    // on one open position but has a substantial lifetime track record,
+    // showing the small loss as the hero undersells them badly (saw a
+    // rank-#2 / +$736k whale display "-$25K" as the hero because one
+    // open bet was underwater). Prefer lifetime whale_pnl when it's
+    // materially larger than current open P&L AND positive. Keeps honest
+    // losers displaying losses, but stops the hero from hiding a $700k
+    // lifetime track record behind a $25k floating drawdown.
+    const lifetimePnl = window._profilePayload && window._profilePayload.whale_pnl != null
+      ? Number(window._profilePayload.whale_pnl)
+      : (pStats.whale_pnl != null ? Number(pStats.whale_pnl) : null);
+    const displayPnl = (lifetimePnl != null && lifetimePnl > 0 && lifetimePnl > Math.abs(polyPnl) * 3)
+      ? lifetimePnl
+      : polyPnl;
+    const displayPnlIsLifetime = displayPnl !== polyPnl;
+
     let tierEmoji, tierLabel, tierColorCss, rankDesc, rankClass;
     let tierProgress = null; // { current, target } only set for 'building' state
 
@@ -799,7 +815,7 @@ async function load() {
             <div class="tier-record">Tiers measure realized P&amp;L, close-at-profit rate, and trading volume.</div>
             <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.round((tierProgress.current / tierProgress.target) * 100)}%;background:${tierColorCss}"></div></div>
           ` : `
-            <div class="tier-pct" style="color:${tierColorCss}">${pStats.pnl_usd >= 0 ? '+' : '-'}$${Math.abs(pStats.pnl_usd) >= 1000000 ? (Math.abs(pStats.pnl_usd)/1000000).toFixed(1)+'M' : Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000)+'K' : Math.round(Math.abs(pStats.pnl_usd))}</div>
+            <div class="tier-pct" style="color:${tierColorCss}">${displayPnl >= 0 ? '+' : '-'}$${Math.abs(displayPnl) >= 1000000 ? (Math.abs(displayPnl)/1000000).toFixed(1)+'M' : Math.abs(displayPnl) >= 1000 ? Math.round(Math.abs(displayPnl)/1000)+'K' : Math.round(Math.abs(displayPnl))}${displayPnlIsLifetime ? '<span style="font-size:14px;font-weight:600;letter-spacing:0;margin-left:6px;color:var(--text-dim)">lifetime</span>' : ''}</div>
             <div class="tier-desc">${rankDesc}</div>
             <div class="tier-record">${closeRate}% close-at-profit · ${closedCount} closed · ${positionCount} total positions</div>
             <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.min(100, closeRate)}%;background:${tierColorCss}"></div></div>
