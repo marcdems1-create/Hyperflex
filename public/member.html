@@ -789,7 +789,7 @@ async function load() {
             <span id="sharpBadge" class="badge" style="display:none;background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)"></span>
           </div>
           <div class="social-row">
-            <span><strong>${(stats.followers || 0).toLocaleString()}</strong><span class="lbl">Followers</span></span>
+            <span id="followerCountChip" onclick="openFollowersModal()" style="cursor:pointer" title="View followers"><strong>${(stats.followers || 0).toLocaleString()}</strong><span class="lbl">Followers</span></span>
             <span><strong>${(stats.following || 0).toLocaleString()}</strong><span class="lbl">Following</span></span>
             ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold)">${take_stats.total_agrees.toLocaleString()}</strong><span class="lbl">Agrees</span></span>` : ''}
           </div>
@@ -1004,6 +1004,22 @@ async function load() {
         </div>
         <button onclick="shareProfileOnX()" class="btn btn-ghost">🐦 Share on X</button>
         <div id="inviteStats" style="margin-top:14px;font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
+      </div>
+
+      <!-- Followers modal — click the follower count chip to open -->
+      <div id="followersModal" onclick="closeFollowersModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px">
+        <div onclick="event.stopPropagation()" style="background:linear-gradient(180deg,#16161f,#0e0e17);border:1px solid var(--border-strong);border-radius:20px;padding:22px 22px 18px;max-width:460px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div>
+              <div style="font-family:var(--mono,'JetBrains Mono',monospace);font-size:10px;font-weight:800;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Followers</div>
+              <div style="font-size:20px;font-weight:900;letter-spacing:-0.01em;color:var(--text)" id="followersModalCount">—</div>
+            </div>
+            <button onclick="closeFollowersModal()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px;background:none;border:0;cursor:pointer">×</button>
+          </div>
+          <div id="followersModalList" style="overflow-y:auto;margin:0 -8px;padding:0 8px;flex:1">
+            <div style="padding:24px 8px;text-align:center;color:var(--text-faint);font-family:var(--mono,monospace);font-size:11px;letter-spacing:0.08em">LOADING…</div>
+          </div>
+        </div>
       </div>
 
       <!-- Challenge modal -->
@@ -1398,6 +1414,69 @@ async function loadFollowStatus() {
   } catch (e) {
     console.warn('[follow-status]', e);
   }
+}
+
+// Followers modal — opens from the profile header follower-count chip.
+// Renders avatar + name + handle/wallet + FLEX score + "followed Nh
+// ago" for each follower. Most recent first. Public — anyone can view,
+// but most useful for the profile owner to see who's followed them.
+async function openFollowersModal() {
+  var modal = document.getElementById('followersModal');
+  var list  = document.getElementById('followersModalList');
+  var count = document.getElementById('followersModalCount');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  if (list) list.innerHTML = '<div style="padding:24px 8px;text-align:center;color:var(--text-faint);font-family:var(--mono,monospace);font-size:11px;letter-spacing:0.08em">LOADING…</div>';
+  if (count) count.textContent = '—';
+  try {
+    var res = await fetch(`${API}/api/users/${encodeURIComponent(userId)}/followers?limit=100`);
+    if (!res.ok) throw new Error('fetch ' + res.status);
+    var d = await res.json();
+    var rows = d.followers || [];
+    if (count) count.textContent = rows.length.toLocaleString() + (rows.length === 1 ? ' follower' : ' followers');
+    if (!rows.length) {
+      list.innerHTML = '<div style="padding:40px 8px;text-align:center;color:var(--text-faint);font-family:var(--mono,monospace);font-size:11px;letter-spacing:0.08em">NO FOLLOWERS YET</div>';
+      return;
+    }
+    var escape = function(s) { return String(s == null ? '' : s).replace(/[&<>"\']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); };
+    list.innerHTML = rows.map(function(u) {
+      var name = escape(u.display_name || u.username || 'Trader');
+      var handle = u.username ? '@' + escape(u.username) : (u.polymarket_address ? escape(u.polymarket_address.slice(0, 6) + '…' + u.polymarket_address.slice(-4)) : '');
+      var flex = u.flex_score_90d != null ? u.flex_score_90d : null;
+      var initial = (u.display_name || u.username || '?')[0].toUpperCase();
+      var when = '';
+      try {
+        if (u.followed_at) {
+          var diff = Date.now() - new Date(u.followed_at).getTime();
+          var mins = Math.floor(diff / 60000);
+          if (mins < 1) when = 'just now';
+          else if (mins < 60) when = mins + 'm ago';
+          else if (mins < 1440) when = Math.floor(mins / 60) + 'h ago';
+          else when = Math.floor(mins / 1440) + 'd ago';
+        }
+      } catch (e) {}
+      var flexHtml = flex != null
+        ? '<span style="font-family:var(--mono,monospace);font-size:12px;font-weight:900;color:var(--gold,#c9920d);letter-spacing:-0.01em;margin-left:auto">' + flex + '</span>'
+        : '';
+      var verifyHtml = u.wallet_verified ? ' <span style="display:inline-block;margin-left:4px;font-size:10px;color:#4d9fff">✓</span>' : '';
+      return '<a href="/m/' + encodeURIComponent(u.id) + '" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:10px;text-decoration:none;color:inherit;transition:background .15s" onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'transparent\'">' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#4d9fff);padding:1.5px;flex-shrink:0"><div style="width:100%;height:100%;border-radius:50%;background:#16161f;display:flex;align-items:center;justify-content:center;font-family:\'Inter\',sans-serif;font-size:14px;font-weight:800;color:var(--text)">' + escape(initial) + '</div></div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:14px;font-weight:700;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + verifyHtml + '</div>' +
+          '<div style="font-family:var(--mono,monospace);font-size:11px;color:var(--muted);margin-top:2px">' + handle + (when ? (handle ? ' · ' : '') + '<span style="color:var(--text-faint)">' + when + '</span>' : '') + '</div>' +
+        '</div>' +
+        flexHtml +
+      '</a>';
+    }).join('');
+  } catch (err) {
+    console.warn('[followers-modal]', err);
+    list.innerHTML = '<div style="padding:24px 8px;text-align:center;color:var(--red)">Failed to load followers.</div>';
+  }
+}
+
+function closeFollowersModal() {
+  var modal = document.getElementById('followersModal');
+  if (modal) modal.style.display = 'none';
 }
 
 async function toggleFollow() {

@@ -12442,11 +12442,67 @@ app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
     } else {
       if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [followerId, followingId]); }
       else { await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId }); }
+      // Notify the followed user in their bell (non-blocking).
+      (async () => {
+        try {
+          let followerName = 'Someone';
+          if (pool) {
+            const r = await dbQuery('SELECT display_name, username FROM users WHERE id = $1 LIMIT 1', [followerId]).catch(() => []);
+            if (r.length) followerName = r[0].display_name || (r[0].username ? '@' + r[0].username : followerName);
+          } else {
+            const { data } = await supabase.from('users').select('display_name, username').eq('id', followerId).maybeSingle();
+            if (data) followerName = data.display_name || (data.username ? '@' + data.username : followerName);
+          }
+          await pushNotification(
+            followingId,
+            'new_follower',
+            followerName + ' followed you',
+            'Tap to see your followers.',
+            null,
+            null
+          );
+        } catch (e) { /* non-blocking */ }
+      })();
       return res.json({ following: true });
     }
   } catch (e) {
     console.error('[follow]', e.message);
     res.status(500).json({ error: 'Follow failed' });
+  }
+});
+
+// GET /api/users/:userId/followers — list who's following this user.
+// Public (same as follower counts). Used by the member-profile followers
+// panel when the viewer is the owner + any future "Followers" UI.
+app.get('/api/users/:userId/followers', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) return res.json({ count: 0, followers: [] });
+    const limit = Math.min(parseInt(req.query.limit) || 100, 200);
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(`
+        SELECT u.id, u.display_name, u.username, u.polymarket_address,
+               u.flex_score_90d, u.is_whale, u.wallet_verified,
+               pf.created_at as followed_at
+        FROM predictor_follows pf
+        JOIN users u ON u.id = pf.follower_id
+        WHERE pf.following_id = $1
+        ORDER BY pf.created_at DESC
+        LIMIT $2`, [userId, limit]).catch(() => []);
+    } else if (supabase) {
+      const { data } = await supabase
+        .from('predictor_follows')
+        .select('follower_id, created_at, users!predictor_follows_follower_id_fkey(id, display_name, username, polymarket_address, flex_score_90d, is_whale, wallet_verified)')
+        .eq('following_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      rows = (data || []).map(r => ({ ...(r.users || {}), followed_at: r.created_at }));
+    }
+    res.json({ count: rows.length, followers: rows });
+  } catch (err) {
+    console.error('[api/users/followers]', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
