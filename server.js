@@ -13615,6 +13615,60 @@ app.get('/api/admin/polymarket-outreach', async (req, res) => {
 // GET /api/admin/verified-predictors — marketing cohort export.
 // Returns every user with wallet_verified=true plus contact + stats so
 // we can reach out directly (email, X handle) later. Admin-gated.
+// GET /api/admin/connected-wallets — every user with a polymarket_address.
+// Shows the full address, claim status, and quick links so admin can audit
+// the connected-wallet cohort at a glance without guessing.
+app.get('/api/admin/connected-wallets', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const q = (req.query.q || '').toLowerCase();
+    const filter = req.query.filter || 'all';
+    const limit = Math.min(parseInt(req.query.limit) || 500, 1000);
+    const rows = await dbQuery(`
+      SELECT u.id, u.display_name, u.username, u.email, u.polymarket_address,
+             u.wallet_verified, u.is_whale, u.whale_rank, u.whale_pnl,
+             u.flex_score_90d, u.follower_count, u.total_predictions,
+             u.prediction_win_rate, u.created_at, u.last_login_date,
+             (u.password_hash LIKE 'whale_profile_%') AS auto_created,
+             (SELECT COUNT(*)::int FROM cached_positions cp WHERE cp.user_id = u.id) AS cached_position_count,
+             (SELECT COUNT(*)::int FROM polymarket_trades pt WHERE LOWER(pt.eoa_address) = LOWER(u.polymarket_address)) AS polymarket_trade_count
+      FROM users u
+      WHERE u.polymarket_address IS NOT NULL
+      ORDER BY
+        u.wallet_verified DESC,
+        COALESCE(u.whale_rank, 99999) ASC,
+        COALESCE(u.whale_pnl, 0) DESC
+      LIMIT $1
+    `, [limit]).catch(async (e) => {
+      // Fallback for older schemas missing some columns
+      return await dbQuery(`
+        SELECT id, display_name, username, polymarket_address, wallet_verified,
+               is_whale, whale_rank, whale_pnl, created_at,
+               (password_hash LIKE 'whale_profile_%') AS auto_created
+        FROM users WHERE polymarket_address IS NOT NULL
+        ORDER BY COALESCE(whale_rank, 99999) ASC
+        LIMIT $1
+      `, [limit]);
+    });
+    let filtered = rows;
+    if (filter === 'claimed')   filtered = filtered.filter(r => !r.auto_created);
+    if (filter === 'unclaimed') filtered = filtered.filter(r =>  r.auto_created);
+    if (filter === 'verified')  filtered = filtered.filter(r =>  r.wallet_verified);
+    if (filter === 'whales')    filtered = filtered.filter(r =>  r.is_whale);
+    if (q) {
+      filtered = filtered.filter(r => {
+        const hay = [r.display_name, r.username, r.email, r.polymarket_address].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    res.json({ count: filtered.length, total: rows.length, wallets: filtered });
+  } catch (err) {
+    console.error('[admin/connected-wallets]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/verified-predictors', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
@@ -14756,6 +14810,12 @@ app.get('/admin/bugs', (req, res) => {
 // password entry the other admin pages use).
 app.get('/admin/predictors', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-predictors.html'));
+});
+
+// Admin UI for auditing connected wallets — every user with a
+// polymarket_address shown with full addr + debug links.
+app.get('/admin/wallets', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-wallets.html'));
 });
 
 // ════════════════════════════════════════════════════════════

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connected Wallets — HYPERFLEX Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0d10;
+  --surface: #13131a;
+  --surface-2: #1a1a24;
+  --text: #f0f0f5;
+  --text-dim: #8b8a9a;
+  --text-faint: #4a4a5a;
+  --border: rgba(255,255,255,0.07);
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --gold: #c9920d;
+  --blue: #4d9fff;
+  --purple: #a855f7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.container { max-width: 1600px; margin: 0 auto; padding: 28px 28px 60px; }
+.head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.head h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px; font-weight: 900; letter-spacing: -0.02em;
+  margin: 0;
+}
+.head .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--blue); text-transform: uppercase;
+  margin-top: 4px;
+}
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  text-transform: uppercase;
+}
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.auth-wrap {
+  max-width: 420px; margin: 120px auto 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px 28px;
+}
+.auth-wrap h2 { margin: 0 0 8px; font-size: 18px; font-weight: 800; }
+.auth-wrap p { margin: 0 0 20px; color: var(--text-dim); font-size: 13px; }
+.auth-wrap input {
+  width: 100%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  outline: none; margin-bottom: 12px;
+}
+.auth-wrap input:focus { border-color: var(--blue); }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px;
+}
+.stat-lbl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--text-faint); text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px; font-weight: 900; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stat-val.blue   { color: var(--blue); }
+.stat-val.green  { color: var(--green); }
+.stat-val.gold   { color: var(--gold); }
+.stat-val.purple { color: var(--purple); }
+
+.filters {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.pill {
+  padding: 6px 12px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-dim); cursor: pointer;
+  text-transform: uppercase;
+}
+.pill.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.search {
+  flex: 1; min-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 100px; padding: 6px 14px;
+  color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;
+  outline: none;
+}
+.search:focus { border-color: var(--blue); }
+
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+thead th {
+  text-align: left; padding: 10px 14px;
+  background: var(--surface-2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--text-faint); text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+tbody tr:hover { background: rgba(255,255,255,0.015); }
+tbody tr:last-child td { border-bottom: none; }
+.name-cell a { color: var(--text); font-weight: 700; }
+.name-cell a:hover { color: var(--blue); }
+.wallet-addr {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text);
+  letter-spacing: 0;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 360px;
+}
+.wallet-copy {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-dim); cursor: pointer;
+  text-transform: uppercase;
+}
+.wallet-copy:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+.badge.verified { background: rgba(77,159,255,0.15); color: var(--blue); }
+.badge.whale    { background: rgba(168,85,247,0.15); color: var(--purple); }
+.badge.auto     { background: rgba(201,146,13,0.12); color: var(--gold); }
+.badge.claimed  { background: rgba(0,230,138,0.12); color: var(--green); }
+.num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.num.up { color: var(--green); }
+.num.down { color: var(--red); }
+.num.muted { color: var(--text-faint); }
+.ext-links a {
+  display: inline-block;
+  padding: 3px 8px;
+  margin-right: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.ext-links a:hover { color: var(--text); border-color: rgba(255,255,255,0.2); text-decoration: none; }
+.loading { text-align: center; padding: 48px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; }
+.empty   { text-align: center; padding: 48px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  display: none;
+}
+.toast.show { display: block; }
+.toast.ok  { border-color: rgba(0,230,138,0.4); color: var(--green); }
+</style>
+</head>
+<body>
+
+<div id="authGate" class="auth-wrap" style="display:none">
+  <h2>Admin · Connected Wallets</h2>
+  <p>Paste your <code>ADMIN_SECRET</code> to view the wallet registry.</p>
+  <input type="password" id="secretInput" placeholder="x-admin-secret" autofocus>
+  <button class="btn primary" onclick="authenticate()" style="width:100%">Unlock</button>
+</div>
+
+<div class="container" id="mainWrap" style="display:none">
+  <div class="head">
+    <div>
+      <div class="sub">Admin · Connected Wallets</div>
+      <h1>Wallet registry</h1>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn" href="/admin/predictors">Predictors →</a>
+      <button class="btn" onclick="loadAll()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="filters">
+    <button class="pill active" data-filter="all">All</button>
+    <button class="pill" data-filter="claimed">Claimed users</button>
+    <button class="pill" data-filter="unclaimed">Auto-created (whales)</button>
+    <button class="pill" data-filter="verified">Verified</button>
+    <button class="pill" data-filter="whales">Whales</button>
+    <input class="search" id="searchInput" placeholder="Search name, handle, email, wallet…">
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Wallet</th>
+        <th>Status</th>
+        <th style="text-align:right">Rank</th>
+        <th style="text-align:right">PnL</th>
+        <th style="text-align:right">Cached / Trades</th>
+        <th>Links</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="7" class="loading">Loading wallet registry…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _data = [];
+var _filter = 'all';
+var _search = '';
+
+function authenticate() {
+  var v = document.getElementById('secretInput').value.trim();
+  if (!v) return;
+  sessionStorage.setItem('hf_admin_secret', v);
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+  loadAll();
+}
+function getSecret() { return sessionStorage.getItem('hf_admin_secret') || ''; }
+
+async function adminFetch(path) {
+  var res = await fetch(path, { headers: { 'x-admin-secret': getSecret() } });
+  if (res.status === 401) {
+    sessionStorage.removeItem('hf_admin_secret');
+    location.reload();
+    return null;
+  }
+  return res;
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+function toast(m, cls) {
+  var t = document.getElementById('toast');
+  t.className = 'toast show ' + (cls || 'ok');
+  t.textContent = m;
+  setTimeout(function(){ t.className = 'toast'; }, 2400);
+}
+
+async function loadAll() {
+  var body = document.getElementById('tbody');
+  body.innerHTML = '<tr><td colspan="7" class="loading">Loading wallet registry…</td></tr>';
+  var res = await adminFetch('/api/admin/connected-wallets?limit=500');
+  if (!res || !res.ok) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">Load failed.</td></tr>';
+    return;
+  }
+  var d = await res.json();
+  _data = d.wallets || [];
+  renderStats();
+  render();
+}
+
+function renderStats() {
+  var total     = _data.length;
+  var claimed   = _data.filter(r => !r.auto_created).length;
+  var unclaimed = _data.filter(r =>  r.auto_created).length;
+  var verified  = _data.filter(r =>  r.wallet_verified).length;
+  var whales    = _data.filter(r =>  r.is_whale).length;
+  var html = [
+    { lbl: 'Connected', val: total,     cls: 'blue'   },
+    { lbl: 'Claimed',   val: claimed,   cls: 'green'  },
+    { lbl: 'Unclaimed', val: unclaimed, cls: 'gold'   },
+    { lbl: 'Verified',  val: verified,  cls: 'blue'   },
+    { lbl: 'Whales',    val: whales,    cls: 'purple' },
+  ].map(s => '<div class="stat"><div class="stat-lbl">' + s.lbl + '</div><div class="stat-val ' + s.cls + '">' + s.val + '</div></div>').join('');
+  document.getElementById('stats').innerHTML = html;
+}
+
+function applyFilter(rows) {
+  var q = _search.toLowerCase().trim();
+  return rows.filter(function(r) {
+    if (_filter === 'claimed'   && r.auto_created)      return false;
+    if (_filter === 'unclaimed' && !r.auto_created)     return false;
+    if (_filter === 'verified'  && !r.wallet_verified)  return false;
+    if (_filter === 'whales'    && !r.is_whale)         return false;
+    if (q) {
+      var hay = [r.display_name, r.username, r.email, r.polymarket_address].filter(Boolean).join(' ').toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+function fmtPnl(n) {
+  if (n == null) return '—';
+  var num = Number(n);
+  if (!num) return '—';
+  var sign = num < 0 ? '-' : '+';
+  var abs = Math.abs(num);
+  var s = abs >= 1e6 ? (abs/1e6).toFixed(2) + 'M'
+       : abs >= 1e3 ? Math.round(abs/1e3) + 'K'
+       : Math.round(abs).toString();
+  return sign + '$' + s;
+}
+
+function render() {
+  var body = document.getElementById('tbody');
+  var rows = applyFilter(_data);
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">No wallets match.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(r) {
+    var addr = r.polymarket_address || '';
+    var badges = '';
+    if (r.auto_created) badges += '<span class="badge auto">Auto</span>';
+    else                badges += '<span class="badge claimed">Claimed</span>';
+    if (r.wallet_verified) badges += '<span class="badge verified">✓ Verified</span>';
+    if (r.is_whale)        badges += '<span class="badge whale">🐋 Whale</span>';
+    var pnl = Number(r.whale_pnl || 0);
+    var pnlCls = pnl > 0 ? 'up' : pnl < 0 ? 'down' : 'muted';
+    var rank = r.whale_rank != null ? '#' + r.whale_rank : '<span class="num muted">—</span>';
+    var cachedN = r.cached_position_count != null ? r.cached_position_count : '—';
+    var tradeN  = r.polymarket_trade_count != null ? r.polymarket_trade_count : '—';
+    return '<tr>' +
+      '<td><div class="name-cell"><a href="/m/' + encodeURIComponent(r.id) + '" target="_blank">' + esc(r.display_name || r.username || 'Trader') + '</a>' +
+        (r.username ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-faint);margin-top:2px">@' + esc(r.username) + '</div>' : '') +
+      '</div></td>' +
+      '<td>' +
+        '<span class="wallet-addr" title="' + esc(addr) + '">' + esc(addr) + '</span>' +
+        '<span class="wallet-copy" onclick="navigator.clipboard.writeText(\'' + esc(addr) + '\');this.textContent=\'Copied\';setTimeout(()=>this.textContent=\'Copy\',1500)">Copy</span>' +
+      '</td>' +
+      '<td>' + badges + '</td>' +
+      '<td style="text-align:right">' + (typeof rank === 'string' ? rank : '<span class="num muted">' + rank + '</span>') + '</td>' +
+      '<td style="text-align:right"><span class="num ' + pnlCls + '">' + fmtPnl(pnl) + '</span></td>' +
+      '<td style="text-align:right" title="cached_positions / polymarket_trades"><span class="num muted">' + cachedN + ' / ' + tradeN + '</span></td>' +
+      '<td><div class="ext-links">' +
+        '<a href="https://polygonscan.com/address/' + esc(addr) + '" target="_blank" rel="noopener">Polygonscan</a>' +
+        '<a href="https://polymarket.com/profile/' + esc(addr) + '" target="_blank" rel="noopener">Polymarket</a>' +
+        '<a href="/m/' + encodeURIComponent(r.id) + '" target="_blank">Profile</a>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('pill') && e.target.dataset.filter) {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    _filter = e.target.dataset.filter;
+    render();
+  }
+});
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  _search = e.target.value;
+  render();
+});
+document.getElementById('secretInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') authenticate();
+});
+
+if (getSecret()) {
+  document.getElementById('mainWrap').style.display = 'block';
+  loadAll();
+} else {
+  document.getElementById('authGate').style.display = 'block';
+}
+</script>
+</body>
+</html>
