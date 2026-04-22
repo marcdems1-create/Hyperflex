@@ -17842,6 +17842,13 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       if (mode === 'following' && userId) {
         params.push(userId);
         where += ` AND (p.user_id = $${params.length}::text OR p.user_id IN (SELECT following_id FROM predictor_follows WHERE follower_id = $${params.length}::text))`;
+      } else if (mode === 'foryou' && userId) {
+        // For You should never show the viewer their own posts — those
+        // already live in the Following tab (+ their own profile). A
+        // social feed that replays your own content back at you reads
+        // as broken. Exclude self-authored posts from this mode.
+        params.push(userId);
+        where += ` AND p.user_id IS DISTINCT FROM $${params.length}::text`;
       }
       if (cursor) {
         params.push(cursor);
@@ -17880,6 +17887,9 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
         const { data: follows } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
         const ids = [userId, ...((follows || []).map(f => f.following_id))];
         q = q.in('user_id', ids);
+      } else if (mode === 'foryou' && userId) {
+        // Exclude self-authored posts from For You (see pool branch note).
+        q = q.neq('user_id', userId);
       }
       if (cursor) q = q.lt('posted_at', cursor);
       const { data } = await q;

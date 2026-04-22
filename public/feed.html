@@ -2072,13 +2072,14 @@ async function loadFeed(append) {
 
     if (!append) feedData = preds; else feedData = feedData.concat(preds);
 
-    // Belt-and-suspenders: the user has been reporting "posted toast fired
-    // but nothing on the feed". To rule out filter/cache races, explicitly
-    // fetch the authenticated user's own predictions and prepend any that
-    // aren't already in feedData. If the write succeeded, they'll appear
-    // here even when /api/predictions/feed for any reason leaves them out.
-    // Only runs on first-page loads (!append) and only when logged in.
-    if (!append && token) {
+    // Belt-and-suspenders: explicit /predictions/mine prepend existed to
+    // cover cases where the user posted but their prediction didn't show
+    // in the main feed query. Now that the server intentionally excludes
+    // self-posts from the For You feed (they'd crowd out other content),
+    // running this prepend on For You would re-introduce the problem it
+    // was meant to fix. Only prepend when the viewer is on Following —
+    // that mode includes self by design.
+    if (!append && token && currentTab === 'following') {
       try {
         var mr = await fetch(API + '/api/predictions/mine?limit=10', { headers: authHeaders() });
         if (mr.ok) {
