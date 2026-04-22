@@ -17873,6 +17873,34 @@ app.get('/api/predictions/mine', requireAuth, async (req, res) => {
         .limit(lim);
       rows = data || [];
     }
+
+    // Attach live market prices — same pattern as /api/predictions/feed so
+    // the client gets the hero-market card treatment on own-posts. Reads
+    // from the warm _screenerCache so no extra API calls.
+    if (_screenerCache?.data?.length && rows.length) {
+      const bySlug = new Map();
+      const byCondition = new Map();
+      for (const m of _screenerCache.data) {
+        if (m.slug) bySlug.set(m.slug, m);
+        if (m.event_slug) bySlug.set(m.event_slug, m);
+        if (m.market_id) byCondition.set(m.market_id, m);
+        if (m.condition_id) byCondition.set(m.condition_id, m);
+      }
+      for (const r of rows) {
+        if (!r.market_id) continue;
+        const match = bySlug.get(r.market_id) || byCondition.get(r.market_id);
+        if (!match) continue;
+        r.market_live = {
+          yes_pct: match.yes_price != null ? Math.round(match.yes_price * 100) : null,
+          volume_24h: match.volume_24h || match.volume24hr || null,
+          liquidity: match.liquidity || null,
+          url: match.slug ? `/market/${match.slug}` : null,
+          closes_at: match.endDate || match.end_date || null,
+          category: match.category || null,
+        };
+      }
+    }
+
     res.json({ user_id: req.userId, count: rows.length, predictions: rows });
   } catch (err) {
     console.error('[predictions/mine]', err.message);

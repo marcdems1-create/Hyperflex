@@ -3175,11 +3175,22 @@ async function loadTopPredictors() {
   var hero = document.getElementById('predHeroSlot');
   var ranks = document.getElementById('predRankSlot');
   if (!hero || !ranks) return;
-  try {
-    var res = await fetch('/api/predictors?verified=1&limit=6&sort=sharp_score');
+  // Prefer wallet-verified users (they're our marketing cohort) but fall
+  // back to the broader top-ranked predictors if the verified pool is
+  // empty — the rail should never show a dead panel. The verified pip
+  // below still visually distinguishes the confirmed ones.
+  async function fetchPredictors(verifiedOnly) {
+    var url = '/api/predictors?limit=10&sort=sharp_score' + (verifiedOnly ? '&verified=1' : '');
+    var res = await fetch(url);
     if (!res.ok) throw new Error('predictors fetch ' + res.status);
     var data = await res.json();
-    var items = Array.isArray(data) ? data : (data.predictors || []);
+    return Array.isArray(data) ? data : (data.predictors || []);
+  }
+  try {
+    var items = await fetchPredictors(true);
+    if (!items.length) {
+      items = await fetchPredictors(false);
+    }
     // Client-side sort: prefer flex_score_90d (composite) then sharp_score
     items.sort(function(a, b) {
       var aS = a.flex_score_90d != null ? a.flex_score_90d : (a.sharp_score || 0);
@@ -3187,7 +3198,7 @@ async function loadTopPredictors() {
       return bS - aS;
     });
     if (!items.length) {
-      hero.innerHTML = '<div class="rail-empty">No verified predictors yet</div>';
+      hero.innerHTML = '<div class="rail-empty">No predictors yet</div>';
       ranks.innerHTML = '';
       return;
     }
