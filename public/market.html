@@ -3284,14 +3284,67 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
       // half-acknowledged state the caller can't verify.
       console.warn('[safe] relayer returned ID but never yielded a hash — falling through to direct');
     }
-    // Non-OK → log the body and fall through to direct dispatch.
+    // Non-OK → log the body and fall through to HFX relayer.
     var relayErrText = await relayResp.text();
-    console.warn('[safe] relayer rejected — falling back to direct execTransaction. status=' + relayResp.status + ' body=' + relayErrText.slice(0, 240));
+    console.warn('[safe] Polymarket relayer rejected — falling back to HFX relayer. status=' + relayResp.status + ' body=' + relayErrText.slice(0, 240));
   } catch (relayErr) {
-    console.warn('[safe] relayer unreachable — falling back to direct execTransaction:', relayErr.message);
+    console.warn('[safe] Polymarket relayer unreachable — falling back to HFX relayer:', relayErr.message);
   }
 
-  // ── Path 2: direct execTransaction (EOA pays MATIC) ──────────────────────
+  // ── Path 2: HYPERFLEX self-hosted relayer ────────────────────────────────
+  // A server-side hot wallet broadcasts execTransaction with the user's
+  // SafeTx signature, paying ~$0.0005 in POL. Used when Polymarket's
+  // relayer rejects (allowlist/auth) AND user's MetaMask Polygon RPC is
+  // broken (can't send direct exec). If HYPERFLEX_RELAYER_PK isn't set
+  // on the server, endpoint returns 503 and we fall through to direct.
+  try {
+    tradeDebug && tradeDebug('submitting via HFX relayer', '/api/polymarket/safe-exec-hfx');
+    var hfxResp = await fetch('/api/polymarket/safe-exec-hfx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        proxyWallet: proxyAddr,
+        to: safeTx.to,
+        value: safeTx.value,
+        data: safeTx.data,
+        operation: safeTx.operation,
+        safeTxGas: safeTx.safeTxGas,
+        baseGas: safeTx.baseGas,
+        gasPrice: safeTx.gasPrice,
+        gasToken: safeTx.gasToken,
+        refundReceiver: safeTx.refundReceiver,
+        nonce: safeTx.nonce,
+        signature: sig,
+      }),
+    });
+    if (hfxResp.ok) {
+      var hfxJson = await hfxResp.json();
+      var hfxHash = hfxJson.transactionHash;
+      console.log('[safe] HFX relayer accepted | tx=' + hfxHash);
+      try {
+        var pubProvider2 = await getPublicProvider();
+        var receipt3 = await pubProvider2.waitForTransaction(hfxHash, 1, 120000);
+        console.log('[safe] HFX-relayed tx mined:', hfxHash, 'status=' + (receipt3 && receipt3.status));
+        return receipt3 || { transactionHash: hfxHash, relayed: 'hyperflex' };
+      } catch (waitErr2) {
+        console.warn('[safe] HFX receipt wait timed out, returning ack:', waitErr2.message);
+        return { transactionHash: hfxHash, relayed: 'hyperflex' };
+      }
+    } else {
+      var hfxErrText = await hfxResp.text();
+      // 503 = relayer not configured (expected if HYPERFLEX_RELAYER_PK
+      // isn't set). Every other status = actual failure.
+      if (hfxResp.status === 503) {
+        console.log('[safe] HFX relayer not configured — falling through to direct exec');
+      } else {
+        console.warn('[safe] HFX relayer rejected — falling through to direct exec. status=' + hfxResp.status + ' body=' + hfxErrText.slice(0, 240));
+      }
+    }
+  } catch (hfxErr) {
+    console.warn('[safe] HFX relayer unreachable — falling through to direct exec:', hfxErr.message);
+  }
+
+  // ── Path 3: direct execTransaction (EOA pays MATIC, needs MetaMask RPC) ───
   try {
     // Rebind the Safe to the MetaMask signer for the write. We read the
     // nonce earlier through the public RPC (no wallet auth needed), but

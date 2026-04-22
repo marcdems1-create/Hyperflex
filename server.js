@@ -37309,6 +37309,125 @@ app.post('/api/polymarket/safe-submit', optionalAuth, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// HYPERFLEX RELAYER — self-hosted Safe execTransaction fallback
+// ════════════════════════════════════════════════════════════
+// Used when Polymarket's relayer rejects a SafeTx (allowlist, auth
+// scope, etc.) AND the user's MetaMask Polygon RPC is broken so
+// they can't send direct exec. A hot wallet on our side calls
+// execTransaction with the user's SafeTx signature, paying gas in
+// POL. ~0.001 POL (~$0.0005) per tx; builder fees easily cover it.
+//
+// Security: the user's SafeTx signature is what authorizes the call.
+// Our relayer just broadcasts — it can't forge intent. We verify
+// the EIP-712 signature recovers to a valid address before spending
+// gas (spam filter); the on-chain Safe enforces owner-ship at match.
+//
+// Falls back gracefully to 503 if HYPERFLEX_RELAYER_PK is unset,
+// so the frontend can fall through to direct exec as a last resort.
+const _SAFE_TX_TYPES_HFX = {
+  SafeTx: [
+    { name: 'to',             type: 'address' },
+    { name: 'value',          type: 'uint256' },
+    { name: 'data',           type: 'bytes'   },
+    { name: 'operation',      type: 'uint8'   },
+    { name: 'safeTxGas',      type: 'uint256' },
+    { name: 'baseGas',        type: 'uint256' },
+    { name: 'gasPrice',       type: 'uint256' },
+    { name: 'gasToken',       type: 'address' },
+    { name: 'refundReceiver', type: 'address' },
+    { name: 'nonce',          type: 'uint256' },
+  ],
+};
+const _SAFE_ABI_HFX = [
+  'function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) payable returns (bool)',
+  'function nonce() view returns (uint256)',
+];
+
+function _getHfxRelayerWallet() {
+  const pk = process.env.HYPERFLEX_RELAYER_PK;
+  if (!pk) return null;
+  try {
+    // Reuse POLYGON_RPCS_SERVER — defined later in the file (forward-ref
+    // safe at runtime because this function is called inside a request
+    // handler, not at module load).
+    const rpc = (typeof POLYGON_RPCS_SERVER !== 'undefined' && POLYGON_RPCS_SERVER[0])
+      || 'https://polygon-rpc.com';
+    const provider = new _serverEthersHfx.JsonRpcProvider(rpc);
+    return new _serverEthersHfx.Wallet(pk, provider);
+  } catch (e) {
+    console.warn('[hfx-relayer] wallet init failed:', e.message);
+    return null;
+  }
+}
+const { ethers: _serverEthersHfx } = require('ethers');
+
+app.post('/api/polymarket/safe-exec-hfx', optionalAuth, async (req, res) => {
+  const wallet = _getHfxRelayerWallet();
+  if (!wallet) {
+    return res.status(503).json({ error: 'HYPERFLEX relayer not configured' });
+  }
+
+  const {
+    proxyWallet, to, value, data, operation,
+    safeTxGas, baseGas, gasPrice, gasToken, refundReceiver,
+    nonce, signature,
+  } = req.body || {};
+
+  if (!proxyWallet || !to || !data || !signature || nonce == null) {
+    return res.status(400).json({ error: 'proxyWallet, to, data, nonce, signature required' });
+  }
+
+  // Spam filter: verify signature recovers to a non-zero address.
+  try {
+    const safeTx = {
+      to, value: String(value || '0'), data,
+      operation: Number(operation || 0),
+      safeTxGas: String(safeTxGas || '0'),
+      baseGas: String(baseGas || '0'),
+      gasPrice: String(gasPrice || '0'),
+      gasToken: gasToken || '0x0000000000000000000000000000000000000000',
+      refundReceiver: refundReceiver || '0x0000000000000000000000000000000000000000',
+      nonce: String(nonce),
+    };
+    const domain = { chainId: 137, verifyingContract: proxyWallet };
+    const recovered = _serverEthersHfx.verifyTypedData(domain, _SAFE_TX_TYPES_HFX, safeTx, signature);
+    if (!recovered || recovered === _serverEthersHfx.ZeroAddress) {
+      return res.status(400).json({ error: 'Invalid SafeTx signature — recovery failed' });
+    }
+    console.log('[hfx-relayer] sig recovered to', recovered.slice(0, 10) + '… | proxy=' + proxyWallet.slice(0, 10) + '… | to=' + to.slice(0, 10) + '…');
+  } catch (vErr) {
+    return res.status(400).json({ error: 'Signature verification error', detail: vErr.message });
+  }
+
+  try {
+    const safe = new _serverEthersHfx.Contract(proxyWallet, _SAFE_ABI_HFX, wallet);
+    const tx = await safe.execTransaction(
+      to,
+      value || 0,
+      data,
+      Number(operation || 0),
+      safeTxGas || 0,
+      baseGas || 0,
+      gasPrice || 0,
+      gasToken || '0x0000000000000000000000000000000000000000',
+      refundReceiver || '0x0000000000000000000000000000000000000000',
+      signature,
+      { gasLimit: 500000 }
+    );
+    console.log('[hfx-relayer] submitted tx=' + tx.hash + ' | proxy=' + proxyWallet.slice(0, 10) + '… | to=' + to.slice(0, 10) + '…');
+    return res.json({ transactionHash: tx.hash, relayed: 'hyperflex' });
+  } catch (e) {
+    const msg = (e && (e.shortMessage || e.reason || e.message)) || 'execTransaction failed';
+    console.error('[hfx-relayer] execTransaction error:', msg);
+    return res.status(502).json({
+      error: 'Relayer execution failed',
+      detail: msg,
+      code: e && e.code,
+    });
+  }
+});
+
 // POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
 // The client handles EIP-712 order signing + HMAC signing; this proxy just forwards to CLOB
 // Used as CORS fallback when browser can't reach clob.polymarket.com directly
