@@ -418,6 +418,62 @@ a:hover { text-decoration: underline; }
 .pred-rank-flex.up   { color: #00e68a; }
 .pred-rank-flex.down { color: #ff4d6a; }
 
+/* Whale Moves strip — third rhythm on the right rail. Big-size
+   positions held by top-50 Polymarket traders. Reads as a live
+   ticker: each row surfaces one whale's concentrated bet. */
+.whale-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  text-decoration: none; color: inherit;
+  background: linear-gradient(180deg, rgba(77,159,255,0.03), rgba(77,159,255,0.005));
+  border: 1px solid rgba(77,159,255,0.08);
+  margin-bottom: 6px;
+  transition: border-color .15s, transform .15s;
+}
+.whale-row:hover { border-color: rgba(77,159,255,0.35); transform: translateX(2px); text-decoration: none; }
+.whale-row-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #4d9fff, #1a4a8c);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 900; color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(77,159,255,0.08);
+}
+.whale-row-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.whale-row-top {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.whale-row-side {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.whale-row-side.yes { color: #00e68a; }
+.whale-row-side.no  { color: #ff4d6a; }
+.whale-row-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 600;
+  color: var(--text);
+  line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+.whale-row-size {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 900;
+  color: #4d9fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
 /* ──────────────────────────────────────────────────────────────────── */
 /* Mobile Hot Alpha strip — horizontal-scroll row that surfaces the   */
 /* same edge signals on phones/tablets where the left rail hides.     */
@@ -1189,6 +1245,23 @@ a:hover { text-decoration: underline; }
     <div id="predHeroSlot"><div class="rail-empty">Loading…</div></div>
     <div id="predRankSlot"></div>
     <a href="/predictors" class="rail-more">Full Leaderboard ↗</a>
+  </div>
+
+  <!-- Whale Moves — third signal surface on the right rail. Live
+       positions from the top-50 Polymarket whales, biggest first.
+       Separate accent (blue) so markets / predictors / whales each
+       read as their own signal family. -->
+  <div class="rail-section">
+    <div class="rail-head">
+      <span class="rail-head-dot" style="background:#4d9fff;box-shadow:0 0 10px rgba(77,159,255,0.7)"></span>
+      <span style="color:#4d9fff">Whale Moves</span>
+      <span class="rail-head-age" id="whaleCount">—</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="whaleMovesSlot">
+      <div class="rail-empty">Scanning whales…</div>
+    </div>
+    <a href="/whales" class="rail-more">Whale Tracker ↗</a>
   </div>
 
   <!-- Search -->
@@ -2690,10 +2763,14 @@ async function deleteMyPrediction(predId, btn) {
   initWalletAutoScan();  // auto-scan using the address saved in the creator dashboard
   loadHotAlpha();        // left rail — edge-scored markets
   loadTopPredictors();   // right rail — verified predictors, 7d
+  loadWhaleMoves();      // right rail — biggest whale positions, live
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
   // Refresh predictors every 5 min (stats don't tick by the second)
   setInterval(loadTopPredictors, 5 * 60 * 1000);
+  // Whale positions refresh every 60s (backend cache is 10 min but we
+  // still want the rail to feel alive)
+  setInterval(loadWhaleMoves, 60 * 1000);
 })();
 
 // ── Left rail: Hot Alpha + Resolving Soon ──
@@ -3015,6 +3092,83 @@ function renderPredictorRanks(list) {
       flexHtml +
     '</a>';
   }).join('');
+}
+
+// ── Right rail: Whale Moves ──
+// Pulls /api/whale-watch (top-50 Polymarket traders + their current
+// concentrated positions). Shows the 6 biggest by size, dedup'd across
+// wallets + markets so we don't show the same market 4 times just
+// because 4 whales agree. Live-ticker feel.
+function _whaleShortSize(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
+  return '$' + Math.round(n);
+}
+
+function _whaleInitials(name) {
+  if (!name) return '🐋';
+  var clean = String(name).replace(/^Whale\s*#?/i, '').trim();
+  if (!clean || /^\d+$/.test(clean)) return '#' + (clean || '?');
+  // Pull first 1-2 uppercase letters; fall back to first char
+  var letters = clean.replace(/[^A-Za-z]/g, '');
+  return letters ? letters.slice(0, 1).toUpperCase() : clean[0].toUpperCase();
+}
+
+async function loadWhaleMoves() {
+  var slot = document.getElementById('whaleMovesSlot');
+  var countEl = document.getElementById('whaleCount');
+  if (!slot) return;
+  try {
+    var res = await fetch('/api/whale-watch');
+    if (!res.ok) throw new Error('whale-watch ' + res.status);
+    var data = await res.json();
+    var whales = Array.isArray(data) ? data : (data.whales || data.positions || []);
+    // Dedup: keep the biggest position per (trader + market) combo,
+    // then sort by size descending, take top 6.
+    var seen = {};
+    whales.forEach(function(w) {
+      var key = (w.trader || w.proxyWallet || '?') + '|' + (w.market || w.position || '?');
+      var size = Number(w.size || 0);
+      if (!seen[key] || Number(seen[key].size || 0) < size) seen[key] = w;
+    });
+    var rows = Object.values(seen)
+      .filter(function(w) {
+        var sz = Number(w.size || 0);
+        var cp = Number(w.current_price != null ? w.current_price : (w.curPrice || 0));
+        return sz >= 25000 && cp > 0.02 && cp < 0.98;
+      })
+      .sort(function(a, b) { return Number(b.size || 0) - Number(a.size || 0); })
+      .slice(0, 6);
+
+    if (countEl) countEl.textContent = rows.length ? rows.length + ' live' : '—';
+    if (!rows.length) {
+      slot.innerHTML = '<div class="rail-empty">Nothing moving right now</div>';
+      return;
+    }
+    slot.innerHTML = rows.map(function(w) {
+      var size = _whaleShortSize(w.size);
+      var side = String(w.side || w.outcome || '').toUpperCase();
+      var sideCls = side === 'YES' ? 'yes' : side === 'NO' ? 'no' : '';
+      var traderName = String(w.trader || 'Whale');
+      var href = w.market_url || (w.slug ? '/market/' + encodeURIComponent(w.slug) : '/whales');
+      var question = esc(w.market || w.position || 'Market');
+      return '<a class="whale-row" href="' + href + '">' +
+        '<span class="whale-row-avatar">' + esc(_whaleInitials(traderName)) + '</span>' +
+        '<div class="whale-row-info">' +
+          '<div class="whale-row-top">' +
+            '<span>' + esc(traderName).slice(0, 18) + '</span>' +
+            (sideCls ? '<span class="whale-row-side ' + sideCls + '">' + side + '</span>' : '') +
+          '</div>' +
+          '<div class="whale-row-q">' + question + '</div>' +
+        '</div>' +
+        '<span class="whale-row-size">' + size + '</span>' +
+      '</a>';
+    }).join('');
+  } catch (err) {
+    slot.innerHTML = '<div class="rail-empty">Whale feed unavailable</div>';
+    console.warn('[whale-moves] load failed:', err.message);
+  }
 }
 
 async function loadTopPredictors() {
