@@ -17690,59 +17690,55 @@ app.get('/api/data/sharps/leaderboard', apiKeyAuth, async (req, res) => {
 app.get('/api/takes/:id', async (req, res) => {
   try {
     const rawId = req.params.id || '';
-    // IDs fall into two buckets:
-    //   - takes.id (UUID, no prefix) → look up in the takes table
-    //   - utake_<predictionId> → it's actually a predictions row,
-    //     synthesised into the feed with a utake_ prefix so the feed
-    //     could distinguish. Route it to the predictions table and
-    //     reshape into a takes-compatible response.
-    const isPrediction = rawId.startsWith('utake_');
-    const id = isPrediction ? rawId.slice(6) : rawId;
+    const id = rawId.startsWith('utake_') ? rawId.slice(6) : rawId;
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       return res.status(404).json({ error: 'Take not found' });
     }
-    if (isPrediction) {
-      const rows = await dbQuery(
-        `SELECT p.*, u.display_name AS user_display_name, u.polymarket_address AS user_polymarket_address,
-                u.avatar_url AS user_avatar_url, u.is_whale AS user_is_whale, u.whale_rank AS user_whale_rank
-           FROM predictions p LEFT JOIN users u ON u.id::text = p.user_id
-          WHERE p.id = $1 LIMIT 1`,
-        [id]
-      ).catch(() => []);
-      if (!rows[0]) return res.status(404).json({ error: 'Take not found' });
-      const p = rows[0];
-      // Shape-shim: take.html expects take-like fields. Map across.
-      return res.json({ take: {
-        id: 'utake_' + p.id,
-        user_id: p.user_id,
-        market_slug: p.market_id || null,
-        condition_id: null,
-        question: p.market_title || p.question || '',
-        side: p.direction,
-        entry_price: p.entry_price,
-        amount: null,
-        thesis: p.thesis_text || p.thesis || '',
-        source: 'user',
-        agree_count: p.agree_count || 0,
-        disagree_count: p.disagree_count || 0,
-        is_correct: p.outcome === 'correct' ? true : p.outcome === 'incorrect' ? false : null,
-        created_at: p.posted_at || p.created_at,
-        user_display_name: p.user_display_name,
-        user_polymarket_address: p.user_polymarket_address,
-        user_avatar_url: p.user_avatar_url,
-        user_is_whale: p.user_is_whale,
-        user_whale_rank: p.user_whale_rank,
-      } });
-    }
-    const rows = await dbQuery(
+    // The feed aggregates two post sources — takes.id (prefixed utake_
+    // when returned) and predictions.id (plain UUID). Either could be
+    // the target of a reply click. Try the takes table first (the
+    // utake_-prefix path), then fall back to predictions. Whichever
+    // has the row wins; only return 404 if neither matches.
+    const takeRows = await dbQuery(
       `SELECT t.*, u.display_name AS user_display_name, u.polymarket_address AS user_polymarket_address,
               u.avatar_url AS user_avatar_url, u.is_whale AS user_is_whale, u.whale_rank AS user_whale_rank
          FROM takes t LEFT JOIN users u ON u.id = t.user_id
         WHERE t.id = $1 LIMIT 1`,
       [id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Take not found' });
-    res.json({ take: rows[0] });
+    ).catch(() => []);
+    if (takeRows[0]) return res.json({ take: takeRows[0] });
+
+    // Fall-through: try predictions. Map into take-shape for the client.
+    const predRows = await dbQuery(
+      `SELECT p.*, u.display_name AS user_display_name, u.polymarket_address AS user_polymarket_address,
+              u.avatar_url AS user_avatar_url, u.is_whale AS user_is_whale, u.whale_rank AS user_whale_rank
+         FROM predictions p LEFT JOIN users u ON u.id::text = p.user_id
+        WHERE p.id::text = $1 LIMIT 1`,
+      [id]
+    ).catch(() => []);
+    if (!predRows[0]) return res.status(404).json({ error: 'Take not found' });
+    const p = predRows[0];
+    return res.json({ take: {
+      id: 'utake_' + p.id,
+      user_id: p.user_id,
+      market_slug: p.market_id || null,
+      condition_id: null,
+      question: p.market_title || p.question || '',
+      side: p.direction,
+      entry_price: p.entry_price,
+      amount: null,
+      thesis: p.thesis_text || p.thesis || '',
+      source: 'user',
+      agree_count: p.agree_count || 0,
+      disagree_count: p.disagree_count || 0,
+      is_correct: p.outcome === 'correct' ? true : p.outcome === 'incorrect' ? false : null,
+      created_at: p.posted_at || p.created_at,
+      user_display_name: p.user_display_name,
+      user_polymarket_address: p.user_polymarket_address,
+      user_avatar_url: p.user_avatar_url,
+      user_is_whale: p.user_is_whale,
+      user_whale_rank: p.user_whale_rank,
+    } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
