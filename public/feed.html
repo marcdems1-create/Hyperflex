@@ -40,66 +40,227 @@ a:hover { text-decoration: underline; }
 .feed-col { flex: 1; max-width: 600px; border-left: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); min-width: 0; }
 .sidebar-col { width: 350px; flex-shrink: 0; padding: 16px 20px; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
 .sidebar-col::-webkit-scrollbar { width: 0; }
-/* Left sidebar — Hot Alpha rail. Narrower than the right side; alpha
-   cards are compact and focused on a single piece of info each. */
-.left-col { width: 300px; flex-shrink: 0; padding: 16px 16px 16px 24px; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
+/* ──────────────────────────────────────────────────────────────────── */
+/* Left rail — HOT ALPHA + RANKS + RESOLVING SOON                       */
+/*                                                                       */
+/* Design principles:                                                    */
+/*  - Depth through subtle panel gradients (not flat fills)              */
+/*  - Scale hierarchy: ONE hero card with huge 44px score number,        */
+/*    then a compressed rank strip (terminal density), then a live       */
+/*    countdown strip. Three visual rhythms stacked.                     */
+/*  - Colour as signal: green <= 85 edge, gold 60-85, red-orange 85+     */
+/*    (mega-edge). Never decorative — each colour means something.       */
+/*  - Typography extremes: Inter 900 tabular for numbers, JB Mono        */
+/*    small-caps for labels, Inter 600 for questions. Nothing between.   */
+/*  - Motion only where it signals state: pulse = live, tick = count-   */
+/*    down, gradient pan = mega-edge glow.                              */
+.left-col { width: 320px; flex-shrink: 0; padding: 16px 8px 16px 24px; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
 .left-col::-webkit-scrollbar { width: 0; }
-.hot-alpha-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; color: var(--text-dim); text-transform: uppercase; }
-.hot-alpha-dot { width: 7px; height: 7px; border-radius: 50%; background: #00e68a; box-shadow: 0 0 8px rgba(0,230,138,0.6); animation: pulse 1.4s infinite; flex-shrink: 0; }
-.hot-alpha-label { color: #00e68a; }
-.hot-alpha-live { margin-left: auto; color: var(--text-faint); font-size: 9px; }
-.alpha-card {
+
+.rail-section { margin-bottom: 18px; }
+.rail-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 4px 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.rail-head-accent { color: #00e68a; }
+.rail-head-dot { width: 7px; height: 7px; border-radius: 50%; background: #00e68a; box-shadow: 0 0 10px rgba(0,230,138,0.7); animation: pulse 1.4s infinite; flex-shrink: 0; }
+.rail-head-age { margin-left: auto; color: var(--text-faint); font-size: 9px; font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.1em; }
+.rail-sep { height: 1px; margin: 0 4px 12px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent); }
+
+/* Hero #1 edge card — the eye magnet. Gradient border auras intensify
+   by score tier. Hover pans the gradient and lifts the card. */
+.alpha-hero {
   display: block; text-decoration: none; color: inherit;
-  padding: 12px 14px; margin-bottom: 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 12px;
-  transition: border-color .18s, transform .18s;
+  position: relative;
+  padding: 18px 16px 16px;
+  margin-bottom: 16px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(201,146,13,0.08), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.005));
+  border: 1px solid rgba(201,146,13,0.22);
+  overflow: hidden;
+  transition: transform .22s, border-color .22s;
 }
-.alpha-card:hover { border-color: rgba(201,146,13,0.35); transform: translateY(-1px); }
-.alpha-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.alpha-edge-chip {
+.alpha-hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
+  background-size: 200% 200%;
+  background-position: 100% 100%;
+  transition: background-position .8s;
+}
+.alpha-hero:hover { transform: translateY(-2px); border-color: rgba(201,146,13,0.55); text-decoration: none; }
+.alpha-hero:hover::before { background-position: 0% 0%; }
+.alpha-hero.hot { border-color: rgba(0,230,138,0.32); background: radial-gradient(120% 80% at 50% 0%, rgba(0,230,138,0.10), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.005)); }
+.alpha-hero.hot:hover { border-color: rgba(0,230,138,0.6); }
+.alpha-hero.mega {
+  border-color: rgba(255,77,106,0.38);
+  background: radial-gradient(120% 80% at 50% 0%, rgba(255,77,106,0.14), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.005));
+  box-shadow: 0 0 0 1px rgba(255,77,106,0.08), 0 10px 30px -12px rgba(255,77,106,0.25);
+}
+.alpha-hero.mega:hover { border-color: rgba(255,77,106,0.7); }
+
+.alpha-hero-label {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
-  padding: 3px 7px; border-radius: 4px;
-  background: rgba(201,146,13,0.14); color: #c9920d;
-  border: 1px solid rgba(201,146,13,0.3);
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold, #c9920d);
+  margin-bottom: 6px;
 }
-.alpha-edge-chip.hot   { background: rgba(0,230,138,0.14); color: #00e68a; border-color: rgba(0,230,138,0.3); }
-.alpha-edge-chip.mega  { background: rgba(255,77,106,0.14); color: #ff4d6a; border-color: rgba(255,77,106,0.3); }
-.alpha-rank {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em;
+.alpha-hero.hot  .alpha-hero-label { color: #00e68a; }
+.alpha-hero.mega .alpha-hero-label { color: #ff4d6a; }
+.alpha-hero-score-row {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 10px;
 }
-.alpha-card-q {
+.alpha-hero-score {
   font-family: 'Inter', sans-serif;
-  font-size: 13px; font-weight: 600; color: var(--text);
-  line-height: 1.35;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; margin-bottom: 10px;
+  font-size: 46px; font-weight: 900;
+  line-height: 0.95; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
-.alpha-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.alpha-yes {
+.alpha-hero-score-suffix {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.alpha-hero-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 600; color: var(--text);
+  line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 12px;
+  letter-spacing: -0.005em;
+}
+.alpha-hero-metrics {
+  display: flex; align-items: center; gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.alpha-hero-metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.alpha-hero-metric-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; }
+.alpha-hero-metric-val { font-size: 13px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.alpha-hero-metric-val.up   { color: #00e68a; }
+.alpha-hero-metric-val.down { color: #ff4d6a; }
+
+/* Rank strip — Bloomberg terminal density. Rows are tight, question
+   truncates, edge chip aligned right. Alternating surfaces help scan. */
+.alpha-rank-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 8px;
+  text-decoration: none; color: inherit;
+  transition: background .15s, transform .15s;
+}
+.alpha-rank-row:nth-child(odd) { background: rgba(255,255,255,0.018); }
+.alpha-rank-row:hover { background: rgba(255,255,255,0.05); text-decoration: none; transform: translateX(2px); }
+.alpha-rank-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--text-faint);
+  text-align: center;
+}
+.alpha-rank-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 500;
+  color: rgba(255,255,255,0.88);
+  line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+}
+.alpha-rank-score {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px; font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  background: rgba(201,146,13,0.12); color: var(--gold, #c9920d);
+  border: 1px solid rgba(201,146,13,0.25);
 }
-.alpha-yes.up   { color: #00e68a; }
-.alpha-yes.down { color: #ff4d6a; }
-.alpha-vol {
+.alpha-rank-score.hot  { background: rgba(0,230,138,0.12); color: #00e68a; border-color: rgba(0,230,138,0.25); }
+.alpha-rank-score.mega { background: rgba(255,77,106,0.12); color: #ff4d6a; border-color: rgba(255,77,106,0.25); }
+
+/* Resolving soon — each row pulls the eye with a live countdown.
+   Progress bar underneath shows how far through its 24h window
+   the market is (tiny, but it's a second read for urgency). */
+.resolving-row {
+  display: block; text-decoration: none; color: inherit;
+  padding: 12px 12px 10px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(245,159,35,0.04), rgba(245,159,35,0.01));
+  border: 1px solid rgba(245,159,35,0.14);
+  transition: border-color .15s, transform .15s;
+}
+.resolving-row:hover { border-color: rgba(245,159,35,0.4); transform: translateY(-1px); text-decoration: none; }
+.resolving-row-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 6px;
+}
+.resolving-clock {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px; color: var(--text-faint);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: #f59e0b;
+  font-variant-numeric: tabular-nums;
 }
-.hot-alpha-more {
+.resolving-clock::before { content: '⏱'; margin-right: 4px; opacity: 0.9; }
+.resolving-yes {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.resolving-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.resolving-bar {
+  height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.resolving-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(245,159,35,0.5), rgba(245,159,35,0.9));
+  transition: width .4s;
+}
+
+.rail-more {
   display: block; text-align: center; padding: 10px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
   color: var(--text-dim); text-decoration: none;
+  text-transform: uppercase;
   background: rgba(255,255,255,0.02); border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.04);
   transition: border-color .15s, color .15s;
+  margin-top: 4px;
 }
-.hot-alpha-more:hover { color: var(--gold); border-color: rgba(201,146,13,0.3); text-decoration: none; }
-.hot-alpha-empty { padding: 16px; text-align: center; font-size: 12px; color: var(--text-faint); }
+.rail-more:hover { color: var(--gold); border-color: rgba(201,146,13,0.3); text-decoration: none; }
+
+.rail-empty {
+  padding: 14px 8px;
+  text-align: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
 /* Narrow-screen hide — keep feed + right sidebar working before dropping left */
 @media (max-width: 1200px) { .left-col { display: none; } }
 @media (max-width: 1000px) { .sidebar-col { display: none; } .layout { max-width: 600px; } }
@@ -667,20 +828,37 @@ a:hover { text-decoration: underline; }
 
 <div class="layout">
 
-<!-- Left rail — Hot Alpha. Edge-scored markets from /api/alpha/top.
-     Narrower than the right sidebar since each card is a single focused
-     signal. Hidden below 1200px so the feed keeps centre stage on
-     laptop/tablet widths. -->
+<!-- Left rail — three stacked signal surfaces:
+       1) HOT ALPHA — hero #1 edge card + compact rank strip
+       2) RESOLVING SOON — live-countdown rows for markets <24h out
+     Each has its own visual rhythm so the rail breathes, not stacks. -->
 <div class="left-col">
-  <div class="hot-alpha-head">
-    <span class="hot-alpha-dot"></span>
-    <span class="hot-alpha-label">Hot Alpha</span>
-    <span class="hot-alpha-live">live</span>
+  <!-- HOT ALPHA section -->
+  <div class="rail-section">
+    <div class="rail-head">
+      <span class="rail-head-dot"></span>
+      <span class="rail-head-accent">Hot Alpha</span>
+      <span class="rail-head-age" id="alphaAgeLabel">—</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="alphaHeroSlot">
+      <div class="rail-empty">Scanning edge…</div>
+    </div>
+    <div id="alphaRankSlot"></div>
+    <a href="/alpha-live" class="rail-more">View All Edge ↗</a>
   </div>
-  <div id="hotAlphaList">
-    <div class="hot-alpha-empty">Loading edge…</div>
+
+  <!-- RESOLVING SOON section -->
+  <div class="rail-section">
+    <div class="rail-head">
+      <span class="rail-head-accent" style="color:#f59e0b">Resolving Soon</span>
+      <span class="rail-head-age" id="resolvingCount">—</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="resolvingSlot">
+      <div class="rail-empty">—</div>
+    </div>
   </div>
-  <a href="/alpha-live" class="hot-alpha-more">View all ↗</a>
 </div>
 
 <div class="feed-col">
@@ -2238,62 +2416,211 @@ async function deleteMyPrediction(predId, btn) {
   setInterval(loadHotAlpha, 90 * 1000);
 })();
 
-// ── Hot Alpha rail (left sidebar) ──
-// Pulls edge-ranked markets from /api/alpha/top and renders compact cards
-// ranked by edge_score. Edge chip colour scales with score: 60-74 = warm
-// gold, 75-89 = green, 90+ = red (mega-edge). Keeps the rail visually
-// magnetic: the hottest thing on the page is always on the far left.
-async function loadHotAlpha() {
-  var list = document.getElementById('hotAlphaList');
-  if (!list) return;
+// ── Left rail: Hot Alpha + Resolving Soon ──
+// Single /api/alpha/top fetch feeds three surfaces:
+//   1. Hero card   — #1 by edge_score, big type, gradient aura
+//   2. Rank strip  — #2 through #6, tight rows, terminal density
+//   3. Resolving   — markets expiring in <24h, live countdown
+// Counter ("45s ago") ticks independent of fetch cadence so the rail
+// feels live even between refreshes.
+var _alphaLastFetchMs = 0;
+var _alphaAllItems = [];
+var _alphaAgeTimer = null;
+var _resolvingTimer = null;
+
+function _alphaTier(score) { return score >= 90 ? 'mega' : score >= 75 ? 'hot' : ''; }
+
+function _readYesPct(m) {
   try {
-    var res = await fetch('/api/alpha/top?n=7');
+    var op = m.outcomePrices;
+    if (typeof op === 'string') op = JSON.parse(op);
+    if (Array.isArray(op) && op[0] != null) return Math.round(parseFloat(op[0]) * 100);
+  } catch (e) {}
+  if (m.yes_price != null) return Math.round(parseFloat(m.yes_price) * 100);
+  return null;
+}
+
+function _shortVol(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
+  if (n > 0)    return '$' + Math.round(n);
+  return '';
+}
+
+function _closesMs(m) {
+  var raw = m.end_date_iso || m.endDate || m.closes_at || m.end_date || null;
+  if (!raw) return null;
+  var t = new Date(raw).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function _fmtCountdown(ms) {
+  if (ms <= 0) return 'RESOLVING';
+  var totalMin = Math.floor(ms / 60000);
+  if (totalMin < 60) return totalMin + 'm';
+  var h = Math.floor(totalMin / 60);
+  var m = totalMin % 60;
+  if (h < 24) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+  var d = Math.floor(h / 24);
+  var hr = h % 24;
+  return d + 'd ' + hr + 'h';
+}
+
+function renderAlphaHero(m) {
+  if (!m) return '<div class="rail-empty">No live edge right now</div>';
+  var score = Math.round(Number(m.edge_score) || 0);
+  var tier  = _alphaTier(score);
+  var label = tier === 'mega' ? 'Mega Edge' : tier === 'hot' ? 'Hot Edge' : 'Edge';
+  var yesPct = _readYesPct(m);
+  var dir    = yesPct != null && yesPct >= 50 ? 'up' : 'down';
+  var volLabel = _shortVol(m.volume24hr || m.volume_24h || 0);
+  var whaleCount = Number(m.whale_count || 0);
+  var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '/alpha-live';
+  var q = esc(m.question || m.title || '');
+  var yesHtml = yesPct != null
+    ? '<div class="alpha-hero-metric-val ' + dir + '">' + (dir === 'up' ? '↑' : '↓') + ' ' + yesPct + '¢</div>'
+    : '<div class="alpha-hero-metric-val" style="color:var(--text-faint)">—</div>';
+
+  return '<a class="alpha-hero ' + tier + '" href="' + href + '">' +
+    '<div class="alpha-hero-label">' + label + ' · #1</div>' +
+    '<div class="alpha-hero-score-row">' +
+      '<div class="alpha-hero-score">' + score + '</div>' +
+      '<div class="alpha-hero-score-suffix">Edge Score</div>' +
+    '</div>' +
+    '<div class="alpha-hero-q">' + q + '</div>' +
+    '<div class="alpha-hero-metrics">' +
+      '<div class="alpha-hero-metric">' +
+        '<div class="alpha-hero-metric-label">Yes</div>' +
+        yesHtml +
+      '</div>' +
+      (volLabel ? ('<div class="alpha-hero-metric">' +
+        '<div class="alpha-hero-metric-label">24h Vol</div>' +
+        '<div class="alpha-hero-metric-val">' + volLabel + '</div>' +
+      '</div>') : '') +
+      (whaleCount > 0 ? ('<div class="alpha-hero-metric">' +
+        '<div class="alpha-hero-metric-label">Whales</div>' +
+        '<div class="alpha-hero-metric-val">' + whaleCount + '</div>' +
+      '</div>') : '') +
+    '</div>' +
+  '</a>';
+}
+
+function renderAlphaRanks(items) {
+  if (!items || !items.length) return '';
+  return items.map(function(m, i) {
+    var score = Math.round(Number(m.edge_score) || 0);
+    var tier  = _alphaTier(score);
+    var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '/alpha-live';
+    return '<a class="alpha-rank-row" href="' + href + '">' +
+      '<span class="alpha-rank-num">' + (i + 2) + '</span>' +
+      '<span class="alpha-rank-q">' + esc(m.question || m.title || '') + '</span>' +
+      '<span class="alpha-rank-score ' + tier + '">' + score + '</span>' +
+    '</a>';
+  }).join('');
+}
+
+function renderResolvingSoon(items) {
+  var slot = document.getElementById('resolvingSlot');
+  var count = document.getElementById('resolvingCount');
+  if (!slot) return;
+  var now = Date.now();
+  var CUTOFF = 24 * 60 * 60 * 1000;
+  var candidates = (items || [])
+    .map(function(m) {
+      var endMs = _closesMs(m);
+      return endMs ? { m: m, endMs: endMs, msLeft: endMs - now } : null;
+    })
+    .filter(function(x) { return x && x.msLeft > 0 && x.msLeft <= CUTOFF; })
+    .sort(function(a, b) { return a.msLeft - b.msLeft; })
+    .slice(0, 4);
+  if (count) count.textContent = candidates.length ? candidates.length + ' open' : '—';
+  if (!candidates.length) {
+    slot.innerHTML = '<div class="rail-empty">Nothing resolving in 24h</div>';
+    return;
+  }
+  slot.innerHTML = candidates.map(function(c) {
+    var m = c.m;
+    var yesPct = _readYesPct(m);
+    var yesHtml = yesPct != null ? (yesPct + '¢') : '—';
+    var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '/alpha-live';
+    // Progress: how far through the 24h window we are. msLeft=0 → 100%.
+    var pct = Math.max(0, Math.min(100, Math.round((1 - c.msLeft / CUTOFF) * 100)));
+    return '<a class="resolving-row" data-end-ms="' + c.endMs + '" href="' + href + '">' +
+      '<div class="resolving-row-top">' +
+        '<span class="resolving-clock">' + _fmtCountdown(c.msLeft) + '</span>' +
+        '<span class="resolving-yes">YES ' + yesHtml + '</span>' +
+      '</div>' +
+      '<div class="resolving-q">' + esc(m.question || m.title || '') + '</div>' +
+      '<div class="resolving-bar"><div class="resolving-bar-fill" style="width:' + pct + '%"></div></div>' +
+    '</a>';
+  }).join('');
+}
+
+// Tick countdown displays every 30s (don't need to re-fetch — just
+// recompute the deltas against the cached end timestamps).
+function tickResolvingCountdowns() {
+  var rows = document.querySelectorAll('.resolving-row');
+  var now = Date.now();
+  var CUTOFF = 24 * 60 * 60 * 1000;
+  rows.forEach(function(row) {
+    var endMs = Number(row.getAttribute('data-end-ms') || 0);
+    if (!endMs) return;
+    var msLeft = endMs - now;
+    var clock = row.querySelector('.resolving-clock');
+    var fill  = row.querySelector('.resolving-bar-fill');
+    if (clock) clock.textContent = _fmtCountdown(msLeft);
+    if (fill) {
+      var pct = Math.max(0, Math.min(100, Math.round((1 - msLeft / CUTOFF) * 100)));
+      fill.style.width = pct + '%';
+    }
+  });
+}
+
+function tickAlphaAge() {
+  var el = document.getElementById('alphaAgeLabel');
+  if (!el || !_alphaLastFetchMs) return;
+  var sec = Math.max(0, Math.round((Date.now() - _alphaLastFetchMs) / 1000));
+  if (sec < 60) el.textContent = sec + 's ago';
+  else if (sec < 3600) el.textContent = Math.round(sec / 60) + 'm ago';
+  else el.textContent = '—';
+}
+
+async function loadHotAlpha() {
+  var heroSlot = document.getElementById('alphaHeroSlot');
+  var rankSlot = document.getElementById('alphaRankSlot');
+  if (!heroSlot || !rankSlot) return;
+  try {
+    var res = await fetch('/api/alpha/top?n=25');
     if (!res.ok) throw new Error('alpha fetch ' + res.status);
     var data = await res.json();
     var items = Array.isArray(data) ? data : (data.markets || data.items || []);
+    _alphaAllItems = items;
+    _alphaLastFetchMs = Date.now();
+
     if (!items.length) {
-      list.innerHTML = '<div class="hot-alpha-empty">No live edge right now</div>';
-      return;
+      heroSlot.innerHTML = '<div class="rail-empty">No live edge right now</div>';
+      rankSlot.innerHTML = '';
+    } else {
+      heroSlot.innerHTML = renderAlphaHero(items[0]);
+      rankSlot.innerHTML = renderAlphaRanks(items.slice(1, 6));
     }
-    list.innerHTML = items.slice(0, 7).map(function(m, i) {
-      var score = Math.round(Number(m.edge_score) || 0);
-      var tier = score >= 90 ? 'mega' : score >= 75 ? 'hot' : '';
-      var yesPct = null;
-      try {
-        var op = m.outcomePrices;
-        if (typeof op === 'string') op = JSON.parse(op);
-        if (Array.isArray(op) && op[0] != null) yesPct = Math.round(parseFloat(op[0]) * 100);
-      } catch (e) {}
-      if (yesPct == null && m.yes_price != null) yesPct = Math.round(parseFloat(m.yes_price) * 100);
-      var vol24 = Number(m.volume24hr || m.volume_24h || 0);
-      var volLabel = vol24 >= 1e6 ? '$' + (vol24/1e6).toFixed(1) + 'M'
-                   : vol24 >= 1e3 ? '$' + Math.round(vol24/1e3) + 'K'
-                   : vol24 > 0    ? '$' + Math.round(vol24)
-                   : '';
-      var dir = yesPct != null && yesPct >= 50 ? 'up' : 'down';
-      var dirGlyph = dir === 'up' ? '↑' : '↓';
-      var href = m.slug ? ('/market/' + encodeURIComponent(m.slug)) : '/alpha-live';
-      var q = esc(m.question || m.title || '');
-      var yesHtml = yesPct != null
-        ? '<span class="alpha-yes ' + dir + '">' + dirGlyph + ' YES ' + yesPct + '¢</span>'
-        : '<span class="alpha-yes" style="color:var(--text-faint)">—</span>';
-      return '<a class="alpha-card" href="' + href + '">' +
-        '<div class="alpha-card-top">' +
-          '<span class="alpha-edge-chip ' + tier + '">Edge ' + score + '</span>' +
-          '<span class="alpha-rank">#' + (i + 1) + '</span>' +
-        '</div>' +
-        '<div class="alpha-card-q">' + q + '</div>' +
-        '<div class="alpha-card-foot">' +
-          yesHtml +
-          (volLabel ? '<span class="alpha-vol">' + volLabel + ' 24h</span>' : '') +
-        '</div>' +
-      '</a>';
-    }).join('');
+    renderResolvingSoon(items);
+    tickAlphaAge();
   } catch (err) {
-    list.innerHTML = '<div class="hot-alpha-empty">Edge rail unavailable</div>';
+    heroSlot.innerHTML = '<div class="rail-empty">Edge rail unavailable</div>';
+    rankSlot.innerHTML = '';
+    var resolvingSlot = document.getElementById('resolvingSlot');
+    if (resolvingSlot) resolvingSlot.innerHTML = '<div class="rail-empty">—</div>';
     console.warn('[hot-alpha] load failed:', err.message);
   }
 }
+
+// Kick off the age + countdown tickers once (after first load they
+// have data to work with; running early is harmless — they no-op
+// until there's content).
+if (!_alphaAgeTimer) _alphaAgeTimer = setInterval(tickAlphaAge, 5000);
+if (!_resolvingTimer) _resolvingTimer = setInterval(tickResolvingCountdowns, 30000);
 </script>
 </body>
 </html>
