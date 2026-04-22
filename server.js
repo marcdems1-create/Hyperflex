@@ -13108,6 +13108,13 @@ app.get('/api/whale-profiles', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 30, 50);
     if (!pool) return res.json({ whales: [] });
 
+    // Quality gate — the Top Predictors rail reads this as a fallback
+    // when no HFX users qualify, so we can't let losing / sub-tier
+    // wallets leak through. Require EITHER:
+    //   - flex_score_90d >= 60   (synthetic score says "decent")
+    //   - OR real whale PnL >= $50k AND non-negative
+    // Rank alone isn't enough — someone can be rank-30 by volume while
+    // hemorrhaging money on every bet.
     const rows = await dbQuery(
       `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.flex_score_90d, u.created_at,
         COUNT(t.id)::int as take_count,
@@ -13117,6 +13124,10 @@ app.get('/api/whale-profiles', async (req, res) => {
        FROM users u
        LEFT JOIN takes t ON t.user_id = u.id AND t.source IN ('whale', 'consensus')
        WHERE u.is_whale = true
+         AND (
+           COALESCE(u.flex_score_90d, 0) >= 60
+           OR (COALESCE(u.whale_pnl, 0) >= 50000 AND COALESCE(u.whale_pnl, 0) > 0)
+         )
        GROUP BY u.id
        ORDER BY COALESCE(u.flex_score_90d, 0) DESC, u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
        LIMIT $1`,
