@@ -794,8 +794,8 @@ async function load() {
             ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold)">${take_stats.total_agrees.toLocaleString()}</strong><span class="lbl">Agrees</span></span>` : ''}
           </div>
           <div class="action-row">
-            <button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>
-            <button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">🔔 Copy</button>
+            ${!isOwner ? `<button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>` : ''}
+            ${!isOwner ? `<button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">🔔 Copy</button>` : ''}
             ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">⚔️ Challenge</button>` : ''}
             <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">📋 Copy link</button>
             <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share</button>
@@ -1402,7 +1402,14 @@ async function loadFollowStatus() {
 
 async function toggleFollow() {
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) { alert('Sign in to follow predictors'); return; }
+  if (!token) {
+    alert('Sign in to follow predictors.');
+    return;
+  }
+  if (!userId) {
+    alert('Profile not loaded yet — wait a moment and try again.');
+    return;
+  }
   const btn = document.getElementById('followBtn');
   if (btn) btn.disabled = true;
   try {
@@ -1410,7 +1417,22 @@ async function toggleFollow() {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
     });
-    if (!r.ok) throw new Error('Failed');
+    if (r.status === 401 || r.status === 403) {
+      // Stale token — clear it so the next click prompts re-auth.
+      localStorage.removeItem('hf_token');
+      localStorage.removeItem('hf_member_token');
+      alert('Your session expired. Sign in again to follow.');
+      return;
+    }
+    if (!r.ok) {
+      let msg = 'Follow failed (HTTP ' + r.status + ')';
+      try {
+        const err = await r.json();
+        if (err && err.error) msg = err.error;
+      } catch (_) {}
+      alert(msg);
+      return;
+    }
     const d = await r.json();
     _isFollowing = d.following;
     if (btn) {
@@ -1423,6 +1445,7 @@ async function toggleFollow() {
     await loadFollowStatus();
   } catch (e) {
     console.warn('[toggle-follow]', e);
+    alert('Network error — check your connection and try again.');
   } finally {
     if (btn) btn.disabled = false;
   }
