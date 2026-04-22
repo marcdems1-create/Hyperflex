@@ -3230,9 +3230,45 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
     if (relayResp.ok) {
       var relayJson = await relayResp.json();
       var txHash = relayJson.transactionHash || relayJson.txHash || null;
-      console.log('[safe] relayer accepted | id=' + (relayJson.transactionID || '?') + ' | tx=' + (txHash || 'pending'));
-      // Poll receipt if we have a hash; otherwise return early — caller
-      // can re-check downstream balance to confirm the tx landed.
+      var txId = relayJson.transactionID || relayJson.transactionId || null;
+      console.log('[safe] relayer accepted | id=' + (txId || '?') + ' | tx=' + (txHash || 'pending'));
+
+      // Polymarket relayer API change (2026-04-23): POST /submit no longer
+      // returns transactionHash in the immediate response — it returns
+      // {transactionID, state:"STATE_NEW"} and the hash is resolved via
+      // GET /transaction?id=<transactionID> once state advances past NEW.
+      // Today the hash is still in the response; post-cutover only the ID.
+      // Poll when we have an ID but no hash yet. Source:
+      // https://docs.polymarket.com/api-reference/relayer/submit-a-transaction
+      if (!txHash && txId) {
+        console.log('[safe] polling relayer for tx hash (async mode)…');
+        var pollStart = Date.now();
+        var POLL_TIMEOUT_MS = 45000;  // 45s — relays typically confirm in 2-10s
+        while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+          try {
+            var statusRes = await fetch('https://relayer-v2.polymarket.com/transaction?id=' + encodeURIComponent(txId));
+            if (statusRes.ok) {
+              var statusJson = await statusRes.json();
+              var state = String(statusJson.state || '').toUpperCase();
+              var pollHash = statusJson.transactionHash || statusJson.txHash || null;
+              console.log('[safe] relayer poll:', state, pollHash || '(no hash yet)');
+              if (pollHash) { txHash = pollHash; break; }
+              // Terminal error states — give up and fall through to direct.
+              if (state === 'STATE_FAILED' || state === 'STATE_ERROR' || state === 'STATE_REJECTED') {
+                console.warn('[safe] relayer reached terminal state ' + state + ', falling through');
+                break;
+              }
+            }
+          } catch (pollErr) {
+            console.warn('[safe] relayer poll error:', pollErr.message);
+          }
+          await new Promise(function(r) { setTimeout(r, 1500); });
+        }
+      }
+
+      // Wait for on-chain confirmation if we got a hash (either immediate
+      // or via poll). Use public RPC so we don't hit MetaMask's possibly-
+      // broken Polygon endpoint.
       if (txHash) {
         try {
           var pubProvider = await getPublicProvider();
@@ -3244,7 +3280,9 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
           return { transactionHash: txHash, relayed: true };
         }
       }
-      return { relayed: true, ack: relayJson };
+      // No hash after polling — fall through rather than returning a
+      // half-acknowledged state the caller can't verify.
+      console.warn('[safe] relayer returned ID but never yielded a hash — falling through to direct');
     }
     // Non-OK → log the body and fall through to direct dispatch.
     var relayErrText = await relayResp.text();
