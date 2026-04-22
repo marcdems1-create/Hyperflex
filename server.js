@@ -13109,7 +13109,7 @@ app.get('/api/whale-profiles', async (req, res) => {
     if (!pool) return res.json({ whales: [] });
 
     const rows = await dbQuery(
-      `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.created_at,
+      `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.flex_score_90d, u.created_at,
         COUNT(t.id)::int as take_count,
         COUNT(t.id) FILTER (WHERE t.is_correct = true)::int as correct_takes,
         COUNT(t.id) FILTER (WHERE t.is_correct = false)::int as incorrect_takes,
@@ -13118,7 +13118,7 @@ app.get('/api/whale-profiles', async (req, res) => {
        LEFT JOIN takes t ON t.user_id = u.id AND t.source IN ('whale', 'consensus')
        WHERE u.is_whale = true
        GROUP BY u.id
-       ORDER BY u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
+       ORDER BY COALESCE(u.flex_score_90d, 0) DESC, u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
        LIMIT $1`,
       [limit]
     );
@@ -13129,6 +13129,7 @@ app.get('/api/whale-profiles', async (req, res) => {
       polymarket_address: r.polymarket_address,
       whale_rank: r.whale_rank,
       whale_pnl: r.whale_pnl != null ? parseFloat(r.whale_pnl) : null,
+      flex_score_90d: r.flex_score_90d != null ? Number(r.flex_score_90d) : null,
       take_count: r.take_count,
       correct_takes: r.correct_takes,
       accuracy: (r.correct_takes + r.incorrect_takes) > 0
@@ -15205,13 +15206,77 @@ const _whaleUserCache = new Map(); // wallet_address → { userId, displayName }
 
 // ensureWhaleProfile: create or update a user record for a Polymarket whale wallet.
 // Returns the user id so takes can be linked to profiles.
-async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
+// Derive a 0–100 FLEX score for a Polymarket trader from their public
+// leaderboard data. We don't have our own calibration/CLV metrics for
+// wallets that haven't traded on HFX, so this is a proxy composite:
+//   - PnL             (40 pts)  — raw dollars made, log-scaled
+//   - Volume          (25 pts)  — proof they've put size on repeatedly
+//   - Win rate        (20 pts)  — if the leaderboard exposes it
+//   - Rank bonus      (15 pts)  — top 5/20/50 gets a ceiling nudge
+// The output is stored in users.flex_score_90d so the Top Predictors
+// rail + /api/predictors endpoint treat whale profiles as ranked
+// traders without special-casing them in the UI.
+function computePolymarketFlexScore(t) {
+  const pnl  = Number(t.pnl  || t.profit || 0);
+  const vol  = Number(t.vol  || t.volume || 0);
+  const rank = Number(t.rank || 0);
+  const wr   = t.win_rate != null ? Number(t.win_rate) : null;
+
+  // PnL — log scaled so $100k doesn't dominate $10M.
+  let pnlPts = 0;
+  if (pnl >= 1e7)      pnlPts = 40;
+  else if (pnl >= 1e6) pnlPts = 34;
+  else if (pnl >= 5e5) pnlPts = 28;
+  else if (pnl >= 1e5) pnlPts = 20;
+  else if (pnl >= 1e4) pnlPts = 12;
+  else if (pnl >    0) pnlPts = 6;
+
+  // Volume — independent of PnL, rewards activity even if break-even.
+  let volPts = 0;
+  if (vol >= 1e7)      volPts = 25;
+  else if (vol >= 1e6) volPts = 18;
+  else if (vol >= 1e5) volPts = 10;
+  else if (vol >= 1e4) volPts = 5;
+
+  // Win rate — only counts if we have it; otherwise we assume neutral
+  // (the PnL signal is already capturing directional accuracy).
+  let wrPts = 0;
+  if (wr != null) {
+    if (wr >= 0.7)      wrPts = 20;
+    else if (wr >= 0.6) wrPts = 14;
+    else if (wr >= 0.5) wrPts = 8;
+    else if (wr >= 0.4) wrPts = 3;
+  } else {
+    // If we have no win rate but PnL is strong, assume implicit accuracy.
+    wrPts = pnlPts >= 20 ? 12 : 0;
+  }
+
+  // Rank ceiling nudge — a literal "this is a known top-N wallet" signal.
+  let rankPts = 0;
+  if (rank && rank <= 5)       rankPts = 15;
+  else if (rank && rank <= 20) rankPts = 10;
+  else if (rank && rank <= 50) rankPts = 5;
+
+  return Math.min(100, Math.max(0, pnlPts + volPts + wrPts + rankPts));
+}
+
+async function ensureWhaleProfile(walletAddress, traderName, rank, pnl, extra) {
   if (!pool || !walletAddress) return null;
   const addrLower = walletAddress.toLowerCase();
+  const flexScore = extra && extra.flexScore != null
+    ? Math.max(0, Math.min(100, Math.round(Number(extra.flexScore))))
+    : null;
 
   // Check cache first
   const cached = _whaleUserCache.get(addrLower);
-  if (cached) return cached.userId;
+  if (cached) {
+    // Even on cache hit, opportunistically refresh flex_score_90d if a
+    // newer computed value arrived with this call. Cheap UPDATE.
+    if (flexScore != null) {
+      dbQuery('UPDATE users SET flex_score_90d = $1 WHERE id = $2 AND (flex_score_90d IS NULL OR flex_score_90d <> $1)', [flexScore, cached.userId]).catch(() => {});
+    }
+    return cached.userId;
+  }
 
   try {
     // Look up existing user by polymarket_address
@@ -15221,20 +15286,20 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
     );
 
     if (existing.length) {
-      // Update rank/pnl/whale flag. PRESERVE the user's chosen display_name —
-      // the whale leaderboard cron runs every ~5 min and used to clobber
-      // user-chosen names with whatever Polymarket's Data API returned (often
-      // "Trader" for wallets without a set username), causing posted takes
-      // to render under the wrong name on the feed and market pages. Only
-      // overwrite when the stored name is empty OR a wallet-prefix stub like
-      // "0x5554...bc9c" which users clearly didn't pick themselves.
       const existingName = existing[0].display_name || '';
       const isWalletStub = /^0x[0-9a-fA-F]{4,}\.{2,}[0-9a-fA-F]{4,}$/.test(existingName) || existingName === '';
       const displayName = (!isWalletStub && existingName) ? existingName : (traderName || existingName);
-      await dbQuery(
-        'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
-        [rank || null, pnl || null, displayName, existing[0].id]
-      ).catch(() => {});
+      if (flexScore != null) {
+        await dbQuery(
+          'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3, flex_score_90d = $4 WHERE id = $5',
+          [rank || null, pnl || null, displayName, flexScore, existing[0].id]
+        ).catch(() => {});
+      } else {
+        await dbQuery(
+          'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
+          [rank || null, pnl || null, displayName, existing[0].id]
+        ).catch(() => {});
+      }
       _whaleUserCache.set(addrLower, { userId: existing[0].id, displayName });
       return existing[0].id;
     }
@@ -15242,9 +15307,9 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl) {
     // Create new whale user
     const displayName = traderName || (addrLower.slice(0, 6) + '...' + addrLower.slice(-4));
     const rows = await dbQuery(
-      `INSERT INTO users (display_name, polymarket_address, password_hash, is_whale, whale_rank, whale_pnl, created_at)
-       VALUES ($1, $2, $3, true, $4, $5, NOW()) RETURNING id`,
-      [displayName, addrLower, 'whale_profile_' + Date.now(), rank || null, pnl || null]
+      `INSERT INTO users (display_name, polymarket_address, password_hash, is_whale, whale_rank, whale_pnl, flex_score_90d, created_at)
+       VALUES ($1, $2, $3, true, $4, $5, $6, NOW()) RETURNING id`,
+      [displayName, addrLower, 'whale_profile_' + Date.now(), rank || null, pnl || null, flexScore]
     );
     if (rows.length) {
       _whaleUserCache.set(addrLower, { userId: rows[0].id, displayName });
@@ -25688,36 +25753,45 @@ function diffWhalePositions(oldPositions, newPositions, trader) {
 async function fetchWhalePositions() {
   const fetch = _nodeFetch;
 
-  // 1. Fetch top 100 traders from Polymarket leaderboard — deeper bench so
-  // the predictor rail has depth as these wallets connect + claim profiles.
-  const lbRes = await fetch('https://data-api.polymarket.com/v1/leaderboard?limit=100&window=all');
+  // 1. Fetch top 500 traders from Polymarket leaderboard. We actively
+  // TRACK (open positions, diff alerts) only the top 100 to keep RPC
+  // load sane, but we IMPORT profiles + FLEX scores for all 500 so the
+  // Top Predictors rail has depth and the marketing cohort is broad.
+  const lbRes = await fetch('https://data-api.polymarket.com/v1/leaderboard?limit=500&window=all');
   if (!lbRes.ok) throw new Error(`Leaderboard API returned ${lbRes.status}`);
   const leaderboard = await lbRes.json();
 
-  // Filter to profitable traders only (positive PnL + minimum volume for signal quality)
+  // Normalise leaderboard rows. Preserve win_rate if the API returns it.
   const allTraders = (leaderboard || []).map((t, i) => ({
     rank: i + 1,
     userName: (() => { const n = t.userName || t.username || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(t.proxyWallet || t.proxy_wallet || n || `trader_${i + 1}`) : n; })(),
     proxyWallet: t.proxyWallet || t.proxy_wallet || '',
     pnl: parseFloat(t.pnl || t.profit || 0),
-    vol: parseFloat(t.vol || t.volume || 0)
+    vol: parseFloat(t.vol || t.volume || 0),
+    win_rate: t.winRate != null ? parseFloat(t.winRate) : (t.win_rate != null ? parseFloat(t.win_rate) : null),
   })).filter(t => t.proxyWallet);
-  // Track the profitable top 100. Previously capped at 50 for tracking
-  // and 30 for profile-ensure; now 100/100 so we have a broader outreach
-  // cohort the moment any of them claims their wallet on HFX.
+  // Active tracking (whale-watch snapshot diffs, whale alerts): only the
+  // profitable top 100 with real volume. Low-signal accounts and newer
+  // wallets can't survive the $10k volume gate.
   const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 100);
 
-  // ── Ensure whale profiles exist for the full tracked cohort ──
-  // Fire-and-forget: each ensureWhaleProfile upserts a minimal user row
-  // so the wallet appears on /api/predictors and the Top Predictors rail
-  // the instant its owner connects. Until they connect, the profile sits
-  // as an orphan (is_whale=true, no display_name/email) and won't pass
-  // the ?verified=1 filter — so the marketing rail stays clean.
+  // ── Mass whale-profile import (top 500 by leaderboard rank) ──
+  // Fire-and-forget. Computes a FLEX score per wallet from public
+  // Polymarket data (PnL + volume + win rate + rank bonus) and stores
+  // it on users.flex_score_90d so /api/predictors and the Top
+  // Predictors rail surface them with legitimate-looking scores.
+  // Iterates in small chunks with tiny pauses to avoid hammering our DB.
   if (pool) {
     (async () => {
-      for (const t of traders) {
-        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl).catch(() => null);
+      const importCohort = allTraders.slice(0, 500);
+      for (let i = 0; i < importCohort.length; i++) {
+        const t = importCohort[i];
+        const flex = computePolymarketFlexScore(t);
+        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl, { flexScore: flex }).catch(() => null);
+        // Breather every 50 rows so we don't block the event loop.
+        if (i > 0 && i % 50 === 0) await new Promise(r => setTimeout(r, 100));
       }
+      console.log(`[whale-import] Ensured ${importCohort.length} whale profiles with FLEX scores`);
     })().catch(() => {});
   }
 

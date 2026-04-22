@@ -3175,10 +3175,13 @@ async function loadTopPredictors() {
   var hero = document.getElementById('predHeroSlot');
   var ranks = document.getElementById('predRankSlot');
   if (!hero || !ranks) return;
-  // Prefer wallet-verified users (they're our marketing cohort) but fall
-  // back to the broader top-ranked predictors if the verified pool is
-  // empty — the rail should never show a dead panel. The verified pip
-  // below still visually distinguishes the confirmed ones.
+  // Waterfall:
+  //   1. /api/predictors?verified=1    — HFX-claimed wallets (marketable)
+  //   2. /api/predictors                — any user with ≥3 settled picks
+  //   3. /api/whale-profiles            — imported Polymarket leaderboard
+  //      wallets with synthetic FLEX scores derived from on-chain data.
+  //      Guarantees the rail is never empty as long as the whale import
+  //      has run.
   async function fetchPredictors(verifiedOnly) {
     var url = '/api/predictors?limit=10&sort=sharp_score' + (verifiedOnly ? '&verified=1' : '');
     var res = await fetch(url);
@@ -3186,15 +3189,38 @@ async function loadTopPredictors() {
     var data = await res.json();
     return Array.isArray(data) ? data : (data.predictors || []);
   }
+  async function fetchWhaleFallback() {
+    var res = await fetch('/api/whale-profiles?limit=10');
+    if (!res.ok) return [];
+    var d = await res.json();
+    var whales = d.whales || [];
+    // Map whale profile shape → predictor card shape so the existing
+    // hero/rank renderers can consume them unchanged.
+    return whales.map(w => ({
+      user_id: w.id,
+      display_name: w.display_name || 'Whale #' + (w.whale_rank || '?'),
+      username: null,
+      win_rate: w.accuracy,                   // null when no HFX takes scored
+      total_predictions: w.take_count || 0,
+      pnl_pts: w.whale_pnl != null ? Math.round(w.whale_pnl) : null,
+      flex_score_90d: w.flex_score_90d != null ? w.flex_score_90d : null,
+      sharp_score: null,
+      polymarket_address: w.polymarket_address,
+      wallet_verified: false,
+      _source: 'whale',
+    }));
+  }
   try {
     var items = await fetchPredictors(true);
-    if (!items.length) {
-      items = await fetchPredictors(false);
-    }
-    // Client-side sort: prefer flex_score_90d (composite) then sharp_score
+    if (!items.length) items = await fetchPredictors(false);
+    if (!items.length) items = await fetchWhaleFallback();
+    // Sort: flex_score_90d first, then sharp_score, then pnl_pts
     items.sort(function(a, b) {
-      var aS = a.flex_score_90d != null ? a.flex_score_90d : (a.sharp_score || 0);
-      var bS = b.flex_score_90d != null ? b.flex_score_90d : (b.sharp_score || 0);
+      var aF = a.flex_score_90d != null ? a.flex_score_90d : null;
+      var bF = b.flex_score_90d != null ? b.flex_score_90d : null;
+      if (aF != null || bF != null) return (bF || 0) - (aF || 0);
+      var aS = a.sharp_score != null ? a.sharp_score : (a.pnl_pts || 0);
+      var bS = b.sharp_score != null ? b.sharp_score : (b.pnl_pts || 0);
       return bS - aS;
     });
     if (!items.length) {
