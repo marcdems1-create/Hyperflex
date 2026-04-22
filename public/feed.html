@@ -1618,6 +1618,35 @@ function loadMore() { loadFeed(true); }
   io.observe(btn);
 })();
 
+// Rebalance the feed so market-attached posts dominate without crowding
+// out pure social commentary. Target mix: ~80% with an attached market
+// (hero card), ~20% without (text-only takes). Feed data is bucketed
+// into "has market" vs "no market" and interleaved so the visible ratio
+// stays on target across any scroll position. When one bucket drains,
+// the remainder fills from the other (no empty slots).
+function rebalanceFeedByMarket(items, marketRatio) {
+  if (!items || !items.length) return items || [];
+  var target = (marketRatio == null) ? 0.8 : marketRatio;
+  // Every `gap`-th slot is a marketless post (5 at ratio 0.8, 4 at 0.75, etc).
+  var gap = Math.max(2, Math.round(1 / Math.max(0.05, 1 - target)));
+  var withMkt = [], noMkt = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var hasMarket = !!(it && (it.market_live || it.market_id || it.market_title));
+    if (hasMarket) withMkt.push(it); else noMkt.push(it);
+  }
+  var out = [];
+  var wi = 0, ni = 0, pos = 0;
+  while (wi < withMkt.length || ni < noMkt.length) {
+    var shouldUseNoMkt = ((pos % gap) === (gap - 1)) && ni < noMkt.length;
+    if (shouldUseNoMkt)          out.push(noMkt[ni++]);
+    else if (wi < withMkt.length) out.push(withMkt[wi++]);
+    else if (ni < noMkt.length)   out.push(noMkt[ni++]);
+    pos++;
+  }
+  return out;
+}
+
 function renderFeed(noFollowsYet) {
   var container = document.getElementById('feedContainer');
   if (!feedData.length) {
@@ -1640,7 +1669,12 @@ function renderFeed(noFollowsYet) {
     ? '<div style="font-size:11px;color:var(--text-faint);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">Showing popular predictions — <a href="/predictors">follow traders</a> to personalise your feed</div>'
     : '';
 
-  container.innerHTML = header + feedData.map(renderCard).join('');
+  // Weight the visible order so ~80% of cards have an attached market
+  // (the sentiment-feed concept: posts as opinion, markets as where that
+  // opinion's quantified). Overridable via window.HF_FEED_MARKET_RATIO.
+  var ratio = (typeof window.HF_FEED_MARKET_RATIO === 'number') ? window.HF_FEED_MARKET_RATIO : 0.8;
+  var ordered = rebalanceFeedByMarket(feedData, ratio);
+  container.innerHTML = header + ordered.map(renderCard).join('');
 }
 
 function renderInfluencerCard(p) {
