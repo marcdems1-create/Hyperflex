@@ -13231,6 +13231,64 @@ async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, fol
 }
 
 // GET /api/admin/influencers — list all influencers
+// GET /api/admin/polymarket-outreach — prioritized outreach queue.
+// Returns auto-created whale profiles (is_whale=true) that do NOT yet
+// have a claimed user on HFX (no login, no display_name override,
+// no email). These are the top Polymarket wallets ripe for DM / cold
+// email: we have their wallet address, rank, PnL, and (if derivable
+// from on-chain or their polymarket.com username) a lead on an X
+// handle. Admin-secret gated.
+app.get('/api/admin/polymarket-outreach', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    // Wallets we've auto-created profiles for (top-100 whales batch) but
+    // which haven't been claimed (password_hash is the whale_profile_*
+    // sentinel we set on auto-create; claimed users overwrite that with
+    // a real bcrypt hash on signup).
+    const rows = await dbQuery(`
+      SELECT id, display_name, username, polymarket_address, whale_rank,
+             whale_pnl, created_at, wallet_verified
+      FROM users
+      WHERE is_whale = true
+        AND password_hash LIKE 'whale_profile_%'
+      ORDER BY whale_rank ASC NULLS LAST
+      LIMIT 200
+    `).catch(async () => {
+      return await dbQuery(`
+        SELECT id, display_name, polymarket_address, whale_rank, created_at
+        FROM users WHERE is_whale = true
+        ORDER BY whale_rank ASC NULLS LAST LIMIT 200
+      `);
+    });
+    // Annotate each with whether the wallet's username looks like an X
+    // handle (short, no spaces, alphanumeric+underscores). Crude but
+    // gives an immediate "try DMing @foo" starting point.
+    const annotated = rows.map(r => {
+      const name = r.display_name || '';
+      const looksLikeHandle = name && /^[A-Za-z0-9_]{2,24}$/.test(name);
+      return {
+        user_id: r.id,
+        display_name: name,
+        polymarket_address: r.polymarket_address,
+        whale_rank: r.whale_rank,
+        whale_pnl: r.whale_pnl,
+        claimed: !!r.wallet_verified,
+        created_at: r.created_at,
+        outreach: {
+          likely_x_handle: looksLikeHandle ? name : null,
+          polygonscan_url: r.polymarket_address ? ('https://polygonscan.com/address/' + r.polymarket_address) : null,
+          polymarket_profile: r.polymarket_address ? ('https://polymarket.com/profile/' + r.polymarket_address) : null,
+        },
+      };
+    });
+    const unclaimed = annotated.filter(a => !a.claimed);
+    res.json({ count: unclaimed.length, total_whales: annotated.length, unclaimed });
+  } catch (err) {
+    console.error('[admin/polymarket-outreach]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/verified-predictors — marketing cohort export.
 // Returns every user with wallet_verified=true plus contact + stats so
 // we can reach out directly (email, X handle) later. Admin-gated.
@@ -25602,8 +25660,9 @@ function diffWhalePositions(oldPositions, newPositions, trader) {
 async function fetchWhalePositions() {
   const fetch = _nodeFetch;
 
-  // 1. Fetch top 50 traders from Polymarket leaderboard
-  const lbRes = await fetch('https://data-api.polymarket.com/v1/leaderboard?limit=50&window=all');
+  // 1. Fetch top 100 traders from Polymarket leaderboard — deeper bench so
+  // the predictor rail has depth as these wallets connect + claim profiles.
+  const lbRes = await fetch('https://data-api.polymarket.com/v1/leaderboard?limit=100&window=all');
   if (!lbRes.ok) throw new Error(`Leaderboard API returned ${lbRes.status}`);
   const leaderboard = await lbRes.json();
 
@@ -25615,13 +25674,20 @@ async function fetchWhalePositions() {
     pnl: parseFloat(t.pnl || t.profit || 0),
     vol: parseFloat(t.vol || t.volume || 0)
   })).filter(t => t.proxyWallet);
-  // Only track profitable whales — the top 0.5% who actually make money
-  const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 50);
+  // Track the profitable top 100. Previously capped at 50 for tracking
+  // and 30 for profile-ensure; now 100/100 so we have a broader outreach
+  // cohort the moment any of them claims their wallet on HFX.
+  const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 100);
 
-  // ── Ensure whale profiles exist for all tracked traders (fire-and-forget) ──
+  // ── Ensure whale profiles exist for the full tracked cohort ──
+  // Fire-and-forget: each ensureWhaleProfile upserts a minimal user row
+  // so the wallet appears on /api/predictors and the Top Predictors rail
+  // the instant its owner connects. Until they connect, the profile sits
+  // as an orphan (is_whale=true, no display_name/email) and won't pass
+  // the ?verified=1 filter — so the marketing rail stays clean.
   if (pool) {
     (async () => {
-      for (const t of traders.slice(0, 30)) {
+      for (const t of traders) {
         await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl).catch(() => null);
       }
     })().catch(() => {});
