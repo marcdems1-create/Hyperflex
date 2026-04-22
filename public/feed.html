@@ -135,6 +135,99 @@ a:hover { text-decoration: underline; }
 .pred-outcome.incorrect { background: rgba(239,68,68,0.1); color: var(--red); }
 
 .pred-foot { display: flex; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Market hero card — the focal point of each feed item. QuickSwap-style:  */
+/* deep dark surface, big rounded corners, airy padding, market question   */
+/* as the hero, YES/NO as prominent pill buttons. This is intentionally    */
+/* the largest visual element in the card so markets dominate the feed.   */
+.mkt-hero {
+  display: block;
+  margin: 6px 0 10px;
+  padding: 18px 20px 20px;
+  background: linear-gradient(180deg, rgba(77,159,255,0.05), rgba(77,159,255,0.02));
+  border: 1px solid rgba(77,159,255,0.14);
+  border-radius: 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .18s, transform .18s;
+}
+.mkt-hero:hover {
+  border-color: rgba(77,159,255,0.32);
+  transform: translateY(-1px);
+}
+.mkt-hero-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.mkt-hero-label {
+  color: #4d9fff;
+  font-weight: 800;
+}
+.mkt-hero-sep { color: rgba(255,255,255,0.12); }
+.mkt-hero-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+.mkt-hero-odds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.mkt-hero-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: background .15s, border-color .15s;
+}
+.mkt-hero-pill:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+.mkt-hero-pill-side {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.mkt-hero-pill-side.yes { color: #00e68a; }
+.mkt-hero-pill-side.no  { color: #ff4d6a; }
+.mkt-hero-pill-odds {
+  font-family: 'Inter', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.mkt-hero-noprice {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  grid-column: 1 / -1;
+}
+@media (max-width: 520px) {
+  .mkt-hero { padding: 14px 14px 16px; }
+  .mkt-hero-q { font-size: 16px; margin-bottom: 12px; }
+  .mkt-hero-pill { padding: 10px 12px; }
+  .mkt-hero-pill-odds { font-size: 18px; }
+}
 .pred-foot-time { font-size: 11px; color: var(--text-faint); }
 
 /* ── Influencer tweet cards ── */
@@ -1595,19 +1688,43 @@ function renderInfluencerCard(p) {
       ? '<a href="' + esc(marketHref) + '" class="inf-bet-no">NO ' + noPct + '¢</a>'
       : '';
 
+    // Match the .mkt-hero treatment used by prediction cards so markets
+    // read as the focal point everywhere in the feed.
+    var infClosesBits = null;
+    if (ml.closes_at) {
+      try {
+        var _now = Date.now();
+        var _t = new Date(ml.closes_at).getTime();
+        var _diff = Math.round((_t - _now) / (1000*60*60*24));
+        if (_diff >= 1) infClosesBits = 'Ends in ' + _diff + 'd';
+        else if (_diff === 0) infClosesBits = 'Ends today';
+        else infClosesBits = 'Resolved';
+      } catch (e) {}
+    }
+    var infTopBits = ['<span class="mkt-hero-label">Market</span>'];
+    if (volLabel) infTopBits.push('<span class="mkt-hero-sep">·</span>', '<span>' + volLabel + ' 24h</span>');
+    if (infClosesBits) infTopBits.push('<span class="mkt-hero-sep">·</span>', '<span>' + infClosesBits + '</span>');
+
+    var infOddsHtml;
+    if (yesPct != null && noPct != null) {
+      infOddsHtml =
+        '<div class="mkt-hero-pill">' +
+          '<span class="mkt-hero-pill-side yes">↑ YES</span>' +
+          '<span class="mkt-hero-pill-odds">' + yesPct + '¢</span>' +
+        '</div>' +
+        '<div class="mkt-hero-pill">' +
+          '<span class="mkt-hero-pill-side no">↓ NO</span>' +
+          '<span class="mkt-hero-pill-odds">' + noPct + '¢</span>' +
+        '</div>';
+    } else {
+      infOddsHtml = '<div class="mkt-hero-noprice">No live price</div>';
+    }
+
     marketDockHtml =
-      '<a href="' + esc(marketHref) + '" class="inf-market-dock">' +
-        '<div class="inf-market-dock-head">' +
-          '<span class="inf-market-dock-label">📊 Polymarket</span>' +
-          (closesLabel ? '<span class="inf-market-dock-close">' + esc(closesLabel) + '</span>' : '') +
-        '</div>' +
-        '<div class="inf-market-dock-q">' + esc(marketQ) + '</div>' +
-        oddsBarHtml +
-        '<div class="inf-market-dock-foot">' +
-          yesBtnHtml +
-          noBtnHtml +
-          (volLabel ? '<span class="inf-market-vol">' + esc(volLabel) + ' 24h vol</span>' : '') +
-        '</div>' +
+      '<a class="mkt-hero" href="' + esc(marketHref) + '">' +
+        '<div class="mkt-hero-top">' + infTopBits.join('') + '</div>' +
+        '<div class="mkt-hero-q">' + esc(marketQ) + '</div>' +
+        '<div class="mkt-hero-odds">' + infOddsHtml + '</div>' +
       '</a>';
   }
 
@@ -1719,38 +1836,59 @@ function renderCard(p) {
     ? ' <a href="' + esc(p._external_url) + '" target="_blank" rel="noopener" style="color:var(--text-faint);font-size:11px;margin-left:6px">source ↗</a>'
     : '';
 
-  // Live market sub-card — shown when we have live market data attached
-  // for this card (screener cache hit). Gives traders a quick read on
-  // where the market sits right now vs. what the influencer said.
+  // Market hero card — the visual centrepiece of each feed item when a
+  // live market is attached. QuickSwap-inspired: big airy surface, bold
+  // market question, prominent YES/NO pills. The intent is for markets
+  // to dominate the feed; social/commentary (thesis, badges) sit below
+  // as supporting context.
   var liveMarketHtml = '';
   if (p.market_live) {
     var ml = p.market_live;
     var yesPct = ml.yes_pct != null ? ml.yes_pct : null;
     var noPct = yesPct != null ? (100 - yesPct) : null;
+    // Prices as cents — matches market.html's numeric style.
+    var yesCents = yesPct != null ? yesPct : null;
+    var noCents  = noPct  != null ? noPct  : null;
+
     var volLabel = ml.volume_24h
       ? ('$' + (ml.volume_24h >= 1e6 ? (ml.volume_24h/1e6).toFixed(1) + 'M' : ml.volume_24h >= 1e3 ? Math.round(ml.volume_24h/1e3) + 'K' : Math.round(ml.volume_24h)))
-      : '—';
-    var closes = ml.closes_at
-      ? new Date(ml.closes_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })
       : null;
-    var yesBar = yesPct != null
-      ? ('<div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px">' +
-         '<span style="color:#00e68a;font-weight:700">YES ' + yesPct + '%</span>' +
-         '<span style="color:var(--text-faint)">·</span>' +
-         '<span style="color:#ff4d6a;font-weight:700">NO ' + noPct + '%</span>' +
-         '</div>')
-      : '<span style="font-family:var(--mono);font-size:11px;color:var(--text-faint)">no live price</span>';
-    liveMarketHtml =
-      '<a href="' + marketHref + '" style="display:block;margin-top:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold,#c9920d)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
-          '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">' +
-            '<span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gold,#c9920d);text-transform:uppercase">Live Market</span>' +
-            (closes ? '<span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">· closes ' + closes + '</span>' : '') +
-          '</div>' +
-          '<span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">' + volLabel + ' 24h vol</span>' +
+    var closesLabel = null;
+    if (ml.closes_at) {
+      try {
+        var now = Date.now();
+        var t = new Date(ml.closes_at).getTime();
+        var diffDays = Math.round((t - now) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 1)       closesLabel = 'Ends in ' + diffDays + 'd';
+        else if (diffDays === 0) closesLabel = 'Ends today';
+        else                     closesLabel = 'Resolved';
+      } catch (e) { closesLabel = null; }
+    }
+
+    var topBits = ['<span class="mkt-hero-label">Market</span>'];
+    if (volLabel) { topBits.push('<span class="mkt-hero-sep">·</span>', '<span>' + volLabel + ' 24h</span>'); }
+    if (closesLabel) { topBits.push('<span class="mkt-hero-sep">·</span>', '<span>' + closesLabel + '</span>'); }
+
+    var oddsHtml;
+    if (yesCents != null && noCents != null) {
+      oddsHtml =
+        '<div class="mkt-hero-pill">' +
+          '<span class="mkt-hero-pill-side yes">↑ YES</span>' +
+          '<span class="mkt-hero-pill-odds">' + yesCents + '¢</span>' +
         '</div>' +
-        '<div style="font-size:13px;color:var(--text);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.market_title || '') + '</div>' +
-        '<div style="margin-top:6px">' + yesBar + '</div>' +
+        '<div class="mkt-hero-pill">' +
+          '<span class="mkt-hero-pill-side no">↓ NO</span>' +
+          '<span class="mkt-hero-pill-odds">' + noCents + '¢</span>' +
+        '</div>';
+    } else {
+      oddsHtml = '<div class="mkt-hero-noprice">No live price</div>';
+    }
+
+    liveMarketHtml =
+      '<a class="mkt-hero" href="' + marketHref + '">' +
+        '<div class="mkt-hero-top">' + topBits.join('') + '</div>' +
+        '<div class="mkt-hero-q">' + esc(p.market_title || '') + '</div>' +
+        '<div class="mkt-hero-odds">' + oddsHtml + '</div>' +
       '</a>';
   }
 
