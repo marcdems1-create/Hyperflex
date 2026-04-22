@@ -13115,8 +13115,12 @@ app.get('/api/whale-profiles', async (req, res) => {
     //   - OR real whale PnL >= $50k AND non-negative
     // Rank alone isn't enough — someone can be rank-30 by volume while
     // hemorrhaging money on every bet.
+    // Rail waterfall honours admin curation — featured predictors jump
+    // to the top, hidden ones are suppressed entirely. Quality gate
+    // (flex ≥ 60 or pnl ≥ $50k) still applies unless featured overrides.
     const rows = await dbQuery(
       `SELECT u.id, u.display_name, u.polymarket_address, u.whale_rank, u.whale_pnl, u.flex_score_90d, u.created_at,
+        COALESCE(u.featured_predictor, false) as featured_predictor,
         COUNT(t.id)::int as take_count,
         COUNT(t.id) FILTER (WHERE t.is_correct = true)::int as correct_takes,
         COUNT(t.id) FILTER (WHERE t.is_correct = false)::int as incorrect_takes,
@@ -13124,12 +13128,18 @@ app.get('/api/whale-profiles', async (req, res) => {
        FROM users u
        LEFT JOIN takes t ON t.user_id = u.id AND t.source IN ('whale', 'consensus')
        WHERE u.is_whale = true
+         AND COALESCE(u.hidden_from_rail, false) = false
          AND (
-           COALESCE(u.flex_score_90d, 0) >= 60
+           COALESCE(u.featured_predictor, false) = true
+           OR COALESCE(u.flex_score_90d, 0) >= 60
            OR (COALESCE(u.whale_pnl, 0) >= 50000 AND COALESCE(u.whale_pnl, 0) > 0)
          )
        GROUP BY u.id
-       ORDER BY COALESCE(u.flex_score_90d, 0) DESC, u.whale_rank ASC NULLS LAST, u.whale_pnl DESC NULLS LAST
+       ORDER BY
+         COALESCE(u.featured_predictor, false) DESC,
+         COALESCE(u.flex_score_90d, 0) DESC,
+         u.whale_rank ASC NULLS LAST,
+         u.whale_pnl DESC NULLS LAST
        LIMIT $1`,
       [limit]
     );
@@ -13319,6 +13329,78 @@ app.post('/api/admin/sync-whale-trade-ledger', async (req, res) => {
     });
   } catch (err) {
     console.error('[admin/sync-whale-trade-ledger]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Top Predictors rail curation — admin UI sits at /admin/predictors ──
+// Two boolean columns on users control the rail:
+//   featured_predictor  — pin to the top of the rail regardless of score
+//   hidden_from_rail    — suppress from /api/whale-profiles + predictors
+// Idempotent schema add so re-deploys don't choke on existing DBs.
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS featured_predictor BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS hidden_from_rail BOOLEAN DEFAULT false`);
+  } catch (e) { /* best-effort */ }
+})();
+
+// GET /api/admin/predictors-edit — editable table for the /admin/predictors
+// page. Shows every imported whale plus flags so admin can toggle.
+app.get('/api/admin/predictors-edit', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(`
+      SELECT id, display_name, username, polymarket_address, whale_rank, whale_pnl,
+             flex_score_90d, is_whale, wallet_verified,
+             COALESCE(featured_predictor, false) AS featured_predictor,
+             COALESCE(hidden_from_rail, false)   AS hidden_from_rail,
+             created_at
+      FROM users
+      WHERE polymarket_address IS NOT NULL
+      ORDER BY
+        featured_predictor DESC,
+        COALESCE(flex_score_90d, 0) DESC,
+        whale_rank ASC NULLS LAST,
+        whale_pnl DESC NULLS LAST
+      LIMIT 500
+    `);
+    res.json({ count: rows.length, predictors: rows });
+  } catch (err) {
+    console.error('[admin/predictors-edit]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/predictors-edit/:userId — toggle featured / hidden flags
+// or override flex_score_90d for a specific predictor.
+//   body: { featured?: bool, hidden?: bool, flex_score?: number|null, display_name?: string }
+app.post('/api/admin/predictors-edit/:userId', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  const userId = req.params.userId;
+  const { featured, hidden, flex_score, display_name } = req.body || {};
+  const sets = [];
+  const params = [];
+  if (typeof featured === 'boolean') { params.push(featured); sets.push(`featured_predictor = $${params.length}`); }
+  if (typeof hidden === 'boolean')   { params.push(hidden);   sets.push(`hidden_from_rail = $${params.length}`); }
+  if (flex_score === null || typeof flex_score === 'number') {
+    const clamped = flex_score === null ? null : Math.max(0, Math.min(100, Math.round(Number(flex_score))));
+    params.push(clamped); sets.push(`flex_score_90d = $${params.length}`);
+  }
+  if (typeof display_name === 'string' && display_name.trim()) {
+    params.push(display_name.trim().slice(0, 60)); sets.push(`display_name = $${params.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+  params.push(userId);
+  try {
+    await dbQuery(`UPDATE users SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+    res.json({ ok: true, updated: sets.length });
+  } catch (err) {
+    console.error('[admin/predictors-edit POST]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -14549,6 +14631,13 @@ app.post('/api/admin/bug-reports/:id/delete', requireAdmin, async (req, res) => 
 // Serve admin bugs dashboard
 app.get('/admin/bugs', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-bugs.html'));
+});
+
+// Admin UI for curating the Top Predictors rail — pin / hide / reorder
+// the predictors that show on the feed. Gated by ADMIN_SECRET (same
+// password entry the other admin pages use).
+app.get('/admin/predictors', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-predictors.html'));
 });
 
 // ════════════════════════════════════════════════════════════

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Top Predictors Admin — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0d10;
+  --surface: #13131a;
+  --surface-2: #1a1a24;
+  --text: #f0f0f5;
+  --text-dim: #8b8a9a;
+  --text-faint: #4a4a5a;
+  --border: rgba(255,255,255,0.07);
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --gold: #c9920d;
+  --blue: #4d9fff;
+  --purple: #a855f7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--purple); text-decoration: none; }
+.container { max-width: 1400px; margin: 0 auto; padding: 28px 28px 60px; }
+.head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.head h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px; font-weight: 900; letter-spacing: -0.02em;
+  margin: 0; color: var(--text);
+}
+.head .sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--purple); text-transform: uppercase;
+  margin-top: 4px;
+}
+.head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  text-transform: uppercase;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }
+.btn.primary { background: var(--purple); border-color: var(--purple); color: #fff; }
+.btn.primary:hover { filter: brightness(1.1); }
+.btn.ghost { background: transparent; }
+
+.auth-wrap {
+  max-width: 420px; margin: 120px auto 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px 28px;
+}
+.auth-wrap h2 { margin: 0 0 8px; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.auth-wrap p { margin: 0 0 20px; color: var(--text-dim); font-size: 13px; }
+.auth-wrap input {
+  width: 100%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  outline: none; margin-bottom: 12px;
+}
+.auth-wrap input:focus { border-color: var(--purple); }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px;
+}
+.stat-lbl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--text-faint); text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 22px; font-weight: 900; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat-val.purple { color: var(--purple); }
+.stat-val.green  { color: var(--green); }
+.stat-val.gold   { color: var(--gold); }
+
+.filters {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.pill {
+  padding: 6px 12px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-dim); cursor: pointer;
+  text-transform: uppercase;
+  transition: all .15s;
+}
+.pill:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.pill.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+.search {
+  flex: 1; min-width: 240px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 100px; padding: 6px 14px;
+  color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;
+  outline: none;
+}
+.search:focus { border-color: var(--purple); }
+
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+thead th {
+  text-align: left; padding: 10px 14px;
+  background: var(--surface-2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--text-faint); text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+tbody tr:hover { background: rgba(255,255,255,0.015); }
+tbody tr:last-child td { border-bottom: none; }
+.name-cell { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.name-cell a { color: var(--text); }
+.name-cell a:hover { color: var(--purple); }
+.wallet {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.badge.whale    { background: rgba(168,85,247,0.15); color: var(--purple); }
+.badge.verified { background: rgba(77,159,255,0.15); color: var(--blue); }
+.badge.featured { background: rgba(201,146,13,0.15); color: var(--gold); }
+.badge.hidden   { background: rgba(255,77,106,0.15); color: var(--red); }
+.num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.num.up { color: var(--green); }
+.num.down { color: var(--red); }
+.num.muted { color: var(--text-faint); }
+.flex-edit {
+  width: 56px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 6px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 800;
+  outline: none; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.flex-edit:focus { border-color: var(--purple); }
+.toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 100px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  color: var(--text-dim); cursor: pointer;
+  text-transform: uppercase;
+  transition: all .15s;
+}
+.toggle:hover { border-color: rgba(255,255,255,0.2); }
+.toggle.on.feat  { background: rgba(201,146,13,0.2); border-color: rgba(201,146,13,0.5); color: var(--gold); }
+.toggle.on.hide  { background: rgba(255,77,106,0.2); border-color: rgba(255,77,106,0.5); color: var(--red); }
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--text); display: none;
+  box-shadow: 0 20px 40px -12px rgba(0,0,0,0.6);
+}
+.toast.show { display: block; }
+.toast.ok   { border-color: rgba(0,230,138,0.4); color: var(--green); }
+.toast.err  { border-color: rgba(255,77,106,0.4); color: var(--red); }
+.loading { text-align: center; padding: 48px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; }
+.empty   { text-align: center; padding: 48px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<!-- Auth gate — stash the secret in sessionStorage so reloads don't re-prompt -->
+<div id="authGate" class="auth-wrap" style="display:none">
+  <h2>Admin · Top Predictors</h2>
+  <p>Paste your <code>ADMIN_SECRET</code> to curate the rail.</p>
+  <input type="password" id="secretInput" placeholder="x-admin-secret" autofocus>
+  <button class="btn primary" onclick="authenticate()" style="width:100%">Unlock</button>
+</div>
+
+<div class="container" id="mainWrap" style="display:none">
+  <div class="head">
+    <div>
+      <div class="sub">Admin · Top Predictors</div>
+      <h1>Curate the rail</h1>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost" onclick="loadAll()">↻ Refresh</button>
+      <button class="btn" onclick="runRebalance()">Rebalance Whale Flags</button>
+      <button class="btn primary" onclick="runSyncLedger()">Sync Trade Ledger</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="filters">
+    <button class="pill active" data-filter="all">All</button>
+    <button class="pill" data-filter="featured">Featured</button>
+    <button class="pill" data-filter="whales">Whales</button>
+    <button class="pill" data-filter="verified">Verified</button>
+    <button class="pill" data-filter="hidden">Hidden</button>
+    <input class="search" id="searchInput" placeholder="Search name, wallet, or handle…">
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Wallet</th>
+        <th style="text-align:right">PnL</th>
+        <th style="text-align:right">Rank</th>
+        <th style="text-align:center">FLEX</th>
+        <th>Status</th>
+        <th style="text-align:right">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="7" class="loading">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _data = [];
+var _filter = 'all';
+var _search = '';
+
+function authenticate() {
+  var v = document.getElementById('secretInput').value.trim();
+  if (!v) return;
+  sessionStorage.setItem('hf_admin_secret', v);
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+  loadAll();
+}
+
+function getSecret() { return sessionStorage.getItem('hf_admin_secret') || ''; }
+
+async function adminFetch(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({
+    'Content-Type': 'application/json',
+    'x-admin-secret': getSecret(),
+  }, opts.headers || {});
+  var res = await fetch(path, opts);
+  if (res.status === 401) {
+    sessionStorage.removeItem('hf_admin_secret');
+    location.reload();
+    return null;
+  }
+  return res;
+}
+
+function toast(msg, cls) {
+  var t = document.getElementById('toast');
+  t.className = 'toast show ' + (cls || '');
+  t.textContent = msg;
+  setTimeout(function() { t.className = 'toast'; }, 2600);
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+function shortAddr(a) {
+  if (!a) return '—';
+  return a.slice(0, 6) + '…' + a.slice(-4);
+}
+
+function fmtPnl(n) {
+  if (n == null) return '—';
+  var num = Number(n);
+  var sign = num < 0 ? '-' : '';
+  var abs = Math.abs(num);
+  var s = abs >= 1e6 ? (abs/1e6).toFixed(2) + 'M'
+       : abs >= 1e3 ? Math.round(abs/1e3) + 'K'
+       : Math.round(abs).toString();
+  return sign + '$' + s;
+}
+
+async function loadAll() {
+  var body = document.getElementById('tbody');
+  body.innerHTML = '<tr><td colspan="7" class="loading">Loading predictors…</td></tr>';
+  var res = await adminFetch('/api/admin/predictors-edit');
+  if (!res || !res.ok) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">Load failed.</td></tr>';
+    return;
+  }
+  var data = await res.json();
+  _data = data.predictors || [];
+  renderStats();
+  render();
+}
+
+function renderStats() {
+  var total    = _data.length;
+  var whales   = _data.filter(function(r){ return r.is_whale; }).length;
+  var verified = _data.filter(function(r){ return r.wallet_verified; }).length;
+  var featured = _data.filter(function(r){ return r.featured_predictor; }).length;
+  var hidden   = _data.filter(function(r){ return r.hidden_from_rail; }).length;
+  var html = [
+    { lbl: 'Imported', val: total, cls: '' },
+    { lbl: 'Whales',   val: whales, cls: 'purple' },
+    { lbl: 'Featured', val: featured, cls: 'gold' },
+    { lbl: 'Verified', val: verified, cls: 'green' },
+  ].map(function(s) {
+    return '<div class="stat"><div class="stat-lbl">' + s.lbl + '</div><div class="stat-val ' + s.cls + '">' + s.val + '</div></div>';
+  }).join('');
+  document.getElementById('stats').innerHTML = html;
+}
+
+function applyFilter(rows) {
+  var q = _search.toLowerCase().trim();
+  return rows.filter(function(r) {
+    if (_filter === 'featured' && !r.featured_predictor) return false;
+    if (_filter === 'hidden'   && !r.hidden_from_rail) return false;
+    if (_filter === 'whales'   && !r.is_whale) return false;
+    if (_filter === 'verified' && !r.wallet_verified) return false;
+    if (q) {
+      var hay = [(r.display_name||''), (r.username||''), (r.polymarket_address||'')].join(' ').toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+function render() {
+  var body = document.getElementById('tbody');
+  var rows = applyFilter(_data);
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">No predictors match.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(r) {
+    var addr = r.polymarket_address || '';
+    var badges = '';
+    if (r.featured_predictor)  badges += '<span class="badge featured">★ Pinned</span> ';
+    if (r.is_whale)            badges += '<span class="badge whale">🐋 Whale</span> ';
+    if (r.wallet_verified)     badges += '<span class="badge verified">✓ Verified</span> ';
+    if (r.hidden_from_rail)    badges += '<span class="badge hidden">Hidden</span> ';
+    var pnl = Number(r.whale_pnl || 0);
+    var pnlCls = pnl > 0 ? 'up' : pnl < 0 ? 'down' : 'muted';
+    var rank = r.whale_rank != null ? '#' + r.whale_rank : '—';
+    var flex = r.flex_score_90d != null ? r.flex_score_90d : '';
+    return '<tr data-uid="' + esc(r.id) + '">' +
+      '<td><div class="name-cell"><a href="/m/' + encodeURIComponent(r.id) + '" target="_blank">' + esc(r.display_name || 'Trader') + '</a></div></td>' +
+      '<td><a href="https://polygonscan.com/address/' + esc(addr) + '" target="_blank" class="wallet">' + esc(shortAddr(addr)) + '</a></td>' +
+      '<td style="text-align:right"><span class="num ' + pnlCls + '">' + fmtPnl(pnl) + '</span></td>' +
+      '<td style="text-align:right"><span class="num muted">' + rank + '</span></td>' +
+      '<td style="text-align:center">' +
+        '<input class="flex-edit" type="number" min="0" max="100" value="' + flex + '" onchange="saveFlex(\'' + esc(r.id) + '\', this.value)">' +
+      '</td>' +
+      '<td>' + (badges || '<span class="num muted">—</span>') + '</td>' +
+      '<td style="text-align:right">' +
+        '<span class="toggle feat ' + (r.featured_predictor ? 'on' : '') + '" onclick="toggle(\'' + esc(r.id) + '\', \'featured\', ' + (!r.featured_predictor) + ')">★ Pin</span> ' +
+        '<span class="toggle hide ' + (r.hidden_from_rail ? 'on' : '') + '" onclick="toggle(\'' + esc(r.id) + '\', \'hidden\', ' + (!r.hidden_from_rail) + ')">Hide</span>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function toggle(userId, field, value) {
+  var body = {};
+  body[field] = value;
+  var res = await adminFetch('/api/admin/predictors-edit/' + encodeURIComponent(userId), {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (res && res.ok) {
+    var idx = _data.findIndex(function(r){ return r.id === userId; });
+    if (idx >= 0) {
+      if (field === 'featured') _data[idx].featured_predictor = value;
+      if (field === 'hidden')   _data[idx].hidden_from_rail = value;
+    }
+    renderStats();
+    render();
+    toast((field === 'featured' ? (value ? 'Pinned to rail' : 'Unpinned') : (value ? 'Hidden from rail' : 'Restored')), 'ok');
+  } else {
+    toast('Update failed', 'err');
+  }
+}
+
+async function saveFlex(userId, v) {
+  var n = v === '' ? null : Number(v);
+  if (n != null && (isNaN(n) || n < 0 || n > 100)) { toast('FLEX must be 0–100', 'err'); return; }
+  var res = await adminFetch('/api/admin/predictors-edit/' + encodeURIComponent(userId), {
+    method: 'POST',
+    body: JSON.stringify({ flex_score: n }),
+  });
+  if (res && res.ok) {
+    var idx = _data.findIndex(function(r){ return r.id === userId; });
+    if (idx >= 0) _data[idx].flex_score_90d = n;
+    toast('FLEX updated', 'ok');
+  } else {
+    toast('Update failed', 'err');
+  }
+}
+
+async function runRebalance() {
+  if (!confirm('Demote sub-tier accounts from is_whale=true? Safe and reversible on reimport.')) return;
+  var res = await adminFetch('/api/admin/rebalance-whale-flags', { method: 'POST' });
+  if (res && res.ok) {
+    var d = await res.json();
+    toast('Demoted ' + d.demoted + ' accounts', 'ok');
+    loadAll();
+  } else {
+    toast('Rebalance failed', 'err');
+  }
+}
+
+async function runSyncLedger() {
+  toast('Syncing ledger — this takes ~60s…', 'ok');
+  var res = await adminFetch('/api/admin/sync-whale-trade-ledger', { method: 'POST' });
+  if (res && res.ok) {
+    var d = await res.json();
+    toast('Inserted ' + d.tradesInserted + ' trades · skipped ' + d.tradesSkipped, 'ok');
+  } else {
+    toast('Sync failed', 'err');
+  }
+}
+
+// Filter pill + search wiring
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('pill') && e.target.dataset.filter) {
+    document.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('active'); });
+    e.target.classList.add('active');
+    _filter = e.target.dataset.filter;
+    render();
+  }
+});
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  _search = e.target.value;
+  render();
+});
+document.getElementById('secretInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') authenticate();
+});
+
+// Auto-unlock if secret is stashed
+if (getSecret()) {
+  document.getElementById('mainWrap').style.display = 'block';
+  loadAll();
+} else {
+  document.getElementById('authGate').style.display = 'block';
+}
+</script>
+
+</body>
+</html>
