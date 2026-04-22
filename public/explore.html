@@ -3,6 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  Logged-in users land in the product (the feed), not the marketing
+  page. Auth lives in localStorage so the server can't route us —
+  do the redirect inline before anything else parses. location.replace
+  keeps the history clean (back button doesn't bounce between /feed
+  and / in a loop). Skip when ?home=1 so we can still access the
+  landing page intentionally (for previews / marketing screenshots).
+-->
+<script>
+(function() {
+  try {
+    if (location.search.indexOf('home=1') !== -1) return;
+    var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    if (t) location.replace('/feed');
+  } catch (e) {}
+})();
+</script>
 <title>HYPERFLEX — Prediction Market Intelligence</title>
 <meta name="description" content="Live prediction market intelligence — whale trades, edge scores, and market signals across all platforms."/>
 <link rel="canonical" href="https://hyperflex.network/"/>
