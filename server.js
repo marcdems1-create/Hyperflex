@@ -13243,6 +13243,86 @@ async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, fol
 }
 
 // GET /api/admin/influencers — list all influencers
+// POST /api/admin/sync-whale-trade-ledger — bulk-backfill whale_trade_history
+// with every tracked whale's current positions. Used as a one-time seed so
+// FLEX recomputes have history to compute against, and as a periodic rebase
+// when we want to re-sync from source.
+//
+// For each imported whale wallet:
+//   1. Fetch current positions via data-api.polymarket.com
+//   2. For each position NOT already logged under (wallet, condition_id, side),
+//      insert an "open" record with size/price snapshotted now.
+// Idempotent — re-running skips already-logged positions.
+app.post('/api/admin/sync-whale-trade-ledger', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    // Pull all tracked whales (profiles created by the Polymarket import).
+    const whales = await dbQuery(`
+      SELECT id, display_name, polymarket_address, whale_rank, whale_pnl
+      FROM users
+      WHERE polymarket_address IS NOT NULL
+        AND password_hash LIKE 'whale_profile_%'
+      ORDER BY whale_rank ASC NULLS LAST
+      LIMIT 500
+    `);
+    const fetch = _nodeFetch;
+    let inserted = 0, skipped = 0, walletsProcessed = 0, walletsFailed = 0;
+    // Process in small batches with a 200ms pause so we don't hammer
+    // data-api.polymarket.com. 500 wallets × 200ms = ~100s total.
+    for (let i = 0; i < whales.length; i++) {
+      const w = whales[i];
+      if (!w.polymarket_address) continue;
+      try {
+        const posRes = await fetch(`https://data-api.polymarket.com/positions?user=${w.polymarket_address}&sizeThreshold=10&limit=50`);
+        if (!posRes.ok) { walletsFailed++; continue; }
+        const positions = await posRes.json();
+        walletsProcessed++;
+        for (const p of (Array.isArray(positions) ? positions : [])) {
+          const conditionId = p.conditionId || p.condition_id || null;
+          const size = Number(p.size || 0);
+          const side = (p.outcome || '').toUpperCase();
+          if (!conditionId || size <= 0 || !side) continue;
+          // Skip if already logged
+          const existing = await dbQuery(
+            `SELECT id FROM whale_trade_history WHERE LOWER(wallet) = $1 AND condition_id = $2 AND side = $3 AND action = 'open' LIMIT 1`,
+            [w.polymarket_address.toLowerCase(), conditionId, side]
+          ).catch(() => []);
+          if (existing.length) { skipped++; continue; }
+          await dbQuery(
+            `INSERT INTO whale_trade_history
+             (action, trader_name, trader_rank, trader_pnl, question, side, size, price, market_url, wallet, user_id, condition_id, slug)
+             VALUES ('open', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              w.display_name, w.whale_rank, w.whale_pnl,
+              p.title || p.market || null,
+              side,
+              size,
+              Number(p.curPrice || p.cur_price || 0),
+              p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : null,
+              w.polymarket_address,
+              w.id,
+              conditionId,
+              p.eventSlug || p.slug || null,
+            ]
+          ).catch(() => {});
+          inserted++;
+        }
+      } catch (err) {
+        walletsFailed++;
+      }
+      if (i > 0 && i % 10 === 0) await new Promise(r => setTimeout(r, 200));
+    }
+    res.json({
+      walletsProcessed, walletsFailed, totalWallets: whales.length,
+      tradesInserted: inserted, tradesSkipped: skipped,
+    });
+  } catch (err) {
+    console.error('[admin/sync-whale-trade-ledger]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
 // imported profiles that don't actually qualify as whales. Ran once after
 // the tier-gate fix shipped to clean up the previously over-eager import
@@ -26066,11 +26146,39 @@ async function fetchWhalePositions() {
             wallet TEXT,
             created_at TIMESTAMPTZ DEFAULT NOW()
           )`);
+          // Schema extensions — every whale trade needs these for FLEX
+          // backreferencing later (joining against users + market
+          // resolutions to grade accuracy). Idempotent ADD COLUMN IF
+          // NOT EXISTS so re-runs don't break on existing data.
+          await dbQuery(`ALTER TABLE whale_trade_history
+            ADD COLUMN IF NOT EXISTS user_id TEXT,
+            ADD COLUMN IF NOT EXISTS condition_id TEXT,
+            ADD COLUMN IF NOT EXISTS slug TEXT,
+            ADD COLUMN IF NOT EXISTS resolved_outcome TEXT,
+            ADD COLUMN IF NOT EXISTS is_correct BOOLEAN,
+            ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`).catch(() => {});
+          await dbQuery('CREATE INDEX IF NOT EXISTS idx_wth_user_id ON whale_trade_history(user_id) WHERE user_id IS NOT NULL').catch(() => {});
+          await dbQuery('CREATE INDEX IF NOT EXISTS idx_wth_wallet ON whale_trade_history(LOWER(wallet))').catch(() => {});
+          await dbQuery('CREATE INDEX IF NOT EXISTS idx_wth_condition_id ON whale_trade_history(condition_id) WHERE condition_id IS NOT NULL').catch(() => {});
           for (const evt of newEvents.slice(0, 20)) {
+            // Look up the user_id for this wallet so FLEX recompute can
+            // JOIN users.id = whale_trade_history.user_id without extra
+            // address-lookup fanout.
+            let walletAddr = null, walletUserId = null;
+            try {
+              // evt shape doesn't carry wallet — derive from snapshot map
+              // key. The outer loop holds `wallet` via the `change` obj
+              // used to build newEvents; not accessible here. So we
+              // best-effort lookup by trader_name's polymarket_address.
+              if (evt.trader_name && pool) {
+                const r = await dbQuery('SELECT id, polymarket_address FROM users WHERE display_name = $1 AND is_whale = true LIMIT 1', [evt.trader_name]);
+                if (r.length) { walletUserId = r[0].id; walletAddr = r[0].polymarket_address; }
+              }
+            } catch (e) {}
             await dbQuery(
-              `INSERT INTO whale_trade_history (action, trader_name, trader_rank, trader_pnl, question, side, size, old_size, new_size, price, market_url)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-              [evt.action, evt.trader_name, evt.trader_rank, evt.trader_pnl, evt.question, evt.side, evt.size, evt.old_size, evt.new_size, evt.price, evt.url]
+              `INSERT INTO whale_trade_history (action, trader_name, trader_rank, trader_pnl, question, side, size, old_size, new_size, price, market_url, wallet, user_id, condition_id, slug)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+              [evt.action, evt.trader_name, evt.trader_rank, evt.trader_pnl, evt.question, evt.side, evt.size, evt.old_size, evt.new_size, evt.price, evt.url, walletAddr, walletUserId, evt.condition_id || null, evt.slug || null]
             ).catch(() => {});
           }
         } catch (e) { console.warn('[whale-history-persist]', e.message); }
