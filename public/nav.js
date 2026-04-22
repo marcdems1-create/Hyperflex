@@ -333,7 +333,6 @@
   ];
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
-    { href: '/rewards', label: '💰 Rewards', gold: true },
     { href: '/brief', label: '🧠 AI Brief', gold: true },
     { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/odds', label: '🎲 Odds' },
@@ -410,17 +409,11 @@
     var allLinks = [];
     // Tier 1 — Your Stuff (logged-in only)
     allLinks.push({ href: '#', label: '🔗 Connect Wallet', id: 'navMobileWalletLink', gold: true });
-    if (isLoggedIn) {
-      allLinks.push({ href: '/rewards', label: '💰 Rewards', gold: true });
-    }
     allLinks.push({ sep: true });
     // Tier 2 — Find Alpha (the primary alpha sources)
     allLinks = allLinks.concat(primaryLinks);
     allLinks.push({ sep: true });
-    // Tier 3+ — More dropdown items, but skip Rewards if already shown in Tier 1
-    var dropdownLinks = isLoggedIn
-      ? moreLinks.filter(function(l) { return l.href !== '/rewards'; })
-      : moreLinks;
+    var dropdownLinks = moreLinks;
     allLinks = allLinks.concat(dropdownLinks);
 
     var mobileMenu = document.createElement('div');
@@ -620,7 +613,6 @@
       { name: 'Alpha Terminal', desc: 'Live edges ranked by Edge Score', href: '/alpha', icon: '⚡' },
       { name: 'Arbitrage', desc: 'Cross-platform price spreads', href: '/arbitrage', icon: '⚖️' },
       { name: 'Home', desc: 'Live market activity & intelligence', href: '/', icon: '🏠' },
-      { name: 'Rewards', desc: 'Earn from referrals', href: '/rewards', icon: '💰' },
       { name: 'Data', desc: 'Market data & analytics', href: '/data', icon: '📈' },
       { name: 'API', desc: 'Developer API docs', href: '/api-docs', icon: '⚙️' },
       { name: '99% Bets', desc: 'High probability markets', href: '/high-prob', icon: '🎯' },
@@ -983,14 +975,6 @@
     var href = a.getAttribute('href') || '';
     if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href) && REF_CODE && !(href.indexOf('r=') !== -1 && href.indexOf(REF_CODE) !== -1)) {
       a.setAttribute('href', href + (href.indexOf('?') !== -1 ? '&' : '?') + 'r=' + REF_CODE);
-    }
-    // Track click for USDC rewards
-    if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href)) {
-      fetch('/api/rewards/track-click', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('hf_token') || '') },
-        body: JSON.stringify({ market_slug: href.split('/event/')[1] ? href.split('/event/')[1].split('?')[0] : '', source_page: location.pathname })
-      }).catch(function(){});
     }
   }, true);
 })();

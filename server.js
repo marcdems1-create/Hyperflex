@@ -11158,7 +11158,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
-app.get('/rewards', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rewards.html')));
+app.get('/rewards', (req, res) => res.redirect(302, '/'));
 
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
