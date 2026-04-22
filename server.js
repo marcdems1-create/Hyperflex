@@ -13232,6 +13232,37 @@ async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, fol
 }
 
 // GET /api/admin/influencers — list all influencers
+// POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
+// imported profiles that don't actually qualify as whales. Ran once after
+// the tier-gate fix shipped to clean up the previously over-eager import
+// where every wallet in the top 500 was marked is_whale=true. Safe to
+// re-run at any time.
+app.post('/api/admin/rebalance-whale-flags', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    // Drop is_whale + whale_rank on profiles that don't meet the gate:
+    //   NOT (pnl >= 100k OR (pnl > 0 AND rank <= 50 AND vol implied))
+    // We can't check vol directly (it's not stored on users) but the
+    // original rank gate was rank<=50 which would have been applied at
+    // import time, so a user with rank>50 or pnl<=0 and is_whale=true
+    // is definitely misflagged.
+    const result = await dbQuery(`
+      UPDATE users
+      SET is_whale = false, whale_rank = NULL
+      WHERE is_whale = true
+        AND password_hash LIKE 'whale_profile_%'
+        AND (COALESCE(whale_pnl, 0) < 100000)
+        AND (whale_rank IS NULL OR whale_rank > 50 OR COALESCE(whale_pnl, 0) <= 0)
+      RETURNING id
+    `).catch(e => { throw e; });
+    const demoted = Array.isArray(result) ? result.length : (result.rowCount || 0);
+    res.json({ demoted, message: `Demoted ${demoted} users from is_whale=true` });
+  } catch (err) {
+    console.error('[admin/rebalance-whale-flags]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/polymarket-outreach — prioritized outreach queue.
 // Returns auto-created whale profiles (is_whale=true) that do NOT yet
 // have a claimed user on HFX (no login, no display_name override,
@@ -15260,20 +15291,45 @@ function computePolymarketFlexScore(t) {
   return Math.min(100, Math.max(0, pnlPts + volPts + wrPts + rankPts));
 }
 
+// Whale qualification — only set is_whale=true (and whale_rank) when the
+// wallet actually qualifies. Previously we flagged all 500 imported
+// wallets as whales which caused the profile page's tier resolver
+// (`isTopWhale = isWhale && whale_rank <= 50`) to mislabel losing traders
+// as WHALE. Real whale criteria:
+//   - PnL ≥ $100k (six figures — the profile page's own threshold)
+//   OR
+//   - Positive PnL AND top-50 leaderboard rank AND real volume (>=$10k)
+function _qualifiesAsWhale(pnl, rank, vol) {
+  pnl = Number(pnl || 0);
+  vol = Number(vol || 0);
+  if (pnl >= 100000) return true;
+  if (pnl > 0 && rank && rank <= 50 && vol >= 10000) return true;
+  return false;
+}
+
 async function ensureWhaleProfile(walletAddress, traderName, rank, pnl, extra) {
   if (!pool || !walletAddress) return null;
   const addrLower = walletAddress.toLowerCase();
   const flexScore = extra && extra.flexScore != null
     ? Math.max(0, Math.min(100, Math.round(Number(extra.flexScore))))
     : null;
+  const vol = extra && extra.vol != null ? Number(extra.vol) : null;
+  const isWhale = _qualifiesAsWhale(pnl, rank, vol);
+  // Only expose whale_rank if they're profitably in the top 50 — otherwise
+  // storing rank 47 on a losing trader makes them read as a top-50 whale
+  // on the profile page even when they've bled money.
+  const exposedRank = (isWhale && Number(pnl || 0) > 0 && rank && rank <= 50) ? rank : null;
 
   // Check cache first
   const cached = _whaleUserCache.get(addrLower);
   if (cached) {
-    // Even on cache hit, opportunistically refresh flex_score_90d if a
-    // newer computed value arrived with this call. Cheap UPDATE.
+    // Even on cache hit, opportunistically refresh flex_score_90d +
+    // is_whale gating if fresher data arrived with this call.
     if (flexScore != null) {
-      dbQuery('UPDATE users SET flex_score_90d = $1 WHERE id = $2 AND (flex_score_90d IS NULL OR flex_score_90d <> $1)', [flexScore, cached.userId]).catch(() => {});
+      dbQuery(
+        'UPDATE users SET flex_score_90d = $1, is_whale = $2, whale_rank = $3, whale_pnl = $4 WHERE id = $5',
+        [flexScore, isWhale, exposedRank, pnl || null, cached.userId]
+      ).catch(() => {});
     }
     return cached.userId;
   }
@@ -15291,25 +15347,25 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl, extra) {
       const displayName = (!isWalletStub && existingName) ? existingName : (traderName || existingName);
       if (flexScore != null) {
         await dbQuery(
-          'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3, flex_score_90d = $4 WHERE id = $5',
-          [rank || null, pnl || null, displayName, flexScore, existing[0].id]
+          'UPDATE users SET is_whale = $1, whale_rank = $2, whale_pnl = $3, display_name = $4, flex_score_90d = $5 WHERE id = $6',
+          [isWhale, exposedRank, pnl || null, displayName, flexScore, existing[0].id]
         ).catch(() => {});
       } else {
         await dbQuery(
-          'UPDATE users SET is_whale = true, whale_rank = $1, whale_pnl = $2, display_name = $3 WHERE id = $4',
-          [rank || null, pnl || null, displayName, existing[0].id]
+          'UPDATE users SET is_whale = $1, whale_rank = $2, whale_pnl = $3, display_name = $4 WHERE id = $5',
+          [isWhale, exposedRank, pnl || null, displayName, existing[0].id]
         ).catch(() => {});
       }
       _whaleUserCache.set(addrLower, { userId: existing[0].id, displayName });
       return existing[0].id;
     }
 
-    // Create new whale user
+    // Create new profile (not necessarily a whale — is_whale is data-gated)
     const displayName = traderName || (addrLower.slice(0, 6) + '...' + addrLower.slice(-4));
     const rows = await dbQuery(
       `INSERT INTO users (display_name, polymarket_address, password_hash, is_whale, whale_rank, whale_pnl, flex_score_90d, created_at)
-       VALUES ($1, $2, $3, true, $4, $5, $6, NOW()) RETURNING id`,
-      [displayName, addrLower, 'whale_profile_' + Date.now(), rank || null, pnl || null, flexScore]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id`,
+      [displayName, addrLower, 'whale_profile_' + Date.now(), isWhale, exposedRank, pnl || null, flexScore]
     );
     if (rows.length) {
       _whaleUserCache.set(addrLower, { userId: rows[0].id, displayName });
@@ -25784,14 +25840,19 @@ async function fetchWhalePositions() {
   if (pool) {
     (async () => {
       const importCohort = allTraders.slice(0, 500);
+      let whaleCount = 0;
       for (let i = 0; i < importCohort.length; i++) {
         const t = importCohort[i];
         const flex = computePolymarketFlexScore(t);
-        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl, { flexScore: flex }).catch(() => null);
+        await ensureWhaleProfile(t.proxyWallet, t.userName, t.rank, t.pnl, {
+          flexScore: flex,
+          vol: t.vol,
+        }).catch(() => null);
+        if (_qualifiesAsWhale(t.pnl, t.rank, t.vol)) whaleCount++;
         // Breather every 50 rows so we don't block the event loop.
         if (i > 0 && i % 50 === 0) await new Promise(r => setTimeout(r, 100));
       }
-      console.log(`[whale-import] Ensured ${importCohort.length} whale profiles with FLEX scores`);
+      console.log(`[whale-import] Imported ${importCohort.length} Polymarket profiles (${whaleCount} real whales, ${importCohort.length - whaleCount} sub-tier)`);
     })().catch(() => {});
   }
 
