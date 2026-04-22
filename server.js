@@ -12931,6 +12931,68 @@ app.get('/api/predictors/:userId/best-call', async (req, res) => {
   });
 });
 
+// GET /api/admin/member-debug/:userId — raw data sources for a profile so
+// admins can diagnose "stats look wrong" without guessing the address.
+// Returns users row + cached_positions + polymarket_trades counts + a live
+// upstream Polymarket position count so we can see exactly which source
+// is sparse. Admin-secret gated.
+app.get('/api/admin/member-debug/:userId', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  const userId = req.params.userId;
+  try {
+    const userRows = await dbQuery(
+      `SELECT id, display_name, username, email, polymarket_address, wallet_verified,
+              is_whale, whale_rank, whale_pnl, flex_score, flex_score_90d, flex_score_alltime,
+              follower_count, total_predictions, prediction_win_rate,
+              created_at, last_login_date
+       FROM users WHERE id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ error: 'User not found' });
+    const u = userRows[0];
+    const cachedCount = await dbQuery('SELECT COUNT(*)::int AS n FROM cached_positions WHERE user_id = $1', [userId]).catch(() => [{ n: 0 }]);
+    const tradesCount = u.polymarket_address ? await dbQuery(
+      `SELECT COUNT(*)::int AS n, SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END)::int AS closed
+       FROM polymarket_trades WHERE LOWER(eoa_address) = LOWER($1)`,
+      [u.polymarket_address]
+    ).catch(() => [{ n: 0, closed: 0 }]) : [{ n: 0, closed: 0 }];
+    const hfPositions = await dbQuery('SELECT COUNT(*)::int AS n, SUM(CASE WHEN settled THEN 1 ELSE 0 END)::int AS settled FROM positions WHERE user_id = $1', [userId]).catch(() => [{ n: 0, settled: 0 }]);
+    let upstreamCount = null;
+    if (u.polymarket_address) {
+      try {
+        const base = 'https://data-api.polymarket.com/positions?user=' + u.polymarket_address + '&limit=200';
+        const [a, b, c, d] = await Promise.all([
+          _nodeFetch(base + '&sortBy=CURRENT&winning=false').then(r => r.ok ? r.json() : []).catch(() => []),
+          _nodeFetch(base + '&sortBy=CURRENT&winning=true').then(r => r.ok ? r.json() : []).catch(() => []),
+          _nodeFetch(base + '&redeemed=true&winning=false').then(r => r.ok ? r.json() : []).catch(() => []),
+          _nodeFetch(base + '&redeemed=true&winning=true').then(r => r.ok ? r.json() : []).catch(() => []),
+        ]);
+        upstreamCount = {
+          current_losing:  Array.isArray(a) ? a.length : 0,
+          current_winning: Array.isArray(b) ? b.length : 0,
+          redeemed_lose:   Array.isArray(c) ? c.length : 0,
+          redeemed_win:    Array.isArray(d) ? d.length : 0,
+        };
+      } catch (e) { upstreamCount = { error: e.message }; }
+    }
+    res.json({
+      user: u,
+      data_sources: {
+        hfx_positions_table:       hfPositions[0] || { n: 0 },
+        cached_positions_table:    cachedCount[0] || { n: 0 },
+        polymarket_trades_table:   tradesCount[0] || { n: 0 },
+        upstream_polymarket_api:   upstreamCount,
+      },
+      polygonscan: u.polymarket_address ? `https://polygonscan.com/address/${u.polymarket_address}` : null,
+      polymarket_profile: u.polymarket_address ? `https://polymarket.com/profile/${u.polymarket_address}` : null,
+    });
+  } catch (err) {
+    console.error('[admin/member-debug]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/member/:userId — public member profile data
 app.get('/api/member/:userId', async (req, res) => {
   try {

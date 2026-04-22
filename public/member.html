@@ -783,6 +783,12 @@ async function load() {
               <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
             </div>` : ''}
           ` : (user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-username">Joined ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : '')}
+          ${(!isWhale && walletAddr) ? `<div class="wallet-row" style="margin-top:6px">
+            <span style="font-family:var(--mono,monospace);font-size:11px;color:var(--muted)">${shortWallet}</span>
+            <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+            <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
+            <a href="https://polymarket.com/profile/${walletAddr}" target="_blank" rel="noopener" style="margin-left:auto">Polymarket ↗</a>
+          </div>` : ''}
           ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
           <div class="hero-badges">
             ${tierBadge(stats.win_rate, stats.streak)}
