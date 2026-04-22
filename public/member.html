@@ -901,7 +901,9 @@ async function load() {
       <div id="tab-trades" class="tab-pane">
         <div id="tradesList">${pStats.total_trades > 0 ? `
           <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap" id="tradesSummary">
-            <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${pStats.win_rate}% win rate</span>
+            ${(pStats.closed_wins + pStats.closed_losses) >= 5
+              ? `<span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${pStats.win_rate}% win rate</span>`
+              : `<span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">— win rate <span style="opacity:0.6">· ${Math.max(0,5-(pStats.closed_wins+pStats.closed_losses))} more settled</span></span>`}
             <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${pStats.open_positions} open</span>
             <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${pStats.total_trades} total</span>
           </div>
@@ -1170,10 +1172,14 @@ async function enrichFromLivePolymarket() {
     // Also render the Trades tab with live positions
     const list = document.getElementById('tradesList');
     if (list) {
-      const wr = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+      const settledSample = wins + losses;
+      const wr = settledSample > 0 ? Math.round(wins / settledSample * 100) : 0;
+      const wrBadge = settledSample >= 5
+        ? `<span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${wr}% win rate</span>`
+        : `<span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">— win rate <span style="opacity:0.6">· ${Math.max(0,5-settledSample)} more settled</span></span>`;
       list.innerHTML = `
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <span class="badge" style="background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)">${wr}% win rate</span>
+          ${wrBadge}
           <span class="badge" style="background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)">${open} open</span>
           <span class="badge" style="background:var(--surface);color:var(--text-soft);border-color:var(--border)">${positions.length} positions</span>
           <span class="badge" style="background:rgba(168,85,247,0.12);color:var(--purple);border-color:rgba(168,85,247,0.3)">🔴 LIVE</span>
@@ -1302,18 +1308,29 @@ async function loadAnalytics(userId) {
     if (!data.platforms) return;
     document.getElementById('analyticsSection').style.display = 'block';
 
-    // Platform stat cards
+    // Platform stat cards — gate win rate on sample size. A "100% win
+    // rate" on 1 closed position is technically true but statistically
+    // meaningless; show "—" until the user has at least 5 settled
+    // events on that platform. Keeps the stat honest and stops naive
+    // readers from treating single-pick wallets as flawless.
+    const MIN_SAMPLES = 5;
     const platformColors = { hyperflex: '#c9920d', polymarket: '#6366f1', kalshi: '#8b5cf6', manifold: '#10b981' };
     const platformLabels = { hyperflex: 'HYPERFLEX', polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold' };
     document.getElementById('platformCards').innerHTML = Object.entries(data.platforms)
       .filter(([, p]) => p.total > 0)
       .map(([name, p]) => {
-        const wr = (p.wins + p.losses) > 0 ? Math.round(p.wins / (p.wins + p.losses) * 100) : 0;
+        const settledCount = p.wins + p.losses;
+        const hasSample = settledCount >= MIN_SAMPLES;
+        const wr = hasSample ? Math.round(p.wins / settledCount * 100) : null;
+        const wrDisplay = hasSample
+          ? `<div style="font-size:22px;font-weight:700;color:#fff">${wr}%</div>
+             <div style="font-size:11px;color:#888">win rate</div>`
+          : `<div style="font-size:22px;font-weight:700;color:#888">—</div>
+             <div style="font-size:10px;color:#666" title="Need ${MIN_SAMPLES - settledCount} more settled positions for a statistically meaningful win rate">${Math.max(0, MIN_SAMPLES - settledCount)} more settled</div>`;
         const pnlColor = p.pnl >= 0 ? '#10b981' : '#ef4444';
         return `<div style="background:#1a1916;border:1px solid ${platformColors[name]}44;border-radius:10px;padding:14px 18px;min-width:130px">
           <div style="font-size:11px;color:${platformColors[name]};font-weight:700;margin-bottom:6px">${platformLabels[name] || name}</div>
-          <div style="font-size:22px;font-weight:700;color:#fff">${wr}%</div>
-          <div style="font-size:11px;color:#888">win rate</div>
+          ${wrDisplay}
           <div style="font-size:13px;font-weight:700;color:${pnlColor};margin-top:4px">${p.pnl >= 0 ? '+' : ''}${Math.round(p.pnl)} pts</div>
           <div style="font-size:11px;color:#555">${p.total} positions</div>
         </div>`;
@@ -1326,32 +1343,62 @@ async function loadAnalytics(userId) {
       sharpEl.style.display = 'inline-block';
     }
 
-    // Calibration chart — simple bar chart using canvas
+    // Calibration chart — bar chart per 10%-probability bucket.
+    // Empty state when there's no actual data (bucket total=0 across
+    // the board) or the user has too few settled picks to be
+    // meaningful. Previously we were rendering empty bars + an
+    // "actual vs expected" legend on canvases with zero data, which
+    // looked broken. Now we print a clear copy line instead.
     const calCtx = document.getElementById('calibrationChart')?.getContext('2d');
     if (calCtx) {
-      const calData = data.calibration.filter(c => c.predicted > 0);
-      const barW = calData.length > 0 ? 240 / calData.length : 30;
       calCtx.clearRect(0, 0, 300, 180);
-      calData.forEach((c, i) => {
-        const x = 30 + i * (barW + 4);
-        const expectedH = (c.predicted / 100) * 140;
-        const actualH = c.actual !== null ? (c.actual / 100) * 140 : 0;
-        calCtx.fillStyle = '#c9920d44';
-        calCtx.fillRect(x, 150 - actualH, barW - 2, actualH);
-        calCtx.fillStyle = '#888';
-        calCtx.fillRect(x, 150 - expectedH, barW - 2, 2);
+      const calData = (data.calibration || []).filter(c => c.predicted > 0);
+      const anyActual = calData.some(c => c.actual !== null && c.total > 0);
+      if (!anyActual) {
         calCtx.fillStyle = '#666';
+        calCtx.font = '11px monospace';
+        calCtx.textAlign = 'center';
+        calCtx.fillText('Not enough settled picks', 150, 80);
+        calCtx.fillStyle = '#444';
         calCtx.font = '9px monospace';
-        calCtx.fillText(c.predicted + '%', x, 165);
-      });
-      calCtx.fillStyle = '#888';
-      calCtx.font = '10px monospace';
-      calCtx.fillText('gold=actual  gray=expected', 10, 178);
+        calCtx.fillText('Calibration needs a meaningful sample', 150, 98);
+        calCtx.textAlign = 'start';
+      } else {
+        const barW = calData.length > 0 ? 240 / calData.length : 30;
+        calData.forEach((c, i) => {
+          const x = 30 + i * (barW + 4);
+          const expectedH = (c.predicted / 100) * 140;
+          const actualH = c.actual !== null ? (c.actual / 100) * 140 : 0;
+          calCtx.fillStyle = '#c9920d44';
+          calCtx.fillRect(x, 150 - actualH, barW - 2, actualH);
+          calCtx.fillStyle = '#888';
+          calCtx.fillRect(x, 150 - expectedH, barW - 2, 2);
+          calCtx.fillStyle = '#666';
+          calCtx.font = '9px monospace';
+          calCtx.fillText(c.predicted + '%', x, 165);
+        });
+        calCtx.fillStyle = '#888';
+        calCtx.font = '10px monospace';
+        calCtx.fillText('gold=actual  gray=expected', 10, 178);
+      }
     }
 
-    // P&L line chart
+    // P&L line chart — empty state when the timeline is flat zero
+    // (no HFX settlements). Before we were drawing a perfectly flat
+    // line at y=0 which looks like nothing rendered.
     const pnlCtx = document.getElementById('pnlChart')?.getContext('2d');
-    if (pnlCtx && data.timeline.length > 1) {
+    const hasMovement = (data.timeline || []).some(t => Math.abs(t.pnl) > 0.001);
+    if (pnlCtx && (!data.timeline || data.timeline.length < 2 || !hasMovement)) {
+      pnlCtx.clearRect(0, 0, 300, 180);
+      pnlCtx.fillStyle = '#666';
+      pnlCtx.font = '11px monospace';
+      pnlCtx.textAlign = 'center';
+      pnlCtx.fillText('No realised P&L yet', 150, 80);
+      pnlCtx.fillStyle = '#444';
+      pnlCtx.font = '9px monospace';
+      pnlCtx.fillText('Chart shows last 30d of HFX settlements', 150, 98);
+      pnlCtx.textAlign = 'start';
+    } else if (pnlCtx && data.timeline.length > 1) {
       const vals = data.timeline.map(t => t.pnl);
       const min = Math.min(...vals, 0);
       const max = Math.max(...vals, 0);
