@@ -263,6 +263,162 @@ a:hover { text-decoration: underline; }
 }
 
 /* ──────────────────────────────────────────────────────────────────── */
+/* Right rail — TOP PREDICTORS. Parallels the left's three-rhythm stack */
+/* with a different accent palette (purple for verified predictors vs.  */
+/* gold/green for alpha). Hero #1 card anchors; ranks compress beneath. */
+.pred-hero {
+  display: block; text-decoration: none; color: inherit;
+  position: relative;
+  padding: 18px 16px 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(168,85,247,0.10), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.005));
+  border: 1px solid rgba(168,85,247,0.25);
+  overflow: hidden;
+  transition: transform .22s, border-color .22s;
+}
+.pred-hero::before {
+  content: ''; position: absolute; inset: 0;
+  border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
+  background-size: 200% 200%; background-position: 100% 100%;
+  transition: background-position .8s;
+}
+.pred-hero:hover { transform: translateY(-2px); border-color: rgba(168,85,247,0.6); text-decoration: none; }
+.pred-hero:hover::before { background-position: 0% 0%; }
+
+.pred-hero-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a855f7;
+  margin-bottom: 10px;
+}
+.pred-hero-body {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 12px;
+}
+.pred-hero-avatar {
+  position: relative;
+  width: 56px; height: 56px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(135deg, #a855f7, #4d9fff, #00e68a);
+}
+.pred-hero-avatar-inner {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 20px; font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+}
+.pred-hero-avatar-inner img { width: 100%; height: 100%; object-fit: cover; }
+.pred-hero-verify {
+  position: absolute; bottom: -2px; right: -2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #4d9fff;
+  border: 2px solid var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; color: #fff;
+}
+.pred-hero-meta { flex: 1; min-width: 0; }
+.pred-hero-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px; font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pred-hero-handle {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: #00e68a;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.pred-hero-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.pred-hero-stat { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pred-hero-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; }
+.pred-hero-stat-val {
+  font-family: 'Inter', sans-serif;
+  font-size: 17px; font-weight: 900;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.pred-hero-stat-val.up   { color: #00e68a; }
+.pred-hero-stat-val.down { color: #ff4d6a; }
+
+/* Rank rows — similar density to alpha-rank-row but with an avatar
+   swatch on the left and the FLEX score as the right-aligned chip. */
+.pred-rank-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  text-decoration: none; color: inherit;
+  transition: background .15s, transform .15s;
+}
+.pred-rank-row:nth-child(odd) { background: rgba(255,255,255,0.018); }
+.pred-rank-row:hover { background: rgba(255,255,255,0.05); text-decoration: none; transform: translateX(2px); }
+.pred-rank-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  padding: 1.5px;
+  background: linear-gradient(135deg, #a855f7, #4d9fff);
+  flex-shrink: 0;
+}
+.pred-rank-avatar-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px; font-weight: 800; color: var(--text);
+  overflow: hidden;
+}
+.pred-rank-avatar-inner img { width: 100%; height: 100%; object-fit: cover; }
+.pred-rank-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pred-rank-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 700; color: var(--text);
+  line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+.pred-rank-stat {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pred-rank-flex {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 900;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.pred-rank-flex.up   { color: #00e68a; }
+.pred-rank-flex.down { color: #ff4d6a; }
+
+/* ──────────────────────────────────────────────────────────────────── */
 /* Mobile Hot Alpha strip — horizontal-scroll row that surfaces the   */
 /* same edge signals on phones/tablets where the left rail hides.     */
 /* Shown >=521px and <1200px as a native swipe strip above the feed.  */
@@ -1020,6 +1176,21 @@ a:hover { text-decoration: underline; }
 
 <!-- ══ Right Sidebar ══ -->
 <div class="sidebar-col">
+  <!-- Top Predictors — verified, this week. Hero + rank strip rhythm
+       mirrors the left rail with a purple palette to differentiate
+       "people" (verified predictors) from "markets" (edge-scored). -->
+  <div class="rail-section">
+    <div class="rail-head">
+      <span class="rail-head-dot" style="background:#a855f7;box-shadow:0 0 10px rgba(168,85,247,0.7)"></span>
+      <span style="color:#a855f7">Top Predictors</span>
+      <span class="rail-head-age">7d · verified</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="predHeroSlot"><div class="rail-empty">Loading…</div></div>
+    <div id="predRankSlot"></div>
+    <a href="/predictors" class="rail-more">Full Leaderboard ↗</a>
+  </div>
+
   <!-- Search -->
   <div class="sb-search-wrap">
     <span class="sb-search-icon">🔍</span>
@@ -2518,8 +2689,11 @@ async function deleteMyPrediction(predId, btn) {
   loadFeed(false);
   initWalletAutoScan();  // auto-scan using the address saved in the creator dashboard
   loadHotAlpha();        // left rail — edge-scored markets
+  loadTopPredictors();   // right rail — verified predictors, 7d
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
+  // Refresh predictors every 5 min (stats don't tick by the second)
+  setInterval(loadTopPredictors, 5 * 60 * 1000);
 })();
 
 // ── Left rail: Hot Alpha + Resolving Soon ──
@@ -2759,6 +2933,118 @@ async function loadHotAlpha() {
 // until there's content).
 if (!_alphaAgeTimer) _alphaAgeTimer = setInterval(tickAlphaAge, 5000);
 if (!_resolvingTimer) _resolvingTimer = setInterval(tickResolvingCountdowns, 30000);
+
+// ── Right rail: Top Predictors (verified) ──
+// Same data as /predictors leaderboard but filtered to wallet_verified
+// accounts. Gives us both the visual rail and a marketing cohort
+// (admin endpoint /api/admin/verified-predictors exposes the full list
+// with contact info for outreach).
+function _predAvatarHtml(p, opts) {
+  opts = opts || {};
+  var inner;
+  if (p.avatar_url) {
+    inner = '<img src="' + esc(p.avatar_url) + '" alt="">';
+  } else {
+    var seed = (p.display_name || '?')[0] || '?';
+    inner = esc(seed.toUpperCase());
+  }
+  var cls = opts.big ? 'pred-hero-avatar' : 'pred-rank-avatar';
+  var innerCls = opts.big ? 'pred-hero-avatar-inner' : 'pred-rank-avatar-inner';
+  var verifyHtml = (opts.big && p.wallet_verified) ? '<span class="pred-hero-verify" title="Verified wallet">✓</span>' : '';
+  return '<div class="' + cls + '"><div class="' + innerCls + '">' + inner + '</div>' + verifyHtml + '</div>';
+}
+
+function _flexColor(score) {
+  if (score == null) return '';
+  return score >= 70 ? 'up' : score < 40 ? 'down' : '';
+}
+
+function renderPredictorHero(p) {
+  if (!p) return '<div class="rail-empty">No verified predictors yet</div>';
+  var href = '/m/' + encodeURIComponent(p.user_id);
+  var name = esc(p.display_name || 'Trader');
+  var handle = p.username ? '@' + esc(p.username) : (p.polymarket_address ? esc(String(p.polymarket_address).slice(0, 8)) + '…' : '—');
+  var winRate = p.win_rate != null ? p.win_rate + '%' : '—';
+  var total = p.total_predictions != null ? p.total_predictions : 0;
+  var flex = p.flex_score_90d != null ? p.flex_score_90d : (p.sharp_score != null ? p.sharp_score : null);
+  var pnlPts = p.pnl_pts != null ? p.pnl_pts : null;
+  var pnlStr = pnlPts != null ? (pnlPts >= 0 ? '+' : '') + pnlPts : '—';
+  var pnlCls = pnlPts == null ? '' : (pnlPts >= 0 ? 'up' : 'down');
+
+  return '<a class="pred-hero" href="' + href + '">' +
+    '<div class="pred-hero-label">Top Predictor · #1</div>' +
+    '<div class="pred-hero-body">' +
+      _predAvatarHtml(p, { big: true }) +
+      '<div class="pred-hero-meta">' +
+        '<div class="pred-hero-name">' + name + '</div>' +
+        '<div class="pred-hero-handle">' + handle + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pred-hero-stats">' +
+      '<div class="pred-hero-stat">' +
+        '<div class="pred-hero-stat-label">Win Rate</div>' +
+        '<div class="pred-hero-stat-val">' + winRate + '</div>' +
+      '</div>' +
+      '<div class="pred-hero-stat">' +
+        '<div class="pred-hero-stat-label">Settled</div>' +
+        '<div class="pred-hero-stat-val">' + total + '</div>' +
+      '</div>' +
+      '<div class="pred-hero-stat">' +
+        '<div class="pred-hero-stat-label">PnL</div>' +
+        '<div class="pred-hero-stat-val ' + pnlCls + '">' + pnlStr + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</a>';
+}
+
+function renderPredictorRanks(list) {
+  if (!list || !list.length) return '';
+  return list.map(function(p, i) {
+    var href = '/m/' + encodeURIComponent(p.user_id);
+    var name = esc(p.display_name || 'Trader');
+    var stat = (p.win_rate != null ? p.win_rate + '% WR' : '') + (p.total_predictions ? ' · ' + p.total_predictions + 'p' : '');
+    var flex = p.flex_score_90d != null ? p.flex_score_90d : (p.sharp_score != null ? p.sharp_score : null);
+    var flexCls = _flexColor(flex);
+    var flexHtml = flex != null ? '<span class="pred-rank-flex ' + flexCls + '">' + flex + '</span>' : '<span class="pred-rank-flex" style="color:var(--text-faint)">—</span>';
+    return '<a class="pred-rank-row" href="' + href + '">' +
+      _predAvatarHtml(p, { big: false }) +
+      '<div class="pred-rank-info">' +
+        '<div class="pred-rank-name">' + name + '</div>' +
+        (stat ? '<div class="pred-rank-stat">' + esc(stat) + '</div>' : '') +
+      '</div>' +
+      flexHtml +
+    '</a>';
+  }).join('');
+}
+
+async function loadTopPredictors() {
+  var hero = document.getElementById('predHeroSlot');
+  var ranks = document.getElementById('predRankSlot');
+  if (!hero || !ranks) return;
+  try {
+    var res = await fetch('/api/predictors?verified=1&limit=6&sort=sharp_score');
+    if (!res.ok) throw new Error('predictors fetch ' + res.status);
+    var data = await res.json();
+    var items = Array.isArray(data) ? data : (data.predictors || []);
+    // Client-side sort: prefer flex_score_90d (composite) then sharp_score
+    items.sort(function(a, b) {
+      var aS = a.flex_score_90d != null ? a.flex_score_90d : (a.sharp_score || 0);
+      var bS = b.flex_score_90d != null ? b.flex_score_90d : (b.sharp_score || 0);
+      return bS - aS;
+    });
+    if (!items.length) {
+      hero.innerHTML = '<div class="rail-empty">No verified predictors yet</div>';
+      ranks.innerHTML = '';
+      return;
+    }
+    hero.innerHTML = renderPredictorHero(items[0]);
+    ranks.innerHTML = renderPredictorRanks(items.slice(1, 5));
+  } catch (err) {
+    hero.innerHTML = '<div class="rail-empty">Leaderboard unavailable</div>';
+    ranks.innerHTML = '';
+    console.warn('[top-predictors] load failed:', err.message);
+  }
+}
 </script>
 </body>
 </html>

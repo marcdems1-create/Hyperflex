@@ -11939,7 +11939,7 @@ app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
 // GET /api/predictors — top predictors leaderboard
 app.get('/api/predictors', async (req, res) => {
   try {
-    const { sort = 'win_rate', q = '', limit = 100, filter = '', category = '' } = req.query;
+    const { sort = 'win_rate', q = '', limit = 100, filter = '', category = '', verified = '' } = req.query;
     const lim = Math.min(parseInt(limit) || 100, 200);
 
     // Aggregate settled positions per user — join markets for category filter
@@ -12016,16 +12016,45 @@ app.get('/api/predictors', async (req, res) => {
 
     // Fetch display names
     let userRows;
+    // When ?verified=1 is set, we only return predictors with a verified
+    // Polymarket wallet connection AND a set display_name/username. This
+    // gives us a targeted list for marketing (the feed rail reads this
+    // so the visible predictors double as the outreach cohort).
+    const verifiedFilter = (verified === '1' || verified === 'true');
     if (pool) {
-      userRows = await dbQuery('SELECT id, display_name, username, is_whale, whale_rank, polymarket_address FROM users WHERE id = ANY($1)', [userIds]);
+      if (verifiedFilter) {
+        userRows = await dbQuery(
+          'SELECT id, display_name, username, is_whale, whale_rank, polymarket_address, wallet_verified FROM users WHERE id = ANY($1) AND wallet_verified = true AND (display_name IS NOT NULL OR username IS NOT NULL)',
+          [userIds]
+        );
+      } else {
+        userRows = await dbQuery('SELECT id, display_name, username, is_whale, whale_rank, polymarket_address, wallet_verified FROM users WHERE id = ANY($1)', [userIds]);
+      }
     } else {
-      const { data } = await supabase.from('users').select('id, display_name, username, is_whale, whale_rank, polymarket_address').in('id', userIds);
-      userRows = data;
+      let q = supabase.from('users').select('id, display_name, username, is_whale, whale_rank, polymarket_address, wallet_verified').in('id', userIds);
+      if (verifiedFilter) {
+        q = q.eq('wallet_verified', true);
+      }
+      const { data } = await q;
+      userRows = (data || []).filter(u => !verifiedFilter || (u.display_name || u.username));
     }
 
     // Build context-aware name map: whale rank > username > wallet short > Trader
     const nameMap = {};
-    for (const u of userRows || []) nameMap[u.id] = resolveDisplayName(u);
+    const verifiedSet = {};
+    for (const u of userRows || []) {
+      nameMap[u.id] = resolveDisplayName(u);
+      if (u.wallet_verified) verifiedSet[u.id] = true;
+    }
+    // When filtering by verified, drop any userIds that weren't in the
+    // filtered userRows — those are the unverified accounts we want to
+    // hide from the rail / marketing list entirely (not just downgrade
+    // their display name).
+    let workingUserIds = userIds;
+    if (verifiedFilter) {
+      workingUserIds = userIds.filter(uid => nameMap[uid]);
+      if (!workingUserIds.length) return res.json([]);
+    }
 
     // Check polymarket connections (users table)
     let csRows;
@@ -12040,7 +12069,7 @@ app.get('/api/predictors', async (req, res) => {
     for (const cs of csRows || []) polyMap[cs.id] = cs.polymarket_address;
 
     // Build result
-    let result = userIds.map(uid => {
+    let result = workingUserIds.map(uid => {
       const u = byUser[uid];
       const wr = u.total > 0 ? u.wins / u.total : 0;
       const win_rate = Math.round(wr * 100);
@@ -13202,6 +13231,36 @@ async function ensureInfluencerProfile(xHandle, displayName, avatarUrl, bio, fol
 }
 
 // GET /api/admin/influencers — list all influencers
+// GET /api/admin/verified-predictors — marketing cohort export.
+// Returns every user with wallet_verified=true plus contact + stats so
+// we can reach out directly (email, X handle) later. Admin-gated.
+app.get('/api/admin/verified-predictors', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const rows = await dbQuery(`
+      SELECT u.id, u.display_name, u.username, u.email, u.twitter_handle,
+             u.polymarket_address, u.wallet_verified,
+             u.follower_count, u.total_predictions, u.prediction_win_rate,
+             u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
+             u.created_at, u.last_login_date
+      FROM users u
+      WHERE u.wallet_verified = true
+        AND (u.display_name IS NOT NULL OR u.username IS NOT NULL)
+      ORDER BY COALESCE(u.flex_score_90d, 0) DESC, u.prediction_win_rate DESC NULLS LAST
+    `).catch(async () => {
+      // Fall back if some columns don't exist on older schemas.
+      return await dbQuery(`
+        SELECT id, display_name, username, polymarket_address, wallet_verified, created_at
+        FROM users WHERE wallet_verified = true
+      `);
+    });
+    res.json({ count: rows.length, predictors: rows });
+  } catch (err) {
+    console.error('[admin/verified-predictors]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/influencers', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
