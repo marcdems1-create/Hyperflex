@@ -1095,11 +1095,13 @@ async function enrichFromLivePolymarket() {
     // for newly-connected wallets. Live data from the Polymarket data-api
     // is the source of truth.
     let positions = [];
+    let serverTotals = null;
     try {
       const posRes = await fetch(`${API}/api/polymarket/positions/${addr}`);
       if (posRes.ok) {
         const body = await posRes.json();
         if (Array.isArray(body.positions)) positions = body.positions;
+        if (body.totals) serverTotals = body.totals;
       } else {
         console.log('[enrich] polymarket positions fetch', posRes.status);
       }
@@ -1138,20 +1140,29 @@ async function enrichFromLivePolymarket() {
       return;
     }
 
+    // Prefer the server's pre-computed totals (they include redeemed/settled
+    // history the client-side fallback loop would miss). Fall back to
+    // per-position aggregation for older payloads that don't carry totals.
     let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
-    for (const p of positions) {
-      // Volume fallback: Polymarket's data-api sometimes returns cost_basis=0
-      // for closed positions. Use the largest plausible size signal available.
-      const size = Math.max(
-        Math.abs(p.cost_basis || 0),
-        Math.abs(p.cash_value || 0),
-        Math.abs(p.pnl || 0),
-        (p.shares || 0) * (p.current_price || 0)
-      );
-      vol += size;
-      pnl += p.pnl || 0;
-      if ((p.cash_value || 0) > 0.01) open++;
-      if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
+    if (serverTotals) {
+      vol    = Number(serverTotals.total_volume_usd) || 0;
+      pnl    = (Number(serverTotals.realized_pnl) || 0) + (Number(serverTotals.unrealized_pnl) || 0);
+      open   = Number(serverTotals.open_positions) || 0;
+      wins   = Number(serverTotals.wins) || 0;
+      losses = Number(serverTotals.losses) || 0;
+    } else {
+      for (const p of positions) {
+        const size = Math.max(
+          Math.abs(p.cost_basis || 0),
+          Math.abs(p.cash_value || 0),
+          Math.abs(p.pnl || 0),
+          (p.shares || 0) * (p.current_price || 0)
+        );
+        vol += size;
+        pnl += p.pnl || 0;
+        if ((p.cash_value || 0) > 0.01) open++;
+        if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
+      }
     }
     const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
     const pnlFmt = (pnl >= 0 ? '+$' : '-$') + (Math.abs(pnl) >= 1e3 ? Math.round(Math.abs(pnl)/1e3) + 'K' : Math.round(Math.abs(pnl)));

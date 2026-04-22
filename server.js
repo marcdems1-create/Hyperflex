@@ -24956,28 +24956,42 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
   const cached = _polyCache?.get(cacheKey);
   if (cached) return res.json(cached);
   try {
-    // Fetch BOTH winning and non-winning positions in parallel
-    const [upstreamLosing, upstreamWinning] = await Promise.all([
-      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
-        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-      }),
-      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=true`, {
-        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-      }).catch(() => null)
+    // Pull in PARALLEL across four buckets to capture the full portfolio:
+    //   - CURRENT winning  (open + green)
+    //   - CURRENT losing   (open + red)
+    //   - REDEEMED         (settled payouts — wins)
+    //   - REDEEMED losing  (settled no-payout — losses)
+    // Previously we fetched only CURRENT x2 at limit=50 which missed
+    // traders with deep historical settled activity. Bumped limit to
+    // 200 each (cap 800 combined, deduped by conditionId+outcome).
+    const base = 'https://data-api.polymarket.com/positions?user=' + address + '&limit=200';
+    const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+    const [upCurLose, upCurWin, upRedLose, upRedWin] = await Promise.all([
+      fetch(base + '&sortBy=CURRENT&winning=false', H),
+      fetch(base + '&sortBy=CURRENT&winning=true',  H).catch(() => null),
+      fetch(base + '&redeemed=true&winning=false',  H).catch(() => null),
+      fetch(base + '&redeemed=true&winning=true',   H).catch(() => null),
     ]);
-    if (upstreamLosing.status === 400) return res.status(400).json({ error: 'Polymarket rejected this address. Double-check your wallet address on polymarket.com' });
-    if (!upstreamLosing.ok) throw new Error('Polymarket API ' + upstreamLosing.status);
-    const rawLosing = await upstreamLosing.json();
-    const rawWinning = upstreamWinning && upstreamWinning.ok ? await upstreamWinning.json() : [];
-    // Merge and deduplicate by conditionId+outcome
-    const seen = new Set();
-    const allRaw = [...(Array.isArray(rawLosing) ? rawLosing : []), ...(Array.isArray(rawWinning) ? rawWinning : [])];
-    const raw = allRaw.filter(p => {
-      const key = (p.conditionId || '') + ':' + (p.outcome || '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    if (upCurLose.status === 400) return res.status(400).json({ error: 'Polymarket rejected this address. Double-check your wallet address on polymarket.com' });
+    if (!upCurLose.ok) throw new Error('Polymarket API ' + upCurLose.status);
+    const parse = async (r) => (r && r.ok) ? (await r.json().catch(() => [])) : [];
+    const [rawCurLose, rawCurWin, rawRedLose, rawRedWin] = await Promise.all([
+      parse(upCurLose), parse(upCurWin), parse(upRedLose), parse(upRedWin),
+    ]);
+    // Merge and deduplicate by conditionId+outcome. Prefer entries with
+    // higher absolute size (recency/accuracy) when collisions occur.
+    const byKey = new Map();
+    const merge = (arr) => {
+      for (const p of (Array.isArray(arr) ? arr : [])) {
+        const key = (p.conditionId || '') + ':' + (p.outcome || '');
+        const prev = byKey.get(key);
+        if (!prev || Math.abs(parseFloat(p.size) || 0) > Math.abs(parseFloat(prev.size) || 0)) {
+          byKey.set(key, p);
+        }
+      }
+    };
+    merge(rawCurLose); merge(rawCurWin); merge(rawRedLose); merge(rawRedWin);
+    const raw = Array.from(byKey.values());
     const positions = raw.map(p => ({
       id: p.conditionId,
       token_id: p.asset || null,
@@ -24989,16 +25003,34 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       cash_value: parseFloat(p.currentValue) || 0,
       cost_basis: parseFloat(p.initialValue) || 0,
       pnl: parseFloat(p.cashPnl) || 0,
-      // Compute pnl_pct from cashPnl / initialValue. Polymarket's percentPnl
-      // field has had inconsistent format (decimal vs already-%), computing
-      // from raw values is stable.
       pnl_pct: (parseFloat(p.initialValue) || 0) > 0 ? ((parseFloat(p.cashPnl) || 0) / parseFloat(p.initialValue)) * 100 : 0,
       market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
       icon: p.icon || null,
       end_date: p.endDateIso || p.endDate || null,
+      // Settlement state — lets the client compute correct open/settled/total
+      // splits without re-querying. `redeemable=true` means the position
+      // resolved in their favour; redeemable=false + curPrice=0 means it
+      // resolved against them. Both count as "settled" for win-rate math.
+      redeemable: !!p.redeemable,
+      redeemed: !!p.redeemed,
+      settled: !!(p.redeemable || p.redeemed || (parseFloat(p.curPrice) || 0) === 0 || (parseFloat(p.curPrice) || 0) === 1),
       platform: 'polymarket'
     }));
-    const data = { positions, address, fetched_at: new Date().toISOString() };
+    // Aggregate totals — lets profile stats reflect the full history
+    // (including settled wins/losses) not just open positions.
+    const settled = positions.filter(p => p.settled);
+    const wins    = settled.filter(p => (p.pnl || 0) > 0).length;
+    const losses  = settled.filter(p => (p.pnl || 0) < 0).length;
+    const totals = {
+      total_positions: positions.length,
+      open_positions:  positions.filter(p => !p.settled).length,
+      settled_positions: settled.length,
+      wins, losses,
+      total_volume_usd: positions.reduce((s, p) => s + Math.abs(p.cost_basis || 0), 0),
+      realized_pnl:    settled.reduce((s, p) => s + (p.pnl || 0), 0),
+      unrealized_pnl:  positions.filter(p => !p.settled).reduce((s, p) => s + (p.pnl || 0), 0),
+    };
+    const data = { positions, totals, address, fetched_at: new Date().toISOString() };
     if (_polyCache) { _polyCache.set(cacheKey, data); setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000); }
     res.json(data);
   } catch (err) {
