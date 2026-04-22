@@ -1121,6 +1121,7 @@ async function enrichFromLivePolymarket() {
             cost_basis: parseFloat(p.cost_basis || p.initial_value) || 0,
             pnl: parseFloat(p.pnl) || 0,
             market_url: p.market_url || null,
+            slug: p.slug || p.event_slug || p.market_slug || p.external_id || null,
           }));
           console.log('[enrich] fallback to cached_positions, count=', positions.length);
         }
@@ -1187,19 +1188,27 @@ async function enrichFromLivePolymarket() {
         ${positions.slice(0, 40).map(p => {
           const sideUp = (p.side || '').toUpperCase();
           const pct = Math.round((p.current_price || 0) * 100);
-          return `<div class="card">
-            <a href="${p.market_url || '#'}" target="_blank" rel="noopener">
-              <div style="display:flex;align-items:flex-start;gap:8px">
-                <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
-                <span class="card-q">${(p.question || '(market)').replace(/</g,'&lt;')}</span>
-              </div>
-            </a>
+          // Build a Polymarket URL even when the position didn't carry
+          // one. Priority: explicit market_url → event/slug page →
+          // search fallback using the question text. Whole card is
+          // clickable so users don't have to aim at the title only.
+          const qText = p.question || '';
+          const slug = p.slug || p.event_slug || p.market_slug || null;
+          const url = p.market_url
+            || (slug ? `https://polymarket.com/event/${slug}` : null)
+            || (qText ? `https://polymarket.com/markets?q=${encodeURIComponent(qText)}` : 'https://polymarket.com');
+          return `<a class="card" href="${url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.35)'" onmouseout="this.style.borderColor=''">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
+              <span class="card-q">${qText.replace(/</g,'&lt;')}</span>
+            </div>
             <div class="card-meta">
               <span>$${Math.round(p.cash_value || 0).toLocaleString()}</span>
               <span>@${pct}¢</span>
               <span class="badge" style="background:${p.pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${p.pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${p.pnl >= 0 ? '+' : ''}$${Math.round(p.pnl || 0).toLocaleString()}</span>
+              <span style="margin-left:auto;font-family:var(--mono,monospace);font-size:10px;color:var(--text-faint);letter-spacing:0.06em">↗ POLYMARKET</span>
             </div>
-          </div>`;
+          </a>`;
         }).join('')}`;
     }
 
