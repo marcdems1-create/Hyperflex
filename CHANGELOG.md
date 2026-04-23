@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-04-23 — Session 17 (Claude Code)
+
+### feat: related-markets carousel on market page + drop duplicate Comments block
+- **File:** `public/market.html`
+- Market page had two identical `<div class="mkt-comments" id="mktCommentsSection">` blocks (plus duplicate `mktTakesSection`, `commentList`, `commentInput` IDs). `getElementById` returns the first match, so the second copy was dead DOM with no JS hooks. Dropped the duplicate block that sat between Holder Distribution and Crystal Ball.
+- In its place, added a **Related Markets** horizontal-scroll carousel driven by `GET /api/alpha/top?n=12`. Filters out the current market by slug + conditionId, renders up to 8 cards with question, YES/NO odds, and edge score. Auto-hides if the fetch fails or filters to 0. Pure front-end — no new server code; piggybacks on the already-cached `buildAlphaList()`.
+- **Don't break:** `loadRelatedMarkets()` runs inside `loadMarket()` AFTER `renderMarket()` so `_market.conditionId` is populated before filter-self. If you reorder, the current market may appear in its own "related" list. Each `.related-card` links to `/market/<slug>` — preserves standard navigation.
+
+---
+
 ## 2026-04-23 — Session 16 (Claude Code)
 
 ### fix: markets/keyset sort param (`5a53c38`)
