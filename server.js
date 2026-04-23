@@ -25637,6 +25637,128 @@ app.get('/api/portfolio/alchemy/:address', async (req, res) => {
   }
 });
 
+// ── Alchemy CTF position discovery ─────────────────────────────────────────
+// Returns every Polymarket ConditionalTokens (ERC-1155) position a proxy
+// actually holds on-chain. Authoritative source — catches positions that
+// Polymarket's data-api /positions doesn't surface (dust, orphan outcomes,
+// stale cache entries). Useful for ghost-row detection and reconciliation.
+const POLYMARKET_CTF_ADDRESS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+app.get('/api/portfolio/alchemy/ctf/:address', async (req, res) => {
+  const key = process.env.ALCHEMY_API_KEY;
+  if (!key) return res.status(503).json({ error: 'Alchemy not configured' });
+  const address = (req.params.address || '').trim().toLowerCase();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return res.status(400).json({ error: 'Invalid address' });
+
+  const cacheKey = 'alchemy_ctf_' + address;
+  const cached = _alchemyCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < ALCHEMY_CACHE_TTL) return res.json(cached.data);
+
+  try {
+    // Paginate through all CTF positions (pageSize=100, max 3 pages = 300 positions).
+    // More than 300 on one proxy is rare; if hit, positions after #300 are dropped.
+    const positions = [];
+    let pageKey = '';
+    for (let i = 0; i < 3; i++) {
+      const url = new URL('https://polygon-mainnet.g.alchemy.com/nft/v3/' + key + '/getNFTsForOwner');
+      url.searchParams.set('owner', address);
+      url.searchParams.append('contractAddresses[]', POLYMARKET_CTF_ADDRESS);
+      url.searchParams.set('withMetadata', 'false');
+      url.searchParams.set('pageSize', '100');
+      if (pageKey) url.searchParams.set('pageKey', pageKey);
+      const r = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error('Alchemy NFT ' + r.status);
+      const page = await r.json();
+      const nfts = Array.isArray(page.ownedNfts) ? page.ownedNfts : [];
+      for (const n of nfts) {
+        // ERC-1155 balance comes back as string. Polymarket shares are 6-decimal
+        // fixed-point, match the frontend's CTF balanceOf handling (market.html + dashboard).
+        const rawBal = (n.balance || '0').toString();
+        const sharesAtomic = BigInt(rawBal);
+        const shares = Number(sharesAtomic) / 1e6;
+        if (shares <= 0) continue; // skip zero-balance residues
+        positions.push({
+          token_id: n.tokenId || n.id?.tokenId || null,
+          shares,
+          shares_atomic: rawBal,
+        });
+      }
+      pageKey = page.pageKey || '';
+      if (!pageKey) break;
+    }
+
+    const data = {
+      address,
+      network: 'matic-mainnet',
+      ctf_contract: POLYMARKET_CTF_ADDRESS,
+      position_count: positions.length,
+      positions,
+      source: 'alchemy-nft-api',
+      fetched_at: new Date().toISOString(),
+    };
+    _alchemyCache.set(cacheKey, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.warn('[alchemy/ctf] fetch failed:', err.message);
+    res.status(502).json({ error: 'Alchemy CTF fetch failed', detail: err.message });
+  }
+});
+
+// ── Alchemy webhook receiver ───────────────────────────────────────────────
+// Real-time push channel for on-chain events. Alchemy POSTs here when an
+// address we've subscribed to fires an event (ERC-20 transfer, ERC-1155
+// transfer, etc). Payload is signed HMAC-SHA256 with a shared secret.
+//
+// SETUP (manual, once):
+//   1. Alchemy dashboard → Notify → Create Webhook → Address Activity (Polygon)
+//   2. Target URL: https://hyperflex.network/api/webhooks/alchemy
+//   3. Add addresses to watch (for now: a few whale proxies)
+//   4. Copy the signing key → Railway env as ALCHEMY_WEBHOOK_SECRET
+//
+// Current behavior is minimal: verify signature → log event → 200 OK. The
+// event-to-notification pipeline (push "whale X bought Y" to followers)
+// plugs in at the commented hook below once the payload shape is verified
+// in production. `crypto` is already required at the top of server.js.
+app.post('/api/webhooks/alchemy', async (req, res) => {
+  const secret = process.env.ALCHEMY_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn('[alchemy-webhook] received event but ALCHEMY_WEBHOOK_SECRET not set — dropping');
+    return res.status(503).json({ error: 'Webhook secret not configured' });
+  }
+  const sigHeader = req.get('X-Alchemy-Signature') || '';
+  // Global express.json() middleware already captured the raw body as UTF-8
+  // via `verify` (see app.use at top of file). We need byte-exact input for
+  // HMAC; req.body is the parsed object, req.rawBody is the original string.
+  const rawBody = req.rawBody || '';
+  if (!rawBody) return res.status(400).json({ error: 'Empty body' });
+
+  const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+  // Constant-time compare; normalize to lowercase hex first.
+  const a = Buffer.from(sigHeader.toLowerCase(), 'hex');
+  const b = Buffer.from(expected, 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn('[alchemy-webhook] invalid signature');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  const payload = req.body || {};
+  console.log('[alchemy-webhook] event:', payload.type || 'unknown', '| id:', payload.id || 'n/a');
+
+  // Respond fast so Alchemy doesn't mark the endpoint unhealthy. Process the
+  // event on next tick — errors must NOT fail the response.
+  res.status(200).json({ ok: true });
+  setImmediate(() => {
+    try {
+      // TODO: event-to-notification pipeline
+      //  - Match payload.event.activity[].fromAddress / toAddress against known
+      //    whale wallets and connected users
+      //  - For each match, pushNotification(userId, ...) to fire bell + email
+      //  - Dedup on payload.id (Alchemy is at-least-once delivery)
+    } catch (handlerErr) {
+      console.error('[alchemy-webhook] handler error (non-fatal):', handlerErr.message);
+    }
+  });
+});
+
 // GET /api/polymarket/positions/:address/enriched — positions + whale overlap intel
 app.get('/api/polymarket/positions/:address/enriched', async (req, res) => {
   try {
