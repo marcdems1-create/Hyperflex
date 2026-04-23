@@ -30465,7 +30465,7 @@ app.get('/api/terminal/data', async (req, res) => {
 
     // PANEL 1: TOP EDGES — highest composite edge score
     const topEdges = [...markets]
-      .filter(m => (m.edge_score || 0) >= 50)
+      .filter(m => (m.edge_score || 0) >= 50 && m.question && String(m.question).trim())
       .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
       .slice(0, 6)
       .map(slim);
@@ -30497,19 +30497,20 @@ app.get('/api/terminal/data', async (req, res) => {
     //   Tier 3: age ≤ 120m AND score ≥ 40 (ignore is_new flag, catch stamps
     //           that dropped just out of the freshness window)
     //   Tier 4: top 6 markets by score ≥ 40 (last resort — "nearly fresh")
+    const _hasQ = m => m.question && String(m.question).trim();
     let freshEdges = [...markets]
-      .filter(m => m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 30) && (m.edge_score || 0) >= 50)
+      .filter(m => _hasQ(m) && m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 30) && (m.edge_score || 0) >= 50)
       .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
       .slice(0, 6);
     if (freshEdges.length < 3) {
       freshEdges = [...markets]
-        .filter(m => m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 60) && (m.edge_score || 0) >= 40)
+        .filter(m => _hasQ(m) && m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 60) && (m.edge_score || 0) >= 40)
         .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
         .slice(0, 6);
     }
     if (freshEdges.length < 3) {
       freshEdges = [...markets]
-        .filter(m => m.edge_age_minutes != null && m.edge_age_minutes <= 120 && (m.edge_score || 0) >= 40)
+        .filter(m => _hasQ(m) && m.edge_age_minutes != null && m.edge_age_minutes <= 120 && (m.edge_score || 0) >= 40)
         .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
         .slice(0, 6);
     }
@@ -30549,18 +30550,18 @@ app.get('/api/terminal/data', async (req, res) => {
     //   Tier 3: top 6 markets by raw 24h volume (last resort — "where
     //           the money is right now")
     let volumeSpike = [...markets]
-      .filter(m => m.edge_components && (m.edge_components.volume_spike || 0) > 0)
+      .filter(m => _hasQ(m) && m.edge_components && (m.edge_components.volume_spike || 0) > 0)
       .sort((a, b) => (b.edge_components.volume_spike || 0) - (a.edge_components.volume_spike || 0))
       .slice(0, 6);
     if (volumeSpike.length < 3) {
       volumeSpike = [...markets]
-        .filter(m => m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5)
+        .filter(m => _hasQ(m) && m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5)
         .sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0))
         .slice(0, 6);
     }
     if (volumeSpike.length < 3) {
       volumeSpike = [...markets]
-        .filter(m => (m.volume || 0) >= 100000)
+        .filter(m => _hasQ(m) && (m.volume || 0) >= 100000)
         .sort((a, b) => (b.volume || 0) - (a.volume || 0))
         .slice(0, 6);
     }
@@ -30574,18 +30575,18 @@ app.get('/api/terminal/data', async (req, res) => {
     //   Tier 3: top 6 closest expiring markets regardless of price zone
     //           (last resort — "what's expiring soon")
     let timeDecay = [...markets]
-      .filter(m => m.edge_components && (m.edge_components.decay || 0) > 0 && m.days_until_expiry != null && m.days_until_expiry <= 3)
+      .filter(m => _hasQ(m) && m.edge_components && (m.edge_components.decay || 0) > 0 && m.days_until_expiry != null && m.days_until_expiry <= 3)
       .sort((a, b) => (b.edge_components.decay || 0) - (a.edge_components.decay || 0))
       .slice(0, 6);
     if (timeDecay.length < 3) {
       timeDecay = [...markets]
-        .filter(m => m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 7 && m.yes_price != null && ((m.yes_price >= 0.15 && m.yes_price <= 0.40) || (m.yes_price >= 0.60 && m.yes_price <= 0.85)))
+        .filter(m => _hasQ(m) && m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 7 && m.yes_price != null && ((m.yes_price >= 0.15 && m.yes_price <= 0.40) || (m.yes_price >= 0.60 && m.yes_price <= 0.85)))
         .sort((a, b) => (a.days_until_expiry || 99) - (b.days_until_expiry || 99))
         .slice(0, 6);
     }
     if (timeDecay.length < 3) {
       timeDecay = [...markets]
-        .filter(m => m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 14 && (m.volume || 0) >= 50000)
+        .filter(m => _hasQ(m) && m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 14 && (m.volume || 0) >= 50000)
         .sort((a, b) => (a.days_until_expiry || 99) - (b.days_until_expiry || 99))
         .slice(0, 6);
     }

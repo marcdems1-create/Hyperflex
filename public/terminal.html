@@ -346,6 +346,8 @@ function marketUrl(m) {
 
 function cardRow(m) {
   if (!m) return '';
+  var q = (typeof m.question === 'string' ? m.question : String(m.question || '')).trim();
+  if (!q) return '';
   var edge = m.edge_score || 0;
   var edgeClass = edge >= 70 ? 'high' : '';
   var freshBadge = m.is_new ? '<span class="fresh-badge">NEW ' + (m.edge_age_minutes || 0) + 'M</span>' : '';
@@ -355,7 +357,6 @@ function cardRow(m) {
   var side = trade.side || (m.yes_price && m.yes_price < 0.5 ? 'YES' : 'NO');
   var roi = trade.roi_pct != null ? (trade.roi_pct >= 0 ? '+' : '') + trade.roi_pct + '%' : '';
   var roiClass = trade.roi_pct < 0 ? 'neg' : '';
-  var q = m.question || '';
   var urgencyReason = (m.trade_thesis && m.trade_thesis.urgency_reason) || m.ai_hook || '';
 
   // data-slug + data-yes-asset + data-no-asset let the SSE tick handler find
