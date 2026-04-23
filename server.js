@@ -25965,6 +25965,13 @@ async function _buildAlphaListInner(opts = {}) {
     clearTimeout(tid);
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
     const _rawAll = await mktRes.json();
+    // Polymarket's Gamma API returns a flat array. If they wrap it in an object
+    // (e.g. { data: [], markets: [] }), extract the inner array so we don't
+    // silently end up with 0 markets.
+    const _rawArr = Array.isArray(_rawAll)
+      ? _rawAll
+      : (_rawAll.data || _rawAll.markets || _rawAll.results || []);
+    console.log('[alpha] gamma raw:', typeof _rawAll, Array.isArray(_rawAll) ? 'array' : 'object', 'len:', _rawArr.length);
     // Pick the right volume metric per market: prefer 24h, fall back to lifetime
     const _vol = (m) => {
       const v24 = parseFloat(m.volume24hr || m.volume_24hr || 0);
@@ -25972,7 +25979,7 @@ async function _buildAlphaListInner(opts = {}) {
       return parseFloat(m.volume || m.volumeNum || 0);
     };
     // Sort all 500 by 24h volume desc — we'll slice top 350 + force-include whale markets later
-    const _sortedAll = (Array.isArray(_rawAll) ? _rawAll : []).sort((a, b) => _vol(b) - _vol(a));
+    const _sortedAll = _rawArr.sort((a, b) => _vol(b) - _vol(a));
 
     // Warm whale cache if empty (so Whale Moves lane always has data)
     if (!_whaleWatchCache || !_whaleWatchCache.data) {
