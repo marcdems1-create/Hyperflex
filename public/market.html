@@ -497,6 +497,24 @@ canvas{display:block;width:100%!important}
         </div>
         <div class="trade-disclaimer">Click "Connect Wallet" to enable trading</div>
 
+        <!-- Paper Trade divider -->
+        <div id="paperTradeSection" style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(30,30,42,0.8)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-family:var(--mono,monospace);font-size:10px;font-weight:700;color:#a855f7;letter-spacing:0.1em;text-transform:uppercase">Paper Trade</span>
+            <span id="paperBalance" style="font-family:var(--mono,monospace);font-size:11px;color:#8888a0">Loading…</span>
+          </div>
+          <p style="font-size:12px;color:#8888a0;margin:0 0 10px;line-height:1.5">Simulate this trade with virtual USDC. No wallet needed — your track record is real.</p>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button onclick="setPaperSide('yes')" id="paperSideYes" style="flex:1;padding:8px;border-radius:7px;border:1px solid rgba(0,230,138,0.4);background:rgba(0,230,138,0.1);color:#00e68a;font-weight:700;font-size:12px;cursor:pointer;font-family:var(--sans)">YES</button>
+            <button onclick="setPaperSide('no')"  id="paperSideNo"  style="flex:1;padding:8px;border-radius:7px;border:1px solid rgba(255,77,106,0.35);background:rgba(255,77,106,0.07);color:#ff4d6a;font-weight:700;font-size:12px;cursor:pointer;font-family:var(--sans)">NO</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="paperAmount" type="number" value="25" min="1" max="500" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(30,30,42,1);border-radius:7px;padding:8px 10px;font-family:var(--mono,monospace);font-size:13px;color:#f0f0f5;outline:none" placeholder="$25"/>
+            <button onclick="submitPaperTrade()" style="padding:8px 14px;background:#a855f7;color:#fff;border:none;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--sans);white-space:nowrap">Paper Trade</button>
+          </div>
+          <div id="paperTradeStatus" style="display:none;margin-top:8px;font-size:12px;font-family:var(--mono,monospace)"></div>
+        </div>
+
         <!-- V2 cutover banner (auto-hides after April 22 once V1 is dead).
              Inserted by injectV2CutoverBanner() on page load. -->
         <div id="v2CutoverBanner" style="display:none"></div>
@@ -6773,6 +6791,12 @@ loadMarket = async function() {
       </div>
       <!-- Preview -->
       <div id="alertPreview" style="padding:12px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);margin-bottom:16px;font-family:var(--sans);font-size:12px;color:#f59e0b;line-height:1.5;text-align:center"></div>
+      <!-- Email capture — shown for logged-out users -->
+      <div id="alertEmailRow" style="margin-bottom:14px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Notify me at</div>
+        <input id="alertEmail" type="email" placeholder="your@email.com" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(30,30,42,1);border-radius:8px;padding:10px 12px;font-family:var(--mono,monospace);font-size:13px;color:#f0f0f5;outline:none;box-sizing:border-box"/>
+        <div style="font-size:11px;color:#8888a0;margin-top:4px">One email when the price moves ±10%. No spam.</div>
+      </div>
       <!-- Submit -->
       <button id="alertSubmitBtn" onclick="submitAlert()" style="width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0c0c0b;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:48px;transition:all .15s" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
         🔔 Create Alert
@@ -6785,15 +6809,90 @@ loadMarket = async function() {
 
 <script>
 // ── Price Alerts ──
+// ── Paper Trading ──────────────────────────────────────────────────────────
+var _paperSide = 'yes';
+var _paperToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+
+function setPaperSide(side) {
+  _paperSide = side;
+  var yBtn = document.getElementById('paperSideYes');
+  var nBtn = document.getElementById('paperSideNo');
+  if (!yBtn || !nBtn) return;
+  if (side === 'yes') {
+    yBtn.style.border = '2px solid #00e68a'; nBtn.style.border = '1px solid rgba(255,77,106,0.35)';
+  } else {
+    nBtn.style.border = '2px solid #ff4d6a'; yBtn.style.border = '1px solid rgba(0,230,138,0.4)';
+  }
+}
+
+async function loadPaperBalance() {
+  var el = document.getElementById('paperBalance');
+  if (!el || !_paperToken) { if (el) el.textContent = 'Sign in to paper trade'; return; }
+  try {
+    var r = await fetch('/api/paper/balance', { headers: { Authorization: 'Bearer ' + _paperToken } });
+    if (!r.ok) return;
+    var d = await r.json();
+    var bal = parseFloat(d.balance || 0).toFixed(2);
+    var pnl = parseFloat(d.pnl || 0);
+    var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+    var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+    el.innerHTML = 'Balance: <strong style="color:#c9920d">$' + bal + '</strong>' +
+      (d.trades > 0 ? ' · PnL: <strong style="color:' + pnlColor + '">' + pnlStr + '</strong>' : '');
+  } catch { /* silent */ }
+}
+
+async function submitPaperTrade() {
+  var statusEl = document.getElementById('paperTradeStatus');
+  if (!_paperToken) { window.location.href = '/creator/login'; return; }
+  if (!_market) { if (statusEl) { statusEl.style.display='block'; statusEl.style.color='#ff4d6a'; statusEl.textContent='Market not loaded yet'; } return; }
+  var amt = parseFloat(document.getElementById('paperAmount').value);
+  if (!amt || amt < 1) { if (statusEl) { statusEl.style.display='block'; statusEl.style.color='#ff4d6a'; statusEl.textContent='Enter amount ≥ $1'; } return; }
+
+  var prices = [];
+  try { prices = JSON.parse(_market.outcomePrices || '[0.5,0.5]'); } catch { prices = [0.5, 0.5]; }
+  var price = _paperSide === 'yes' ? parseFloat(prices[0]) : parseFloat(prices[1]);
+  if (!price || price <= 0) price = 0.5;
+
+  if (statusEl) { statusEl.style.display='block'; statusEl.style.color='#8888a0'; statusEl.textContent='Placing paper trade…'; }
+  try {
+    var r = await fetch('/api/paper/trade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + _paperToken },
+      body: JSON.stringify({
+        market_slug: _market.slug || _market.conditionId,
+        condition_id: _market.conditionId || null,
+        question: _market._displayTitle || _market.question || '',
+        side: _paperSide.toUpperCase(),
+        entry_price: price,
+        amount: amt,
+      }),
+    });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Trade failed');
+    var shares = parseFloat(d.shares || 0).toFixed(2);
+    var newBal = parseFloat(d.new_balance || 0).toFixed(2);
+    if (statusEl) {
+      statusEl.style.color = '#00e68a';
+      statusEl.textContent = 'Paper trade placed: ' + shares + ' ' + _paperSide.toUpperCase() + ' shares · Balance: $' + newBal;
+    }
+    loadPaperBalance();
+  } catch (e) {
+    if (statusEl) { statusEl.style.color='#ff4d6a'; statusEl.textContent=e.message; }
+  }
+}
+
+// Load paper balance on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadPaperBalance);
+} else {
+  setTimeout(loadPaperBalance, 800);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 var _alertSide = 'yes';
 var _alertDir = 'below';
 
 function openAlertModal() {
-  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-  if (!token) {
-    alert('Sign in to set price alerts');
-    return;
-  }
   var modal = document.getElementById('alertModal');
   modal.style.display = 'flex';
   document.getElementById('alertModalQuestion').textContent = _market ? (_market._displayTitle || _market.question || '') : '';
@@ -6889,52 +6988,64 @@ function updateAlertPreview() {
   document.getElementById('alertCurrentPrice').textContent = 'Current ' + sideLabel + ' price: ' + cp + '\u00a2';
 }
 
-function submitAlert() {
+async function submitAlert() {
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-  if (!token) return;
-  var threshold = parseInt(document.getElementById('alertThreshold').value) / 100;
-  var conditionId = _market.conditionId || _market.market_id || '';
+  var emailInput = document.getElementById('alertEmail');
+  var email = emailInput ? emailInput.value.trim() : '';
   var slug = '';
-  try { slug = window.location.pathname.split('/market/')[1] || ''; } catch(e) {}
+  try { slug = decodeURIComponent(window.location.pathname.split('/market/')[1] || ''); } catch(e) {}
 
   var btn = document.getElementById('alertSubmitBtn');
   btn.textContent = 'Creating...';
   btn.disabled = true;
 
-  fetch('/api/price-alerts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-    body: JSON.stringify({
-      condition_id: conditionId,
-      slug: slug,
-      question: _market._displayTitle || _market.question || '',
-      direction: _alertDir,
-      threshold: threshold,
-      side: _alertSide
-    })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
+  // If user is logged in — create in-app price alert (existing system)
+  if (token) {
+    var threshold = parseInt(document.getElementById('alertThreshold').value) / 100;
+    var conditionId = _market.conditionId || _market.market_id || '';
+    try {
+      var r = await fetch('/api/price-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          condition_id: conditionId, slug,
+          question: _market._displayTitle || _market.question || '',
+          direction: _alertDir, threshold, side: _alertSide
+        })
+      });
+      var data = await r.json();
+      if (data.error) throw new Error(data.error);
+      loadMarketAlerts(); updateAlertBell();
+    } catch (e) { alert('Alert failed: ' + e.message); btn.textContent = '🔔 Create Alert'; btn.disabled = false; return; }
+  }
+
+  // Email alert — always register if email provided (works logged out too)
+  if (email && email.includes('@')) {
+    var prices = [];
+    try { prices = JSON.parse(_market.outcomePrices || '[0.5,0.5]'); } catch { prices = [0.5, 0.5]; }
+    var baselinePrice = parseFloat(prices[0]) || 0.5;
+    try {
+      await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          market_slug: slug,
+          question: _market._displayTitle || _market.question || '',
+          threshold_pct: 10,
+          baseline_price: baselinePrice,
+        })
+      });
+    } catch { /* silent */ }
+  }
+
+  btn.textContent = '✓ Alert Created!';
+  btn.style.background = 'linear-gradient(135deg,#00e68a,#00b36b)';
+  setTimeout(function() {
     btn.textContent = '🔔 Create Alert';
+    btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
     btn.disabled = false;
-    if (data.error) {
-      alert(data.error);
-      return;
-    }
-    // Show success
-    btn.textContent = '✓ Alert Created!';
-    btn.style.background = 'linear-gradient(135deg,#00e68a,#00b36b)';
-    setTimeout(function() {
-      btn.textContent = '🔔 Create Alert';
-      btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
-    }, 2000);
-    loadMarketAlerts();
-    updateAlertBell();
-  })
-  .catch(function() {
-    btn.textContent = '🔔 Create Alert';
-    btn.disabled = false;
-  });
+  }, 2000);
 }
 
 function loadMarketAlerts() {
@@ -7001,11 +7112,10 @@ function updateAlertBell() {
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
   var bellBtn = document.getElementById('alertBellBtn');
   var badge = document.getElementById('activeAlertsBadge');
-  if (!token || !_market) {
-    if (bellBtn) bellBtn.style.display = 'none';
-    return;
-  }
+  // Show bell for everyone — email alerts work without a token
+  if (!_market) { if (bellBtn) bellBtn.style.display = 'none'; return; }
   if (bellBtn) bellBtn.style.display = 'inline-flex';
+  if (!token) return; // no in-app alerts to count without auth
 
   var conditionId = _market.conditionId || _market.market_id || '';
   fetch('/api/price-alerts/market/' + encodeURIComponent(conditionId), {

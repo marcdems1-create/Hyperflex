@@ -18644,6 +18644,237 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PAPER TRADING — virtual $1 000 USDC, real market prices, zero real money
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/paper/balance
+app.get('/api/paper/balance', requireAuth, async (req, res) => {
+  try {
+    const rows = pool
+      ? await dbQuery('SELECT paper_balance, paper_trades_count, paper_pnl FROM users WHERE id = $1', [req.userId])
+      : (await supabase.from('users').select('paper_balance,paper_trades_count,paper_pnl').eq('id', req.userId)).data;
+    const u = (rows || [])[0] || {};
+    res.json({
+      balance: parseFloat(u.paper_balance ?? 1000),
+      trades: parseInt(u.paper_trades_count ?? 0),
+      pnl: parseFloat(u.paper_pnl ?? 0),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/paper/positions
+app.get('/api/paper/positions', requireAuth, async (req, res) => {
+  try {
+    const rows = pool
+      ? await dbQuery('SELECT * FROM paper_positions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.userId])
+      : (await supabase.from('paper_positions').select('*').eq('user_id', req.userId).order('created_at', { ascending: false }).limit(50)).data;
+    res.json({ positions: rows || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/paper/trade — place a paper trade
+app.post('/api/paper/trade', requireAuth, async (req, res) => {
+  try {
+    const { market_slug, condition_id, question, side, entry_price, amount } = req.body;
+    if (!market_slug || !question || !['YES','NO'].includes(side)) return res.status(400).json({ error: 'Missing fields' });
+    const price = parseFloat(entry_price);
+    const amt = parseFloat(amount);
+    if (!price || price <= 0 || price >= 1 || !amt || amt <= 0) return res.status(400).json({ error: 'Invalid price or amount' });
+    if (amt < 1) return res.status(400).json({ error: 'Minimum paper trade is $1' });
+    if (amt > 500) return res.status(400).json({ error: 'Maximum paper trade is $500' });
+
+    // Check balance
+    const balRows = pool
+      ? await dbQuery('SELECT paper_balance, paper_trades_count FROM users WHERE id = $1', [req.userId])
+      : (await supabase.from('users').select('paper_balance,paper_trades_count').eq('id', req.userId)).data;
+    const balance = parseFloat((balRows || [])[0]?.paper_balance ?? 1000);
+    if (balance < amt) return res.status(400).json({ error: 'Insufficient paper balance' });
+
+    const shares = parseFloat((amt / price).toFixed(4));
+
+    if (pool) {
+      await pool.query('BEGIN');
+      try {
+        await dbQuery(
+          `INSERT INTO paper_positions (user_id, market_slug, condition_id, question, side, entry_price, shares, amount)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [req.userId, market_slug, condition_id || null, question, side, price, shares, amt]
+        );
+        await dbQuery(
+          `UPDATE users SET paper_balance = paper_balance - $1, paper_trades_count = COALESCE(paper_trades_count,0) + 1 WHERE id = $2`,
+          [amt, req.userId]
+        );
+        await pool.query('COMMIT');
+      } catch (e) { await pool.query('ROLLBACK'); throw e; }
+    } else {
+      const { error: ie } = await supabase.from('paper_positions').insert([
+        { user_id: req.userId, market_slug, condition_id: condition_id || null, question, side, entry_price: price, shares, amount: amt }
+      ]);
+      if (ie) throw new Error(ie.message);
+      const prevCount = parseInt((balRows || [])[0]?.paper_trades_count || 0);
+      await supabase.from('users').update({ paper_balance: balance - amt, paper_trades_count: prevCount + 1 }).eq('id', req.userId);
+    }
+
+    res.json({ ok: true, shares, new_balance: parseFloat((balance - amt).toFixed(2)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAILY PICK — one market per day, vote YES/NO, build a streak
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/daily-pick — today's pick (auto-selects from top alpha if not set)
+app.get('/api/daily-pick', optionalAuth, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    let pick = null;
+    const pickRows = pool
+      ? await dbQuery('SELECT * FROM daily_picks WHERE pick_date = $1', [today])
+      : (await supabase.from('daily_picks').select('*').eq('pick_date', today)).data;
+    pick = (pickRows || [])[0] || null;
+
+    // Auto-select from screener cache when no pick is set
+    if (!pick) {
+      const markets = _screenerCache && _screenerCache.data ? _screenerCache.data : [];
+      const top = markets.find(m => m.question && m.slug && (m.edge_score || 0) >= 50);
+      if (top) {
+        try {
+          const insertData = {
+            pick_date: today,
+            market_slug: top.slug,
+            condition_id: top.condition_id || null,
+            question: top.question,
+            yes_price: top.yes_price,
+            no_price: top.yes_price != null ? parseFloat((1 - top.yes_price).toFixed(4)) : null,
+            category: top.category || null,
+          };
+          if (pool) {
+            const ir = await dbQuery(
+              `INSERT INTO daily_picks (pick_date,market_slug,condition_id,question,yes_price,no_price,category)
+               VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (pick_date) DO NOTHING RETURNING *`,
+              [insertData.pick_date, insertData.market_slug, insertData.condition_id,
+               insertData.question, insertData.yes_price, insertData.no_price, insertData.category]
+            );
+            pick = ir[0] || null;
+          } else {
+            const { data } = await supabase.from('daily_picks').upsert(insertData, { onConflict: 'pick_date' }).select();
+            pick = (data || [])[0] || null;
+          }
+          if (!pick) {
+            const reread = pool
+              ? await dbQuery('SELECT * FROM daily_picks WHERE pick_date = $1', [today])
+              : (await supabase.from('daily_picks').select('*').eq('pick_date', today)).data;
+            pick = (reread || [])[0] || null;
+          }
+        } catch { /* no pick today */ }
+      }
+    }
+
+    if (!pick) return res.json({ pick: null });
+
+    let userVote = null;
+    let streak = 0;
+    if (req.userId) {
+      const vRows = pool
+        ? await dbQuery('SELECT side FROM user_daily_picks WHERE user_id = $1 AND pick_date = $2', [req.userId, today])
+        : (await supabase.from('user_daily_picks').select('side').eq('user_id', req.userId).eq('pick_date', today)).data;
+      userVote = (vRows || [])[0]?.side || null;
+
+      const sRows = pool
+        ? await dbQuery(
+            `SELECT pick_date, was_correct FROM user_daily_picks
+             WHERE user_id = $1 ORDER BY pick_date DESC LIMIT 30`,
+            [req.userId])
+        : (await supabase.from('user_daily_picks').select('pick_date,was_correct').eq('user_id', req.userId).order('pick_date', { ascending: false }).limit(30)).data;
+      for (const r of (sRows || [])) {
+        if (r.was_correct === false) break;
+        streak++;
+      }
+    }
+
+    res.json({
+      pick: {
+        pick_date: pick.pick_date,
+        market_slug: pick.market_slug,
+        question: pick.question,
+        yes_price: pick.yes_price,
+        no_price: pick.no_price,
+        category: pick.category,
+        yes_votes: pick.yes_votes || 0,
+        no_votes: pick.no_votes || 0,
+      },
+      user_vote: userVote,
+      streak,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/daily-pick/vote
+app.post('/api/daily-pick/vote', requireAuth, async (req, res) => {
+  try {
+    const { side } = req.body;
+    if (!['YES','NO'].includes(side)) return res.status(400).json({ error: 'side must be YES or NO' });
+    const today = new Date().toISOString().slice(0, 10);
+
+    const pickRows = pool
+      ? await dbQuery('SELECT id, yes_votes, no_votes FROM daily_picks WHERE pick_date = $1', [today])
+      : (await supabase.from('daily_picks').select('id,yes_votes,no_votes').eq('pick_date', today)).data;
+    if (!(pickRows || []).length) return res.status(404).json({ error: 'No pick today' });
+    const pick = pickRows[0];
+
+    if (pool) {
+      await dbQuery(
+        `INSERT INTO user_daily_picks (user_id, pick_date, side)
+         VALUES ($1,$2,$3) ON CONFLICT (user_id, pick_date) DO UPDATE SET side = EXCLUDED.side`,
+        [req.userId, today, side]
+      );
+      const col = side === 'YES' ? 'yes_votes' : 'no_votes';
+      await dbQuery(`UPDATE daily_picks SET ${col} = ${col} + 1 WHERE pick_date = $1`, [today]);
+    } else {
+      await supabase.from('user_daily_picks').upsert({ user_id: req.userId, pick_date: today, side }, { onConflict: 'user_id,pick_date' });
+      if (side === 'YES') await supabase.from('daily_picks').update({ yes_votes: (pick.yes_votes || 0) + 1 }).eq('pick_date', today);
+      else await supabase.from('daily_picks').update({ no_votes: (pick.no_votes || 0) + 1 }).eq('pick_date', today);
+    }
+
+    const updated = pool
+      ? await dbQuery('SELECT yes_votes, no_votes FROM daily_picks WHERE pick_date = $1', [today])
+      : (await supabase.from('daily_picks').select('yes_votes,no_votes').eq('pick_date', today)).data;
+    const u = (updated || [])[0] || {};
+    res.json({ ok: true, yes_votes: u.yes_votes || 0, no_votes: u.no_votes || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARKET ALERTS — email capture, notify on price move
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /api/alerts — register an email alert (no auth required)
+app.post('/api/alerts', async (req, res) => {
+  try {
+    const { email, market_slug, question, threshold_pct, baseline_price } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Valid email required' });
+    if (!market_slug) return res.status(400).json({ error: 'market_slug required' });
+    const threshold = parseInt(threshold_pct) || 10;
+    if (pool) {
+      await dbQuery(
+        `INSERT INTO market_alerts (email, market_slug, question, threshold_pct, baseline_price)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [email.toLowerCase().trim(), market_slug, question || '', threshold, parseFloat(baseline_price) || null]
+      );
+    } else {
+      await supabase.from('market_alerts').insert([{
+        email: email.toLowerCase().trim(),
+        market_slug,
+        question: question || '',
+        threshold_pct: threshold,
+        baseline_price: parseFloat(baseline_price) || null,
+      }]);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/predictions/user/:userId — all predictions for a user
 app.get('/api/predictions/user/:userId', async (req, res) => {
   try {
@@ -44362,6 +44593,56 @@ cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
   }
 
   if (triggered > 0) console.log(`[price-alerts] Triggered ${triggered} alerts`);
+}));
+
+// Email market alerts — every 15 minutes, check market_alerts table
+cron.schedule('*/15 * * * *', safeCron('emailMarketAlerts', async () => {
+  if (!process.env.SMTP_HOST) return; // no email configured
+  const markets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+  if (!markets.length) return;
+  const priceBySlug = {};
+  markets.forEach(m => { if (m.slug) priceBySlug[m.slug] = m.yes_price; });
+
+  let pending;
+  try {
+    pending = pool
+      ? await dbQuery('SELECT * FROM market_alerts WHERE triggered = false LIMIT 200')
+      : (await supabase.from('market_alerts').select('*').eq('triggered', false).limit(200)).data;
+  } catch { return; }
+  if (!(pending || []).length) return;
+
+  let fired = 0;
+  for (const a of pending) {
+    const cur = priceBySlug[a.market_slug];
+    if (cur == null || !a.baseline_price) continue;
+    const movePct = Math.abs((cur - a.baseline_price) / a.baseline_price * 100);
+    if (movePct < (a.threshold_pct || 10)) continue;
+
+    const dir = cur > a.baseline_price ? '📈 jumped' : '📉 dropped';
+    const curCents = Math.round(cur * 100);
+    const baseCents = Math.round(a.baseline_price * 100);
+    const shortQ = (a.question || 'Your market').length > 80 ? (a.question || '').slice(0, 77) + '…' : (a.question || 'Your market');
+    const marketUrl = `https://hyperflex.network/market/${encodeURIComponent(a.market_slug)}`;
+
+    try {
+      await sendEmail({
+        to: a.email,
+        subject: `Market alert: ${shortQ.slice(0, 50)}`,
+        html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#0e0e15;color:#f0f0f5;border-radius:12px">
+          <p style="font-size:11px;font-weight:700;color:#c9920d;letter-spacing:0.1em;text-transform:uppercase;margin:0 0 12px">HYPERFLEX Alert</p>
+          <h2 style="margin:0 0 12px;font-size:17px;line-height:1.4">${shortQ}</h2>
+          <p style="margin:0 0 20px;font-size:15px">YES ${dir} from <strong>${baseCents}¢ → ${curCents}¢</strong> (${movePct.toFixed(0)}% move)</p>
+          <a href="${marketUrl}" style="display:inline-block;padding:10px 20px;background:#c9920d;color:#000;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">View Market →</a>
+          <p style="margin:20px 0 0;font-size:11px;color:#666">You requested this alert at hyperflex.network. <a href="${marketUrl}" style="color:#666">Unsubscribe</a></p>
+        </div>`,
+        text: `${shortQ}\n\nYES ${dir} from ${baseCents}¢ → ${curCents}¢ (${movePct.toFixed(0)}% move)\n\n${marketUrl}`,
+      });
+      if (pool) await dbQuery('UPDATE market_alerts SET triggered = true, triggered_at = now() WHERE id = $1', [a.id]);
+      else await supabase.from('market_alerts').update({ triggered: true, triggered_at: new Date().toISOString() }).eq('id', a.id);
+      fired++;
+    } catch { /* skip on send failure */ }
+  }
+  if (fired) console.log(`[email-market-alerts] Sent ${fired} alerts`);
 }));
 
 // GET /accuracy — Accuracy tracking page

@@ -1168,6 +1168,25 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div class="feed-col">
+
+  <!-- Visitor CTA — shown only when logged out -->
+  <div id="visitorCta" style="display:none;background:linear-gradient(135deg,rgba(201,146,13,0.12),rgba(168,85,247,0.08));border:1px solid rgba(201,146,13,0.3);border-radius:12px;padding:20px 22px;margin-bottom:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#c9920d;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Build your track record</div>
+    <div style="font-size:17px;font-weight:700;color:#f0f0f5;margin-bottom:6px;line-height:1.35">Post predictions. Earn a reputation.<br>No wallet needed.</div>
+    <div style="font-size:13px;color:#8888a0;margin-bottom:18px">Join thousands tracking predictions on Polymarket. Sign up free in 10 seconds.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <a href="/creator/login" style="display:inline-flex;align-items:center;gap:8px;padding:11px 20px;background:#c9920d;color:#000;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;transition:background .15s" onmouseover="this.style.background='#e0a820'" onmouseout="this.style.background='#c9920d'">
+        Get started free →
+      </a>
+      <span style="font-size:12px;color:#8888a0">Already trading? <a href="/creator/login" style="color:#4d9fff;text-decoration:none">Connect Polymarket →</a></span>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#8888a0">✓ Post takes on any market</span>
+      <span style="font-size:11px;color:#8888a0">✓ Paper trade with $1,000 virtual USDC</span>
+      <span style="font-size:11px;color:#8888a0">✓ Build a verified track record</span>
+    </div>
+  </div>
+
   <div class="feed-header">
     <div class="feed-title"><a href="/feed" style="color:inherit;text-decoration:none">FLEX Feed</a></div>
     <div class="tabs">
@@ -1232,6 +1251,20 @@ a:hover { text-decoration: underline; }
 
 <!-- ══ Right Sidebar ══ -->
 <div class="sidebar-col">
+
+  <!-- Daily Pick widget -->
+  <div class="rail-section" id="dailyPickSection" style="display:none">
+    <div class="rail-head">
+      <span class="rail-head-dot" style="background:#00e68a;box-shadow:0 0 10px rgba(0,230,138,0.7)"></span>
+      <span style="color:#00e68a">Daily Pick</span>
+      <span class="rail-head-age" id="dailyPickDate">today</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="dailyPickBody" style="padding:12px 0 4px">
+      <div class="rail-empty">Loading today's pick…</div>
+    </div>
+  </div>
+
   <!-- Top Predictors — verified, this week. Hero + rank strip rhythm
        mirrors the left rail with a purple palette to differentiate
        "people" (verified predictors) from "markets" (edge-scored). -->
@@ -2754,6 +2787,16 @@ async function deleteMyPrediction(predId, btn) {
 
 // ── Init ──
 (function() {
+  // Show visitor CTA for logged-out users; hide wallet prompt
+  if (!token) {
+    var vcta = document.getElementById('visitorCta');
+    if (vcta) vcta.style.display = 'block';
+    var wp = document.getElementById('walletPrompt');
+    if (wp) wp.style.display = 'none';
+    var pb = document.getElementById('postBar');
+    if (pb) pb.style.display = 'none';
+  }
+
   try {
     var payload = JSON.parse(atob(token.split('.')[1]));
     var name = payload.display_name || payload.email || '';
@@ -2765,6 +2808,7 @@ async function deleteMyPrediction(predId, btn) {
   loadHotAlpha();        // left rail — edge-scored markets
   loadTopPredictors();   // right rail — verified predictors, 7d
   loadWhaleMoves();      // right rail — biggest whale positions, live
+  loadDailyPick();       // right rail — daily pick widget
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
   // Refresh predictors every 5 min (stats don't tick by the second)
@@ -2973,6 +3017,80 @@ function tickAlphaAge() {
   if (sec < 60) el.textContent = sec + 's ago';
   else if (sec < 3600) el.textContent = Math.round(sec / 60) + 'm ago';
   else el.textContent = '—';
+}
+
+// ── Daily Pick widget ──
+var _dailyPickVoted = false;
+async function loadDailyPick() {
+  var section = document.getElementById('dailyPickSection');
+  var body = document.getElementById('dailyPickBody');
+  var dateEl = document.getElementById('dailyPickDate');
+  if (!section || !body) return;
+  try {
+    var r = await fetch(API + '/api/daily-pick', { headers: authHeaders() });
+    if (!r.ok) return;
+    var d = await r.json();
+    if (!d.pick) return;
+    var p = d.pick;
+    section.style.display = '';
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+    var totalVotes = (p.yes_votes || 0) + (p.no_votes || 0);
+    var yesPct = totalVotes ? Math.round(p.yes_votes / totalVotes * 100) : 50;
+    var noPct = 100 - yesPct;
+    var userVote = d.user_vote;
+    var streak = d.streak || 0;
+    var yesC = p.yes_price != null ? Math.round(p.yes_price * 100) : '—';
+    var noC  = p.no_price  != null ? Math.round(p.no_price  * 100) : '—';
+
+    var streakHtml = streak >= 2
+      ? '<div style="font-family:var(--mono,monospace);font-size:10px;color:#c9920d;font-weight:700;margin-bottom:10px">' + streak + '-day streak</div>'
+      : '';
+
+    var voteHtml;
+    if (userVote) {
+      // Already voted — show result breakdown
+      voteHtml = '<div style="display:flex;gap:6px;margin-bottom:10px">' +
+        '<div style="flex:1;background:rgba(0,230,138,0.12);border:1px solid rgba(0,230,138,0.3);border-radius:7px;padding:8px;text-align:center">' +
+          '<div style="font-family:var(--mono,monospace);font-size:9px;color:#00e68a;font-weight:700;margin-bottom:2px">YES ' + yesC + '¢</div>' +
+          '<div style="font-size:14px;font-weight:800;color:#f0f0f5">' + yesPct + '%</div>' +
+        '</div>' +
+        '<div style="flex:1;background:rgba(255,77,106,0.10);border:1px solid rgba(255,77,106,0.25);border-radius:7px;padding:8px;text-align:center">' +
+          '<div style="font-family:var(--mono,monospace);font-size:9px;color:#ff4d6a;font-weight:700;margin-bottom:2px">NO ' + noC + '¢</div>' +
+          '<div style="font-size:14px;font-weight:800;color:#f0f0f5">' + noPct + '%</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#8888a0;text-align:center">You picked <strong style="color:' + (userVote==='YES'?'#00e68a':'#ff4d6a') + '">' + userVote + '</strong> · ' + totalVotes + ' total votes</div>';
+    } else {
+      // Not voted yet
+      var loginHint = !token ? '<div style="margin-top:10px;font-size:11px;color:#8888a0;text-align:center"><a href="/creator/login" style="color:#4d9fff;text-decoration:none">Sign in</a> to track your streak</div>' : '';
+      voteHtml = '<div style="display:flex;gap:8px;margin-bottom:6px">' +
+        '<button onclick="castDailyVote(\'YES\')" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(0,230,138,0.4);background:rgba(0,230,138,0.08);color:#00e68a;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--sans)">YES ' + yesC + '¢</button>' +
+        '<button onclick="castDailyVote(\'NO\')"  style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,77,106,0.35);background:rgba(255,77,106,0.07);color:#ff4d6a;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--sans)">NO ' + noC + '¢</button>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#8888a0;text-align:center">' + totalVotes + ' votes so far</div>' + loginHint;
+    }
+
+    var shortQ = p.question.length > 100 ? p.question.slice(0, 97) + '…' : p.question;
+    body.innerHTML = streakHtml +
+      '<a href="/market/' + esc(p.market_slug) + '?from=daily-pick" style="display:block;font-size:13px;font-weight:600;color:#f0f0f5;line-height:1.4;margin-bottom:12px;text-decoration:none">' + esc(shortQ) + '</a>' +
+      voteHtml;
+    window._dailyPickSlug = p.market_slug;
+    window._dailyPickQ = p.question;
+    window._dailyPickYesPrice = p.yes_price;
+  } catch (e) { /* silent */ }
+}
+
+async function castDailyVote(side) {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  try {
+    var r = await fetch(API + '/api/daily-pick/vote', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ side }),
+    });
+    if (!r.ok) { var e = await r.json(); alert(e.error || 'Vote failed'); return; }
+    loadDailyPick(); // refresh to show results
+  } catch (e) { alert('Vote failed: ' + e.message); }
 }
 
 async function loadHotAlpha() {
