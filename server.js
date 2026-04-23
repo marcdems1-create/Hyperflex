@@ -716,7 +716,7 @@ ${urls.join('\n')}
   }
 });
 
-// Serve explore.html as the homepage — explore IS the hub
+// Homepage → FLEX Feed
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(require('path').join(__dirname, 'public', 'feed.html'));
