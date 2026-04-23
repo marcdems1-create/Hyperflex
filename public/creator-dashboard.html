@@ -22467,8 +22467,30 @@ async function confirmTrade() {
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
       } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
-        // FOK failed due to insufficient liquidity — suggest switching to Limit
-        errEl.innerHTML = 'order couldn\'t be fully filled. FOK orders are fully filled or killed.<br><button onclick="toggleOrderType();this.parentElement.style.display=\'none\'" style="margin-top:8px;padding:8px 16px;background:var(--gold);color:#000;border:none;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Switch to Limit order →</button>';
+        // FOK failed on a thin book (typical on illiquid markets where the
+        // top bid can vanish between our book-walk and the submit). Auto-
+        // retry as GTC at the same limit: if it fills partially, great; if
+        // the book has moved, the order rests and the user can cancel on
+        // Polymarket. Either outcome beats a hard rejection with a
+        // manual-intervention button. Recursion-guarded via _fokFallbackFired.
+        const alreadyFellBack = _tradeModalData && _tradeModalData._fokFallbackFired;
+        if (!alreadyFellBack && (_tradeModalData._orderType || 'FOK') !== 'GTC') {
+          _tradeModalData._fokFallbackFired = true;
+          _tradeModalData._orderType = 'GTC';
+          const otBtn = document.getElementById('tradeOrderTypeBtn');
+          if (otBtn) otBtn.textContent = 'Limit ▾';
+          const plbl = document.getElementById('tradePriceLabel');
+          if (plbl) plbl.textContent = 'Limit Price';
+          console.log('[qt-trade] FOK rejected — auto-retrying as Limit GTC');
+          if (typeof showToast === 'function') showToast('Book too thin for Market fill — placing as Limit order', 'info');
+          btn.disabled = true;
+          btn.textContent = 'Retrying as Limit...';
+          errEl.style.display = 'none';
+          return confirmTrade();
+        }
+        // Either already retried or user placed a GTC originally — surface
+        // the failure honestly.
+        errEl.innerHTML = 'Order couldn\'t be filled.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Book is too thin at this price. Try a smaller size or wait for the book to fill in.</span>';
       } else {
         const msg = data.error || data.message || (typeof data === 'string' ? data : '');
         errEl.textContent = msg || ('Order rejected by CLOB (' + res.status + ')');
