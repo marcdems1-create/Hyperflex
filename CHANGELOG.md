@@ -7,6 +7,17 @@
 
 ## 2026-04-23 — Session 17 (Claude Code)
 
+### fix: deposit flow now lands USDC.e, not native USDC
+- **File:** `public/market.html` → deposit modal (Jumper widget config), `fetchUsdcBalance()`, modal state, balance display
+- **Bug:** Jumper/LI.FI widget `toToken` was pointed at **native USDC** (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`). Polymarket CTF V1 trading collateral is **USDC.e** (`0x2791Bca1…`) and V2's pUSD wraps USDC.e. Users who deposited via Bridge & Swap got a non-zero trading-wallet balance that couldn't place any order — "insufficient balance" at CLOB submit despite the UI saying there was $X.
+- **Fixes:**
+  1. Jumper `toToken` flipped to USDC.e. All new bridge deposits land correctly.
+  2. `fetchUsdcBalance()` now returns `{ usdce, native, total }` instead of a single number so the deposit modal can distinguish tradeable (USDC.e) from needs-conversion (native).
+  3. Legacy rescue: if proxy already holds native USDC, modal shows a "⚠ $X native USDC — Convert to USDC.e →" banner linking to a Jumper same-chain swap.
+  4. Direct Transfer MAX / input gated on USDC.e only (was summing both). Native USDC in EOA gets a subtle "swap it to use it" blue banner.
+  5. "No USDC on Polygon" copy now branches: shows "$X native USDC detected, use Bridge & Swap to convert" when that's the actual situation.
+- **Don't break:** `fetchUsdcBalance` return type changed from `number | null` to `{usdce, native, total} | null`. Only two callers updated (`openDepositModal`). If you add new callers, read `.total` for the number-equivalent or `.usdce` for the tradeable-only amount.
+
 ### fix: market page now sees native USDC + pUSD (matches dashboard)
 - **File:** `public/market.html` → `fetchTradeBalance()` + setup-panel balance block
 - User deposited native USDC from MetaMask. Dashboard showed it correctly; market page showed $0. Cause: dashboard uses `/api/portfolio/alchemy/:address` which sums USDC.e + native USDC + pUSD; market page was doing a direct `USDC.e.balanceOf(proxy)` RPC call that missed the native USDC.

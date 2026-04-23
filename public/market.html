@@ -1823,11 +1823,23 @@ async function fetchUsdcBalance(address) {
   if (!address) return null;
   try {
     var provider = await getPublicProvider();
-    var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+    var usdceAddr  = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e (bridged) — what Polymarket trades
+    var usdcNative = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native USDC — NOT directly tradeable
     var abi = ['function balanceOf(address) view returns (uint256)'];
-    var contract = new ethers.Contract(usdcAddress, abi, provider);
-    var raw = await contract.balanceOf(address);
-    return parseFloat(ethers.formatUnits(raw, 6));
+    var usdceC  = new ethers.Contract(usdceAddr, abi, provider);
+    var usdcNC  = new ethers.Contract(usdcNative, abi, provider);
+    var [rawE, rawN] = await Promise.all([
+      usdceC.balanceOf(address).catch(() => 0n),
+      usdcNC.balanceOf(address).catch(() => 0n),
+    ]);
+    var usdceN = parseFloat(ethers.formatUnits(rawE, 6));
+    var nativeN = parseFloat(ethers.formatUnits(rawN, 6));
+    // Return object so callers can distinguish tradeable (USDC.e) vs
+    // needs-conversion (native USDC). Legacy callers that expect a number
+    // should use the `.total` property or read `.usdce` for the tradeable
+    // portion. Keeping the original single-number return behavior via a
+    // Number-subclass-ish shape would be too magical — callers updated.
+    return { usdce: usdceN, native: nativeN, total: usdceN + nativeN };
   } catch (e) {
     console.warn('[deposit] USDC balance lookup failed:', e.message);
     return null;
@@ -1890,18 +1902,26 @@ async function openDepositModal() {
     }
     if (!proxy) throw new Error('Could not resolve your trading wallet. Complete setup first.');
 
-    // Fetch both balances in parallel
-    var [eoaBal, proxyBal, polBal] = await Promise.all([
+    // Fetch both balances in parallel. fetchUsdcBalance now returns
+    // { usdce, native, total } so we can surface native USDC separately
+    // (it isn't directly tradeable — needs conversion to USDC.e).
+    var [eoaObj, proxyObj, polBal] = await Promise.all([
       fetchUsdcBalance(eoa),
       fetchUsdcBalance(proxy),
       fetchPolBalance(eoa)
     ]);
+    var eoaBal   = eoaObj   ? eoaObj.total   : 0;
+    var proxyBal = proxyObj ? proxyObj.total : 0;
 
     window._lastDepositState = {
       eoa: eoa,
       proxy: proxy,
       eoaBalance: eoaBal,
+      eoaUsdce:   eoaObj   ? eoaObj.usdce    : 0,
+      eoaNative:  eoaObj   ? eoaObj.native   : 0,
       proxyBalance: proxyBal,
+      proxyUsdce:   proxyObj ? proxyObj.usdce  : 0,
+      proxyNative:  proxyObj ? proxyObj.native : 0,
       polBalance: polBal
     };
     if (!window._depositModalTab) window._depositModalTab = 'bridge';
@@ -1976,8 +1996,12 @@ function _depositModalFrame(state) {
 
   // Default state: ready to deposit
   var eoaBal = state.eoaBalance != null ? state.eoaBalance : 0;
+  var eoaUsdceOnly = state.eoaUsdce != null ? state.eoaUsdce : eoaBal;
+  var eoaNative    = state.eoaNative != null ? state.eoaNative : 0;
   var proxyBal = state.proxyBalance != null ? state.proxyBalance : 0;
-  var hasEoaUsdc = eoaBal >= 0.01;
+  // hasEoaUsdc gates Direct Transfer — which only moves USDC.e. Native USDC
+  // doesn't count here (user has to swap it first).
+  var hasEoaUsdc = eoaUsdceOnly >= 0.01;
   var hasGas = state.polBalance == null || state.polBalance >= 0.001; // ~$0.0005 gas
 
   // Tab state for deposit modal — 'transfer' (direct USDC) or 'bridge' (Jumper widget)
@@ -2016,13 +2040,31 @@ function _depositModalFrame(state) {
 
     (depositTab === 'bridge'
       ? // ── BRIDGE & SWAP TAB — Jumper/LI.FI widget ──
+        // toToken = USDC.e (0x2791…) NOT native USDC (0x3c499…). Polymarket's
+        // CTF V1 collateral is USDC.e and V2's pUSD wraps USDC.e; native USDC
+        // is not directly tradeable on Polymarket. Bridging to native USDC
+        // (the previous behavior) left users with a non-zero balance that
+        // couldn't place orders — see CHANGELOG session 17 entry for the
+        // full bug write-up.
         '<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px">' +
-          '<iframe id="jumperWidget" src="https://iframe.jumper.exchange/?toChain=137&toToken=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' +
+          '<iframe id="jumperWidget" src="https://iframe.jumper.exchange/?toChain=137&toToken=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' +
             (state.proxy ? '&toAddress=' + state.proxy : '') +
             '&integrator=hyperflex&fee=0.005&appearance=dark&variant=compact" ' +
             'style="width:100%;height:440px;border:none;display:block" ' +
             'allow="clipboard-write" loading="lazy"></iframe>' +
         '</div>' +
+        // Legacy-native-USDC rescue: if the proxy already holds native USDC
+        // from a pre-fix deposit, show a one-click swap CTA. Opens Jumper
+        // same-chain swap (Polygon → Polygon, native USDC → USDC.e).
+        ((state.proxyNative || 0) >= 0.01
+          ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;margin-bottom:10px">' +
+              '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gold,#c9920d);margin-bottom:4px">⚠ $' + (state.proxyNative || 0).toFixed(2) + ' native USDC in your trading wallet</div>' +
+              '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px">Native USDC can\'t be traded on Polymarket directly. Swap it to USDC.e to make it tradeable.</div>' +
+              '<a href="https://jumper.exchange/?fromChain=137&fromToken=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359&toChain=137&toToken=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' +
+                (state.proxy ? '&toAddress=' + state.proxy : '') +
+                '&integrator=hyperflex" target="_blank" rel="noopener" style="display:inline-block;background:var(--gold,#c9920d);color:#0a0a0f;padding:8px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:800;text-decoration:none">Convert to USDC.e →</a>' +
+            '</div>'
+          : '') +
         '<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.15);border-radius:8px;margin-bottom:10px">' +
           '<span style="font-size:14px;flex-shrink:0;margin-top:1px">✦</span>' +
           '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6">' +
@@ -2031,15 +2073,22 @@ function _depositModalFrame(state) {
         '</div>'
 
       : // ── DIRECT TRANSFER TAB ──
+      // Direct Transfer moves USDC.e on-chain. Input max is gated on
+      // USDC.e only — native USDC in MetaMask doesn't count here. Native
+      // USDC users get routed to Bridge & Swap (which handles same-chain
+      // native→USDC.e swap).
       (hasEoaUsdc
-        ? // Has USDC → show input + action
-          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit</div>' +
+        ? // Has USDC.e → show input + action
+          ((eoaNative || 0) >= 0.01
+            ? '<div style="padding:8px 12px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.2);border-radius:6px;margin-bottom:10px;font-family:var(--mono);font-size:10px;color:var(--blue,#4d9fff);line-height:1.5">You also have <strong>$' + (eoaNative || 0).toFixed(2) + '</strong> native USDC — <button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="background:none;border:none;color:var(--blue,#4d9fff);text-decoration:underline;cursor:pointer;padding:0;font:inherit">swap it to USDC.e</button> to use it for trading.</div>'
+            : '') +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit (USDC.e)</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
             '<div style="flex:1;position:relative">' +
               '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:15px;color:var(--muted)">$</span>' +
-              '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaBal + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
+              '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaUsdceOnly + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
             '</div>' +
-            '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaBal.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
+            '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaUsdceOnly.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
           '</div>' +
 
           (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:var(--mono);font-size:10px;color:var(--gold,#c9920d);line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
@@ -2050,11 +2099,18 @@ function _depositModalFrame(state) {
 
           '<div style="text-align:center;margin-top:10px"><button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="background:none;border:none;color:var(--blue,#4d9fff);font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:underline">Need USDC from another chain? Use Bridge & Swap →</button></div>'
 
-        : // No USDC → show bridge as primary, Ramp as fallback
-          '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
-            '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#00e68a;margin-bottom:6px">No USDC on Polygon</div>' +
-            '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Use <strong style="color:var(--text)">Bridge & Swap</strong> to send funds from any chain, or buy USDC with a card.</div>' +
-          '</div>' +
+        : // No USDC.e → show bridge as primary, Ramp as fallback.
+          // If user has native USDC, surface it explicitly so they don't
+          // think "No USDC" means they're literally empty.
+          ((eoaNative || 0) >= 0.01
+            ? '<div style="padding:14px 16px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.25);border-radius:10px;margin-bottom:14px">' +
+                '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--blue,#4d9fff);margin-bottom:6px">$' + (eoaNative || 0).toFixed(2) + ' native USDC detected</div>' +
+                '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Polymarket trades USDC.e specifically. Use <strong style="color:var(--text)">Bridge & Swap</strong> below to convert your native USDC → USDC.e in one step.</div>' +
+              '</div>'
+            : '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
+                '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:#00e68a;margin-bottom:6px">No USDC on Polygon</div>' +
+                '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Use <strong style="color:var(--text)">Bridge & Swap</strong> to send funds from any chain, or buy USDC with a card.</div>' +
+              '</div>') +
 
           '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
             '<button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.3);border-radius:8px;color:var(--text);cursor:pointer;transition:all 0.15s;width:100%;text-align:left">' +
