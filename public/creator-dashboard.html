@@ -21640,12 +21640,19 @@ async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
 const DASH_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
 async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
   if (!ownerAddr || !operator) return false;
+  // Cache approval in localStorage — approval is permanent on-chain so we only
+  // need to check once per (proxy, exchange) pair. This eliminates the repeated
+  // setApprovalForAll MetaMask popup on every subsequent sell.
+  const _cacheKey = 'hfx_ctf_ok_' + ownerAddr.slice(-8).toLowerCase() + '_' + operator.slice(-8).toLowerCase();
+  if (localStorage.getItem(_cacheKey) === '1') return true;
   try {
     const provider = await getDashboardPublicProvider();
     const ctf = new ethers.Contract(DASH_CONDITIONAL_TOKENS, [
       'function isApprovedForAll(address account, address operator) view returns (bool)'
     ], provider);
-    return await ctf.isApprovedForAll(ownerAddr, operator);
+    const approved = await ctf.isApprovedForAll(ownerAddr, operator);
+    if (approved) localStorage.setItem(_cacheKey, '1');
+    return approved;
   } catch (e) {
     console.warn('[dash-ctf] isApprovedForAll check failed:', e.message);
     return false;
@@ -22530,12 +22537,18 @@ async function confirmTrade() {
     _confirmTradeRetryCount = 0; // reset on success
     console.log('[qt-trade] Order success:', data);
 
-    // Calculate P&L for sells (estimated from cost basis if available)
+    // Calculate P&L for sells (proceeds minus cost basis)
     var tradePnl = null;
     if (clobSide === 'SELL' && _tradeModalData) {
-      var costBasis = _tradeModalData.avg_price || _tradeModalData.avgPrice || _tradeModalData.cost_basis || null;
-      if (costBasis && costBasis > 0) {
-        tradePnl = (roundedPrice - costBasis) * finalShares;
+      // avg_cost is per-share average entry price (initialValue / size from Polymarket API).
+      // cost_basis is the TOTAL dollars spent — NOT per-share — so don't use it in the
+      // per-share formula (roundedPrice - costBasis) * shares, which produced absurd values
+      // like -$1204 on a $6.66 sell.
+      var perShareBasis = _tradeModalData.avg_cost
+        || (_tradeModalData.shares > 0 ? (_tradeModalData.cost_basis || 0) / _tradeModalData.shares : null)
+        || null;
+      if (perShareBasis && perShareBasis > 0) {
+        tradePnl = (roundedPrice - perShareBasis) * finalShares;
       }
     }
 
