@@ -382,17 +382,40 @@ function drawPnlChart(){
 
 async function toggleFollow(){
   var btn=document.getElementById('followBtn');
-  if(!btn||!_data||!_data.hfx_user_id)return;
+  if(!btn||!_data)return;
   var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
-  if(!token){showToast('Sign in to follow');return}
+  if(!token){
+    // Not logged in — show inline sign-in prompt in place of button
+    var signinUrl='/creator/login?next='+encodeURIComponent(window.location.pathname);
+    btn.outerHTML='<a href="'+signinUrl+'" class="follow-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">Sign in to follow</a>';
+    return;
+  }
+  if(!_data.hfx_user_id){showToast('Profile not indexed yet — try again in a moment');return;}
+  var prev=btn.textContent;
+  btn.disabled=true;
+  btn.textContent='...';
   try{
     var r=await fetch('/api/predictors/'+_data.hfx_user_id+'/follow',{method:'POST',headers:{Authorization:'Bearer '+token}});
+    if(r.status===401){
+      // Token expired — bounce to login
+      btn.disabled=false;btn.textContent=prev;
+      var signinUrl='/creator/login?next='+encodeURIComponent(window.location.pathname);
+      btn.outerHTML='<a href="'+signinUrl+'" class="follow-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">Sign in to follow</a>';
+      return;
+    }
     if(r.ok){
       var d=await r.json();
+      btn.disabled=false;
       if(d.following){btn.classList.add('active');btn.textContent='Following \u2713';}
       else{btn.classList.remove('active');btn.textContent='+ Follow';}
+    } else {
+      btn.disabled=false;btn.textContent=prev;
+      showToast('Could not follow — please try again');
     }
-  }catch(e){}
+  }catch(e){
+    btn.disabled=false;btn.textContent=prev;
+    showToast('Network error — please try again');
+  }
 }
 
 async function checkFollowState(){

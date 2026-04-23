@@ -220,6 +220,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 
 .sfs-ctas{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px}
 </style>
+<script src="/utils.js"></script>
 </head>
 <body>
 <nav>
@@ -251,15 +252,12 @@ const API = location.origin;
 async function _resolveProfileUserId() {
   const path = location.pathname;
   if (path.startsWith('/@')) {
-    const handle = path.slice(2).split('/')[0]; // handle or handle in "handle/passport"
+    const handle = path.slice(2).split('/')[0];
     if (!handle) return null;
     try {
       const r = await fetch(API + '/api/user-by-handle/' + encodeURIComponent(handle));
       if (r.ok) {
         const d = await r.json();
-        // Cache the full payload so the Flex Score card can render without
-        // re-fetching. Flex fields (score / tier / components) come back on
-        // this same endpoint per Charter §8 single-surface rule.
         if (d && d.id) { window._profilePayload = d; return d.id; }
       }
     } catch {}
@@ -268,21 +266,7 @@ async function _resolveProfileUserId() {
   return path.split('/').pop() || null;
 }
 
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const ts   = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-  if (diff < 0)    return 'just now';
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  if (diff < 86400*30) return `${Math.floor(diff/86400)}d ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-}
-
-function getInitials(name) {
-  return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
+// timeAgo + getInitials defined in utils.js
 
 function tierBadge(winRate, streak) {
   let badges = '';
@@ -917,13 +901,26 @@ async function load() {
         </button>
       </div>
 
+      <!-- Polymarket open positions — shown for verified whale profiles -->
+      ${isWhale && walletAddr ? '<div id="whalePositions" style="margin:16px 0 24px"></div>' : ''}
+
+      <!-- Best Call trophy -->
+      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
+        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
+        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
+          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
+          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
+        </div>
+      </div>
+
       <!-- Tabs -->
       <div class="tabs" role="tablist">
         <button class="tab-btn active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
         <button class="tab-btn" onclick="switchProfileTab('trades',this)">Trades${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
         <button class="tab-btn" onclick="switchProfileTab('record',this)">Track Record</button>
         <button class="tab-btn" onclick="switchProfileTab('sports',this)">🏆 Sports</button>
-      </div>
 
       <!-- TAKES -->
       <div id="tab-takes" class="tab-pane active">
@@ -1135,6 +1132,9 @@ async function load() {
     loadAnalytics(userId);
     loadTrophyCard(userId);
     loadInviteSection(userId);
+    if (isWhale && walletAddr) loadWhalePositions(walletAddr);
+    showOwnerTools(userId, user.wallet_verified);
+    loadSocialPredictions(userId);
   } catch (err) {
     console.error(err);
     page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
@@ -1565,6 +1565,46 @@ async function loadAnalytics(userId) {
   } catch(e) { console.warn('analytics', e); }
 }
 
+// ── WHALE POSITIONS ────────────────────────────────────────────────────────────
+async function loadWhalePositions(walletAddr) {
+  const el = document.getElementById('whalePositions');
+  if (!el) return;
+  try {
+    const res = await fetch(`/api/trader/${encodeURIComponent(walletAddr)}/profile`);
+    if (!res.ok) { el.remove(); return; }
+    const d = await res.json();
+    const open = (d.polymarket?.open_positions || []).filter(p => p.size > 0).slice(0, 8);
+    if (!open.length) { el.remove(); return; }
+    const pnlColor = v => v > 0 ? '#00e68a' : v < 0 ? '#ff4d6a' : 'var(--muted)';
+    el.innerHTML = `
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:12px">
+        Polymarket Positions <span style="font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted)">${open.length} open</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        ${open.map(p => {
+          const sideColor = (p.side || '').toUpperCase() === 'YES' ? '#00e68a' : '#ff4d6a';
+          const sideBg = (p.side || '').toUpperCase() === 'YES' ? 'rgba(0,230,138,0.1)' : 'rgba(255,77,106,0.1)';
+          const pricePct = p.cur_price ? Math.round(p.cur_price * 100) + '¢' : '';
+          const sizeK = p.size >= 1000 ? '$' + Math.round(p.size / 1000) + 'K' : '$' + Math.round(p.size);
+          const pnlStr = p.pnl != null ? (p.pnl >= 0 ? '+$' + Math.round(p.pnl) : '-$' + Math.round(Math.abs(p.pnl))) : '';
+          const href = p.market_url || '#';
+          return `<a href="${href}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(30,30,42,0.5);text-decoration:none;transition:background .1s">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.question || 'Unknown market'}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideBg};padding:2px 7px;border-radius:4px">${(p.side || '').toUpperCase()}</span>
+                ${pricePct ? `<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${pricePct}</span>` : ''}
+                <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${sizeK}</span>
+                ${pnlStr ? `<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${pnlColor(p.pnl)}">${pnlStr}</span>` : ''}
+              </div>
+            </div>
+            <span style="font-size:10px;color:var(--muted);flex-shrink:0">↗</span>
+          </a>`;
+        }).join('')}
+      </div>`;
+  } catch (e) { if (el) el.remove(); }
+}
+
 // ── FOLLOW SYSTEM ─────────────────────────────────────────────────────────────
 let _isFollowing = false;
 
@@ -1954,20 +1994,6 @@ function showOwnerTools(profileUserId, walletVerified) {
   } catch {}
 }
 
-// Wire up social predictions + owner tools after main load
-const _origLoad = load;
-load = async function() {
-  await _origLoad();
-  loadSocialPredictions(userId);
-  // Check if owner should see tools
-  try {
-    const r = await fetch(`${API}/api/member/${userId}`);
-    if (r.ok) {
-      const d = await r.json();
-      showOwnerTools(userId, d.user?.wallet_verified);
-    }
-  } catch {}
-};
 </script>
 </body>
 </html>

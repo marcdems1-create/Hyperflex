@@ -519,6 +519,58 @@ nav {
 .trade-action .market-link:hover { text-decoration: underline; }
 .trade-time { font-size: 11px; color: var(--muted); flex-shrink: 0; padding-top: 2px; }
 
+/* ── HOT ALPHA carousel ── */
+#explore-top-edges { overflow: hidden; }
+
+/* desktop: vertical list */
+#exploreEdgeList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alpha-edge-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s;
+  min-width: 0;
+}
+.alpha-edge-card:hover { border-color: var(--gold); }
+
+/* mobile: horizontal swipe carousel */
+@media (max-width: 640px) {
+  #explore-top-edges { padding: 14px 14px 10px !important; }
+  #exploreEdgeList {
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 4px;
+    /* negative margin to let cards bleed past padding for swipe feel */
+    margin-right: -14px;
+    padding-right: 14px;
+  }
+  #exploreEdgeList::-webkit-scrollbar { display: none; }
+  .alpha-edge-card {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-shrink: 0;
+    width: 200px;
+    gap: 6px;
+    padding: 12px;
+  }
+  .alpha-edge-card .aec-score { font-size: 22px !important; min-width: unset !important; text-align: left !important; }
+  .alpha-edge-card .aec-meta { flex-direction: column; gap: 3px; }
+}
+
 /* SIDEBAR */
 .sidebar-card {
   background: rgba(22,22,31,0.8);
@@ -1053,6 +1105,7 @@ nav {
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
+<script src="/utils.js"></script>
 <script src="/nav.js?v=20"></script>
 
 <!-- Member Auth Modal -->
@@ -1335,16 +1388,6 @@ nav {
 })();
 </script>
 
-<!-- REWARDS CTA BANNER -->
-<div style="max-width:1200px;margin:0 auto;padding:0 40px">
-  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:16px;background:linear-gradient(90deg,rgba(0,230,138,0.06),rgba(77,159,255,0.04));border:1px solid rgba(0,230,138,0.15);border-radius:10px;text-decoration:none;transition:all 0.2s;backdrop-filter:blur(8px)" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(0,230,138,0.15)';this.style.transform='none'">
-    <span style="font-size:18px">&#x1F4B0;</span>
-    <span style="font-family:var(--sans);font-size:12px;font-weight:700;color:#00e68a;letter-spacing:-0.2px">Earn USDC on every trade</span>
-    <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Trade through HYPERFLEX and get rewarded weekly</span>
-    <span style="margin-left:auto;font-family:var(--sans);font-size:11px;font-weight:600;color:#4d9fff;white-space:nowrap">Learn more &rarr;</span>
-  </a>
-</div>
-
 <!-- Hidden containers for JS compatibility -->
 <div style="display:none"><div id="hubSignalCards"></div><div id="hubScreenerCards"></div><div id="hubCrystalCards"></div><div id="aiEdgeCards"></div></div>
 
@@ -1361,14 +1404,14 @@ nav {
 
     <!-- TOP EDGES — live alpha feed -->
     <div id="explore-top-edges" class="sidebar-card" style="margin-bottom:16px;border-top:2px solid var(--gold)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase">Top Edges Right Now</span>
-          <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
+          <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-green);display:inline-block;flex-shrink:0"></span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase">HOT ALPHA</span>
         </div>
-        <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Open Terminal &rarr;</a>
+        <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;letter-spacing:.04em">VIEW ALL &rarr;</a>
       </div>
-      <div id="exploreEdgeList" style="display:flex;flex-direction:column;gap:6px">
+      <div id="exploreEdgeList">
         <div style="font-size:12px;color:var(--muted);padding:8px 0">Loading edges...</div>
       </div>
     </div>
@@ -1973,20 +2016,7 @@ function switchTab(tab) {
   if (_exploreSearchQuery) applyExploreSearch();
 }
 
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const ts   = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-  if (diff < 0)    return 'just now';
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
-}
-
-function getInitials(name) {
-  return (name || 'A').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
-}
+// timeAgo + getInitials defined in utils.js
 
 function slugToColor(slug, communities) {
   return communities[slug]?.primary_color || '#c9920d';
@@ -2822,7 +2852,7 @@ function renderFeaturedSpotlight(sections, communities) {
     </a>`;
 }
 
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// escHtml defined in utils.js
 
 async function loadFeed() {
   try {
@@ -3401,7 +3431,7 @@ async function handleExploreCopyCta() {
     el.innerHTML = mkts.map(function(m) {
       var s = m.edge_score || 0;
       var fire = s > 75;
-      var q = (m.question || '').substring(0, 55);
+      var q = (m.question || '').substring(0, 60);
       var price = m.yes_price != null ? Math.round(m.yes_price * 100) : '--';
       var wh = m.whale_count || 0;
       var chg = m.price_change_24h || 0;
@@ -3409,22 +3439,23 @@ async function handleExploreCopyCta() {
       var chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(1) + '%';
       var roi = m.trade && m.trade.roi_pct ? m.trade.roi_pct : 0;
       var side = m.trade && m.trade.side ? m.trade.side : '';
+      var sideColor = side === 'YES' ? 'var(--accent-green)' : side === 'NO' ? 'var(--accent-red)' : 'var(--gold)';
+      var scoreColor = fire ? 'var(--accent-amber)' : 'var(--gold)';
       var slug = m.slug || '';
       var link = slug ? '/market/' + slug : '#';
-      return '<a href="' + link + '" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:inherit;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
-        + '<div style="font-family:var(--mono);font-size:16px;font-weight:800;min-width:36px;text-align:center;color:' + (fire ? 'var(--accent-amber)' : 'var(--gold)') + '">' + (fire ? '\uD83D\uDD25' : '') + s + '</div>'
-        + '<div style="flex:1;min-width:0;overflow:hidden">'
-        + '<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>'
-        + '<div style="display:flex;gap:10px;margin-top:3px;font-family:var(--mono);font-size:10px;color:var(--muted)">'
-        + '<span>' + price + '\u00A2</span>'
-        + (wh ? '<span>' + wh + ' whale' + (wh > 1 ? 's' : '') + '</span>' : '')
-        + '<span style="color:' + chgColor + '">' + chgStr + '</span>'
-        + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% max ROI</span>' : '')
-        + '</div></div>'
-        + '<div style="text-align:right;flex-shrink:0">'
-        + (side ? '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + (side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)') + ';margin-bottom:2px">' + side + '</div>' : '')
-        + '<div style="font-family:var(--mono);font-size:9px;color:var(--gold)">Trade \u2192</div>'
-        + '</div></a>';
+      return '<a href="' + link + '" class="alpha-edge-card">'
+        + '<div class="aec-score" style="font-family:var(--mono);font-size:16px;font-weight:800;min-width:36px;text-align:center;color:' + scoreColor + ';flex-shrink:0;line-height:1">' + (fire ? '\uD83D\uDD25' : '') + s + '</div>'
+        + '<div class="aec-body" style="flex:1;min-width:0;overflow:hidden">'
+          + '<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;line-height:1.35">' + q + '</div>'
+          + '<div class="aec-meta" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--muted);align-items:center">'
+            + '<span style="font-weight:700;color:' + sideColor + ';background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 5px">' + (side || (price + '\u00A2')) + '</span>'
+            + (wh ? '<span>' + wh + ' \uD83D\uDC33</span>' : '')
+            + '<span style="color:' + chgColor + '">' + chgStr + '</span>'
+            + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% ROI</span>' : '')
+          + '</div>'
+        + '</div>'
+        + '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold);flex-shrink:0;white-space:nowrap">Trade \u2192</div>'
+        + '</a>';
     }).join('');
   } catch(e) { console.warn('Top edges error:', e); }
 })();

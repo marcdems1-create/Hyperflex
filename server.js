@@ -11931,7 +11931,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports-predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
-app.get('/rewards', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rewards.html')));
+app.get('/rewards', (req, res) => res.redirect(302, '/'));
 
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
@@ -29405,18 +29405,20 @@ async function _buildAlphaListInner(opts = {}) {
     let binanceVolSurge = {};
     try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
-    // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
-    // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
-    // by 24h volume desc to get the actually-hot markets in our processing window.
+    // Fetch a wider window from Gamma API — we sort client-side by 24h volume anyway,
+    // so the server-side sort just needs to be a valid parameter.
+    // Use volume24hr (same as other callers) — volumeNum was non-standard and caused
+    // Gamma to return an error object instead of an array.
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volumeNum&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
-    const _rawAll = _gammaUnwrap(await mktRes.json());;
+    const _rawArr = _gammaUnwrap(await mktRes.json());
+    if (!Array.isArray(_rawArr) || _rawArr.length === 0) throw new Error('Gamma API returned 0 markets');
     // Pick the right volume metric per market: prefer 24h, fall back to lifetime
     const _vol = (m) => {
       const v24 = parseFloat(m.volume24hr || m.volume_24hr || 0);
@@ -29424,7 +29426,7 @@ async function _buildAlphaListInner(opts = {}) {
       return parseFloat(m.volume || m.volumeNum || 0);
     };
     // Sort all 500 by 24h volume desc — we'll slice top 350 + force-include whale markets later
-    const _sortedAll = (Array.isArray(_rawAll) ? _rawAll : []).sort((a, b) => _vol(b) - _vol(a));
+    const _sortedAll = _rawArr.sort((a, b) => _vol(b) - _vol(a));
 
     // Warm whale cache if empty (so Whale Moves lane always has data)
     if (!_whaleWatchCache || !_whaleWatchCache.data) {

@@ -620,8 +620,7 @@ function renderPodium(topN){
     var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlClass=pnl>=0?'':' negative';
-    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
-    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(dname||r.display_name||'');})();
     var platformHtml=(r.platforms||[]).map(function(p){
       var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
       return'<span class="platform-pill '+cls+'">'+p+'</span>';
@@ -663,8 +662,7 @@ function renderTable(data){
     var pnlStr=formatPnl(pnl);
     var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
     var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
-    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
-    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(dname||r.display_name||'');})();
     var uid=escHtml(r.user_id||'');
     var streak=r.win_streak||0;
     var streakHtml=streak>=5?'<span class="streak-badge streak-hot">'+streak+'W</span>':streak>0?'<span class="streak-badge">'+streak+'W</span>':'<span class="streak-badge">&mdash;</span>';
@@ -714,8 +712,7 @@ function renderHallOfFame(){
   if(!legends.length){section.style.display='none';return}
   grid.innerHTML=legends.map(function(r,i){
     var vol=r.volume||r.account_value||0;
-    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||r.display_name||'';
-    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(r.display_name||'');})();
     return'<a href="'+profileUrl+'" class="hof-card" style="text-decoration:none;cursor:pointer">'+
       '<div class="hof-rank">#'+(i+1)+'</div>'+
       '<div class="hof-name">'+escHtml(r.display_name)+'</div>'+
