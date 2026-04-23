@@ -565,6 +565,30 @@ These fields are NOT in the V2 EIP-712 signed struct, so they don't break signat
 
 **8. `checkTradingSetup` only checks ERC-20 allowances (USDC/pUSD), NOT CTF approvals.** Don't rely on the green "setup complete" banner to mean V2 SELL is ready. The CTF check fires lazily inside executeTrade. If we want to make the setup panel comprehensive, add a CTF V2 row alongside the existing 5 ERC-20 rows.
 
+### V2 SELL lessons (2026-04-22, session 15 — portfolio-tab path)
+
+Five separate guards have to all line up for a V2 SELL from the creator-dashboard `#portfolio` tab to succeed. All five were hit in one debugging session — codify so nobody re-lives it.
+
+**9. Never approve `type(uint256).max` on fresh V2 contracts — Blockaid flags as scam.** MetaMask's Blockaid layer treats `MAX_UINT256` approvals to low-reputation spenders as "deceptive — known for scams". The V2 exchanges (`CTF_EXCHANGE_V2` / `NEG_RISK_EXCHANGE_V2` / `COLLATERAL_ONRAMP`) deployed Apr 22 and haven't been whitelisted. Use `APPROVAL_CAP = '10000000000000000'` (10B tokens at 6 decimals) in `market.html` `approveTokens()`. `MAX_UINT256` is still defined as a harmless named constant, but all `.approve(spender, ...)` callsites must use `APPROVAL_CAP`. The `checkTokenApproval` threshold is 1M (atomic `1e12`) so 10B still registers as OK — no re-prompt on already-approved users. Don't "clean this up" by reverting to MaxUint — users will bounce on the scam banner.
+
+**10. `creator-dashboard.html` Quick Trade has its own `confirmTrade` — duplicate of `market.html`'s `executeTrade`.** Every V2 fix in `market.html` must be ported to `creator-dashboard.html`. The Quick Trade panel's confirmTrade was missing the V2 CTF `setApprovalForAll` pre-flight (#7 above) for months after `market.html` got it. Port pattern: next to `dashWrapUsdcToPmct`, add `dashIsCtfApprovedForOperator` + `dashApproveCtfForOperator` (both go through `dashExecuteViaProxy`), and wire the pre-flight in `confirmTrade` after the V2 BUY pUSD-wrap block. Before porting: grep `market.html` for `isCtfApprovedForOperator` / `setApprovalForAll` / `pUSD` and make sure `creator-dashboard.html` has an equivalent `dash`-prefixed copy for each callsite.
+
+**11. `proxyAddress` / `eoaAddress` must be hoisted to the top of `confirmTrade`.** The pre-sell on-chain CTF balance check references both; historically they were declared `const` ~60 lines below the check, making every on-chain verify silently throw `ReferenceError` via TDZ. The catch fell back to the cache and looked like it worked. After hoisting, DO NOT re-declare them lower in the function — the `const` redeclaration is a parse-time syntax error that kills every JS on the page (loadPortfolio, toggleConnectionsPanel, etc. all ReferenceError). Single declaration, at the top of `confirmTrade`, right after `errEl`/`btn` reads.
+
+**12. USD↔shares round-trip inflates — silent-clamp to on-chain, don't block.** User types `$1.56` at 5.7¢ → `confirmTrade` computes `shares = 1.56 / 0.057 = 27.37`, but on-chain is 27.29 (2-decimal USD rounding drift). Blocking with "Selling more than you hold" on a 0.3% overshoot is bad UX. In the pre-sell on-chain branch: if `onchainShares < shares` but overshoot ≤ 2%, clamp `shares = onchainShares` and back-compute `amount = shares * price` so the downstream maker/taker math uses the real number. Over 2% is almost certainly a real mistake and still errors. `amount` and `shares` at the top of `confirmTrade` must be `let`, not `const`, for the clamp to work. Apply to both the primary RPC path AND the RPC-failure cache-fallback branch — otherwise RPC flakiness breaks the clamp.
+
+**13. FOK auto-fallback to GTC on thin books.** V2 book walker sees the top of book (e.g. 48 shares at 4.1¢) but FOK all-or-nothing requires the FULL size to match at submit — if the lone bid vanishes between walk and submit, FOK rejects with `"order couldn't be fully filled"`. Auto-retry the same order as Limit GTC at the walked limit price: partial fill + resting order is strictly better than zero fill. Recursion-guarded via `_tradeModalData._fokFallbackFired` boolean so we can't loop. `openTradeModal` spreads a fresh `pos` every modal open, so the guard resets naturally between trades. Show a `showToast` to tell the user the retry is happening so the extra MetaMask sign prompt doesn't feel random.
+
+**Consolidated V2 SELL flow (both market.html executeTrade AND creator-dashboard.html confirmTrade):**
+1. Pre-sell on-chain CTF balance check (guard 12 clamp, guard 11 hoist)
+2. V2 BUY only: pUSD wrap via CollateralOnramp
+3. V2 SELL only: CTF setApprovalForAll pre-flight (guard 10 port)
+4. Build + sign + submit FOK order
+5. On FOK rejection: auto-retry as GTC (guard 13)
+6. Token approvals use APPROVAL_CAP not MAX_UINT256 (guard 9)
+
+Any new branch that touches `confirmTrade` or `executeTrade` must preserve all six steps. If a new session removes any of them to "simplify," trades will regress. Add a regression test before refactoring.
+
 ### Builder fees + Cloudflare Worker proxy
 
 Trades route through `cloudflare-trade-proxy/` (Worker) as the **primary** path to bypass geo-blocking. Direct CLOB is the fallback for non-geo-restricted users.
