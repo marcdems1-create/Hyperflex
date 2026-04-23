@@ -7,6 +7,13 @@
 
 ## 2026-04-23 — Session 17 (Claude Code)
 
+### fix: market page now sees native USDC + pUSD (matches dashboard)
+- **File:** `public/market.html` → `fetchTradeBalance()` + setup-panel balance block
+- User deposited native USDC from MetaMask. Dashboard showed it correctly; market page showed $0. Cause: dashboard uses `/api/portfolio/alchemy/:address` which sums USDC.e + native USDC + pUSD; market page was doing a direct `USDC.e.balanceOf(proxy)` RPC call that missed the native USDC.
+- **Fix:** Both balance-read sites in `market.html` now call the Alchemy endpoint first (`usdc_total + pusd`), fall back to the existing RPC / Polymarket profile-API path if Alchemy is unreachable (503/error). Dashboard and market page now show the same number.
+- **Caveat:** This only fixes the *display*. Polymarket V1 trading collateral is USDC.e specifically. A user holding only native USDC will see a non-zero balance but still fail at order submit with "insufficient balance." Future work: auto-swap native USDC → USDC.e on deposit, or show per-token breakdown so users know what to do.
+- **Don't break:** The 3-tier fallback order matters: Alchemy → RPC → Polymarket profile API. Each one only fires if the previous returned null.
+
 ### chore: retire /arbitrage page (API stays alive)
 - **Files:** deleted `public/arbitrage.html`; edited `public/nav.js` (removed 2 nav entries); `server.js` (turned the route into a 301 → `/`).
 - The standalone page wasn't driving value. Users get the same cross-platform spread signal on `/odds` and inside the creator dashboard, both of which still consume `/api/arbitrage` and `/api/v1/arbitrage`.
