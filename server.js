@@ -22783,13 +22783,21 @@ app.get('/api/markets/search', async (req, res) => {
     //   Per-word match (bounded)           +25 × matched words
     //   First query word is a prefix       +50
     //   Position bonus (early = better)    +30 * (1 - pos/len) for phrase
+    //   Active market (not expired)        +3000 (always beats resolved)
     //   Volume (tiebreaker only)           +log10(volume)  ~ 0–7 range
     //
     // Returned score is a Number; caller sorts DESC.
-    const scoreRelevance = (question, volume) => {
+    const _searchNow = Date.now();
+    const scoreRelevance = (question, volume, closeDate, closed) => {
       const t = (question || '').toLowerCase().trim();
       if (!t) return -1;
       let score = 0;
+
+      // 0. Active market — always beats a resolved/expired market regardless of relevance.
+      //    A market is "expired" if closed===true OR endDate is in the past.
+      const isExpired = closed === true
+        || (closeDate && new Date(closeDate).getTime() < _searchNow);
+      if (!isExpired) score += 3000;
 
       // 1. Exact phrase (query appears verbatim)
       const phraseIdx = t.indexOf(q);
@@ -22937,11 +22945,11 @@ app.get('/api/markets/search', async (req, res) => {
           let yesPct = null;
           // Some events have outcomePrices at event level
           try { if (evt.outcomePrices) yesPct = Math.round(JSON.parse(evt.outcomePrices)[0] * 100); } catch {}
-          results.push({ question: evtTitle, yes_pct: yesPct, close_date: evt.endDate || evt.endDateIso || null, slug: evtSlug, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', volume: parseFloat(evt.volume || 0) });
+          results.push({ question: evtTitle, yes_pct: yesPct, close_date: evt.endDate || evt.endDateIso || null, closed: !!(evt.closed || evt.active === false), slug: evtSlug, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', volume: parseFloat(evt.volume || 0) });
           continue;
         }
         for (const m of nestedMarkets) {
-          if (m.closed) continue;
+          // Don't skip closed markets entirely — keep them but deprioritize via scoreRelevance
           const mTitle = m.question || m.groupItemTitle || m.title || evtTitle || '';
           if (!mTitle) continue;
           // Only keep this nested market if either the event title matches
@@ -22951,7 +22959,7 @@ app.get('/api/markets/search', async (req, res) => {
           let yesPct = null;
           try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
           if (m.bestAsk != null && yesPct == null) yesPct = Math.round(m.bestAsk * 100);
-          results.push({ question: mTitle, yes_pct: yesPct, close_date: m.endDate || m.endDateIso || evt.endDate || null, slug: evtSlug || m.eventSlug || m.slug || '', url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', volume: parseFloat(m.volume || m.volumeNum || 0) });
+          results.push({ question: mTitle, yes_pct: yesPct, close_date: m.endDate || m.endDateIso || evt.endDate || null, closed: !!(m.closed || m.active === false), slug: evtSlug || m.eventSlug || m.slug || '', url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', volume: parseFloat(m.volume || m.volumeNum || 0) });
         }
       }
       return results;
@@ -22989,7 +22997,6 @@ app.get('/api/markets/search', async (req, res) => {
           const evtMatch = matchesQuery(evtTitle);
           const nestedMarkets = evt.markets || [];
           for (const m of nestedMarkets) {
-            if (m.closed) continue;
             const mTitle = m.question || m.groupItemTitle || m.title || evtTitle;
             if (!evtMatch && !matchesQuery(mTitle)) continue;
             const dedupKey = mTitle.toLowerCase().trim();
@@ -22997,10 +23004,11 @@ app.get('/api/markets/search', async (req, res) => {
             seenPolyQuestions.add(dedupKey);
             let yesPct = null;
             try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
-            if (yesPct !== null && (yesPct >= 95 || yesPct <= 5)) continue;
+            if (!m.closed && yesPct !== null && (yesPct >= 95 || yesPct <= 5)) continue;
             polyMarkets.push({
               question: mTitle, yes_pct: yesPct,
               close_date: m.endDate || m.endDateIso || evt.endDate || null,
+              closed: !!(m.closed || m.active === false),
               url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
               slug: evtSlug || '', volume: parseFloat(m.volume || m.volumeNum) || 0
             });
@@ -23012,7 +23020,7 @@ app.get('/api/markets/search', async (req, res) => {
     // Relevance-first sort. Volume is a log-scaled tiebreaker inside the
     // scorer so an exact phrase match always outranks a higher-volume but
     // semantically-weaker result.
-    polyMarkets.sort((a, b) => scoreRelevance(b.question, b.volume) - scoreRelevance(a.question, a.volume));
+    polyMarkets.sort((a, b) => scoreRelevance(b.question, b.volume, b.close_date, b.closed) - scoreRelevance(a.question, a.volume, a.close_date, a.closed));
     polyMarkets = polyMarkets.slice(0, 50);
 
     // ── Cross-reference screener cache for live CLOB prices ──
@@ -23181,7 +23189,7 @@ app.get('/api/markets/search', async (req, res) => {
       .filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95))
       // Same relevance-first sort as Polymarket so the two panels stay
       // in sync when the pair-matcher runs below.
-      .sort((a, b) => scoreRelevance(b.question, b.volume) - scoreRelevance(a.question, a.volume));
+      .sort((a, b) => scoreRelevance(b.question, b.volume, b.close_date, b.closed) - scoreRelevance(a.question, a.volume, a.close_date, a.closed));
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
