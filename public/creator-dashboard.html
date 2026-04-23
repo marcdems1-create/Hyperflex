@@ -21785,8 +21785,6 @@ async function confirmTrade() {
   const apiKey = localStorage.getItem('poly_api_key');
   const apiSecret = localStorage.getItem('poly_api_secret');
   const apiPassphrase = localStorage.getItem('poly_api_passphrase');
-  const eoaAddress = localStorage.getItem('poly_eoa_address') || window._connectedWallet;
-  const proxyAddress = localStorage.getItem('hf_poly_wallet');
 
   if (!apiKey || !apiSecret || !apiPassphrase) {
     // Auto-derive CLOB API keys and immediately retry — max 1 retry
