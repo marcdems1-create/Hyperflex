@@ -568,11 +568,35 @@ function closeChallenge() {
   if (!m) return;
   m.style.display = 'none';
   document.body.style.overflow = '';
+  // Reset picker state so leftover side / stake don't leak into the
+  // next challenge the user opens.
+  _challengeSide = null;
+  const yes = document.getElementById('challengeSideYes');
+  const no  = document.getElementById('challengeSideNo');
+  if (yes) { yes.style.background = 'rgba(0,230,138,0.08)'; yes.style.borderColor = 'rgba(0,230,138,0.28)'; }
+  if (no)  { no.style.background  = 'rgba(255,77,106,0.08)'; no.style.borderColor  = 'rgba(255,77,106,0.28)'; }
+  const stake = document.getElementById('challengeStake');
+  const stakeLbl = document.getElementById('challengeStakeLabel');
+  if (stake) stake.value = '0';
+  if (stakeLbl) stakeLbl.textContent = '0';
 }
+var _challengeSide = null;
+function setChallengeSide(side) {
+  _challengeSide = side;
+  const yes = document.getElementById('challengeSideYes');
+  const no  = document.getElementById('challengeSideNo');
+  if (yes) yes.style.background = side === 'YES' ? 'rgba(0,230,138,0.22)'  : 'rgba(0,230,138,0.08)';
+  if (yes) yes.style.borderColor = side === 'YES' ? 'rgba(0,230,138,0.6)'   : 'rgba(0,230,138,0.28)';
+  if (no)  no.style.background  = side === 'NO'  ? 'rgba(255,77,106,0.22)' : 'rgba(255,77,106,0.08)';
+  if (no)  no.style.borderColor = side === 'NO'  ? 'rgba(255,77,106,0.6)'  : 'rgba(255,77,106,0.28)';
+}
+
 async function submitChallenge() {
   const input = document.getElementById('challengeThesis');
   const thesis = (input?.value || '').trim();
   if (!thesis) { input?.focus(); return; }
+  if (!_challengeSide) { alert('Pick YES or NO — the side you\'re staking.'); return; }
+  const stake = parseInt(document.getElementById('challengeStake')?.value || '0', 10) || 0;
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
   if (!token) {
     alert('Sign in to challenge predictors.');
@@ -587,7 +611,12 @@ async function submitChallenge() {
     const res = await fetch(`${API}/api/challenges`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ challenged_id: challengedId, thesis }),
+      body: JSON.stringify({
+        challenged_id: challengedId,
+        thesis,
+        challenger_side: _challengeSide,
+        stake_flex: stake,
+      }),
     });
     if (res.status === 401 || res.status === 403) {
       localStorage.removeItem('hf_token');
@@ -1071,7 +1100,31 @@ async function load() {
             <button onclick="closeChallenge()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px">×</button>
           </div>
           <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
-          <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:90px;margin-bottom:12px;transition:border-color .15s" onfocus="this.style.borderColor='rgba(255,77,106,0.4)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:90px;margin-bottom:14px;transition:border-color .15s" onfocus="this.style.borderColor='rgba(255,77,106,0.4)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+
+          <!-- Your side — the position you're staking. Challenged user
+               gets the opposite side by definition. Resolution of the
+               market against this picks the winner. -->
+          <div style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Your side</div>
+          <div style="display:flex;gap:8px;margin-bottom:14px">
+            <button type="button" id="challengeSideYes" onclick="setChallengeSide('YES')"
+                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(0,230,138,0.28);background:rgba(0,230,138,0.08);color:#00e68a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">YES</button>
+            <button type="button" id="challengeSideNo" onclick="setChallengeSide('NO')"
+                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(255,77,106,0.28);background:rgba(255,77,106,0.08);color:#ff4d6a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">NO</button>
+          </div>
+
+          <!-- FLEX stake — skin in the game. Winner gains, loser loses.
+               Capped at 100 so no single challenge dominates a trader's
+               FLEX score. Optional (stake = 0 = no score movement). -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase">FLEX stake (optional)</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--text)"><span id="challengeStakeLabel">0</span> FLEX</div>
+          </div>
+          <input type="range" id="challengeStake" min="0" max="100" value="0" step="5"
+                 oninput="document.getElementById('challengeStakeLabel').textContent=this.value"
+                 style="width:100%;margin-bottom:4px;accent-color:#c9920d">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-bottom:16px">Winner gains, loser loses. Auto-settled when the market resolves.</div>
+
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button onclick="closeChallenge()" class="btn btn-ghost">Cancel</button>
             <button onclick="submitChallenge()" class="btn btn-challenge">Post Challenge →</button>

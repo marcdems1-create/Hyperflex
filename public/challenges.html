@@ -353,6 +353,25 @@ function renderCard(c) {
       '</div>' +
     '</a>' +
     (c.market_title ? '<div style="font-family:var(--mono,monospace);font-size:11px;color:var(--text-dim);margin-bottom:8px">On: ' + esc(c.market_title) + '</div>' : '') +
+    // Side + stake chips — key negotiation terms at a glance.
+    (function(){
+      var bits = [];
+      if (c.challenger_side) {
+        var meSide    = iAmChallenged ? c.challenged_side : c.challenger_side;
+        var themSide  = iAmChallenged ? c.challenger_side : c.challenged_side;
+        var meCls  = meSide   === 'YES' ? 'color:#00e68a' : 'color:#ff4d6a';
+        var themCls= themSide === 'YES' ? 'color:#00e68a' : 'color:#ff4d6a';
+        bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;letter-spacing:0.06em">You: <b style="' + meCls + '">' + esc(meSide || '—') + '</b> · Them: <b style="' + themCls + '">' + esc(themSide || '—') + '</b></span>');
+      }
+      if (Number(c.stake_flex) > 0) {
+        bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;color:var(--gold);letter-spacing:0.06em">Stake: ' + c.stake_flex + ' FLEX</span>');
+      }
+      if (c.winner_id) {
+        var iWon = (iAmChallenged && c.winner_id === c.challenged_id) || (iAmChallenger && c.winner_id === c.challenger_id);
+        bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;font-weight:800;letter-spacing:0.06em;color:' + (iWon ? '#00e68a' : '#ff4d6a') + '">' + (iWon ? '✓ YOU WON' : '✗ YOU LOST') + '</span>');
+      }
+      return bits.length ? '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">' + bits.join('') + '</div>' : '';
+    })() +
     '<div class="thesis">' + esc(c.thesis || '') + '</div>' +
     actions +
   '</div>';

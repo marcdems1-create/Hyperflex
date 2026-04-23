@@ -12439,18 +12439,37 @@ app.get('/api/sharp-money-feed', async (req, res) => {
 // market-resolution hook once it exists.
 
 // POST /api/challenges — create a new challenge
-//   body: { challenged_id, thesis, market_id?, market_title? }
+//   body: { challenged_id, thesis, market_id?, market_title?, market_slug?,
+//           condition_id?, challenger_side? ('YES'|'NO'), stake_flex? }
 app.post('/api/challenges', requireAuth, async (req, res) => {
-  const { challenged_id, thesis, market_id, market_title } = req.body || {};
+  const b = req.body || {};
+  const {
+    challenged_id, thesis, market_id, market_title,
+    market_slug, condition_id,
+  } = b;
+  const challengerSide = b.challenger_side ? String(b.challenger_side).toUpperCase() : null;
+  const challengedSide = challengerSide === 'YES' ? 'NO' : challengerSide === 'NO' ? 'YES' : null;
+  const stakeFlex = Math.max(0, Math.min(100, parseInt(b.stake_flex) || 0));
   if (!challenged_id) return res.status(400).json({ error: 'challenged_id required' });
   if (challenged_id === req.user.id) return res.status(400).json({ error: 'Cannot challenge yourself' });
   if (!thesis || !thesis.trim()) return res.status(400).json({ error: 'Thesis required' });
+  if (challengerSide && challengerSide !== 'YES' && challengerSide !== 'NO') {
+    return res.status(400).json({ error: 'challenger_side must be YES or NO' });
+  }
   if (!pool) return res.status(503).json({ error: 'Database not configured' });
   try {
     const rows = await dbQuery(
-      `INSERT INTO challenges (challenger_id, challenged_id, thesis, market_id, market_title)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-      [req.user.id, challenged_id, thesis.trim().slice(0, 500), market_id || null, market_title || null]
+      `INSERT INTO challenges (
+         challenger_id, challenged_id, thesis,
+         market_id, market_title, market_slug, condition_id,
+         challenger_side, challenged_side, stake_flex
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, created_at`,
+      [
+        req.user.id, challenged_id, thesis.trim().slice(0, 500),
+        market_id || null, market_title || null, market_slug || null, condition_id || null,
+        challengerSide, challengedSide, stakeFlex,
+      ]
     );
     const challenge = rows[0];
     // Resolve challenger display name for the notification copy
@@ -23872,6 +23891,73 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
     }
     if (scored > 0) console.log(`[takes] Scored ${scored} takes for "${(marketQuestion || '').substring(0, 40)}" → ${upperOutcome}`);
   } catch (e) { console.warn('[takes] scoreTakesForMarket error:', e.message); }
+
+  // ── Resolve outstanding challenges on the same market ────────────────────
+  // Walk accepted challenges attached to this market (by slug, condition_id,
+  // or title fallback) and mark winner_id. Fires reverse notifications so
+  // both parties see the outcome in their bell. Status flips to 'resolved'.
+  try {
+    const uo = (outcome || '').toUpperCase();
+    let cRows = [];
+    if (marketSlug) {
+      cRows = await dbQuery(
+        `SELECT * FROM challenges
+         WHERE (market_slug = $1 OR market_id = $1)
+           AND status = 'accepted'
+           AND challenger_side IS NOT NULL`,
+        [marketSlug]
+      ).catch(() => []);
+    }
+    if (!cRows.length && marketQuestion) {
+      cRows = await dbQuery(
+        `SELECT * FROM challenges
+         WHERE LOWER(market_title) = LOWER($1)
+           AND status = 'accepted'
+           AND challenger_side IS NOT NULL`,
+        [marketQuestion]
+      ).catch(() => []);
+    }
+    for (const c of cRows) {
+      const winnerId = (c.challenger_side || '').toUpperCase() === uo
+        ? c.challenger_id
+        : c.challenged_id;
+      const loserId = winnerId === c.challenger_id ? c.challenged_id : c.challenger_id;
+      await dbQuery(
+        `UPDATE challenges
+         SET status='resolved', resolution_outcome=$1, winner_id=$2, resolved_at=NOW()
+         WHERE id = $3`,
+        [uo, winnerId, c.id]
+      ).catch(() => {});
+      // FLEX stake transfer (if staked): credit winner, debit loser.
+      // Cheap score bump — real user-visible flex_score_90d is recomputed
+      // off the broader score formula, but stake_flex gives an immediate
+      // skin-in-the-game signal on the challenge itself.
+      const stake = Number(c.stake_flex) || 0;
+      if (stake > 0) {
+        try {
+          await dbQuery('UPDATE users SET flex_score_90d = LEAST(100, COALESCE(flex_score_90d,0) + $1) WHERE id = $2', [stake, winnerId]).catch(() => {});
+          await dbQuery('UPDATE users SET flex_score_90d = GREATEST(0, COALESCE(flex_score_90d,0) - $1) WHERE id = $2', [stake, loserId]).catch(() => {});
+        } catch (e) {}
+      }
+      // Notify both parties.
+      const qShort = (marketQuestion || c.market_title || '').substring(0, 60);
+      await pushNotification(
+        winnerId,
+        'challenge_won',
+        '⚔ You won a challenge',
+        `Market resolved ${uo}. ${stake > 0 ? '+' + stake + ' FLEX. ' : ''}"${qShort}"`,
+        null, null, { refType: 'challenge', refId: c.id }
+      );
+      await pushNotification(
+        loserId,
+        'challenge_lost',
+        'Challenge resolved against you',
+        `Market resolved ${uo}. ${stake > 0 ? '−' + stake + ' FLEX. ' : ''}"${qShort}"`,
+        null, null, { refType: 'challenge', refId: c.id }
+      );
+    }
+    if (cRows.length) console.log(`[challenges] Resolved ${cRows.length} challenges for "${(marketQuestion || '').substring(0, 40)}" → ${uo}`);
+  } catch (e) { console.warn('[challenges] resolve error:', e.message); }
 }
 
 // outcome     — 'YES' | 'NO'
@@ -44869,8 +44955,17 @@ if (pool) {
         responded_at TIMESTAMPTZ,
         resolved_at TIMESTAMPTZ
       )`).catch(() => {});
+      // challenger_side = YES|NO, the side the challenger is betting.
+      // challenged_side is implied (opposite), but we store both
+      // explicitly so resolution doesn't care about ordering.
+      await dbQuery(`ALTER TABLE challenges
+        ADD COLUMN IF NOT EXISTS challenger_side TEXT,
+        ADD COLUMN IF NOT EXISTS challenged_side TEXT,
+        ADD COLUMN IF NOT EXISTS condition_id    TEXT,
+        ADD COLUMN IF NOT EXISTS market_slug     TEXT`).catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenged ON challenges(challenged_id, status, created_at DESC)').catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenger ON challenges(challenger_id, status, created_at DESC)').catch(() => {});
+      await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_condition ON challenges(condition_id) WHERE condition_id IS NOT NULL').catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS creator_wall (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
