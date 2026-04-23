@@ -324,6 +324,7 @@
   // as a first-class route. The homepage (/) will be rebuilt into the
   // townsquare per spec §6; once that lands the two URLs diverge.
   var primaryLinks = [
+    { href: '/feed', label: 'Feed', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
@@ -332,8 +333,7 @@
     { href: '/whales', label: 'Market Intel' },
     { href: '/arbitrage', label: 'Arbitrage', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
-    { href: '/predictors', label: 'Predictors' },
-    { href: '/feed', label: '💬 Feed', gold: true }
+    { href: '/predictors', label: 'Predictors' }
   ];
 
   // Profile navigation helper — resolves canonical URL client-side via
