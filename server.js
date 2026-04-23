@@ -29407,11 +29407,11 @@ async function _buildAlphaListInner(opts = {}) {
 
     // Fetch a wider window from Gamma API — we sort client-side by 24h volume anyway,
     // so the server-side sort just needs to be a valid parameter.
-    // Use volume24hr (same as other callers) — volumeNum was non-standard and caused
-    // Gamma to return an error object instead of an array.
+    // Use order=volume — markets/keyset only accepts 'volume' (not 'volume24hr';
+    // that param works on events/keyset but returns 0 on markets/keyset).
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume24hr&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
