@@ -25564,8 +25564,9 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
 const _alchemyCache = new Map();
 const ALCHEMY_CACHE_TTL = 30_000;
 const ALCHEMY_TOKENS_POLYGON = {
-  usdce: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-  pusd:  '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB', // PMCT
+  usdce:  '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  usdc:   '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // native USDC
+  pusd:   '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB', // PMCT
 };
 app.get('/api/portfolio/alchemy/:address', async (req, res) => {
   const key = process.env.ALCHEMY_API_KEY;
@@ -25583,7 +25584,7 @@ app.get('/api/portfolio/alchemy/:address', async (req, res) => {
     const body = [
       {
         jsonrpc: '2.0', id: 1, method: 'alchemy_getTokenBalances',
-        params: [address, [ALCHEMY_TOKENS_POLYGON.usdce, ALCHEMY_TOKENS_POLYGON.pusd]],
+        params: [address, [ALCHEMY_TOKENS_POLYGON.usdce, ALCHEMY_TOKENS_POLYGON.usdc, ALCHEMY_TOKENS_POLYGON.pusd]],
       },
       { jsonrpc: '2.0', id: 2, method: 'eth_getBalance', params: [address, 'latest'] },
     ];
@@ -25610,13 +25611,18 @@ app.get('/api/portfolio/alchemy/:address', async (req, res) => {
       return whole + frac;
     };
     const usdceRaw = toks.find(t => t.contractAddress?.toLowerCase() === ALCHEMY_TOKENS_POLYGON.usdce.toLowerCase())?.tokenBalance;
+    const usdcRaw  = toks.find(t => t.contractAddress?.toLowerCase() === ALCHEMY_TOKENS_POLYGON.usdc.toLowerCase())?.tokenBalance;
     const pusdRaw  = toks.find(t => t.contractAddress?.toLowerCase() === ALCHEMY_TOKENS_POLYGON.pusd.toLowerCase())?.tokenBalance;
 
+    const usdce = toUnits(usdceRaw, 6);
+    const usdc  = toUnits(usdcRaw, 6);
     const data = {
       address,
       network: 'matic-mainnet',
       balances: {
-        usdce: toUnits(usdceRaw, 6),
+        usdce,
+        usdc,
+        usdc_total: usdce + usdc, // what the existing frontend fetchUSDCBalance sums
         pusd:  toUnits(pusdRaw, 6),
         matic: toUnits(maticHex, 18),
       },
