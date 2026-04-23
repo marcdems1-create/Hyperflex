@@ -13615,6 +13615,84 @@ app.get('/api/admin/polymarket-outreach', async (req, res) => {
 // GET /api/admin/verified-predictors — marketing cohort export.
 // Returns every user with wallet_verified=true plus contact + stats so
 // we can reach out directly (email, X handle) later. Admin-gated.
+// GET /api/admin/wallet-debug/:address — keyed by Polygon wallet, not user id.
+// Returns the matching HFX user (if any), our cached row counts, and a live
+// upstream count across all four Polymarket position buckets. Same shape as
+// /api/admin/member-debug/:userId. Use this when you have a wallet but no
+// user_id handy.
+app.get('/api/admin/wallet-debug/:address', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const addr = (req.params.address || '').trim().toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'Invalid wallet address' });
+  try {
+    const userRows = pool
+      ? await dbQuery(
+          `SELECT id, display_name, username, email, polymarket_address, wallet_verified,
+                  is_whale, whale_rank, whale_pnl, flex_score_90d, flex_score_alltime,
+                  created_at, last_login_date,
+                  (password_hash LIKE 'whale_profile_%') AS auto_created
+           FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1`,
+          [addr]
+        )
+      : [];
+    const u = userRows[0] || null;
+    const cachedCount = (u && pool) ? await dbQuery('SELECT COUNT(*)::int AS n FROM cached_positions WHERE user_id = $1', [u.id]).catch(() => [{ n: 0 }]) : [{ n: 0 }];
+    const tradesCount = pool ? await dbQuery(
+      'SELECT COUNT(*)::int AS n, SUM(CASE WHEN status=\'closed\' THEN 1 ELSE 0 END)::int AS closed FROM polymarket_trades WHERE LOWER(eoa_address) = $1',
+      [addr]
+    ).catch(() => [{ n: 0, closed: 0 }]) : [{ n: 0, closed: 0 }];
+
+    // Live Polymarket — four buckets, same as /api/polymarket/positions/:addr
+    const base = 'https://data-api.polymarket.com/positions?user=' + addr + '&limit=200';
+    const [a, b, c, d] = await Promise.all([
+      _nodeFetch(base + '&sortBy=CURRENT&winning=false').then(r => r.ok ? r.json() : []).catch(() => []),
+      _nodeFetch(base + '&sortBy=CURRENT&winning=true').then(r => r.ok ? r.json() : []).catch(() => []),
+      _nodeFetch(base + '&redeemed=true&winning=false').then(r => r.ok ? r.json() : []).catch(() => []),
+      _nodeFetch(base + '&redeemed=true&winning=true').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+    const upstream = {
+      current_losing:  Array.isArray(a) ? a.length : 0,
+      current_winning: Array.isArray(b) ? b.length : 0,
+      redeemed_lose:   Array.isArray(c) ? c.length : 0,
+      redeemed_win:    Array.isArray(d) ? d.length : 0,
+    };
+    upstream.total = upstream.current_losing + upstream.current_winning + upstream.redeemed_lose + upstream.redeemed_win;
+
+    // Also try Polymarket's /activity endpoint — this is the deep trade
+    // log (beyond current portfolio) and catches traders with 1000+
+    // historical trades that /positions caps at 200.
+    let activityCount = null;
+    try {
+      const actRes = await _nodeFetch('https://data-api.polymarket.com/activity?user=' + addr + '&limit=500&type=TRADE');
+      if (actRes.ok) {
+        const actArr = await actRes.json();
+        activityCount = Array.isArray(actArr) ? actArr.length : null;
+      }
+    } catch (e) { /* activity endpoint optional */ }
+
+    res.json({
+      wallet: addr,
+      user: u,
+      data_sources: {
+        hfx_user_exists: !!u,
+        cached_positions_rows:  (cachedCount[0] || { n: 0 }).n,
+        polymarket_trades_rows: (tradesCount[0] || { n: 0 }).n,
+        polymarket_trades_closed: (tradesCount[0] || {}).closed || 0,
+        upstream_positions: upstream,
+        upstream_activity_trades: activityCount,
+      },
+      links: {
+        polygonscan:        'https://polygonscan.com/address/' + addr,
+        polymarket_profile: 'https://polymarket.com/profile/' + addr,
+        hfx_profile: u ? ('/m/' + u.id) : null,
+      },
+    });
+  } catch (err) {
+    console.error('[admin/wallet-debug]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/connected-wallets — every user with a polymarket_address.
 // Shows the full address, claim status, and quick links so admin can audit
 // the connected-wallet cohort at a glance without guessing.
