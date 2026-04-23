@@ -2929,6 +2929,12 @@ function buildOrderForClob(params, version) {
 }
 
 var MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+// Bounded approval cap: 10B tokens at 6 decimals (USDC.e + pUSD both 6-dec).
+// Using a ceiling instead of uint256.max avoids Blockaid's "Unlimited /
+// known for scams" heuristic on low-reputation spenders (the V2 contracts
+// deployed Apr 22 haven't been whitelisted yet). 10B is effectively
+// infinite for any realistic trader but not literal infinity.
+var APPROVAL_CAP = '10000000000000000';
 
 // Public RPC provider for read-only calls — no MetaMask authorization needed.
 // Falls back to 1rpc.io if polygon-rpc.com is down.
@@ -3078,7 +3084,7 @@ async function approveTokens() {
       var step = pending[i];
       showTradeStatus('Approve ' + step.label + ' (' + (i + 1) + '/' + pending.length + ')...', 'info');
       console.log('[setup] Approving ' + step.label + ' (' + step.addr + ')...');
-      var tx = await step.contract.approve(step.addr, MAX_UINT256);
+      var tx = await step.contract.approve(step.addr, APPROVAL_CAP);
       await tx.wait();
       console.log('[setup] ' + step.label + ' approved');
     }
