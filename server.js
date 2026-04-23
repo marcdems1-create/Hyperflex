@@ -668,12 +668,12 @@ app.get('/sitemap.xml', async (req, res) => {
       const _gammaHeaders = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 5000);
-      const r = await fetch('https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false', {
+      const r = await fetch('https://gamma-api.polymarket.com/events/keyset?limit=200&active=true&closed=false&order=volume24hr&ascending=false', {
         headers: _gammaHeaders, signal: ctrl.signal
       });
       clearTimeout(tid);
       if (r.ok) {
-        const events = await r.json();
+        const events = _gammaUnwrap(await r.json());;
         marketSlugs = (events || []).filter(e => e.slug).map(e => e.slug);
       }
     } catch (e) { /* sitemap still works with just static pages */ }
@@ -1264,7 +1264,7 @@ app.get('/api/debug-fetch', async (req, res) => {
     }
   };
   await Promise.allSettled([
-    testFetch('polymarket', 'https://gamma-api.polymarket.com/markets?closed=false&limit=1'),
+    testFetch('polymarket', 'https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=1'),
     testFetch('kalshi', 'https://api.elections.kalshi.com/trade-api/v2/events?limit=1'),
     testFetch('httpbin', 'https://httpbin.org/get'),
   ]);
@@ -1683,6 +1683,24 @@ const _kalshiCache = new Map();
 const _manifoldCache = new Map();
 const _polyCache = new Map();
 const _predictorFollowCache = new Map();
+
+// Polymarket gamma keyset endpoints (/markets/keyset, /events/keyset —
+// replacing the legacy /markets and /events that deprecate May 1 2026)
+// wrap the array in a { data, next_cursor } envelope. The legacy
+// endpoints returned a bare array. During rollout the keyset endpoints
+// may still return a bare array for back-compat. This helper accepts
+// both shapes so every consumer can safely do:
+//     const arr = _gammaUnwrap(await res.json());
+// and get an array regardless of which shape the upstream returned.
+function _gammaUnwrap(body) {
+  if (Array.isArray(body)) return body;
+  if (body && Array.isArray(body.data)) return body.data;
+  return [];
+}
+// Optional cursor extraction for paginated loops.
+function _gammaCursor(body) {
+  return (body && body.next_cursor) ? body.next_cursor : null;
+}
 
 // ── MARKETS ───────────────────────────────────────
 
@@ -14092,11 +14110,11 @@ app.post('/api/admin/import-url', async (req, res) => {
         if (searchTerms) {
           const gc = new AbortController();
           const gt = setTimeout(() => gc.abort(), 5000);
-          const gRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=3&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=3&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
             signal: gc.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
           }).finally(() => clearTimeout(gt));
           if (gRes.ok) {
-            const gData = await gRes.json();
+            const gData = _gammaUnwrap(await gRes.json());;
             const top = (Array.isArray(gData) ? gData : [])[0];
             if (top) {
               matchedSlug = (top.events?.[0]?.slug) || top.slug || null;
@@ -14198,11 +14216,11 @@ app.post('/api/admin/import-tweet', async (req, res) => {
         if (searchTerms) {
           const ctrl = new AbortController();
           const tid = setTimeout(() => ctrl.abort(), 5000);
-          const gRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=5&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
             signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
           }).finally(() => clearTimeout(tid));
           if (gRes.ok) {
-            const gData = await gRes.json();
+            const gData = _gammaUnwrap(await gRes.json());;
             const top = (Array.isArray(gData) ? gData : [])[0];
             if (top) {
               matchedSlug = (top.events && top.events[0] && top.events[0].slug) || top.slug || null;
@@ -15537,8 +15555,8 @@ app.get('/api/activity', async (req, res) => {
       // Use whale data for trending — much higher quality than random Gamma API results
       const [whaleRes, polyCrypto, polyPolitics] = await Promise.allSettled([
         fetchExt('https://data-api.polymarket.com/v1/leaderboard?limit=20&window=all'),
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=trump'),
+        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
+        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=trump'),
       ]);
       // Pull whale positions for the feed
       if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
@@ -15604,9 +15622,9 @@ app.get('/api/activity', async (req, res) => {
       }
       // Fallback: if no whale data, use Gamma API
       if (!activities.some(a => a.id?.startsWith('twhale_'))) {
-        const polyFallback = await fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false').catch(() => null);
+        const polyFallback = await fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volume&ascending=false').catch(() => null);
         if (polyFallback?.ok) {
-        const raw = await polyFallback.json();
+        const raw = _gammaUnwrap(await polyFallback.json());;
         const filteredPoly = (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000);
         filteredPoly.sort(() => Math.random() - 0.5);
         filteredPoly.slice(0, 6).forEach((m, i) => {
@@ -16723,12 +16741,12 @@ function _midprice(book) {
 // Returns { endDate, clobTokenIds: [yes, no], closed, active } or null.
 async function _fetchPolymarketMeta(conditionId) {
   try {
-    const r = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}&limit=1`, {
+    const r = await fetch(`https://gamma-api.polymarket.com/markets/keyset?condition_ids=${encodeURIComponent(conditionId)}&limit=1`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     });
     if (!r.ok) return null;
-    const arr = await r.json();
+    const arr = _gammaUnwrap(await r.json());;
     const m = Array.isArray(arr) ? arr[0] : null;
     if (!m) return null;
     let tokens = [];
@@ -17687,11 +17705,11 @@ app.get('/api/takes/search-markets', async (req, res) => {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 6000);
         const gammaRes = await fetch(
-          `https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false&search=${encodeURIComponent(q)}`,
+          `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volume&ascending=false&search=${encodeURIComponent(q)}`,
           { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
         ).finally(() => clearTimeout(tid));
         if (gammaRes.ok) {
-          const gammaData = await gammaRes.json();
+          const gammaData = _gammaUnwrap(await gammaRes.json());;
           const existing = new Set(results.map(r => (r.question || '').toLowerCase()));
           for (const m of (Array.isArray(gammaData) ? gammaData : [])) {
             if (existing.has((m.question || '').toLowerCase())) continue;
@@ -26051,7 +26069,7 @@ app.get('/api/markets/search', async (req, res) => {
       // Polymarket — synonym-expanded searches
       ...polyExtraSearches,
       // Polymarket — broad top-200 by liquidity (catches synonym matches not in search results)
-      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
+      fetchWithTimeout(`https://gamma-api.polymarket.com/events/keyset?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
       // Kalshi — paginated cache of ALL events (10-min TTL)
       getKalshiEvents(),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
@@ -26783,11 +26801,11 @@ async function fetchWhalePositions() {
           // (Only if we have a slug — otherwise we can't look it up)
           if (!clobTokenIds && slug) {
             try {
-              const r = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, {
+              const r = await fetch(`https://gamma-api.polymarket.com/markets/keyset?slug=${encodeURIComponent(slug)}`, {
                 headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
               });
               if (r.ok) {
-                const arr = await r.json();
+                const arr = _gammaUnwrap(await r.json());;
                 const gm = Array.isArray(arr) && arr.length ? arr[0] : null;
                 if (gm) {
                   if (gm.conditionId) conditionId = gm.conditionId;
@@ -26796,11 +26814,11 @@ async function fetchWhalePositions() {
               }
               // If still no tokens, try events endpoint (for multi-outcome)
               if (!clobTokenIds) {
-                const eRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
+                const eRes = await fetch(`https://gamma-api.polymarket.com/events/keyset?slug=${encodeURIComponent(slug)}`, {
                   headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
                 });
                 if (eRes.ok) {
-                  const ed = await eRes.json();
+                  const ed = _gammaUnwrap(await eRes.json());;
                   if (Array.isArray(ed) && ed.length && ed[0].markets && ed[0].markets.length) {
                     // Match market by question text within the event
                     const qLower = (p.market || '').toLowerCase().trim();
@@ -28086,14 +28104,14 @@ app.get('/market/:slug', async (req, res) => {
     let market = null, eventTitle = '';
 
     // Try markets endpoint
-    const gRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
-    if (gRes.ok) { const d = await gRes.json(); if (d && d.length) market = d[0]; }
+    const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+    if (gRes.ok) { const d = _gammaUnwrap(await gRes.json()); if (d.length) market = d[0]; }
 
     // Fallback to events
     if (!market) {
-      const eRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+      const eRes = await fetch(`https://gamma-api.polymarket.com/events/keyset?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
       if (eRes.ok) {
-        const ed = await eRes.json();
+        const ed = _gammaUnwrap(await eRes.json());;
         if (ed && ed.length && ed[0].markets && ed[0].markets.length) {
           eventTitle = ed[0].title || '';
           market = ed[0].markets[0];
@@ -28223,11 +28241,11 @@ app.get('/api/market/:slug', async (req, res) => {
       // Cache miss — query Gamma directly. condition_ids filter returns
       // the market row so we can read its slug/event_slug.
       try {
-        const gr = await fetch(`https://gamma-api.polymarket.com/markets?condition_ids=${encodeURIComponent(conditionId)}`, {
+        const gr = await fetch(`https://gamma-api.polymarket.com/markets/keyset?condition_ids=${encodeURIComponent(conditionId)}`, {
           headers: { Accept: 'application/json' },
         });
         if (gr.ok) {
-          const gdata = await gr.json();
+          const gdata = _gammaUnwrap(await gr.json());;
           const firstMarket = Array.isArray(gdata) ? gdata[0] : null;
           if (firstMarket) {
             // Prefer event slug when the market belongs to a multi-outcome event,
@@ -29188,13 +29206,13 @@ async function _buildAlphaListInner(opts = {}) {
     // by 24h volume desc to get the actually-hot markets in our processing window.
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volumeNum&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volumeNum&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
-    const _rawAll = await mktRes.json();
+    const _rawAll = _gammaUnwrap(await mktRes.json());;
     // Pick the right volume metric per market: prefer 24h, fall back to lifetime
     const _vol = (m) => {
       const v24 = parseFloat(m.volume24hr || m.volume_24hr || 0);
@@ -31906,12 +31924,12 @@ app.get('/api/high-prob', async (req, res) => {
       const fetch = _nodeFetch;
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 15000);
-      const r = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volume&ascending=false', {
+      const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume&ascending=false', {
         signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
       });
       clearTimeout(tid);
       if (!r.ok) throw new Error('Gamma API ' + r.status);
-      rawMarkets = await r.json();
+      rawMarkets = _gammaUnwrap(await r.json());
       _highProbCache = { ts: Date.now(), raw: rawMarkets };
     } else {
       rawMarkets = _highProbCache.raw;
@@ -32038,12 +32056,12 @@ app.get('/api/screener/narratives', async (req, res) => {
     if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
       markets = _screenerCache.data;
     } else {
-      const pmRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=300&order=volume&ascending=false', {
+      const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume&ascending=false', {
         headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
         signal: AbortSignal.timeout(10000)
       });
       if (pmRes.ok) {
-        const raw = await pmRes.json();
+        const raw = _gammaUnwrap(await pmRes.json());;
         markets = (Array.isArray(raw) ? raw : []).filter(m => m.question);
       }
     }
@@ -32113,12 +32131,12 @@ app.get('/api/screener/narrative-lifecycle', async (req, res) => {
     if (!currentNarratives || !currentNarratives.length) {
       // Fetch inline if cache empty
       try {
-        const pmRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=300&order=volume&ascending=false', {
+        const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume&ascending=false', {
           headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
           signal: AbortSignal.timeout(10000)
         });
         if (pmRes.ok) {
-          const raw = await pmRes.json();
+          const raw = _gammaUnwrap(await pmRes.json());;
           const markets = (Array.isArray(raw) ? raw : []).filter(m => m.question);
           const groups = {};
           let totalVol = 0;
@@ -34225,13 +34243,13 @@ app.get('/api/new-markets', async (req, res) => {
     const fetch = _nodeFetch;
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
-    const r = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=30&order=startDate&ascending=false', {
+    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=30&order=startDate&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!r.ok) throw new Error('Gamma API ' + r.status);
-    const raw = await r.json();
+    const raw = _gammaUnwrap(await r.json());;
     const now = new Date();
     const markets = (raw || []).filter(m => m.question).map(m => {
       let yesPrice = null;
@@ -34366,10 +34384,10 @@ app.get('/api/ecosystem/stats', async (req, res) => {
 
     // Parallel fetches: active markets count, top markets by 24h volume, volume endpoint
     const [activeRes, topRes, volumeRes] = await Promise.allSettled([
-      fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=0', {
+      fetch('https://gamma-api.polymarket.com/markets/keyset?active=true&closed=false&limit=0', {
         headers, signal: AbortSignal.timeout(12000)
       }),
-      fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=200&order=volume24hr&ascending=false', {
+      fetch('https://gamma-api.polymarket.com/markets/keyset?active=true&closed=false&limit=200&order=volume24hr&ascending=false', {
         headers, signal: AbortSignal.timeout(15000)
       }),
       fetch('https://data-api.polymarket.com/volume', {
@@ -34509,13 +34527,13 @@ app.get('/api/ecosystem/rewards', async (req, res) => {
     const fetch = _nodeFetch;
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
-    const r = await fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&order=volume24hr&ascending=false', {
+    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?active=true&closed=false&limit=50&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!r.ok) throw new Error('Gamma API ' + r.status);
-    const raw = await r.json();
+    const raw = _gammaUnwrap(await r.json());;
 
     // Filter for markets with reward fields or high liquidity (proxy for LP incentives)
     const rewardMarkets = (raw || [])
@@ -35556,13 +35574,13 @@ async function snapshotPolymarketPrices() {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+    const res = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!res.ok) { console.warn('[snapshot] Gamma API returned', res.status); return; }
-    const markets = await res.json();
+    const markets = _gammaUnwrap(await res.json());;
     if (!Array.isArray(markets) || !markets.length) { console.warn('[snapshot] No markets returned'); return; }
 
     // Upgrade to live CLOB prices before snapshotting
@@ -37046,13 +37064,13 @@ async function generateCrystalBallPredictions() {
       const fetch = _nodeFetch;
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 15000);
-      const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+      const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
         signal: ctrl.signal,
         headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
       });
       clearTimeout(tid);
       if (mktRes.ok) {
-        const rawMarkets = await mktRes.json();
+        const rawMarkets = _gammaUnwrap(await mktRes.json());;
         const markets = (rawMarkets || []).filter(m => m.question).map(m => {
           let yesPrice = null;
           try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
@@ -40770,14 +40788,14 @@ async function detectArbitrageOpportunities() {
   try {
     const fetch = _nodeFetch;
     // Fetch Polymarket events
-    const polyRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false', {
+    const polyRes = await fetch('https://gamma-api.polymarket.com/events/keyset?closed=false&limit=50&order=liquidity&ascending=false', {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     }).catch(() => null);
     // Kalshi events come from the paginated cache (getKalshiEvents)
 
     const polyMarkets = [];
     if (polyRes && polyRes.ok) {
-      const raw = await polyRes.json();
+      const raw = _gammaUnwrap(await polyRes.json());;
       for (const evt of (Array.isArray(raw) ? raw : [])) {
         for (const m of (evt.markets || [])) {
           if (m.closed) continue;
@@ -41612,17 +41630,31 @@ app.get('/api/spread-scanner', async (req, res) => {
     const allWindowMarkets = [];
     const now = Date.now();
 
-    // Fetch multiple pages to get all crypto windows
-    for (let offset = 0; offset < 400; offset += 100) {
+    // Fetch up to 4 pages of markets via keyset cursor pagination. Old
+    // code used offset=0..300 stepping by 100; keyset drops offset in
+    // favour of an opaque next_cursor token returned in the response.
+    // Loop terminates early when the cursor is absent or the page is
+    // empty — same semantics as the old offset loop.
+    let cursor = null;
+    for (let page = 0; page < 4; page++) {
       try {
-        const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=startDate&ascending=false`, {
+        const url = 'https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=100&order=startDate&ascending=false'
+          + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+        const gammaRes = await fetch(url, {
           headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
         });
         if (!gammaRes.ok) break;
-        const gammaData = await gammaRes.json();
-        const markets = Array.isArray(gammaData) ? gammaData : [];
+        const gammaData = _gammaUnwrap(await gammaRes.json());;
+        // Keyset wraps the array in a data envelope with next_cursor.
+        // Tolerate both shapes: some keyset responses still return a
+        // bare array during the rollout window.
+        const markets = Array.isArray(gammaData) ? gammaData
+                      : Array.isArray(gammaData.data) ? gammaData.data
+                      : [];
         if (!markets.length) break;
         allWindowMarkets.push(...markets);
+        cursor = gammaData && gammaData.next_cursor ? gammaData.next_cursor : null;
+        if (!cursor) break;
       } catch { break; }
     }
 
@@ -43215,12 +43247,12 @@ app.post('/api/tweet-brief', async (req, res) => {
 // cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
 /* DISABLED — account flagged
   try {
-    const screenerRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=100&order=volume&ascending=false', {
+    const screenerRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=100&order=volume&ascending=false', {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
       signal: AbortSignal.timeout(10000)
     });
     if (!screenerRes.ok) return;
-    const markets = await screenerRes.json();
+    const markets = _gammaUnwrap(await screenerRes.json());;
     const today = new Date();
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     const expiringToday = (Array.isArray(markets) ? markets : []).filter(m => {
@@ -44596,12 +44628,12 @@ app.get('/api/events', async (req, res) => {
       try {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 10000);
-        const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+        const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
           signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
         });
         clearTimeout(tid);
         if (mktRes.ok) {
-          const rawMarkets = await mktRes.json();
+          const rawMarkets = _gammaUnwrap(await mktRes.json());;
           markets = (rawMarkets || []).map(m => {
             let yesPrice = null;
             try {
@@ -46692,12 +46724,12 @@ async function fetchPythPolymarkets() {
     // Fetch via gamma API events
     for (const term of searchTerms) {
       try {
-        const r = await fetch(`https://gamma-api.polymarket.com/events?active=true&closed=false&limit=20&_q=${encodeURIComponent(term)}`, {
+        const r = await fetch(`https://gamma-api.polymarket.com/events/keyset?active=true&closed=false&limit=20&_q=${encodeURIComponent(term)}`, {
           signal: AbortSignal.timeout(8000),
           headers: { Accept: 'application/json', 'User-Agent': 'HYPERFLEX/1.0' }
         });
         if (!r.ok) continue;
-        const events = await r.json();
+        const events = _gammaUnwrap(await r.json());;
         for (const evt of events) {
           if (!evt.markets || !evt.markets.length) continue;
           for (const mkt of evt.markets) {
