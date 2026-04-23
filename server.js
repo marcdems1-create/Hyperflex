@@ -35722,12 +35722,13 @@ app.get('/api/market-history/:marketId', async (req, res) => {
       // 2. Gamma API (uses conditionId) — for outcomePrices
       if (!history.length) {
         try {
-          const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets/${encodeURIComponent(marketId)}`, {
+          const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?condition_ids=${encodeURIComponent(marketId)}&limit=1`, {
             headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
           });
           if (gammaRes.ok) {
-            const gammaData = await gammaRes.json();
-            if (gammaData.outcomePrices) {
+            const gammaJson = await gammaRes.json();
+            const gammaData = Array.isArray(gammaJson) ? gammaJson[0] : (gammaJson && Array.isArray(gammaJson.data) ? gammaJson.data[0] : gammaJson);
+            if (gammaData && gammaData.outcomePrices) {
               try {
                 const prices = JSON.parse(gammaData.outcomePrices);
                 if (Array.isArray(prices) && prices.length > 0) {
@@ -35735,7 +35736,7 @@ app.get('/api/market-history/:marketId', async (req, res) => {
                 }
               } catch (_) { /* outcomePrices not parseable */ }
             }
-            if (!question && gammaData.question) question = gammaData.question;
+            if (!question && gammaData && gammaData.question) question = gammaData.question;
           }
         } catch (e) { console.warn('[market-history] gamma fallback failed:', e.message); }
       }
