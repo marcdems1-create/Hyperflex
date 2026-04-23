@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Challenges — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root {
+  --bg: #0d0d10;
+  --surface: #13131a;
+  --surface-2: #1a1a24;
+  --text: #f0f0f5;
+  --text-dim: #8b8a9a;
+  --text-faint: #4a4a5a;
+  --border: rgba(255,255,255,0.07);
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --gold: #c9920d;
+  --blue: #4d9fff;
+  --purple: #a855f7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--purple); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 80px 24px 80px; }
+.head {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+}
+.head-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--red); text-transform: uppercase;
+}
+.head h1 {
+  margin: 4px 0 0; font-size: 26px; font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.tabs {
+  display: flex; gap: 6px; margin-bottom: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 4px;
+}
+.tab {
+  flex: 1; padding: 8px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim); cursor: pointer;
+  background: none; border: 0; border-radius: 7px;
+  transition: background .15s, color .15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--surface-2); color: var(--text); }
+.tab-count {
+  display: inline-block; margin-left: 5px;
+  padding: 0 6px; border-radius: 4px;
+  background: rgba(255,77,106,0.15); color: var(--red);
+  font-size: 9px;
+}
+.filter-pills {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.pill {
+  padding: 5px 11px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-dim); cursor: pointer;
+  text-transform: uppercase;
+}
+.pill.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+.card {
+  background: linear-gradient(180deg, rgba(255,77,106,0.03), rgba(255,77,106,0.005));
+  border: 1px solid rgba(255,77,106,0.14);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  transition: border-color .15s;
+}
+.card:hover { border-color: rgba(255,77,106,0.3); }
+.card.accepted { border-color: rgba(0,230,138,0.22); background: linear-gradient(180deg, rgba(0,230,138,0.04), rgba(0,230,138,0.008)); }
+.card.declined { opacity: 0.65; border-color: rgba(255,255,255,0.06); background: rgba(255,255,255,0.015); }
+.card.resolved { border-color: rgba(201,146,13,0.3); background: linear-gradient(180deg, rgba(201,146,13,0.04), rgba(201,146,13,0.008)); }
+
+.row-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px;
+}
+.row-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-faint); text-transform: uppercase;
+}
+.status-chip {
+  padding: 2px 8px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.status-chip.pending  { background: rgba(255,77,106,0.14); color: var(--red); }
+.status-chip.accepted { background: rgba(0,230,138,0.14); color: var(--green); }
+.status-chip.declined { background: rgba(255,255,255,0.06); color: var(--text-dim); }
+.status-chip.resolved { background: rgba(201,146,13,0.14); color: var(--gold); }
+
+.who {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.who-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #a855f7, #4d9fff);
+  padding: 1.5px; flex-shrink: 0;
+}
+.who-avatar-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 12px;
+  color: var(--text);
+}
+.who-name { font-weight: 700; font-size: 14px; }
+.who-sub  {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-dim);
+  margin-top: 1px;
+}
+
+.thesis {
+  font-size: 15px; line-height: 1.5; color: var(--text);
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 10px;
+  border-left: 3px solid rgba(255,77,106,0.4);
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card.accepted .thesis { border-left-color: rgba(0,230,138,0.45); }
+.card.declined .thesis { border-left-color: rgba(255,255,255,0.15); }
+
+.actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-top: 4px;
+}
+.btn {
+  padding: 8px 16px; border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text);
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: rgba(255,255,255,0.05); }
+.btn.accept {
+  background: rgba(0,230,138,0.14); color: var(--green);
+  border-color: rgba(0,230,138,0.3);
+}
+.btn.accept:hover { background: rgba(0,230,138,0.22); }
+.btn.decline {
+  background: rgba(255,77,106,0.08); color: var(--red);
+  border-color: rgba(255,77,106,0.25);
+}
+.btn.decline:hover { background: rgba(255,77,106,0.14); }
+
+.empty {
+  padding: 60px 24px; text-align: center;
+  background: var(--surface); border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--text-faint);
+}
+.empty .icon { font-size: 30px; margin-bottom: 10px; opacity: 0.6; }
+.empty .head {
+  font-size: 14px; font-weight: 700; color: var(--text-dim);
+  margin-bottom: 4px; padding: 0; border: 0;
+}
+.empty p { margin: 0; font-size: 12px; }
+
+.login-gate {
+  padding: 40px 24px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.login-gate h2 { margin: 0 0 8px; font-size: 18px; }
+.login-gate p { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="head-eyebrow">⚔ HYPERFLEX · Challenges</div>
+      <h1>Who's staking against you</h1>
+    </div>
+  </div>
+
+  <div id="authGate" class="login-gate" style="display:none">
+    <h2>Sign in to see your challenges</h2>
+    <p>Challenges are tied to your track record. You'll need an account to respond.</p>
+    <a href="/creator/login" class="btn">Sign in →</a>
+  </div>
+
+  <div id="main" style="display:none">
+    <div class="tabs">
+      <button class="tab active" data-dir="incoming" onclick="setDir('incoming', this)">Incoming <span id="cIn" class="tab-count" style="display:none">0</span></button>
+      <button class="tab" data-dir="outgoing" onclick="setDir('outgoing', this)">Outgoing <span id="cOut" class="tab-count" style="display:none">0</span></button>
+      <button class="tab" data-dir="all" onclick="setDir('all', this)">All</button>
+    </div>
+    <div class="filter-pills">
+      <button class="pill active" data-status="all" onclick="setStatus('all', this)">All</button>
+      <button class="pill" data-status="pending" onclick="setStatus('pending', this)">Pending</button>
+      <button class="pill" data-status="accepted" onclick="setStatus('accepted', this)">Accepted</button>
+      <button class="pill" data-status="declined" onclick="setStatus('declined', this)">Declined</button>
+      <button class="pill" data-status="resolved" onclick="setStatus('resolved', this)">Resolved</button>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+var _dir = 'incoming';
+var _status = 'all';
+var _data = [];
+var _myId = null;
+var _token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var d = new Date(iso).getTime();
+  var delta = Math.floor((Date.now() - d) / 1000);
+  if (delta < 60)     return delta + 's ago';
+  if (delta < 3600)   return Math.floor(delta / 60) + 'm ago';
+  if (delta < 86400)  return Math.floor(delta / 3600) + 'h ago';
+  return Math.floor(delta / 86400) + 'd ago';
+}
+
+async function load() {
+  try {
+    var res = await fetch('/api/challenges?direction=' + _dir + '&status=' + _status + '&limit=100', {
+      headers: { Authorization: 'Bearer ' + _token }
+    });
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('hf_token');
+      localStorage.removeItem('hf_member_token');
+      document.getElementById('authGate').style.display = 'block';
+      document.getElementById('main').style.display = 'none';
+      return;
+    }
+    if (!res.ok) { document.getElementById('list').innerHTML = '<div class="empty"><div class="icon">⚠️</div><div class="head">Failed to load</div><p>Try again in a moment.</p></div>'; return; }
+    var d = await res.json();
+    _data = d.challenges || [];
+    // Infer my user id from the first row (either side is me).
+    if (!_myId && _data.length) {
+      var r = _data[0];
+      _myId = r.challenger_id && r.challenger_id === r.challenger_id ? (_dir === 'outgoing' ? r.challenger_id : r.challenged_id) : null;
+    }
+    render();
+    updateCounts();
+  } catch (e) {
+    document.getElementById('list').innerHTML = '<div class="empty"><div class="icon">⚠️</div><div class="head">Network error</div><p>' + esc(e.message) + '</p></div>';
+  }
+}
+
+async function updateCounts() {
+  // Separate lightweight fetch so the tab badges reflect pending counts
+  // regardless of the currently-selected filter.
+  try {
+    var inc = await fetch('/api/challenges?direction=incoming&status=pending&limit=50', { headers: { Authorization: 'Bearer ' + _token } }).then(r => r.ok ? r.json() : {});
+    var out = await fetch('/api/challenges?direction=outgoing&status=pending&limit=50', { headers: { Authorization: 'Bearer ' + _token } }).then(r => r.ok ? r.json() : {});
+    var cIn  = document.getElementById('cIn');
+    var cOut = document.getElementById('cOut');
+    if (cIn)  { cIn.textContent  = (inc.count || 0); cIn.style.display  = (inc.count || 0) > 0 ? '' : 'none'; }
+    if (cOut) { cOut.textContent = (out.count || 0); cOut.style.display = (out.count || 0) > 0 ? '' : 'none'; }
+  } catch (e) {}
+}
+
+function setDir(v, btn) {
+  _dir = v;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  load();
+}
+function setStatus(v, btn) {
+  _status = v;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  load();
+}
+
+function render() {
+  var list = document.getElementById('list');
+  if (!_data.length) {
+    var dirCopy = _dir === 'incoming' ? 'Nobody has challenged you yet'
+                : _dir === 'outgoing' ? 'You haven\'t challenged anyone yet'
+                : 'No challenges';
+    list.innerHTML = '<div class="empty"><div class="icon">⚔️</div><div class="head">' + dirCopy + '</div><p>Challenges appear here once someone posts one. Head to a predictor\'s profile to start one.</p></div>';
+    return;
+  }
+  list.innerHTML = _data.map(c => renderCard(c)).join('');
+}
+
+function renderCard(c) {
+  var iAmChallenged = _myId ? (c.challenged_id === _myId) : (_dir === 'incoming');
+  var iAmChallenger = _myId ? (c.challenger_id === _myId) : (_dir === 'outgoing');
+  // Fallback: when _myId isn't known (first render of All tab), infer
+  // from direction buckets the server returned.
+  var them = iAmChallenged
+    ? { id: c.challenger_id, name: c.challenger_name || 'Trader', handle: c.challenger_handle }
+    : { id: c.challenged_id, name: c.challenged_name || 'Trader', handle: c.challenged_handle };
+  var initial = (them.name || '?')[0].toUpperCase();
+  var status = c.status || 'pending';
+  var role = iAmChallenged ? 'CHALLENGED YOU' : iAmChallenger ? 'YOU CHALLENGED' : (c.direction_hint || '');
+  var actions = '';
+  if (status === 'pending' && iAmChallenged) {
+    actions = '<div class="actions">' +
+      '<button class="btn accept" onclick="respond(\'' + esc(c.id) + '\',\'accept\',this)">Accept challenge</button>' +
+      '<button class="btn decline" onclick="respond(\'' + esc(c.id) + '\',\'decline\',this)">Decline</button>' +
+    '</div>';
+  } else if (status === 'pending' && iAmChallenger) {
+    actions = '<div class="actions"><span style="font-family:var(--mono,monospace);font-size:10px;color:var(--text-faint);letter-spacing:0.08em;text-transform:uppercase">Awaiting response</span></div>';
+  }
+
+  return '<div class="card ' + status + '">' +
+    '<div class="row-top">' +
+      '<div class="row-meta">' +
+        '<span>' + esc(role) + '</span>' +
+        '<span style="color:var(--text-faint)">·</span>' +
+        '<span>' + esc(timeAgo(c.created_at)) + '</span>' +
+      '</div>' +
+      '<span class="status-chip ' + status + '">' + esc(status) + '</span>' +
+    '</div>' +
+    '<a href="/m/' + encodeURIComponent(them.id) + '" class="who" style="color:inherit;text-decoration:none">' +
+      '<div class="who-avatar"><div class="who-avatar-inner">' + esc(initial) + '</div></div>' +
+      '<div>' +
+        '<div class="who-name">' + esc(them.name) + '</div>' +
+        (them.handle ? '<div class="who-sub">@' + esc(them.handle) + '</div>' : '') +
+      '</div>' +
+    '</a>' +
+    (c.market_title ? '<div style="font-family:var(--mono,monospace);font-size:11px;color:var(--text-dim);margin-bottom:8px">On: ' + esc(c.market_title) + '</div>' : '') +
+    '<div class="thesis">' + esc(c.thesis || '') + '</div>' +
+    actions +
+  '</div>';
+}
+
+async function respond(id, action, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    var r = await fetch('/api/challenges/' + encodeURIComponent(id) + '/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + _token },
+      body: JSON.stringify({ action }),
+    });
+    if (!r.ok) {
+      var msg = 'Failed';
+      try { var e = await r.json(); if (e && e.error) msg = e.error; } catch (_) {}
+      alert(msg);
+      if (btn) btn.disabled = false;
+      return;
+    }
+    load();
+  } catch (e) {
+    alert('Network error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+if (!_token) {
+  document.getElementById('authGate').style.display = 'block';
+} else {
+  // Decode JWT to get our user id so we can distinguish incoming vs
+  // outgoing in the "All" tab without re-querying.
+  try {
+    var payload = JSON.parse(atob(_token.split('.')[1]));
+    _myId = payload.id || payload.user_id || payload.sub || null;
+  } catch (e) {}
+  document.getElementById('main').style.display = 'block';
+  load();
+}
+</script>
+
+</body>
+</html>

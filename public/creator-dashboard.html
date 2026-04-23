@@ -13866,12 +13866,58 @@ function renderNotifBell() {
     const ago = timeAgo(n.created_at);
     const cls = n.read ? 'notif-item' : 'notif-item unread';
     const dest = n.community_slug && n.community_slug.startsWith('market:') ? '/market/' + n.community_slug.slice(7) : n.market_id ? '#' : n.community_slug ? '/' + n.community_slug : '#';
+
+    // Challenges get inline Accept/Decline so the user can respond
+    // without leaving the bell. The outer card stays clickable to
+    // navigate to /challenges for the full thread; the action buttons
+    // stopPropagation so they don't trigger that navigation.
+    if (n.type === 'challenge_received' && n.ref_type === 'challenge' && n.ref_id) {
+      return `<div class="${cls}" onclick="notifClick(${JSON.stringify(n.id)},'/challenges')">
+        <div class="notif-item-title">${escHtml(n.title)}</div>
+        ${n.body ? `<div class="notif-item-body">${escHtml(n.body)}</div>` : ''}
+        <div class="notif-item-time">${ago}</div>
+        <div style="display:flex;gap:6px;margin-top:8px" onclick="event.stopPropagation()">
+          <button onclick="respondChallenge(${JSON.stringify(n.ref_id)},'accept',this)"
+                  style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(0,230,138,0.35);background:rgba(0,230,138,0.12);color:#00e68a;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer">Accept</button>
+          <button onclick="respondChallenge(${JSON.stringify(n.ref_id)},'decline',this)"
+                  style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,77,106,0.3);background:rgba(255,77,106,0.08);color:#ff4d6a;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer">Decline</button>
+        </div>
+      </div>`;
+    }
+
     return `<div class="${cls}" onclick="notifClick(${JSON.stringify(n.id)},${JSON.stringify(dest)})">
       <div class="notif-item-title">${escHtml(n.title)}</div>
       ${n.body ? `<div class="notif-item-body">${escHtml(n.body)}</div>` : ''}
       <div class="notif-item-time">${ago}</div>
     </div>`;
   }).join('');
+}
+
+// Inline challenge accept/decline from the bell. Marks the underlying
+// notification read on success so it doesn't keep pinging. Server blocks
+// re-response on already-settled challenges, so subsequent clicks are
+// safe no-ops.
+async function respondChallenge(id, action, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const r = await fetch(`${API}/api/challenges/${encodeURIComponent(id)}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ action }),
+    });
+    if (!r.ok) {
+      let msg = 'Failed';
+      try { const e = await r.json(); if (e && e.error) msg = e.error; } catch (_) {}
+      alert(msg);
+      if (btn) { btn.disabled = false; btn.textContent = action === 'accept' ? 'Accept' : 'Decline'; }
+      return;
+    }
+    // Refresh notifications so the challenge row updates / disappears.
+    loadNotifs();
+  } catch (err) {
+    alert('Network error — try again.');
+    if (btn) { btn.disabled = false; btn.textContent = action === 'accept' ? 'Accept' : 'Decline'; }
+  }
 }
 
 function toggleNotifDropdown(e) {

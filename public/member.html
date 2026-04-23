@@ -569,17 +569,50 @@ function closeChallenge() {
   m.style.display = 'none';
   document.body.style.overflow = '';
 }
-function submitChallenge() {
+async function submitChallenge() {
   const input = document.getElementById('challengeThesis');
   const thesis = (input?.value || '').trim();
   if (!thesis) { input?.focus(); return; }
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) {
+    alert('Sign in to challenge predictors.');
+    return;
+  }
+  const challengedId = window._profileUserId || userId;
+  if (!challengedId) { alert('Profile not loaded yet.'); return; }
   const u = document.querySelector('.hero-name')?.childNodes[0]?.textContent?.trim() || 'this predictor';
   const handle = (document.querySelector('.hero-username')?.textContent || '').trim();
   const tag = handle.startsWith('@') ? handle : '';
-  const text = `⚔️ Challenging ${tag || u} on @hyperflex:\n\n"${thesis}"\n\nWinner takes the track record.\nhyperflex.network/m/${window._profileUserId}`;
-  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
-  closeChallenge();
-  if (input) input.value = '';
+  try {
+    const res = await fetch(`${API}/api/challenges`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ challenged_id: challengedId, thesis }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('hf_token');
+      localStorage.removeItem('hf_member_token');
+      alert('Session expired. Sign in again.');
+      return;
+    }
+    if (!res.ok) {
+      let msg = 'Challenge failed (HTTP ' + res.status + ')';
+      try { const err = await res.json(); if (err && err.error) msg = err.error; } catch (_) {}
+      alert(msg);
+      return;
+    }
+    // Challenge posted — fire the X share intent as a secondary step so
+    // users can still amplify on-platform. Close the modal regardless.
+    const text = `⚔️ Challenging ${tag || u} on @hyperflex:\n\n"${thesis}"\n\nWinner takes the track record.\nhyperflex.network/m/${challengedId}`;
+    window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+    closeChallenge();
+    if (input) input.value = '';
+    // Lightweight confirmation — no toast infra on this page, so alert.
+    setTimeout(() => alert('Challenge posted. They\'ll see it in their notifications.'), 200);
+  } catch (err) {
+    console.warn('[challenge]', err);
+    alert('Network error — try again.');
+  }
 }
 
 function showFlexScoreInfo() {

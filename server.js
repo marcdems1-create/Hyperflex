@@ -2626,17 +2626,31 @@ app.post('/api/notifications/read', async (req, res) => {
 });
 
 // Helper: push a notification to a user
-async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null) {
+async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null, refs = null) {
   try {
+    const refType = refs && refs.refType ? refs.refType : null;
+    const refId   = refs && refs.refId   ? refs.refId   : null;
     if (pool) {
-      await dbQuery(
-        'INSERT INTO notifications (user_id, type, title, body, market_id, community_slug) VALUES ($1, $2, $3, $4, $5, $6)',
-        [userId, type, title, body || null, marketId || null, communitySlug || null]
-      );
+      // Write with ref columns; fall back to legacy shape if they're not
+      // present (older DBs). Same table, same behaviour — just richer
+      // metadata on the new fields for notifications that need inline
+      // actions (challenge accept/decline, reaction replies, etc.).
+      try {
+        await dbQuery(
+          'INSERT INTO notifications (user_id, type, title, body, market_id, community_slug, ref_type, ref_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [userId, type, title, body || null, marketId || null, communitySlug || null, refType, refId]
+        );
+      } catch (_) {
+        await dbQuery(
+          'INSERT INTO notifications (user_id, type, title, body, market_id, community_slug) VALUES ($1, $2, $3, $4, $5, $6)',
+          [userId, type, title, body || null, marketId || null, communitySlug || null]
+        );
+      }
     } else {
       await supabase.from('notifications').insert([{
         user_id: userId, type, title, body: body || null,
         market_id: marketId || null, community_slug: communitySlug || null,
+        ref_type: refType, ref_id: refId,
       }]);
     }
   } catch (err) {
@@ -12414,6 +12428,160 @@ app.get('/api/sharp-money-feed', async (req, res) => {
 });
 
 // Toggle follow a predictor
+// ── Challenges ────────────────────────────────────────────────────────────
+// A challenge is one user publicly staking an opposing position against
+// another. Flow:
+//   challenger posts → challenges row created with status='pending'
+//                    + notification fires to challenged user's bell
+//   challenged accepts → status='accepted', counter-notification fires
+//   challenged declines → status='declined', challenger gets notified
+// Resolution (status='resolved', winner_id) is set manually or by the
+// market-resolution hook once it exists.
+
+// POST /api/challenges — create a new challenge
+//   body: { challenged_id, thesis, market_id?, market_title? }
+app.post('/api/challenges', requireAuth, async (req, res) => {
+  const { challenged_id, thesis, market_id, market_title } = req.body || {};
+  if (!challenged_id) return res.status(400).json({ error: 'challenged_id required' });
+  if (challenged_id === req.user.id) return res.status(400).json({ error: 'Cannot challenge yourself' });
+  if (!thesis || !thesis.trim()) return res.status(400).json({ error: 'Thesis required' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(
+      `INSERT INTO challenges (challenger_id, challenged_id, thesis, market_id, market_title)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+      [req.user.id, challenged_id, thesis.trim().slice(0, 500), market_id || null, market_title || null]
+    );
+    const challenge = rows[0];
+    // Resolve challenger display name for the notification copy
+    let challengerName = 'Someone';
+    try {
+      const u = await dbQuery('SELECT display_name, username FROM users WHERE id = $1 LIMIT 1', [req.user.id]).catch(() => []);
+      if (u.length) challengerName = u[0].display_name || (u[0].username ? '@' + u[0].username : 'Someone');
+    } catch (e) {}
+    await pushNotification(
+      challenged_id,
+      'challenge_received',
+      challengerName + ' challenged you',
+      (thesis.length > 120 ? thesis.slice(0, 120) + '…' : thesis),
+      null, null,
+      { refType: 'challenge', refId: challenge.id }
+    );
+    res.json({ challenge: { id: challenge.id, status: 'pending', created_at: challenge.created_at } });
+  } catch (err) {
+    console.error('[challenges POST]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/challenges/:id/respond — accept or decline
+//   body: { action: 'accept' | 'decline' }
+app.post('/api/challenges/:id/respond', requireAuth, async (req, res) => {
+  const id = req.params.id;
+  const action = (req.body && req.body.action) || '';
+  if (action !== 'accept' && action !== 'decline') return res.status(400).json({ error: 'action must be accept or decline' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery('SELECT * FROM challenges WHERE id = $1 LIMIT 1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Challenge not found' });
+    const c = rows[0];
+    if (c.challenged_id !== req.user.id) return res.status(403).json({ error: 'Only the challenged user can respond' });
+    if (c.status !== 'pending') return res.status(400).json({ error: 'Challenge already ' + c.status });
+
+    const newStatus = action === 'accept' ? 'accepted' : 'declined';
+    await dbQuery(
+      'UPDATE challenges SET status = $1, responded_at = NOW() WHERE id = $2',
+      [newStatus, id]
+    );
+
+    // Notify the original challenger of the response.
+    let responderName = 'Someone';
+    try {
+      const u = await dbQuery('SELECT display_name, username FROM users WHERE id = $1 LIMIT 1', [req.user.id]).catch(() => []);
+      if (u.length) responderName = u[0].display_name || (u[0].username ? '@' + u[0].username : 'Someone');
+    } catch (e) {}
+    const verb = action === 'accept' ? 'accepted' : 'declined';
+    await pushNotification(
+      c.challenger_id,
+      'challenge_' + action + 'ed',
+      responderName + ' ' + verb + ' your challenge',
+      c.thesis && c.thesis.length > 120 ? c.thesis.slice(0, 120) + '…' : (c.thesis || ''),
+      null, null,
+      { refType: 'challenge', refId: id }
+    );
+    res.json({ id, status: newStatus });
+  } catch (err) {
+    console.error('[challenges respond]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/challenges — list challenges for the authenticated user.
+//   ?direction=incoming (default) | outgoing | all
+//   ?status=pending|accepted|declined|resolved|all
+app.get('/api/challenges', requireAuth, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  const direction = (req.query.direction || 'incoming').toLowerCase();
+  const status    = (req.query.status || 'all').toLowerCase();
+  const limit     = Math.min(parseInt(req.query.limit) || 50, 200);
+  try {
+    const params = [req.user.id];
+    let where;
+    if (direction === 'outgoing')    where = 'c.challenger_id = $1';
+    else if (direction === 'all')    where = '(c.challenger_id = $1 OR c.challenged_id = $1)';
+    else                             where = 'c.challenged_id = $1';
+    if (status !== 'all') {
+      params.push(status);
+      where += ' AND c.status = $' + params.length;
+    }
+    params.push(limit);
+    const rows = await dbQuery(`
+      SELECT c.*,
+             cu.display_name AS challenger_name, cu.username AS challenger_handle,
+             du.display_name AS challenged_name, du.username AS challenged_handle
+      FROM challenges c
+      LEFT JOIN users cu ON cu.id = c.challenger_id
+      LEFT JOIN users du ON du.id = c.challenged_id
+      WHERE ${where}
+      ORDER BY c.created_at DESC
+      LIMIT $${params.length}
+    `, params);
+    res.json({ count: rows.length, challenges: rows });
+  } catch (err) {
+    console.error('[challenges list]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/challenges/:id — single challenge detail
+app.get('/api/challenges/:id', requireAuth, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(`
+      SELECT c.*,
+             cu.display_name AS challenger_name, cu.username AS challenger_handle,
+             du.display_name AS challenged_name, du.username AS challenged_handle
+      FROM challenges c
+      LEFT JOIN users cu ON cu.id = c.challenger_id
+      LEFT JOIN users du ON du.id = c.challenged_id
+      WHERE c.id = $1 LIMIT 1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const c = rows[0];
+    if (c.challenger_id !== req.user.id && c.challenged_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not a party to this challenge' });
+    }
+    res.json({ challenge: c });
+  } catch (err) {
+    console.error('[challenges get]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Serve the challenges management page.
+app.get('/challenges', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'challenges.html'));
+});
+
 app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
   try {
     const followerId = req.user.id;
@@ -44679,6 +44847,30 @@ if (pool) {
         read BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
+      // Ref fields for actionable notifications — e.g. challenge_received
+      // carries ref_type='challenge' + ref_id=<challenges.id> so the bell
+      // can render inline Accept/Decline without another lookup.
+      await dbQuery(`ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS ref_type TEXT,
+        ADD COLUMN IF NOT EXISTS ref_id   TEXT`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS challenges (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        challenger_id TEXT NOT NULL,
+        challenged_id TEXT NOT NULL,
+        market_id TEXT,
+        market_title TEXT,
+        thesis TEXT,
+        stake_flex INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        resolution_outcome TEXT,
+        winner_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        responded_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ
+      )`).catch(() => {});
+      await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenged ON challenges(challenged_id, status, created_at DESC)').catch(() => {});
+      await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenger ON challenges(challenger_id, status, created_at DESC)').catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS creator_wall (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
