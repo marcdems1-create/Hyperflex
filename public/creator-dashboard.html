@@ -21720,27 +21720,25 @@ async function confirmTrade() {
   //      on the CTF Conditional Tokens contract (authoritative)
   //   4. On-chain confirms empty → show error + refresh
   //   5. On-chain has enough → silently update cache, proceed
+  //
+  // Always run on-chain (not just when cache looks insufficient) so stale
+  // cache doesn't waste a MetaMask sign on a ghost position.
   if (clobSide === 'SELL') {
     const ownedShares = parseFloat(_tradeModalData.shares) || 0;
-    const cacheLooksInsufficient = ownedShares <= 0.01 || shares > ownedShares + 0.0001;
-    if (cacheLooksInsufficient) {
-      // Verify against on-chain before blocking. CTF Conditional Tokens on
-      // Polygon: balanceOf(address owner, uint256 id) → uint256 (1:1 shares,
-      // no decimals since Polymarket issues whole-share ERC-1155).
-      const CTF_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
-      try {
-        const provider = await getDashboardPublicProvider();
-        const ctf = new ethers.Contract(
-          CTF_CONDITIONAL_TOKENS,
-          ['function balanceOf(address owner, uint256 id) view returns (uint256)'],
-          provider
-        );
-        const owner = proxyAddress || eoaAddress;
-        const onchainRaw = await ctf.balanceOf(owner, tokenId);
-        // Polymarket CTF shares use 6-decimal fixed point (USDC collateral)
-        const onchainShares = parseFloat(ethers.formatUnits(onchainRaw, 6));
-        console.log('[pre-sell] on-chain balance:', onchainShares, 'requested:', shares, 'cache:', ownedShares);
-        if (onchainShares < shares - 0.0001) {
+    const CTF_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+    try {
+      const provider = await getDashboardPublicProvider();
+      const ctf = new ethers.Contract(
+        CTF_CONDITIONAL_TOKENS,
+        ['function balanceOf(address owner, uint256 id) view returns (uint256)'],
+        provider
+      );
+      const owner = proxyAddress || eoaAddress;
+      const onchainRaw = await ctf.balanceOf(owner, tokenId);
+      // Polymarket CTF shares use 6-decimal fixed point (USDC collateral)
+      const onchainShares = parseFloat(ethers.formatUnits(onchainRaw, 6));
+      console.log('[pre-sell] on-chain balance:', onchainShares, 'requested:', shares, 'cache:', ownedShares);
+      if (onchainShares < shares - 0.0001) {
           // SILENT CLAMP — if requested overshoots by <2% (typical dollar-amount
           // rounding drift: user types $1.56 at 5.7¢ → 27.37 shares, but on-chain
           // is 27.29; that's 0.3% over and should Just Work, not error). Clamp
@@ -21769,28 +21767,24 @@ async function confirmTrade() {
           // Patch the cached position so the MAX button and other UI catch up.
           _tradeModalData.shares = onchainShares;
         }
-      } catch (onchainErr) {
-        // RPC failed — fall back to cache. If cache says zero, still block
-        // (accurate enough) but note in console. Better than blocking when
-        // RPC is flaky and shares genuinely exist.
-        console.warn('[pre-sell] on-chain check failed, falling back to cache:', onchainErr.message);
-        if (ownedShares <= 0.01) {
-          errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You may have already sold them, or you\'re on the opposite side (Yes vs No). Refreshing positions…</span>';
+    } catch (onchainErr) {
+      // RPC failed — fall back to cache. If cache says zero, still block.
+      console.warn('[pre-sell] on-chain check failed, falling back to cache:', onchainErr.message);
+      if (ownedShares <= 0.01) {
+        errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You may have already sold them, or you\'re on the opposite side (Yes vs No). Refreshing positions…</span>';
+        errEl.style.display = 'block';
+        if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+        return;
+      }
+      if (shares > ownedShares + 0.0001) {
+        const overshoot = (shares - ownedShares) / ownedShares;
+        if (ownedShares > 0.01 && overshoot <= 0.02) {
+          shares = ownedShares;
+          amount = shares * price;
+        } else {
+          errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
           errEl.style.display = 'block';
-          if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
           return;
-        }
-        if (shares > ownedShares + 0.0001) {
-          const overshoot = (shares - ownedShares) / ownedShares;
-          if (ownedShares > 0.01 && overshoot <= 0.02) {
-            console.log('[pre-sell/cache] clamping requested shares', shares.toFixed(4), '→', ownedShares.toFixed(4), '(overshoot ' + (overshoot * 100).toFixed(2) + '%)');
-            shares = ownedShares;
-            amount = shares * price;
-          } else {
-            errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
-            errEl.style.display = 'block';
-            return;
-          }
         }
       }
     }
