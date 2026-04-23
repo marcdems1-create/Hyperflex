@@ -496,14 +496,16 @@ Matches official SDK order.
 - Wrap is dispatched as a Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — wired via `executeViaProxy()` in `market.html` + `dashExecuteViaProxy()` in `creator-dashboard.html`, with relayer-first dispatch (`POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`) and direct execTransaction fallback
 - POLY_BUILDER_* HMAC headers still used in V2 alongside the on-chain `order.builder` bytes32
 
-**Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default flips to V2 before April 22 cutover.
+**Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default is V2 as of the April 22 cutover.
 
-**V2 must-do before flipping default:**
-1. Verify the Polymarket Safe singleton via `factory.masterCopy()` on Polygon — research said v1.3.0 but flagged as unverified. EIP-712 domain depends on this (v1.3.0 = `{chainId, verifyingContract}` no name/version; older versions differ).
-2. Live-test `POST /api/polymarket/safe-submit` with a real wrap to confirm relayer accepts `to = CollateralOnramp` for our builder key. Relayer-v2 allowlist documents USDC.e/CTF/Exchange targets but Onramp's status is unverified. If rejected, direct execTransaction fallback works but requires EOA MATIC.
-3. Migrate V2 approvals from EOA-signed `token.approve()` to Safe execTransaction approve dispatched via the same `executeViaProxy` path. Current code mirrors V1's EOA approve pattern, which works for V1 (probably via Polymarket's Safe fallback handler) but unverified for V2.
-4. Amoy testnet (chainId 80002) smoke test — same V2 contract addresses deterministic deploy. Test wrap + approve + order path end-to-end before mainnet flip.
-5. Get the builder profile verified at polymarket.com/settings?tab=builder and set non-zero maker/taker fee rate (currently 0% — attributed V2 trades earn nothing otherwise).
+**V2 status (2026-04-22, session 15):** End-to-end live trading works on both `market.html` and the creator-dashboard portfolio Quick Trade. Wrap + CTF approve + BUY + SELL all confirmed on mainnet with real positions. The only remaining gate is **Polymarket verifying our builder profile** at polymarket.com/settings?tab=builder so we can set a non-zero maker/taker fee rate — attributed V2 trades earn 0 builder fees until then. Do not flip fees on until verification lands; the infrastructure is otherwise complete.
+
+**Pre-cutover checklist — resolved:**
+1. ✅ Polymarket Safe singleton confirmed v1.3.0-compatible via live execTransaction dispatch. EIP-712 domain `{chainId, verifyingContract}` (no name/version) is what works on mainnet.
+2. ✅ `POST /api/polymarket/safe-submit` relayer path verified live. Relayer returns 401 on some calls (notably CTF `setApprovalForAll`) but the direct `execTransaction` fallback succeeds as long as the user's EOA has MATIC for gas. Users without MATIC on their EOA will hit the approval step and bounce — consider a MATIC top-up flow later.
+3. ✅ V2 approvals (ERC-20 + CTF operator) working through `executeViaProxy` SafeTx. Both `market.html` and `creator-dashboard.html` have the full dispatch chain.
+4. ✅ Live-tested on mainnet rather than Amoy — V2 contracts deployed to mainnet ahead of cutover made testnet unnecessary.
+5. ⏳ Builder profile verification pending on Polymarket's side. Maker/taker fees stay at 0% until approved. No code change needed on our end when it lands.
 
 ### Market vs Limit order rules — decimal constraints (corrected 2026-04-21)
 
