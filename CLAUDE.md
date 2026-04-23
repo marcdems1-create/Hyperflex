@@ -2,6 +2,7 @@
 
 > This file is auto-read by Claude at the start of every session. Keep it updated.
 > Full details in HYPERFLEX_Complete_Brief.md. Read that too.
+> **CHANGELOG.md** — read this before every build. Every code change is logged there with commit hash, files touched, and "don't break" notes for the next agent.
 
 ---
 
