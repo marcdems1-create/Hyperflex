@@ -86,6 +86,17 @@ canvas{display:block;width:100%!important}
 .holder-row a:hover{color:var(--text)}
 .holder-shares{font-family:var(--body);font-size:12px;font-weight:500;color:var(--soft)}
 
+/* Related markets carousel */
+.related-track{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.related-track::-webkit-scrollbar{display:none}
+.related-card{flex:0 0 240px;scroll-snap-align:start;background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,transform .15s}
+.related-card:hover{border-color:rgba(201,146,13,0.4);transform:translateY(-1px)}
+.related-card-q{font-family:var(--body);font-size:12px;font-weight:600;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}
+.related-card-row{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--soft)}
+.related-card-yes{color:var(--green);font-weight:700}
+.related-card-no{color:var(--red);font-weight:700}
+.related-card-edge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(201,146,13,0.1);color:var(--gold);letter-spacing:0.3px}
+
 /* Orderbook */
 .mkt-comments{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-comments h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
@@ -341,30 +352,14 @@ canvas{display:block;width:100%!important}
         <div class="dist-legend" id="distLegend"></div>
       </div>
 
-      <!-- Community Takes -->
-      <div class="mkt-comments" id="mktTakesSection" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h3 style="margin:0">Takes <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="takeCount"></span></h3>
-          <button onclick="openMarketTakeModal()" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:6px;padding:5px 12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.5)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.2)'">Post Take</button>
+      <!-- Related Markets — edge-scored carousel to keep the session alive -->
+      <div class="mkt-related" id="mktRelatedSection" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0;font-family:var(--body);font-size:15px;font-weight:600">Related Markets</h3>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--soft)">Top edge right now</span>
         </div>
-        <div id="marketTakesList" style="display:flex;flex-direction:column;gap:0">
-          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:16px 0">No takes yet — share your prediction</div>
-        </div>
-      </div>
-
-      <!-- Comments -->
-      <div class="mkt-comments" id="mktCommentsSection">
-        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
-        <div class="comments-tabs">
-          <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
-          <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
-        </div>
-        <div class="comment-list" id="commentList">
-          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>
-        </div>
-        <div class="comment-input-row">
-          <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
-          <button class="comment-submit" onclick="postMarketComment()">Post</button>
+        <div id="relatedMarketsTrack" class="related-track">
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);padding:12px 0">Loading…</div>
         </div>
       </div>
 
@@ -636,6 +631,7 @@ async function loadMarket() {
     }
 
     renderMarket();
+    loadRelatedMarkets();
 
     // Auto-select outcome from ?outcome= param (conditionId, slug, tokenId, or index)
     var outcomeParam = new URLSearchParams(window.location.search).get('outcome');
@@ -6547,6 +6543,51 @@ async function loadMarketComments(slug) {
     _marketComments = Array.isArray(data) ? data : (data.comments || []);
     renderComments();
   } catch (e) { /* silent */ }
+}
+
+// Related-markets carousel — pull top edge-scored markets, exclude this one,
+// render ≤8 as a horizontal-scroll carousel. Gives the user a retention hook
+// when they're done with this market's detail view.
+async function loadRelatedMarkets() {
+  var track = document.getElementById('relatedMarketsTrack');
+  var wrap = document.getElementById('mktRelatedSection');
+  if (!track || !wrap) return;
+  try {
+    var r = await fetch('/api/alpha/top?n=12');
+    if (!r.ok) throw new Error('alpha/top ' + r.status);
+    var data = await r.json();
+    var mkts = (data && data.markets) || [];
+    // Drop the current market so we don't link to self
+    var currentSlug = (slug || '').toLowerCase();
+    var currentCid  = (_market && _market.conditionId || '').toLowerCase();
+    var filtered = mkts.filter(function(m) {
+      var s = (m.slug || '').toLowerCase();
+      var c = (m.conditionId || m.condition_id || '').toLowerCase();
+      if (s && s === currentSlug) return false;
+      if (c && currentCid && c === currentCid) return false;
+      return true;
+    }).slice(0, 8);
+    if (!filtered.length) { wrap.style.display = 'none'; return; }
+    track.innerHTML = filtered.map(function(m) {
+      var yes = Math.round((parseFloat(m.yes_price) || 0.5) * 100);
+      var no  = 100 - yes;
+      var edge = m.edge_score != null ? Math.round(m.edge_score) : null;
+      var href = '/market/' + encodeURIComponent(m.slug || '');
+      var q = (m.question || 'Untitled').replace(/</g,'&lt;');
+      return '<a class="related-card" href="' + href + '">' +
+        '<div class="related-card-q">' + q + '</div>' +
+        '<div class="related-card-row">' +
+          '<span><span class="related-card-yes">' + yes + '¢</span> · <span class="related-card-no">' + no + '¢</span></span>' +
+          (edge != null ? '<span class="related-card-edge">EDGE ' + edge + '</span>' : '') +
+        '</div>' +
+      '</a>';
+    }).join('');
+    wrap.style.display = 'block';
+  } catch (e) {
+    // Silent failure — carousel is a nice-to-have, not critical path
+    console.warn('[related-markets]', e.message);
+    wrap.style.display = 'none';
+  }
 }
 
 // Pending comment that survives the auth modal flow — set when an anonymous
