@@ -17395,7 +17395,12 @@ async function loadPolymarketPositions(forceRefresh) {
         neg_risk: p.negativeRisk === true,
         opposite_asset: p.oppositeAsset || null
       }));
-      console.log('[poly-positions] Client-side fetch:', positions.length, 'positions');
+      // Drop zero-share ghost positions — data-api.polymarket.com sometimes
+      // returns rows for positions the proxy no longer holds (sold elsewhere,
+      // partially redeemed). Showing them creates ghost Sell rows that fail
+      // the on-chain balance check immediately.
+      positions = positions.filter(p => p.shares > 0.001 || p.redeemable);
+      console.log('[poly-positions] Client-side fetch:', positions.length, 'positions (after ghost filter)');
     } catch (clientErr) {
       console.warn('[poly-positions] Client-side fetch failed, falling back to proxy:', clientErr.message);
     }
