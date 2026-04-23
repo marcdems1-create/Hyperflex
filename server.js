@@ -25230,6 +25230,43 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       realized_pnl:    settled.reduce((s, p) => s + (p.pnl || 0), 0),
       unrealized_pnl:  positions.filter(p => !p.settled).reduce((s, p) => s + (p.pnl || 0), 0),
     };
+
+    // Deep history via /activity — /positions caps at the recent active
+    // portfolio, but /activity is the append-only trade log. Pull trade
+    // events, aggregate by conditionId+outcome to count unique markets
+    // the user has ever traded, and sum cumulative USD volume. Non-
+    // blocking — if /activity fails or is rate-limited, totals above
+    // still reflect the positions view.
+    try {
+      const actRes = await fetch('https://data-api.polymarket.com/activity?user=' + address + '&limit=500&type=TRADE', H);
+      if (actRes.ok) {
+        const acts = await actRes.json();
+        if (Array.isArray(acts) && acts.length) {
+          // Track unique markets and total volume.
+          const markets = new Set();
+          let activityVolume = 0;
+          for (const a of acts) {
+            const key = (a.conditionId || '') + ':' + (a.outcome || '');
+            if (key && key !== ':') markets.add(key);
+            const usd = Number(a.usdcSize || a.usdc_size || a.size || 0);
+            if (usd > 0) activityVolume += usd;
+          }
+          totals.activity_trade_count    = acts.length;
+          totals.activity_unique_markets = markets.size;
+          totals.activity_total_volume   = activityVolume;
+          // If activity volume significantly exceeds the positions
+          // volume, the /positions snapshot is undercounting — prefer
+          // activity volume as the canonical "lifetime volume" number.
+          if (activityVolume > totals.total_volume_usd * 1.5) {
+            totals.total_volume_usd_src = 'activity';
+            totals.total_volume_usd     = activityVolume;
+          } else {
+            totals.total_volume_usd_src = 'positions';
+          }
+        }
+      }
+    } catch (e) { /* activity optional */ }
+
     const data = { positions, totals, address, fetched_at: new Date().toISOString() };
     if (_polyCache) { _polyCache.set(cacheKey, data); setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000); }
     res.json(data);
