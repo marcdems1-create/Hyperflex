@@ -21899,14 +21899,12 @@ async function confirmTrade() {
           const bookData = await bookRes.json();
           let fillPrice = null;
 
-          // For SELL book walk: derive share count from current market price (same as the
-          // order itself uses), NOT from limitPrice. Using limitPrice here causes a false
-          // "not enough liquidity" check when limit < current price (e.g. 11.4¢ limit on
-          // an 18.6¢ position gives 34 shares when only 21 are held/needed).
-          const posCurrentPriceWalk = _tradeModalData.current_price || _tradeModalData.probability || price;
+          // For SELL book walk: use `price` (= _limitPrice, the live CLOB bid) so
+          // share count is consistent with setMaxShares, which also uses _limitPrice.
+          // Both must use the same rate or they produce mismatched share counts.
           const heldSharesWalk = _tradeModalData.shares || _tradeModalData.size || Infinity;
           const sellShares = Math.min(
-            posCurrentPriceWalk > 0 ? roundDown(amount / posCurrentPriceWalk, rounding.sizeDec) : 0,
+            price > 0 ? roundDown(amount / price, rounding.sizeDec) : 0,
             heldSharesWalk
           );
 
@@ -22013,16 +22011,14 @@ async function confirmTrade() {
       takerAmt = Math.round(rawTakerAmt * DECIMALS).toString();
     } else {
       sideInt = 1;
-      // SELL: convert USD amount → shares using current market price (NOT limit price).
-      // Limit price is only the worst-acceptable fill price, not the conversion rate.
-      // Cap at actual held shares to prevent "not enough balance" CLOB errors.
+      // SELL: convert USD amount → shares using `price` (= _limitPrice, live CLOB bid).
+      // setMaxShares uses _limitPrice to compute the dollar amount, so both must use the
+      // same rate or the share count diverges (e.g. $2.05 / 0.486 = 4.22 instead of
+      // $2.05 / 0.41 = 5.0, failing CLOB's 5-share minimum).
       // SDK getOrderRawAmounts / getMarketOrderRawAmounts SELL (identical rounding for GTC+FOK):
       //   rawMakerAmt = roundDown(shares, roundConfig.size)   ← shares, sizeDec=2 for tick 0.01
       //   rawTakerAmt = rawMakerAmt × price                   ← USDC, amountDec=4 for tick 0.01
-      // Convert user's USD input → shares using current market price (not limit/walk price).
-      // Cap at held shares to prevent "not enough balance" CLOB rejection.
-      const posCurrentPrice = _tradeModalData.current_price || _tradeModalData.probability || price;
-      const sellShares = posCurrentPrice > 0 ? amount / posCurrentPrice : 0;
+      const sellShares = price > 0 ? amount / price : 0;
       const heldShares = _tradeModalData.shares || _tradeModalData.size || Infinity;
       const cappedShares = Math.min(sellShares, heldShares);
       const rawMakerAmt = roundDown(cappedShares, rounding.sizeDec); // shares, SDK: roundConfig.size
