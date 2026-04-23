@@ -2183,18 +2183,45 @@ async function fetchTradeBalance() {
     return;
   }
 
-  // Method 1: On-chain RPC balance read
+  // Method 0: Alchemy endpoint (matches dashboard). Sums USDC.e + native
+  // USDC + pUSD so users who deposited native USDC from MetaMask see the
+  // same number the dashboard shows. Falls back silently on 503 (key not
+  // set) or any error. Also populates window._walletBalancePUSD/MATIC for
+  // downstream V2 flows.
   var balance = null;
   try {
-    var provider = await getPublicProvider();
-    var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-    var abi = ['function balanceOf(address) view returns (uint256)'];
-    var contract = new ethers.Contract(usdcAddress, abi, provider);
-    var raw = await contract.balanceOf(proxyAddress);
-    balance = parseFloat(ethers.formatUnits(raw, 6));
-    console.log('[balance debug] RPC balance:', balance);
+    var aRes = await fetch('/api/portfolio/alchemy/' + proxyAddress);
+    if (aRes.ok) {
+      var aData = await aRes.json();
+      var usdcTotal = Number(aData?.balances?.usdc_total);
+      var pusdNum   = Number(aData?.balances?.pusd) || 0;
+      // Count pUSD toward tradeable balance — it's trading collateral on V2
+      // and wraps 1:1 to USDC.e, so treating it as spendable matches intent.
+      if (!isNaN(usdcTotal)) {
+        balance = usdcTotal + pusdNum;
+        window._walletBalancePUSD  = pusdNum;
+        window._walletBalanceMATIC = Number(aData?.balances?.matic) || 0;
+        console.log('[balance debug] Alchemy balance:', balance.toFixed(2), '(usdc_total', usdcTotal.toFixed(2), '+ pusd', pusdNum.toFixed(2), ')');
+      }
+    }
   } catch (e) {
-    console.log('[balance] RPC failed:', e.code || e.message);
+    console.log('[balance] Alchemy failed:', e.message);
+  }
+
+  // Method 1: On-chain RPC balance read (USDC.e only — fallback when Alchemy
+  // is unreachable or key not configured). Keeping as-is since it's proven.
+  if (balance === null) {
+    try {
+      var provider = await getPublicProvider();
+      var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+      var abi = ['function balanceOf(address) view returns (uint256)'];
+      var contract = new ethers.Contract(usdcAddress, abi, provider);
+      var raw = await contract.balanceOf(proxyAddress);
+      balance = parseFloat(ethers.formatUnits(raw, 6));
+      console.log('[balance debug] RPC balance:', balance);
+    } catch (e) {
+      console.log('[balance] RPC failed:', e.code || e.message);
+    }
   }
 
   // Method 2: Fallback — Polymarket profile API (works when RPC is rate-limited on mobile)
@@ -3497,23 +3524,37 @@ async function checkTradingSetup() {
     setSetupStep(3, '', 'Approve token spending');
   }
 
-  // Proxy balance display
+  // Proxy balance display — try Alchemy first (sums USDC.e + native USDC +
+  // pUSD, matches the dashboard), fall back to direct USDC.e RPC read.
   if (proxyValid) {
     var balPanel = document.getElementById('setupProxyBalance');
     var balVal = document.getElementById('setupBalanceVal');
     if (balPanel) balPanel.style.display = 'block';
+    var formattedBal = null;
     try {
-      var provider = await getPublicProvider();
-      var usdcAbi = ['function balanceOf(address) view returns (uint256)'];
-      var usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, provider);
-      var rawBal = await usdcContract.balanceOf(proxyAddr);
-      var formattedBal = parseFloat(ethers.formatUnits(rawBal, 6));
+      var aRes = await fetch('/api/portfolio/alchemy/' + proxyAddr);
+      if (aRes.ok) {
+        var aData = await aRes.json();
+        var usdcTotal = Number(aData?.balances?.usdc_total);
+        var pusdNum   = Number(aData?.balances?.pusd) || 0;
+        if (!isNaN(usdcTotal)) formattedBal = usdcTotal + pusdNum;
+      }
+    } catch (e) { /* fall through to RPC */ }
+    if (formattedBal === null) {
+      try {
+        var provider = await getPublicProvider();
+        var usdcAbi = ['function balanceOf(address) view returns (uint256)'];
+        var usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, provider);
+        var rawBal = await usdcContract.balanceOf(proxyAddr);
+        formattedBal = parseFloat(ethers.formatUnits(rawBal, 6));
+      } catch (e) {
+        console.log('[setup] Balance skipped:', e.code || e.message);
+      }
+    }
+    if (formattedBal !== null) {
       if (balVal) balVal.textContent = '$' + formattedBal.toFixed(2);
-      // Also update the header balance
       var headerBal = document.getElementById('tradeBalance');
       if (headerBal) headerBal.textContent = 'Balance: $' + formattedBal.toFixed(2);
-    } catch (e) {
-      console.log('[setup] Balance skipped:', e.code || e.message);
     }
   }
 }
