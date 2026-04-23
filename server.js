@@ -17613,7 +17613,7 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
       (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 43200.0)) *
       (1.0 + COALESCE(t.sharp_score, 0) / 100.0) AS trending_score
       FROM takes t
-      WHERE t.created_at > now() - interval '7 days'`;
+      WHERE t.created_at > now() - interval '30 days'`;
     const params = [];
     let paramIdx = 1;
 
