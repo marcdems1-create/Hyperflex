@@ -966,6 +966,29 @@ git status   # verify files are dirty
 
 ---
 
+## Session 15 (April 23, 2026) — Cleanup + Profile Fix
+
+**Rewards system removal** (commits `a9d20c0`, `b843949`):
+- Removed "Earn USDC" / rewards banners from explore.html and signals.html
+- `/rewards` route now redirects to `/` — dead page purged
+- Removed rewards nav link from nav.js (shared nav bar)
+
+**Dead file cleanup + shared utilities** (commit `a360646`):
+- Extracted `public/utils.js` — shared utility functions across pages
+- Deleted 4 dead HTML pages: `alpha-preview.html`, `user-dashboard.html`, `meet-kevin-oil-market.html`, `twitter-banner.html`
+
+**Profile data mismatch fix** (commit `101f195`):
+- **Bug**: Whale profiles at `/m/:userId` showed 0/0/0 stats (no HFX bets) while hero card showed correct Polymarket PnL — confusing split between HFX `positions` table data and live Polymarket data
+- **Fix**: Added `loadWhalePositions(walletAddr)` in member.html — auto-fetches live Polymarket positions via `/api/trader/:address/profile` for whale profiles; renders up to 8 open positions inline with side badge, price, size, PnL
+- **Bug**: HFX user profile links in predictors.html routed UUID user_ids to `/p/:UUID` → `profile-trader.html` → display_name search → always 404
+- **Fix**: Updated `renderPodium`, `renderTable`, `renderHallOfFame` in predictors.html — UUID user_ids (non-`0x`) now route to `/m/:userId`; wallet addresses still go to `/trader/:wallet`
+- **Bug**: `loadSocialPredictions()` and `showOwnerTools()` in member.html were never called — dead `_origLoad` override at bottom of file ran after `load()` had already executed
+- **Fix**: Removed dead override; wired `loadAnalytics`, `loadTrophyCard`, `loadInviteSection`, `loadWhalePositions`, `showOwnerTools`, `loadSocialPredictions` directly at the end of `load()`
+
+**Latest commits:** `a360646` → `b843949` → `a9d20c0` → `101f195` (all on branch `claude/fix-clob-order-attribution-UiZjd`)
+
+---
+
 ## The Ask
 
 Marc is the founder. Claude is the CTO. Be proactive, stay in context, don't ask what we're building — you already know. Read the brief, check git status, and get to work.
