@@ -432,7 +432,11 @@ async function load(n){
   currentN=n||currentN;
   try{
     const r=await fetch('/api/alpha/top?n='+currentN);
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok){
+      let detail='';
+      try{const j=await r.json();detail=j.detail||j.error||'';}catch{}
+      throw new Error('HTTP '+r.status+(detail?' — '+detail:''));
+    }
     const data=await r.json();
     render(data);
   }catch(e){

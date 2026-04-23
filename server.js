@@ -30380,6 +30380,31 @@ app.get('/api/alpha/top', async (req, res) => {
   }
 });
 
+// Debug endpoint — tells us exactly what Gamma returns so we can diagnose
+// 502s without Railway log access. Not cached, fires a fresh Gamma fetch.
+app.get('/api/alpha/debug', async (req, res) => {
+  const out = { ts: new Date().toISOString(), cache_age_s: _screenerCache ? Math.round((Date.now() - _screenerCache.ts) / 1000) : null };
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 12000);
+    const r = await _nodeFetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume&ascending=false', {
+      signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    out.gamma_status = r.status;
+    out.gamma_ok = r.ok;
+    const body = await r.json();
+    const arr = _gammaUnwrap(body);
+    out.gamma_is_array = Array.isArray(arr);
+    out.gamma_count = arr.length;
+    out.gamma_sample = arr.slice(0, 2).map(m => ({ slug: m.slug, question: (m.question||'').slice(0,60), volume: m.volume, volume24hr: m.volume24hr }));
+    out.gamma_raw_type = Array.isArray(body) ? 'array' : (body && typeof body === 'object' ? Object.keys(body).join(',') : typeof body);
+  } catch (e) {
+    out.gamma_error = e.message;
+  }
+  res.json(out);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TERMINAL — unified 6-panel data endpoint for /terminal Bloomberg-style view
 // ═══════════════════════════════════════════════════════════════════════════
