@@ -1146,9 +1146,15 @@ async function enrichFromLivePolymarket() {
       return;
     }
 
-    // Prefer the server's pre-computed totals (they include redeemed/settled
-    // history the client-side fallback loop would miss). Fall back to
-    // per-position aggregation for older payloads that don't carry totals.
+    // Start from the DB-derived polymarket_stats that came with the
+    // /api/member response — those reflect the polymarket_trades table
+    // (the same source the admin dashboard reads). Then OVERLAY the
+    // live Polymarket totals ONLY where they beat the DB: live has
+    // fresher open-position state, DB has deeper trade history.
+    // Previously the live fetch clobbered everything, so a wallet with
+    // 100 trades in our DB but 1 open position on Polymarket rendered
+    // as "1 position · $25 volume." Now the max of the two wins.
+    const dbStats = (typeof data !== 'undefined' && data && data.polymarket_stats) ? data.polymarket_stats : null;
     let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
     if (serverTotals) {
       vol    = Number(serverTotals.total_volume_usd) || 0;
@@ -1170,6 +1176,27 @@ async function enrichFromLivePolymarket() {
         if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
       }
     }
+    // Overlay DB stats where they exceed the live fetch. polymarket_trades
+    // (our append-only log — what the admin dashboard surfaces) is the
+    // ground truth for trade count + volume. Live positions is the
+    // ground truth for open/unrealised. Take the max of each so neither
+    // source silently loses to the other.
+    let totalPositions = positions.length;
+    if (dbStats) {
+      const dbTotal   = Number(dbStats.total_trades  || 0);
+      const dbVol     = Number(dbStats.volume_usd    || 0);
+      const dbWins    = Number(dbStats.closed_wins   || 0);
+      const dbLosses  = Number(dbStats.closed_losses || 0);
+      const dbPnl     = Number(dbStats.pnl_usd       || 0);
+      if (dbTotal   > totalPositions) totalPositions = dbTotal;
+      if (dbVol     > vol)            vol    = dbVol;
+      if (dbWins    > wins)           wins   = dbWins;
+      if (dbLosses  > losses)         losses = dbLosses;
+      // PnL: prefer whichever source has larger magnitude — reflects the
+      // real realised+unrealised total over the full history.
+      if (Math.abs(dbPnl) > Math.abs(pnl)) pnl = dbPnl;
+    }
+
     const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
     const pnlFmt = (pnl >= 0 ? '+$' : '-$') + (Math.abs(pnl) >= 1e3 ? Math.round(Math.abs(pnl)/1e3) + 'K' : Math.round(Math.abs(pnl)));
 
@@ -1178,7 +1205,7 @@ async function enrichFromLivePolymarket() {
     const pEl = document.getElementById('statPnl');
     const pSub = document.getElementById('statPnlSub');
     if (vEl) vEl.textContent = volFmt;
-    if (vSub) vSub.textContent = positions.length + ' positions';
+    if (vSub) vSub.textContent = totalPositions + ' positions';
     if (pEl) { pEl.textContent = pnlFmt; pEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
     if (pSub) pSub.textContent = wins + 'W / ' + losses + 'L';
 

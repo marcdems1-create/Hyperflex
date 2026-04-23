@@ -13134,9 +13134,16 @@ app.get('/api/member/:userId', async (req, res) => {
     let polyStats = { total: 0, volume: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
     if (pool && userData.polymarket_address) {
       try {
+        // LOWER() on both sides — eoa_address is stored lowercase by the
+        // builder-fee pipeline, but polymarket_address on users can carry
+        // mixed case from older connections. Without normalisation the
+        // join silently returns 0 rows and the profile looks empty even
+        // though the admin dashboard clearly tracks trades for this
+        // wallet. Bumped LIMIT 100 → 500 so active traders don't get
+        // truncated.
         polyTrades = await dbQuery(
           `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at
-           FROM polymarket_trades WHERE eoa_address = $1 ORDER BY created_at DESC LIMIT 100`,
+           FROM polymarket_trades WHERE LOWER(eoa_address) = LOWER($1) ORDER BY created_at DESC LIMIT 500`,
           [userData.polymarket_address]
         );
         polyStats.total = polyTrades.length;
