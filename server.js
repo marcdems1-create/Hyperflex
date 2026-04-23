@@ -25953,25 +25953,27 @@ async function _buildAlphaListInner(opts = {}) {
     let binanceVolSurge = {};
     try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
-    // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
-    // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
-    // by 24h volume desc to get the actually-hot markets in our processing window.
+    // Fetch a wider window from Gamma API — we sort client-side by 24h volume anyway,
+    // so the server-side sort just needs to be a valid parameter.
+    // Use volume24hr (same as other callers) — volumeNum was non-standard and caused
+    // Gamma to return an error object instead of an array.
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volumeNum&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
     const _rawAll = await mktRes.json();
-    // Polymarket's Gamma API returns a flat array. If they wrap it in an object
-    // (e.g. { data: [], markets: [] }), extract the inner array so we don't
-    // silently end up with 0 markets.
+    // Gamma returns a flat array. Guard against any object-wrapped shape.
     const _rawArr = Array.isArray(_rawAll)
       ? _rawAll
-      : (_rawAll.data || _rawAll.markets || _rawAll.results || []);
-    console.log('[alpha] gamma raw:', typeof _rawAll, Array.isArray(_rawAll) ? 'array' : 'object', 'len:', _rawArr.length);
+      : Array.isArray(_rawAll.data) ? _rawAll.data
+      : Array.isArray(_rawAll.markets) ? _rawAll.markets
+      : Array.isArray(_rawAll.results) ? _rawAll.results
+      : [];
+    if (_rawArr.length === 0) throw new Error('Gamma API returned 0 markets (shape: ' + JSON.stringify(Object.keys(_rawAll || {})) + ')');
     // Pick the right volume metric per market: prefer 24h, fall back to lifetime
     const _vol = (m) => {
       const v24 = parseFloat(m.volume24hr || m.volume_24hr || 0);
