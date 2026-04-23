@@ -21629,6 +21629,33 @@ async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
   return dashExecuteViaProxy(DASH_COLLATERAL_ONRAMP, data, 0n, proxyAddr, eoaAddr, signer);
 }
 
+// CTF (ERC-1155) operator approval — V2 exchanges need setApprovalForAll from
+// the seller's proxy or CLOB-V2 rejects SELL with "not enough balance /
+// allowance" even when the proxy holds the shares. V1 exchanges were
+// pre-approved during polymarket.com onboarding; V2 operators are new so each
+// user needs one setApprovalForAll per V2 exchange (CTF V2 + NegRisk V2).
+const DASH_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
+  if (!ownerAddr || !operator) return false;
+  try {
+    const provider = await getDashboardPublicProvider();
+    const ctf = new ethers.Contract(DASH_CONDITIONAL_TOKENS, [
+      'function isApprovedForAll(address account, address operator) view returns (bool)'
+    ], provider);
+    return await ctf.isApprovedForAll(ownerAddr, operator);
+  } catch (e) {
+    console.warn('[dash-ctf] isApprovedForAll check failed:', e.message);
+    return false;
+  }
+}
+async function dashApproveCtfForOperator(operator, proxyAddr, eoaAddr, signer) {
+  if (!operator) throw new Error('Operator address missing');
+  const iface = new ethers.Interface(['function setApprovalForAll(address operator, bool approved)']);
+  const data = iface.encodeFunctionData('setApprovalForAll', [operator, true]);
+  console.log('[dash-ctf] setApprovalForAll ' + operator.slice(0,10) + '…=true via Safe');
+  return dashExecuteViaProxy(DASH_CONDITIONAL_TOKENS, data, 0n, proxyAddr, eoaAddr, signer);
+}
+
 var _confirmTradeRetryCount = 0;
 async function confirmTrade() {
   if (!window._connectedWallet) {
@@ -21658,6 +21685,15 @@ async function confirmTrade() {
   }
 
   const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
+
+  // Hoisted from below — the pre-sell on-chain check at line ~21710 needs
+  // these. Leaving them at the post-sell-check spot hit a TDZ and the whole
+  // on-chain verify silently threw every time, causing the cache-fast-path
+  // to swallow ghost rows (seen on Sell Yes of a SI-hit-jun-2026 position
+  // that had been closed elsewhere — user saw "balance disagrees with what
+  // we cached" after a CLOB round-trip).
+  const eoaAddress = localStorage.getItem('poly_eoa_address') || window._connectedWallet;
+  const proxyAddress = localStorage.getItem('hf_poly_wallet');
 
   // ── $1 MINIMUM ORDER TOTAL (both sides) ───────────────────────────────────
   // Polymarket CLOB rejects orders whose takerAmount (USDC for BUY, USDC
@@ -22029,6 +22065,48 @@ async function confirmTrade() {
           btn.disabled = false; btn.textContent = 'Place Order';
           return;
         }
+      }
+    }
+
+    // V2 SELL pre-flight: the V2 exchange is a new operator on the CTF
+    // ERC-1155 contract and needs setApprovalForAll from the seller's proxy
+    // before it can transferFrom outcome tokens at match time. Without this,
+    // CLOB-V2 rejects with "not enough balance / allowance" even though the
+    // proxy holds the shares — which is exactly what users were hitting when
+    // selling a Plasma YES position on V2. One SafeTx per (exchange, proxy),
+    // sticky forever. See market.html executeTrade for the canonical pattern.
+    if (useClobV2 && clobSide === 'SELL' && proxyAddress) {
+      try {
+        const approved = await dashIsCtfApprovedForOperator(proxyAddress, exchangeAddr);
+        console.log('[qt-trade-v2] CTF approval for', exchangeAddr.slice(0,10) + '… =', approved);
+        if (!approved) {
+          btn.textContent = 'Approve V2 to transfer shares...';
+          errEl.style.color = 'var(--gold)';
+          errEl.textContent = 'Approving V2 exchange to transfer your outcome tokens (one-time)...';
+          errEl.style.display = 'block';
+          await dashApproveCtfForOperator(exchangeAddr, proxyAddress, eoaAddress, window._walletSigner);
+          // Re-check so we don't sign an order that would still fail.
+          const approvedAfter = await dashIsCtfApprovedForOperator(proxyAddress, exchangeAddr);
+          if (!approvedAfter) {
+            errEl.style.color = '';
+            errEl.textContent = 'Approval submitted but not yet confirmed — try again in a few seconds.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+            return;
+          }
+          errEl.style.color = '';
+          errEl.style.display = 'none';
+        }
+      } catch (approveErr) {
+        const amsg = (approveErr && approveErr.message) || 'Unknown approval error';
+        console.error('[qt-trade-v2] CTF approval failed:', approveErr);
+        errEl.style.color = '';
+        errEl.textContent = 'Could not approve V2 exchange: ' + amsg;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+        return;
       }
     }
 
