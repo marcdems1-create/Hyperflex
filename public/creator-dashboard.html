@@ -21405,6 +21405,24 @@ function setTradeMode(mode) {
   _updateQuickBtnLabels();
   updateTradeEstimate();
   updateTradeConfirmBtn();
+
+  // Flip the Yes/No pill prices to reflect the new mode. Use the cached
+  // orderbook if it's landed; otherwise the next CLOB refresh will fix
+  // it. Sell shows bids (receive), buy shows asks (pay).
+  try {
+    const ob = _tradeModalData && _tradeModalData._orderbook;
+    if (ob) {
+      const isSell = mode === 'sell';
+      const ask = ob.best_ask != null ? ob.best_ask : (ob.mid_price || 0.5);
+      const bid = ob.best_bid != null ? ob.best_bid : (ob.mid_price || 0.5);
+      const yesPrice = isSell ? bid : ask;
+      const noPrice  = isSell ? (1 - ask) : (1 - bid);
+      const yEl = document.getElementById('tradeYesPrice');
+      const nEl = document.getElementById('tradeNoPrice');
+      if (yEl) yEl.textContent = (yesPrice * 100).toFixed(1) + '¢';
+      if (nEl) nEl.textContent = (noPrice  * 100).toFixed(1) + '¢';
+    }
+  } catch (e) {}
 }
 
 async function loadOrderbook(pos) {
@@ -21435,12 +21453,24 @@ async function loadOrderbook(pos) {
     // Update limit price from CLOB data (respects Market vs Limit order type)
     _updateLimitFromOrderbook();
 
-    // Also update YES/NO price displays with CLOB data
-    if (data.best_ask != null || data.mid_price != null) {
-      const yesPrice = data.best_ask != null ? data.best_ask : (data.mid_price || 0.5);
-      const noPrice = 1 - yesPrice;
+    // Update YES/NO price displays with CLOB data. CRITICAL: the number
+    // on the pill must match what the user actually gets at market in
+    // the CURRENT mode. Previously we always showed the ASK (buy price),
+    // which made SELL mode look like a 12c rip-off — the pill read
+    // 'Yes 18.7c' while the market-price field (correctly) showed the
+    // bid at 6.1c. Branch on mode:
+    //   BUY  mode: Yes = best_ask  (what you pay to buy Yes)
+    //              No  = 1 - best_bid (cross-side ask on No)
+    //   SELL mode: Yes = best_bid  (what you receive selling Yes)
+    //              No  = 1 - best_ask (cross-side bid on No)
+    if (data.best_ask != null || data.best_bid != null || data.mid_price != null) {
+      const isSell = _tradeModalData && _tradeModalData.mode === 'sell';
+      const ask = data.best_ask != null ? data.best_ask : (data.mid_price || 0.5);
+      const bid = data.best_bid != null ? data.best_bid : (data.mid_price || 0.5);
+      const yesPrice = isSell ? bid : ask;
+      const noPrice  = isSell ? (1 - ask) : (1 - bid);
       document.getElementById('tradeYesPrice').textContent = (yesPrice * 100).toFixed(1) + '\u00A2';
-      document.getElementById('tradeNoPrice').textContent = (noPrice * 100).toFixed(1) + '\u00A2';
+      document.getElementById('tradeNoPrice').textContent  = (noPrice  * 100).toFixed(1) + '\u00A2';
     }
 
     // Close-at-market: auto-fill max shares once the live CLOB price lands
