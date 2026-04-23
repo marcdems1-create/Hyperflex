@@ -7,6 +7,12 @@
 
 ## 2026-04-23 — Session 16 (Claude Code)
 
+### fix: markets/keyset sort param (`5a53c38`)
+- **File:** `server.js` → `buildAlphaList()`
+- `order=volume24hr` is only valid on `events/keyset` — not on `markets/keyset`. Gamma returns 0 results with that param, causing 502 on `/api/alpha/top`.
+- **Fix:** Changed to `order=volume` (what all other `markets/keyset` calls in the codebase use).
+- **Don't break:** If you add more `markets/keyset` calls, use `order=volume`. Use `order=volume24hr` only on `events/keyset`.
+
 ### fix: SELL max amount uses live CLOB bid, not entry price (`516b8a0`)
 - **File:** `public/creator-dashboard.html` → `setMaxShares()`
 - **Bug:** `current_price` on a position is the ENTRY price (e.g. 11.4¢), not the live market price. SELL was pre-filling `shares × entryPrice` ($3.88) instead of `shares × liveBid` ($1.39), immediately triggering "Selling more than you hold."
