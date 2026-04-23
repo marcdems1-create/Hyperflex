@@ -1695,6 +1695,7 @@ const _predictorFollowCache = new Map();
 function _gammaUnwrap(body) {
   if (Array.isArray(body)) return body;
   if (body && Array.isArray(body.data)) return body.data;
+  if (body && Array.isArray(body.markets)) return body.markets; // keyset envelope: { markets, next_cursor }
   return [];
 }
 // Optional cursor extraction for paginated loops.
