@@ -21668,14 +21668,14 @@ async function confirmTrade() {
   const btn = document.getElementById('tradeConfirmBtn');
   errEl.style.display = 'none';
 
-  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
+  let amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
   if (!amount || amount <= 0) {
     errEl.textContent = 'Enter amount in USD';
     errEl.style.display = 'block';
     return;
   }
   const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
-  const shares = price > 0 ? amount / price : 0;
+  let shares = price > 0 ? amount / price : 0;
 
   const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
   if (!tokenId) {
@@ -21748,19 +21748,34 @@ async function confirmTrade() {
         const onchainShares = parseFloat(ethers.formatUnits(onchainRaw, 6));
         console.log('[pre-sell] on-chain balance:', onchainShares, 'requested:', shares, 'cache:', ownedShares);
         if (onchainShares < shares - 0.0001) {
-          // Truly insufficient — show the accurate on-chain number
-          if (onchainShares <= 0.01) {
-            errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Confirmed on-chain. You may have sold them elsewhere. Refreshing positions…</span>';
+          // SILENT CLAMP — if requested overshoots by <2% (typical dollar-amount
+          // rounding drift: user types $1.56 at 5.7¢ → 27.37 shares, but on-chain
+          // is 27.29; that's 0.3% over and should Just Work, not error). Clamp
+          // shares down to on-chain and back-compute the USD amount so downstream
+          // maker/taker math uses the real number. Polymarket.com does this too.
+          const overshoot = (shares - onchainShares) / onchainShares;
+          if (onchainShares > 0.01 && overshoot <= 0.02) {
+            console.log('[pre-sell] clamping requested shares', shares.toFixed(4), '→', onchainShares.toFixed(4), '(overshoot ' + (overshoot * 100).toFixed(2) + '%)');
+            shares = onchainShares;
+            amount = shares * price;
+            _tradeModalData.shares = onchainShares;
+            // fall through to submit
           } else {
-            errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">On-chain balance: ' + onchainShares.toFixed(2) + ' shares. Reduce the amount or tap MAX.</span>';
+            // Truly insufficient — show the accurate on-chain number
+            if (onchainShares <= 0.01) {
+              errEl.innerHTML = 'You don\'t hold any shares on this outcome.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Confirmed on-chain. You may have sold them elsewhere. Refreshing positions…</span>';
+            } else {
+              errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">On-chain balance: ' + onchainShares.toFixed(2) + ' shares. Reduce the amount or tap MAX.</span>';
+            }
+            errEl.style.display = 'block';
+            if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
+            return;
           }
-          errEl.style.display = 'block';
-          if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
-          return;
+        } else {
+          // On-chain confirmed — cache was stale, let the sell through.
+          // Patch the cached position so the MAX button and other UI catch up.
+          _tradeModalData.shares = onchainShares;
         }
-        // On-chain confirmed — cache was stale, let the sell through.
-        // Patch the cached position so the MAX button and other UI catch up.
-        _tradeModalData.shares = onchainShares;
       } catch (onchainErr) {
         // RPC failed — fall back to cache. If cache says zero, still block
         // (accurate enough) but note in console. Better than blocking when
@@ -21773,9 +21788,16 @@ async function confirmTrade() {
           return;
         }
         if (shares > ownedShares + 0.0001) {
-          errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
-          errEl.style.display = 'block';
-          return;
+          const overshoot = (shares - ownedShares) / ownedShares;
+          if (ownedShares > 0.01 && overshoot <= 0.02) {
+            console.log('[pre-sell/cache] clamping requested shares', shares.toFixed(4), '→', ownedShares.toFixed(4), '(overshoot ' + (overshoot * 100).toFixed(2) + '%)');
+            shares = ownedShares;
+            amount = shares * price;
+          } else {
+            errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '. Reduce the amount or tap MAX.</span>';
+            errEl.style.display = 'block';
+            return;
+          }
         }
       }
     }
