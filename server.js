@@ -28503,7 +28503,10 @@ app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
-app.get('/arbitrage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arbitrage.html')));
+// Arbitrage page retired — the standalone surface wasn't valuable enough to
+// justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
+// stays live for odds.html, creator-dashboard, and the public Data API docs.
+app.get('/arbitrage', (req, res) => res.redirect(301, '/'));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 

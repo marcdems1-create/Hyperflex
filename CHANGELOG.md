@@ -7,6 +7,11 @@
 
 ## 2026-04-23 — Session 17 (Claude Code)
 
+### chore: retire /arbitrage page (API stays alive)
+- **Files:** deleted `public/arbitrage.html`; edited `public/nav.js` (removed 2 nav entries); `server.js` (turned the route into a 301 → `/`).
+- The standalone page wasn't driving value. Users get the same cross-platform spread signal on `/odds` and inside the creator dashboard, both of which still consume `/api/arbitrage` and `/api/v1/arbitrage`.
+- **Don't break:** the two API endpoints stay live. `odds.html` and `creator-dashboard.html` both read `/api/arbitrage`; `api-docs.html` still documents `/api/v1/arbitrage`. If you delete those endpoints you break three surfaces. `'arbitrage'` stays in `RESERVED_SLUGS` so nobody can create a community with that name.
+
 ### feat: related-markets carousel on market page + drop duplicate Comments block
 - **File:** `public/market.html`
 - Market page had two identical `<div class="mkt-comments" id="mktCommentsSection">` blocks (plus duplicate `mktTakesSection`, `commentList`, `commentInput` IDs). `getElementById` returns the first match, so the second copy was dead DOM with no JS hooks. Dropped the duplicate block that sat between Holder Distribution and Crystal Ball.
