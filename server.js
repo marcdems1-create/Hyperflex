@@ -25555,6 +25555,82 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
   }
 });
 
+// ── Alchemy Polygon balances proxy ─────────────────────────────────────────
+// One server-side call replaces the browser's trio of public-RPC balanceOf
+// reads (USDC.e, pUSD, MATIC) on portfolio-tab load. Key stays in env,
+// never in the browser. Cached 30s per address to respect Alchemy compute
+// units. Returns 503 if ALCHEMY_API_KEY isn't configured so the client can
+// gracefully fall back to public RPC.
+const _alchemyCache = new Map();
+const ALCHEMY_CACHE_TTL = 30_000;
+const ALCHEMY_TOKENS_POLYGON = {
+  usdce: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  pusd:  '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB', // PMCT
+};
+app.get('/api/portfolio/alchemy/:address', async (req, res) => {
+  const key = process.env.ALCHEMY_API_KEY;
+  if (!key) return res.status(503).json({ error: 'Alchemy not configured' });
+  const address = (req.params.address || '').trim().toLowerCase();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return res.status(400).json({ error: 'Invalid address' });
+
+  const cacheKey = 'alchemy_bal_' + address;
+  const cached = _alchemyCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < ALCHEMY_CACHE_TTL) return res.json(cached.data);
+
+  const url = 'https://polygon-mainnet.g.alchemy.com/v2/' + key;
+  try {
+    // Batch three JSON-RPC calls in one HTTP POST (id-keyed response array)
+    const body = [
+      {
+        jsonrpc: '2.0', id: 1, method: 'alchemy_getTokenBalances',
+        params: [address, [ALCHEMY_TOKENS_POLYGON.usdce, ALCHEMY_TOKENS_POLYGON.pusd]],
+      },
+      { jsonrpc: '2.0', id: 2, method: 'eth_getBalance', params: [address, 'latest'] },
+    ];
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('Alchemy ' + r.status);
+    const arr = await r.json();
+    if (!Array.isArray(arr)) throw new Error('Unexpected Alchemy response');
+
+    const byId = Object.fromEntries(arr.map((e) => [e.id, e]));
+    const toks = byId[1]?.result?.tokenBalances || [];
+    const maticHex = byId[2]?.result || '0x0';
+
+    // tokenBalances hex → normalized numbers (6 decimals for both ERC-20s)
+    const toUnits = (hex, decimals) => {
+      if (!hex || hex === '0x0') return 0;
+      const atomic = BigInt(hex);
+      // Keep precision: divide as BigInt, then convert small remainder to float
+      const whole = Number(atomic / BigInt(10) ** BigInt(decimals));
+      const frac  = Number(atomic % BigInt(10) ** BigInt(decimals)) / Number(BigInt(10) ** BigInt(decimals));
+      return whole + frac;
+    };
+    const usdceRaw = toks.find(t => t.contractAddress?.toLowerCase() === ALCHEMY_TOKENS_POLYGON.usdce.toLowerCase())?.tokenBalance;
+    const pusdRaw  = toks.find(t => t.contractAddress?.toLowerCase() === ALCHEMY_TOKENS_POLYGON.pusd.toLowerCase())?.tokenBalance;
+
+    const data = {
+      address,
+      network: 'matic-mainnet',
+      balances: {
+        usdce: toUnits(usdceRaw, 6),
+        pusd:  toUnits(pusdRaw, 6),
+        matic: toUnits(maticHex, 18),
+      },
+      source: 'alchemy',
+      fetched_at: new Date().toISOString(),
+    };
+    _alchemyCache.set(cacheKey, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.warn('[alchemy] balances fetch failed:', err.message);
+    res.status(502).json({ error: 'Alchemy fetch failed', detail: err.message });
+  }
+});
+
 // GET /api/polymarket/positions/:address/enriched — positions + whale overlap intel
 app.get('/api/polymarket/positions/:address/enriched', async (req, res) => {
   try {
