@@ -22830,6 +22830,58 @@ async function confirmTrade() {
             }
           } catch (dbgErr) { console.warn('[qt-trade] diag dump failed:', dbgErr.message); }
 
+          // If everything on-chain looks correct but CLOB still rejects, the
+          // most likely remaining cause is a stale apikey. CLOB's "not enough
+          // balance / allowance" is generic enough to cover the case where
+          // the apikey isn't registered to any maker address in their DB.
+          // Auto-clear and force a re-derive ONCE per trade attempt. If the
+          // user just completed polymarket.com onboarding (deposit, first
+          // trade on their side, etc.), CLOB is now indexing their EOA and a
+          // fresh POST /auth/api-key will return a registered key instead of
+          // the deterministic-but-orphaned `d60fc46c…` response.
+          // Guarded via `_tradeModalData._apikeyRefreshFired` so we can't loop.
+          const allCtApprovalsOk  = dbgCtf === '✓';   // routed-exchange is CTF V2 per our earlier evidence
+          const requiredPUsdOk    = dbgPUsdAllowCt.startsWith('✓') && dbgPUsdAllowCtfEx.startsWith('✓');
+          const sharesOk          = dbgBal !== 'rpc-error' && parseFloat(dbgBal) > 0;
+          const onchainGreen      = allCtApprovalsOk && requiredPUsdOk && sharesOk;
+          if (clobSide === 'SELL' && onchainGreen && !_tradeModalData._apikeyRefreshFired) {
+            _tradeModalData._apikeyRefreshFired = true;
+            console.warn('[qt-trade] on-chain ✓ but CLOB rejected — apikey likely stale, clearing + re-deriving');
+            try {
+              localStorage.removeItem('poly_api_key');
+              localStorage.removeItem('poly_api_secret');
+              localStorage.removeItem('poly_api_passphrase');
+              localStorage.removeItem('hf_clob_api_key');
+              localStorage.removeItem('hf_clob_api_secret');
+              localStorage.removeItem('hf_clob_api_passphrase');
+            } catch (_e) {}
+            if (window._connectedWallet && window.ethereum && typeof derivePolymarketApiKey === 'function') {
+              btn.textContent = 'Refreshing trading keys...';
+              errEl.style.color = 'var(--gold)';
+              errEl.innerHTML = 'All on-chain approvals are set — refreshing your CLOB trading keys (you\'ll see a MetaMask sign popup).<br>' +
+                '<span style="font-size:11px;color:var(--dim)">This can happen after a fresh polymarket.com onboarding. One-time step.</span>';
+              errEl.style.display = 'block';
+              try {
+                await Promise.race([
+                  derivePolymarketApiKey(),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000)),
+                ]);
+                const freshKey = localStorage.getItem('poly_api_key');
+                if (freshKey) {
+                  console.log('[qt-trade] new apikey obtained — retrying order');
+                  errEl.style.color = '';
+                  errEl.style.display = 'none';
+                  btn.disabled = false;
+                  return confirmTrade();
+                }
+              } catch (deriveErr) {
+                console.warn('[qt-trade] apikey refresh failed:', deriveErr.message);
+              }
+              errEl.style.color = '';
+              // fall through to the normal banner render below
+            }
+          }
+
           // Format the raw wire amounts into human-readable shares/pUSD so we
           // can eyeball whether the rounding matches expectations at this tick.
           const routedTo = isNegRisk ? 'NegRisk V2' : 'CTF V2';
