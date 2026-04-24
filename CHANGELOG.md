@@ -7,6 +7,14 @@
 
 ## 2026-04-24 — Session 18 (Claude Code)
 
+### fix: PR #41 ordering bug — USDC.e→Onramp approval must fire BEFORE the wrap, not in the post-wrap allowance pre-flight
+- **File:** `public/creator-dashboard.html` → `dashWrapUsdcToPmct()`
+- **Symptom:** after PR #41 landed, tester retried BUY. MetaMask again showed "This transaction is likely to fail", tester cancelled. Railway logs confirmed the tx hitting our `/safe-submit` endpoint was `to: 0x93070a847efEf7F7073…` (CollateralOnramp) with a body length consistent with `wrap()` — not the new `approve()` call we added. So the approval was never dispatched before the wrap.
+- **Root cause:** PR #41 added the USDC.e→Onramp approval to the V2 pre-flight matrix in `confirmTrade()` — but in `confirmTrade()` the pUSD-wrap step runs *before* the allowance pre-flight. That code structure is baked into the flow (you need the wrap to complete to know how much pUSD you have, and the allowance block only fires for the rest of the approvals once pUSD is available). So the approval was scheduled to run, but only after the wrap would have needed it.
+- **Fix:** moved the USDC.e→Onramp approval check+dispatch inline into `dashWrapUsdcToPmct()` itself, right before the wrap call. Every caller of `dashWrapUsdcToPmct` now gets the correct ordering for free. Still cached via `hfx_usdce_ok_…` localStorage so a repeat wrap is zero-popup. If the approve doesn't land on-chain we throw a descriptive error instead of letting the wrap attempt proceed and MetaMask-cancel the user again.
+- **Also:** removed the duplicate `const USDC = '0x2791Bca1…'` inside `dashWrapUsdcToPmct` and switched to the shared `DASH_USDC_E_ADDRESS` constant now that it exists at module scope.
+- **Don't break:** the V2 pre-flight still includes `usdceApprovals` for completeness, so a SELL-first user also gets the approval set before they later BUY. Those two paths are now redundant but harmless (the cache makes the pre-flight check a no-op once the inline path has run). If you ever remove `usdceApprovals` from the pre-flight, don't remove the inline path — that's the one that actually fires in time for a fresh wallet's first BUY.
+
 ### fix: V2 BUY wrap reverts in MetaMask sim — add USDC.e→CollateralOnramp approval
 - **File:** `public/creator-dashboard.html` → new `DASH_USDC_E_ADDRESS` constant, new `dashIsUsdceApprovedForSpender` + `dashApproveUsdceForSpender` helpers, V2 pre-flight extended with a `usdceApprovals` matrix
 - **Symptom:** user onboarded on polymarket.com, came back to HYPERFLEX, pressed Buy. UI showed `Balance: $2.00` (USDC.e from the deposit), started "Wrapping 1.0 USDC → pUSD before order..." and then MetaMask displayed "This transaction is likely to fail" → user cancelled → "Transaction cancelled!" toast. The wrap never landed so no pUSD was ever minted and every BUY attempt hit the same wall.
