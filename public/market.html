@@ -2821,11 +2821,13 @@ function buildOrderForClob(params, version) {
   //           sideInt, sigType, isNegRisk, feeRateBps, expiration }
   var v = version || 1;
   if (v === 2) {
-    // V2: drops taker/nonce/feeRateBps, adds timestamp/metadata/builder
-    // signatureType remap: V1's 2 (POLY_GNOSIS_SAFE) maps to V2's 1 (CONTRACT/SAFE).
-    // V2 consolidated sig types; passing 2 makes sig verification fail and CLOB
-    // returns a generic 'insufficient balance/allowance' rejection.
-    var v2SigType = params.sigType === 2 ? 1 : params.sigType; // 0 stays 0
+    // V2: drops taker/nonce/feeRateBps, adds timestamp/metadata/builder.
+    // signatureType values in V2 are unchanged from V1: 0=EOA, 1=POLY_PROXY,
+    // 2=POLY_GNOSIS_SAFE. Our proxies come from the Safe factory
+    // (0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b) so we pass 2 through
+    // as-is. The 2→1 remap shipped in PR #33 was based on an incorrect
+    // reading of the V2 migration doc; 1 is POLY_PROXY (legacy Polymarket
+    // proxy, not Safe) and doesn't hit the Safe signature path.
     var struct = {
       salt: params.salt,
       maker: params.maker,
@@ -2834,11 +2836,15 @@ function buildOrderForClob(params, version) {
       makerAmount: params.makerAmount,
       takerAmount: params.takerAmount,
       side: params.sideInt,
-      signatureType: v2SigType,
+      signatureType: params.sigType,
       timestamp: String(Date.now()),   // ms since epoch
       metadata: BYTES32_ZERO,
       builder: HFX_BUILDER_CODE_V2,    // our assigned V2 builder code
     };
+    // Both standard and NegRisk V2 exchanges share the same EIP-712 domain
+    // name — "Polymarket CTF Exchange" — verified against the official
+    // py-clob-client-v2 SDK source (ctf_exchange_v2_typed_data.py). Only
+    // the verifyingContract flips per market. Don't split the name.
     var domain = {
       name: 'Polymarket CTF Exchange',
       version: '2',
@@ -2881,6 +2887,9 @@ function buildOrderForClob(params, version) {
     side: params.sideInt,
     signatureType: params.sigType,
   };
+  // V1: same story as V2. Standard and NegRisk share the domain name
+  // "Polymarket CTF Exchange"; only verifyingContract differs. Confirmed
+  // against py-clob-client-v2's ctf_exchange_v1_typed_data.py.
   var v1Domain = {
     name: 'Polymarket CTF Exchange',
     version: '1',
@@ -4928,16 +4937,16 @@ async function executeTrade() {
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
 
-    // signatureType encoding DIFFERS between V1 and V2:
-    //   V1: 0=EOA, 1=CONTRACT(EIP-1271), 2=POLY_GNOSIS_SAFE
-    //   V2: 0=EOA, 1=CONTRACT/SAFE (consolidated per V2 migration doc)
-    // Sending V1's `2` to V2's parser makes sig verification fail silently and
-    // CLOB returns the generic 'insufficient balance/allowance' error. sigType
-    // is computed here once but BRANCHED later by clobVersion at order-struct
-    // build time (buildOrderForClob).
+    // signatureType values are IDENTICAL between V1 and V2:
+    //   0 = EOA, 1 = POLY_PROXY (legacy proxy factory, not Safe),
+    //   2 = POLY_GNOSIS_SAFE (our Safe-factory proxies)
+    // PR #33 wrongly remapped 2→1 for V2 citing "consolidated sig types";
+    // that broke every proxy-signed V2 trade because 1 is the POLY_PROXY
+    // EIP-1271 path, not the Safe path. CLOB rejected with "invalid
+    // signature" rather than the expected fill. sigType flows through
+    // buildOrderForClob unmodified now.
     // maker = proxy wallet (where funds live); signer = EOA (MetaMask key)
     var sigType = proxyAddress && proxyAddress.toLowerCase() !== eoaAddress.toLowerCase() ? 2 : 0;
-    // V1 value retained above; buildOrderForClob recomputes for V2 as needed.
     var makerAddr = proxyAddress || eoaAddress;
     console.log('[trade] maker=' + makerAddr.slice(0,10) + ' signer=' + eoaAddress.slice(0,10) + ' sigType=' + sigType + ' proxy=' + (proxyAddress || 'NONE'));
 
@@ -6238,8 +6247,12 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
     // banner. Same pattern executeTrade uses at line ~3785.
     var walletCtx = await HFXWallet.getSigner();
     var signer = walletCtx.signer || walletCtx;
+    // Domain name must match the Hashing() initializer string the V1
+    // exchange was deployed with: "Polymarket CTF Exchange" (same for
+    // both standard and NegRisk — only verifyingContract differs).
+    // 'ClobExchange' was a legacy placeholder that never matched.
     var order = await signer.signTypedData(
-      { name: 'ClobExchange', version: '1', chainId: 137, verifyingContract: exchange },
+      { name: 'Polymarket CTF Exchange', version: '1', chainId: 137, verifyingContract: exchange },
       { Order: [
         {name:'salt',type:'uint256'},{name:'maker',type:'address'},{name:'signer',type:'address'},
         {name:'taker',type:'address'},{name:'tokenId',type:'uint256'},{name:'makerAmount',type:'uint256'},

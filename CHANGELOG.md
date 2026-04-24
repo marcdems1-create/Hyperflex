@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-04-24 — Session 18 (Claude Code)
+
+### fix: V2 invalid-signature on both exchanges — sigType 2→1 remap was the real bug
+- **Files:** `public/market.html` → `buildOrderForClob()`, `executeTrade()` sigType computation, stop-loss SELL signer; `public/creator-dashboard.html` → `confirmTrade()` sigTypeInt
+- **Symptom:** After PRs #33/#34/#35 the auto-retry would try CTF V2, flip to NegRisk V2, and still hit "Order rejected: invalid signature (tried both exchanges)". Users couldn't sell anything via `creator-dashboard.html` Quick Trade.
+- **Root cause — PR #33's signatureType 2→1 remap was wrong.** The commit claimed "V2 consolidated sig types; 2=POLY_GNOSIS_SAFE became 1=CONTRACT/SAFE". That's not true. Verified against the official py-clob-client-v2 SDK source (`order_utils/model/signature_type_v2.py`): V2 still uses the same three values as V1 plus a new 3 for smart contract wallets: `0 = EOA, 1 = POLY_PROXY, 2 = POLY_GNOSIS_SAFE, 3 = POLY_1271`. Our proxies come from the Safe factory (`0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`), so they MUST sign with 2. PR #33 routed every post-cutover proxy order through the POLY_PROXY EIP-1271 path, which can't recover to the Safe address → "invalid signature" on both binary and NegRisk markets (session 15's CLAUDE.md entry says V2 SELL was working live on April 22 — PR #33 on April 24 broke it).
+- **Fix:** `sigType` computation no longer remaps 2→1 in either file — it passes the V1 value (`2` for Safe, `0` for EOA) through to V2 unchanged. `creator-dashboard.html` now uses the simpler `proxyAddress ? 2 : 0`.
+- **Bonus fix (stop-loss GTC order in `market.html:~6254`):** replaced the legacy `'ClobExchange'` domain name with `'Polymarket CTF Exchange'` — a latent bug; that code path had never matched an on-chain exchange so every stop-loss sell would've been rejected.
+- **What does NOT need changing: the EIP-712 domain `name`.** Both standard AND NegRisk exchanges share `"Polymarket CTF Exchange"` in V1 and V2. Confirmed against the SDK's `ctf_exchange_v1_typed_data.py` + `ctf_exchange_v2_typed_data.py` — only `verifyingContract` flips per market. A draft of this fix briefly edited the name to `"Polymarket Neg Risk CTF Exchange"` based on a third-party cheatsheet; the cheatsheet was wrong and that edit was reverted before landing. Do not split the name.
+- **Why both retries failed:** first attempt signed with wrong sigType (1 instead of 2) against the correct domain → invalid sig. Retry flipped `verifyingContract` to the other exchange but still had wrong sigType → invalid sig again. Fixing sigType unblocks first-try success when `_negRisk` is correct from the market's `neg_risk` metadata; the existing auto-retry still covers cases where the flag is stale or missing.
+- **Source:** [`Polymarket/py-clob-client-v2`](https://github.com/Polymarket/py-clob-client-v2) → `py_clob_client_v2/order_utils/model/signature_type_v2.py` + `ctf_exchange_v{1,2}_typed_data.py` + `exchange_order_builder_v2.py`. This is the canonical SDK; believe it over any third-party doc.
+- **Don't break:** keep the retry — it's still useful when `_negRisk` is genuinely unknown. Do not re-introduce the 2→1 sigType remap. Do not re-split the domain name by NegRisk — the SDK uses one name for both. If a future PR claims V2 migration doc examples say sig type is 1, remember those examples use a POLY_PROXY user (legacy Polymarket proxy, not Safe); our users are on Safe so they need 2.
+
+---
+
 ## 2026-04-23 — Session 17 (Claude Code)
 
 ### chore: kill V1 CLOB path — 100% V2 traffic starting now

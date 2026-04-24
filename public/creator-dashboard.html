@@ -22279,15 +22279,14 @@ async function confirmTrade() {
     //   V1: taker/nonce/feeRateBps/expiration; domain version "1"
     //   V2: timestamp/metadata/builder; domain version "2"; makerAmount in pUSD
     //
-    // signatureType encoding DIFFERS between V1 and V2:
-    //   V1: 0=EOA, 1=CONTRACT(EIP-1271 generic), 2=POLY_GNOSIS_SAFE (Polymarket-specific)
-    //   V2: 0=EOA, 1=CONTRACT/SAFE (consolidated — per V2 migration doc examples)
-    // Sending V1's `2` to V2 causes CLOB to fail sig verification silently and
-    // return the generic 'insufficient balance/allowance' error — which is what
-    // the user has been hitting on every V2 sell since cutover.
-    const sigTypeInt = proxyAddress
-      ? (useClobV2 ? 1 : 2)   // proxy/Safe: V2 uses 1, V1 uses 2
-      : 0;                     // EOA direct: 0 in both
+    // signatureType values are UNCHANGED between V1 and V2:
+    //   0 = EOA, 1 = POLY_PROXY (legacy Polymarket proxy, NOT Safe),
+    //   2 = POLY_GNOSIS_SAFE (our Safe-factory proxies use this one).
+    // PR #33 claimed V2 consolidated sig types to 0/1 and remapped 2→1; that
+    // was wrong (1 is the legacy POLY_PROXY path, not the Safe path), which
+    // is why every post-#33 trade rejected with "invalid signature" —
+    // CLOB ran EIP-1271 on POLY_PROXY's factory, not on the Safe.
+    const sigTypeInt = proxyAddress ? 2 : 0;
     let orderStruct, orderDomain, orderTypes;
     if (useClobV2) {
       orderStruct = {
@@ -22303,6 +22302,9 @@ async function confirmTrade() {
         metadata: DASH_BYTES32_ZERO,
         builder: DASH_BUILDER_CODE_V2,
       };
+      // Both standard and NegRisk V2 exchanges share the domain name
+      // "Polymarket CTF Exchange" — only verifyingContract flips.
+      // Verified against py-clob-client-v2 ctf_exchange_v2_typed_data.py.
       orderDomain = {
         name: 'Polymarket CTF Exchange',
         version: '2',
@@ -22339,6 +22341,8 @@ async function confirmTrade() {
         side: sideInt,
         signatureType: sigTypeInt,
       };
+      // Same name across standard + NegRisk V1; only verifyingContract
+      // differs. Matches py-clob-client-v2 ctf_exchange_v1_typed_data.py.
       orderDomain = {
         name: 'Polymarket CTF Exchange',
         version: '1',
