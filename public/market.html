@@ -2822,6 +2822,10 @@ function buildOrderForClob(params, version) {
   var v = version || 1;
   if (v === 2) {
     // V2: drops taker/nonce/feeRateBps, adds timestamp/metadata/builder
+    // signatureType remap: V1's 2 (POLY_GNOSIS_SAFE) maps to V2's 1 (CONTRACT/SAFE).
+    // V2 consolidated sig types; passing 2 makes sig verification fail and CLOB
+    // returns a generic 'insufficient balance/allowance' rejection.
+    var v2SigType = params.sigType === 2 ? 1 : params.sigType; // 0 stays 0
     var struct = {
       salt: params.salt,
       maker: params.maker,
@@ -2830,7 +2834,7 @@ function buildOrderForClob(params, version) {
       makerAmount: params.makerAmount,
       takerAmount: params.takerAmount,
       side: params.sideInt,
-      signatureType: params.sigType,
+      signatureType: v2SigType,
       timestamp: String(Date.now()),   // ms since epoch
       metadata: BYTES32_ZERO,
       builder: HFX_BUILDER_CODE_V2,    // our assigned V2 builder code
@@ -4924,9 +4928,16 @@ async function executeTrade() {
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
 
-    // signatureType: 2 = POLY_GNOSIS_SAFE (proxy wallet), 0 = EOA
+    // signatureType encoding DIFFERS between V1 and V2:
+    //   V1: 0=EOA, 1=CONTRACT(EIP-1271), 2=POLY_GNOSIS_SAFE
+    //   V2: 0=EOA, 1=CONTRACT/SAFE (consolidated per V2 migration doc)
+    // Sending V1's `2` to V2's parser makes sig verification fail silently and
+    // CLOB returns the generic 'insufficient balance/allowance' error. sigType
+    // is computed here once but BRANCHED later by clobVersion at order-struct
+    // build time (buildOrderForClob).
     // maker = proxy wallet (where funds live); signer = EOA (MetaMask key)
     var sigType = proxyAddress && proxyAddress.toLowerCase() !== eoaAddress.toLowerCase() ? 2 : 0;
+    // V1 value retained above; buildOrderForClob recomputes for V2 as needed.
     var makerAddr = proxyAddress || eoaAddress;
     console.log('[trade] maker=' + makerAddr.slice(0,10) + ' signer=' + eoaAddress.slice(0,10) + ' sigType=' + sigType + ' proxy=' + (proxyAddress || 'NONE'));
 
