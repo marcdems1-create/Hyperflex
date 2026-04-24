@@ -40084,7 +40084,14 @@ app.post('/api/polymarket/order', async (req, res) => {
       '| body_source:', req.rawBody ? 'raw' : 'reserialized',
       '| v2_row:', v2RowId || '—');
 
-    const r = await fetch('https://clob.polymarket.com/order', {
+    // Route V2 bodies to clob-v2.polymarket.com (dedicated V2 host) until
+    // Polymarket flips clob.polymarket.com to V2 backend on Apr 28. Sending
+    // V2-signed orders to the prod URL pre-cutover returns "invalid signature"
+    // because V1 parser hashes over V1 fields. Detect V2 by order.builder.
+    // Mirror of client-side routing in market.html:5438 / dashboard:22378.
+    const isV2Body = !!(req.body && req.body.order && typeof req.body.order.builder === 'string' && req.body.order.builder.startsWith('0x'));
+    const clobHost = isV2Body ? 'https://clob-v2.polymarket.com' : 'https://clob.polymarket.com';
+    const r = await fetch(clobHost + '/order', {
       method: 'POST',
       headers: clobHeaders,
       body: orderBody,

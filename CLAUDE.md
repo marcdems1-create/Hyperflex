@@ -483,7 +483,15 @@ Matches official SDK order.
 - CTF Exchange (V1): `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
 - NegRisk Exchange (V1): `0xC5d563A36AE78145C45a50134d48A1215220f80a`
 
-### CLOB V2 contract addresses (cutover April 22, 2026)
+### CLOB V2 contract addresses
+
+**⚠️ TWO CUTOVERS — DO NOT CONFLATE:**
+- **Apr 22, 2026 = OUR client default flip.** `V2_CUTOVER_MS` in `market.html:2784` and `_V2_CUTOVER_MS_DASH` in `creator-dashboard.html` — date our code starts generating V2 order structs by default. This is HYPERFLEX-internal.
+- **Apr 28, 2026 (~11:00 UTC) = Polymarket backend takeover** of `https://clob.polymarket.com`. Per official Polymarket migration doc, the production URL backend flips from V1 → V2 on Apr 28. Until then, V2 orders MUST go to the dedicated host `https://clob-v2.polymarket.com` or the prod URL rejects with `"invalid signature"` (V1 parser hashes over different fields).
+- **Bridge host:** `clob-v2.polymarket.com` is the dedicated V2 endpoint, live since pre-cutover. Will keep working post-Apr-28 but the canonical route after that date is `clob.polymarket.com`.
+
+Historical CLAUDE.md text said "cutover April 22" without distinguishing — that referred to our client default only. The production-URL switch is Apr 28.
+
 - CTF Exchange V2: `0xE111180000d2663C0091e4f400237545B87B996B`
 - NegRisk Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
 - pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
@@ -550,7 +558,7 @@ ROUNDING_CONFIG = {
 
 When V2 was first defaulted on a day before Polymarket's canonical cutover, every error became a learning opportunity. Codifying these so a future session doesn't re-discover them in production:
 
-**1. `clob-v2.polymarket.com` IS live pre-cutover.** The dedicated V2 host accepts V2-signed orders TODAY, not just at midnight UTC Apr 22. `clob.polymarket.com` runs V1's parser until cutover; sending a V2 order there returns `{"error":"invalid signature"}` because V1 reconstructs the EIP-712 hash over V1 fields (taker/nonce/feeRateBps/expiration) and gets a different hash than what the V2 struct signed. **Route V2 orders to `clob-v2.polymarket.com`** — detect by presence of `order.builder` field in the body.
+**1. `clob-v2.polymarket.com` IS live pre-Polymarket-cutover (Apr 28).** The dedicated V2 host accepts V2-signed orders today. `clob.polymarket.com` runs V1's parser **until Polymarket flips the backend on Apr 28**; sending a V2 order there returns `{"error":"invalid signature"}` because V1 reconstructs the EIP-712 hash over V1 fields (taker/nonce/feeRateBps/expiration) and gets a different hash than what the V2 struct signed. **Route V2 orders to `clob-v2.polymarket.com`** — detect by presence of `order.builder` field in the body. After Apr 28, `clob.polymarket.com` becomes canonical and the dedicated host is redundant (still works, but no longer required).
 
 **2. V1's parser demands wire-body fields V2's struct drops.** If you ever route a V2 order through V1's parser (e.g. you forget to flip the host), V1 rejects in this specific order:
 - `{"error":"error parsing fee rate bps () to int64"}` → add `feeRateBps: '0'` to wire body
