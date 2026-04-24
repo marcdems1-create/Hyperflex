@@ -21659,8 +21659,32 @@ async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAdd
 }
 
 async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
+  // CollateralOnramp.wrap() does `USDC.e.transferFrom(msg.sender, self, amount)`
+  // so the proxy must have USDC.e.allowance(onramp) > 0. Without it MetaMask
+  // simulates the wrap tx and flags "This transaction is likely to fail",
+  // user (correctly) cancels, no pUSD ever mints. Prior PR #41 put this
+  // approval in the POST-wrap allowance pre-flight which runs *after* the
+  // wrap — wrong order, approval never fired. Dispatch it here inline, right
+  // before the wrap, cached via localStorage so a repeat wrap is zero-popup.
+  try {
+    const approved = await dashIsUsdceApprovedForSpender(proxyAddr, DASH_COLLATERAL_ONRAMP);
+    if (!approved) {
+      console.log('[dash-pmct] USDC.e → CollateralOnramp not approved — dispatching approve before wrap');
+      await dashApproveUsdceForSpender(DASH_COLLATERAL_ONRAMP, proxyAddr, eoaAddr, signer);
+      // Re-check so a silently-reverted approval doesn't lead us into a
+      // guaranteed-revert wrap attempt.
+      const after = await dashIsUsdceApprovedForSpender(proxyAddr, DASH_COLLATERAL_ONRAMP);
+      if (!after) {
+        throw new Error('USDC.e approval to CollateralOnramp did not land on-chain — try again in a moment.');
+      }
+    }
+  } catch (approvalErr) {
+    const msg = (approvalErr && approvalErr.message) || 'Unknown approval error';
+    console.error('[dash-pmct] USDC.e approval for wrap failed:', approvalErr);
+    throw new Error('Could not approve USDC.e for the wrap step: ' + msg);
+  }
   const iface = new ethers.Interface(['function wrap(address asset, address to, uint256 amount)']);
-  const USDC = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+  const USDC = DASH_USDC_E_ADDRESS;
   const data = iface.encodeFunctionData('wrap', [USDC, proxyAddr, String(amountAtomic)]);
   console.log('[dash-pmct] wrapping ' + ethers.formatUnits(amountAtomic, 6) + ' USDC.e → pUSD');
   return dashExecuteViaProxy(DASH_COLLATERAL_ONRAMP, data, 0n, proxyAddr, eoaAddr, signer);
