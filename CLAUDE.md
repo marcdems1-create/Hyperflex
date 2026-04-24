@@ -512,9 +512,9 @@ Collateral: pUSD (aka PMCT in contract source) replaces USDC.e for settlement. O
 
 Fees: protocol-set, taker-only, computed at match time. Do NOT set `feeRateBps` in orders — field no longer exists in V2 struct. Query fee params via `getClobMarketInfo(conditionID)` if needed.
 
-Builder attribution — TWO mechanisms, both required:
-1. `builderCode` embedded in signed order `builder` field (bytes32) — the on-chain attribution record.
-2. `POLY_BUILDER_API_KEY` / `POLY_BUILDER_SECRET` / `POLY_BUILDER_PASSPHRASE` HMAC headers attached to every `/order` POST — the backend-side association between the on-chain `builder` bytes32 and our builder account. Read from env vars at `server.js:38803-38818`, attached via `getBuilderHeaders()`. Do NOT delete these env vars or the HMAC header code — Polymarket uses them to credit attribution to our builder profile. The Relayer for gasless transactions also uses these creds if we adopt that flow.
+Builder attribution: single mechanism — `builderCode` embedded in the signed order `builder` field (bytes32). Per the official V2 migration doc (April 2026), the `POLY_BUILDER_*` HMAC request headers from V1 are REMOVED for order attribution in V2; only the on-chain `builder` bytes32 counts. Our code at `server.js:40019` still attaches them via `getBuilderHeaders()` — V2 ignores them harmlessly (confirmed live per session 15), but stripping them is safe post-Apr-28 cutover and is filed as part of the post-cutover cleanup commit alongside the V1 wire-body compat fields (`feeRateBps: '0'`, `nonce: '0'`, `expiration: '0'`).
+
+The HMAC creds themselves (`POLY_BUILDER_API_KEY` / `POLY_BUILDER_SECRET` / `POLY_BUILDER_PASSPHRASE` env vars + `getBuilderHeaders()` helper at `server.js:38803-38818`) must be kept — Polymarket's Relayer (gasless tx flow, `relayer-v2.polymarket.com/submit`) still authenticates with them. Do NOT delete the env vars or the helper. Just stop attaching the headers to the `/order` POST.
 
 Proxy discovery: unchanged — `computeProxyAddress(eoa)` via Safe Factory. Proxy is `maker`, EOA is `signer`. USDC.e and pUSD balances read from proxy address, not EOA.
 
@@ -522,7 +522,7 @@ HMAC L2 auth headers (standard CLOB API auth, separate from builder HMAC): uncha
 
 Cancel behavior: V2 replaces on-chain cancel with operator-controlled `pauseUser`/`unpauseUser`. User-initiated cancels still go through the CLOB cancel API; no direct on-chain contract call path.
 
-**Open verification — file as follow-up:** Polymarket's official V2 migration doc says builder HMAC headers are removed and on-chain `builder` field is sufficient. Our code still attaches HMAC headers and they appear to work. 10-minute test: strip HMAC headers on a single test trade and check whether attribution still lands at polymarket.com/settings?tab=builder. If yes, the doc is right and we can simplify; if no, our setup is right and the doc is incomplete. Don't touch until verified — silent attribution loss costs revenue.
+Order book wipe at cutover: All open orders are wiped during the ~1h maintenance window on Apr 28. Our default trade path is FOK (no resting state — nothing to lose), but any user with an open GTC limit order across the window will have it silently cancelled. Cutover banner on `market.html` + dashboard around Apr 27-28 should warn users.
 
 **Legacy V2 reference (kept for context):** addresses + Amoy parity:
 - pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
