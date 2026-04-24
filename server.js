@@ -38811,13 +38811,18 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
 const POLY_BUILDER_CODE_FALLBACK = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
 const POLY_BUILDER_CODE = (function () {
   const raw = process.env.POLY_BUILDER_CODE;
-  if (!raw) return POLY_BUILDER_CODE_FALLBACK;
+  if (!raw) {
+    console.log('[boot] POLY_BUILDER_CODE unset — using hardcoded mainnet default');
+    return POLY_BUILDER_CODE_FALLBACK;
+  }
   if (!/^0x[0-9a-fA-F]{64}$/.test(raw)) {
     console.warn('[boot] POLY_BUILDER_CODE malformed — falling back to mainnet. Expected 0x + 64 hex, got:', raw.slice(0, 10) + '…');
     return POLY_BUILDER_CODE_FALLBACK;
   }
-  if (raw.toLowerCase() !== POLY_BUILDER_CODE_FALLBACK.toLowerCase()) {
-    console.log('[boot] POLY_BUILDER_CODE overridden via env var:', raw.slice(0, 10) + '…');
+  if (raw.toLowerCase() === POLY_BUILDER_CODE_FALLBACK.toLowerCase()) {
+    console.log('[boot] POLY_BUILDER_CODE env var set (matches default)');
+  } else {
+    console.log('[boot] POLY_BUILDER_CODE overridden via env var:', raw);
   }
   return raw;
 })();
