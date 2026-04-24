@@ -7,6 +7,13 @@
 
 ## 2026-04-24 — Session 18 (Claude Code)
 
+### diag: V2 SELL "not enough balance/allowance" banner dumps routed exchange + raw amounts + CLOB body
+- **File:** `public/creator-dashboard.html` → 400/`not enough balance` handler in `confirmTrade()`
+- **Context:** After PR #36 unblocked the invalid-signature bug, the next blocker on `hyperflex.network` Quick Trade is CLOB rejecting SELL with "not enough balance / allowance" even when the proxy holds the tokenId and both V2 operator approvals are set on-chain. Existing banner only showed `EOA`, `Proxy`, two approval checks, single-tokenId balance, and a truncated token ID — not enough to reason about the rejection.
+- **Added to the banner:** `Routed to: {CTF V2 | NegRisk V2} ({addr})` — what `verifyingContract` we actually signed against; `Proxy pUSD` — in case any path reads maker's pUSD for fees/spread; `Sell size: {makerHuman} shares → {takerHuman} pUSD @ tick {tickSize}` — human-readable order amounts; `CLOB said: {…}` — first 120 chars of the raw error body so we see CLOB's exact phrasing, not just our re-labeled error message. Tokenid row now also shows the last 6 chars so copy-paste can identify the specific outcome token.
+- **Why:** one screenshot from a failing SELL should now be enough to pin the cause to one of: wrong proxy, wrong outcome token held, exchange-address mismatch against what CLOB expected, a rounding bug in makerAmt/takerAmt at non-0.01 tick sizes, or a genuine CLOB bug/indexer lag. Before this we were guessing.
+- **Don't break:** banner is diag-only, no trade-flow change. If `dashGetPmctBalance` or `getDashboardPublicProvider` is refactored, the new reads here need to follow. `errStr` and `data` are still in scope at this handler — if someone moves the `JSON.parse` above this block, update accordingly.
+
 ### fix: V2 invalid-signature on both exchanges — sigType 2→1 remap was the real bug
 - **Files:** `public/market.html` → `buildOrderForClob()`, `executeTrade()` sigType computation, stop-loss SELL signer; `public/creator-dashboard.html` → `confirmTrade()` sigTypeInt
 - **Symptom:** After PRs #33/#34/#35 the auto-retry would try CTF V2, flip to NegRisk V2, and still hit "Order rejected: invalid signature (tried both exchanges)". Users couldn't sell anything via `creator-dashboard.html` Quick Trade.
