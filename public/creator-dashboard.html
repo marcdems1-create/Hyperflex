@@ -21677,6 +21677,15 @@ const DASH_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
 // to the adapter, on top of the exchange approvals. Source:
 // Polymarket/py-clob-client-v2/py_clob_client_v2/config.py (mainnet chainId 137).
 const DASH_NEG_RISK_ADAPTER   = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
+// USDC.e on Polygon. The CollateralOnramp wraps USDC.e → pUSD, which means
+// during a V2 BUY we may need to pull USDC.e from the proxy into the onramp.
+// Without USDC.e.approve(onramp, …) the wrap call reverts on MetaMask's
+// tx simulation → "This transaction is likely to fail" → user cancels.
+// Seen on a freshly-onboarded polymarket.com wallet (proxy had $2 USDC.e
+// from the deposit, no pUSD, no onramp allowance; first BUY tried to wrap
+// and MetaMask flagged it). The V2 SDK's approve_allowances.py doesn't
+// cover this because it assumes USDC.e is pre-approved from V1 onboarding.
+const DASH_USDC_E_ADDRESS     = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
 
 async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
   if (!ownerAddr || !operator) return false;
@@ -21754,6 +21763,42 @@ async function dashIsPmctApprovedForSpender(ownerAddr, spender) {
     return false;
   }
 }
+// ── USDC.e allowance helpers (V2 wrap pre-flight) ────────────────────────
+// Parallel to the pUSD helpers above. Used so the CollateralOnramp can
+// transferFrom USDC.e out of the proxy during `wrap(USDC_E, proxy, amount)`.
+async function dashIsUsdceApprovedForSpender(ownerAddr, spender) {
+  if (!ownerAddr || !spender) return false;
+  const _cacheKey = 'hfx_usdce_ok_' + ownerAddr.slice(-8).toLowerCase() + '_' + spender.slice(-8).toLowerCase();
+  if (localStorage.getItem(_cacheKey) === '1') return true;
+  try {
+    const provider = await getDashboardPublicProvider();
+    const usdce = new ethers.Contract(DASH_USDC_E_ADDRESS, [
+      'function allowance(address owner, address spender) view returns (uint256)'
+    ], provider);
+    const raw = await usdce.allowance(ownerAddr, spender);
+    const ok = raw > BigInt('1000000000000'); // 1M USDC.e atomic threshold, same as pUSD
+    if (ok) localStorage.setItem(_cacheKey, '1');
+    return ok;
+  } catch (e) {
+    console.warn('[dash-usdce] allowance check failed:', e.message);
+    return false;
+  }
+}
+var _dashUsdceApprovalInFlight = Object.create(null);
+async function dashApproveUsdceForSpender(spender, proxyAddr, eoaAddr, signer) {
+  if (!spender) throw new Error('Spender address missing');
+  const key = spender.toLowerCase();
+  if (_dashUsdceApprovalInFlight[key]) return _dashUsdceApprovalInFlight[key];
+  const APPROVAL_CAP = '10000000000000000';
+  const iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);
+  const data = iface.encodeFunctionData('approve', [spender, APPROVAL_CAP]);
+  console.log('[dash-usdce] approve ' + spender.slice(0,10) + '…=CAP via Safe');
+  const p = dashExecuteViaProxy(DASH_USDC_E_ADDRESS, data, 0n, proxyAddr, eoaAddr, signer)
+    .finally(() => { delete _dashUsdceApprovalInFlight[key]; });
+  _dashUsdceApprovalInFlight[key] = p;
+  return p;
+}
+
 var _dashPmctApprovalInFlight = Object.create(null);
 async function dashApprovePmctForSpender(spender, proxyAddr, eoaAddr, signer) {
   if (!spender) throw new Error('Spender address missing');
@@ -22331,18 +22376,29 @@ async function confirmTrade() {
         pUsdApprovals.push({ addr: negRiskV2Addr, label: 'NegRisk V2 (pUSD)' });
         pUsdApprovals.push({ addr: negRiskAdapter,label: 'NegRisk Adapter (pUSD)' });
       }
+      // USDC.e → CollateralOnramp. Needed so `wrap()` can transferFrom the
+      // proxy's USDC.e into the onramp (and mint pUSD back). Without this,
+      // the wrap MetaMask tx simulates as reverted and users cancel before
+      // the pUSD is ever minted. Always include — both BUY (needs the wrap)
+      // and SELL (user may later BUY).
+      const usdceApprovals = [
+        { addr: DASH_COLLATERAL_ONRAMP, label: 'CollateralOnramp (USDC.e wrap)' },
+      ];
 
       try {
-        const [ctStatuses, pUsdStatuses] = await Promise.all([
+        const [ctStatuses, pUsdStatuses, usdceStatuses] = await Promise.all([
           Promise.all(ctApprovals.map(a => dashIsCtfApprovedForOperator(proxyAddress, a.addr))),
           Promise.all(pUsdApprovals.map(a => dashIsPmctApprovedForSpender(proxyAddress, a.addr))),
+          Promise.all(usdceApprovals.map(a => dashIsUsdceApprovedForSpender(proxyAddress, a.addr))),
         ]);
-        ctApprovals.forEach((a, i)    => console.log('[qt-trade-v2] CT approval ', a.label, a.addr.slice(0,10) + '… =', ctStatuses[i]));
-        pUsdApprovals.forEach((a, i)  => console.log('[qt-trade-v2] pUSD approval', a.label, a.addr.slice(0,10) + '… =', pUsdStatuses[i]));
+        ctApprovals.forEach((a, i)    => console.log('[qt-trade-v2] CT approval   ', a.label, a.addr.slice(0,10) + '… =', ctStatuses[i]));
+        pUsdApprovals.forEach((a, i)  => console.log('[qt-trade-v2] pUSD approval ', a.label, a.addr.slice(0,10) + '… =', pUsdStatuses[i]));
+        usdceApprovals.forEach((a, i) => console.log('[qt-trade-v2] USDC.e approval', a.label, a.addr.slice(0,10) + '… =', usdceStatuses[i]));
 
-        const missingCt   = ctApprovals.filter((_, i)   => !ctStatuses[i]);
-        const missingPUsd = pUsdApprovals.filter((_, i) => !pUsdStatuses[i]);
-        const totalMissing = missingCt.length + missingPUsd.length;
+        const missingCt    = ctApprovals.filter((_, i)    => !ctStatuses[i]);
+        const missingPUsd  = pUsdApprovals.filter((_, i)  => !pUsdStatuses[i]);
+        const missingUsdce = usdceApprovals.filter((_, i) => !usdceStatuses[i]);
+        const totalMissing = missingCt.length + missingPUsd.length + missingUsdce.length;
 
         if (totalMissing > 0) {
           btn.disabled = true;
@@ -22378,6 +22434,23 @@ async function confirmTrade() {
             if (!after) {
               errEl.style.color = '';
               errEl.innerHTML = 'Approval for ' + missingPUsd[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
+              errEl.style.display = 'block';
+              btn.disabled = false;
+              btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+              return;
+            }
+          }
+          // USDC.e (ERC-20 approve) approvals last. Enables the wrap step
+          // that converts USDC.e → pUSD on a V2 BUY.
+          for (let i = 0; i < missingUsdce.length; i++) {
+            done += 1;
+            btn.textContent = 'Approving ' + missingUsdce[i].label + ' (' + done + '/' + totalMissing + ')...';
+            await dashApproveUsdceForSpender(missingUsdce[i].addr, proxyAddress, eoaAddress, window._walletSigner);
+            const after = await dashIsUsdceApprovedForSpender(proxyAddress, missingUsdce[i].addr);
+            console.log('[qt-trade-v2] post-approval USDC.e', missingUsdce[i].label, '=', after);
+            if (!after) {
+              errEl.style.color = '';
+              errEl.innerHTML = 'Approval for ' + missingUsdce[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
               errEl.style.display = 'block';
               btn.disabled = false;
               btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
