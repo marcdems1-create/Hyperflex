@@ -22635,9 +22635,15 @@ async function confirmTrade() {
           // visible in the error and screenshottable. Confirms whether the
           // right proxy is wired up and whether V2 operator approvals are
           // set where CLOB expects them.
+          // Full diagnostic dump: approvals on BOTH V2 operators, per-tokenId
+          // balance on the ConditionalTokens contract, the exact exchange we
+          // signed against (CLOB needs the matching verifyingContract or it
+          // rejects), proxy pUSD balance (sanity for any path that reads it),
+          // the raw order amounts we sent, and the truncated CLOB error body.
+          // One screenshot → enough evidence to reason about the rejection.
           const ctfV2Op = '0xE111180000d2663C0091e4f400237545B87B996B';
           const nrV2Op  = '0xe2222d279d744050d28e00520010520000310F59';
-          let dbgCtf = '…', dbgNr = '…', dbgBal = '…';
+          let dbgCtf = '…', dbgNr = '…', dbgBal = '…', dbgPUsd = '…';
           try {
             if (typeof dashIsCtfApprovedForOperator === 'function' && proxyAddress) {
               const [a, b] = await Promise.all([
@@ -22657,22 +22663,40 @@ async function confirmTrade() {
               const bal = await ctf.balanceOf(proxyAddress, tokenId).catch(() => null);
               dbgBal = bal === null ? 'rpc-error' : parseFloat(ethers.formatUnits(bal, 6)).toFixed(2);
             }
+            if (proxyAddress && typeof dashGetPmctBalance === 'function') {
+              const pu = await dashGetPmctBalance(proxyAddress).catch(() => null);
+              dbgPUsd = pu === null ? 'rpc-error' : parseFloat(ethers.formatUnits(pu, 6)).toFixed(4);
+            }
           } catch (dbgErr) { console.warn('[qt-trade] diag dump failed:', dbgErr.message); }
+
+          // Format the raw wire amounts into human-readable shares/pUSD so we
+          // can eyeball whether the rounding matches expectations at this tick.
+          const routedTo = isNegRisk ? 'NegRisk V2' : 'CTF V2';
+          const makerHuman = (Number(makerAmt) / 1e6).toFixed(4);
+          const takerHuman = (Number(takerAmt) / 1e6).toFixed(6);
+          const clobBodyStr = (() => {
+            try { return JSON.stringify(data); } catch (_) { return String(data || ''); }
+          })();
+          const clobBodyShort = clobBodyStr.length > 120 ? clobBodyStr.slice(0, 120) + '…' : clobBodyStr;
 
           errEl.innerHTML =
             '<div style="font-weight:700;margin-bottom:6px">Order rejected: insufficient balance/allowance</div>' +
             '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;background:rgba(0,0,0,0.25);padding:8px 10px;border-radius:6px">' +
               '<div>EOA:    <span style="color:var(--text)">' + (eoaAddress ? eoaAddress.slice(0,10) + '…' + eoaAddress.slice(-4) : 'MISSING') + '</span></div>' +
               '<div>Proxy:  <span style="color:var(--text)">' + (proxyAddress ? proxyAddress.slice(0,10) + '…' + proxyAddress.slice(-4) : 'MISSING') + '</span></div>' +
+              '<div>Routed to:          <span style="color:var(--text)">' + routedTo + ' (' + exchangeAddr.slice(0,10) + '…' + exchangeAddr.slice(-4) + ')</span></div>' +
               '<div>CTF V2 approval:    <span style="color:var(--text)">' + dbgCtf + '</span></div>' +
               '<div>NegRisk V2 approval:<span style="color:var(--text)"> ' + dbgNr + '</span></div>' +
-              '<div>Shares on-chain:    <span style="color:var(--text)">' + dbgBal + '</span></div>' +
-              '<div>Token:  <span style="color:var(--text)">' + (tokenId ? String(tokenId).slice(0,20) + '…' : 'MISSING') + '</span></div>' +
+              '<div>Shares on-chain:    <span style="color:var(--text)">' + dbgBal + ' (tokenId ' + (tokenId ? String(tokenId).slice(0,10) + '…' + String(tokenId).slice(-6) : 'MISSING') + ')</span></div>' +
+              '<div>Proxy pUSD:         <span style="color:var(--text)">' + dbgPUsd + '</span></div>' +
+              '<div>Sell size:          <span style="color:var(--text)">' + makerHuman + ' shares → ' + takerHuman + ' pUSD @ tick ' + tickSize + '</span></div>' +
+              '<div>CLOB said:          <span style="color:var(--text)">' + (clobBodyShort || '(empty)') + '</span></div>' +
             '</div>' +
             '<div style="font-size:11px;color:var(--dim);display:block;margin-top:8px;line-height:1.5">' +
               '➜ Compare <strong>Proxy</strong> with what polymarket.com shows. If different, you\'re on the wrong MetaMask account.<br>' +
-              '➜ If <strong>Shares on-chain</strong> is 0, the position is on a different wallet.<br>' +
-              '➜ If both approvals are ✓ and shares > 0, screenshot this and send it over — that\'s enough to trace.' +
+              '➜ If <strong>Shares on-chain</strong> is 0, the position is on a different wallet (or the opposite outcome token).<br>' +
+              '➜ If the Routed-to exchange\'s approval is ✗, that\'s the direct cause.<br>' +
+              '➜ Otherwise screenshot this — Routed + CLOB said is usually enough to trace.' +
             '</div>';
           if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
         } else {
