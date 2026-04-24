@@ -514,6 +514,10 @@ canvas{display:block;width:100%!important}
              Inserted by injectV2CutoverBanner() on page load. -->
         <div id="v2CutoverBanner" style="display:none"></div>
 
+        <!-- Polymarket Apr 28 maintenance-window banner. Auto-shows Apr 27 00:00 UTC
+             through Apr 28 13:00 UTC. Injected by injectApr28Banner() on page load. -->
+        <div id="apr28CutoverBanner" style="display:none"></div>
+
         <!-- Trading setup runs silently in background — no checklist UI -->
         <div id="tradingSetup" style="display:none"></div>
         <div id="setupStep1" style="display:none"></div>
@@ -2833,6 +2837,31 @@ if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', injectV2CutoverBanner);
   } else {
     setTimeout(injectV2CutoverBanner, 0);
+  }
+}
+
+// Polymarket's Apr 28 2026 (~11:00 UTC) backend-takeover maintenance window
+// wipes all open GTC orders. Shown to everyone 24h before through ~2h after
+// scheduled go-live. Non-dismissable by design — single short-lived warning
+// covering an irreversible action.
+var APR28_BANNER_START = Date.UTC(2026, 3, 27, 0, 0, 0);   // Apr 27 00:00 UTC
+var APR28_BANNER_END   = Date.UTC(2026, 3, 28, 13, 0, 0);  // Apr 28 13:00 UTC
+function injectApr28Banner() {
+  var el = document.getElementById('apr28CutoverBanner');
+  if (!el) return;
+  var now = Date.now();
+  if (now < APR28_BANNER_START || now >= APR28_BANNER_END) { el.style.display = 'none'; return; }
+  el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.55;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);color:#f0f0f5';
+  el.innerHTML =
+    'Polymarket maintenance Apr 28, ~11:00 UTC (' +
+    '<a href="https://status.polymarket.com" target="_blank" rel="noopener" style="color:#f59e0b;text-decoration:underline">status.polymarket.com</a>' +
+    '). ~1h downtime. Open GTC limit orders will be wiped — close before the window or re-place after. FOK trades unaffected.';
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectApr28Banner);
+  } else {
+    setTimeout(injectApr28Banner, 0);
   }
 }
 

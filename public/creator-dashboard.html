@@ -7107,6 +7107,8 @@ window.hfxOpenDeposit = function() {
 
             <!-- Main portfolio content (hidden when welcome is shown) -->
             <div id="portfolioMain">
+            <!-- Apr 28 maintenance-window banner. Injected by dashInjectApr28Banner(). -->
+            <div class="apr28-cutover-banner-slot" style="display:none"></div>
             <!-- No real positions message -->
             <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:16px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.7">
               <strong style="color:var(--gold);display:block;font-size:13px;margin-bottom:6px">No open positions on Polymarket.</strong>
@@ -7579,6 +7581,8 @@ window.hfxOpenDeposit = function() {
       <div id="tab-quicktrade" style="display:none">
         <div class="section">
           <div style="max-width:1000px">
+            <!-- Apr 28 maintenance-window banner. Injected by dashInjectApr28Banner(). -->
+            <div class="apr28-cutover-banner-slot" style="display:none"></div>
 
             <!-- Back to Dashboard -->
             <div style="margin-bottom:16px">
@@ -21512,6 +21516,35 @@ function updateTradeEstimate() {
     if (totalEl) totalEl.textContent = '$' + amount.toFixed(2);
     if (toWinEl) toWinEl.textContent = '$' + amount.toFixed(2);
     if (estEl) estEl.textContent = 'Sell ' + shares.toFixed(1) + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + amount.toFixed(2);
+  }
+}
+
+// Polymarket Apr 28 2026 (~11:00 UTC) backend-takeover maintenance window
+// wipes all open GTC orders. Auto-shown 24h before through ~2h after
+// scheduled go-live. Non-dismissable; self-expires. Mirror of market.html
+// injectApr28Banner() — duplicated per CLAUDE.md's file-duplication rule.
+var DASH_APR28_BANNER_START = Date.UTC(2026, 3, 27, 0, 0, 0);
+var DASH_APR28_BANNER_END   = Date.UTC(2026, 3, 28, 13, 0, 0);
+function dashInjectApr28Banner() {
+  var slots = document.querySelectorAll('.apr28-cutover-banner-slot');
+  if (!slots.length) return;
+  var now = Date.now();
+  var active = (now >= DASH_APR28_BANNER_START && now < DASH_APR28_BANNER_END);
+  for (var i = 0; i < slots.length; i++) {
+    var el = slots[i];
+    if (!active) { el.style.display = 'none'; continue; }
+    el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.55;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);color:#f0f0f5';
+    el.innerHTML =
+      'Polymarket maintenance Apr 28, ~11:00 UTC (' +
+      '<a href="https://status.polymarket.com" target="_blank" rel="noopener" style="color:#f59e0b;text-decoration:underline">status.polymarket.com</a>' +
+      '). ~1h downtime. Open GTC limit orders will be wiped — close before the window or re-place after. FOK trades unaffected.';
+  }
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', dashInjectApr28Banner);
+  } else {
+    setTimeout(dashInjectApr28Banner, 0);
   }
 }
 
