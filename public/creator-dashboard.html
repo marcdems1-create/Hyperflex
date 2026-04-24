@@ -21617,6 +21617,17 @@ async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAdd
       safeTx.gasToken, safeTx.refundReceiver, sig
     );
     const receipt = await tx.wait();
+    // A reverted execTransaction mines with status=0. Without this check we
+    // treat the failure as success and downstream isApprovedForAll returns
+    // false, triggering another approval retry loop — exactly the '8 popups
+    // no effect' mobile symptom. The most common cause is the EIP-712 sig
+    // not verifying inside the Safe (mobile wallets sometimes produce
+    // different typed-data hashes than desktop; nonce races are another).
+    if (receipt && receipt.status === 0) {
+      console.error('[dash-safe] execTransaction REVERTED | tx=' + receipt.transactionHash);
+      throw new Error('Transaction reverted on-chain. This usually means the Safe signature didn\'t verify — try again, and if it keeps happening your wallet may not support EIP-712 v4.');
+    }
+    console.log('[dash-safe] execTransaction OK | tx=' + receipt.transactionHash + ' | status=' + receipt.status);
     return receipt;
   } catch (e) {
     const msg = (e && (e.shortMessage || e.message)) || 'execTransaction failed';
@@ -21664,12 +21675,26 @@ async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
     return false;
   }
 }
+// In-flight guard keyed by operator address. Prevents rapid-click from
+// stacking multiple setApprovalForAll SafeTxes against the same operator
+// (which was the root of the mobile "8 popups no effect" bug — concurrent
+// approvals read the same Safe nonce, only one can land, the rest revert
+// with status=0 silently). All concurrent callers await the same promise.
+var _dashCtfApprovalInFlight = Object.create(null);
 async function dashApproveCtfForOperator(operator, proxyAddr, eoaAddr, signer) {
   if (!operator) throw new Error('Operator address missing');
+  const key = operator.toLowerCase();
+  if (_dashCtfApprovalInFlight[key]) {
+    console.log('[dash-ctf] approval already in flight for ' + key.slice(0,10) + '… — awaiting existing dispatch');
+    return _dashCtfApprovalInFlight[key];
+  }
   const iface = new ethers.Interface(['function setApprovalForAll(address operator, bool approved)']);
   const data = iface.encodeFunctionData('setApprovalForAll', [operator, true]);
   console.log('[dash-ctf] setApprovalForAll ' + operator.slice(0,10) + '…=true via Safe');
-  return dashExecuteViaProxy(DASH_CONDITIONAL_TOKENS, data, 0n, proxyAddr, eoaAddr, signer);
+  const p = dashExecuteViaProxy(DASH_CONDITIONAL_TOKENS, data, 0n, proxyAddr, eoaAddr, signer)
+    .finally(() => { delete _dashCtfApprovalInFlight[key]; });
+  _dashCtfApprovalInFlight[key] = p;
+  return p;
 }
 
 var _confirmTradeRetryCount = 0;
@@ -22503,45 +22528,23 @@ async function confirmTrade() {
         errEl.textContent = 'API keys expired — sign in MetaMask popup, then click the trade button.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
         if (clobSide === 'SELL') {
-          // V2 returns "not enough balance / allowance" when the CTF operator
-          // approval is missing — NOT when you lack shares. Distinguish
-          // "allowance" from "balance" cases before deciding what to show.
-          // Previous behavior auto-blacklisted the position (adding to
-          // _hfGhostCids) which killed real positions on a missing-approval
-          // error. Now: surface the actual error, auto-retry the CTF approval
-          // if it looks like an allowance issue, never blacklist from a CLOB
-          // response alone.
-          const looksLikeApprovalIssue = errStr.includes('allowance');
-          if (looksLikeApprovalIssue && !_tradeModalData._ctfApprovalRetryFired) {
-            _tradeModalData._ctfApprovalRetryFired = true;
-            console.warn('[qt-trade] CLOB returned allowance error — re-running CTF approval pre-flight');
-            errEl.style.color = 'var(--gold,#c9920d)';
-            errEl.innerHTML = 'Re-approving V2 exchange for your shares… check MetaMask to sign.';
-            errEl.style.display = 'block';
-            try {
-              if (typeof dashApproveCtfForOperator === 'function' && proxyAddress && eoaAddress) {
-                await dashApproveCtfForOperator(exchangeAddr, proxyAddress, eoaAddress, window._walletSigner);
-                // Retry the order once after approval lands. Don't reset the
-                // _ctfApprovalRetryFired guard so we can't loop forever.
-                btn.disabled = false;
-                btn.textContent = 'Retrying order…';
-                errEl.style.color = '';
-                errEl.style.display = 'none';
-                return confirmTrade();
-              }
-            } catch (approveErr) {
-              console.error('[qt-trade] CTF re-approval failed:', approveErr);
-            }
-            errEl.style.color = '';
-            errEl.innerHTML = 'Couldn\'t auto-approve V2 exchange. Reload the page and try again — if this persists, your EOA may need MATIC for gas on the approval transaction.';
-          } else {
-            // Not an allowance issue OR we already tried re-approving.
-            // Surface honestly. Don't blacklist — CLOB is NOT the source
-            // of truth for "does this wallet own these shares". Polygon
-            // state is. If the user actually holds the position they'll
-            // retry and it'll work once we understand the real blocker.
-            errEl.innerHTML = 'Order rejected: insufficient balance/allowance.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Verify your position on polymarket.com — if it shows there but not here, reload this page to refresh the wallet connection.</span>';
-          }
+          // CLOB returned "not enough balance / allowance". Two possible
+          // causes: (a) genuine empty balance, (b) CTF operator approval
+          // missing. The pre-flight already dispatched and confirmed the
+          // approval BEFORE we got here, so if we still see this error it
+          // means either the pre-flight's approval reverted silently (fixed
+          // with receipt.status check in dashExecuteViaProxy) or the user
+          // genuinely doesn't hold shares at the exchange asking for them.
+          //
+          // Historically we auto-retried the approval here. That created an
+          // infinite-popup loop on mobile when the SafeTx sig couldn't be
+          // verified (see "No changes / 8 popups" mobile bug). The right
+          // answer is to trust the pre-flight: if it succeeded, the approval
+          // landed; if it failed, it failed loudly. Don't silently retry.
+          //
+          // Also DO NOT blacklist — CLOB is not the source of truth for
+          // "does this wallet own these shares". Polygon state is.
+          errEl.innerHTML = 'Order rejected: insufficient balance/allowance.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Verify your position on polymarket.com. If it shows there but not here, reload this page to refresh the wallet connection. If a V2 approval popup failed earlier, the transaction may have reverted — check Polygonscan for your last execTransaction status.</span>';
           if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
         } else {
           errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
