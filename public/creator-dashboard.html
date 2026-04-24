@@ -21659,34 +21659,73 @@ async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAdd
 }
 
 async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
-  // CollateralOnramp.wrap() does `USDC.e.transferFrom(msg.sender, self, amount)`
-  // so the proxy must have USDC.e.allowance(onramp) > 0. Without it MetaMask
-  // simulates the wrap tx and flags "This transaction is likely to fail",
-  // user (correctly) cancels, no pUSD ever mints. Prior PR #41 put this
-  // approval in the POST-wrap allowance pre-flight which runs *after* the
-  // wrap — wrong order, approval never fired. Dispatch it here inline, right
-  // before the wrap, cached via localStorage so a repeat wrap is zero-popup.
+  // Pick the USDC variant the proxy actually holds. Polymarket onboarding
+  // may deposit native USDC (0x3c499c…) OR USDC.e (0x2791Bca1…) depending
+  // on the flow. CollateralOnramp.wrap(asset, to, amount) pulls `asset`
+  // from msg.sender via transferFrom — if we pass an asset the proxy
+  // doesn't hold, the transferFrom reverts and MetaMask flags the tx as
+  // "likely to fail" → user cancels → no pUSD. Previous code hardcoded
+  // USDC.e which breaks for users whose deposit landed as native USDC.
+  // Read both balances on-chain (cache-bypass) and pick the one with
+  // enough balance. USDC.e preferred when both are sufficient.
+  const USDC_E      = DASH_USDC_E_ADDRESS;
+  const USDC_NATIVE = DASH_USDC_NATIVE_ADDRESS;
+  let pickedToken = USDC_E;
+  let pickedLabel = 'USDC.e';
   try {
-    const approved = await dashIsUsdceApprovedForSpender(proxyAddr, DASH_COLLATERAL_ONRAMP);
+    const prov = await getDashboardPublicProvider();
+    const erc20Abi = ['function balanceOf(address) view returns (uint256)'];
+    const usdce = new ethers.Contract(USDC_E,      erc20Abi, prov);
+    const usdcN = new ethers.Contract(USDC_NATIVE, erc20Abi, prov);
+    const [balE, balN] = await Promise.all([
+      usdce.balanceOf(proxyAddr).catch(() => 0n),
+      usdcN.balanceOf(proxyAddr).catch(() => 0n),
+    ]);
+    const needed = BigInt(amountAtomic);
+    console.log('[dash-pmct] proxy USDC balances | USDC.e=' + ethers.formatUnits(balE, 6) +
+                ' native=' + ethers.formatUnits(balN, 6) +
+                ' needed=' + ethers.formatUnits(needed, 6));
+    if (balE >= needed) {
+      pickedToken = USDC_E;      pickedLabel = 'USDC.e';
+    } else if (balN >= needed) {
+      pickedToken = USDC_NATIVE; pickedLabel = 'USDC (native)';
+    } else {
+      throw new Error('Proxy has insufficient USDC to wrap. USDC.e=' +
+        ethers.formatUnits(balE, 6) + ', native USDC=' + ethers.formatUnits(balN, 6) +
+        ', needed=' + ethers.formatUnits(needed, 6) +
+        '. Deposit more USDC on polymarket.com or use Direct Transfer.');
+    }
+  } catch (pickErr) {
+    const msg = (pickErr && pickErr.message) || 'Unknown error picking USDC';
+    // Only propagate the clean "insufficient USDC" message; re-raise
+    // everything else as a visible error so the user isn't left guessing.
+    throw new Error(msg);
+  }
+
+  // Ensure the picked USDC token is approved to the CollateralOnramp so
+  // transferFrom succeeds when wrap() runs. ERC-20 helper parametrized on
+  // token so the cache key is per-(token, owner, spender) — the old
+  // USDC.e-specific helper aliased USDC.e cache state to native USDC and
+  // would skip the approve when it shouldn't.
+  try {
+    const approved = await dashIsErc20ApprovedForSpender(pickedToken, proxyAddr, DASH_COLLATERAL_ONRAMP);
     if (!approved) {
-      console.log('[dash-pmct] USDC.e → CollateralOnramp not approved — dispatching approve before wrap');
-      await dashApproveUsdceForSpender(DASH_COLLATERAL_ONRAMP, proxyAddr, eoaAddr, signer);
-      // Re-check so a silently-reverted approval doesn't lead us into a
-      // guaranteed-revert wrap attempt.
-      const after = await dashIsUsdceApprovedForSpender(proxyAddr, DASH_COLLATERAL_ONRAMP);
+      console.log('[dash-pmct] ' + pickedLabel + ' → CollateralOnramp not approved — dispatching approve before wrap');
+      await dashApproveErc20ForSpender(pickedToken, DASH_COLLATERAL_ONRAMP, proxyAddr, eoaAddr, signer);
+      const after = await dashIsErc20ApprovedForSpender(pickedToken, proxyAddr, DASH_COLLATERAL_ONRAMP);
       if (!after) {
-        throw new Error('USDC.e approval to CollateralOnramp did not land on-chain — try again in a moment.');
+        throw new Error(pickedLabel + ' approval to CollateralOnramp did not land on-chain — try again in a moment.');
       }
     }
   } catch (approvalErr) {
     const msg = (approvalErr && approvalErr.message) || 'Unknown approval error';
-    console.error('[dash-pmct] USDC.e approval for wrap failed:', approvalErr);
-    throw new Error('Could not approve USDC.e for the wrap step: ' + msg);
+    console.error('[dash-pmct] ' + pickedLabel + ' approval for wrap failed:', approvalErr);
+    throw new Error('Could not approve ' + pickedLabel + ' for the wrap step: ' + msg);
   }
+
   const iface = new ethers.Interface(['function wrap(address asset, address to, uint256 amount)']);
-  const USDC = DASH_USDC_E_ADDRESS;
-  const data = iface.encodeFunctionData('wrap', [USDC, proxyAddr, String(amountAtomic)]);
-  console.log('[dash-pmct] wrapping ' + ethers.formatUnits(amountAtomic, 6) + ' USDC.e → pUSD');
+  const data = iface.encodeFunctionData('wrap', [pickedToken, proxyAddr, String(amountAtomic)]);
+  console.log('[dash-pmct] wrapping ' + ethers.formatUnits(amountAtomic, 6) + ' ' + pickedLabel + ' → pUSD');
   return dashExecuteViaProxy(DASH_COLLATERAL_ONRAMP, data, 0n, proxyAddr, eoaAddr, signer);
 }
 
@@ -21710,6 +21749,52 @@ const DASH_NEG_RISK_ADAPTER   = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
 // and MetaMask flagged it). The V2 SDK's approve_allowances.py doesn't
 // cover this because it assumes USDC.e is pre-approved from V1 onboarding.
 const DASH_USDC_E_ADDRESS     = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+// Native USDC on Polygon (newer, non-bridged). Polymarket's onboarding deposit
+// flow can land funds here instead of USDC.e depending on source chain / widget
+// configuration. Code that wraps USDC → pUSD must pick whichever one the
+// proxy actually holds, else the wrap reverts on transferFrom.
+const DASH_USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
+// ── Generic ERC-20 allowance helpers ──────────────────────────────────────
+// Parametrized on `tokenAddr` so USDC.e and native USDC don't alias cache
+// keys. The older `dashIsUsdceApprovedForSpender` hardcoded USDC.e and
+// silently collided across tokens for the same (owner, spender) pair.
+async function dashIsErc20ApprovedForSpender(tokenAddr, ownerAddr, spender) {
+  if (!tokenAddr || !ownerAddr || !spender) return false;
+  const _cacheKey = 'hfx_erc20_ok_' +
+    tokenAddr.slice(-8).toLowerCase() + '_' +
+    ownerAddr.slice(-8).toLowerCase() + '_' +
+    spender.slice(-8).toLowerCase();
+  if (localStorage.getItem(_cacheKey) === '1') return true;
+  try {
+    const provider = await getDashboardPublicProvider();
+    const tok = new ethers.Contract(tokenAddr, [
+      'function allowance(address owner, address spender) view returns (uint256)'
+    ], provider);
+    const raw = await tok.allowance(ownerAddr, spender);
+    // Same 1M-atomic threshold as the pUSD/USDC.e-specific helpers.
+    const ok = raw > BigInt('1000000000000');
+    if (ok) localStorage.setItem(_cacheKey, '1');
+    return ok;
+  } catch (e) {
+    console.warn('[dash-erc20] allowance check failed:', e.message);
+    return false;
+  }
+}
+var _dashErc20ApprovalInFlight = Object.create(null);
+async function dashApproveErc20ForSpender(tokenAddr, spender, proxyAddr, eoaAddr, signer) {
+  if (!tokenAddr || !spender) throw new Error('Token/spender address missing');
+  const key = tokenAddr.toLowerCase() + ':' + spender.toLowerCase();
+  if (_dashErc20ApprovalInFlight[key]) return _dashErc20ApprovalInFlight[key];
+  const APPROVAL_CAP = '10000000000000000';
+  const iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);
+  const data = iface.encodeFunctionData('approve', [spender, APPROVAL_CAP]);
+  console.log('[dash-erc20] approve token=' + tokenAddr.slice(0,10) + '…  spender=' + spender.slice(0,10) + '…  CAP via Safe');
+  const p = dashExecuteViaProxy(tokenAddr, data, 0n, proxyAddr, eoaAddr, signer)
+    .finally(() => { delete _dashErc20ApprovalInFlight[key]; });
+  _dashErc20ApprovalInFlight[key] = p;
+  return p;
+}
 
 async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
   if (!ownerAddr || !operator) return false;
