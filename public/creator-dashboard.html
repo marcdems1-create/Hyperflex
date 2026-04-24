@@ -22160,32 +22160,52 @@ async function confirmTrade() {
       }
     }
 
-    // V2 SELL pre-flight: the V2 exchange is a new operator on the CTF
-    // ERC-1155 contract and needs setApprovalForAll from the seller's proxy
-    // before it can transferFrom outcome tokens at match time. Without this,
-    // CLOB-V2 rejects with "not enough balance / allowance" even though the
-    // proxy holds the shares — which is exactly what users were hitting when
-    // selling a Plasma YES position on V2. One SafeTx per (exchange, proxy),
-    // sticky forever. See market.html executeTrade for the canonical pattern.
+    // V2 SELL pre-flight — approve BOTH V2 operators on CTF, not just the
+    // one we think this market uses. Why: the `neg_risk` flag on the market
+    // is unreliable (defaults to `true` when the endpoint fails or returns
+    // undefined — see loadOrderbook), so we've been approving the wrong
+    // exchange for half the markets. User screenshot showed 8 MetaMask
+    // signatures all going to NEG_RISK_EXCHANGE_V2 while CLOB was trying to
+    // match on CTF_EXCHANGE_V2 → every order rejected with "not enough
+    // balance / allowance" even though approvals were landing on-chain.
+    //
+    // Approving both operators is 2 popups the first time a user sells,
+    // zero after. Sticky forever (setApprovalForAll is not per-market).
+    // If only one needs approval we only popup once.
+    //
+    // Also: tracking V1 CTF + NegRisk approvals here would be wasted —
+    // V1 is killed as of session 17 PR #24.
     if (useClobV2 && clobSide === 'SELL' && proxyAddress) {
+      const v2Operators = [
+        { addr: '0xE111180000d2663C0091e4f400237545B87B996B', label: 'CTF V2' },
+        { addr: '0xe2222d279d744050d28e00520010520000310F59', label: 'NegRisk V2' },
+      ];
       try {
-        const approved = await dashIsCtfApprovedForOperator(proxyAddress, exchangeAddr);
-        console.log('[qt-trade-v2] CTF approval for', exchangeAddr.slice(0,10) + '… =', approved);
-        if (!approved) {
-          btn.textContent = 'Approve V2 to transfer shares...';
+        const statuses = await Promise.all(
+          v2Operators.map(op => dashIsCtfApprovedForOperator(proxyAddress, op.addr))
+        );
+        v2Operators.forEach((op, i) => console.log('[qt-trade-v2] CTF approval for', op.label, op.addr.slice(0,10) + '… =', statuses[i]));
+        const missing = v2Operators.filter((_, i) => !statuses[i]);
+        if (missing.length > 0) {
+          btn.disabled = true;
+          btn.textContent = 'Approving V2 (' + missing.length + ' of ' + v2Operators.length + ')...';
           errEl.style.color = 'var(--gold)';
-          errEl.textContent = 'Approving V2 exchange to transfer your outcome tokens (one-time)...';
+          errEl.textContent = 'One-time V2 setup: approve ' + missing.map(o => o.label).join(' + ') + ' to transfer your shares. ' +
+            (missing.length > 1 ? 'You\'ll see ' + missing.length + ' MetaMask popups.' : 'Check MetaMask to sign.');
           errEl.style.display = 'block';
-          await dashApproveCtfForOperator(exchangeAddr, proxyAddress, eoaAddress, window._walletSigner);
-          // Re-check so we don't sign an order that would still fail.
-          const approvedAfter = await dashIsCtfApprovedForOperator(proxyAddress, exchangeAddr);
-          if (!approvedAfter) {
-            errEl.style.color = '';
-            errEl.textContent = 'Approval submitted but not yet confirmed — try again in a few seconds.';
-            errEl.style.display = 'block';
-            btn.disabled = false;
-            btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
-            return;
+          for (let i = 0; i < missing.length; i++) {
+            btn.textContent = 'Approving ' + missing[i].label + ' (' + (i + 1) + '/' + missing.length + ')...';
+            await dashApproveCtfForOperator(missing[i].addr, proxyAddress, eoaAddress, window._walletSigner);
+            const after = await dashIsCtfApprovedForOperator(proxyAddress, missing[i].addr);
+            console.log('[qt-trade-v2] post-approval status for', missing[i].label, '=', after);
+            if (!after) {
+              errEl.style.color = '';
+              errEl.innerHTML = 'Approval for ' + missing[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
+              errEl.style.display = 'block';
+              btn.disabled = false;
+              btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+              return;
+            }
           }
           errEl.style.color = '';
           errEl.style.display = 'none';
