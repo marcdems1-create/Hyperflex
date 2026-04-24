@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-04-24 — Session 18 (Claude Code)
+
+### fix: V2 invalid-signature on both exchanges — two struct-level bugs
+- **Files:** `public/market.html` → `buildOrderForClob()`, `executeTrade()` sigType computation, stop-loss SELL signer; `public/creator-dashboard.html` → `confirmTrade()` sigTypeInt + V1/V2 orderDomain
+- **Symptom:** After PRs #33/#34/#35 the auto-retry would try CTF V2, flip to NegRisk V2, and still hit "Order rejected: invalid signature (tried both exchanges)". Users couldn't sell anything via `creator-dashboard.html` Quick Trade.
+- **Root cause #1 — wrong EIP-712 domain `name` for NegRisk.** Both files hardcoded `"Polymarket CTF Exchange"` for every case. NegRisk's on-chain `Hashing()` initializer returns `"Polymarket Neg Risk CTF Exchange"`. Different name → different `nameHash` → different `domainSeparator` → digest doesn't match → sig recovery returns wrong address → CLOB rejects. Applies to BOTH V1 and V2 NegRisk. This was a latent bug in V1 too — any V1 NegRisk SELL would have failed silently the same way.
+- **Root cause #2 — PR #33 signatureType 2→1 remap was wrong.** The commit claimed "V2 consolidated sig types; 2=POLY_GNOSIS_SAFE became 1=CONTRACT/SAFE". That's not true — V2 still uses `0 = EOA, 1 = POLY_PROXY (legacy Polymarket proxy factory), 2 = POLY_GNOSIS_SAFE`. Our proxies come from the Safe factory (`0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`), so they MUST sign with `2`. PR #33 routed every post-cutover proxy order through the POLY_PROXY EIP-1271 path, which can't recover to the Safe address → "invalid signature" on the binary path (session 15's CLAUDE.md entry says V2 SELL was working live on April 22 — PR #33 on April 24 broke it).
+- **Fix:** Both domain `name` selects now branch on `isNegRisk` in market.html `buildOrderForClob()` (V1 and V2 branches) and creator-dashboard.html `confirmTrade()` (V1 and V2 branches). `sigType` computation no longer remaps 2→1 — it passes the V1 value (`2` for Safe, `0` for EOA) through to V2 unchanged. Same fix applied to the stop-loss GTC order in `market.html:~6254` which had a separate legacy domain name `"ClobExchange"` that also never matched either contract.
+- **Why both retries failed:** first attempt had correct name ("Polymarket CTF Exchange" + CTF V2 contract) but wrong sigType (1 instead of 2) → invalid sig. Retry flipped exchange address to NegRisk V2 but kept the "Polymarket CTF Exchange" name (now ALSO mismatched against NegRisk's on-chain name) AND still had wrong sigType → invalid sig again. Fixing both unblocks first-try success when the `_negRisk` flag is correct from the market's `neg_risk` metadata; the existing auto-retry keeps covering cases where the flag is stale or missing.
+- **Source:** V2 migration cheatsheet (https://github.com/cengizmandros/polymarket-cheatsheet) + deployed contract `Hashing()` initializer strings.
+- **Don't break:** keep the retry — it's still useful when `_negRisk` is genuinely unknown. Do not re-introduce the 2→1 sigType remap. Do not "simplify" the domain name back to a single string; NegRisk really does need its own name. If a future PR claims the V2 migration doc says sig types were consolidated to 0/1, verify against the cheatsheet before merging — the doc's "1 = CONTRACT/SAFE" wording is misleading shorthand for EIP-1271, not a replacement for POLY_GNOSIS_SAFE.
+
+---
+
 ## 2026-04-23 — Session 17 (Claude Code)
 
 ### chore: kill V1 CLOB path — 100% V2 traffic starting now
