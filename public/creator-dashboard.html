@@ -21357,10 +21357,20 @@ function setMaxShares() {
     // price — using it produces the entry cost ($3.88 @ 11.4¢) rather than the
     // current liquidation value ($1.39 @ 4.1¢). _limitPrice is set to the live
     // CLOB bid by loadOrderbook before _fillMax fires, so prefer it here.
-    const shares = _tradeModalData.shares || _tradeModalData.size || 0;
+    //
+    // SAFETY MARGIN: subtract 0.01 shares before computing max USD so the
+    // amount that lands in the input field can never round-trip to a shares
+    // value that exceeds on-chain balance. Mirrors the pre-sell clamp safety
+    // margin (PR #30). Otherwise 100% button at max position produces an
+    // amount that → shares = amount/price → slightly > on-chain atomic → CLOB
+    // rejects with 'insufficient balance/allowance' despite the position
+    // being real. User loses ~0.01 shares of value (half a cent USD at low
+    // prices), dust-clearable later.
+    const rawShares = _tradeModalData.shares || _tradeModalData.size || 0;
+    const shares = Math.max(0, rawShares - 0.01);
     const curPrice = _tradeModalData._limitPrice || _tradeModalData.probability || price;
-    const maxUsd = Math.round(shares * curPrice * 100) / 100;
-    input.value = maxUsd > 0 ? maxUsd : (shares * curPrice).toFixed(2);
+    const maxUsd = Math.floor(shares * curPrice * 100) / 100; // floor not round
+    input.value = maxUsd > 0 ? maxUsd.toFixed(2) : (shares * curPrice).toFixed(2);
   } else {
     // Max buy = wallet balance
     const balance = window._walletBalanceUSDC || 0;
