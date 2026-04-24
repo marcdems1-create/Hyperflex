@@ -4484,7 +4484,13 @@ async function executeTrade() {
   _tradeInFlight = true;
   _pendingWalletSwitch = null;
 
-  // Global safety timeout — if trade flow hangs for 45s on mobile, unblock the button
+  // Global safety timeout — trades that only need signing complete in <20s.
+  // BUT a V2 first-time setup dispatches up to 7 SafeTx approvals (each
+  // 2–5s tx + up to 30s post-dispatch poll for RPC block propagation), so
+  // the whole flow can legitimately take ~4 minutes. Keep 300s ceiling;
+  // the user has bigger problems than a stale button if a trade hangs
+  // for 5 minutes, and the global timeout is only a "unlock the button"
+  // safety net, not a flow limit.
   var _tradeTimeout = setTimeout(function() {
     if (cta && cta.disabled) {
       cta.disabled = false;
@@ -4492,7 +4498,7 @@ async function executeTrade() {
       _tradeInFlight = false;
       showTradeStatus('Trade timed out — check your MetaMask app and try again', 'error');
     }
-  }, 45000);
+  }, 300000);
   var _clearTradeTimeout = function() { clearTimeout(_tradeTimeout); };
 
   // Check if full setup is needed (no keys, no proxy, not approved)
@@ -5100,14 +5106,40 @@ async function executeTrade() {
         if (totalMissing > 0) {
           cta.disabled = true;
           showTradeStatus('One-time V2 setup: ' + totalMissing + ' approval' + (totalMissing > 1 ? 's' : '') + ' to sign…', 'info');
+
+          // Poll isApproved against the public RPC until it flips to true,
+          // for up to 30s. The approval tx mines in 2–5s but the public RPC
+          // we read from can lag the block that landed it by another few
+          // seconds — a single immediate check was erroring out as "didn't
+          // land" before the RPC caught up. Poll matches the dashboard's
+          // pattern from PR #42.
+          async function _pollUntilTrue(checkFn, maxMs) {
+            var deadline = Date.now() + (maxMs || 30000);
+            while (Date.now() < deadline) {
+              try { if (await checkFn()) return true; } catch (_e) {}
+              await new Promise(function(r) { setTimeout(r, 2000); });
+            }
+            return false;
+          }
+
           var step = 0;
           for (var i = 0; i < missingCt.length; i++) {
             step++;
             cta.textContent = 'Approving CT→' + missingCt[i].label + ' (' + step + '/' + totalMissing + ')…';
-            await approveCtfForOperator(missingCt[i].addr);
-            var afterCt = await isCtfApprovedForOperator(makerAddr, missingCt[i].addr);
-            if (!afterCt) {
-              showTradeStatus('CT approval for ' + missingCt[i].label + ' didn\'t land on-chain. Retry in a few seconds.', 'error');
+            try {
+              await approveCtfForOperator(missingCt[i].addr);
+            } catch (dispatchErr) {
+              var dmsg = (dispatchErr && dispatchErr.message) || 'Unknown error';
+              console.error('[trade-v2] CT approval dispatch failed:', dispatchErr);
+              showTradeStatus('CT approval for ' + missingCt[i].label + ' failed: ' + dmsg, 'error');
+              cta.disabled = false; updateCtaButton();
+              return;
+            }
+            // Bust the localStorage cache so the poll reads fresh on-chain state.
+            try { localStorage.removeItem('hfx_ctf_ok_' + makerAddr.slice(-8).toLowerCase() + '_' + missingCt[i].addr.slice(-8).toLowerCase()); } catch (_e) {}
+            var ctOk = await _pollUntilTrue(function() { return isCtfApprovedForOperator(makerAddr, missingCt[i].addr); }, 30000);
+            if (!ctOk) {
+              showTradeStatus('CT approval for ' + missingCt[i].label + ' didn\'t confirm on-chain after 30s. The tx may still land — wait a moment and retry.', 'error');
               cta.disabled = false; updateCtaButton();
               return;
             }
@@ -5115,10 +5147,19 @@ async function executeTrade() {
           for (var j = 0; j < missingPUsd.length; j++) {
             step++;
             cta.textContent = 'Approving pUSD→' + missingPUsd[j].label + ' (' + step + '/' + totalMissing + ')…';
-            await approvePmctForSpender(missingPUsd[j].addr);
-            var afterPUsd = await isPmctApprovedForSpender(makerAddr, missingPUsd[j].addr);
-            if (!afterPUsd) {
-              showTradeStatus('pUSD approval for ' + missingPUsd[j].label + ' didn\'t land on-chain. Retry in a few seconds.', 'error');
+            try {
+              await approvePmctForSpender(missingPUsd[j].addr);
+            } catch (dispatchErr2) {
+              var dmsg2 = (dispatchErr2 && dispatchErr2.message) || 'Unknown error';
+              console.error('[trade-v2] pUSD approval dispatch failed:', dispatchErr2);
+              showTradeStatus('pUSD approval for ' + missingPUsd[j].label + ' failed: ' + dmsg2, 'error');
+              cta.disabled = false; updateCtaButton();
+              return;
+            }
+            try { localStorage.removeItem('hfx_pusd_ok_' + makerAddr.slice(-8).toLowerCase() + '_' + missingPUsd[j].addr.slice(-8).toLowerCase()); } catch (_e) {}
+            var pUsdOk = await _pollUntilTrue(function() { return isPmctApprovedForSpender(makerAddr, missingPUsd[j].addr); }, 30000);
+            if (!pUsdOk) {
+              showTradeStatus('pUSD approval for ' + missingPUsd[j].label + ' didn\'t confirm on-chain after 30s. The tx may still land — wait a moment and retry.', 'error');
               cta.disabled = false; updateCtaButton();
               return;
             }
