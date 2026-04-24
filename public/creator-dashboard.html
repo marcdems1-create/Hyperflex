@@ -22302,15 +22302,11 @@ async function confirmTrade() {
         metadata: DASH_BYTES32_ZERO,
         builder: DASH_BUILDER_CODE_V2,
       };
-      // NegRisk exchange has a DIFFERENT EIP-712 domain name on-chain —
-      // "Polymarket Neg Risk CTF Exchange", not "Polymarket CTF Exchange".
-      // Using the wrong name makes the nameHash differ, domainSeparator
-      // differs, digest differs, sig recovery fails → CLOB rejects with
-      // "invalid signature". This is the other half of the invalid-sig
-      // bug — the auto-retry only flipped verifyingContract, not the name,
-      // so both attempts kept failing.
+      // Both standard and NegRisk V2 exchanges share the domain name
+      // "Polymarket CTF Exchange" — only verifyingContract flips.
+      // Verified against py-clob-client-v2 ctf_exchange_v2_typed_data.py.
       orderDomain = {
-        name: isNegRisk ? 'Polymarket Neg Risk CTF Exchange' : 'Polymarket CTF Exchange',
+        name: 'Polymarket CTF Exchange',
         version: '2',
         chainId: 137,
         verifyingContract: exchangeAddr,
@@ -22345,11 +22341,10 @@ async function confirmTrade() {
         side: sideInt,
         signatureType: sigTypeInt,
       };
-      // Same NegRisk name divergence applies to V1 — "Polymarket Neg Risk CTF
-      // Exchange" is the on-chain name for NegRisk V1 too. Latent bug in our
-      // V1 path that would've silently broken NegRisk V1 SELL if anyone hit it.
+      // Same name across standard + NegRisk V1; only verifyingContract
+      // differs. Matches py-clob-client-v2 ctf_exchange_v1_typed_data.py.
       orderDomain = {
-        name: isNegRisk ? 'Polymarket Neg Risk CTF Exchange' : 'Polymarket CTF Exchange',
+        name: 'Polymarket CTF Exchange',
         version: '1',
         chainId: 137,
         verifyingContract: exchangeAddr,

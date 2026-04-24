@@ -2841,13 +2841,12 @@ function buildOrderForClob(params, version) {
       metadata: BYTES32_ZERO,
       builder: HFX_BUILDER_CODE_V2,    // our assigned V2 builder code
     };
-    // NegRisk exchange has its own EIP-712 domain name on-chain —
-    // "Polymarket Neg Risk CTF Exchange" — NOT "Polymarket CTF Exchange".
-    // Using the wrong name makes keccak256(nameHash) differ, domainSeparator
-    // differs, digest differs, sig recovery fails → CLOB rejects with
-    // "invalid signature". Verified against deployed contract Hashing().
+    // Both standard and NegRisk V2 exchanges share the same EIP-712 domain
+    // name — "Polymarket CTF Exchange" — verified against the official
+    // py-clob-client-v2 SDK source (ctf_exchange_v2_typed_data.py). Only
+    // the verifyingContract flips per market. Don't split the name.
     var domain = {
-      name: params.isNegRisk ? 'Polymarket Neg Risk CTF Exchange' : 'Polymarket CTF Exchange',
+      name: 'Polymarket CTF Exchange',
       version: '2',
       chainId: 137,
       verifyingContract: params.isNegRisk ? NEG_RISK_EXCHANGE_V2 : CTF_EXCHANGE_V2,
@@ -2888,11 +2887,11 @@ function buildOrderForClob(params, version) {
     side: params.sideInt,
     signatureType: params.sigType,
   };
-  // V1 NegRisk exchange uses the same distinct domain name as V2 NegRisk.
-  // Using "Polymarket CTF Exchange" for NegRisk markets was a latent bug —
-  // V1 NegRisk trades with that name would've always failed sig verification.
+  // V1: same story as V2. Standard and NegRisk share the domain name
+  // "Polymarket CTF Exchange"; only verifyingContract differs. Confirmed
+  // against py-clob-client-v2's ctf_exchange_v1_typed_data.py.
   var v1Domain = {
-    name: params.isNegRisk ? 'Polymarket Neg Risk CTF Exchange' : 'Polymarket CTF Exchange',
+    name: 'Polymarket CTF Exchange',
     version: '1',
     chainId: 137,
     verifyingContract: params.isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE,
@@ -6248,12 +6247,12 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
     // banner. Same pattern executeTrade uses at line ~3785.
     var walletCtx = await HFXWallet.getSigner();
     var signer = walletCtx.signer || walletCtx;
-    // Domain name must match what the on-chain Hashing() contract uses.
-    // NegRisk exchange returns a distinct EIP-712 name. 'ClobExchange' was
-    // a legacy placeholder that never matched either contract.
-    var stopLossDomainName = isNegRisk ? 'Polymarket Neg Risk CTF Exchange' : 'Polymarket CTF Exchange';
+    // Domain name must match the Hashing() initializer string the V1
+    // exchange was deployed with: "Polymarket CTF Exchange" (same for
+    // both standard and NegRisk — only verifyingContract differs).
+    // 'ClobExchange' was a legacy placeholder that never matched.
     var order = await signer.signTypedData(
-      { name: stopLossDomainName, version: '1', chainId: 137, verifyingContract: exchange },
+      { name: 'Polymarket CTF Exchange', version: '1', chainId: 137, verifyingContract: exchange },
       { Order: [
         {name:'salt',type:'uint256'},{name:'maker',type:'address'},{name:'signer',type:'address'},
         {name:'taker',type:'address'},{name:'tokenId',type:'uint256'},{name:'makerAmount',type:'uint256'},
