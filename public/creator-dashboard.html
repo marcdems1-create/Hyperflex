@@ -22261,7 +22261,16 @@ async function confirmTrade() {
     // Build EIP-712 order struct — branches on V1 vs V2.
     //   V1: taker/nonce/feeRateBps/expiration; domain version "1"
     //   V2: timestamp/metadata/builder; domain version "2"; makerAmount in pUSD
-    const sigTypeInt = proxyAddress ? 2 : 0; // 2 = POLY_GNOSIS_SAFE, 0 = EOA
+    //
+    // signatureType encoding DIFFERS between V1 and V2:
+    //   V1: 0=EOA, 1=CONTRACT(EIP-1271 generic), 2=POLY_GNOSIS_SAFE (Polymarket-specific)
+    //   V2: 0=EOA, 1=CONTRACT/SAFE (consolidated — per V2 migration doc examples)
+    // Sending V1's `2` to V2 causes CLOB to fail sig verification silently and
+    // return the generic 'insufficient balance/allowance' error — which is what
+    // the user has been hitting on every V2 sell since cutover.
+    const sigTypeInt = proxyAddress
+      ? (useClobV2 ? 1 : 2)   // proxy/Safe: V2 uses 1, V1 uses 2
+      : 0;                     // EOA direct: 0 in both
     let orderStruct, orderDomain, orderTypes;
     if (useClobV2) {
       orderStruct = {
