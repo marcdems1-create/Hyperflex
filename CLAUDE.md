@@ -483,30 +483,53 @@ Matches official SDK order.
 - CTF Exchange (V1): `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
 - NegRisk Exchange (V1): `0xC5d563A36AE78145C45a50134d48A1215220f80a`
 
-### CLOB V2 contract addresses
+### Polymarket CLOB V2 — canonical reference
 
-**⚠️ TWO CUTOVERS — DO NOT CONFLATE:**
-- **Apr 22, 2026 = OUR client default flip.** `V2_CUTOVER_MS` in `market.html:2784` and `_V2_CUTOVER_MS_DASH` in `creator-dashboard.html` — date our code starts generating V2 order structs by default. This is HYPERFLEX-internal.
-- **Apr 28, 2026 (~11:00 UTC) = Polymarket backend takeover** of `https://clob.polymarket.com`. Per official Polymarket migration doc, the production URL backend flips from V1 → V2 on Apr 28. Until then, V2 orders MUST go to the dedicated host `https://clob-v2.polymarket.com` or the prod URL rejects with `"invalid signature"` (V1 parser hashes over different fields).
-- **Bridge host:** `clob-v2.polymarket.com` is the dedicated V2 endpoint, live since pre-cutover. Will keep working post-Apr-28 but the canonical route after that date is `clob.polymarket.com`.
+**⚠️ DO NOT CHANGE WITHOUT READING `@polymarket/clob-client-v2` SOURCE**
 
-Historical CLAUDE.md text said "cutover April 22" without distinguishing — that referred to our client default only. The production-URL switch is Apr 28.
+SDK: `@polymarket/clob-client-v2` (installed, verified against `node_modules/@polymarket/clob-client-v2/dist/index.js`). V1 `@polymarket/clob-client` is deprecated in our codebase as of April 22, 2026 (client-default cutover, commit `f7c30d3`). Polymarket's production URL `clob.polymarket.com` takes over V2 April 28, 2026 (~11:00 UTC) per official migration doc. Until then, V2 traffic routes to `clob-v2.polymarket.com`; after, both URLs serve V2.
 
+V2 Order struct fields: `salt` (uint256), `maker` (proxy), `signer` (EOA), `tokenId`, `makerAmount`, `takerAmount`, `side` (uint8 in signing payload: 0=BUY, 1=SELL; string "BUY"/"SELL" in wire body), `signatureType` (2 = POLY_GNOSIS_SAFE), `timestamp` (ms — replaces nonce), `metadata` (bytes32, zero default), `builder` (bytes32 builderCode, currently `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8`).
+
+Removed in V2: `nonce`, `expiration`, `taker`, `feeRateBps`. Do NOT re-add.
+
+EIP-712 domains — both standard and NegRisk exchanges share the SAME `name`. Only `verifyingContract` differs. Verified against SDK constant at `node_modules/@polymarket/clob-client-v2/dist/index.js:640` (`CTF_EXCHANGE_V2_DOMAIN_NAME = "Polymarket CTF Exchange"`):
+
+- Exchange (standard + NegRisk): `{ name: "Polymarket CTF Exchange", version: "2", chainId: 137, verifyingContract: params.isNegRisk ? NEG_RISK_EXCHANGE_V2 : CTF_EXCHANGE_V2 }`
+- ClobAuth: `{ name: "ClobAuthDomain", version: "1", chainId: 137 }` — stays at "1", do NOT bump
+
+Pick `verifyingContract` based on `params.isNegRisk`. The deployed NegRisk exchange is a different contract but the EIP-712 domain name is identical — this is NOT a V1 holdover, V2 deploys both from the same `CTFExchange.sol` source.
+
+Contract addresses (Polygon mainnet):
 - CTF Exchange V2: `0xE111180000d2663C0091e4f400237545B87B996B`
-- NegRisk Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
-- pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
-- CollateralOnramp (wrap): `0x93070a847efEf7F70739046A929D47a521F5B8ee` — `wrap(address asset, address to, uint256 amount)`
-- CollateralOfframp (unwrap): `0x2957922Eb93258b93368531d39fAcCA3B4dC5854` — `unwrap(address asset, address to, uint256 amount)`
-- HYPERFLEX V2 builder code (bytes32): `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8` — provisioned 3/31/2026, status Enabled, fees 0% (set non-zero at polymarket.com/settings?tab=builder once verified)
-- All addresses identical on Amoy testnet (chainId 80002)
+- NegRisk CTF Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
+- Collateral Onramp: `0x93070a847efEf7F70739046A929D47a521F5B8ee`
+- pUSD (PMCT): `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB`
+- USDC.e (unchanged): `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- Safe Factory (unchanged): `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
 
-**V2 differences from V1:**
-- Order struct drops `taker`/`nonce`/`feeRateBps`/`expiration`, adds `timestamp`/`metadata`/`builder`
-- EIP-712 domain version flips `"1"` → `"2"`
-- `makerAmount` denominated in **pUSD, not USDC.e** — V2 BUY orders fail at fill if proxy lacks pUSD balance
-- Users must wrap USDC.e → pUSD via CollateralOnramp before trading V2 (no auto-conversion)
-- Wrap is dispatched as a Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — wired via `executeViaProxy()` in `market.html` + `dashExecuteViaProxy()` in `creator-dashboard.html`, with relayer-first dispatch (`POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`) and direct execTransaction fallback
-- POLY_BUILDER_* HMAC headers still used in V2 alongside the on-chain `order.builder` bytes32
+Collateral: pUSD (aka PMCT in contract source) replaces USDC.e for settlement. Our users are POLY_GNOSIS_SAFE (signatureType=2); funds live at the proxy, not the EOA. Any wrap/approve/unwrap write path MUST route through Safe `execTransaction` via `executeViaProxy()` (`market.html:3459`) or `dashExecuteViaProxy()` (`creator-dashboard.html:21632`) — a raw EOA call to `Onramp.wrap()` reverts because `msg.sender` is the EOA which holds no USDC.e. The EOA signs; the Safe executes. Wrap flow: approve onramp (not pUSD token) for USDC.e spend, then call `wrap(USDC.e, proxy_address, amount)` — both dispatched as SafeTx. Client-side wrap helper: `wrapUsdcToPmct()` at `market.html:3466`, working live per session 15 mainnet test.
+
+Fees: protocol-set, taker-only, computed at match time. Do NOT set `feeRateBps` in orders — field no longer exists in V2 struct. Query fee params via `getClobMarketInfo(conditionID)` if needed.
+
+Builder attribution — TWO mechanisms, both required:
+1. `builderCode` embedded in signed order `builder` field (bytes32) — the on-chain attribution record.
+2. `POLY_BUILDER_API_KEY` / `POLY_BUILDER_SECRET` / `POLY_BUILDER_PASSPHRASE` HMAC headers attached to every `/order` POST — the backend-side association between the on-chain `builder` bytes32 and our builder account. Read from env vars at `server.js:38803-38818`, attached via `getBuilderHeaders()`. Do NOT delete these env vars or the HMAC header code — Polymarket uses them to credit attribution to our builder profile. The Relayer for gasless transactions also uses these creds if we adopt that flow.
+
+Proxy discovery: unchanged — `computeProxyAddress(eoa)` via Safe Factory. Proxy is `maker`, EOA is `signer`. USDC.e and pUSD balances read from proxy address, not EOA.
+
+HMAC L2 auth headers (standard CLOB API auth, separate from builder HMAC): unchanged — `POLY_ADDRESS`, `POLY_TIMESTAMP`, `POLY_API_KEY`, `POLY_PASSPHRASE`, `POLY_SIGNATURE` (HMAC-SHA256 with url-safe base64 with padding, `!== undefined` check on fee rate).
+
+Cancel behavior: V2 replaces on-chain cancel with operator-controlled `pauseUser`/`unpauseUser`. User-initiated cancels still go through the CLOB cancel API; no direct on-chain contract call path.
+
+**Open verification — file as follow-up:** Polymarket's official V2 migration doc says builder HMAC headers are removed and on-chain `builder` field is sufficient. Our code still attaches HMAC headers and they appear to work. 10-minute test: strip HMAC headers on a single test trade and check whether attribution still lands at polymarket.com/settings?tab=builder. If yes, the doc is right and we can simplify; if no, our setup is right and the doc is incomplete. Don't touch until verified — silent attribution loss costs revenue.
+
+**Legacy V2 reference (kept for context):** addresses + Amoy parity:
+- pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
+- CollateralOfframp (unwrap): `0x2957922Eb93258b93368531d39fAcCA3B4dC5854` — `unwrap(address asset, address to, uint256 amount)`
+- HYPERFLEX V2 builder code: provisioned 3/31/2026, status Enabled, fees 0% until polymarket.com/settings?tab=builder verification lands
+- All addresses identical on Amoy testnet (chainId 80002)
+- Wrap relayer fallback: `POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`, with direct `execTransaction` as fallback when relayer 401s
 
 **Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default is V2 as of the April 22 cutover.
 
