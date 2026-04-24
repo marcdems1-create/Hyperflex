@@ -21810,10 +21810,25 @@ async function confirmTrade() {
           // maker/taker math uses the real number. Polymarket.com does this too.
           const overshoot = (shares - onchainShares) / onchainShares;
           if (onchainShares > 0.01 && overshoot <= 0.02) {
-            console.log('[pre-sell] clamping requested shares', shares.toFixed(4), '→', onchainShares.toFixed(4), '(overshoot ' + (overshoot * 100).toFixed(2) + '%)');
-            shares = onchainShares;
+            // Clamp to on-chain balance, then floor to 2 decimals and back off
+            // 1 penny of shares as a safety margin. Why: downstream roundDown
+            // of shares → makerAmt uses Math.floor(shares*100)/100 which can
+            // round UP when a float like 28.5700000001 lands (JS float imprecision
+            // from formatUnits). On-chain atomic may be 28569999 (displays as
+            // 28.57 via toFixed), so makerAmt=28570000 > actual balance =
+            // "insufficient balance/allowance" rejection. This was the final
+            // remaining cause of the 'both approvals ✓, shares 28.57, still
+            // rejected' bug after all the operator approvals were fixed.
+            //
+            // Losing 1 penny of shares (≈ 1¢ × price, so half a cent of USD)
+            // is acceptable. User can dust-clear the residue on polymarket.com.
+            const safeShares = Math.floor(onchainShares * 100) / 100 - 0.01;
+            const clampedShares = Math.max(safeShares, 0);
+            console.log('[pre-sell] clamping requested shares', shares.toFixed(4), '→', clampedShares.toFixed(4),
+                        '(on-chain', onchainShares.toFixed(6), '| overshoot', (overshoot * 100).toFixed(2) + '% | safety margin: 0.01 shares)');
+            shares = clampedShares;
             amount = shares * price;
-            _tradeModalData.shares = onchainShares;
+            _tradeModalData.shares = clampedShares;
             // fall through to submit
           } else if (onchainShares <= 0.01 && ownedShares > 0.01) {
             // Disagreement: on-chain reads empty, cache says we hold shares,
