@@ -7,6 +7,16 @@
 
 ## 2026-04-24 — Session 18 (Claude Code)
 
+### fix: port the full V2 allowance matrix to market.html (the 'still not fixed' case)
+- **File:** `public/market.html` → new `NEG_RISK_ADAPTER` constant, new `isPmctApprovedForSpender` + `approvePmctForSpender` helpers with localStorage caching + in-flight dedup, `isCtfApprovedForOperator` upgraded with the same caching pattern, V2 SELL pre-flight in `executeTrade()` rewritten to dispatch the full PR #38 matrix.
+- **Symptom:** After PRs #33–42 landed on the dashboard path, users trading from `/market/:slug` were still hitting "Order rejected: invalid signature" and "not enough balance / allowance". The market.html V2 pre-flight had been frozen at the pre-PR-#38 state — only `CT.setApprovalForAll(exchangeAddr)`, missing the four pUSD approvals and the NegRisk Adapter approvals. PR #38's own "Don't break" note explicitly flagged market.html as not yet covered; this is the follow-up.
+- **Fix:** market.html's V2 pre-flight now runs for BOTH BUY and SELL (was SELL-only) and dispatches the full matrix:
+  - Binary: `CT→CTF V2` + `pUSD→CT` + `pUSD→CTF V2` (3 popups first time, 0 after)
+  - NegRisk: above + `CT→NR Adapter` + `CT→NegRisk V2` + `pUSD→NegRisk V2` + `pUSD→NR Adapter` (up to 7 popups first time, 0 after)
+- **Sibling helper symmetry:** `isPmctApprovedForSpender` / `approvePmctForSpender` mirror the dashboard's `dashIs*/dashApprove*` versions. Both use the same 10B `APPROVAL_CAP` to avoid Blockaid's "Unlimited / known for scams" banner. Both cache in localStorage under `hfx_ctf_ok_…` / `hfx_pusd_ok_…` keys — these keys are SHARED across market.html and creator-dashboard.html (same cache namespace) so approving on one page is remembered on the other.
+- **In-flight dedup:** `_ctfApprovalInFlight` and `_pmctApprovalInFlight` maps keyed by spender prevent rapid-click from stacking concurrent approval SafeTxes against the same target (same fix pattern as PR #27).
+- **Don't break:** `NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296'` must match the dashboard's `DASH_NEG_RISK_ADAPTER`. They're two declarations of the same contract; rename one and you break the matrix. The pre-flight is gated on `clobVersion === 2 && makerAddr` (no side filter). If you narrow that gate back to SELL-only, V2 BUYs fail the same way SELLs did. Leave it universal.
+
 ### fix: PR #41 ordering bug — USDC.e→Onramp approval must fire BEFORE the wrap, not in the post-wrap allowance pre-flight
 - **File:** `public/creator-dashboard.html` → `dashWrapUsdcToPmct()`
 - **Symptom:** after PR #41 landed, tester retried BUY. MetaMask again showed "This transaction is likely to fail", tester cancelled. Railway logs confirmed the tx hitting our `/safe-submit` endpoint was `to: 0x93070a847efEf7F7073…` (CollateralOnramp) with a body length consistent with `wrap()` — not the new `approve()` call we added. So the approval was never dispatched before the wrap.
