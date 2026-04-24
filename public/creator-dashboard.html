@@ -22149,10 +22149,17 @@ async function confirmTrade() {
     // builds the full V2 struct / domain / types. Not duplicated here yet
     // because this file's ethers version differs from market.html — wait
     // until V2 cutover so we can test one surface at a time.
-    // Explicit-true only. Default-true-on-undefined was the root cause of the
-    // "invalid signature" loop — signing against NEG_RISK_EXCHANGE_V2 for a
-    // binary market made CLOB's re-hash diverge from ours.
-    const isNegRisk = _tradeModalData._negRisk === true;
+    // Priority: _negRisk wins when explicitly set (lets the 'invalid signature'
+    // auto-retry flip it). Falls back to position data when _negRisk is
+    // undefined. Everything else defaults to binary (false).
+    let isNegRisk;
+    if (_tradeModalData._negRisk === true)       isNegRisk = true;
+    else if (_tradeModalData._negRisk === false) isNegRisk = false;
+    else isNegRisk = _tradeModalData.neg_risk === true || _tradeModalData.negativeRisk === true;
+    console.log('[qt-trade] isNegRisk:', isNegRisk,
+                '| _negRisk=' + _tradeModalData._negRisk,
+                '| neg_risk=' + _tradeModalData.neg_risk,
+                '| negativeRisk=' + _tradeModalData.negativeRisk);
     // V2 routing — same priority order as market.html isClobV2Enabled():
     //   1. ?clob_v2=1 / ?clob_v2=0 URL override (also writes to localStorage)
     //   2. window.HF_USE_CLOB_V2 = true|false
@@ -22667,6 +22674,30 @@ async function confirmTrade() {
         } else {
           errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
         }
+      } else if (errStr.includes('invalid signature')) {
+        // V2 "invalid signature" on a first attempt almost always means we
+        // picked the wrong exchange for the EIP-712 domain (NegRisk vs CTF).
+        // CLOB routes the order by conditionId and re-hashes with the correct
+        // exchange; if that differs from our sign-time `verifyingContract`,
+        // the digest doesn't match, sig doesn't recover, CLOB rejects.
+        // Auto-retry with the flipped negRisk flag once. Guarded so we can't
+        // loop forever.
+        if (!_tradeModalData._negRiskFlipFired) {
+          _tradeModalData._negRiskFlipFired = true;
+          // Flip whatever we had — explicit opposite of what we just sent.
+          _tradeModalData._negRisk = !(
+            _tradeModalData._negRisk === true ||
+            _tradeModalData.neg_risk === true ||
+            _tradeModalData.negativeRisk === true
+          );
+          console.warn('[qt-trade] invalid signature — retrying with isNegRisk flipped to', _tradeModalData._negRisk);
+          if (typeof showToast === 'function') showToast('Retrying with different exchange routing…', 'info');
+          btn.disabled = true;
+          btn.textContent = 'Retrying…';
+          errEl.style.display = 'none';
+          return confirmTrade();
+        }
+        errEl.innerHTML = 'Order rejected: invalid signature (tried both exchanges).<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">This is unusual. Screenshot and send over — the order struct needs manual debugging.</span>';
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
       } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
