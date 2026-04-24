@@ -22564,7 +22564,50 @@ async function confirmTrade() {
           //
           // Also DO NOT blacklist — CLOB is not the source of truth for
           // "does this wallet own these shares". Polygon state is.
-          errEl.innerHTML = 'Order rejected: insufficient balance/allowance.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Verify your position on polymarket.com. If it shows there but not here, reload this page to refresh the wallet connection. If a V2 approval popup failed earlier, the transaction may have reverted — check Polygonscan for your last execTransaction status.</span>';
+          // Dump actual on-chain state into the banner so the user can see
+          // what we see. Mobile-friendly: no console required, everything is
+          // visible in the error and screenshottable. Confirms whether the
+          // right proxy is wired up and whether V2 operator approvals are
+          // set where CLOB expects them.
+          const ctfV2Op = '0xE111180000d2663C0091e4f400237545B87B996B';
+          const nrV2Op  = '0xe2222d279d744050d28e00520010520000310F59';
+          let dbgCtf = '…', dbgNr = '…', dbgBal = '…';
+          try {
+            if (typeof dashIsCtfApprovedForOperator === 'function' && proxyAddress) {
+              const [a, b] = await Promise.all([
+                dashIsCtfApprovedForOperator(proxyAddress, ctfV2Op).catch(() => null),
+                dashIsCtfApprovedForOperator(proxyAddress, nrV2Op).catch(() => null),
+              ]);
+              dbgCtf = a === null ? 'rpc-error' : (a ? '✓' : '✗');
+              dbgNr  = b === null ? 'rpc-error' : (b ? '✓' : '✗');
+            }
+            if (tokenId && proxyAddress) {
+              const prov = await getDashboardPublicProvider();
+              const ctf = new ethers.Contract(
+                '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045',
+                ['function balanceOf(address, uint256) view returns (uint256)'],
+                prov
+              );
+              const bal = await ctf.balanceOf(proxyAddress, tokenId).catch(() => null);
+              dbgBal = bal === null ? 'rpc-error' : parseFloat(ethers.formatUnits(bal, 6)).toFixed(2);
+            }
+          } catch (dbgErr) { console.warn('[qt-trade] diag dump failed:', dbgErr.message); }
+
+          errEl.innerHTML =
+            '<div style="font-weight:700;margin-bottom:6px">Order rejected: insufficient balance/allowance</div>' +
+            '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;background:rgba(0,0,0,0.25);padding:8px 10px;border-radius:6px">' +
+              '<div>EOA:    <span style="color:var(--text)">' + (eoaAddress ? eoaAddress.slice(0,10) + '…' + eoaAddress.slice(-4) : 'MISSING') + '</span></div>' +
+              '<div>Proxy:  <span style="color:var(--text)">' + (proxyAddress ? proxyAddress.slice(0,10) + '…' + proxyAddress.slice(-4) : 'MISSING') + '</span></div>' +
+              '<div>CTF V2 approval:    <span style="color:var(--text)">' + dbgCtf + '</span></div>' +
+              '<div>NegRisk V2 approval:<span style="color:var(--text)"> ' + dbgNr + '</span></div>' +
+              '<div>Shares on-chain:    <span style="color:var(--text)">' + dbgBal + '</span></div>' +
+              '<div>Token:  <span style="color:var(--text)">' + (tokenId ? String(tokenId).slice(0,20) + '…' : 'MISSING') + '</span></div>' +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--dim);display:block;margin-top:8px;line-height:1.5">' +
+              '➜ Compare <strong>Proxy</strong> with what polymarket.com shows. If different, you\'re on the wrong MetaMask account.<br>' +
+              '➜ If <strong>Shares on-chain</strong> is 0, the position is on a different wallet.<br>' +
+              '➜ If both approvals are ✓ and shares > 0, screenshot this and send it over — that\'s enough to trace.' +
+            '</div>';
           if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
         } else {
           errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
