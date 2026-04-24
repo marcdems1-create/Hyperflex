@@ -21840,6 +21840,17 @@ async function confirmTrade() {
             // warn loudly in the console, surface a soft banner, let the user
             // attempt the sell. CLOB is the ultimate source of truth — if
             // balance is truly 0 it will reject and we handle that cleanly.
+            //
+            // HOWEVER: still gate on requested shares <= cache. Otherwise a
+            // user typing $2.00 on a $1.46 position (37% overshoot) gets let
+            // through to CLOB for a wasted round-trip — when cache already
+            // knew the attempt was impossible. Mismatch path is for "we
+            // can't verify on-chain, trust cache" — NOT "ignore all limits".
+            if (shares > ownedShares + 0.0001) {
+              errEl.innerHTML = 'Selling more than you hold.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">You have ' + ownedShares.toFixed(2) + ' shares (on-chain check was inconclusive, using cache). Reduce the amount or tap MAX.</span>';
+              errEl.style.display = 'block';
+              return;
+            }
             console.warn('[pre-sell] MISMATCH — on-chain says 0 but cache has', ownedShares.toFixed(4),
                          '— letting the sell through; CLOB will be the tiebreaker');
             errEl.innerHTML = '<span style="color:var(--gold,#c9920d)">⚠ Heads up: couldn\'t verify shares on-chain.</span><br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Attempting sell anyway — if the order fails, the position may have been transferred elsewhere.</span>';
