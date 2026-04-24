@@ -38823,6 +38823,42 @@ let _builderCreds = null;
 // we can verify end-to-end. After N we drop to sampled summary logs only.
 let _builderSignVerbose = 20;
 
+// V2-specific verbose log — separate counter (50) so we have plenty of
+// grant-application-grade evidence that our V2 orders carry the on-chain
+// builder bytes32. Independent of the HMAC log because V2 attribution
+// doesn't use HMAC at all (the builder bytes32 inside the signed order IS
+// the attribution mechanism after the 4/28 migration). Pulled directly
+// from the parsed POST body so what we log is byte-identical to what the
+// CLOB receives.
+let _v2OrderVerbose = 50;
+function _logV2OrderTraceIfApplicable(bodyStr) {
+  if (_v2OrderVerbose <= 0) return;
+  let parsed;
+  try { parsed = JSON.parse(bodyStr); } catch (_e) { return; }
+  const ord = parsed && parsed.order;
+  // V2 detection = presence of `builder` field on the order. V1 has no such
+  // field. Skip silently for V1 — those are pre-cutover compat traffic.
+  if (!ord || !ord.builder) return;
+  _v2OrderVerbose--;
+  console.log('[v2-order] ============================');
+  console.log('[v2-order]   builder      =', ord.builder);
+  console.log('[v2-order]   timestamp_ms =', ord.timestamp);
+  console.log('[v2-order]   metadata     =', ord.metadata);
+  console.log('[v2-order]   side         =', ord.side, '(wire string; signed as uint8 0/1)');
+  console.log('[v2-order]   sigType      =', ord.signatureType);
+  console.log('[v2-order]   tokenId      =', String(ord.tokenId).slice(0, 24) + '…');
+  console.log('[v2-order]   maker        =', ord.maker);
+  console.log('[v2-order]   signer       =', ord.signer);
+  console.log('[v2-order]   makerAmt     =', ord.makerAmount);
+  console.log('[v2-order]   takerAmt     =', ord.takerAmount);
+  console.log('[v2-order]   salt         =', ord.salt);
+  console.log('[v2-order]   sig[0..20]   =', String(ord.signature || '').slice(0, 22) + '…');
+  console.log('[v2-order]   owner        =', parsed.owner);
+  console.log('[v2-order]   orderType    =', parsed.orderType);
+  console.log('[v2-order] (' + _v2OrderVerbose + ' verbose V2 logs remaining)');
+  console.log('[v2-order] ============================');
+}
+
 // Returns POLY_BUILDER_* headers for an order, or {} if credentials aren't ready.
 // `body` is the RAW request body string that will be POSTed. It must be
 // byte-identical to what goes over the wire — do not re-JSON.stringify.
@@ -38836,6 +38872,11 @@ function getBuilderHeaders(method, path, body) {
     .update(message)
     .digest('base64')
     .replace(/\+/g, '-').replace(/\//g, '_'); // keep '=' padding
+
+  // V2 trace — independent of the HMAC verbose log. Fires whenever the body
+  // contains a V2 order (has order.builder). Path-agnostic so it logs orders
+  // hitting /order regardless of whether HMAC is active.
+  if (path === '/order') _logV2OrderTraceIfApplicable(bodyStr);
 
   if (_builderSignVerbose > 0) {
     _builderSignVerbose--;

@@ -7,6 +7,12 @@
 
 ## 2026-04-23 — Session 17 (Claude Code)
 
+### feat: V2 order verbose log for grant-application evidence
+- **File:** `server.js` → `_v2OrderVerbose` counter + `_logV2OrderTraceIfApplicable()` helper inside `getBuilderHeaders()`
+- Independent counter (50) that fires whenever a `/order` body contains a V2 order (detected via `order.builder` presence). Logs the full V2-relevant fields: `builder` bytes32, `timestamp`, `metadata`, `side`, `signatureType`, `tokenId`, `maker`, `signer`, amounts, salt, signature prefix, `owner`, `orderType`. Path-agnostic so it captures orders regardless of whether HMAC is still active post-4/28.
+- **Why:** Grant application + Polymarket support diagnostics need byte-exact evidence that we're shipping the on-chain `builder` field. When support says "order 0xabc… didn't attribute", we can grep Railway logs for the bytes32 and prove what we sent.
+- **Don't break:** Logs only the first 50 V2 orders to avoid log spam. To reset the counter for fresh evidence, redeploy or set `_v2OrderVerbose = 50` directly.
+
 ### fix: deposit flow now lands USDC.e, not native USDC
 - **File:** `public/market.html` → deposit modal (Jumper widget config), `fetchUsdcBalance()`, modal state, balance display
 - **Bug:** Jumper/LI.FI widget `toToken` was pointed at **native USDC** (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`). Polymarket CTF V1 trading collateral is **USDC.e** (`0x2791Bca1…`) and V2's pUSD wraps USDC.e. Users who deposited via Bridge & Swap got a non-zero trading-wallet balance that couldn't place any order — "insufficient balance" at CLOB submit despite the UI saying there was $X.
