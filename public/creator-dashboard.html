@@ -21672,6 +21672,12 @@ async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
 // pre-approved during polymarket.com onboarding; V2 operators are new so each
 // user needs one setApprovalForAll per V2 exchange (CTF V2 + NegRisk V2).
 const DASH_CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+// NegRisk adapter: the V2 SDK's approve_neg_risk_allowances example shows
+// NegRisk markets need setApprovalForAll on the adapter AND pUSD allowance
+// to the adapter, on top of the exchange approvals. Source:
+// Polymarket/py-clob-client-v2/py_clob_client_v2/config.py (mainnet chainId 137).
+const DASH_NEG_RISK_ADAPTER   = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
+
 async function dashIsCtfApprovedForOperator(ownerAddr, operator) {
   if (!ownerAddr || !operator) return false;
   // Cache approval in localStorage — approval is permanent on-chain so we only
@@ -21711,6 +21717,62 @@ async function dashApproveCtfForOperator(operator, proxyAddr, eoaAddr, signer) {
   const p = dashExecuteViaProxy(DASH_CONDITIONAL_TOKENS, data, 0n, proxyAddr, eoaAddr, signer)
     .finally(() => { delete _dashCtfApprovalInFlight[key]; });
   _dashCtfApprovalInFlight[key] = p;
+  return p;
+}
+
+// ── pUSD allowance helpers (V2-only) ──────────────────────────────────────
+// CLOB V2's balance/allowance check is unified across BUY and SELL. Even a
+// SELL order gets rejected with {"error":"not enough balance / allowance"}
+// if the maker's pUSD allowance is 0 on the matching exchange or on the CT
+// contract (for split/merge flows through the collateral route). Source:
+// Polymarket/py-clob-client-v2/examples/account/approve_allowances.py +
+// approve_neg_risk_allowances.py — both scripts set 3–5 approvals as a
+// one-time setup, only one of which (CTF.setApprovalForAll) our code was
+// previously doing. The missing pUSD approvals manifested as mystery SELL
+// rejections on "Proxy pUSD: 0.0000" wallets even with balance + CTF
+// approvals in place.
+async function dashIsPmctApprovedForSpender(ownerAddr, spender) {
+  if (!ownerAddr || !spender) return false;
+  // Cache: allowance at APPROVAL_CAP lasts practically forever. Same pattern
+  // as dashIsCtfApprovedForOperator — one RPC call per (proxy, spender) pair
+  // per browser, then cached in localStorage.
+  const _cacheKey = 'hfx_pusd_ok_' + ownerAddr.slice(-8).toLowerCase() + '_' + spender.slice(-8).toLowerCase();
+  if (localStorage.getItem(_cacheKey) === '1') return true;
+  try {
+    const provider = await getDashboardPublicProvider();
+    const pusd = new ethers.Contract(DASH_PMCT_ADDRESS, [
+      'function allowance(address owner, address spender) view returns (uint256)'
+    ], provider);
+    const raw = await pusd.allowance(ownerAddr, spender);
+    // Match the same APPROVAL_CAP threshold used for USDC approvals: a fresh
+    // approval at APPROVAL_CAP should register way above this minimum.
+    const ok = raw > BigInt('1000000000000'); // 1M pUSD (atomic, 6 decimals)
+    if (ok) localStorage.setItem(_cacheKey, '1');
+    return ok;
+  } catch (e) {
+    console.warn('[dash-pusd] allowance check failed:', e.message);
+    return false;
+  }
+}
+var _dashPmctApprovalInFlight = Object.create(null);
+async function dashApprovePmctForSpender(spender, proxyAddr, eoaAddr, signer) {
+  if (!spender) throw new Error('Spender address missing');
+  const key = spender.toLowerCase();
+  if (_dashPmctApprovalInFlight[key]) {
+    console.log('[dash-pusd] approval already in flight for ' + key.slice(0,10) + '… — awaiting existing dispatch');
+    return _dashPmctApprovalInFlight[key];
+  }
+  // Bounded approval cap (10B tokens at 6 decimals). Using MAX_UINT256 on
+  // fresh V2 contracts triggers Blockaid's "Unlimited / known for scams"
+  // banner on MetaMask mobile because the spenders haven't been whitelisted
+  // yet. Same cap as USDC approvals in market.html.
+  const APPROVAL_CAP = '10000000000000000';
+  const iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);
+  const data = iface.encodeFunctionData('approve', [spender, APPROVAL_CAP]);
+  console.log('[dash-pusd] approve ' + spender.slice(0,10) + '…=CAP via Safe');
+  const p = dashExecuteViaProxy(DASH_PMCT_ADDRESS, data, 0n, proxyAddr, eoaAddr, signer)
+    .finally(() => { delete _dashPmctApprovalInFlight[key]; });
+  _dashPmctApprovalInFlight[key] = p;
   return p;
 }
 
@@ -22228,32 +22290,94 @@ async function confirmTrade() {
     //
     // Also: tracking V1 CTF + NegRisk approvals here would be wasted —
     // V1 is killed as of session 17 PR #24.
-    if (useClobV2 && clobSide === 'SELL' && proxyAddress) {
-      const v2Operators = [
-        { addr: '0xE111180000d2663C0091e4f400237545B87B996B', label: 'CTF V2' },
-        { addr: '0xe2222d279d744050d28e00520010520000310F59', label: 'NegRisk V2' },
+    // V2 unified allowance pre-flight. CLOB V2's "balance/allowance" check
+    // is stricter than V1: it enforces the full maker allowance matrix before
+    // ANY order, including a SELL where the maker receives pUSD (not gives
+    // it). The V2 SDK's approve_allowances.py + approve_neg_risk_allowances.py
+    // show the complete list:
+    //
+    //   CT.setApprovalForAll(CTF_EXCHANGE_V2)        — always needed
+    //   CT.setApprovalForAll(NEG_RISK_EXCHANGE_V2)   — always needed (for NR markets)
+    //   CT.setApprovalForAll(NEG_RISK_ADAPTER)       — NegRisk only
+    //   pUSD.approve(CT)                             — always needed
+    //   pUSD.approve(CTF_EXCHANGE_V2)                — always needed
+    //   pUSD.approve(NEG_RISK_EXCHANGE_V2)           — NegRisk only
+    //   pUSD.approve(NEG_RISK_ADAPTER)               — NegRisk only
+    //
+    // Previously we only did the first two CT approvals. On a proxy with
+    // "Proxy pUSD: 0.0000" and zero pUSD allowances, CLOB rejects SELL with
+    // {"error":"not enough balance / allowance"} even with 28.57 shares and
+    // CTF approvals ✓. This pre-flight closes the gap for both BUY and SELL.
+    //
+    // The entries are listed universally; NegRisk-only ones are no-ops on
+    // binary markets if you approve them anyway (just an extra popup once),
+    // so we include them all. If _tradeModalData._negRisk is a confident
+    // false we skip NegRisk-only to reduce first-trade friction.
+    if (useClobV2 && proxyAddress) {
+      const wantNegRisk = isNegRisk || _tradeModalData._negRisk === undefined;
+      const ctfV2Addr      = '0xE111180000d2663C0091e4f400237545B87B996B';
+      const negRiskV2Addr  = '0xe2222d279d744050d28e00520010520000310F59';
+      const negRiskAdapter = DASH_NEG_RISK_ADAPTER;
+      const ctApprovals = [
+        { addr: ctfV2Addr,     label: 'CTF V2 (shares)' },
       ];
+      const pUsdApprovals = [
+        { addr: DASH_CONDITIONAL_TOKENS, label: 'CT (pUSD collateral)' },
+        { addr: ctfV2Addr,               label: 'CTF V2 (pUSD)' },
+      ];
+      if (wantNegRisk) {
+        ctApprovals.push({ addr: negRiskV2Addr,   label: 'NegRisk V2 (shares)' });
+        ctApprovals.push({ addr: negRiskAdapter,  label: 'NegRisk Adapter (shares)' });
+        pUsdApprovals.push({ addr: negRiskV2Addr, label: 'NegRisk V2 (pUSD)' });
+        pUsdApprovals.push({ addr: negRiskAdapter,label: 'NegRisk Adapter (pUSD)' });
+      }
+
       try {
-        const statuses = await Promise.all(
-          v2Operators.map(op => dashIsCtfApprovedForOperator(proxyAddress, op.addr))
-        );
-        v2Operators.forEach((op, i) => console.log('[qt-trade-v2] CTF approval for', op.label, op.addr.slice(0,10) + '… =', statuses[i]));
-        const missing = v2Operators.filter((_, i) => !statuses[i]);
-        if (missing.length > 0) {
+        const [ctStatuses, pUsdStatuses] = await Promise.all([
+          Promise.all(ctApprovals.map(a => dashIsCtfApprovedForOperator(proxyAddress, a.addr))),
+          Promise.all(pUsdApprovals.map(a => dashIsPmctApprovedForSpender(proxyAddress, a.addr))),
+        ]);
+        ctApprovals.forEach((a, i)    => console.log('[qt-trade-v2] CT approval ', a.label, a.addr.slice(0,10) + '… =', ctStatuses[i]));
+        pUsdApprovals.forEach((a, i)  => console.log('[qt-trade-v2] pUSD approval', a.label, a.addr.slice(0,10) + '… =', pUsdStatuses[i]));
+
+        const missingCt   = ctApprovals.filter((_, i)   => !ctStatuses[i]);
+        const missingPUsd = pUsdApprovals.filter((_, i) => !pUsdStatuses[i]);
+        const totalMissing = missingCt.length + missingPUsd.length;
+
+        if (totalMissing > 0) {
           btn.disabled = true;
-          btn.textContent = 'Approving V2 (' + missing.length + ' of ' + v2Operators.length + ')...';
           errEl.style.color = 'var(--gold)';
-          errEl.textContent = 'One-time V2 setup: approve ' + missing.map(o => o.label).join(' + ') + ' to transfer your shares. ' +
-            (missing.length > 1 ? 'You\'ll see ' + missing.length + ' MetaMask popups.' : 'Check MetaMask to sign.');
+          errEl.textContent = 'One-time V2 setup: ' + totalMissing + ' approval' + (totalMissing > 1 ? 's' : '') +
+            ' to enable trading. You\'ll see ' + totalMissing + ' MetaMask popup' + (totalMissing > 1 ? 's' : '') + '.';
           errEl.style.display = 'block';
-          for (let i = 0; i < missing.length; i++) {
-            btn.textContent = 'Approving ' + missing[i].label + ' (' + (i + 1) + '/' + missing.length + ')...';
-            await dashApproveCtfForOperator(missing[i].addr, proxyAddress, eoaAddress, window._walletSigner);
-            const after = await dashIsCtfApprovedForOperator(proxyAddress, missing[i].addr);
-            console.log('[qt-trade-v2] post-approval status for', missing[i].label, '=', after);
+
+          let done = 0;
+          // CT (setApprovalForAll) approvals first.
+          for (let i = 0; i < missingCt.length; i++) {
+            done += 1;
+            btn.textContent = 'Approving ' + missingCt[i].label + ' (' + done + '/' + totalMissing + ')...';
+            await dashApproveCtfForOperator(missingCt[i].addr, proxyAddress, eoaAddress, window._walletSigner);
+            const after = await dashIsCtfApprovedForOperator(proxyAddress, missingCt[i].addr);
+            console.log('[qt-trade-v2] post-approval CT', missingCt[i].label, '=', after);
             if (!after) {
               errEl.style.color = '';
-              errEl.innerHTML = 'Approval for ' + missing[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
+              errEl.innerHTML = 'Approval for ' + missingCt[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
+              errEl.style.display = 'block';
+              btn.disabled = false;
+              btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+              return;
+            }
+          }
+          // pUSD (ERC-20 approve) approvals next.
+          for (let i = 0; i < missingPUsd.length; i++) {
+            done += 1;
+            btn.textContent = 'Approving ' + missingPUsd[i].label + ' (' + done + '/' + totalMissing + ')...';
+            await dashApprovePmctForSpender(missingPUsd[i].addr, proxyAddress, eoaAddress, window._walletSigner);
+            const after = await dashIsPmctApprovedForSpender(proxyAddress, missingPUsd[i].addr);
+            console.log('[qt-trade-v2] post-approval pUSD', missingPUsd[i].label, '=', after);
+            if (!after) {
+              errEl.style.color = '';
+              errEl.innerHTML = 'Approval for ' + missingPUsd[i].label + ' didn\'t land on-chain.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">If the transaction reverted: your mobile wallet may not support EIP-712 v4 signatures. Try from desktop MetaMask.</span>';
               errEl.style.display = 'block';
               btn.disabled = false;
               btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
@@ -22265,9 +22389,9 @@ async function confirmTrade() {
         }
       } catch (approveErr) {
         const amsg = (approveErr && approveErr.message) || 'Unknown approval error';
-        console.error('[qt-trade-v2] CTF approval failed:', approveErr);
+        console.error('[qt-trade-v2] allowance pre-flight failed:', approveErr);
         errEl.style.color = '';
-        errEl.textContent = 'Could not approve V2 exchange: ' + amsg;
+        errEl.textContent = 'Could not set V2 allowances: ' + amsg;
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');

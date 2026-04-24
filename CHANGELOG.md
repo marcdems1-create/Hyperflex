@@ -7,6 +7,27 @@
 
 ## 2026-04-24 — Session 18 (Claude Code)
 
+### fix: V2 SELL `not enough balance / allowance` — we were missing the pUSD allowance matrix
+- **Files:** `public/creator-dashboard.html` → new `DASH_NEG_RISK_ADAPTER` constant, new `dashIsPmctApprovedForSpender` + `dashApprovePmctForSpender` helpers, rewritten V2 allowance pre-flight inside `confirmTrade()`
+- **Diagnostic that pinned it:** after PR #37 landed, the banner on a failing SELL showed `Routed to: CTF V2 (0xE1111800…996B)`, both approvals ✓, 28.57 shares on-chain for the exact tokenId, sell size 11.36 shares → 0.999680 pUSD @ tick 0.001, and `CLOB said: {"error":"not enough balance / allowance"}` with `Proxy pUSD: 0.0000`. Every maker-side check we knew about was green — so CLOB was rejecting for a reason our pre-flight didn't even consider.
+- **Root cause:** the V2 SDK's [`examples/account/approve_allowances.py`](https://github.com/Polymarket/py-clob-client-v2/blob/main/examples/account/approve_allowances.py) and [`approve_neg_risk_allowances.py`](https://github.com/Polymarket/py-clob-client-v2/blob/main/examples/account/approve_neg_risk_allowances.py) show the full maker-side setup is **three ERC-20 pUSD approvals + two-or-three `setApprovalForAll` on the ConditionalTokens contract**. Our SELL pre-flight was only doing `CT.setApprovalForAll(CTF_EXCHANGE_V2)` + the NegRisk exchange analog. CLOB V2's balance/allowance check is unified across BUY and SELL — it wants the complete setup before it routes anything, which is why SELL was rejected even though the maker receives pUSD rather than giving it.
+- **The full matrix (from the SDK):**
+
+  | Purpose | Approval | Binary | NegRisk |
+  | --- | --- | :-: | :-: |
+  | Share transfer | `CT.setApprovalForAll(CTF_EXCHANGE_V2)` | ✅ | ✅ |
+  | Share transfer | `CT.setApprovalForAll(NEG_RISK_EXCHANGE_V2)` | — | ✅ |
+  | Split through adapter | `CT.setApprovalForAll(NEG_RISK_ADAPTER)` | — | ✅ |
+  | Collateral flow | `pUSD.approve(CT)` | ✅ | ✅ |
+  | Matching fees/collateral | `pUSD.approve(CTF_EXCHANGE_V2)` | ✅ | — |
+  | Matching fees/collateral | `pUSD.approve(NEG_RISK_EXCHANGE_V2)` | — | ✅ |
+  | Split through adapter | `pUSD.approve(NEG_RISK_ADAPTER)` | — | ✅ |
+
+- **Fix:** the V2 pre-flight now runs before BOTH BUY and SELL (gated on `useClobV2 && proxyAddress`, no longer SELL-only) and checks/sets every approval in the matrix above. Helpers are cached in `localStorage` (`hfx_pusd_ok_<ownerSuffix>_<spenderSuffix>` mirrors the existing `hfx_ctf_ok_…` pattern) so a repeat trade is zero-popup. NegRisk Adapter contract address is `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` (mainnet, chainId 137 — from `py_clob_client_v2/config.py`). pUSD address `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` was already defined as `DASH_PMCT_ADDRESS`.
+- **Approval cap:** same 10B-token cap as USDC approvals in `market.html` (`APPROVAL_CAP = '10000000000000000'`). MetaMask Blockaid flags `MaxUint256` approvals to low-reputation spenders as "Unlimited / known for scams"; the V2 contracts deployed April 22 haven't been whitelisted so we stay under the cap.
+- **First-trade UX:** a fresh proxy on a binary market sees up to 3 MetaMask popups (CT→CTF V2, pUSD→CT, pUSD→CTF V2) — cached-approved after that. If `_negRisk` is `undefined` (unknown), the pre-flight also sets the NegRisk Adapter + NegRisk V2 approvals so a later NR trade doesn't block. If `_negRisk === false` explicitly, only the binary 3 fire.
+- **Don't break:** the pUSD approvals are part of the same pre-flight as the CT approvals — if you split them back apart, the error-surfacing/recovery path must stay symmetric. The allowance cache is keyed on wallet-suffix + spender-suffix; if you rotate the approval cap or invalidate approvals you need to bust these cache entries. `DASH_NEG_RISK_ADAPTER` is a new sibling to `DASH_CONDITIONAL_TOKENS`. Does NOT cover `market.html` yet — that file has its own V2 SELL pre-flight (`isCtfApprovedForOperator` + `approveCtfForOperator`) that still only sets one approval; same treatment needed in a follow-up PR.
+
 ### diag: V2 SELL "not enough balance/allowance" banner dumps routed exchange + raw amounts + CLOB body
 - **File:** `public/creator-dashboard.html` → 400/`not enough balance` handler in `confirmTrade()`
 - **Context:** After PR #36 unblocked the invalid-signature bug, the next blocker on `hyperflex.network` Quick Trade is CLOB rejecting SELL with "not enough balance / allowance" even when the proxy holds the tokenId and both V2 operator approvals are set on-chain. Existing banner only showed `EOA`, `Proxy`, two approval checks, single-tokenId balance, and a truncated token ID — not enough to reason about the rejection.
