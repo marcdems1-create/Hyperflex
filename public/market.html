@@ -5105,7 +5105,31 @@ async function executeTrade() {
 
         if (totalMissing > 0) {
           cta.disabled = true;
-          showTradeStatus('One-time V2 setup: ' + totalMissing + ' approval' + (totalMissing > 1 ? 's' : '') + ' to sign…', 'info');
+
+          // Pre-warm the signer BEFORE the approval loop. Without this, each
+          // executeViaProxy call inside the loop calls HFXWallet.getSigner()
+          // independently; mobile MetaMask sometimes reports the session as
+          // dropped between calls (WalletConnect heartbeat drifts), triggering
+          // a surprise reconnect popup in the middle of the approval flow.
+          // Warming it once up front puts any session-recovery at the
+          // beginning where the user expects it, not mid-flow.
+          try {
+            await HFXWallet.getSigner();
+          } catch (warmErr) {
+            console.warn('[trade-v2] pre-warm signer failed:', warmErr && warmErr.message);
+          }
+
+          // User-facing notice that MetaMask Blockaid WILL flag these approvals
+          // as "deceptive request / known for scams". The V2 exchange contracts
+          // deployed Apr 22 haven't been whitelisted at Blockaid yet — it's a
+          // false positive, the user needs to tap Confirm anyway. Without this
+          // warning users see the scary orange banner, hit Cancel, the tx
+          // fails, and they think the site is broken. Explain up front.
+          showTradeStatus(
+            'One-time V2 setup: ' + totalMissing + ' approval' + (totalMissing > 1 ? 's' : '') + ' to sign. ' +
+            'MetaMask may show "deceptive request" on each — that\'s Blockaid\'s heuristic on contracts Polymarket deployed Apr 22 that aren\'t whitelisted yet. Tap CONFIRM on each; the approvals are safe.',
+            'info'
+          );
 
           // Poll isApproved against the public RPC until it flips to true,
           // for up to 30s. The approval tx mines in 2–5s but the public RPC
