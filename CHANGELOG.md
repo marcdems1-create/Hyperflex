@@ -7,6 +7,13 @@
 
 ## 2026-04-23 — Session 17 (Claude Code)
 
+### chore: kill V1 CLOB path — 100% V2 traffic starting now
+- **Files:** `public/market.html` → `isClobV2Enabled()` always returns `true`; `public/creator-dashboard.html` → `useClobV2 = true` (hard-coded).
+- **Why:** we need attribution volume on the Builder Leaderboard before the grant application. Every V1 order sent before 4/28 is attribution wasted (HMAC headers aren't attributing and that system is sunset on 4/28 anyway). Every V2 order carries our builder bytes32 on-chain and WILL attribute. Forcing V2 means every trade from here on is evidence.
+- **Overrides removed:** `?clob_v2=1/0` URL param, `window.HF_USE_CLOB_V2`, `localStorage.hf_use_clob_v2` sticky flag. Any of those previously set to `'0'` are purged on page load so users who toggled to V1 for testing aren't quietly stuck.
+- **V1 code paths still physically present** in `buildOrderForClob()` (v1 branch) and the dashboard V1 order-struct branch — unreachable but kept for quick revert if V2 breaks catastrophically. Don't rely on them as a fallback; the 4/28 migration deletes V1 from Polymarket's side regardless.
+- **Don't break:** if V2 genuinely regresses, the rollback is revert this commit — NOT re-introducing the flag-based fallback. The 4/28 cutover removes V1 entirely so we have <5 days either way.
+
 ### feat: V2 order verbose log for grant-application evidence
 - **File:** `server.js` → `_v2OrderVerbose` counter + `_logV2OrderTraceIfApplicable()` helper inside `getBuilderHeaders()`
 - Independent counter (50) that fires whenever a `/order` body contains a V2 order (detected via `order.builder` presence). Logs the full V2-relevant fields: `builder` bytes32, `timestamp`, `metadata`, `side`, `signatureType`, `tokenId`, `maker`, `signer`, amounts, salt, signature prefix, `owner`, `orderType`. Path-agnostic so it captures orders regardless of whether HMAC is still active post-4/28.

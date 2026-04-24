@@ -2766,33 +2766,21 @@ var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c09
 // but unverified as accepting orders pre-cutover. Safer to default V1
 // tonight and let V2 flip on its own at Polymarket's canonical cutover.
 // Users can still opt in with ?clob_v2=1 for testing the V2 path.
-var V2_CUTOVER_MS = Date.UTC(2026, 3, 22, 0, 0, 0);  // midnight UTC Apr 22 (Polymarket canonical cutover)
+// V1 path is KILLED as of session 17 — pre-4/28 we want 100% V2 traffic to
+// pile up attribution evidence on the Builder Leaderboard before applying for
+// the grant. All URL/window/localStorage overrides are ignored. If V2 itself
+// breaks, rollback = revert this file; do NOT try to route back to V1
+// through a flag because the 4/28 migration removes V1 anyway.
+var V2_CUTOVER_MS = 0; // force V2 forever
 function isClobV2Enabled() {
-  if (typeof window === 'undefined') return Date.now() >= V2_CUTOVER_MS;
-  // Layer 1: URL override (and persist to layer 3 for next nav)
+  // Purge any sticky "V1 forced" flag left over from earlier testing so users
+  // who set ?clob_v2=0 at some point aren't quietly stuck on V1 now.
   try {
-    var qs = new URLSearchParams(window.location.search);
-    var qv = qs.get('clob_v2');
-    if (qv === '1') {
-      try { localStorage.setItem('hf_use_clob_v2', '1'); } catch (e) {}
-      return true;
-    }
-    if (qv === '0') {
-      try { localStorage.setItem('hf_use_clob_v2', '0'); } catch (e) {}
-      return false;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('hf_use_clob_v2') === '0') {
+      localStorage.removeItem('hf_use_clob_v2');
     }
   } catch (e) {}
-  // Layer 2: window flag override
-  if (window.HF_USE_CLOB_V2 === true)  return true;
-  if (window.HF_USE_CLOB_V2 === false) return false;
-  // Layer 3: sticky localStorage
-  try {
-    var lv = localStorage.getItem('hf_use_clob_v2');
-    if (lv === '1') return true;
-    if (lv === '0') return false;
-  } catch (e) {}
-  // Layer 4: date-gated default
-  return Date.now() >= V2_CUTOVER_MS;
+  return true;
 }
 
 // V2 cutover banner. With V2 now the default, this only fires for users
