@@ -26198,6 +26198,14 @@ app.get('/api/polymarket/tick-size/:tokenId', async (req, res) => {
   }
 });
 
+// Static frontend config for Polymarket. Builder code is public (on-chain in
+// every order) so no auth needed. Lets the frontend pick up POLY_BUILDER_CODE
+// env var overrides without a code change — critical for Amoy testing.
+app.get('/api/polymarket/config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ builderCode: POLY_BUILDER_CODE });
+});
+
 // ── POLYMARKET ORDER PROXY (submits signed order to CLOB) ──────────────────
 // OLD /api/polymarket/order route removed — was missing CLOB auth header forwarding
 // and shadowed the proper geo-bypass proxy at line ~31151.
@@ -38795,6 +38803,24 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
 //
 // The `owner` field inside the order body is the TRADER's CLOB api_key UUID
 // (verified in market.html:4262 — do NOT confuse with POLY_BUILDER_API_KEY).
+
+// HYPERFLEX V2 builder code (bytes32) — the on-chain attribution tag baked
+// into every V2 order's EIP-712 struct. Env var lets us swap for Amoy testing
+// without a code change; hardcoded fallback keeps mainnet working if unset.
+// Format-validated at read time — a malformed env var falls back to mainnet.
+const POLY_BUILDER_CODE_FALLBACK = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+const POLY_BUILDER_CODE = (function () {
+  const raw = process.env.POLY_BUILDER_CODE;
+  if (!raw) return POLY_BUILDER_CODE_FALLBACK;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(raw)) {
+    console.warn('[boot] POLY_BUILDER_CODE malformed — falling back to mainnet. Expected 0x + 64 hex, got:', raw.slice(0, 10) + '…');
+    return POLY_BUILDER_CODE_FALLBACK;
+  }
+  if (raw.toLowerCase() !== POLY_BUILDER_CODE_FALLBACK.toLowerCase()) {
+    console.log('[boot] POLY_BUILDER_CODE overridden via env var:', raw.slice(0, 10) + '…');
+  }
+  return raw;
+})();
 
 let _builderCreds = null;
 (function initBuilderCreds() {

@@ -2745,7 +2745,22 @@ var BYTES32_ZERO = '0x' + '0'.repeat(64);
 // Address: 0x51f0d8d8798c6d57d8c60af767000ab3df5804e9, Status: Enabled.
 // ⚠️ Maker + Taker fee rates default to 0% — set a non-zero rate at
 //    polymarket.com/settings?tab=builder before any flow earns revenue.
+// Overridden by POLY_BUILDER_CODE env var (via /api/polymarket/config) on
+// load so we can point at Amoy without redeploying. Hardcoded default keeps
+// mainnet working if the endpoint is slow or unreachable.
 var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+(function hydrateBuilderCodeV2() {
+  try {
+    fetch('/api/polymarket/config', { credentials: 'omit' }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json();
+    }).then(function (j) {
+      if (!j || typeof j.builderCode !== 'string') return;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(j.builderCode)) return;
+      HFX_BUILDER_CODE_V2 = j.builderCode;
+    }).catch(function () { /* keep fallback */ });
+  } catch (e) { /* keep fallback */ }
+})();
 // V2 routing decision. Four layers, in priority order:
 //   1. Explicit URL override   — ?clob_v2=1 (force V2) | ?clob_v2=0 (force V1, emergency rollback)
 //   2. Explicit window flag    — window.HF_USE_CLOB_V2 = true|false
