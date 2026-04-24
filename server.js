@@ -26149,25 +26149,40 @@ app.get('/api/polymarket/neg-risk/:tokenId', async (req, res) => {
   const tokenId = req.params.tokenId.trim();
   if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
   const cached = _negRiskCache.get(tokenId);
-  if (cached && Date.now() - cached._ts < 300000) return res.json(cached.data); // 5 min cache
+  if (cached && Date.now() - cached._ts < 300000) return res.json(cached.data);
   try {
-    const upstream = await fetch(`https://clob.polymarket.com/neg-risk?token_id=${encodeURIComponent(tokenId)}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    });
-    if (!upstream.ok) {
-      // Default to negRisk=true for modern markets
-      const fallback = { neg_risk: true };
-      _negRiskCache.set(tokenId, { _ts: Date.now(), data: fallback });
-      return res.json(fallback);
+    // Query BOTH hosts — clob-v2 is authoritative post-Apr22 cutover but some
+    // markets may still resolve via the V1 host during the cutover window.
+    // Use whichever responds first with a valid boolean.
+    const hosts = [
+      'https://clob-v2.polymarket.com/neg-risk?token_id=',
+      'https://clob.polymarket.com/neg-risk?token_id=',
+    ];
+    let result = null;
+    for (const h of hosts) {
+      try {
+        const upstream = await fetch(h + encodeURIComponent(tokenId), {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        if (!upstream.ok) continue;
+        const data = await upstream.json();
+        // Accept either { neg_risk: true/false } or bare boolean.
+        if (typeof data === 'boolean') { result = { neg_risk: data }; break; }
+        if (data && typeof data.neg_risk === 'boolean') { result = { neg_risk: data.neg_risk }; break; }
+      } catch (_) { /* try next host */ }
     }
-    const data = await upstream.json();
-    const result = { neg_risk: data.neg_risk === true || data === true };
+    // Default to FALSE (not true) on failure. Binary markets are the common
+    // case and require the standard CTF exchange. Defaulting to true made
+    // us sign orders against NEG_RISK_EXCHANGE_V2 for binary markets,
+    // producing 'invalid signature' rejections because CLOB re-hashed
+    // against the CTF_EXCHANGE_V2 contract and got a different digest.
+    if (!result) result = { neg_risk: false };
     _negRiskCache.set(tokenId, { _ts: Date.now(), data: result });
     if (_negRiskCache.size > 500) { const oldest = _negRiskCache.keys().next().value; _negRiskCache.delete(oldest); }
     res.json(result);
   } catch (err) {
     console.error('[polymarket neg-risk]', err.message);
-    res.json({ neg_risk: true }); // safe default
+    res.json({ neg_risk: false }); // binary default — see comment above
   }
 });
 

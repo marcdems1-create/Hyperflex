@@ -21460,12 +21460,19 @@ async function loadOrderbook(pos) {
       fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(r => r.ok ? r.json() : null).catch(() => null)
     ]);
     const data = await obRes.json();
-    const nrData = await nrRes.json().catch(() => ({ neg_risk: true }));
+    // Default FALSE (not true) on parse failure. Binary markets are the
+    // common case; defaulting to true made us sign orders against the
+    // NegRisk V2 exchange for binary markets → "invalid signature" from
+    // CLOB because hash domains differed.
+    const nrData = await nrRes.json().catch(() => ({ neg_risk: false }));
     const tsData = await tsRes.json().catch(() => ({ minimum_tick_size: 0.01 }));
 
     if (data.error) { el.innerHTML = '<span style="color:#ff6b6b;font-size:11px">' + data.error + '</span>'; return; }
     _tradeModalData._orderbook = data;
-    _tradeModalData._negRisk = nrData.neg_risk !== false;
+    // Only treat as NegRisk if the endpoint explicitly returned true.
+    // Previous "!== false" default was wrong for binary markets when the
+    // endpoint was missing/undefined — signed orders against wrong exchange.
+    _tradeModalData._negRisk = nrData && nrData.neg_risk === true;
     _tradeModalData._tickSize = tsData.minimum_tick_size || 0.01;
     _tradeModalData._feeRateBps = (feeRes && feeRes.base_fee !== undefined) ? String(feeRes.base_fee) : '0';
 
@@ -22142,7 +22149,10 @@ async function confirmTrade() {
     // builds the full V2 struct / domain / types. Not duplicated here yet
     // because this file's ethers version differs from market.html — wait
     // until V2 cutover so we can test one surface at a time.
-    const isNegRisk = _tradeModalData._negRisk !== false;
+    // Explicit-true only. Default-true-on-undefined was the root cause of the
+    // "invalid signature" loop — signing against NEG_RISK_EXCHANGE_V2 for a
+    // binary market made CLOB's re-hash diverge from ours.
+    const isNegRisk = _tradeModalData._negRisk === true;
     // V2 routing — same priority order as market.html isClobV2Enabled():
     //   1. ?clob_v2=1 / ?clob_v2=0 URL override (also writes to localStorage)
     //   2. window.HF_USE_CLOB_V2 = true|false
