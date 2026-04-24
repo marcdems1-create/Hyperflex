@@ -39985,7 +39985,59 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 // The order is already signed client-side — we just forward it.
 // CRITICAL: Do NOT forward X-Forwarded-For or any geo-identifying headers —
 // the CLOB must see Railway's server IP, not the end user's IP.
+// V2 trade observability — see supabase_migration_polymarket_v2_trades.sql.
+// Detects V2 orders by presence of `order.builder` (not in V1 struct) and
+// logs every attempt/accept/reject row. DB errors are swallowed so the trade
+// flow is never blocked by observability. Non-V2 orders are not logged.
+function _isV2Order(orderObj) {
+  return !!(orderObj && typeof orderObj.builder === 'string' && orderObj.builder.startsWith('0x'));
+}
+async function _logV2Attempt(orderObj, clientIp) {
+  try {
+    if (!_isV2Order(orderObj)) return null;
+    const row = {
+      eoa_address:   (orderObj.signer || '').toLowerCase() || null,
+      proxy_address: (orderObj.maker  || '').toLowerCase() || null,
+      token_id:      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
+      side:          orderObj.side != null ? Number(orderObj.side) : null,
+      maker_amount:  orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
+      taker_amount:  orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
+      salt:          orderObj.salt != null ? String(orderObj.salt) : null,
+      builder_code:  orderObj.builder || null,
+      clob_status:   'attempted',
+      client_ip:     clientIp || null,
+    };
+    const { data, error } = await supabase.from('polymarket_v2_trades').insert(row).select('id').maybeSingle();
+    if (error) { console.warn('[v2-trades] insert failed:', error.message); return null; }
+    return data && data.id ? data.id : null;
+  } catch (e) {
+    console.warn('[v2-trades] insert threw:', e.message);
+    return null;
+  }
+}
+async function _logV2Outcome(rowId, httpStatus, responseText, parsedData) {
+  try {
+    if (!rowId) return;
+    const ok = httpStatus >= 200 && httpStatus < 300;
+    const update = {
+      clob_status: ok ? 'accepted' : 'rejected',
+      clob_response_code: httpStatus,
+      clob_order_id: ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null,
+      clob_error:   ok ? null : (responseText || '').slice(0, 500),
+      updated_at:   new Date().toISOString(),
+    };
+    const { error } = await supabase.from('polymarket_v2_trades').update(update).eq('id', rowId);
+    if (error) console.warn('[v2-trades] update failed:', error.message);
+  } catch (e) {
+    console.warn('[v2-trades] update threw:', e.message);
+  }
+}
+
 app.post('/api/polymarket/order', async (req, res) => {
+  const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+  // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
+  // never responds or we throw before the outcome log fires.
+  const v2RowId = await _logV2Attempt(req.body && req.body.order, clientIp);
   try {
     // Use raw body (byte-exact as the client sent it) so the builder HMAC
     // signs the identical string the CLOB receives. JSON.stringify(req.body)
@@ -40022,7 +40074,6 @@ app.post('/api/polymarket/order', async (req, res) => {
 
     // Log what we're sending for debugging
     const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
-    const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     const hasAttribution = 'POLY_BUILDER_API_KEY' in clobHeaders;
     const builderKeyPrefix = (clobHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
     console.log('[clob-proxy] forwarding order | client_ip:', clientIp,
@@ -40030,7 +40081,8 @@ app.post('/api/polymarket/order', async (req, res) => {
       '| auth_headers:', fwdHeaders.join(','),
       '| builder_attribution:', hasAttribution,
       '| builder_key:', builderKeyPrefix ? builderKeyPrefix + '…' : 'NONE',
-      '| body_source:', req.rawBody ? 'raw' : 'reserialized');
+      '| body_source:', req.rawBody ? 'raw' : 'reserialized',
+      '| v2_row:', v2RowId || '—');
 
     const r = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
@@ -40048,9 +40100,12 @@ app.post('/api/polymarket/order', async (req, res) => {
       console.log('[clob-proxy] OK:', text.slice(0, 200));
     }
 
+    _logV2Outcome(v2RowId, r.status, text, data);
+
     res.status(r.status).json(data);
   } catch (err) {
     console.error('[clob-proxy] Error:', err.message);
+    _logV2Outcome(v2RowId, 502, 'proxy_error: ' + err.message, null);
     res.status(502).json({ error: 'Proxy error: ' + err.message });
   }
 });
