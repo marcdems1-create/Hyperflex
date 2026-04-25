@@ -22438,10 +22438,15 @@ async function confirmTrade() {
           data = await res.json().catch(() => ({}));
           console.log('[qt-trade] CF Worker:', res.status, JSON.stringify(data).slice(0, 200));
 
-          // If CF Worker also geo-blocked, try Railway
-          const cfGeoBlocked = !res.ok && JSON.stringify(data).toLowerCase().includes('restricted');
-          if (cfGeoBlocked) {
-            console.warn('[qt-trade] CF Worker geo-blocked — trying Railway proxy');
+          // Fall through to Railway on geo-block OR signature errors. The
+          // signature case catches CF Worker hitting a V1 backend with a
+          // V2-signed order pre-Apr-28 cutover — Railway is V2-aware
+          // (server.js:40087, commit f7c30d3) so it'll succeed.
+          const cfBodyLower = JSON.stringify(data).toLowerCase();
+          const cfGeoBlocked = !res.ok && cfBodyLower.includes('restricted');
+          const cfSigError   = !res.ok && (cfBodyLower.includes('invalid signature') || cfBodyLower.includes('signature verification failed'));
+          if (cfGeoBlocked || cfSigError) {
+            console.warn('[qt-trade] CF Worker', cfGeoBlocked ? 'geo-blocked' : 'returned signature error', '— trying Railway proxy');
             res = await fetch('/api/polymarket/order', {
               method: 'POST',
               headers: clobHeaders,

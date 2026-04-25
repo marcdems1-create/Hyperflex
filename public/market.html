@@ -5584,7 +5584,17 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     if (cfRes.ok) return cfData;
 
-    if (!isGeoBlocked(cfData)) {
+    // Belt-and-suspenders: also fall through to Railway on signature errors.
+    // If CF Worker hits a V1 backend (pre-Apr-28 cutover or stale Worker
+    // deploy) with a V2-signed order, CLOB returns "invalid signature(s)" —
+    // not a geo-block, but the Railway proxy is V2-aware (server.js:40087)
+    // so it'll succeed. Defensive string match across known wordings.
+    function isSignatureError(d) {
+      var s = JSON.stringify(d || {}).toLowerCase();
+      return s.indexOf('invalid signature') !== -1 || s.indexOf('signature verification failed') !== -1;
+    }
+
+    if (!isGeoBlocked(cfData) && !isSignatureError(cfData)) {
       if (cfRes.status === 401) {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
@@ -5600,7 +5610,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
     }
 
-    tradeDebug('CF Worker also geo-blocked — trying Railway');
+    tradeDebug('CF Worker geo-blocked or returned signature error — trying Railway');
   } catch (cfErr) {
     tradeDebug('CF proxy THREW', cfErr.message + ' — trying Railway');
   }

@@ -9,7 +9,24 @@
  * Deploy: cd cloudflare-trade-proxy && npx wrangler deploy
  */
 
-const CLOB_BASE = 'https://clob.polymarket.com';
+const CLOB_BASE_V1 = 'https://clob.polymarket.com';
+const CLOB_BASE_V2 = 'https://clob-v2.polymarket.com';
+
+// Pre-Apr-28-cutover, V2-signed orders MUST hit the dedicated V2 host.
+// clob.polymarket.com still routes through V1's parser until Polymarket
+// flips the backend; sending a V2 order there returns "invalid signature"
+// because V1 reconstructs the EIP-712 hash over V1 fields. Mirror of the
+// Railway-proxy fix in server.js:40087 (commit f7c30d3). Detect V2 by
+// presence of order.builder in the body.
+function pickClobHost(body) {
+  try {
+    const parsed = JSON.parse(body);
+    const isV2 = !!(parsed && parsed.order && typeof parsed.order.builder === 'string' && parsed.order.builder.startsWith('0x'));
+    return isV2 ? CLOB_BASE_V2 : CLOB_BASE_V1;
+  } catch (e) {
+    return CLOB_BASE_V1;
+  }
+}
 
 // Headers we forward from the client to Polymarket CLOB
 const POLY_HEADERS = [
@@ -95,9 +112,10 @@ export default {
 
     // Forward the signed order body to CLOB
     const body = await request.text();
+    const clobBase = pickClobHost(body);
 
     try {
-      const clobRes = await fetch(`${CLOB_BASE}/order`, {
+      const clobRes = await fetch(`${clobBase}/order`, {
         method: 'POST',
         headers: clobHeaders,
         body: body,
