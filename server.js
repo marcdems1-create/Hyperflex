@@ -26186,6 +26186,227 @@ app.get('/api/polymarket/neg-risk/:tokenId', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// POLYMARKET V2 ORDER SDK BRIDGE
+// ════════════════════════════════════════════════════════════════════════════
+// After 3 weeks of hand-rolling V2 order signing and hitting a new bug every
+// shipping cycle, bridging to @polymarket/clob-client-v2 directly. The SDK is
+// the canonical source of truth for:
+//   - Order struct shape (salt, timestamp, metadata, builder field ordering)
+//   - EIP-712 typed-data construction (domain, types, message)
+//   - Wire-body serialization (orderToJsonV2 — which fields go where)
+//   - L2 auth HMAC (createL2Headers — exact HMAC message format)
+//
+// Private keys live in MetaMask, so we split the SDK flow into two endpoints:
+//   1. v2-build — server constructs order struct + typed-data via SDK,
+//      client signs the typed-data via MetaMask, no key leaves the device.
+//   2. v2-submit — client sends { order, signature, creds } back; server
+//      uses SDK to serialize + compute L2 HMAC + POST to clob-v2. CLOB creds
+//      flow through server memory-only for the single HMAC call, not stored.
+// The user's private key never touches the server. Anything that only needs
+// the EOA ADDRESS (not a signing key) — like L2 header construction — uses
+// a stub signer that returns the address.
+let _polymarketV2Sdk = null;
+function _loadPolymarketV2Sdk() {
+  if (_polymarketV2Sdk) return _polymarketV2Sdk;
+  try {
+    _polymarketV2Sdk = require('@polymarket/clob-client-v2');
+  } catch (err) {
+    console.error('[polymarket-v2-sdk] require failed:', err.message);
+    throw new Error('V2 SDK not available');
+  }
+  return _polymarketV2Sdk;
+}
+
+// Stub signer: ExchangeOrderBuilderV2.buildOrder validates signer address
+// matches maker/signer, and createL2Headers just reads getAddress(). Neither
+// need a private key. This stub fulfills both without any secret material.
+function _v2StubSigner(eoaAddress) {
+  return {
+    getAddress: async () => eoaAddress,
+    // Ethers v5-style signer API — SDK probes both. Safe no-ops; we never
+    // call these because we hand the typed-data to the client for signing.
+    _signTypedData: async () => { throw new Error('v2-build: server does not sign; client signs via MetaMask'); },
+    signTypedData:  async () => { throw new Error('v2-build: server does not sign; client signs via MetaMask'); },
+  };
+}
+
+// POST /api/polymarket/v2-build-order
+// Body: { tokenID, price, size, side: 'BUY'|'SELL', negRisk: bool,
+//         tickSize: '0.01'|'0.001'|..., eoaAddress, proxyAddress,
+//         builderCode?, expiration?, version? = 2 }
+// Returns: { typedData, order, exchangeAddress, version }
+//   typedData = { domain, types: {Order: [...]}, primaryType, message }
+//     - client passes domain/types/message directly to signer.signTypedData
+//   order = the exact struct the server built; client echoes this back on
+//     v2-submit-order along with the signature
+app.post('/api/polymarket/v2-build-order', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const required = ['tokenID', 'price', 'size', 'side', 'eoaAddress', 'proxyAddress'];
+    for (const k of required) {
+      if (b[k] === undefined || b[k] === null || b[k] === '') {
+        return res.status(400).json({ error: `Missing required field: ${k}` });
+      }
+    }
+    const sdk = _loadPolymarketV2Sdk();
+    const { OrderBuilder, SignatureTypeV2, getContractConfig, Chain } = sdk;
+
+    const chainId = 137;
+    const contracts = getContractConfig(chainId);
+    const exchangeAddress = b.negRisk === true
+      ? contracts.negRiskExchangeV2
+      : contracts.exchangeV2;
+    if (!exchangeAddress) {
+      return res.status(500).json({ error: 'SDK did not return V2 exchange address for this chain' });
+    }
+
+    // signatureType = 2 (POLY_GNOSIS_SAFE) — our users trade through Polymarket
+    // Safes (factory-deterministic from EOA). Verified against
+    // py_clob_client_v2/order_utils/model/signature_type_v2.py — do NOT change
+    // without re-reading that file (see CHANGELOG PR #36).
+    const signatureType = SignatureTypeV2.POLY_GNOSIS_SAFE;
+
+    const builder = new OrderBuilder({
+      chainId,
+      signatureType,
+      funderAddress: b.proxyAddress,  // maker = proxy
+      signer: _v2StubSigner(b.eoaAddress),
+    });
+    // Access the internal ExchangeOrderBuilderV2 by calling buildOrder through
+    // createOrder's components. Simplest reliable path: replicate createOrder's
+    // logic but stop before the sign step.
+    const { buildOrderCreationArgs, ExchangeOrderBuilderV2 } = _loadInternals(sdk);
+
+    // ROUNDING_CONFIG is keyed on tickSize. Default to '0.01'.
+    const tickSize = b.tickSize || '0.01';
+    const roundingConfig = _loadRoundingConfig(sdk)[tickSize];
+    if (!roundingConfig) {
+      return res.status(400).json({ error: `Unsupported tickSize: ${tickSize}` });
+    }
+
+    // Build the V2 order data (raw amounts + shape)
+    const userOrder = {
+      tokenID: String(b.tokenID),
+      price: Number(b.price),
+      size: Number(b.size),
+      side: b.side,
+      expiration: b.expiration ? Number(b.expiration) : 0,
+      builderCode: b.builderCode || undefined,
+    };
+    const orderData = await buildOrderCreationArgs(
+      b.eoaAddress,          // signer address (EOA that signs)
+      b.proxyAddress,        // maker (proxy that holds funds)
+      signatureType,
+      userOrder,
+      roundingConfig,
+      2,                     // version 2
+    );
+
+    const eob = new ExchangeOrderBuilderV2(exchangeAddress, chainId, _v2StubSigner(b.eoaAddress));
+    const order = await eob.buildOrder(orderData);
+    const typedData = eob.buildOrderTypedData(order);
+
+    return res.json({
+      typedData,
+      order,
+      exchangeAddress,
+      version: 2,
+    });
+  } catch (err) {
+    console.error('[v2-build-order]', err && err.message, err && err.stack);
+    return res.status(500).json({ error: 'Failed to build V2 order', detail: err.message });
+  }
+});
+
+// POST /api/polymarket/v2-submit-order
+// Body: { order, signature, orderType, creds: { key, secret, passphrase } }
+// Where `order` is the struct returned from v2-build-order, `signature` is
+// the hex sig the client got from MetaMask on the typed-data we returned,
+// and `creds` is the client's CLOB API key/secret/passphrase (same set
+// currently used by the hand-rolled flow in market.html + dashboard).
+// Returns: CLOB's response body passed through, with HTTP status preserved.
+app.post('/api/polymarket/v2-submit-order', async (req, res) => {
+  try {
+    const { order, signature, orderType, creds } = req.body || {};
+    if (!order || !signature || !creds || !creds.key || !creds.secret || !creds.passphrase) {
+      return res.status(400).json({ error: 'Missing order, signature, or creds' });
+    }
+    const sdk = _loadPolymarketV2Sdk();
+    const { orderToJsonV2, createL2Headers } = sdk;
+
+    const signedOrder = { ...order, signature };
+    const endpoint = '/order';
+    const body = orderToJsonV2(
+      signedOrder,
+      creds.key,
+      orderType || 'GTC',
+      false,   // postOnly
+      false,   // deferExec
+    );
+    const bodyStr = JSON.stringify(body);
+
+    const eoaAddress = order.signer; // client-provided, we only use it for the L2 address header
+    const headers = await createL2Headers(
+      _v2StubSigner(eoaAddress),
+      creds,
+      { method: 'POST', requestPath: endpoint, body: bodyStr },
+    );
+
+    // Verbose log once so we can grep for the exact bytes we sent, matching
+    // the existing _v2OrderVerbose pattern but scoped to this path.
+    console.log('[v2-submit-order] POSTing to clob-v2 | builder=' + (order.builder || '').slice(0, 10) + '… | sigType=' + order.signatureType + ' | orderType=' + (orderType || 'GTC'));
+
+    // Append builder-attribution HMAC headers for the 4/28 pre-cutover window.
+    // Gets stripped when the CLOB backend routes through V2 anyway; keeping it
+    // so we stay consistent with the /api/polymarket/builder-sign path until
+    // the cutover removes HMAC attribution entirely.
+    const builderHeaders = typeof getBuilderHeaders === 'function'
+      ? (getBuilderHeaders('POST', endpoint, bodyStr) || {})
+      : {};
+    const allHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...headers,
+      ...builderHeaders,
+    };
+
+    const upstream = await fetch('https://clob-v2.polymarket.com' + endpoint, {
+      method: 'POST',
+      headers: allHeaders,
+      body: bodyStr,
+    });
+    const respText = await upstream.text();
+    let respJson; try { respJson = JSON.parse(respText); } catch (_e) { respJson = { raw: respText }; }
+    return res.status(upstream.status).json(respJson);
+  } catch (err) {
+    console.error('[v2-submit-order]', err && err.message, err && err.stack);
+    return res.status(500).json({ error: 'Failed to submit V2 order', detail: err.message });
+  }
+});
+
+// SDK internals that aren't exported from the top-level module — we reach
+// into the CJS bundle to get them. If the SDK rev bumps and these names
+// change, these helpers need updating in one place.
+function _loadInternals(sdk) {
+  // buildOrderCreationArgs and ExchangeOrderBuilderV2 are exported via the
+  // top-level via internal re-export; if not, we fall back to requiring the
+  // CJS file directly and reading named exports.
+  if (sdk.buildOrderCreationArgs && sdk.ExchangeOrderBuilderV2) {
+    return { buildOrderCreationArgs: sdk.buildOrderCreationArgs, ExchangeOrderBuilderV2: sdk.ExchangeOrderBuilderV2 };
+  }
+  // CJS bundle path
+  const bundle = require('@polymarket/clob-client-v2/dist/index.cjs');
+  if (!bundle.buildOrderCreationArgs || !bundle.ExchangeOrderBuilderV2) {
+    throw new Error('SDK internal names changed — buildOrderCreationArgs / ExchangeOrderBuilderV2 not found');
+  }
+  return { buildOrderCreationArgs: bundle.buildOrderCreationArgs, ExchangeOrderBuilderV2: bundle.ExchangeOrderBuilderV2 };
+}
+function _loadRoundingConfig(sdk) {
+  const bundle = require('@polymarket/clob-client-v2/dist/index.cjs');
+  return bundle.ROUNDING_CONFIG || sdk.ROUNDING_CONFIG;
+}
+
 // ── POLYMARKET TICK SIZE (determines rounding precision per market) ──────────
 const _tickSizeCache = new Map();
 app.get('/api/polymarket/tick-size/:tokenId', async (req, res) => {
