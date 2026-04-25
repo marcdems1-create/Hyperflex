@@ -21734,10 +21734,17 @@ async function confirmTrade() {
   const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
   let shares = price > 0 ? amount / price : 0;
 
-  const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
-  if (!tokenId) {
-    errEl.textContent = 'No token ID for this market';
+  // ONLY accept the outcome-specific tokenId from p.asset (data-api). The
+  // previous OR-chain `... || _tradeModalData.id || _tradeModalData.conditionId`
+  // silently fell through to conditionId when p.asset was null/missing,
+  // and balanceOf(proxy, conditionId) is always 0 (conditionId is a market
+  // identifier, not an ERC-1155 tokenId). That produced false "Insufficient
+  // share balance" errors on positions the user actually held.
+  const tokenId = _tradeModalData.token_id || '';
+  if (!tokenId || !/^\d+$/.test(tokenId)) {
+    errEl.innerHTML = 'Missing outcome token ID for this position.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Polymarket\'s data feed may be lagging. Refreshing positions…</span>';
     errEl.style.display = 'block';
+    if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
     return;
   }
 
