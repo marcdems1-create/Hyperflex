@@ -6988,8 +6988,8 @@ window.hfxOpenDeposit = function() {
                     <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);min-height:32px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='none'">Disconnect</button>
                   </div>
                 </div>
-                <!-- Kalshi pill -->
-                <div id="kalshiConnectionPill" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s">
+                <!-- Kalshi pill — hidden, Polymarket-first focus -->
+                <div id="kalshiConnectionPill" style="display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s">
                   <span id="kalshiPillDot" style="width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0"></span>
                   <div style="font-size:13px;font-weight:700;color:var(--text);flex:1">
                     <span style="margin-right:4px">🟡</span> Kalshi
@@ -7024,8 +7024,8 @@ window.hfxOpenDeposit = function() {
                     </div>
                     <div style="font-size:11px;color:var(--dim);margin-top:6px">Find your deposit address at <a href="javascript:void(0)" onclick="window.open(polyRef('https://polymarket.com/portfolio'),'_blank')" style="color:#a78bfa;cursor:pointer">polymarket.com</a> → Profile → Deposit Address</div>
                   </div>
-                  <!-- Kalshi -->
-                  <div>
+                  <!-- Kalshi — hidden, Polymarket-first focus -->
+                  <div style="display:none">
                     <div style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Kalshi</div>
                     <input type="password" id="panel-kalshi-key" placeholder="API key" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px" onfocus="this.style.borderColor='rgba(217,119,6,0.5)'" onblur="this.style.borderColor='var(--border)'"/>
                     <button onclick="connectKalshiFromPanel()" style="width:100%;background:rgba(217,119,6,0.12);color:#fbbf24;border:1px solid rgba(217,119,6,0.3);border-radius:10px;padding:10px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px">Connect Kalshi →</button>
