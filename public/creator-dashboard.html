@@ -6988,8 +6988,8 @@ window.hfxOpenDeposit = function() {
                     <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);min-height:32px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='none'">Disconnect</button>
                   </div>
                 </div>
-                <!-- Kalshi pill -->
-                <div id="kalshiConnectionPill" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s">
+                <!-- Kalshi pill — hidden, Polymarket-first focus -->
+                <div id="kalshiConnectionPill" style="display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--cream);border:1px solid var(--border);border-radius:12px;transition:border-color .15s">
                   <span id="kalshiPillDot" style="width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0"></span>
                   <div style="font-size:13px;font-weight:700;color:var(--text);flex:1">
                     <span style="margin-right:4px">🟡</span> Kalshi
@@ -7024,8 +7024,8 @@ window.hfxOpenDeposit = function() {
                     </div>
                     <div style="font-size:11px;color:var(--dim);margin-top:6px">Find your deposit address at <a href="javascript:void(0)" onclick="window.open(polyRef('https://polymarket.com/portfolio'),'_blank')" style="color:#a78bfa;cursor:pointer">polymarket.com</a> → Profile → Deposit Address</div>
                   </div>
-                  <!-- Kalshi -->
-                  <div>
+                  <!-- Kalshi — hidden, Polymarket-first focus -->
+                  <div style="display:none">
                     <div style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Kalshi</div>
                     <input type="password" id="panel-kalshi-key" placeholder="API key" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:8px" onfocus="this.style.borderColor='rgba(217,119,6,0.5)'" onblur="this.style.borderColor='var(--border)'"/>
                     <button onclick="connectKalshiFromPanel()" style="width:100%;background:rgba(217,119,6,0.12);color:#fbbf24;border:1px solid rgba(217,119,6,0.3);border-radius:10px;padding:10px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px">Connect Kalshi →</button>
@@ -7107,6 +7107,8 @@ window.hfxOpenDeposit = function() {
 
             <!-- Main portfolio content (hidden when welcome is shown) -->
             <div id="portfolioMain">
+            <!-- Apr 28 maintenance-window banner. Injected by dashInjectApr28Banner(). -->
+            <div class="apr28-cutover-banner-slot" style="display:none"></div>
             <!-- No real positions message -->
             <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:16px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.7">
               <strong style="color:var(--gold);display:block;font-size:13px;margin-bottom:6px">No open positions on Polymarket.</strong>
@@ -7579,6 +7581,8 @@ window.hfxOpenDeposit = function() {
       <div id="tab-quicktrade" style="display:none">
         <div class="section">
           <div style="max-width:1000px">
+            <!-- Apr 28 maintenance-window banner. Injected by dashInjectApr28Banner(). -->
+            <div class="apr28-cutover-banner-slot" style="display:none"></div>
 
             <!-- Back to Dashboard -->
             <div style="margin-bottom:16px">
@@ -15949,6 +15953,16 @@ let _manifoldUsername = '';
 // Public RPC for read-only calls — no MetaMask popup needed
 const DASHBOARD_POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
 async function getDashboardPublicProvider() {
+  // Prefer Alchemy via our server-side proxy (more reliable than public
+  // RPCs which occasionally return data=null on Safe nonce reads). Falls
+  // through to public RPCs if /api/polygon/rpc is 503 or unreachable.
+  try {
+    const ap = new ethers.JsonRpcProvider(location.origin + '/api/polygon/rpc');
+    await ap.getBlockNumber();
+    return ap;
+  } catch (e) {
+    console.warn('[rpc] Alchemy proxy failed, falling through to public RPCs:', e.message);
+  }
   for (const rpc of DASHBOARD_POLYGON_RPCS) {
     try {
       const p = new ethers.JsonRpcProvider(rpc);
@@ -15956,7 +15970,29 @@ async function getDashboardPublicProvider() {
       return p;
     } catch (e) { console.warn('[rpc]', rpc, 'failed:', e.message); }
   }
-  throw new Error('All public RPCs failed');
+  throw new Error('All RPCs failed');
+}
+
+// Retry-with-backoff for Safe.nonce() reads. Public RPCs occasionally
+// return data=null on the first call to a freshly-fetched provider. Three
+// attempts at 500ms / 1s / 2s converts a transient blip into a non-event.
+async function dashSafeNonceWithRetry(proxyAddr, safeAbi) {
+  const delays = [500, 1000, 2000];
+  let lastErr = null;
+  for (let i = 0; i < delays.length; i++) {
+    try {
+      const provider = await getDashboardPublicProvider();
+      const safe = new ethers.Contract(proxyAddr, safeAbi, provider);
+      return await safe.nonce();
+    } catch (e) {
+      lastErr = e;
+      if (i < delays.length - 1) {
+        console.warn('[dash-safe-nonce] attempt ' + (i + 1) + ' failed (' + (e.message || e).slice(0, 80) + '), retrying in ' + delays[i] + 'ms');
+        await new Promise(r => setTimeout(r, delays[i]));
+      }
+    }
+  }
+  throw lastErr || new Error('Could not read Safe nonce after 3 attempts');
 }
 
 // Resolve Polymarket proxy address from EOA via on-chain Safe factory call
@@ -21538,6 +21574,35 @@ function updateTradeEstimate() {
   }
 }
 
+// Polymarket Apr 28 2026 (~11:00 UTC) backend-takeover maintenance window
+// wipes all open GTC orders. Auto-shown 24h before through ~2h after
+// scheduled go-live. Non-dismissable; self-expires. Mirror of market.html
+// injectApr28Banner() — duplicated per CLAUDE.md's file-duplication rule.
+var DASH_APR28_BANNER_START = Date.UTC(2026, 3, 27, 0, 0, 0);
+var DASH_APR28_BANNER_END   = Date.UTC(2026, 3, 28, 13, 0, 0);
+function dashInjectApr28Banner() {
+  var slots = document.querySelectorAll('.apr28-cutover-banner-slot');
+  if (!slots.length) return;
+  var now = Date.now();
+  var active = (now >= DASH_APR28_BANNER_START && now < DASH_APR28_BANNER_END);
+  for (var i = 0; i < slots.length; i++) {
+    var el = slots[i];
+    if (!active) { el.style.display = 'none'; continue; }
+    el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.55;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);color:#f0f0f5';
+    el.innerHTML =
+      'Polymarket maintenance Apr 28, ~11:00 UTC (' +
+      '<a href="https://status.polymarket.com" target="_blank" rel="noopener" style="color:#f59e0b;text-decoration:underline">status.polymarket.com</a>' +
+      '). ~1h downtime. Open GTC limit orders will be wiped — close before the window or re-place after. FOK trades unaffected.';
+  }
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', dashInjectApr28Banner);
+  } else {
+    setTimeout(dashInjectApr28Banner, 0);
+  }
+}
+
 // ── CLOB V2 helpers (dashboard copy) ─────────────────────────────────────
 // Duplicated from market.html rather than shared because this file loads a
 // different ethers minor version (6.9.0 vs market.html's 6.13.2). The
@@ -21546,7 +21611,21 @@ function updateTradeEstimate() {
 const DASH_PMCT_ADDRESS       = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
 const DASH_COLLATERAL_ONRAMP  = '0x93070a847efEf7F70739046A929D47a521F5B8ee';
 const DASH_COLLATERAL_OFFRAMP = '0x2957922Eb93258b93368531d39fAcCA3B4dC5854';
-const DASH_BUILDER_CODE_V2    = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+// `let` so /api/polymarket/config can override for Amoy testing. Hardcoded
+// default keeps mainnet working if the endpoint is unreachable on load.
+let   DASH_BUILDER_CODE_V2    = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+(function hydrateDashBuilderCodeV2() {
+  try {
+    fetch('/api/polymarket/config', { credentials: 'omit' }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json();
+    }).then(function (j) {
+      if (!j || typeof j.builderCode !== 'string') return;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(j.builderCode)) return;
+      DASH_BUILDER_CODE_V2 = j.builderCode;
+    }).catch(function () { /* keep fallback */ });
+  } catch (e) { /* keep fallback */ }
+})();
 const DASH_ZERO_ADDR          = '0x0000000000000000000000000000000000000000';
 const DASH_BYTES32_ZERO       = '0x' + '0'.repeat(64);
 const DASH_SAFE_TX_TYPES = {
@@ -21584,9 +21663,13 @@ async function dashGetPmctBalance(addr) {
 // Relayer-first SafeTx dispatch. Mirrors market.html executeViaProxy.
 async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAddr, signer) {
   const safe = new ethers.Contract(proxyAddr, DASH_SAFE_ABI, signer);
+  // Use the public/Alchemy provider for the nonce view-call rather than the
+  // signer (MetaMask). MetaMask's RPC has returned {code:-32006, "Unauthorized"}
+  // intermittently in some session states; the public path doesn't need wallet
+  // auth for a read. Retry-with-backoff catches transient blips.
   let nonce;
-  try { nonce = await safe.nonce(); }
-  catch (e) { throw new Error('Could not read Safe nonce: ' + (e.message || e)); }
+  try { nonce = await dashSafeNonceWithRetry(proxyAddr, DASH_SAFE_ABI); }
+  catch (e) { throw new Error('Could not read Safe nonce after 3 attempts: ' + (e.message || e)); }
 
   const safeTx = {
     to: toAddr, value: (valueWei || 0n).toString(), data: calldata,
@@ -21866,10 +21949,17 @@ async function confirmTrade() {
   const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
   let shares = price > 0 ? amount / price : 0;
 
-  const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
-  if (!tokenId) {
-    errEl.textContent = 'No token ID for this market';
+  // ONLY accept the outcome-specific tokenId from p.asset (data-api). The
+  // previous OR-chain `... || _tradeModalData.id || _tradeModalData.conditionId`
+  // silently fell through to conditionId when p.asset was null/missing,
+  // and balanceOf(proxy, conditionId) is always 0 (conditionId is a market
+  // identifier, not an ERC-1155 tokenId). That produced false "Insufficient
+  // share balance" errors on positions the user actually held.
+  const tokenId = _tradeModalData.token_id || '';
+  if (!tokenId || !/^\d+$/.test(tokenId)) {
+    errEl.innerHTML = 'Missing outcome token ID for this position.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Polymarket\'s data feed may be lagging. Refreshing positions…</span>';
     errEl.style.display = 'block';
+    if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
     return;
   }
 
@@ -22738,10 +22828,15 @@ async function confirmTrade() {
           data = await res.json().catch(() => ({}));
           console.log('[qt-trade] CF Worker:', res.status, JSON.stringify(data).slice(0, 200));
 
-          // If CF Worker also geo-blocked, try Railway
-          const cfGeoBlocked = !res.ok && JSON.stringify(data).toLowerCase().includes('restricted');
-          if (cfGeoBlocked) {
-            console.warn('[qt-trade] CF Worker geo-blocked — trying Railway proxy');
+          // Fall through to Railway on geo-block OR signature errors. The
+          // signature case catches CF Worker hitting a V1 backend with a
+          // V2-signed order pre-Apr-28 cutover — Railway is V2-aware
+          // (server.js:40087, commit f7c30d3) so it'll succeed.
+          const cfBodyLower = JSON.stringify(data).toLowerCase();
+          const cfGeoBlocked = !res.ok && cfBodyLower.includes('restricted');
+          const cfSigError   = !res.ok && (cfBodyLower.includes('invalid signature') || cfBodyLower.includes('signature verification failed'));
+          if (cfGeoBlocked || cfSigError) {
+            console.warn('[qt-trade] CF Worker', cfGeoBlocked ? 'geo-blocked' : 'returned signature error', '— trying Railway proxy');
             res = await fetch('/api/polymarket/order', {
               method: 'POST',
               headers: clobHeaders,
@@ -23245,10 +23340,9 @@ async function redeemPosition(posDataJson, opts) {
       ]);
     }
 
-    // ── STEP 1: Get Safe nonce (read-only, no gas) ──
+    // ── STEP 1: Get Safe nonce (read-only, no gas) — retry-with-backoff via Alchemy proxy ──
     const safeReadAbi = ['function nonce() view returns (uint256)'];
-    const safeRead = new ethers.Contract(proxyAddr, safeReadAbi, pubProvider);
-    const nonce = await safeRead.nonce();
+    const nonce = await dashSafeNonceWithRetry(proxyAddr, safeReadAbi);
     console.log('[redeem] Safe nonce:', nonce.toString(), '| target:', isNegRisk ? 'NegRisk' : 'CTF', '| condition:', conditionId.slice(0,10));
 
     // ── STEP 2: Build EIP-712 typed data for Safe transaction ──

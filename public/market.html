@@ -514,6 +514,10 @@ canvas{display:block;width:100%!important}
              Inserted by injectV2CutoverBanner() on page load. -->
         <div id="v2CutoverBanner" style="display:none"></div>
 
+        <!-- Polymarket Apr 28 maintenance-window banner. Auto-shows Apr 27 00:00 UTC
+             through Apr 28 13:00 UTC. Injected by injectApr28Banner() on page load. -->
+        <div id="apr28CutoverBanner" style="display:none"></div>
+
         <!-- Trading setup runs silently in background — no checklist UI -->
         <div id="tradingSetup" style="display:none"></div>
         <div id="setupStep1" style="display:none"></div>
@@ -2751,7 +2755,22 @@ var BYTES32_ZERO = '0x' + '0'.repeat(64);
 // Address: 0x51f0d8d8798c6d57d8c60af767000ab3df5804e9, Status: Enabled.
 // ⚠️ Maker + Taker fee rates default to 0% — set a non-zero rate at
 //    polymarket.com/settings?tab=builder before any flow earns revenue.
+// Overridden by POLY_BUILDER_CODE env var (via /api/polymarket/config) on
+// load so we can point at Amoy without redeploying. Hardcoded default keeps
+// mainnet working if the endpoint is slow or unreachable.
 var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+(function hydrateBuilderCodeV2() {
+  try {
+    fetch('/api/polymarket/config', { credentials: 'omit' }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json();
+    }).then(function (j) {
+      if (!j || typeof j.builderCode !== 'string') return;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(j.builderCode)) return;
+      HFX_BUILDER_CODE_V2 = j.builderCode;
+    }).catch(function () { /* keep fallback */ });
+  } catch (e) { /* keep fallback */ }
+})();
 // V2 routing decision. Four layers, in priority order:
 //   1. Explicit URL override   — ?clob_v2=1 (force V2) | ?clob_v2=0 (force V1, emergency rollback)
 //   2. Explicit window flag    — window.HF_USE_CLOB_V2 = true|false
@@ -2812,6 +2831,31 @@ if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', injectV2CutoverBanner);
   } else {
     setTimeout(injectV2CutoverBanner, 0);
+  }
+}
+
+// Polymarket's Apr 28 2026 (~11:00 UTC) backend-takeover maintenance window
+// wipes all open GTC orders. Shown to everyone 24h before through ~2h after
+// scheduled go-live. Non-dismissable by design — single short-lived warning
+// covering an irreversible action.
+var APR28_BANNER_START = Date.UTC(2026, 3, 27, 0, 0, 0);   // Apr 27 00:00 UTC
+var APR28_BANNER_END   = Date.UTC(2026, 3, 28, 13, 0, 0);  // Apr 28 13:00 UTC
+function injectApr28Banner() {
+  var el = document.getElementById('apr28CutoverBanner');
+  if (!el) return;
+  var now = Date.now();
+  if (now < APR28_BANNER_START || now >= APR28_BANNER_END) { el.style.display = 'none'; return; }
+  el.style.cssText = 'display:block;margin:8px 0 12px;padding:10px 14px;border-radius:10px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;line-height:1.55;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);color:#f0f0f5';
+  el.innerHTML =
+    'Polymarket maintenance Apr 28, ~11:00 UTC (' +
+    '<a href="https://status.polymarket.com" target="_blank" rel="noopener" style="color:#f59e0b;text-decoration:underline">status.polymarket.com</a>' +
+    '). ~1h downtime. Open GTC limit orders will be wiped — close before the window or re-place after. FOK trades unaffected.';
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectApr28Banner);
+  } else {
+    setTimeout(injectApr28Banner, 0);
   }
 }
 
@@ -2933,6 +2977,18 @@ var APPROVAL_CAP = '10000000000000000';
 // Falls back to 1rpc.io if polygon-rpc.com is down.
 var POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
 async function getPublicProvider() {
+  // Prefer Alchemy via our server-side proxy (more reliable than public
+  // RPCs which occasionally return data=null on Safe nonce reads). Falls
+  // through to public RPCs if /api/polygon/rpc is 503 (ALCHEMY_API_KEY
+  // unset on Railway) or unreachable.
+  try {
+    var alchemyProxy = location.origin + '/api/polygon/rpc';
+    var ap = new ethers.JsonRpcProvider(alchemyProxy);
+    await ap.getBlockNumber();
+    return ap;
+  } catch (e) {
+    console.warn('[rpc] Alchemy proxy failed, falling through to public RPCs:', e.message);
+  }
   for (var i = 0; i < POLYGON_RPCS.length; i++) {
     try {
       var p = new ethers.JsonRpcProvider(POLYGON_RPCS[i]);
@@ -3190,13 +3246,29 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
   // was returning {code:-32006, message:"Unauthorized"} on eth_call in some
   // session states (wallet locked, account switched, site permission lapsed).
   // The public RPC doesn't need wallet auth for a read.
+  // Retry-with-backoff: public RPCs sometimes return data=null on the first
+  // call to a freshly-fetched provider. Three attempts at 500ms / 1s / 2s
+  // converts a transient blip into a non-event.
   var nonce;
-  try {
-    var readProvider = await getPublicProvider();
-    var safeReader = new ethers.Contract(proxyAddr, SAFE_ABI, readProvider);
-    nonce = await safeReader.nonce();
-  } catch (e) {
-    throw new Error('Could not read Safe nonce — proxy may not be deployed: ' + (e.message || e));
+  var nonceAttempts = [500, 1000, 2000];
+  var nonceLastErr = null;
+  for (var na = 0; na < nonceAttempts.length; na++) {
+    try {
+      var readProvider = await getPublicProvider();
+      var safeReader = new ethers.Contract(proxyAddr, SAFE_ABI, readProvider);
+      nonce = await safeReader.nonce();
+      nonceLastErr = null;
+      break;
+    } catch (e) {
+      nonceLastErr = e;
+      if (na < nonceAttempts.length - 1) {
+        console.warn('[safe-nonce] attempt ' + (na + 1) + ' failed (' + (e.message || e).slice(0, 80) + '), retrying in ' + nonceAttempts[na] + 'ms');
+        await new Promise(function (r) { setTimeout(r, nonceAttempts[na]); });
+      }
+    }
+  }
+  if (nonceLastErr) {
+    throw new Error('Could not read Safe nonce after 3 attempts — proxy may not be deployed: ' + (nonceLastErr.message || nonceLastErr));
   }
 
   var safeTx = {
@@ -5719,7 +5791,17 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     if (cfRes.ok) return cfData;
 
-    if (!isGeoBlocked(cfData)) {
+    // Belt-and-suspenders: also fall through to Railway on signature errors.
+    // If CF Worker hits a V1 backend (pre-Apr-28 cutover or stale Worker
+    // deploy) with a V2-signed order, CLOB returns "invalid signature(s)" —
+    // not a geo-block, but the Railway proxy is V2-aware (server.js:40087)
+    // so it'll succeed. Defensive string match across known wordings.
+    function isSignatureError(d) {
+      var s = JSON.stringify(d || {}).toLowerCase();
+      return s.indexOf('invalid signature') !== -1 || s.indexOf('signature verification failed') !== -1;
+    }
+
+    if (!isGeoBlocked(cfData) && !isSignatureError(cfData)) {
       if (cfRes.status === 401) {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
@@ -5735,7 +5817,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
     }
 
-    tradeDebug('CF Worker also geo-blocked — trying Railway');
+    tradeDebug('CF Worker geo-blocked or returned signature error — trying Railway');
   } catch (cfErr) {
     tradeDebug('CF proxy THREW', cfErr.message + ' — trying Railway');
   }

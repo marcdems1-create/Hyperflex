@@ -424,6 +424,9 @@ Social products compound. Every take posted is content. Every follow is a connec
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
 8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
 9. **Always read https://docs.polymarket.com/builders/overview before making CLOB trading changes.**
+10. **"Does this already exist?" is step 1, not step 4.** Before proposing any new endpoint, helper, or module — especially in the Polymarket trading / collateral / balance / wrap surface — grep the codebase. This repo has been in active development for weeks; most obvious integration points are already built. Pasting reference snippets from external docs without checking what's already wired is the fastest way to waste a session.
+11. **Safe-proxy check on every Polymarket doc snippet.** Polymarket docs default to EOA examples because they're simplest to publish. HYPERFLEX users are Gnosis Safe proxy users (`signatureType: 2` = POLY_GNOSIS_SAFE; funds live at the proxy; `maker = proxy`, `signer = EOA`). Every write path — approvals, wraps/unwraps, cancels, redemptions, setApprovalForAll — must dispatch via `execTransaction` through `executeViaProxy()` / `dashExecuteViaProxy()`. Raw EOA calls to Onramp/CTF/Exchange contracts revert on balance check because the EOA holds nothing. Before adopting any doc snippet that touches these contracts, confirm it accounts for the Safe proxy.
+12. **Default to ethers v6 syntax in all new code.** `package.json` pins `ethers: ^6.16.0`. Use `new ethers.JsonRpcProvider(...)`, `new ethers.Interface(ABI)`, `ethers.parseUnits(...)`, `ethers.formatUnits(...)`, `ethers.ZeroAddress`. The v5 namespaces `ethers.providers.*` and `ethers.utils.*` were removed in v6 — pasting v5 code crashes at first request.
 
 ---
 
@@ -480,22 +483,53 @@ Matches official SDK order.
 - CTF Exchange (V1): `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
 - NegRisk Exchange (V1): `0xC5d563A36AE78145C45a50134d48A1215220f80a`
 
-### CLOB V2 contract addresses (cutover April 22, 2026)
-- CTF Exchange V2: `0xE111180000d2663C0091e4f400237545B87B996B`
-- NegRisk Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
-- pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
-- CollateralOnramp (wrap): `0x93070a847efEf7F70739046A929D47a521F5B8ee` — `wrap(address asset, address to, uint256 amount)`
-- CollateralOfframp (unwrap): `0x2957922Eb93258b93368531d39fAcCA3B4dC5854` — `unwrap(address asset, address to, uint256 amount)`
-- HYPERFLEX V2 builder code (bytes32): `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8` — provisioned 3/31/2026, status Enabled, fees 0% (set non-zero at polymarket.com/settings?tab=builder once verified)
-- All addresses identical on Amoy testnet (chainId 80002)
+### Polymarket CLOB V2 — canonical reference
 
-**V2 differences from V1:**
-- Order struct drops `taker`/`nonce`/`feeRateBps`/`expiration`, adds `timestamp`/`metadata`/`builder`
-- EIP-712 domain version flips `"1"` → `"2"`
-- `makerAmount` denominated in **pUSD, not USDC.e** — V2 BUY orders fail at fill if proxy lacks pUSD balance
-- Users must wrap USDC.e → pUSD via CollateralOnramp before trading V2 (no auto-conversion)
-- Wrap is dispatched as a Safe `execTransaction` (Onramp pulls from msg.sender; user funds live in proxy not EOA) — wired via `executeViaProxy()` in `market.html` + `dashExecuteViaProxy()` in `creator-dashboard.html`, with relayer-first dispatch (`POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`) and direct execTransaction fallback
-- POLY_BUILDER_* HMAC headers still used in V2 alongside the on-chain `order.builder` bytes32
+**⚠️ DO NOT CHANGE WITHOUT READING `@polymarket/clob-client-v2` SOURCE**
+
+SDK: `@polymarket/clob-client-v2` (installed, verified against `node_modules/@polymarket/clob-client-v2/dist/index.js`). V1 `@polymarket/clob-client` is deprecated in our codebase as of April 22, 2026 (client-default cutover, commit `f7c30d3`). Polymarket's production URL `clob.polymarket.com` takes over V2 April 28, 2026 (~11:00 UTC) per official migration doc. Until then, V2 traffic routes to `clob-v2.polymarket.com`; after, both URLs serve V2.
+
+V2 Order struct fields: `salt` (uint256), `maker` (proxy), `signer` (EOA), `tokenId`, `makerAmount`, `takerAmount`, `side` (uint8 in signing payload: 0=BUY, 1=SELL; string "BUY"/"SELL" in wire body), `signatureType` (2 = POLY_GNOSIS_SAFE), `timestamp` (ms — replaces nonce), `metadata` (bytes32, zero default), `builder` (bytes32 builderCode, currently `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8`).
+
+Removed in V2: `nonce`, `expiration`, `taker`, `feeRateBps`. Do NOT re-add.
+
+EIP-712 domains — both standard and NegRisk exchanges share the SAME `name`. Only `verifyingContract` differs. Verified against SDK constant at `node_modules/@polymarket/clob-client-v2/dist/index.js:640` (`CTF_EXCHANGE_V2_DOMAIN_NAME = "Polymarket CTF Exchange"`):
+
+- Exchange (standard + NegRisk): `{ name: "Polymarket CTF Exchange", version: "2", chainId: 137, verifyingContract: params.isNegRisk ? NEG_RISK_EXCHANGE_V2 : CTF_EXCHANGE_V2 }`
+- ClobAuth: `{ name: "ClobAuthDomain", version: "1", chainId: 137 }` — stays at "1", do NOT bump
+
+Pick `verifyingContract` based on `params.isNegRisk`. The deployed NegRisk exchange is a different contract but the EIP-712 domain name is identical — this is NOT a V1 holdover, V2 deploys both from the same `CTFExchange.sol` source.
+
+Contract addresses (Polygon mainnet):
+- CTF Exchange V2: `0xE111180000d2663C0091e4f400237545B87B996B`
+- NegRisk CTF Exchange V2: `0xe2222d279d744050d28e00520010520000310F59`
+- Collateral Onramp: `0x93070a847efEf7F70739046A929D47a521F5B8ee`
+- pUSD (PMCT): `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB`
+- USDC.e (unchanged): `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- Safe Factory (unchanged): `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
+
+Collateral: pUSD (aka PMCT in contract source) replaces USDC.e for settlement. Our users are POLY_GNOSIS_SAFE (signatureType=2); funds live at the proxy, not the EOA. Any wrap/approve/unwrap write path MUST route through Safe `execTransaction` via `executeViaProxy()` (`market.html:3459`) or `dashExecuteViaProxy()` (`creator-dashboard.html:21632`) — a raw EOA call to `Onramp.wrap()` reverts because `msg.sender` is the EOA which holds no USDC.e. The EOA signs; the Safe executes. Wrap flow: approve onramp (not pUSD token) for USDC.e spend, then call `wrap(USDC.e, proxy_address, amount)` — both dispatched as SafeTx. Client-side wrap helper: `wrapUsdcToPmct()` at `market.html:3466`, working live per session 15 mainnet test.
+
+Fees: protocol-set, taker-only, computed at match time. Do NOT set `feeRateBps` in orders — field no longer exists in V2 struct. Query fee params via `getClobMarketInfo(conditionID)` if needed.
+
+Builder attribution: single mechanism — `builderCode` embedded in the signed order `builder` field (bytes32). Per the official V2 migration doc (April 2026), the `POLY_BUILDER_*` HMAC request headers from V1 are REMOVED for order attribution in V2; only the on-chain `builder` bytes32 counts. Our code at `server.js:40019` still attaches them via `getBuilderHeaders()` — V2 ignores them harmlessly (confirmed live per session 15), but stripping them is safe post-Apr-28 cutover and is filed as part of the post-cutover cleanup commit alongside the V1 wire-body compat fields (`feeRateBps: '0'`, `nonce: '0'`, `expiration: '0'`).
+
+The HMAC creds themselves (`POLY_BUILDER_API_KEY` / `POLY_BUILDER_SECRET` / `POLY_BUILDER_PASSPHRASE` env vars + `getBuilderHeaders()` helper at `server.js:38803-38818`) must be kept — Polymarket's Relayer (gasless tx flow, `relayer-v2.polymarket.com/submit`) still authenticates with them. Do NOT delete the env vars or the helper. Just stop attaching the headers to the `/order` POST.
+
+Proxy discovery: unchanged — `computeProxyAddress(eoa)` via Safe Factory. Proxy is `maker`, EOA is `signer`. USDC.e and pUSD balances read from proxy address, not EOA.
+
+HMAC L2 auth headers (standard CLOB API auth, separate from builder HMAC): unchanged — `POLY_ADDRESS`, `POLY_TIMESTAMP`, `POLY_API_KEY`, `POLY_PASSPHRASE`, `POLY_SIGNATURE` (HMAC-SHA256 with url-safe base64 with padding, `!== undefined` check on fee rate).
+
+Cancel behavior: V2 replaces on-chain cancel with operator-controlled `pauseUser`/`unpauseUser`. User-initiated cancels still go through the CLOB cancel API; no direct on-chain contract call path.
+
+Order book wipe at cutover: All open orders are wiped during the ~1h maintenance window on Apr 28. Our default trade path is FOK (no resting state — nothing to lose), but any user with an open GTC limit order across the window will have it silently cancelled. Cutover banner on `market.html` + dashboard around Apr 27-28 should warn users.
+
+**Legacy V2 reference (kept for context):** addresses + Amoy parity:
+- pUSD (PMCT) collateral token: `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` — 6 decimals, wraps USDC.e or native USDC 1:1
+- CollateralOfframp (unwrap): `0x2957922Eb93258b93368531d39fAcCA3B4dC5854` — `unwrap(address asset, address to, uint256 amount)`
+- HYPERFLEX V2 builder code: provisioned 3/31/2026, status Enabled, fees 0% until polymarket.com/settings?tab=builder verification lands
+- All addresses identical on Amoy testnet (chainId 80002)
+- Wrap relayer fallback: `POST /api/polymarket/safe-submit` → `relayer-v2.polymarket.com/submit`, with direct `execTransaction` as fallback when relayer 401s
 
 **Feature flag:** `window.HF_USE_CLOB_V2 = true` or `?clob_v2=1` URL param routes a single trade through V2. Default is V2 as of the April 22 cutover.
 
@@ -547,7 +581,7 @@ ROUNDING_CONFIG = {
 
 When V2 was first defaulted on a day before Polymarket's canonical cutover, every error became a learning opportunity. Codifying these so a future session doesn't re-discover them in production:
 
-**1. `clob-v2.polymarket.com` IS live pre-cutover.** The dedicated V2 host accepts V2-signed orders TODAY, not just at midnight UTC Apr 22. `clob.polymarket.com` runs V1's parser until cutover; sending a V2 order there returns `{"error":"invalid signature"}` because V1 reconstructs the EIP-712 hash over V1 fields (taker/nonce/feeRateBps/expiration) and gets a different hash than what the V2 struct signed. **Route V2 orders to `clob-v2.polymarket.com`** — detect by presence of `order.builder` field in the body.
+**1. `clob-v2.polymarket.com` IS live pre-Polymarket-cutover (Apr 28).** The dedicated V2 host accepts V2-signed orders today. `clob.polymarket.com` runs V1's parser **until Polymarket flips the backend on Apr 28**; sending a V2 order there returns `{"error":"invalid signature"}` because V1 reconstructs the EIP-712 hash over V1 fields (taker/nonce/feeRateBps/expiration) and gets a different hash than what the V2 struct signed. **Route V2 orders to `clob-v2.polymarket.com`** — detect by presence of `order.builder` field in the body. After Apr 28, `clob.polymarket.com` becomes canonical and the dedicated host is redundant (still works, but no longer required).
 
 **2. V1's parser demands wire-body fields V2's struct drops.** If you ever route a V2 order through V1's parser (e.g. you forget to flip the host), V1 rejects in this specific order:
 - `{"error":"error parsing fee rate bps () to int64"}` → add `feeRateBps: '0'` to wire body
@@ -1076,6 +1110,7 @@ git status   # verify files are dirty
 45. `supabase_migration_influencer_feed.sql` ← external_influencers + influencer_posts tables, seed data for 30+ influencers
 46. `supabase_migration_influencer_social.sql` ← influencer_post_reactions + influencer_post_comments + influencer_follows + engagement counters
 47. `supabase_migration_sports.sql` ← sport_teams + sport_games + picks tables, immutable pre-game pick triggers (NBA-first tipster wedge)
+48. `supabase_migration_polymarket_v2_trades.sql` ← polymarket_v2_trades table for V2 observability (gates V1 deletion on real usage evidence)
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring

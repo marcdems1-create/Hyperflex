@@ -26213,6 +26213,268 @@ app.get('/api/polymarket/tick-size/:tokenId', async (req, res) => {
   }
 });
 
+// Static frontend config for Polymarket. Builder code is public (on-chain in
+// every order) so no auth needed. Lets the frontend pick up POLY_BUILDER_CODE
+// env var overrides without a code change — critical for Amoy testing.
+app.get('/api/polymarket/config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ builderCode: POLY_BUILDER_CODE });
+});
+
+// Polygon RPC proxy backed by Alchemy. Frontend points an ethers
+// JsonRpcProvider at this endpoint instead of public RPCs — public RPCs
+// occasionally return malformed/empty responses (data=null) on calls like
+// safe.nonce(), which manifests as "Could not read Safe nonce" errors in
+// the V2 allowance setup flow. The Alchemy key never reaches the browser.
+//
+// Returns 503 if ALCHEMY_API_KEY is unset so the client can fall through to
+// public RPCs without ambiguity. Read-only path — no signing, no spending.
+app.post('/api/polygon/rpc', async (req, res) => {
+  const key = process.env.ALCHEMY_API_KEY;
+  if (!key) return res.status(503).json({ error: 'ALCHEMY_API_KEY not configured' });
+  try {
+    const r = await fetch('https://polygon-mainnet.g.alchemy.com/v2/' + key, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await r.text();
+    res.status(r.status).type('application/json').send(text);
+  } catch (e) {
+    res.status(502).json({ error: 'RPC proxy failed: ' + e.message });
+  }
+});
+
+// ── ADMIN V2 DIAGNOSTICS ──────────────────────────────────────────────────
+// Surfaces every diagnostic field needed to debug a failing V2 trade in one
+// request: proxy deploy status, USDC.e + pUSD balances, allowances to all
+// V1+V2 exchanges and the Onramp, CTF setApprovalForAll status, plus failed
+// tx revert-reason replay. Replaces "click around Polygonscan + grep console"
+// with a single admin call. All read-only — no signing, no spending.
+
+const _V2_DIAG_ADDRS = {
+  USDC_E:           '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  PUSD:             '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB',
+  SAFE_FACTORY:     '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b',
+  ONRAMP:           '0x93070a847efEf7F70739046A929D47a521F5B8ee',
+  CTF_EXCHANGE_V1:  '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E',
+  NEG_RISK_V1:      '0xC5d563A36AE78145C45a50134d48A1215220f80a',
+  CTF_EXCHANGE_V2:  '0xE111180000d2663C0091e4f400237545B87B996B',
+  NEG_RISK_V2:      '0xe2222d279d744050d28e00520010520000310F59',
+  CONDITIONAL_TOKENS: '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045',
+};
+
+// Raw eth_call helper with multi-RPC fallback. Returns decoded uint256 / bool
+// based on selector convention. Returns null if every RPC fails.
+async function _v2DiagRpcCall(method, params) {
+  for (const rpc of POLYGON_RPCS_SERVER) {
+    try {
+      const r = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (j.error) { _v2DiagRpcCall._lastError = j.error; continue; }
+      return j.result;
+    } catch (e) { _v2DiagRpcCall._lastError = { message: e.message }; }
+  }
+  return null;
+}
+
+function _v2DiagPad32(addr) { return '000000000000000000000000' + addr.toLowerCase().replace(/^0x/, ''); }
+function _v2DiagHexToBigInt(hex) { try { return BigInt(hex || '0x0'); } catch { return 0n; } }
+function _v2DiagFormatUnits(bi, decimals) {
+  if (bi === undefined || bi === null) return null;
+  try {
+    const big = typeof bi === 'bigint' ? bi : BigInt(bi);
+    const div = 10n ** BigInt(decimals);
+    const whole = big / div;
+    const frac = big % div;
+    if (frac === 0n) return whole.toString();
+    return whole.toString() + '.' + frac.toString().padStart(decimals, '0').replace(/0+$/, '');
+  } catch { return null; }
+}
+
+// GET /api/admin/proxy-health/:eoa
+// One round-trip = full proxy diagnostic. Computes proxy address from EOA via
+// Safe factory, checks deploy status, reads all relevant balances + allowances.
+app.get('/api/admin/proxy-health/:eoa', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const eoa = (req.params.eoa || '').trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(eoa)) return res.status(400).json({ error: 'Invalid EOA' });
+
+  try {
+    const eoaPad = _v2DiagPad32(eoa);
+
+    // Step 1: compute proxy via Safe factory proxyFor(eoa) — selector 0x4d0c6cdb
+    const proxyHex = await _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.SAFE_FACTORY, data: '0x4d0c6cdb' + eoaPad }, 'latest']);
+    if (!proxyHex || proxyHex === '0x') return res.status(502).json({ error: 'Could not compute proxy', eoa });
+    const proxyAddr = '0x' + proxyHex.slice(-40);
+    const proxyPad = _v2DiagPad32(proxyAddr);
+
+    // Step 2: parallel fetch — deploy code, balances, allowances, CTF approvals
+    const sel = {
+      balanceOf:        '0x70a08231', // balanceOf(address)
+      allowance:        '0xdd62ed3e', // allowance(owner, spender)
+      isApprovedForAll: '0xe985e9c5', // ERC-1155 isApprovedForAll(owner, operator)
+    };
+    const calls = [
+      // Deploy status (code at proxy)
+      _v2DiagRpcCall('eth_getCode', [proxyAddr, 'latest']),
+      // Balances
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.USDC_E, data: sel.balanceOf + proxyPad }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.PUSD,   data: sel.balanceOf + proxyPad }, 'latest']),
+      _v2DiagRpcCall('eth_getBalance', [proxyAddr, 'latest']),
+      _v2DiagRpcCall('eth_getBalance', [eoa, 'latest']),
+      // ERC-20 allowances (proxy is owner)
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.USDC_E, data: sel.allowance + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.ONRAMP) }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.USDC_E, data: sel.allowance + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.CTF_EXCHANGE_V1) }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.USDC_E, data: sel.allowance + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.NEG_RISK_V1) }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.PUSD,   data: sel.allowance + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.CTF_EXCHANGE_V2) }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.PUSD,   data: sel.allowance + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.NEG_RISK_V2) }, 'latest']),
+      // ERC-1155 setApprovalForAll (CTF → V2 exchanges)
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.CONDITIONAL_TOKENS, data: sel.isApprovedForAll + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.CTF_EXCHANGE_V2) }, 'latest']),
+      _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.CONDITIONAL_TOKENS, data: sel.isApprovedForAll + proxyPad + _v2DiagPad32(_V2_DIAG_ADDRS.NEG_RISK_V2) }, 'latest']),
+    ];
+    const [code, usdceBal, pusdBal, proxyMatic, eoaMatic, allowOnramp, allowCtfV1, allowNegV1, allowCtfV2, allowNegV2, ctfApprovedV2, ctfApprovedNegV2] = await Promise.all(calls);
+
+    // Decode
+    const isDeployed = !!code && code !== '0x' && code !== '0x0';
+    const usdceBI = _v2DiagHexToBigInt(usdceBal);
+    const pusdBI  = _v2DiagHexToBigInt(pusdBal);
+    const result = {
+      eoa,
+      proxy: proxyAddr,
+      proxy_deployed: isDeployed,
+      balances: {
+        usdce: { atomic: usdceBI.toString(), human: _v2DiagFormatUnits(usdceBI, 6) },
+        pusd:  { atomic: pusdBI.toString(),  human: _v2DiagFormatUnits(pusdBI, 6) },
+        matic_proxy: _v2DiagFormatUnits(_v2DiagHexToBigInt(proxyMatic), 18),
+        matic_eoa:   _v2DiagFormatUnits(_v2DiagHexToBigInt(eoaMatic), 18),
+      },
+      allowances_erc20: {
+        usdce_to_onramp:    _v2DiagFormatUnits(_v2DiagHexToBigInt(allowOnramp), 6),
+        usdce_to_ctf_v1:    _v2DiagFormatUnits(_v2DiagHexToBigInt(allowCtfV1), 6),
+        usdce_to_neg_v1:    _v2DiagFormatUnits(_v2DiagHexToBigInt(allowNegV1), 6),
+        pusd_to_ctf_v2:     _v2DiagFormatUnits(_v2DiagHexToBigInt(allowCtfV2), 6),
+        pusd_to_neg_v2:     _v2DiagFormatUnits(_v2DiagHexToBigInt(allowNegV2), 6),
+      },
+      ctf_operator_approvals: {
+        ctf_to_v2_exchange: _v2DiagHexToBigInt(ctfApprovedV2) === 1n,
+        ctf_to_v2_neg_risk: _v2DiagHexToBigInt(ctfApprovedNegV2) === 1n,
+      },
+    };
+
+    // Diagnosis hints — compares against thresholds, surfaces likely issues
+    const hints = [];
+    if (!isDeployed) hints.push('Proxy not deployed yet — user must visit polymarket.com to activate');
+    if (usdceBI === 0n && pusdBI === 0n) hints.push('Proxy has no USDC.e and no pUSD — user must deposit before trading');
+    if (_v2DiagHexToBigInt(allowOnramp) === 0n && usdceBI > 0n) hints.push('USDC.e → Onramp allowance is 0 — V2 BUY wrap will revert with insufficient allowance (most likely cause of GS013)');
+    if (_v2DiagHexToBigInt(allowCtfV2) === 0n) hints.push('pUSD → CTF V2 allowance is 0 — V2 BUY will fail at order match');
+    if (_v2DiagHexToBigInt(allowNegV2) === 0n) hints.push('pUSD → NegRisk V2 allowance is 0 — V2 BUY on NegRisk markets will fail');
+    if (!result.ctf_operator_approvals.ctf_to_v2_exchange) hints.push('CTF setApprovalForAll(CTF V2) not set — V2 SELL will fail with "not enough balance / allowance"');
+    if (!result.ctf_operator_approvals.ctf_to_v2_neg_risk) hints.push('CTF setApprovalForAll(NegRisk V2) not set — V2 SELL on NegRisk markets will fail');
+    const proxyMaticHuman = parseFloat(result.balances.matic_proxy || '0');
+    const eoaMaticHuman = parseFloat(result.balances.matic_eoa || '0');
+    if (eoaMaticHuman < 0.005) hints.push('EOA MATIC balance < 0.005 — direct execTransaction may fail to pay gas');
+    result.hints = hints;
+    res.json(result);
+  } catch (e) {
+    console.error('[admin/proxy-health]', e.message);
+    res.status(500).json({ error: 'Diagnostic failed: ' + e.message });
+  }
+});
+
+// GET /api/admin/tx-trace/:hash
+// Receipt + revert-reason extraction via eth_call replay. Decodes Error(string)
+// payloads. Returns whatever Polygon gives us — no opinion, just facts.
+app.get('/api/admin/tx-trace/:hash', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const hash = (req.params.hash || '').trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return res.status(400).json({ error: 'Invalid tx hash' });
+
+  try {
+    const [receipt, tx] = await Promise.all([
+      _v2DiagRpcCall('eth_getTransactionReceipt', [hash]),
+      _v2DiagRpcCall('eth_getTransactionByHash',  [hash]),
+    ]);
+    if (!receipt) return res.status(404).json({ error: 'Tx not found or not yet mined', hash });
+
+    const status = parseInt(receipt.status || '0x0', 16);
+    const out = {
+      hash,
+      status: status === 1 ? 'success' : 'fail',
+      block_number: parseInt(receipt.blockNumber, 16),
+      gas_used: parseInt(receipt.gasUsed || '0x0', 16),
+      from: receipt.from,
+      to: receipt.to,
+      logs_count: (receipt.logs || []).length,
+    };
+
+    // For failed txs, replay as eth_call at the block before to extract revert reason
+    if (status === 0 && tx) {
+      const blockHex = '0x' + (parseInt(tx.blockNumber, 16) - 1).toString(16);
+      const callRes = await _v2DiagRpcCall('eth_call', [{
+        from: tx.from, to: tx.to, value: tx.value || '0x0',
+        gas: tx.gas, gasPrice: tx.gasPrice, data: tx.input || '0x',
+      }, blockHex]);
+      // Decode revert reason if present. Standard Error(string) is 0x08c379a0...
+      // Custom errors (Solidity 0.8.4+) have other 4-byte selectors — surface raw.
+      out.revert_raw = (_v2DiagRpcCall._lastError && _v2DiagRpcCall._lastError.data) || callRes || null;
+      const errMsg = _v2DiagRpcCall._lastError && _v2DiagRpcCall._lastError.message;
+      if (errMsg) out.revert_message = errMsg;
+      // Try to decode Error(string) — selector 0x08c379a0
+      const raw = out.revert_raw;
+      if (raw && typeof raw === 'string' && raw.startsWith('0x08c379a0')) {
+        try {
+          // Skip selector (4 bytes = 8 hex), offset (32 bytes = 64 hex), length (32 bytes = 64 hex)
+          const lenHex = raw.slice(10 + 64, 10 + 128);
+          const len = parseInt(lenHex, 16);
+          const strHex = raw.slice(10 + 128, 10 + 128 + len * 2);
+          out.revert_decoded = Buffer.from(strHex, 'hex').toString('utf8');
+        } catch {}
+      }
+      // Try to decode Safe-style GS-codes embedded in the message
+      const gsMatch = (errMsg || '').match(/GS\d{3}/);
+      if (gsMatch) out.safe_error_code = gsMatch[0];
+    }
+    res.json(out);
+  } catch (e) {
+    console.error('[admin/tx-trace]', e.message);
+    res.status(500).json({ error: 'Trace failed: ' + e.message });
+  }
+});
+
+// GET /api/admin/v2-trades?days=7&status=rejected
+// Reads polymarket_v2_trades (from migration #48). Empty until migration runs.
+app.get('/api/admin/v2-trades', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const days = Math.max(1, Math.min(30, parseInt(req.query.days, 10) || 7));
+  const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    let q = supabase.from('polymarket_v2_trades').select('id, eoa_address, proxy_address, token_id, side, maker_amount, taker_amount, clob_status, clob_order_id, clob_response_code, clob_error, builder_code, created_at, updated_at').gte('created_at', sinceIso).order('created_at', { ascending: false }).limit(500);
+    if (req.query.status) q = q.eq('clob_status', String(req.query.status));
+    const { data, error } = await q;
+    if (error) {
+      // Most likely cause: migration #48 hasn't run yet
+      return res.json({ rows: [], summary: {}, error: error.message, hint: 'If error mentions "relation polymarket_v2_trades does not exist", run supabase_migration_polymarket_v2_trades.sql in Railway Postgres.' });
+    }
+    const rows = data || [];
+    const summary = { total: rows.length, by_status: {}, unique_proxies: new Set(rows.map(r => r.proxy_address)).size };
+    for (const r of rows) summary.by_status[r.clob_status] = (summary.by_status[r.clob_status] || 0) + 1;
+    res.json({ rows, summary, since: sinceIso, days });
+  } catch (e) {
+    console.error('[admin/v2-trades]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── /ADMIN V2 DIAGNOSTICS ─────────────────────────────────────────────────
+
 // ── POLYMARKET ORDER PROXY (submits signed order to CLOB) ──────────────────
 // OLD /api/polymarket/order route removed — was missing CLOB auth header forwarding
 // and shadowed the proper geo-bypass proxy at line ~31151.
@@ -38811,6 +39073,29 @@ app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
 // The `owner` field inside the order body is the TRADER's CLOB api_key UUID
 // (verified in market.html:4262 — do NOT confuse with POLY_BUILDER_API_KEY).
 
+// HYPERFLEX V2 builder code (bytes32) — the on-chain attribution tag baked
+// into every V2 order's EIP-712 struct. Env var lets us swap for Amoy testing
+// without a code change; hardcoded fallback keeps mainnet working if unset.
+// Format-validated at read time — a malformed env var falls back to mainnet.
+const POLY_BUILDER_CODE_FALLBACK = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8';
+const POLY_BUILDER_CODE = (function () {
+  const raw = process.env.POLY_BUILDER_CODE;
+  if (!raw) {
+    console.log('[boot] POLY_BUILDER_CODE unset — using hardcoded mainnet default');
+    return POLY_BUILDER_CODE_FALLBACK;
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(raw)) {
+    console.warn('[boot] POLY_BUILDER_CODE malformed — falling back to mainnet. Expected 0x + 64 hex, got:', raw.slice(0, 10) + '…');
+    return POLY_BUILDER_CODE_FALLBACK;
+  }
+  if (raw.toLowerCase() === POLY_BUILDER_CODE_FALLBACK.toLowerCase()) {
+    console.log('[boot] POLY_BUILDER_CODE env var set (matches default)');
+  } else {
+    console.log('[boot] POLY_BUILDER_CODE overridden via env var:', raw);
+  }
+  return raw;
+})();
+
 let _builderCreds = null;
 (function initBuilderCreds() {
   const key        = process.env.POLY_BUILDER_API_KEY;
@@ -38949,7 +39234,7 @@ app.post('/api/polymarket/safe-submit', optionalAuth, async (req, res) => {
     signature,
     signatureParams: {
       gasPrice: '0', operation: '0',
-      safeTxnGas: '0', baseGas: '0',
+      safeTxGas: '0', baseGas: '0',
       gasToken: '0x0000000000000000000000000000000000000000',
       refundReceiver: '0x0000000000000000000000000000000000000000',
     },
@@ -39969,7 +40254,59 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 // The order is already signed client-side — we just forward it.
 // CRITICAL: Do NOT forward X-Forwarded-For or any geo-identifying headers —
 // the CLOB must see Railway's server IP, not the end user's IP.
+// V2 trade observability — see supabase_migration_polymarket_v2_trades.sql.
+// Detects V2 orders by presence of `order.builder` (not in V1 struct) and
+// logs every attempt/accept/reject row. DB errors are swallowed so the trade
+// flow is never blocked by observability. Non-V2 orders are not logged.
+function _isV2Order(orderObj) {
+  return !!(orderObj && typeof orderObj.builder === 'string' && orderObj.builder.startsWith('0x'));
+}
+async function _logV2Attempt(orderObj, clientIp) {
+  try {
+    if (!_isV2Order(orderObj)) return null;
+    const row = {
+      eoa_address:   (orderObj.signer || '').toLowerCase() || null,
+      proxy_address: (orderObj.maker  || '').toLowerCase() || null,
+      token_id:      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
+      side:          orderObj.side != null ? Number(orderObj.side) : null,
+      maker_amount:  orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
+      taker_amount:  orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
+      salt:          orderObj.salt != null ? String(orderObj.salt) : null,
+      builder_code:  orderObj.builder || null,
+      clob_status:   'attempted',
+      client_ip:     clientIp || null,
+    };
+    const { data, error } = await supabase.from('polymarket_v2_trades').insert(row).select('id').maybeSingle();
+    if (error) { console.warn('[v2-trades] insert failed:', error.message); return null; }
+    return data && data.id ? data.id : null;
+  } catch (e) {
+    console.warn('[v2-trades] insert threw:', e.message);
+    return null;
+  }
+}
+async function _logV2Outcome(rowId, httpStatus, responseText, parsedData) {
+  try {
+    if (!rowId) return;
+    const ok = httpStatus >= 200 && httpStatus < 300;
+    const update = {
+      clob_status: ok ? 'accepted' : 'rejected',
+      clob_response_code: httpStatus,
+      clob_order_id: ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null,
+      clob_error:   ok ? null : (responseText || '').slice(0, 500),
+      updated_at:   new Date().toISOString(),
+    };
+    const { error } = await supabase.from('polymarket_v2_trades').update(update).eq('id', rowId);
+    if (error) console.warn('[v2-trades] update failed:', error.message);
+  } catch (e) {
+    console.warn('[v2-trades] update threw:', e.message);
+  }
+}
+
 app.post('/api/polymarket/order', async (req, res) => {
+  const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+  // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
+  // never responds or we throw before the outcome log fires.
+  const v2RowId = await _logV2Attempt(req.body && req.body.order, clientIp);
   try {
     // Use raw body (byte-exact as the client sent it) so the builder HMAC
     // signs the identical string the CLOB receives. JSON.stringify(req.body)
@@ -40006,7 +40343,6 @@ app.post('/api/polymarket/order', async (req, res) => {
 
     // Log what we're sending for debugging
     const fwdHeaders = Object.keys(clobHeaders).filter(k => k.startsWith('POLY_'));
-    const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     const hasAttribution = 'POLY_BUILDER_API_KEY' in clobHeaders;
     const builderKeyPrefix = (clobHeaders.POLY_BUILDER_API_KEY || '').slice(0, 8);
     console.log('[clob-proxy] forwarding order | client_ip:', clientIp,
@@ -40014,9 +40350,17 @@ app.post('/api/polymarket/order', async (req, res) => {
       '| auth_headers:', fwdHeaders.join(','),
       '| builder_attribution:', hasAttribution,
       '| builder_key:', builderKeyPrefix ? builderKeyPrefix + '…' : 'NONE',
-      '| body_source:', req.rawBody ? 'raw' : 'reserialized');
+      '| body_source:', req.rawBody ? 'raw' : 'reserialized',
+      '| v2_row:', v2RowId || '—');
 
-    const r = await fetch('https://clob.polymarket.com/order', {
+    // Route V2 bodies to clob-v2.polymarket.com (dedicated V2 host) until
+    // Polymarket flips clob.polymarket.com to V2 backend on Apr 28. Sending
+    // V2-signed orders to the prod URL pre-cutover returns "invalid signature"
+    // because V1 parser hashes over V1 fields. Detect V2 by order.builder.
+    // Mirror of client-side routing in market.html:5438 / dashboard:22378.
+    const isV2Body = !!(req.body && req.body.order && typeof req.body.order.builder === 'string' && req.body.order.builder.startsWith('0x'));
+    const clobHost = isV2Body ? 'https://clob-v2.polymarket.com' : 'https://clob.polymarket.com';
+    const r = await fetch(clobHost + '/order', {
       method: 'POST',
       headers: clobHeaders,
       body: orderBody,
@@ -40032,9 +40376,12 @@ app.post('/api/polymarket/order', async (req, res) => {
       console.log('[clob-proxy] OK:', text.slice(0, 200));
     }
 
+    _logV2Outcome(v2RowId, r.status, text, data);
+
     res.status(r.status).json(data);
   } catch (err) {
     console.error('[clob-proxy] Error:', err.message);
+    _logV2Outcome(v2RowId, 502, 'proxy_error: ' + err.message, null);
     res.status(502).json({ error: 'Proxy error: ' + err.message });
   }
 });
