@@ -39219,7 +39219,7 @@ app.post('/api/polymarket/safe-submit', optionalAuth, async (req, res) => {
     signature,
     signatureParams: {
       gasPrice: '0', operation: '0',
-      safeTxnGas: '0', baseGas: '0',
+      safeTxGas: '0', baseGas: '0',
       gasToken: '0x0000000000000000000000000000000000000000',
       refundReceiver: '0x0000000000000000000000000000000000000000',
     },
