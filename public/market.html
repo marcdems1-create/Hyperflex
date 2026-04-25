@@ -2970,6 +2970,18 @@ var APPROVAL_CAP = '10000000000000000';
 // Falls back to 1rpc.io if polygon-rpc.com is down.
 var POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
 async function getPublicProvider() {
+  // Prefer Alchemy via our server-side proxy (more reliable than public
+  // RPCs which occasionally return data=null on Safe nonce reads). Falls
+  // through to public RPCs if /api/polygon/rpc is 503 (ALCHEMY_API_KEY
+  // unset on Railway) or unreachable.
+  try {
+    var alchemyProxy = location.origin + '/api/polygon/rpc';
+    var ap = new ethers.JsonRpcProvider(alchemyProxy);
+    await ap.getBlockNumber();
+    return ap;
+  } catch (e) {
+    console.warn('[rpc] Alchemy proxy failed, falling through to public RPCs:', e.message);
+  }
   for (var i = 0; i < POLYGON_RPCS.length; i++) {
     try {
       var p = new ethers.JsonRpcProvider(POLYGON_RPCS[i]);
@@ -3227,13 +3239,29 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
   // was returning {code:-32006, message:"Unauthorized"} on eth_call in some
   // session states (wallet locked, account switched, site permission lapsed).
   // The public RPC doesn't need wallet auth for a read.
+  // Retry-with-backoff: public RPCs sometimes return data=null on the first
+  // call to a freshly-fetched provider. Three attempts at 500ms / 1s / 2s
+  // converts a transient blip into a non-event.
   var nonce;
-  try {
-    var readProvider = await getPublicProvider();
-    var safeReader = new ethers.Contract(proxyAddr, SAFE_ABI, readProvider);
-    nonce = await safeReader.nonce();
-  } catch (e) {
-    throw new Error('Could not read Safe nonce — proxy may not be deployed: ' + (e.message || e));
+  var nonceAttempts = [500, 1000, 2000];
+  var nonceLastErr = null;
+  for (var na = 0; na < nonceAttempts.length; na++) {
+    try {
+      var readProvider = await getPublicProvider();
+      var safeReader = new ethers.Contract(proxyAddr, SAFE_ABI, readProvider);
+      nonce = await safeReader.nonce();
+      nonceLastErr = null;
+      break;
+    } catch (e) {
+      nonceLastErr = e;
+      if (na < nonceAttempts.length - 1) {
+        console.warn('[safe-nonce] attempt ' + (na + 1) + ' failed (' + (e.message || e).slice(0, 80) + '), retrying in ' + nonceAttempts[na] + 'ms');
+        await new Promise(function (r) { setTimeout(r, nonceAttempts[na]); });
+      }
+    }
+  }
+  if (nonceLastErr) {
+    throw new Error('Could not read Safe nonce after 3 attempts — proxy may not be deployed: ' + (nonceLastErr.message || nonceLastErr));
   }
 
   var safeTx = {

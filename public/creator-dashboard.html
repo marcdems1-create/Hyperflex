@@ -15953,6 +15953,16 @@ let _manifoldUsername = '';
 // Public RPC for read-only calls — no MetaMask popup needed
 const DASHBOARD_POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
 async function getDashboardPublicProvider() {
+  // Prefer Alchemy via our server-side proxy (more reliable than public
+  // RPCs which occasionally return data=null on Safe nonce reads). Falls
+  // through to public RPCs if /api/polygon/rpc is 503 or unreachable.
+  try {
+    const ap = new ethers.JsonRpcProvider(location.origin + '/api/polygon/rpc');
+    await ap.getBlockNumber();
+    return ap;
+  } catch (e) {
+    console.warn('[rpc] Alchemy proxy failed, falling through to public RPCs:', e.message);
+  }
   for (const rpc of DASHBOARD_POLYGON_RPCS) {
     try {
       const p = new ethers.JsonRpcProvider(rpc);
@@ -15960,7 +15970,29 @@ async function getDashboardPublicProvider() {
       return p;
     } catch (e) { console.warn('[rpc]', rpc, 'failed:', e.message); }
   }
-  throw new Error('All public RPCs failed');
+  throw new Error('All RPCs failed');
+}
+
+// Retry-with-backoff for Safe.nonce() reads. Public RPCs occasionally
+// return data=null on the first call to a freshly-fetched provider. Three
+// attempts at 500ms / 1s / 2s converts a transient blip into a non-event.
+async function dashSafeNonceWithRetry(proxyAddr, safeAbi) {
+  const delays = [500, 1000, 2000];
+  let lastErr = null;
+  for (let i = 0; i < delays.length; i++) {
+    try {
+      const provider = await getDashboardPublicProvider();
+      const safe = new ethers.Contract(proxyAddr, safeAbi, provider);
+      return await safe.nonce();
+    } catch (e) {
+      lastErr = e;
+      if (i < delays.length - 1) {
+        console.warn('[dash-safe-nonce] attempt ' + (i + 1) + ' failed (' + (e.message || e).slice(0, 80) + '), retrying in ' + delays[i] + 'ms');
+        await new Promise(r => setTimeout(r, delays[i]));
+      }
+    }
+  }
+  throw lastErr || new Error('Could not read Safe nonce after 3 attempts');
 }
 
 // Resolve Polymarket proxy address from EOA via on-chain Safe factory call
@@ -21608,9 +21640,13 @@ async function dashGetPmctBalance(addr) {
 // Relayer-first SafeTx dispatch. Mirrors market.html executeViaProxy.
 async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAddr, signer) {
   const safe = new ethers.Contract(proxyAddr, DASH_SAFE_ABI, signer);
+  // Use the public/Alchemy provider for the nonce view-call rather than the
+  // signer (MetaMask). MetaMask's RPC has returned {code:-32006, "Unauthorized"}
+  // intermittently in some session states; the public path doesn't need wallet
+  // auth for a read. Retry-with-backoff catches transient blips.
   let nonce;
-  try { nonce = await safe.nonce(); }
-  catch (e) { throw new Error('Could not read Safe nonce: ' + (e.message || e)); }
+  try { nonce = await dashSafeNonceWithRetry(proxyAddr, DASH_SAFE_ABI); }
+  catch (e) { throw new Error('Could not read Safe nonce after 3 attempts: ' + (e.message || e)); }
 
   const safeTx = {
     to: toAddr, value: (valueWei || 0n).toString(), data: calldata,
@@ -22761,10 +22797,9 @@ async function redeemPosition(posDataJson, opts) {
       ]);
     }
 
-    // ── STEP 1: Get Safe nonce (read-only, no gas) ──
+    // ── STEP 1: Get Safe nonce (read-only, no gas) — retry-with-backoff via Alchemy proxy ──
     const safeReadAbi = ['function nonce() view returns (uint256)'];
-    const safeRead = new ethers.Contract(proxyAddr, safeReadAbi, pubProvider);
-    const nonce = await safeRead.nonce();
+    const nonce = await dashSafeNonceWithRetry(proxyAddr, safeReadAbi);
     console.log('[redeem] Safe nonce:', nonce.toString(), '| target:', isNegRisk ? 'NegRisk' : 'CTF', '| condition:', conditionId.slice(0,10));
 
     // ── STEP 2: Build EIP-712 typed data for Safe transaction ──

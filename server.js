@@ -26206,6 +26206,31 @@ app.get('/api/polymarket/config', (req, res) => {
   res.json({ builderCode: POLY_BUILDER_CODE });
 });
 
+// Polygon RPC proxy backed by Alchemy. Frontend points an ethers
+// JsonRpcProvider at this endpoint instead of public RPCs — public RPCs
+// occasionally return malformed/empty responses (data=null) on calls like
+// safe.nonce(), which manifests as "Could not read Safe nonce" errors in
+// the V2 allowance setup flow. The Alchemy key never reaches the browser.
+//
+// Returns 503 if ALCHEMY_API_KEY is unset so the client can fall through to
+// public RPCs without ambiguity. Read-only path — no signing, no spending.
+app.post('/api/polygon/rpc', async (req, res) => {
+  const key = process.env.ALCHEMY_API_KEY;
+  if (!key) return res.status(503).json({ error: 'ALCHEMY_API_KEY not configured' });
+  try {
+    const r = await fetch('https://polygon-mainnet.g.alchemy.com/v2/' + key, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await r.text();
+    res.status(r.status).type('application/json').send(text);
+  } catch (e) {
+    res.status(502).json({ error: 'RPC proxy failed: ' + e.message });
+  }
+});
+
 // ── ADMIN V2 DIAGNOSTICS ──────────────────────────────────────────────────
 // Surfaces every diagnostic field needed to debug a failing V2 trade in one
 // request: proxy deploy status, USDC.e + pUSD balances, allowances to all
