@@ -23084,7 +23084,41 @@ async function confirmTrade() {
           })();
           const clobBodyShort = clobBodyStr.length > 120 ? clobBodyStr.slice(0, 120) + '…' : clobBodyStr;
 
+          // PRIMARY DIAGNOSIS: when CLOB's error body contains the
+          // "balance: X, sum of active orders: Y" math, surface it as the
+          // top-level cause. Open resting orders consume your sellable
+          // balance; the ✗ rows below are usually irrelevant noise when
+          // this fires. Format both atomics into human shares.
+          let primaryDiag = '';
+          try {
+            const errBody = (data && data.error) ? String(data.error) : '';
+            const balMatch = errBody.match(/balance[^0-9]*?(\d{6,})/i);
+            const ordMatch = errBody.match(/sum of active orders[^0-9]*?(\d{6,})/i);
+            if (balMatch && ordMatch) {
+              const balAtomic = BigInt(balMatch[1]);
+              const ordAtomic = BigInt(ordMatch[1]);
+              const freeAtomic = balAtomic > ordAtomic ? (balAtomic - ordAtomic) : 0n;
+              const fmt = (a) => (Number(a) / 1e6).toFixed(4);
+              const sellRequested = (Number(makerAmt) / 1e6).toFixed(4);
+              const overcommitted = ordAtomic > balAtomic;
+              primaryDiag =
+                '<div style="background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.35);border-radius:8px;padding:12px 14px;margin-bottom:10px;font-family:var(--mono);font-size:12px;line-height:1.75">' +
+                  '<div style="font-weight:700;color:#ff4d6a;margin-bottom:8px;font-size:13px">⚠ Open orders are blocking this sell</div>' +
+                  '<div>Shares on-chain:           <span style="color:var(--text)">' + fmt(balAtomic) + '</span></div>' +
+                  '<div>Committed to open orders: <span style="color:#f59e0b">' + fmt(ordAtomic) + '</span>' + (overcommitted ? ' <span style="color:#ff4d6a">(over-committed!)</span>' : '') + '</div>' +
+                  '<div>Free to sell:              <span style="color:var(--text)">' + fmt(freeAtomic) + '</span></div>' +
+                  '<div>Sell size requested:       <span style="color:var(--text)">' + sellRequested + '</span></div>' +
+                  '<div style="margin-top:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;line-height:1.5">' +
+                    'You have resting limit orders consuming most of your share balance. ' +
+                    '<a href="https://polymarket.com/portfolio" target="_blank" rel="noopener" style="color:#ff4d6a;text-decoration:underline;font-weight:600">Cancel them on polymarket.com →</a> ' +
+                    'and try this sell again. The technical detail below is for diagnostics — not the cause.' +
+                  '</div>' +
+                '</div>';
+            }
+          } catch (_parseErr) { /* fall through to existing banner without primary block */ }
+
           errEl.innerHTML =
+            primaryDiag +
             '<div style="font-weight:700;margin-bottom:6px">Order rejected: insufficient balance/allowance</div>' +
             '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;background:rgba(0,0,0,0.25);padding:8px 10px;border-radius:6px">' +
               '<div>EOA:                  <span style="color:var(--text)">' + (eoaAddress ? eoaAddress.slice(0,10) + '…' + eoaAddress.slice(-4) : 'MISSING') + '</span></div>' +
@@ -23103,9 +23137,9 @@ async function confirmTrade() {
               '<div>CLOB said:            <span style="color:var(--text)">' + (clobBodyShort || '(empty)') + '</span></div>' +
             '</div>' +
             '<div style="font-size:11px;color:var(--dim);display:block;margin-top:8px;line-height:1.5">' +
-              '➜ Any ✗ in the CT→/pUSD→ rows is the direct cause — approval didn\'t land.<br>' +
-              '➜ If all are ✓ and shares > 0: CLOB is rejecting for something else. Screenshot.<br>' +
-              '➜ If the Routed-to exchange\'s approvals are ✗: the pre-flight pop-up didn\'t land on-chain.' +
+              '➜ If a primary diagnosis is shown above, fix that first — the rows below are usually noise when it fires.<br>' +
+              '➜ Otherwise: any ✗ in the CT→/pUSD→ rows on the routed exchange is the cause — approval didn\'t land.<br>' +
+              '➜ If all are ✓ and shares > 0: CLOB is rejecting for something else. Screenshot.' +
             '</div>';
           if (typeof loadPolymarketPositions === 'function') loadPolymarketPositions(true);
         } else {
