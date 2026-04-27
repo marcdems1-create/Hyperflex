@@ -21167,7 +21167,7 @@ function openTradeModal(posDataJson, mode, options) {
     return;
   }
 
-  _tradeModalData = { ...pos, mode: mode || 'buy', _fillMax: !!opts.fillMax, _orderType: 'FOK' };
+  _tradeModalData = { ...pos, mode: mode || 'buy', _fillMax: !!opts.fillMax, _orderType: 'FAK' };
   const modal = document.getElementById('tradeModal');
   if (!modal) return;
 
@@ -21278,7 +21278,7 @@ function _updateLimitFromOrderbook() {
   if (!_tradeModalData || !_tradeModalData._orderbook) return;
   const ob = _tradeModalData._orderbook;
   const mode = _tradeModalData.mode || 'buy';
-  const orderType = _tradeModalData._orderType || 'FOK';
+  const orderType = _tradeModalData._orderType || 'FAK';
   let livePrice = null;
 
   if (orderType === 'GTC') {
@@ -21312,14 +21312,14 @@ function _updateLimitFromOrderbook() {
 
 function toggleOrderType() {
   if (!_tradeModalData) return;
-  const current = _tradeModalData._orderType || 'FOK';
-  const next = current === 'FOK' ? 'GTC' : 'FOK';
+  const current = _tradeModalData._orderType || 'FAK';
+  const next = current === 'FAK' ? 'GTC' : 'FAK';
   _tradeModalData._orderType = next;
   const btn = document.getElementById('tradeOrderTypeBtn');
-  if (btn) btn.textContent = next === 'FOK' ? 'Market ▾' : 'Limit ▾';
+  if (btn) btn.textContent = next === 'FAK' ? 'Market ▾' : 'Limit ▾';
   // Update price label
   const priceLabel = document.getElementById('tradePriceLabel');
-  if (priceLabel) priceLabel.textContent = next === 'FOK' ? 'Market Price' : 'Limit Price';
+  if (priceLabel) priceLabel.textContent = next === 'FAK' ? 'Market Price' : 'Limit Price';
   // Market orders: snap to best bid/ask; Limit orders: use mid for better default
   _updateLimitFromOrderbook();
   updateTradeEstimate();
@@ -22214,7 +22214,7 @@ async function confirmTrade() {
     // The limit price must be the worst price the order would touch when walking the book.
     // Add slippage buffer (1 extra tick) to handle book changes between read and submit.
     let walkPrice = price;
-    const isMarketOrder = (_tradeModalData._orderType || 'FOK') !== 'GTC';
+    const isMarketOrder = (_tradeModalData._orderType || 'FAK') !== 'GTC';
     if (isMarketOrder && tokenId) {
       try {
         btn.textContent = 'Checking depth...';
@@ -22735,7 +22735,7 @@ async function confirmTrade() {
       deferExec: false,
       order: orderJson,
       owner: apiKey,
-      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK',
+      orderType: (_tradeModalData._orderType || 'FAK') === 'GTC' ? 'GTC' : 'FAK',
     });
 
     // Route through Cloudflare Worker edge proxy to avoid geo-blocking.
@@ -23137,31 +23137,15 @@ async function confirmTrade() {
         errEl.innerHTML = 'Order rejected: invalid signature (tried both exchanges).<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">This is unusual. Screenshot and send over — the order struct needs manual debugging.</span>';
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
-      } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
-        // FOK failed on a thin book (typical on illiquid markets where the
-        // top bid can vanish between our book-walk and the submit). Auto-
-        // retry as GTC at the same limit: if it fills partially, great; if
-        // the book has moved, the order rests and the user can cancel on
-        // Polymarket. Either outcome beats a hard rejection with a
-        // manual-intervention button. Recursion-guarded via _fokFallbackFired.
-        const alreadyFellBack = _tradeModalData && _tradeModalData._fokFallbackFired;
-        if (!alreadyFellBack && (_tradeModalData._orderType || 'FOK') !== 'GTC') {
-          _tradeModalData._fokFallbackFired = true;
-          _tradeModalData._orderType = 'GTC';
-          const otBtn = document.getElementById('tradeOrderTypeBtn');
-          if (otBtn) otBtn.textContent = 'Limit ▾';
-          const plbl = document.getElementById('tradePriceLabel');
-          if (plbl) plbl.textContent = 'Limit Price';
-          console.log('[qt-trade] FOK rejected — auto-retrying as Limit GTC');
-          if (typeof showToast === 'function') showToast('Book too thin for Market fill — placing as Limit order', 'info');
-          btn.disabled = true;
-          btn.textContent = 'Retrying as Limit...';
-          errEl.style.display = 'none';
-          return confirmTrade();
-        }
-        // Either already retried or user placed a GTC originally — surface
-        // the failure honestly.
-        errEl.innerHTML = 'Order couldn\'t be filled.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">Book is too thin at this price. Try a smaller size or wait for the book to fill in.</span>';
+      } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok') || errStr.includes('fak') || errStr.includes('not filled')) {
+        // FAK couldn't fill ANY shares at the user's limit price. With FAK
+        // (Fill And Kill) we get partial fills natively, so reaching here
+        // means literally zero takers at this price. We do NOT auto-fall-
+        // back to GTC — resting limits earn no builder fee (maker side
+        // doesn't pay fees per V2 doc; rebate is funded by takers). Better
+        // to surface the failure honestly so the user picks: bump price,
+        // smaller size, or explicitly switch to Limit.
+        errEl.innerHTML = 'Order couldn\'t be filled at this price.<br><span style="font-size:11px;color:var(--dim);display:block;margin-top:4px">No takers at your price right now. Bump the price 1-2¢, try a smaller size, or switch to Limit and let it rest.</span>';
       } else {
         const msg = data.error || data.message || (typeof data === 'string' ? data : '');
         errEl.textContent = msg || ('Order rejected by CLOB (' + res.status + ')');
