@@ -5383,7 +5383,7 @@ async function executeTrade() {
       deferExec: false,
       order: orderJson,
       owner: apiKey,
-      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
+      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FAK' : 'GTC'
     });
     tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 
@@ -5435,7 +5435,7 @@ async function executeTrade() {
             deferExec: false,
             order: JSON.parse(requestBody).order,
             owner: apiKey,
-            orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
+            orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FAK' : 'GTC'
           });
           data = await submitClobOrder(retryBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
           if (data._expired || data._error) {
@@ -5554,7 +5554,7 @@ async function executeTrade() {
           token_id: tokenId,
           side: sideLabel,
           trade_mode: _tradeMode || 'buy',
-          order_type: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC',
+          order_type: (document.getElementById('tradeOrderType').value === 'market') ? 'FAK' : 'GTC',
           amount_usd: amount,
           shares: shares,
           price_cents: price,
