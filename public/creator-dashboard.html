@@ -22733,6 +22733,7 @@ async function confirmTrade() {
     }
     const requestBody = JSON.stringify({
       deferExec: false,
+      postOnly: false,
       order: orderJson,
       owner: apiKey,
       orderType: (_tradeModalData._orderType || 'FAK') === 'GTC' ? 'GTC' : 'FAK',
