@@ -22597,7 +22597,21 @@ async function confirmTrade() {
     // was wrong (1 is the legacy POLY_PROXY path, not the Safe path), which
     // is why every post-#33 trade rejected with "invalid signature" —
     // CLOB ran EIP-1271 on POLY_PROXY's factory, not on the Safe.
-    const sigTypeInt = proxyAddress ? 2 : 0;
+    // Per Polymarket py-clob-client issue #297: some wallets have CLOB
+    // balance/allowance records SPLIT between sigType 1 (POLY_PROXY) and
+    // sigType 2 (POLY_GNOSIS_SAFE). The bug is in CLOB's bucketing — when
+    // they're split, an order signed with one type gets rejected because
+    // CLOB checks balance under that type, finds zero, returns "not enough
+    // balance / allowance" even though the wallet's REAL balance lives
+    // under the other type. The fix attempt: if a balance/allowance
+    // rejection fires below, retry once with the FLIPPED sigType. The
+    // override is set on _tradeModalData so the retry picks it up here.
+    const sigTypeInt = (typeof _tradeModalData._sigTypeOverride === 'number')
+      ? _tradeModalData._sigTypeOverride
+      : (proxyAddress ? 2 : 0);
+    if (_tradeModalData._sigTypeOverride !== undefined) {
+      console.log('[v2-sigtype-flip] using override sigType=' + sigTypeInt + ' (default would be ' + (proxyAddress ? 2 : 0) + ')');
+    }
     let orderStruct, orderDomain, orderTypes;
     if (useClobV2) {
       orderStruct = {
@@ -22929,6 +22943,29 @@ async function confirmTrade() {
         }
         errEl.textContent = 'API keys expired — sign in MetaMask popup, then click the trade button.';
       } else if (res.status === 400 && errStr.includes('not enough balance')) {
+        // Per Polymarket py-clob-client issue #297: balance/allowance can be
+        // SPLIT across sigType 1 (POLY_PROXY) and sigType 2 (POLY_GNOSIS_SAFE)
+        // in CLOB's backend. Order signed with one type → CLOB checks balance
+        // under that type → finds zero → rejects, even though the wallet's
+        // real balance lives under the OTHER type. Workaround: retry once
+        // with the flipped sigType. Recursion-guarded via _sigTypeFlipFired.
+        // If THIS works, we know the wallet is in split-state and route
+        // future trades accordingly. If both attempts fail identically, the
+        // bug is somewhere else and we surface the existing diagnostic.
+        if (!_tradeModalData._sigTypeFlipFired && useClobV2 && proxyAddress) {
+          _tradeModalData._sigTypeFlipFired = true;
+          const currentType = (typeof _tradeModalData._sigTypeOverride === 'number')
+            ? _tradeModalData._sigTypeOverride
+            : 2;
+          const flipped = currentType === 2 ? 1 : 2;
+          _tradeModalData._sigTypeOverride = flipped;
+          console.warn('[v2-sigtype-flip] balance/allowance reject — retrying with sigType=' + flipped + ' (issue #297 workaround)');
+          if (typeof showToast === 'function') showToast('Retrying with alternate signature type (Polymarket #297 workaround)…', 'info');
+          btn.disabled = true;
+          btn.textContent = 'Retrying (alt sigType)…';
+          errEl.style.display = 'none';
+          return confirmTrade();
+        }
         if (clobSide === 'SELL') {
           // CLOB returned "not enough balance / allowance". Two possible
           // causes: (a) genuine empty balance, (b) CTF operator approval
