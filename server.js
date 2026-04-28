@@ -10459,7 +10459,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -16654,6 +16654,245 @@ app.get('/api/picks/:id/verify', async (req, res) => {
   } catch (err) {
     console.error('[picks] verify error:', err.message);
     res.status(500).json({ error: 'Verify failed' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// CHALLENGES — sports pick'em surface (NBA-first wedge)
+// ════════════════════════════════════════════════════════════════════════
+// Three endpoints power /challenges/nba:
+//   GET /api/challenges/nba/today     — today's slate, my-picks overlaid
+//   GET /api/challenges/me            — viewer's record + active picks
+//   GET /api/challenges/recent        — public picks feed (social proof)
+// Plus a thin alias around the existing leaderboard so the page reads a
+// consistent /api/challenges/* namespace.
+
+// GET /api/challenges/nba/today — today's NBA slate with my pick (if any)
+// already attached to each game. Single fetch, no client-side joining.
+// Optional auth: viewer-aware when ?token sent, anonymous-friendly otherwise.
+// Returns { games: [{id, starts_at, status, home, away, my_pick?}], pick_count, lock_count }
+app.get('/api/challenges/nba/today', optionalAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'Database not configured' });
+    const sport = (req.query.sport || 'nba').toLowerCase();
+    const userId = req.userId || null;
+
+    // Window: any game whose tipoff is in the next 36h. Same window as
+    // /api/games/today so picks composed there match what we surface here.
+    const games = await dbQuery(
+      `SELECT g.id, g.starts_at, g.status, g.home_score, g.away_score, g.period,
+              home.id AS home_id, home.name AS home_name, home.abbreviation AS home_abbr, home.logo_url AS home_logo,
+              away.id AS away_id, away.name AS away_name, away.abbreviation AS away_abbr, away.logo_url AS away_logo
+         FROM sport_games g
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE g.sport = $1
+          AND g.starts_at BETWEEN (now() - INTERVAL '6 hours') AND (now() + INTERVAL '36 hours')
+        ORDER BY g.starts_at ASC
+        LIMIT 50`,
+      [sport]
+    );
+
+    // Total pick count across all today's games (social proof "N picks locked")
+    const lockCountRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM picks p
+         JOIN sport_games g ON g.id = p.game_id
+        WHERE g.sport = $1
+          AND g.starts_at BETWEEN (now() - INTERVAL '6 hours') AND (now() + INTERVAL '36 hours')`,
+      [sport]
+    ).catch(() => [{ n: 0 }]);
+    const lockCount = (lockCountRow[0] && lockCountRow[0].n) || 0;
+
+    // Viewer's picks on today's slate — overlay so the UI can show
+    // "picked Lakers -3.5 @ -110, 2u" instead of a blank pick button.
+    let myPicks = {};
+    if (userId && games.length) {
+      const ids = games.map(g => g.id);
+      const myPickRows = await dbQuery(
+        `SELECT id, game_id, bet_type, side, line, odds, units, thesis, locked_at,
+                settlement_status, settled_units
+           FROM picks
+          WHERE user_id = $1 AND game_id = ANY($2::text[])
+          ORDER BY locked_at DESC`,
+        [userId, ids]
+      ).catch(() => []);
+      for (const p of myPickRows) {
+        // First pick per game wins the overlay slot — picks are immutable
+        // post-insert so a user shouldn't have multiple per game in
+        // practice, but the ORDER BY guards if they did.
+        if (!myPicks[p.game_id]) myPicks[p.game_id] = p;
+      }
+    }
+
+    const enriched = games.map(g => ({
+      ...g,
+      my_pick: myPicks[g.id] || null,
+    }));
+
+    res.json({
+      sport,
+      games: enriched,
+      lock_count: lockCount,
+      // Server clock — frontend uses this to anchor countdown timers so
+      // a phone with a wonky clock doesn't show negative seconds.
+      server_now: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[challenges/nba/today]', err.message);
+    res.status(500).json({ error: 'Failed to load today\'s slate' });
+  }
+});
+
+// GET /api/challenges/me — viewer's pick'em digest.
+// Returns lifetime W-L-P-V, current run, longest run, units P&L, plus
+// active (unsettled) picks for the dashboard strip on /challenges/nba.
+// Auth-required — anonymous viewers don't have a record to show.
+app.get('/api/challenges/me', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'Database not configured' });
+    const userId = req.userId;
+
+    // One scan, multiple aggregates.
+    const aggRows = await dbQuery(
+      `SELECT
+         COUNT(*) FILTER (WHERE settlement_status = 'win')::int   AS wins,
+         COUNT(*) FILTER (WHERE settlement_status = 'loss')::int  AS losses,
+         COUNT(*) FILTER (WHERE settlement_status = 'push')::int  AS pushes,
+         COUNT(*) FILTER (WHERE settlement_status = 'void')::int  AS voids,
+         COUNT(*) FILTER (WHERE settlement_status IS NULL)::int   AS pending,
+         COALESCE(SUM(settled_units), 0)::numeric                 AS units_pnl,
+         COUNT(*)::int                                            AS total
+       FROM picks
+       WHERE user_id = $1`,
+      [userId]
+    ).catch(() => [{}]);
+    const a = aggRows[0] || {};
+
+    // Run computation: walk settled picks newest → oldest, count
+    // consecutive wins until we hit a non-win. Push/void neither extend
+    // nor break a run (they're vacuous outcomes — no money decided).
+    const runRows = await dbQuery(
+      `SELECT settlement_status FROM picks
+        WHERE user_id = $1 AND settlement_status IS NOT NULL
+        ORDER BY settled_at DESC NULLS LAST, locked_at DESC
+        LIMIT 50`,
+      [userId]
+    ).catch(() => []);
+    let currentRun = 0;
+    for (const r of runRows) {
+      if (r.settlement_status === 'win') currentRun++;
+      else if (r.settlement_status === 'push' || r.settlement_status === 'void') continue;
+      else break;
+    }
+    // Longest run requires a forward-only scan over ALL settled picks.
+    let longestRun = 0;
+    if (runRows.length) {
+      // Walk same array but reverse to oldest → newest.
+      let cursor = 0;
+      for (let i = runRows.length - 1; i >= 0; i--) {
+        const s = runRows[i].settlement_status;
+        if (s === 'win') { cursor++; if (cursor > longestRun) longestRun = cursor; }
+        else if (s === 'push' || s === 'void') continue;
+        else cursor = 0;
+      }
+    }
+
+    // Active picks — for the "your active picks" strip on the page
+    const active = await dbQuery(
+      `SELECT p.id, p.game_id, p.bet_type, p.side, p.line, p.odds, p.units, p.thesis, p.locked_at,
+              g.starts_at, g.status,
+              home.name AS home_name, home.abbreviation AS home_abbr,
+              away.name AS away_name, away.abbreviation AS away_abbr
+         FROM picks p
+         JOIN sport_games g ON g.id = p.game_id
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE p.user_id = $1 AND p.settlement_status IS NULL
+        ORDER BY g.starts_at ASC
+        LIMIT 20`,
+      [userId]
+    ).catch(() => []);
+
+    const settled = (a.wins || 0) + (a.losses || 0) + (a.pushes || 0) + (a.voids || 0);
+    const decided = (a.wins || 0) + (a.losses || 0); // win-rate ignores push/void
+    const winRate = decided > 0 ? Math.round((a.wins / decided) * 1000) / 10 : null;
+
+    res.json({
+      total: a.total || 0,
+      pending: a.pending || 0,
+      wins: a.wins || 0,
+      losses: a.losses || 0,
+      pushes: a.pushes || 0,
+      voids: a.voids || 0,
+      settled,
+      win_rate: winRate, // null when no decided picks yet
+      units_pnl: parseFloat((a.units_pnl || 0).toString()),
+      current_run: currentRun,
+      longest_run: longestRun,
+      active_picks: active,
+    });
+  } catch (err) {
+    console.error('[challenges/me]', err.message);
+    res.status(500).json({ error: 'Failed to load record' });
+  }
+});
+
+// GET /api/challenges/recent — public picks feed across all users.
+// Powers a "live picks" strip on the page so visitors see momentum
+// (real users locking real calls) before they sign up. Last 30 picks,
+// joined with display_name + team info. Public — no auth.
+app.get('/api/challenges/recent', async (req, res) => {
+  try {
+    if (!pool) return res.json({ picks: [] });
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 30);
+    const sport = (req.query.sport || 'nba').toLowerCase();
+    const rows = await dbQuery(
+      `SELECT p.id, p.bet_type, p.side, p.line, p.odds, p.units, p.locked_at,
+              p.settlement_status, p.settled_units,
+              u.display_name, u.handle, u.avatar_url,
+              g.id AS game_id, g.starts_at, g.status,
+              home.abbreviation AS home_abbr, away.abbreviation AS away_abbr
+         FROM picks p
+         JOIN users u ON u.id = p.user_id
+         JOIN sport_games g ON g.id = p.game_id
+         LEFT JOIN sport_teams home ON home.id = g.home_team_id
+         LEFT JOIN sport_teams away ON away.id = g.away_team_id
+        WHERE p.sport = $1
+        ORDER BY p.locked_at DESC
+        LIMIT $2`,
+      [sport, limit]
+    ).catch(() => []);
+    res.json({ picks: rows, sport });
+  } catch (err) {
+    console.error('[challenges/recent]', err.message);
+    res.status(500).json({ error: 'Failed to load recent picks' });
+  }
+});
+
+// GET /api/challenges/leaderboard — alias around the existing
+// /api/sports-predictors/leaderboard so the challenges page reads a
+// single /api/challenges/* namespace. Same gating, same data.
+app.get('/api/challenges/leaderboard', async (req, res) => {
+  try {
+    if (!pool) return res.json({ gated: true, reason: 'no_db' });
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const rows = await dbQuery(`
+      SELECT sfs.user_id, sfs.score, sfs.settled_bets, sfs.net_units,
+             sfs.distinct_sports, sfs.distinct_bet_types, sfs.avg_clv_cents,
+             u.display_name, u.handle, u.avatar_url
+        FROM sports_flex_scores sfs
+        JOIN users u ON u.id = sfs.user_id
+       WHERE sfs.qualifies = TRUE AND sfs.score IS NOT NULL
+       ORDER BY sfs.score DESC, sfs.net_units DESC
+       LIMIT $1`, [limit]).catch(() => []);
+    if (rows.length < 3) {
+      return res.json({ gated: true, reason: 'insufficient_sample', qualifying: rows.length, min_qualifiers: 3 });
+    }
+    rows.forEach((r, i) => { r.rank = i + 1; });
+    res.json({ gated: false, leaders: rows });
+  } catch (err) {
+    console.error('[challenges/leaderboard]', err.message);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
   }
 });
 
@@ -29434,6 +29673,8 @@ app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
+app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges.html')));
+app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges.html')));
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
