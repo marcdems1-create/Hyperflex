@@ -19149,6 +19149,89 @@ app.get('/api/predictions/mine', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/me/loop — single-fetch payload for the "Your Loop" card on /feed.
+// Returns the user's loop progression — what's pending, what's settled this
+// week, what they won, plus login streak + total predictions for empty-state
+// detection. Does NOT return the FLEX score itself per voice charter (FLEX
+// Score appears on profiles + leaderboards only). Loop card uses *deltas and
+// progression* to give users a reason to come back.
+app.get('/api/me/loop', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    let total = 0, pending = 0, postedWeek = 0, settledWeek = 0, wonWeek = 0;
+    let streakDays = 0;
+
+    if (pool) {
+      // Single SQL hit — five aggregates against the predictions table.
+      const aggRows = await dbQuery(
+        `SELECT
+           COUNT(*)::int                                                                  AS total,
+           COUNT(*) FILTER (WHERE outcome IS NULL)::int                                   AS pending,
+           COUNT(*) FILTER (WHERE posted_at > $2)::int                                    AS posted_week,
+           COUNT(*) FILTER (WHERE outcome IN ('correct','incorrect') AND resolved_at > $2)::int AS settled_week,
+           COUNT(*) FILTER (WHERE outcome = 'correct' AND resolved_at > $2)::int          AS won_week
+         FROM predictions
+         WHERE user_id = $1`,
+        [uid, sevenDaysAgo]
+      ).catch(e => {
+        // predictions table may not exist on a fresh env — soft-fall to zeros.
+        console.warn('[me/loop] predictions agg failed:', e.message);
+        return [];
+      });
+      const a = (aggRows || [])[0] || {};
+      total       = a.total       || 0;
+      pending     = a.pending     || 0;
+      postedWeek  = a.posted_week || 0;
+      settledWeek = a.settled_week || 0;
+      wonWeek     = a.won_week     || 0;
+
+      const streakRows = await dbQuery(
+        'SELECT login_streak FROM users WHERE id = $1',
+        [uid]
+      ).catch(() => []);
+      streakDays = (streakRows[0] && streakRows[0].login_streak) || 0;
+    } else if (supabase) {
+      // Supabase fallback — five separate count queries (no aggregate-with-FILTER).
+      const all = await supabase.from('predictions').select('id,outcome,posted_at,resolved_at').eq('user_id', uid);
+      const rows = (all && all.data) || [];
+      total = rows.length;
+      for (const r of rows) {
+        if (r.outcome == null) pending++;
+        if (r.posted_at && r.posted_at > sevenDaysAgo) postedWeek++;
+        if (r.resolved_at && r.resolved_at > sevenDaysAgo) {
+          if (r.outcome === 'correct' || r.outcome === 'incorrect') settledWeek++;
+          if (r.outcome === 'correct') wonWeek++;
+        }
+      }
+      const u = await supabase.from('users').select('login_streak').eq('id', uid).maybeSingle();
+      streakDays = (u && u.data && u.data.login_streak) || 0;
+    }
+
+    // Win-rate this week — only meaningful if settled count > 0
+    const winRateWeek = settledWeek > 0 ? Math.round((wonWeek / settledWeek) * 100) : null;
+
+    res.json({
+      total,
+      pending,
+      posted_week: postedWeek,
+      settled_week: settledWeek,
+      won_week: wonWeek,
+      win_rate_week: winRateWeek,
+      streak_days: streakDays,
+      // State hint for the client — saves a branch:
+      //   'empty'    — never posted; show first-take CTA
+      //   'building' — posted < 3; show "build your record" copy
+      //   'active'   — posted 3+; show full loop digest
+      state: total === 0 ? 'empty' : total < 3 ? 'building' : 'active',
+    });
+  } catch (err) {
+    console.error('[me/loop]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/predictions/:id — single prediction
 app.get('/api/predictions/:id', async (req, res) => {
   try {

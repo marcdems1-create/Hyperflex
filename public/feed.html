@@ -262,6 +262,154 @@ a:hover { text-decoration: underline; }
   color: var(--text-faint);
 }
 
+/* ── Your Loop card ───────────────────────────────────────────────── */
+/* Lives in the left rail under "Resolving Soon". Three states keyed
+   off /api/me/loop's `state` field:
+     'empty'    → first-take CTA (visitor or signed-in with 0 takes)
+     'building' → 1-2 takes posted, copy nudges toward 3
+     'active'   → 3+ takes, full digest with pending / week / streak.
+   No FLEX score number rendered (voice charter: profile/leaderboard
+   only). The user has to click through to see it — that's a feature.
+   Visitor (logged-out) gets a 4th anonymized state with the network's
+   top-predictor numbers so they see what the loop pays out. */
+
+.loop-card {
+  position: relative;
+  display: block;
+  padding: 14px 14px 12px;
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(168,85,247,0.06), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008));
+  border: 1px solid rgba(168,85,247,0.18);
+  text-decoration: none; color: inherit;
+  transition: border-color .18s, transform .18s;
+}
+.loop-card:hover { border-color: rgba(168,85,247,0.40); transform: translateY(-1px); text-decoration: none; }
+.loop-card.empty { border-color: rgba(201,146,13,0.20); background: radial-gradient(120% 80% at 50% 0%, rgba(201,146,13,0.05), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008)); }
+.loop-card.empty:hover { border-color: rgba(201,146,13,0.40); }
+
+.loop-stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.loop-stat {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.loop-stat-label {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.08em;
+  color: var(--text-faint); text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.loop-stat-val {
+  font-size: 18px; font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.loop-stat-val.up   { color: #00e68a; }
+.loop-stat-val.down { color: #ff4d6a; }
+.loop-stat-val.warn { color: #f59e0b; }
+.loop-stat-sub {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-faint); letter-spacing: 0.04em;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+/* Active state — single-row pending takes pulse, signals "this is what
+   you came back for". Pulses subtly so users notice without it feeling
+   like a notification. */
+.loop-pending {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px;
+  margin-bottom: 10px;
+  background: rgba(245,166,35,0.07);
+  border: 1px solid rgba(245,166,35,0.22);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+}
+.loop-pending-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245,166,35,0.7);
+  animation: pulse 1.4s infinite;
+  flex-shrink: 0;
+}
+.loop-pending-num { font-size: 13px; font-weight: 800; color: #f5a623; font-variant-numeric: tabular-nums; }
+.loop-pending-label { color: var(--text-dim); font-weight: 700; letter-spacing: 0.04em; }
+.loop-pending-arrow { margin-left: auto; color: var(--text-faint); font-size: 13px; }
+
+/* Streak strip — "you've shown up N days; one miss breaks it" — loss-aversion lever. */
+.loop-streak {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.loop-streak-days { font-weight: 800; color: #c9920d; font-variant-numeric: tabular-nums; }
+.loop-streak-label { letter-spacing: 0.06em; }
+.loop-streak-warn { color: #ff4d6a; margin-left: auto; font-weight: 700; letter-spacing: 0.06em; }
+
+/* Empty / building / visitor body — tighter spacing, single CTA */
+.loop-cta-body {
+  margin-bottom: 10px;
+}
+.loop-cta-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 6px;
+  letter-spacing: -0.005em;
+}
+.loop-cta-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px; font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.loop-cta-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #000;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 800;
+  letter-spacing: 0.01em;
+  border: none; cursor: pointer;
+  text-decoration: none;
+  transition: background .15s, transform .12s;
+}
+.loop-cta-btn:hover { background: #e0a820; transform: translateY(-1px); text-decoration: none; }
+.loop-cta-btn.purple { background: #a855f7; color: #fff; }
+.loop-cta-btn.purple:hover { background: #b96cf9; }
+
+/* Visitor anonymized loop — small footer note framing the numbers */
+.loop-visitor-foot {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; font-weight: 700;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
 /* ──────────────────────────────────────────────────────────────────── */
 /* Right rail — TOP PREDICTORS. Parallels the left's three-rhythm stack */
 /* with a different accent palette (purple for verified predictors vs.  */
@@ -1518,6 +1666,22 @@ a:hover { text-decoration: underline; }
     <div class="rail-sep"></div>
     <div id="resolvingSlot">
       <div class="rail-empty">—</div>
+    </div>
+  </div>
+
+  <!-- YOUR LOOP section — fills the empty rail space below "Resolving Soon"
+       and gives users a personal reason to return. Three states keyed off
+       /api/me/loop's `state` field; visitors get an anonymized 4th state
+       backed by the network's top-predictor numbers. -->
+  <div class="rail-section">
+    <div class="rail-head">
+      <span class="rail-head-dot" style="background:#a855f7;box-shadow:0 0 10px rgba(168,85,247,0.7)"></span>
+      <span style="color:#a855f7">Your Loop</span>
+      <span class="rail-head-age" id="loopAge">—</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="loopSlot">
+      <div class="rail-empty">Loading…</div>
     </div>
   </div>
 </div>
@@ -3211,6 +3375,7 @@ async function deleteMyPrediction(predId, btn) {
   loadTopPredictors();   // right rail — verified predictors, 7d
   loadWhaleMoves();      // right rail — biggest whale positions, live
   loadDailyPick();       // right rail — daily pick widget
+  loadYourLoop();        // left rail — personal progression card
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
   // Refresh predictors every 5 min (stats don't tick by the second)
@@ -3218,6 +3383,9 @@ async function deleteMyPrediction(predId, btn) {
   // Whale positions refresh every 60s (backend cache is 10 min but we
   // still want the rail to feel alive)
   setInterval(loadWhaleMoves, 60 * 1000);
+  // Loop card refreshes every 2 min — pending takes resolving is the
+  // primary return-visit hook; surface it the moment something settles.
+  setInterval(loadYourLoop, 2 * 60 * 1000);
 })();
 
 // ── Left rail: Hot Alpha + Resolving Soon ──
@@ -3503,6 +3671,184 @@ function tickAlphaAge() {
   if (sec < 60) el.textContent = sec + 's ago';
   else if (sec < 3600) el.textContent = Math.round(sec / 60) + 'm ago';
   else el.textContent = '—';
+}
+
+// ── Your Loop card ───────────────────────────────────────────────────
+// Single-fetch render of the user's personal progression. Three states:
+//   visitor   — logged-out; show network top-predictor numbers + signup CTA
+//   empty     — signed in, no takes ever; first-take CTA
+//   building  — 1-2 takes; "build your record" copy with mini-stats
+//   active    — 3+ takes; full digest (pending pulse + week stats + streak)
+// Refreshed on a 2-min interval so a settling take surfaces quickly.
+function renderYourLoop(data, isVisitor) {
+  var slot = document.getElementById('loopSlot');
+  var ageEl = document.getElementById('loopAge');
+  if (!slot) return;
+  if (ageEl) ageEl.textContent = isVisitor ? 'preview' : 'live';
+
+  // ── Visitor state ─────────────────────────────────────────────────
+  // Anonymized peek at what the loop produces. Pulls top predictor's
+  // numbers from the right rail (which has already loaded) so visitors
+  // see a real, non-zero number — that's social proof, not a marketing
+  // claim. If the rail hasn't loaded yet, fall back to neutral copy.
+  if (isVisitor) {
+    var topPnl = '—', topWR = '—', topSettled = '—';
+    if (Array.isArray(window._predRailData) && window._predRailData.length) {
+      var top = window._predRailData[0];
+      if (top.win_rate != null)  topWR = top.win_rate + '%';
+      if (top.total_predictions) topSettled = top.total_predictions;
+      if (top.pnl_pts != null) {
+        var p = Math.round(top.pnl_pts);
+        topPnl = (p >= 0 ? '+' : '') + p;
+      }
+    }
+    slot.innerHTML =
+      '<a class="loop-card empty" href="/creator/login">' +
+        '<div class="loop-cta-body">' +
+          '<div class="loop-cta-title">Build a track record. Backed by real money.</div>' +
+          '<div class="loop-cta-sub">Post a take. Get scored when the market resolves. Earn followers.</div>' +
+        '</div>' +
+        '<div class="loop-stat-row">' +
+          '<div class="loop-stat">' +
+            '<div class="loop-stat-label">Top Predictor WR</div>' +
+            '<div class="loop-stat-val up">' + esc(topWR) + '</div>' +
+            '<div class="loop-stat-sub">7d · verified</div>' +
+          '</div>' +
+          '<div class="loop-stat">' +
+            '<div class="loop-stat-label">Settled Takes</div>' +
+            '<div class="loop-stat-val">' + esc(topSettled) + '</div>' +
+            '<div class="loop-stat-sub">All time</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="loop-cta-btn">Get started free →</div>' +
+        '<div class="loop-visitor-foot">Free · No wallet needed</div>' +
+      '</a>';
+    return;
+  }
+
+  // ── Signed-in: empty / building / active ──────────────────────────
+  if (!data) {
+    slot.innerHTML = '<div class="rail-empty">—</div>';
+    return;
+  }
+
+  var state = data.state || (data.total === 0 ? 'empty' : data.total < 3 ? 'building' : 'active');
+
+  if (state === 'empty') {
+    slot.innerHTML =
+      '<a class="loop-card empty" href="#" onclick="event.preventDefault();openFeedPostPicker()">' +
+        '<div class="loop-cta-body">' +
+          '<div class="loop-cta-title">Post your first prediction.</div>' +
+          '<div class="loop-cta-sub">One take starts your record. Resolution scores it. Tier ladder begins.</div>' +
+        '</div>' +
+        '<div class="loop-cta-btn">Post a prediction →</div>' +
+      '</a>';
+    return;
+  }
+
+  // Common stat tiles for building + active
+  var settledLabel = data.settled_week > 0 ? data.settled_week + ' settled' : 'None resolved yet';
+  var winRateHtml;
+  if (data.win_rate_week != null && data.settled_week > 0) {
+    var wrCls = data.win_rate_week >= 60 ? 'up' : data.win_rate_week >= 40 ? '' : 'down';
+    winRateHtml =
+      '<div class="loop-stat">' +
+        '<div class="loop-stat-label">Win Rate · 7d</div>' +
+        '<div class="loop-stat-val ' + wrCls + '">' + data.win_rate_week + '%</div>' +
+        '<div class="loop-stat-sub">' + esc(settledLabel) + '</div>' +
+      '</div>';
+  } else {
+    winRateHtml =
+      '<div class="loop-stat">' +
+        '<div class="loop-stat-label">Win Rate · 7d</div>' +
+        '<div class="loop-stat-val" style="color:var(--text-faint)">—</div>' +
+        '<div class="loop-stat-sub">' + esc(settledLabel) + '</div>' +
+      '</div>';
+  }
+  var postedHtml =
+    '<div class="loop-stat">' +
+      '<div class="loop-stat-label">Posted · 7d</div>' +
+      '<div class="loop-stat-val">' + (data.posted_week || 0) + '</div>' +
+      '<div class="loop-stat-sub">Of ' + (data.total || 0) + ' total</div>' +
+    '</div>';
+
+  // Pending pulse — the dopamine hook for active users
+  var pendingHtml = '';
+  if (data.pending > 0) {
+    pendingHtml =
+      '<div class="loop-pending">' +
+        '<span class="loop-pending-dot"></span>' +
+        '<span class="loop-pending-num">' + data.pending + '</span>' +
+        '<span class="loop-pending-label">pending resolution</span>' +
+        '<span class="loop-pending-arrow">→</span>' +
+      '</div>';
+  }
+
+  // Streak strip — loss-aversion lever. Warn if streak ≥ 3 (worth losing).
+  var streakHtml = '';
+  if (data.streak_days >= 1) {
+    var warn = data.streak_days >= 3
+      ? '<span class="loop-streak-warn">Don\'t break it</span>'
+      : '';
+    streakHtml =
+      '<div class="loop-streak">' +
+        '<span class="loop-streak-days">' + data.streak_days + '</span>' +
+        '<span class="loop-streak-label">day streak</span>' +
+        warn +
+      '</div>';
+  }
+
+  // Building state — fewer stats, more nudge to keep posting
+  if (state === 'building') {
+    var needed = 3 - (data.total || 0);
+    slot.innerHTML =
+      '<a class="loop-card" href="#" onclick="event.preventDefault();openFeedPostPicker()">' +
+        '<div class="loop-cta-body">' +
+          '<div class="loop-cta-title">' + needed + ' more to unlock your record</div>' +
+          '<div class="loop-cta-sub">Track record stabilises after 3 settled takes. Post the next one.</div>' +
+        '</div>' +
+        pendingHtml +
+        '<div class="loop-stat-row">' + postedHtml + winRateHtml + '</div>' +
+        streakHtml +
+      '</a>';
+    return;
+  }
+
+  // Active state — the full loop digest. Card links to the user's own
+  // profile so they can see their FLEX score there (per voice charter,
+  // FLEX number lives on profiles only — not in this card).
+  var profileHref = window._myUserId ? '/m/' + encodeURIComponent(window._myUserId) : '/m/me';
+  slot.innerHTML =
+    '<a class="loop-card" href="' + profileHref + '">' +
+      pendingHtml +
+      '<div class="loop-stat-row">' + postedHtml + winRateHtml + '</div>' +
+      streakHtml +
+    '</a>';
+}
+
+async function loadYourLoop() {
+  var slot = document.getElementById('loopSlot');
+  if (!slot) return;
+  if (!token) {
+    renderYourLoop(null, true);
+    return;
+  }
+  // Cache myUserId from JWT for the active-state profile link.
+  if (!window._myUserId) {
+    try {
+      var payload = JSON.parse(atob(token.split('.')[1]));
+      window._myUserId = payload.sub || payload.id || payload.user_id || null;
+    } catch (e) { /* ignore */ }
+  }
+  try {
+    var r = await fetch(API + '/api/me/loop', { headers: authHeaders() });
+    if (!r.ok) throw new Error('me/loop ' + r.status);
+    var data = await r.json();
+    renderYourLoop(data, false);
+  } catch (err) {
+    console.warn('[your-loop] load failed:', err.message);
+    slot.innerHTML = '<div class="rail-empty">Loop unavailable</div>';
+  }
 }
 
 // ── Daily Pick widget ──
@@ -4026,6 +4372,14 @@ async function loadTopPredictors() {
     }
     hero.innerHTML = renderPredictorHero(items[0]);
     ranks.innerHTML = renderPredictorRanks(items.slice(1, 5));
+    // Expose for the Your Loop visitor state — anonymized social proof
+    // pulls real numbers from the same data the rail just rendered.
+    window._predRailData = items;
+    if (!token && typeof loadYourLoop === 'function') {
+      // Re-render the loop card now that we have visitor numbers; the
+      // initial render fired before this data was available.
+      try { renderYourLoop(null, true); } catch (e) { /* harmless */ }
+    }
   } catch (err) {
     hero.innerHTML = '<div class="rail-empty">Leaderboard unavailable</div>';
     ranks.innerHTML = '';
