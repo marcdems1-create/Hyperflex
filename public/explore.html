@@ -3734,9 +3734,16 @@ function renderTakeCard(t) {
       (priceDisplay ? '<span class="take-price">' + priceDisplay + '</span>' : '') +
       '</a>';
   } else if (t.question) {
-    marketLink = '<div class="take-market-link" style="cursor:default">' +
-      '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
-      '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
+    // No market_slug → render as plain inline text, NOT a card-styled div.
+    // Previously this rendered as <div class="take-market-link"> which looked
+    // identical to the clickable link but had no href. On mobile, users tap
+    // the card-shaped thing expecting it to navigate; with no href + no
+    // handler, the tap bubbles up and some browsers treat it as a focus
+    // shift, scrolling to top of page. Fix: visually distinct treatment so
+    // users see it's not a link.
+    marketLink = '<div style="margin-top:6px;font-size:13px;color:var(--text);line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+      '<span style="font-weight:600">' + escHtml(t.question) + '</span>' +
+      '<span class="take-side-pill ' + sideClass + '" style="font-size:10px;padding:2px 6px">' + (t.side || '').toUpperCase() + '</span>' +
       '</div>';
   }
 
