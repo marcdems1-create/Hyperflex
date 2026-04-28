@@ -5381,6 +5381,7 @@ async function executeTrade() {
     }
     var requestBody = JSON.stringify({
       deferExec: false,
+      postOnly: false,
       order: orderJson,
       owner: apiKey,
       orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FAK' : 'GTC'
@@ -5433,6 +5434,7 @@ async function executeTrade() {
           apiPassphrase = localStorage.getItem('poly_api_passphrase');
           var retryBody = JSON.stringify({
             deferExec: false,
+            postOnly: false,
             order: JSON.parse(requestBody).order,
             owner: apiKey,
             orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FAK' : 'GTC'
