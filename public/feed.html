@@ -36,7 +36,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-s
 a { color: var(--gold); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.layout { max-width: 1320px; margin: 0 auto; padding: 80px 0 60px; display: flex; gap: 0; min-height: 100vh; }
+.layout { max-width: 1440px; margin: 0 auto; padding: 80px 0 60px; display: flex; gap: 0; min-height: 100vh; }
 .feed-col { flex: 1; max-width: 600px; border-left: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); min-width: 0; }
 .sidebar-col { width: 350px; flex-shrink: 0; padding: 16px 20px; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
 .sidebar-col::-webkit-scrollbar { width: 0; }
@@ -558,6 +558,153 @@ a:hover { text-decoration: underline; }
 .mobile-alpha-yes.up { color: #00e68a; }
 .mobile-alpha-yes.down { color: #ff4d6a; }
 .mobile-alpha-vol { color: var(--text-faint); }
+
+/* ── Desktop Alpha Cards Row ──────────────────────────────────────────── */
+/* Horizontal-scroll row of edge cards that lives at the top of the feed
+   column on desktop (≥1200px) — mirrors the /alpha-live card vocabulary
+   (rank glow, score+label, badge row, question, trade strip) but compact
+   enough to fit four-across in the feed-col. Hides under 1200px where
+   the mobile-alpha-strip takes over (single source of truth per width). */
+.feed-alpha-row {
+  display: none;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 6px;
+}
+.feed-alpha-row-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: #00e68a; text-transform: uppercase;
+}
+.feed-alpha-row-head-dot { width: 7px; height: 7px; border-radius: 50%; background: #00e68a; box-shadow: 0 0 10px rgba(0,230,138,0.7); animation: pulse 1.4s infinite; flex-shrink: 0; }
+.feed-alpha-row-head-age { color: var(--text-faint); font-size: 9px; letter-spacing: 0.1em; font-weight: 700; }
+.feed-alpha-row-head-more {
+  margin-left: auto;
+  color: var(--text-faint);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  font-weight: 700;
+  transition: color .15s;
+}
+.feed-alpha-row-head-more:hover { color: var(--gold); text-decoration: none; }
+
+.feed-alpha-scroller {
+  display: flex; gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 2px 8px;
+}
+.feed-alpha-scroller::-webkit-scrollbar { display: none; }
+
+/* Edge card — alpha-live vocabulary, compact. Rank-1 gets a green aura
+   (top edge), rank-2 blue, rank-3 purple — mirrors alpha-live exactly so
+   users learn the rhythm in one place and recognise it everywhere. */
+.feed-edge-card {
+  flex: 0 0 auto;
+  width: 260px;
+  scroll-snap-align: start;
+  background: rgba(22,22,31,0.8);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 12px 13px 11px;
+  text-decoration: none; color: inherit;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.feed-edge-card:hover {
+  border-color: rgba(77,159,255,0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  text-decoration: none;
+}
+.feed-edge-card.rank-1 {
+  border-color: rgba(0,230,138,0.30);
+  background: linear-gradient(180deg, rgba(0,230,138,0.05), rgba(22,22,31,0.85));
+}
+.feed-edge-card.rank-2 { border-color: rgba(77,159,255,0.22); }
+.feed-edge-card.rank-3 { border-color: rgba(168,85,247,0.22); }
+
+.feed-edge-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px;
+}
+.feed-edge-score-wrap { display: flex; align-items: baseline; gap: 7px; }
+.feed-edge-score {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 26px; font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold, #c9920d);
+  letter-spacing: -0.01em;
+}
+.feed-edge-score.high { color: #00e68a; }
+.feed-edge-score.mid  { color: #4d9fff; }
+.feed-edge-score.low  { color: var(--text-faint); }
+.feed-edge-score-l {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.feed-edge-rank {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.feed-edge-badges {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 8px;
+  min-height: 18px;
+}
+.feed-edge-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.feed-edge-badge.whale    { background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid rgba(168,85,247,0.25); }
+.feed-edge-badge.volume   { background: rgba(77,159,255,0.10); color: #4d9fff; border: 1px solid rgba(77,159,255,0.25); }
+.feed-edge-badge.momentum { background: rgba(0,230,138,0.10);  color: #00e68a; border: 1px solid rgba(0,230,138,0.25); }
+.feed-edge-badge.momentum.down { background: rgba(255,77,106,0.10); color: #ff4d6a; border-color: rgba(255,77,106,0.25); }
+.feed-edge-badge.depth    { background: rgba(245,158,11,0.10); color: #f59e0b; border: 1px solid rgba(245,158,11,0.25); }
+
+.feed-edge-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 600;
+  color: var(--text);
+  line-height: 1.32;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 9px;
+  min-height: 34px;
+  letter-spacing: -0.005em;
+}
+
+.feed-edge-strip {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 700;
+  color: var(--text-dim);
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.feed-edge-strip .entry { color: var(--text); }
+.feed-edge-strip .arrow { color: var(--text-faint); }
+.feed-edge-strip .roi   { color: #f59e0b; font-weight: 800; margin-left: auto; }
+
+/* Show on desktop — hide on the same widths where mobile-alpha-strip takes over */
+@media (min-width: 1200px) {
+  .feed-alpha-row { display: block; }
+}
 
 @media (max-width: 1199px) and (min-width: 521px) { .mobile-alpha-strip { display: block; } }
 @media (max-width: 520px) {
@@ -1376,6 +1523,24 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div class="feed-col">
+
+  <!-- Desktop Hot Alpha row — horizontal-scroll edge cards using the
+       /alpha-live card vocabulary. Same data source as the left rail
+       (loadHotAlpha → _alphaAllItems), different rhythm: the rail is a
+       vertical hierarchy (#1 hero + ranks), this row is parallel cards
+       you can scan side-by-side. Hides under 1200px (mobile strip
+       takes over). -->
+  <div class="feed-alpha-row" id="feedAlphaRow">
+    <div class="feed-alpha-row-head">
+      <span class="feed-alpha-row-head-dot"></span>
+      <span>Hot Alpha</span>
+      <span class="feed-alpha-row-head-age" id="feedAlphaRowAge">—</span>
+      <a href="/alpha-live" class="feed-alpha-row-head-more">View All Edge ↗</a>
+    </div>
+    <div class="feed-alpha-scroller" id="feedAlphaScroller">
+      <div class="rail-empty" style="padding:20px 8px;color:var(--text-faint);font-size:12px">Scanning edge…</div>
+    </div>
+  </div>
 
   <!-- Visitor CTA — shown only when logged out -->
   <div id="visitorCta" style="display:none;background:linear-gradient(135deg,rgba(201,146,13,0.12),rgba(168,85,247,0.08));border:1px solid rgba(201,146,13,0.3);border-radius:12px;padding:20px 22px;margin-bottom:14px">
@@ -3145,6 +3310,90 @@ function renderAlphaHero(m) {
   '</a>';
 }
 
+// Desktop Hot Alpha row — same data as the left rail, parallel-card rhythm.
+// Mirrors /alpha-live's edge-card vocabulary (rank glow, score+label, badge
+// row, question, trade strip with entry → win → ROI). Compact: 260px cards
+// that fit four-across in the feed-col on a 1440-max layout.
+function renderFeedAlphaRow(items) {
+  var scroller = document.getElementById('feedAlphaScroller');
+  var ageEl = document.getElementById('feedAlphaRowAge');
+  if (!scroller) return;
+  if (ageEl && _alphaLastFetchMs) {
+    var sec = Math.max(0, Math.round((Date.now() - _alphaLastFetchMs) / 1000));
+    ageEl.textContent = sec < 60 ? sec + 's ago' : Math.round(sec / 60) + 'm ago';
+  }
+  if (!items || !items.length) {
+    scroller.innerHTML = '<div class="rail-empty" style="padding:20px 8px;color:var(--text-faint);font-size:12px">No live edge right now</div>';
+    return;
+  }
+
+  scroller.innerHTML = items.slice(0, 10).map(function(m, i) {
+    var score = Math.max(0, Math.round(Number(m.edge_score) || 0));
+    // Score color tier — matches alpha-live: ≥60 high (green), ≥35 mid (blue), else low.
+    var scoreClass = score >= 60 ? 'high' : score >= 35 ? 'mid' : 'low';
+    // Rank-1 green aura, rank-2 blue, rank-3 purple — same as alpha-live.
+    var rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+
+    // Build the link with alpha-prefill params so /market/:slug opens the
+    // trade widget pre-loaded with side + Kelly size.
+    var href = '/screener';
+    if (m.slug) {
+      var t = m.trade || {};
+      var params = ['from=alpha'];
+      if (m.market_id) params.push('outcome=' + encodeURIComponent(m.market_id));
+      if (t.side) params.push('side=' + String(t.side).toLowerCase());
+      if (t.recommended_size_usd) params.push('size=' + t.recommended_size_usd);
+      href = '/market/' + encodeURIComponent(m.slug) + '?' + params.join('&');
+    }
+
+    // Badge row: whales, vol, momentum (up/down). Capped at 3 to keep the
+    // card from wrapping its question.
+    var badges = [];
+    var whaleCount = Number(m.whale_count || 0);
+    if (whaleCount > 0) badges.push('<span class="feed-edge-badge whale">' + whaleCount + ' whales</span>');
+    var volLabel = _shortVol(m.volume24hr || m.volume_24h || 0);
+    if (volLabel) badges.push('<span class="feed-edge-badge volume">' + volLabel + '</span>');
+    var ec = m.edge_components || {};
+    var mom = Number(ec.momentum || 0);
+    if (Math.abs(mom) >= 4) {
+      var momCls = mom >= 0 ? 'momentum' : 'momentum down';
+      var momArrow = mom >= 0 ? '↑' : '↓';
+      badges.push('<span class="feed-edge-badge ' + momCls + '">' + momArrow + ' ' + Math.abs(Math.round(mom)) + '</span>');
+    }
+    badges = badges.slice(0, 3);
+
+    // Trade strip — entry → win → ROI. Same logic as alpha-live so the
+    // numbers a user sees here match what they'll see on the destination.
+    var trade = m.trade || {};
+    var mktPct = _readYesPct(m);
+    var entry = Number(trade.entry_cost) || mktPct || 0;
+    var win   = Number(trade.potential_profit) || (entry > 0 ? (100 - entry) : 0);
+    var roi   = Number(trade.roi_pct) || (entry > 0 ? Math.round(win / entry * 100) : 0);
+
+    var stripHtml = entry > 0
+      ? ('<div class="feed-edge-strip">' +
+          '<span class="entry">Pay ' + Math.round(entry) + '¢</span>' +
+          '<span class="arrow">→</span>' +
+          '<span>Win ' + Math.round(win) + '¢</span>' +
+          (roi > 0 ? '<span class="roi">' + roi + '% ROI</span>' : '') +
+        '</div>')
+      : '';
+
+    return '<a class="feed-edge-card ' + rankClass + '" href="' + href + '">' +
+      '<div class="feed-edge-top">' +
+        '<div class="feed-edge-score-wrap">' +
+          '<span class="feed-edge-score ' + scoreClass + '">' + score + '</span>' +
+          '<span class="feed-edge-score-l">Edge</span>' +
+        '</div>' +
+        '<span class="feed-edge-rank">#' + (i + 1) + '</span>' +
+      '</div>' +
+      (badges.length ? '<div class="feed-edge-badges">' + badges.join('') + '</div>' : '<div class="feed-edge-badges"></div>') +
+      '<div class="feed-edge-q">' + esc(m.question || m.title || '') + '</div>' +
+      stripHtml +
+    '</a>';
+  }).join('');
+}
+
 function renderMobileAlpha(items) {
   var scroller = document.getElementById('mobileAlphaScroller');
   if (!scroller) return;
@@ -3351,6 +3600,7 @@ async function loadHotAlpha() {
     }
     renderResolvingSoon(items);
     renderMobileAlpha(items);
+    renderFeedAlphaRow(items);
     tickAlphaAge();
     maybeShowAlphaDrop(items);
   } catch (err) {
