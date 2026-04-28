@@ -930,6 +930,214 @@ a:hover { text-decoration: underline; }
 .load-more-btn { display: block; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: all .15s; font-family: 'Inter', sans-serif; }
 .load-more-btn:hover { border-color: var(--purple-border); color: var(--text); }
 
+/* ── Alpha Drop modal ── */
+/* Lands on first visit (or when the #1 edge changes). One screen, one signal,
+   one primary CTA. Big tabular score, gradient aura keyed to tier, animated
+   count-up on the score number. Dry voice — no greetings, no exclamation. */
+.alpha-drop-overlay {
+  position: fixed; inset: 0;
+  background: radial-gradient(120% 80% at 50% 0%, rgba(201,146,13,0.08), rgba(0,0,0,0.78) 60%);
+  z-index: 1100;
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  transition: opacity .22s ease-out;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.alpha-drop-overlay.open { display: flex; opacity: 1; }
+.alpha-drop-overlay.tier-hot  { background: radial-gradient(120% 80% at 50% 0%, rgba(0,230,138,0.10), rgba(0,0,0,0.78) 60%); }
+.alpha-drop-overlay.tier-mega { background: radial-gradient(120% 80% at 50% 0%, rgba(255,77,106,0.12), rgba(0,0,0,0.80) 60%); }
+
+.alpha-drop {
+  position: relative;
+  width: 100%; max-width: 480px;
+  background:
+    radial-gradient(160% 100% at 50% 0%, rgba(201,146,13,0.10), transparent 55%),
+    linear-gradient(180deg, #15151c, #0f0f15);
+  border: 1px solid rgba(201,146,13,0.30);
+  border-radius: 18px;
+  padding: 22px 22px 20px;
+  overflow: hidden;
+  transform: scale(.94) translateY(8px);
+  opacity: 0;
+  transition: transform .32s cubic-bezier(.18,.9,.32,1.18), opacity .26s ease-out;
+  box-shadow: 0 30px 90px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02);
+}
+.alpha-drop-overlay.open .alpha-drop { transform: scale(1) translateY(0); opacity: 1; }
+.alpha-drop-overlay.tier-hot  .alpha-drop { border-color: rgba(0,230,138,0.32); background: radial-gradient(160% 100% at 50% 0%, rgba(0,230,138,0.10), transparent 55%), linear-gradient(180deg, #15151c, #0f0f15); }
+.alpha-drop-overlay.tier-mega .alpha-drop {
+  border-color: rgba(255,77,106,0.40);
+  background: radial-gradient(160% 100% at 50% 0%, rgba(255,77,106,0.13), transparent 55%), linear-gradient(180deg, #15151c, #0f0f15);
+  box-shadow: 0 30px 90px -20px rgba(255,77,106,0.30), 0 0 0 1px rgba(255,77,106,0.06);
+}
+
+/* Pan a subtle gloss across the card on open — signals "live", not decorative */
+.alpha-drop::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 38%, rgba(255,255,255,0.06) 50%, transparent 62%);
+  background-size: 220% 220%;
+  background-position: 150% 150%;
+  animation: alpha-drop-gloss 1.6s .15s ease-out forwards;
+}
+@keyframes alpha-drop-gloss {
+  to { background-position: -50% -50%; }
+}
+
+.alpha-drop-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-dim);
+  font-size: 14px; font-weight: 700; line-height: 1;
+  cursor: pointer; z-index: 2;
+  transition: background .15s, color .15s;
+}
+.alpha-drop-close:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
+.alpha-drop-head {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--gold); text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.alpha-drop-overlay.tier-hot  .alpha-drop-head { color: #00e68a; }
+.alpha-drop-overlay.tier-mega .alpha-drop-head { color: #ff4d6a; }
+.alpha-drop-head-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+  animation: pulse 1.4s infinite;
+}
+.alpha-drop-head-age { margin-left: auto; color: var(--text-faint); font-size: 9px; letter-spacing: 0.1em; font-weight: 700; }
+
+.alpha-drop-score-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.alpha-drop-score {
+  font-family: 'Inter', sans-serif;
+  font-size: 76px; font-weight: 900;
+  line-height: 0.92; letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: linear-gradient(180deg, #fff 0%, #c9c9d4 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.alpha-drop-score-suffix {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.alpha-drop-score-tier {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: auto;
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.1em;
+  background: rgba(201,146,13,0.12); color: var(--gold);
+  border: 1px solid rgba(201,146,13,0.28);
+  text-transform: uppercase;
+}
+.alpha-drop-overlay.tier-hot  .alpha-drop-score-tier { background: rgba(0,230,138,0.12); color: #00e68a; border-color: rgba(0,230,138,0.28); }
+.alpha-drop-overlay.tier-mega .alpha-drop-score-tier { background: rgba(255,77,106,0.14); color: #ff4d6a; border-color: rgba(255,77,106,0.32); }
+
+.alpha-drop-q {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px; font-weight: 600; color: var(--text);
+  line-height: 1.35; letter-spacing: -0.005em;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.alpha-drop-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.alpha-drop-metric {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 10px 11px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.alpha-drop-metric-label { font-size: 9px; font-weight: 800; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 4px; }
+.alpha-drop-metric-val { font-size: 16px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+.alpha-drop-metric-val.up   { color: #00e68a; }
+.alpha-drop-metric-val.down { color: #ff4d6a; }
+.alpha-drop-metric-sub { font-size: 9px; font-weight: 700; color: var(--text-faint); margin-top: 3px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Live ticker line — countdown to next resolution. Pulls focus to urgency. */
+.alpha-drop-resolving {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: rgba(245,166,35,0.06);
+  border: 1px solid rgba(245,166,35,0.18);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.alpha-drop-resolving-dot { width: 6px; height: 6px; border-radius: 50%; background: #f5a623; box-shadow: 0 0 8px rgba(245,166,35,0.7); animation: pulse 1.4s infinite; flex-shrink: 0; }
+.alpha-drop-resolving-clock { font-size: 11px; font-weight: 800; color: #f5a623; letter-spacing: 0.08em; }
+.alpha-drop-resolving-q { flex: 1; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.alpha-drop-actions { display: flex; gap: 10px; }
+.alpha-drop-cta {
+  flex: 2;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 16px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: #000;
+  font-weight: 800; font-size: 14px;
+  text-decoration: none;
+  border: none; cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.01em;
+  transition: background .15s, transform .12s;
+}
+.alpha-drop-cta:hover { background: #e0a820; transform: translateY(-1px); text-decoration: none; }
+.alpha-drop-overlay.tier-hot  .alpha-drop-cta { background: #00e68a; color: #001a10; }
+.alpha-drop-overlay.tier-hot  .alpha-drop-cta:hover { background: #1ff4a0; }
+.alpha-drop-overlay.tier-mega .alpha-drop-cta { background: #ff4d6a; color: #fff; }
+.alpha-drop-overlay.tier-mega .alpha-drop-cta:hover { background: #ff6680; }
+.alpha-drop-skip {
+  flex: 1;
+  padding: 13px 14px;
+  border-radius: 10px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--text-dim);
+  font-weight: 700; font-size: 13px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: color .15s, border-color .15s;
+}
+.alpha-drop-skip:hover { color: var(--text); border-color: rgba(255,255,255,0.20); }
+
+/* Mobile: snap to bottom-sheet on small screens, same content. */
+@media (max-width: 540px) {
+  .alpha-drop-overlay { align-items: flex-end; padding: 0; }
+  .alpha-drop {
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(40px);
+  }
+  .alpha-drop-overlay.open .alpha-drop { transform: translateY(0); }
+  .alpha-drop-score { font-size: 64px; }
+  .alpha-drop-q { font-size: 15px; }
+  .alpha-drop-metric-val { font-size: 14px; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    MOBILE REVAMP (≤640px) — 2026
    ────────────────────────────────────────────────────────────────────────
@@ -1475,6 +1683,35 @@ a:hover { text-decoration: underline; }
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('manualModal')">Cancel</button>
       <button class="btn-submit-manual" id="mSubmitBtn" onclick="submitManual()">Post Prediction</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alpha Drop popup — fires on first visit each day (or when the #1 edge changes
+     since last shown). One screen, one signal, one CTA. Voice: dry/numerate. -->
+<div class="alpha-drop-overlay" id="alphaDropOverlay" onclick="if(event.target===this)closeAlphaDrop()">
+  <div class="alpha-drop" id="alphaDropCard">
+    <button class="alpha-drop-close" onclick="closeAlphaDrop()" aria-label="Close">×</button>
+    <div class="alpha-drop-head">
+      <span class="alpha-drop-head-dot"></span>
+      <span id="alphaDropLabel">Top Edge</span>
+      <span class="alpha-drop-head-age" id="alphaDropDate">—</span>
+    </div>
+    <div class="alpha-drop-score-row">
+      <div class="alpha-drop-score" id="alphaDropScore">0</div>
+      <div class="alpha-drop-score-suffix">Edge<br>Score</div>
+      <span class="alpha-drop-score-tier" id="alphaDropTier">EDGE</span>
+    </div>
+    <div class="alpha-drop-q" id="alphaDropQ">—</div>
+    <div class="alpha-drop-metrics" id="alphaDropMetrics"></div>
+    <div class="alpha-drop-resolving" id="alphaDropResolving" style="display:none">
+      <span class="alpha-drop-resolving-dot"></span>
+      <span class="alpha-drop-resolving-clock" id="alphaDropResolvingClock">—</span>
+      <span class="alpha-drop-resolving-q" id="alphaDropResolvingQ">—</span>
+    </div>
+    <div class="alpha-drop-actions">
+      <a class="alpha-drop-cta" id="alphaDropCta" href="#" onclick="_alphaDropCtaClick()">Open trade →</a>
+      <button class="alpha-drop-skip" onclick="closeAlphaDrop()">See feed</button>
     </div>
   </div>
 </div>
@@ -3115,6 +3352,7 @@ async function loadHotAlpha() {
     renderResolvingSoon(items);
     renderMobileAlpha(items);
     tickAlphaAge();
+    maybeShowAlphaDrop(items);
   } catch (err) {
     heroSlot.innerHTML = '<div class="rail-empty">Edge rail unavailable</div>';
     rankSlot.innerHTML = '';
@@ -3129,6 +3367,195 @@ async function loadHotAlpha() {
 // until there's content).
 if (!_alphaAgeTimer) _alphaAgeTimer = setInterval(tickAlphaAge, 5000);
 if (!_resolvingTimer) _resolvingTimer = setInterval(tickResolvingCountdowns, 30000);
+
+// ── Alpha Drop popup ──
+// Lands users on the top edge before they scroll. Fires once per day, OR
+// whenever the #1 market changes after a 4h cooloff — so a refreshed alpha
+// during the day still pulls the user back. localStorage gates dismissal:
+//   hf_alpha_drop_v1_date   — last calendar date the drop fired (YYYY-MM-DD)
+//   hf_alpha_drop_v1_slug   — slug of the market last shown
+//   hf_alpha_drop_v1_ts     — ms timestamp last shown (for cooloff)
+// Honors ?nodrop=1 for testing. Score animates 0 → final over 600ms; resolving
+// strip pulls in the nearest <24h market for urgency.
+var _alphaDropShown = false;
+var _alphaDropCtaHref = '/alpha-live';
+var _ALPHA_DROP_KEY_DATE = 'hf_alpha_drop_v1_date';
+var _ALPHA_DROP_KEY_SLUG = 'hf_alpha_drop_v1_slug';
+var _ALPHA_DROP_KEY_TS   = 'hf_alpha_drop_v1_ts';
+var _ALPHA_DROP_COOLOFF_MS = 4 * 60 * 60 * 1000;
+
+function _alphaDropToday() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function _alphaDropShouldShow(top) {
+  if (_alphaDropShown) return false;
+  if (!top) return false;
+  try {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('nodrop') === '1') return false;
+    if (url.searchParams.get('drop') === '1') return true; // force-show for testing
+  } catch (e) {}
+  var slug = top.slug || top.conditionId || top.question || '';
+  var today = _alphaDropToday();
+  var lastDate = '', lastSlug = '', lastTs = 0;
+  try {
+    lastDate = localStorage.getItem(_ALPHA_DROP_KEY_DATE) || '';
+    lastSlug = localStorage.getItem(_ALPHA_DROP_KEY_SLUG) || '';
+    lastTs   = Number(localStorage.getItem(_ALPHA_DROP_KEY_TS) || 0);
+  } catch (e) {}
+  // First visit of the day → show.
+  if (lastDate !== today) return true;
+  // Same day but the top edge changed AND we're past the cooloff → show again.
+  if (slug && lastSlug && slug !== lastSlug && (Date.now() - lastTs) > _ALPHA_DROP_COOLOFF_MS) return true;
+  return false;
+}
+
+function _alphaDropMarkShown(top) {
+  try {
+    localStorage.setItem(_ALPHA_DROP_KEY_DATE, _alphaDropToday());
+    localStorage.setItem(_ALPHA_DROP_KEY_SLUG, top.slug || top.conditionId || top.question || '');
+    localStorage.setItem(_ALPHA_DROP_KEY_TS, String(Date.now()));
+  } catch (e) {}
+}
+
+function _alphaDropCountUp(el, target, ms) {
+  if (!el) return;
+  var start = performance.now();
+  var from = 0;
+  function step(t) {
+    var p = Math.min(1, (t - start) / ms);
+    // ease-out cubic
+    var eased = 1 - Math.pow(1 - p, 3);
+    var v = Math.round(from + (target - from) * eased);
+    el.textContent = v;
+    if (p < 1) requestAnimationFrame(step);
+    else el.textContent = target;
+  }
+  requestAnimationFrame(step);
+}
+
+function _alphaDropFmtVol(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
+  if (n > 0)    return '$' + Math.round(n);
+  return '—';
+}
+
+function maybeShowAlphaDrop(items) {
+  if (!Array.isArray(items) || !items.length) return;
+  var top = items[0];
+  if (!_alphaDropShouldShow(top)) return;
+  _alphaDropShown = true;
+
+  var overlay = document.getElementById('alphaDropOverlay');
+  var card    = document.getElementById('alphaDropCard');
+  if (!overlay || !card) return;
+
+  var score = Math.max(0, Math.round(Number(top.edge_score) || 0));
+  var tier  = score >= 90 ? 'mega' : score >= 75 ? 'hot' : '';
+  var tierLabel = tier === 'mega' ? 'Mega Edge' : tier === 'hot' ? 'Hot Edge' : 'Edge';
+  var headLabel = tier === 'mega' ? 'Mega Edge · Now' : tier === 'hot' ? 'Hot Edge · Now' : 'Top Edge · Now';
+
+  overlay.classList.remove('tier-hot', 'tier-mega');
+  if (tier) overlay.classList.add('tier-' + tier);
+
+  document.getElementById('alphaDropLabel').textContent = headLabel;
+  document.getElementById('alphaDropTier').textContent = tierLabel;
+  document.getElementById('alphaDropDate').textContent = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  document.getElementById('alphaDropQ').textContent = top.question || top.title || '';
+
+  // Metrics: YES%, 24h vol, whale count
+  var yesPct = _readYesPct(top);
+  var dir = yesPct != null && yesPct >= 50 ? 'up' : 'down';
+  var vol = top.volume24hr || top.volume_24h || top.volume || 0;
+  var whales = Number(top.whale_count || 0);
+  var capital = Number(top.total_whale_capital || 0);
+
+  var metricsEl = document.getElementById('alphaDropMetrics');
+  var capitalLabel = capital > 0 ? _alphaDropFmtVol(capital) : '—';
+  metricsEl.innerHTML =
+    '<div class="alpha-drop-metric">' +
+      '<div class="alpha-drop-metric-label">Yes</div>' +
+      '<div class="alpha-drop-metric-val ' + (yesPct != null ? dir : '') + '">' +
+        (yesPct != null ? (dir === 'up' ? '↑ ' : '↓ ') + yesPct + '¢' : '—') +
+      '</div>' +
+      '<div class="alpha-drop-metric-sub">Live</div>' +
+    '</div>' +
+    '<div class="alpha-drop-metric">' +
+      '<div class="alpha-drop-metric-label">24h Vol</div>' +
+      '<div class="alpha-drop-metric-val">' + _alphaDropFmtVol(vol) + '</div>' +
+      '<div class="alpha-drop-metric-sub">Liquidity</div>' +
+    '</div>' +
+    '<div class="alpha-drop-metric">' +
+      '<div class="alpha-drop-metric-label">Whales</div>' +
+      '<div class="alpha-drop-metric-val ' + (whales > 0 ? 'up' : '') + '">' + (whales || '—') + '</div>' +
+      '<div class="alpha-drop-metric-sub">' + (capital > 0 ? capitalLabel + ' aligned' : 'Top-50 aligned') + '</div>' +
+    '</div>';
+
+  // Resolving strip — nearest market expiring within 24h (excluding the
+  // hero so we don't show the same line twice).
+  var now = Date.now();
+  var CUTOFF = 24 * 60 * 60 * 1000;
+  var nearest = null;
+  for (var i = 0; i < items.length; i++) {
+    if (i === 0) continue;
+    var endMs = _closesMs(items[i]);
+    if (!endMs) continue;
+    var msLeft = endMs - now;
+    if (msLeft > 0 && msLeft <= CUTOFF) {
+      if (!nearest || msLeft < nearest.msLeft) nearest = { m: items[i], msLeft: msLeft };
+    }
+  }
+  var resolvingEl = document.getElementById('alphaDropResolving');
+  if (nearest) {
+    document.getElementById('alphaDropResolvingClock').textContent = _fmtCountdown(nearest.msLeft);
+    document.getElementById('alphaDropResolvingQ').textContent = nearest.m.question || nearest.m.title || '';
+    resolvingEl.style.display = 'flex';
+  } else {
+    resolvingEl.style.display = 'none';
+  }
+
+  // Wire CTA — open the actual market page on click.
+  var slug = top.slug || '';
+  _alphaDropCtaHref = slug ? '/market/' + encodeURIComponent(slug) : '/alpha-live';
+  var ctaEl = document.getElementById('alphaDropCta');
+  if (ctaEl) ctaEl.setAttribute('href', _alphaDropCtaHref);
+
+  overlay.classList.add('open');
+
+  // Lock body scroll while the drop is open.
+  document.body.style.overflow = 'hidden';
+
+  // Animate score after the card transition starts.
+  setTimeout(function() {
+    _alphaDropCountUp(document.getElementById('alphaDropScore'), score, 600);
+  }, 180);
+
+  _alphaDropMarkShown(top);
+
+  // ESC closes.
+  document.addEventListener('keydown', _alphaDropEscHandler);
+}
+
+function _alphaDropEscHandler(e) {
+  if (e.key === 'Escape') closeAlphaDrop();
+}
+
+function closeAlphaDrop() {
+  var overlay = document.getElementById('alphaDropOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', _alphaDropEscHandler);
+}
+
+function _alphaDropCtaClick() {
+  // Let the anchor navigate; just clear the lock so back-button returns clean.
+  document.body.style.overflow = '';
+}
 
 // ── Right rail: Top Predictors (verified) ──
 // Same data as /predictors leaderboard but filtered to wallet_verified
