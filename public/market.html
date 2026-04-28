@@ -4986,12 +4986,30 @@ async function executeTrade() {
     if (clobSide === 'BUY') {
       sideInt = 0;
       if (isMarketOrder) {
-        // Market BUY (FOK): CLOB requires makerAmount (USDC) ≤ 2 decimals,
+        // Market BUY (FAK): CLOB requires makerAmount (USDC) ≤ 2 decimals,
         // takerAmount (shares) ≤ 4 decimals — different from limit-order tick config.
         // Using user-entered USDC directly avoids the shares→maker float drift
         // (e.g. 65.22 × 0.23 = 15.0006, rejected as 4-decimal maker).
-        rawMakerAmt = roundDown(amount, 2);
-        rawTakerAmt = roundDown(amount / rawPrice, 4);
+        //
+        // V2 fee headroom: V2 fees are taker-only and added ON TOP of the
+        // order amount per migration doc. CLOB rejects with "balance not
+        // enough to cover the fee estimate" if the user's pUSD balance
+        // doesn't have headroom. Fee curve: fee = C × (feeRateBps/10000) ×
+        // p × (1-p) × order_amount, with C ≈ 0.65 observed on the silver/
+        // Lakers markets (1000bps). Reduce makerAmount by curve-computed
+        // ratio + 0.5% safety pad. Floor at 3% buffer for any feeRateBps>0
+        // to cover worst-case C and rounding. Floor doesn't apply if
+        // feeRateBps=0 (fee-free markets).
+        var v2BuyAmount = amount;
+        var feeRateBpsNum = Number(feeRateBps) || 0;
+        if (clobVersion === 2 && feeRateBpsNum > 0) {
+          var curve = (feeRateBpsNum / 10000) * rawPrice * (1 - rawPrice);
+          var feeBuffer = Math.max(curve + 0.005, 0.03); // 3% floor
+          v2BuyAmount = amount * (1 - feeBuffer);
+          console.log('[trade-v2] BUY fee headroom: input=$' + amount.toFixed(4) + ' buffer=' + (feeBuffer * 100).toFixed(2) + '% adjusted=$' + v2BuyAmount.toFixed(4) + ' (feeRateBps=' + feeRateBpsNum + ' p=' + rawPrice + ')');
+        }
+        rawMakerAmt = roundDown(v2BuyAmount, 2);
+        rawTakerAmt = roundDown(v2BuyAmount / rawPrice, 4);
       } else {
         // Limit BUY: taker = shares (rounded down), maker = taker × price
         rawTakerAmt = roundDown(shares, roundConfig.size);
