@@ -5,6 +5,50 @@
 
 ---
 
+## 2026-04-28 — Session 19 (Claude Code)
+
+### milestone: first V2 trade accepted by Polymarket CLOB (pre-cutover)
+- **When:** 2026-04-28 02:18:11 UTC (~9h before Polymarket's scheduled V2 cutover at ~11:00 UTC)
+- **Where:** market `mlb-nyy-tex-2026-04-27`, BUY side, 1.0 USDC → 1.0626 shares @ 94.1¢ limit (book walked from top-of-book 94.0¢ + 1 tick slippage)
+- **Order ID:** `0xc118b787f3e0e00eb26108cf0594c56a9535e443ecf6025e1a343d71c80657f3`
+- **Wallet:** EOA `0x43493952…`, proxy `0x51f0d8d8…` (POLY_GNOSIS_SAFE, sigType=2)
+- **Routed to:** `clob-v2.polymarket.com/order` → exchange `0xE111180000d2663C0091e4f400237545B87B996B` (CTF Exchange V2, non-NegRisk)
+- **Builder:** `0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c0992f3fd1eb49b8` attached in the bytes32 `builder` field of the signed struct ✓
+- **Response:** HTTP 200, `success:true`, `errorMsg:""`, `status:"delayed"`, `takingAmount:""`, `makingAmount:""`
+- **What confirms V2:**
+  - V2 order shape — `salt`, `maker`, `signer`, `tokenId`, `makerAmount`, `takerAmount`, `side`, `signatureType`, `timestamp` (ms), `metadata`, `builder`. Zero V1 fields (`nonce`, `expiration`, `feeRateBps`, `taker`) in the EIP-712 signed payload.
+  - Wire body: `deferExec:false`, `postOnly:false`, `orderType:'FAK'`, `owner:apiKey`, plus the V1-compat string fields (`feeRateBps:'0'`, `nonce:'0'`, `expiration:'0'`) we keep for cutover-window safety per CLAUDE.md note 2.
+  - signTypedData against `verifyingContract = 0xE111…996B` (V2) with `domain.name = "Polymarket CTF Exchange"`, `version = "2"`, `chainId = 137`.
+  - V2 pre-flight matrix all green: `CTF V2 (pUSD) ✓`, `NegRisk V2 (pUSD) ✓`, `Onramp (USDC.e) ✓`, `CT→CTF V2 ✓`, plus the V1 legacy USDC.e allowances still in place from prior onboarding.
+- **Why this is the milestone:** every prior V2 attempt failed at one of `invalid signature` (sigType bug, PRs #33–34), `not enough balance / allowance` (missing pUSD matrix, PRs #36–42), `wrap reverts in MetaMask sim` (missing USDC.e→Onramp approval, PR #41), or `deceptive approval` Blockaid banner (MaxUint256 cap, fixed earlier). This is the first attempt where every guard fired correctly, the order was signed end-to-end, transmitted to the V2 host, and **the V2 CLOB validated the signature, accepted the order, and assigned it an order ID**. That's the path being live.
+
+### investigation: `status:"delayed"` on the first V2 trade — what we know vs. don't
+- **Symptom:** order accepted (200 OK, `success:true`) but `status:"delayed"` with `takingAmount`/`makingAmount` empty. Polymarket's `data-api` shows 0 positions for the proxy on this market 30+ minutes after submission. The "1.1 shares @ 94¢" the UI shows is a *client-side optimistic injection* (`[trade] Local position injected for YES 1.1 shares @ 94¢` in the console — see `market.html` line 5535), not a real fill.
+- **What `delayed` means in V2:** order was accepted into the book/queue but not matched on receipt. Distinct from V1's binary `MATCHED` / `LIVE` / `CANCELED`. Pre-cutover V2 may be acknowledging orders before the matching engine is fully online for the underlying market — orders sit until the cutover completes.
+- **Three plausible causes, ranked:**
+  1. **Pre-cutover V2 matching engine not fully online for this market** *(most likely)*. CLAUDE.md: "Polymarket's production URL `clob.polymarket.com` takes over V2 April 28, 2026 (~11:00 UTC) per official migration doc. Until then, V2 traffic routes to `clob-v2.polymarket.com`." We submitted at 02:18 UTC, ~9h before the cutover. Pre-cutover the dedicated host accepts and signature-verifies V2 orders, but the matching engine may queue them rather than match against V1 liquidity. If this is the cause, the order should match itself once the cutover completes (or be silently re-keyed onto V1 by Polymarket's migration process — TBD).
+  2. **`feeRateBps=1000` from `getClobMarketInfo()`** — the CLOB metadata returned a 10% taker fee for this market. That's an order of magnitude higher than the 0-200 bps standard. With a 10% taker fee, the matcher's effective break-even on our 94.1¢ limit is ~103.5¢ all-in — there's no counter-order it can clear. Could be (a) a special-market state (closing window, restricted, etc.), (b) a default placeholder V2 metadata returns pre-cutover before the real schedule is wired, or (c) a real punitive fee that should make us reject the trade client-side before submitting. We do NOT pass `feeRateBps` in the V2 EIP-712 struct (V2 strips that field) — protocol fees are computed at match time — but the high metadata reading does affect what the matcher will accept.
+  3. **Sub-cent tick + 1-tick slippage** *(probably not the cause but worth noting)*. tickSize=0.001, our limit is 94.1¢ vs top-of-book 94.0¢ — that's 0.1¢ of slack. If the top-of-book vanished between the book walk and the submit, FAK has nothing to match and "delayed" is what V2 returns instead of V1's `"order couldn't be fully filled"`. The book at submit time had >1 share at 94¢ per the walk log, so this is unlikely but not impossible.
+- **What we'd need to confirm cause:** check the order ID against Polymarket's order detail endpoint after cutover (~11:00 UTC). If it auto-fills post-cutover → cause 1. If it's still `delayed` 24h later → cause 2 (fee rate). If it's `CANCELED` with "no liquidity" → cause 3. Sandbox can't reach Polymarket from this environment, so this part is on Marc to verify from the browser.
+- **Action items:**
+  1. Watch the order ID at `clob.polymarket.com/order/0xc118b787…` after the 11:00 UTC cutover.
+  2. If `feeRateBps=1000` persists on this market post-cutover, treat it as a market-disabled signal and reject client-side with a clear "trading restricted" toast — submitting a doomed order at 10% fee is bad UX.
+  3. Add a `delayed` post-submit indicator in the UI — currently we render the fake "Order placed!" success state on `success:true` regardless of whether `status === "matched" | "delayed" | "live"`. A `status === "delayed"` should surface "Order accepted, waiting to match — check back in a few minutes" instead of confetti.
+
+### docs: CLAUDE.md V2 status updated to reflect first-trade milestone
+- **File:** `CLAUDE.md` → Session 15 / V2 status section
+- Changed `V2 status (2026-04-22, session 15): End-to-end live trading works…` to note first **CLOB-accepted** V2 trade on 2026-04-28 with the order ID and pending-fill caveat. The Apr-22 testing was up to and including signature verification; the Apr-28 trade is the first where Polymarket's CLOB returned an order ID and accepted the order into its book.
+- **Don't break:** the surrounding pre-cutover checklist in CLAUDE.md still matters — V1 wire-body compat fields (`feeRateBps:'0'`, `nonce:'0'`, `expiration:'0'`) and the builder HMAC headers stay attached through the cutover window. Don't strip them based on this milestone — wait until at least 24h post-cutover with confirmed fills before declaring V2 stable.
+
+### feat(feed): Alpha Drop popup — first-touch dopamine on /feed (commit 3ff33e9)
+- **File:** `public/feed.html` → +427 lines: CSS (modal overlay, gradient aura keyed to score tier, score count-up animation, mobile bottom-sheet variant), HTML (modal markup with score row, 3 metric tiles, resolving strip, dual-button action row), JS (`maybeShowAlphaDrop`, `_alphaDropShouldShow`, `_alphaDropMarkShown`, `_alphaDropCountUp`, `closeAlphaDrop`, ESC handler, `_alphaDropEscHandler`).
+- **Trigger:** fires once per calendar day on `/feed` load, OR when the #1 edge slug changes after a 4h cooloff (rewards alpha refresh during the day). `?nodrop=1` disables for testing, `?drop=1` force-shows.
+- **Data:** reuses the same `loadHotAlpha()` fetch — no extra request. Top item from `/api/alpha/top` becomes the hero; the nearest <24h-resolving market becomes the urgency strip.
+- **Voice charter compliance:** dry/numerate copy, no greeting, no exclamation, no decorative emoji. Functional glyphs only (`●`, `↑`, `↓`, `→`). Tier labels: "Edge" / "Hot Edge" / "Mega Edge" — no "🔥" anywhere.
+- **Don't break:** the localStorage gate uses three keys: `hf_alpha_drop_v1_date` (last calendar date shown), `hf_alpha_drop_v1_slug` (top slug last shown), `hf_alpha_drop_v1_ts` (ms timestamp). All three are read together in `_alphaDropShouldShow`. If you change the gate logic, version-bump the keys (v1 → v2) so existing users don't see a stale dismissed state forever. The score count-up uses `requestAnimationFrame` and a `performance.now()` start anchor — don't replace with `setInterval` (jitters under load). Modal animation uses `cubic-bezier(.18,.9,.32,1.18)` for a slight overshoot — that's intentional pop, not a typo.
+
+---
+
 ## 2026-04-24 — Session 18 (Claude Code)
 
 ### fix: port the full V2 allowance matrix to market.html (the 'still not fixed' case)
