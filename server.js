@@ -18648,6 +18648,20 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
 // PAPER TRADING — virtual $1 000 USDC, real market prices, zero real money
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Paper-trading schema is gated on `supabase_migration_paper_trading.sql`.
+// On environments where it hasn't been run, the SELECT throws either
+// `42703 column ... does not exist` (users table missing the paper_*
+// columns) or `42P01 relation ... does not exist` (paper_positions table
+// missing). Treat both as "feature not provisioned" and return safe
+// defaults so the page renders instead of 500-ing.
+function _isPaperSchemaMissing(err) {
+  if (!err) return false;
+  const code = err.code || (err.cause && err.cause.code) || '';
+  if (code === '42703' || code === '42P01') return true;
+  const msg = String(err.message || err).toLowerCase();
+  return msg.includes('paper_balance') || msg.includes('paper_positions') || msg.includes('paper_trades_count') || msg.includes('paper_pnl');
+}
+
 // GET /api/paper/balance
 app.get('/api/paper/balance', requireAuth, async (req, res) => {
   try {
@@ -18660,7 +18674,12 @@ app.get('/api/paper/balance', requireAuth, async (req, res) => {
       trades: parseInt(u.paper_trades_count ?? 0),
       pnl: parseFloat(u.paper_pnl ?? 0),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (_isPaperSchemaMissing(e)) {
+      return res.json({ balance: 1000, trades: 0, pnl: 0, ephemeral: true });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /api/paper/positions
@@ -18670,7 +18689,12 @@ app.get('/api/paper/positions', requireAuth, async (req, res) => {
       ? await dbQuery('SELECT * FROM paper_positions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.userId])
       : (await supabase.from('paper_positions').select('*').eq('user_id', req.userId).order('created_at', { ascending: false }).limit(50)).data;
     res.json({ positions: rows || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (_isPaperSchemaMissing(e)) {
+      return res.json({ positions: [], ephemeral: true });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/paper/trade — place a paper trade
@@ -18717,7 +18741,12 @@ app.post('/api/paper/trade', requireAuth, async (req, res) => {
     }
 
     res.json({ ok: true, shares, new_balance: parseFloat((balance - amt).toFixed(2)) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (_isPaperSchemaMissing(e)) {
+      return res.status(503).json({ error: 'Paper trading is being provisioned. Try again shortly.' });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

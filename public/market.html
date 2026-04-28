@@ -1179,6 +1179,11 @@ async function loadWhaleFlow(marketSlug) {
 }
 
 // ── Top Holders ───────────────────────────────────────────────────────────────
+// Uses Polymarket's /holders endpoint, NOT /positions. /positions requires
+// `user=` and 400s without it (it's a per-wallet endpoint). /holders is the
+// per-market endpoint and returns the top wallets by size for each tokenId.
+// YES/NO split is done by matching `asset` (tokenId) to clobTokenIds[0] (YES)
+// vs clobTokenIds[1] (NO) on the market metadata.
 async function loadTopHolders(m) {
   var conditionId = m.conditionId;
   if (!conditionId) return;
@@ -1186,19 +1191,53 @@ async function loadTopHolders(m) {
   var section = document.getElementById('mktHoldersSection');
   section.style.display = '';
 
+  // Resolve YES/NO tokenIds for this market so we can bucket holders.
+  // clobTokenIds is a JSON-stringified ["yesTokenId", "noTokenId"] in gamma.
+  var yesTokenId = null, noTokenId = null;
   try {
-    var res = await fetch('https://data-api.polymarket.com/positions?market=' + conditionId + '&limit=30&sortBy=CURRENT');
-    if (!res.ok) throw new Error('fetch failed');
-    var data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) { section.style.display = 'none'; return; }
+    var tids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+    if (Array.isArray(tids) && tids.length >= 2) {
+      yesTokenId = String(tids[0]);
+      noTokenId  = String(tids[1]);
+    }
+  } catch (e) { /* fall through — will use outcome-string fallback below */ }
+
+  try {
+    var res = await fetch('https://data-api.polymarket.com/holders?market=' + conditionId + '&limit=30');
+    if (!res.ok) throw new Error('fetch failed (' + res.status + ')');
+    var raw = await res.json();
+    // /holders may return a bare array OR { holders: [...] } depending on version.
+    var data = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.holders) ? raw.holders : []);
+    if (!data.length) { section.style.display = 'none'; return; }
 
     var yesHolders = [], noHolders = [];
-    data.forEach(function(pos) {
-      var isYes = (pos.outcome === 'YES') || (pos.winning === true) || (pos.outcomeIndex === 0);
-      var entry = { address: pos.proxyWallet || pos.address || pos.user || '', shares: pos.size || pos.currentValue || 0, name: pos.name || pos.username || '' };
+    data.forEach(function(h) {
+      // Field tolerance: shape varies between /holders responses.
+      var asset   = String(h.asset || h.tokenId || h.token_id || '');
+      var address = h.proxyWallet || h.address || h.user || '';
+      var shares  = parseFloat(h.amount || h.size || h.balance || h.currentValue || 0) || 0;
+      var name    = h.name || h.username || '';
+
+      // Primary bucket: asset (tokenId) matches one of our resolved YES/NO ids.
+      // Fallback: outcomeIndex / outcome string (legacy /positions shape).
+      var isYes;
+      if (yesTokenId && asset === yesTokenId)      isYes = true;
+      else if (noTokenId && asset === noTokenId)   isYes = false;
+      else if (h.outcome === 'YES')                isYes = true;
+      else if (h.outcome === 'NO')                 isYes = false;
+      else if (h.outcomeIndex === 0)               isYes = true;
+      else if (h.outcomeIndex === 1)               isYes = false;
+      else                                         return;  // unbucketable — skip
+
+      var entry = { address: address, shares: shares, name: name };
       if (isYes) yesHolders.push(entry);
-      else noHolders.push(entry);
+      else       noHolders.push(entry);
     });
+
+    // /holders may not pre-sort by size; ensure descending so the truncate
+    // to 10 below shows the actual top holders, not the first 10 returned.
+    yesHolders.sort(function(a, b) { return b.shares - a.shares; });
+    noHolders .sort(function(a, b) { return b.shares - a.shares; });
 
     function renderHolderList(list, limit) {
       if (!list.length) return '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No data</div>';
