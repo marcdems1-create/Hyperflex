@@ -13200,6 +13200,171 @@ app.get('/api/admin/member-debug/:userId', async (req, res) => {
   }
 });
 
+// GET /api/admin/alpha-diag — pipeline health for the edge scoring engine.
+// Answers "why is the top edge only 32?" in one fetch:
+//  - cache sizes (whale index, volume baseline, screener)
+//  - signal-fill rates across the latest alpha list (% with whales, % with
+//    depth, % with news, etc.)
+//  - edge-score distribution by bucket (0-25 / 25-50 / 50-75 / 75-99)
+//  - top-of-distribution components so we can see what's driving the
+//    highest-scoring market vs the median
+// Admin-secret gated. Read-only. Cheap (reads in-memory caches; no upstream calls).
+app.get('/api/admin/alpha-diag', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET && req.query.secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const now = Date.now();
+
+    // ── Cache sizes + freshness ──
+    const screenerData = (_screenerCache && _screenerCache.data) || [];
+    const whaleData    = (_whaleIndexCache && _whaleIndexCache.data) || null;
+    const whalePicks   = (whaleData && whaleData.picks) || [];
+    const baselineMap  = (_volumeBaselineCache && _volumeBaselineCache.data) || {};
+
+    const caches = {
+      screener: {
+        size: screenerData.length,
+        age_ms: _screenerCache ? (now - _screenerCache.ts) : null,
+        age_label: _screenerCache ? _ageLabel(now - _screenerCache.ts) : 'never built',
+      },
+      whale_index: {
+        size: whalePicks.length,
+        age_ms: _whaleIndexCache ? (now - _whaleIndexCache.ts) : null,
+        age_label: _whaleIndexCache ? _ageLabel(now - _whaleIndexCache.ts) : 'never built',
+      },
+      volume_baseline: {
+        size: Object.keys(baselineMap).length,
+        age_ms: _volumeBaselineCache ? (now - _volumeBaselineCache.ts) : null,
+        age_label: _volumeBaselineCache ? _ageLabel(now - _volumeBaselineCache.ts) : 'never built',
+      },
+      volume_tracker_markets: Object.keys(_volumeTracker || {}).length,
+    };
+
+    if (!screenerData.length) {
+      return res.json({ caches, error: 'screener cache empty — refresh /api/screener once and retry' });
+    }
+
+    // Sample the top N by edge_score (matches what users see on the rail)
+    const N = Math.min(50, screenerData.length);
+    const sample = screenerData.slice(0, N);
+
+    // ── Signal-fill rates ──
+    // For each component, count how many of the sampled markets had it
+    // contribute > 0. Computed off m.edge_components (where present) plus
+    // direct field reads for the signals not yet exposed there.
+    const fill = {
+      whale_match:    sample.filter(m => (m.whale_count || 0) > 0).length,
+      whale_capital:  sample.filter(m => (m.total_whale_capital || 0) > 0).length,
+      depth_data:     sample.filter(m => m.depth_ratio != null).length,
+      depth_signal:   sample.filter(m => m.edge_components && (m.edge_components.depth || 0) > 0).length,
+      momentum:       sample.filter(m => m.edge_components && (m.edge_components.momentum || 0) > 0).length,
+      volume_tier:    sample.filter(m => m.edge_components && (m.edge_components.volume || 0) > 0).length,
+      decay:          sample.filter(m => m.edge_components && (m.edge_components.decay || 0) > 0).length,
+      divergence:     sample.filter(m => m.edge_components && (m.edge_components.divergence || 0) > 0).length,
+      expiry:         sample.filter(m => m.edge_components && (m.edge_components.expiry || 0) > 0).length,
+      whale_velocity: sample.filter(m => m.edge_components && (m.edge_components.whale_velocity || 0) > 0).length,
+      volume_spike:   sample.filter(m => m.edge_components && (m.edge_components.volume_spike || 0) > 0).length,
+    };
+    const pct = (n) => N > 0 ? Math.round(n / N * 100) : 0;
+    const fill_pct = {};
+    for (const k of Object.keys(fill)) fill_pct[k] = pct(fill[k]);
+
+    // ── Score distribution ──
+    const buckets = { '0-25': 0, '25-50': 0, '50-75': 0, '75-99': 0 };
+    let scoreSum = 0;
+    let topScore = 0;
+    for (const m of sample) {
+      const s = Math.round(Number(m.edge_score) || 0);
+      scoreSum += s;
+      if (s > topScore) topScore = s;
+      if (s < 25) buckets['0-25']++;
+      else if (s < 50) buckets['25-50']++;
+      else if (s < 75) buckets['50-75']++;
+      else buckets['75-99']++;
+    }
+    const distribution = {
+      sample_size: N,
+      top_score: topScore,
+      median_estimate: Math.round(scoreSum / Math.max(1, N)),
+      buckets,
+      buckets_pct: {
+        '0-25':  pct(buckets['0-25']),
+        '25-50': pct(buckets['25-50']),
+        '50-75': pct(buckets['50-75']),
+        '75-99': pct(buckets['75-99']),
+      },
+    };
+
+    // ── Top market component breakdown ──
+    // What's driving the highest-scoring market? If it's missing whales but
+    // has volume + mega, that confirms whale data isn't flowing.
+    const topMarket = sample[0] || null;
+    const top_breakdown = topMarket ? {
+      question: topMarket.question,
+      slug: topMarket.slug,
+      edge_score: topMarket.edge_score,
+      yes_price: topMarket.yes_price,
+      volume_24h: topMarket.volume24hr || topMarket.volume_24h || 0,
+      whale_count: topMarket.whale_count || 0,
+      whale_capital: topMarket.total_whale_capital || 0,
+      depth_ratio: topMarket.depth_ratio,
+      components: topMarket.edge_components || {},
+      // Signals not exposed in edge_components but still contribute to score —
+      // flag whether they likely fired by recomputing the gates.
+      likely_fired: {
+        mega:  (topMarket.volume24hr || 0) >= 5000000,
+        binance_signals_eligible: (topMarket.category === 'crypto'),
+      },
+    } : null;
+
+    // ── Diagnosis hints ──
+    // One-liners pointing at the most likely cause of low scores. Heuristic,
+    // not authoritative — a human still has to interpret. Gives a starting
+    // point for "why are scores low today" in plain English.
+    const hints = [];
+    if (fill_pct.whale_match < 20) hints.push('LOW whale match rate (' + fill_pct.whale_match + '%) — whale index cache may be stale or conditionId rotation broke matching. Check whale_index.age_label.');
+    if (fill_pct.depth_data < 30)  hints.push('LOW depth coverage (' + fill_pct.depth_data + '%) — fetchClobDepth only fires for $100k+ vol markets. If you expected more, check the CLOB /book endpoint isn\'t timing out.');
+    if (caches.volume_baseline.size < 50) hints.push('SPARSE volume baseline cache (' + caches.volume_baseline.size + ' markets) — needs a few days of screener refreshes to fill. Volume-spike signal fires rarely until this populates.');
+    if (caches.whale_index.size === 0) hints.push('WHALE INDEX EMPTY — top whale picks not loaded. Hit /api/whales/index once to seed.');
+    if (distribution.top_score < 50) hints.push('Even top market under 50 — likely all major signals (whales/depth/news) are dark right now. Check upstream Polymarket data feed.');
+    if (distribution.buckets['75-99'] === 0 && distribution.top_score >= 60) hints.push('Top is mid-tier — algo working, no breakout signals layered today. This is correct, not a bug.');
+
+    res.json({
+      timestamp: new Date(now).toISOString(),
+      caches,
+      fill_counts: fill,
+      fill_pct,
+      distribution,
+      top_breakdown,
+      hints,
+      // Note on what's NOT measured: this samples the cached screener output,
+      // which means signals that fired during scoring but were filtered out
+      // (e.g. resolved markets at >=95% / <=5%) aren't represented. The fill
+      // rates measure "what reached the top 50 alpha list", not "what fired
+      // somewhere in the engine". For the latter, instrument buildAlphaList
+      // directly.
+      notes: {
+        sample_source: 'top ' + N + ' markets from _screenerCache.data, sorted as the engine returned them',
+        score_max: 99,
+        signals_in_components: ['whale','whale_velocity','volume_spike','decay','momentum','volume','divergence','capital','expiry','depth'],
+        signals_NOT_in_components_but_contribute: ['mega (volume bonus)', 'news (headline match)', 'binance_divergence (crypto)', 'binance_vol_surge (crypto)'],
+      },
+    });
+  } catch (err) {
+    console.error('[admin/alpha-diag]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function _ageLabel(ms) {
+  if (ms == null) return 'never';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  return Math.round(s / 3600) + 'h ago';
+}
+
 // GET /api/member/:userId — public member profile data
 app.get('/api/member/:userId', async (req, res) => {
   try {
