@@ -3714,6 +3714,26 @@ function _reltime(ts) {
   return Math.floor(ms/86400000) + 'd';
 }
 
+// JIT-resolve a take's market slug via conditionId when slug wasn't stored on
+// the take row at insert time. Used by takes synthesized before slug backfill.
+window.resolveAndNavigate = function(ev, conditionId) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  if (!conditionId) return;
+  var target = ev && ev.currentTarget;
+  if (target) target.style.opacity = '0.6';
+  fetch('/api/resolve-slug?cid=' + encodeURIComponent(conditionId))
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      if (data && data.slug) {
+        window.open('/market/' + data.slug, '_blank');
+      } else {
+        window.open('/alpha-live', '_blank');
+      }
+    })
+    .catch(function() { window.open('/alpha-live', '_blank'); })
+    .finally(function() { if (target) target.style.opacity = ''; });
+};
+
 function renderTakeCard(t) {
   var isWhale = t.source === 'whale';
   var isConsensus = t.source === 'consensus';
@@ -3733,14 +3753,20 @@ function renderTakeCard(t) {
       '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
       (priceDisplay ? '<span class="take-price">' + priceDisplay + '</span>' : '') +
       '</a>';
+  } else if (t.question && t.condition_id) {
+    // No slug stored on the take row, but we have a conditionId. Render the
+    // styled card and JIT-resolve the slug on click via /api/resolve-slug.
+    // Keeps trade conversion intact for whale/consensus takes that were
+    // synthesized before the slug-backfill landed.
+    var cidEsc = String(t.condition_id).replace(/'/g, "\\'");
+    marketLink = '<a class="take-market-link" href="javascript:void(0)" onclick="resolveAndNavigate(event, \'' + cidEsc + '\')">' +
+      '<div style="flex:1;min-width:0"><div class="take-market-q">' + escHtml(t.question) + '</div></div>' +
+      '<span class="take-side-pill ' + sideClass + '">' + (t.side || '').toUpperCase() + '</span>' +
+      (priceDisplay ? '<span class="take-price">' + priceDisplay + '</span>' : '') +
+      '</a>';
   } else if (t.question) {
-    // No market_slug → render as plain inline text, NOT a card-styled div.
-    // Previously this rendered as <div class="take-market-link"> which looked
-    // identical to the clickable link but had no href. On mobile, users tap
-    // the card-shaped thing expecting it to navigate; with no href + no
-    // handler, the tap bubbles up and some browsers treat it as a focus
-    // shift, scrolling to top of page. Fix: visually distinct treatment so
-    // users see it's not a link.
+    // No slug, no conditionId — can't deep-link. Render as plain inline text
+    // so users don't tap a card that goes nowhere.
     marketLink = '<div style="margin-top:6px;font-size:13px;color:var(--text);line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
       '<span style="font-weight:600">' + escHtml(t.question) + '</span>' +
       '<span class="take-side-pill ' + sideClass + '" style="font-size:10px;padding:2px 6px">' + (t.side || '').toUpperCase() + '</span>' +

@@ -26498,6 +26498,29 @@ app.get('/api/polymarket/config', (req, res) => {
   res.json({ builderCode: POLY_BUILDER_CODE });
 });
 
+// Resolve a Polymarket slug from a conditionId. Used by take cards in the
+// social feed when the take row was inserted with market_slug=null (whale
+// consensus signals don't always have slug attached at time of insert).
+// Lets the frontend keep every take clickable — JIT-resolves to /market/<slug>
+// when the user taps. Read-only, public.
+app.get('/api/resolve-slug', (req, res) => {
+  const cid = String(req.query.cid || req.query.condition_id || '').trim();
+  if (!cid || !/^0x[0-9a-fA-F]{64}$/.test(cid)) {
+    return res.status(400).json({ error: 'Valid condition_id required' });
+  }
+  const cidLower = cid.toLowerCase();
+  const data = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  const m = data.find(x => {
+    const xCid = (x.conditionId || x.condition_id || '').toLowerCase();
+    return xCid === cidLower;
+  });
+  if (m && (m.slug || m.eventSlug || m.event_slug)) {
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.json({ slug: m.slug || m.eventSlug || m.event_slug, condition_id: cid });
+  }
+  return res.status(404).json({ error: 'Slug not found in screener cache', condition_id: cid });
+});
+
 // Polygon RPC proxy backed by Alchemy. Frontend points an ethers
 // JsonRpcProvider at this endpoint instead of public RPCs — public RPCs
 // occasionally return malformed/empty responses (data=null) on calls like
@@ -28400,12 +28423,24 @@ async function fetchWhalePositions() {
                 const capitalDisplay = sig.total_capital >= 1000000
                   ? '$' + (sig.total_capital / 1000000).toFixed(1) + 'M'
                   : '$' + Math.round(sig.total_capital / 1000) + 'K';
+                // Best-effort slug resolution: if sig.slug is null, look up
+                // the screener cache by condition_id. Keeps the take card
+                // clickable downstream (no fake-link cards in feed).
+                let resolvedSlug = sig.slug || null;
+                if (!resolvedSlug && sig.condition_id && _screenerCache && Array.isArray(_screenerCache.data)) {
+                  const cidLower = String(sig.condition_id).toLowerCase();
+                  const m = _screenerCache.data.find(x => {
+                    const xCid = (x.conditionId || x.condition_id || '').toLowerCase();
+                    return xCid === cidLower;
+                  });
+                  if (m) resolvedSlug = m.slug || m.eventSlug || m.event_slug || null;
+                }
                 await dbQuery(
                   `INSERT INTO takes (display_name, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'consensus')`,
                   [
                     sig.whale_count + ' Whales',
-                    sig.slug || null,
+                    resolvedSlug,
                     sig.condition_id || null,
                     sig.market,
                     sig.side.toUpperCase(),
