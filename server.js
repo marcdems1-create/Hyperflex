@@ -12705,6 +12705,152 @@ app.get('/api/challenges/public', async (req, res) => {
   }
 });
 
+// POST /api/admin/seed-challenges — seed N fake challenges using real users
+// (whales preferred) and real Polymarket markets from _screenerCache.
+// Gated by x-admin-secret header. Idempotent: skips if a challenges row
+// already exists for the same (challenger, challenged, market_slug) tuple.
+//   body: { count?: 14, include_for_user_id?: <uuid> }
+//   include_for_user_id — optional. When provided, ensures at least 4 of the
+//     seeded challenges target that user (so the dashboard tab has visible
+//     supply for the operator's own account).
+app.post('/api/admin/seed-challenges', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ error: 'unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  const count = Math.max(1, Math.min(50, parseInt(req.body && req.body.count) || 14));
+  const targetUser = (req.body && req.body.include_for_user_id) || null;
+  try {
+    // Pull a pool of real users (prefer whales for plausibility).
+    const userPool = await dbQuery(`
+      SELECT id, display_name, username
+      FROM users
+      WHERE display_name IS NOT NULL
+      ORDER BY (CASE WHEN is_whale THEN 0 ELSE 1 END), whale_rank NULLS LAST, created_at DESC
+      LIMIT 30
+    `).catch(() => []);
+    if (userPool.length < 2) {
+      return res.status(400).json({ error: 'Need at least 2 users with display_name to seed challenges' });
+    }
+    const targetUserRow = targetUser ? userPool.find(u => u.id === targetUser) : null;
+
+    // Real markets from screener cache.
+    const markets = (_screenerCache && _screenerCache.data || []).slice(0, 30);
+    if (!markets.length) {
+      return res.status(400).json({ error: 'Screener cache empty — wait for first refresh' });
+    }
+
+    // Plausible thesis pool. Dry, numerate, no exclamations, betting vocab.
+    const thesisPool = [
+      'Sharp money is on this side. Public is way off.',
+      'Volume tells the story — top 5 traders are loaded up.',
+      'CLV says yes. Closing line is moving against you.',
+      'Modeled at 64%. Market is mispricing.',
+      'Three whales took the same side in the last 4 hours.',
+      'Resolution criteria favors the dog here.',
+      'Public is fading reality. Take the points.',
+      'Chalk covers. Mid-tier vol but the line moved 3¢.',
+      'Catalyst window is mispriced. Easy fade.',
+      'Whale capital says otherwise. 8x your stake.',
+      'Implied prob is way off the base rate.',
+      'Late steam moved this 4¢. Following the smart side.',
+      'Top holder went from 0 to 80k shares. Tells me everything.',
+      'Reverse line move. Public on one side, money on the other.',
+    ];
+
+    const sides = ['YES', 'NO'];
+    const statuses = ['pending', 'pending', 'accepted', 'accepted', 'accepted', 'resolved', 'resolved', 'declined'];
+    let seeded = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 0; i < count; i++) {
+      // Pick two distinct users. Bias ~28% of seeds toward target user.
+      let challenger, challenged;
+      const useTarget = targetUserRow && (i < 4 || Math.random() < 0.28);
+      if (useTarget) {
+        // Decide if target is challenger or challenged this iteration.
+        const targetIsChallenger = Math.random() < 0.5;
+        if (targetIsChallenger) {
+          challenger = targetUserRow;
+          challenged = userPool[Math.floor(Math.random() * userPool.length)];
+          if (challenged.id === challenger.id) challenged = userPool.find(u => u.id !== challenger.id);
+        } else {
+          challenged = targetUserRow;
+          challenger = userPool[Math.floor(Math.random() * userPool.length)];
+          if (challenger.id === challenged.id) challenger = userPool.find(u => u.id !== challenged.id);
+        }
+      } else {
+        challenger = userPool[Math.floor(Math.random() * userPool.length)];
+        do { challenged = userPool[Math.floor(Math.random() * userPool.length)]; } while (challenged.id === challenger.id);
+      }
+      if (!challenger || !challenged) continue;
+
+      const market = markets[Math.floor(Math.random() * markets.length)];
+      const challengerSide = sides[Math.floor(Math.random() * 2)];
+      const challengedSide = challengerSide === 'YES' ? 'NO' : 'YES';
+      const status = statuses[i % statuses.length];
+      const stake = [10, 25, 25, 50, 50, 50, 75, 100][Math.floor(Math.random() * 8)];
+      const thesis = thesisPool[Math.floor(Math.random() * thesisPool.length)];
+      const ageHours = Math.floor(Math.random() * 72) + 1;
+      const createdAt = new Date(Date.now() - ageHours * 3600 * 1000).toISOString();
+
+      // Resolved branch needs winner_id + resolved_at + responded_at.
+      let winnerId = null, resolvedAt = null, respondedAt = null;
+      if (status === 'accepted') {
+        respondedAt = new Date(Date.now() - (ageHours - 1) * 3600 * 1000).toISOString();
+      } else if (status === 'resolved') {
+        respondedAt = new Date(Date.now() - (ageHours - 1) * 3600 * 1000).toISOString();
+        resolvedAt = new Date(Date.now() - Math.max(0, ageHours - 24) * 3600 * 1000).toISOString();
+        winnerId = Math.random() < 0.5 ? challenger.id : challenged.id;
+      } else if (status === 'declined') {
+        respondedAt = new Date(Date.now() - (ageHours - 1) * 3600 * 1000).toISOString();
+      }
+
+      try {
+        // Idempotency: skip if same triple already seeded.
+        const dup = await dbQuery(
+          `SELECT id FROM challenges WHERE challenger_id = $1 AND challenged_id = $2 AND market_slug = $3 LIMIT 1`,
+          [challenger.id, challenged.id, market.slug || null]
+        );
+        if (dup.length) { skipped++; continue; }
+
+        await dbQuery(
+          `INSERT INTO challenges (
+             challenger_id, challenged_id,
+             market_id, market_title, market_slug, condition_id,
+             challenger_side, challenged_side,
+             stake_flex, thesis,
+             status, winner_id,
+             created_at, responded_at, resolved_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          [
+            challenger.id, challenged.id,
+            null, market.question || null, market.slug || null, market.conditionId || market.condition_id || null,
+            challengerSide, challengedSide,
+            stake, thesis,
+            status, winnerId,
+            createdAt, respondedAt, resolvedAt,
+          ]
+        );
+        seeded++;
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+
+    // Bust the public-summary cache so the new rows show up immediately.
+    if (typeof _challengesPublicCache !== 'undefined') {
+      _challengesPublicCache.at = 0;
+      _challengesPublicCache.payload = null;
+    }
+    res.json({ seeded, skipped, errors: errors.slice(0, 5) });
+  } catch (err) {
+    console.error('[seed-challenges]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve the challenges management page.
 app.get('/challenges', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'challenges.html'));

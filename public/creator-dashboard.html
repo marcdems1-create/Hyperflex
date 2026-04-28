@@ -4906,6 +4906,10 @@ window.hfxOpenDeposit = function() {
       <a class="nav-item" data-nav-section="community" onclick="showTab('members')">
         <span class="nav-icon">🔗</span><span class="nav-label">Social</span>
       </a>
+      <a class="nav-item" data-nav-section="community" onclick="showTab('challenges')">
+        <span class="nav-icon">⚔️</span><span class="nav-label">Challenges</span>
+        <span id="navChallengesBadge" style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(255,77,106,0.15);color:#ff4d6a;letter-spacing:.05em;display:none"></span>
+      </a>
       <a class="nav-item" data-nav-section="community" id="leaderboardNavItem" href="/predictors" style="text-decoration:none">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
       </a>
@@ -7844,6 +7848,290 @@ window.hfxOpenDeposit = function() {
         </div>
       </div><!-- /tab-ta -->
 
+      <!-- CHALLENGES TAB -->
+      <div id="tab-challenges" style="display:none">
+        <style>
+          .ch-hero {
+            display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px;
+            margin-bottom:20px;
+          }
+          .ch-stat {
+            background: var(--paper); border:1px solid var(--border);
+            border-radius:12px; padding:16px 18px; position:relative; overflow:hidden;
+          }
+          .ch-stat::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:2px;
+            background: linear-gradient(90deg, transparent, currentColor, transparent);
+            opacity:0.4;
+          }
+          .ch-stat-label {
+            font-family:var(--mono); font-size:10px; font-weight:800; letter-spacing:.12em;
+            color:var(--muted); text-transform:uppercase; margin-bottom:6px;
+          }
+          .ch-stat-val {
+            font-family:var(--mono); font-size:28px; font-weight:900; letter-spacing:-.02em;
+            color:var(--ink);
+          }
+          .ch-stat.gold { color:#c9920d; } .ch-stat.gold .ch-stat-val { color:#c9920d; }
+          .ch-stat.green { color:#00e68a; } .ch-stat.green .ch-stat-val { color:#00e68a; }
+          .ch-stat.red { color:#ff4d6a; } .ch-stat.red .ch-stat-val { color:#ff4d6a; }
+          @media (max-width: 700px) { .ch-hero { grid-template-columns: repeat(2, 1fr); } }
+
+          .ch-section-head {
+            display:flex; align-items:baseline; justify-content:space-between;
+            gap:12px; margin: 28px 0 12px;
+          }
+          .ch-section-title {
+            font-family:var(--sans); font-size:18px; font-weight:800; color:var(--ink);
+            letter-spacing:-.01em;
+          }
+          .ch-section-sub {
+            font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+            text-transform:uppercase; color:var(--muted);
+          }
+
+          /* Head-to-head matchup card */
+          .ch-card {
+            background: var(--paper);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 0;
+            margin-bottom: 12px;
+            overflow:hidden;
+            transition: border-color .15s, transform .15s;
+          }
+          .ch-card:hover { border-color: rgba(168,85,247,0.4); transform: translateY(-1px); }
+          .ch-card.action-required {
+            border-color: rgba(255,77,106,0.45);
+            box-shadow: 0 0 0 1px rgba(255,77,106,0.12), 0 8px 24px rgba(255,77,106,0.06);
+          }
+          .ch-card.accepted  { border-color: rgba(0,230,138,0.30); }
+          .ch-card.resolved  { border-color: rgba(201,146,13,0.32); }
+          .ch-card.declined  { opacity:.55; }
+
+          .ch-card-top {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:12px 18px;
+            border-bottom:1px solid var(--border);
+            background: rgba(255,255,255,0.015);
+          }
+          .ch-card-meta {
+            font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.1em;
+            color:var(--muted); text-transform:uppercase;
+            display:flex; align-items:center; gap:10px;
+          }
+          .ch-status {
+            font-family:var(--mono); font-size:9px; font-weight:800; letter-spacing:.1em;
+            text-transform:uppercase; padding:3px 8px; border-radius:4px;
+          }
+          .ch-status.pending  { background: rgba(255,77,106,0.14); color:#ff4d6a; }
+          .ch-status.accepted { background: rgba(0,230,138,0.14); color:#00e68a; }
+          .ch-status.resolved { background: rgba(201,146,13,0.14); color:#c9920d; }
+          .ch-status.declined { background: rgba(255,255,255,0.06); color:var(--muted); }
+
+          .ch-h2h {
+            display:grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items:center; gap:14px;
+            padding: 22px 18px;
+          }
+          .ch-side {
+            display:flex; flex-direction:column; align-items:center; gap:8px;
+            text-align:center;
+          }
+          .ch-avatar {
+            width:64px; height:64px; border-radius:50%;
+            padding:2px;
+            background: linear-gradient(135deg, #a855f7, #4d9fff);
+            flex-shrink:0;
+            transition: transform .15s;
+          }
+          .ch-side:hover .ch-avatar { transform: scale(1.05); }
+          .ch-card.resolved .ch-avatar.winner { background: linear-gradient(135deg, #c9920d, #f6d365); }
+          .ch-card.resolved .ch-avatar.loser  { background: linear-gradient(135deg, #ff4d6a, #ff8da1); filter:grayscale(0.6); }
+          .ch-avatar-inner {
+            width:100%; height:100%; border-radius:50%;
+            background: var(--paper);
+            display:flex; align-items:center; justify-content:center;
+            font-family:var(--sans); font-weight:900; font-size:22px;
+            color:var(--ink);
+          }
+          .ch-name {
+            font-weight:800; font-size:14px; color:var(--ink);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;
+          }
+          .ch-name a { color:inherit; text-decoration:none; }
+          .ch-name a:hover { text-decoration:underline; }
+          .ch-handle {
+            font-family:var(--mono); font-size:10px; color:var(--dim);
+            margin-top:-4px;
+          }
+          .ch-side-pill {
+            font-family:var(--mono); font-size:14px; font-weight:900; letter-spacing:.06em;
+            padding:6px 14px; border-radius:6px;
+          }
+          .ch-side-pill.yes { background: rgba(0,230,138,0.14); color:#00e68a; }
+          .ch-side-pill.no  { background: rgba(255,77,106,0.14); color:#ff4d6a; }
+
+          .ch-vs {
+            display:flex; flex-direction:column; align-items:center; gap:8px;
+            min-width:120px;
+          }
+          .ch-vs-vs {
+            font-family:var(--mono); font-size:11px; font-weight:800; letter-spacing:.2em;
+            color:var(--muted); text-transform:uppercase;
+          }
+          .ch-stake {
+            font-family:var(--mono); font-size:24px; font-weight:900;
+            color:#c9920d; letter-spacing:-.01em; line-height:1;
+          }
+          .ch-stake-label {
+            font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.14em;
+            color:var(--muted); text-transform:uppercase;
+          }
+          .ch-winner-line {
+            font-family:var(--mono); font-size:10px; font-weight:800; letter-spacing:.1em;
+            color:#c9920d; text-transform:uppercase;
+          }
+
+          .ch-market {
+            padding: 10px 18px; border-top:1px solid var(--border);
+            font-family:var(--mono); font-size:11px; color:var(--muted);
+            display:flex; align-items:center; gap:8px;
+          }
+          .ch-market a { color:var(--ink); text-decoration:none; font-weight:700; }
+          .ch-market a:hover { text-decoration:underline; }
+          .ch-market-label {
+            font-size:9px; font-weight:800; letter-spacing:.14em;
+            color:var(--dim); text-transform:uppercase;
+          }
+
+          .ch-thesis {
+            padding: 12px 18px;
+            border-top:1px solid var(--border);
+            background: rgba(255,255,255,0.01);
+            font-size:13px; line-height:1.5; color:var(--ink);
+            white-space:pre-wrap; word-break:break-word;
+          }
+          .ch-thesis::before {
+            content:'"'; color:var(--dim); font-size:18px; margin-right:4px;
+          }
+
+          .ch-actions {
+            display:flex; gap:8px; padding: 12px 18px;
+            border-top:1px solid var(--border);
+            background: rgba(255,77,106,0.03);
+          }
+          .ch-btn {
+            padding:10px 20px; border-radius:8px;
+            font-family:var(--mono); font-size:11px; font-weight:800; letter-spacing:.08em;
+            text-transform:uppercase;
+            cursor:pointer; border:1px solid var(--border);
+            background: var(--paper); color:var(--ink);
+            transition: all .15s;
+          }
+          .ch-btn.accept {
+            background: rgba(0,230,138,0.14); color:#00e68a; border-color: rgba(0,230,138,0.35);
+          }
+          .ch-btn.accept:hover { background: rgba(0,230,138,0.22); transform: translateY(-1px); }
+          .ch-btn.decline {
+            background: rgba(255,77,106,0.08); color:#ff4d6a; border-color: rgba(255,77,106,0.28);
+          }
+          .ch-btn.decline:hover { background: rgba(255,77,106,0.15); }
+          .ch-awaiting {
+            padding: 10px 18px;
+            border-top: 1px dashed var(--border);
+            font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+            color:var(--dim); text-transform:uppercase;
+            background: rgba(255,255,255,0.01);
+          }
+
+          .ch-empty {
+            padding: 60px 24px; text-align:center;
+            background: var(--paper); border:1px dashed var(--border);
+            border-radius:14px;
+          }
+          .ch-empty-icon { font-size:36px; opacity:.5; margin-bottom:10px; }
+          .ch-empty-title { font-size:15px; font-weight:700; color:var(--muted); margin-bottom:4px; }
+          .ch-empty-desc { font-size:12px; color:var(--dim); }
+
+          @media (max-width: 600px) {
+            .ch-h2h { grid-template-columns: 1fr; gap:18px; padding:18px 14px; }
+            .ch-vs { flex-direction:row; gap:14px; }
+            .ch-avatar { width:54px; height:54px; }
+            .ch-stake { font-size:20px; }
+          }
+        </style>
+
+        <div class="section">
+          <div class="markets-table" style="padding:24px">
+            <div class="tab-head">
+              <div class="tab-head-text">
+                <div class="tab-head-title">⚔️ Challenges</div>
+                <div class="tab-head-sub">Head-to-head FLEX stakes on prediction markets</div>
+              </div>
+            </div>
+
+            <div class="ch-hero">
+              <div class="ch-stat">
+                <div class="ch-stat-label">Open</div>
+                <div class="ch-stat-val" id="chMyOpen">0</div>
+              </div>
+              <div class="ch-stat green">
+                <div class="ch-stat-label">Wins</div>
+                <div class="ch-stat-val" id="chMyWins">0</div>
+              </div>
+              <div class="ch-stat red">
+                <div class="ch-stat-label">Losses</div>
+                <div class="ch-stat-val" id="chMyLosses">0</div>
+              </div>
+              <div class="ch-stat gold">
+                <div class="ch-stat-label">FLEX in play</div>
+                <div class="ch-stat-val" id="chMyStake">0</div>
+              </div>
+            </div>
+
+            <div id="chActionRequiredSection" style="display:none">
+              <div class="ch-section-head">
+                <div class="ch-section-title">Action required</div>
+                <div class="ch-section-sub" id="chActionSub"></div>
+              </div>
+              <div id="chActionRequired"></div>
+            </div>
+
+            <div id="chAcceptedSection" style="display:none">
+              <div class="ch-section-head">
+                <div class="ch-section-title">Live matchups</div>
+                <div class="ch-section-sub" id="chAcceptedSub"></div>
+              </div>
+              <div id="chAccepted"></div>
+            </div>
+
+            <div id="chOutgoingSection" style="display:none">
+              <div class="ch-section-head">
+                <div class="ch-section-title">Awaiting response</div>
+                <div class="ch-section-sub" id="chOutgoingSub"></div>
+              </div>
+              <div id="chOutgoing"></div>
+            </div>
+
+            <div id="chResolvedSection" style="display:none">
+              <div class="ch-section-head">
+                <div class="ch-section-title">Resolved</div>
+                <div class="ch-section-sub" id="chResolvedSub"></div>
+              </div>
+              <div id="chResolved"></div>
+            </div>
+
+            <div id="chEmpty" class="ch-empty" style="display:none">
+              <div class="ch-empty-icon">⚔️</div>
+              <div class="ch-empty-title">No challenges yet</div>
+              <div class="ch-empty-desc">Visit a predictor's profile to start one. Stake up to 100 FLEX per challenge.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
         <div class="section">
@@ -10160,7 +10448,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints','ta'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints','ta','challenges'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -10186,7 +10474,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'Settings', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'Settings', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis', challenges:'Challenges' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -10234,6 +10522,7 @@ function showTab(tab) {
   if (tab === 'watchlist') { loadWatchlistTab(); }
   if (tab === 'briefing') { loadBriefingTab(); }
   if (tab === 'ta') { loadTATab(); }
+  if (tab === 'challenges') { loadChallengesTab(); }
   if (tab === 'findmarkets') { loadTrendingMarkets(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
@@ -10443,6 +10732,220 @@ function loadAlphaTab() {
 }
 
 // ── FLEX POINTS TAB ─────────────────────────────────────────────────────────
+// ── Challenges tab ──────────────────────────────────────────────────────────
+var _challengesMyId = null;
+
+function _chEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function _chTimeAgo(iso) {
+  if (!iso) return '';
+  var d = new Date(iso).getTime();
+  var delta = Math.floor((Date.now() - d) / 1000);
+  if (delta < 60)    return delta + 's ago';
+  if (delta < 3600)  return Math.floor(delta / 60) + 'm ago';
+  if (delta < 86400) return Math.floor(delta / 3600) + 'h ago';
+  return Math.floor(delta / 86400) + 'd ago';
+}
+function _chInitial(name) {
+  if (!name) return '?';
+  var parts = String(name).trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+function _chCard(c, myId) {
+  var iAmChallenged = c.challenged_id === myId;
+  var iAmChallenger = c.challenger_id === myId;
+  var status = (c.status || 'pending').toLowerCase();
+  var actionRequired = status === 'pending' && iAmChallenged;
+  var awaiting = status === 'pending' && iAmChallenger;
+
+  // Map left/right so I'm always on the left.
+  var left  = iAmChallenged
+    ? { id: c.challenged_id, name: c.challenged_name || 'You', handle: c.challenged_handle, side: c.challenged_side, role: 'me' }
+    : { id: c.challenger_id, name: iAmChallenger ? (c.challenger_name || 'You') : (c.challenger_name || 'Trader'), handle: c.challenger_handle, side: c.challenger_side, role: iAmChallenger ? 'me' : 'them' };
+  var right = iAmChallenged
+    ? { id: c.challenger_id, name: c.challenger_name || 'Trader', handle: c.challenger_handle, side: c.challenger_side, role: 'them' }
+    : { id: c.challenged_id, name: c.challenged_name || 'Trader', handle: c.challenged_handle, side: c.challenged_side, role: iAmChallenger ? 'them' : 'me' };
+
+  var leftIsWinner  = c.winner_id && c.winner_id === left.id;
+  var rightIsWinner = c.winner_id && c.winner_id === right.id;
+
+  var avatarSide = function(p, isWinner) {
+    var winnerCls = (status === 'resolved' && c.winner_id) ? (isWinner ? ' winner' : ' loser') : '';
+    var sideCls = (p.side || '').toUpperCase() === 'YES' ? 'yes' : 'no';
+    var sidePill = p.side ? '<span class="ch-side-pill ' + sideCls + '">' + _chEsc(p.side.toUpperCase()) + '</span>' : '';
+    var nameLink = p.id ? '<a href="/m/' + encodeURIComponent(p.id) + '">' + _chEsc(p.name) + '</a>' : _chEsc(p.name);
+    var handle = p.handle ? '<div class="ch-handle">@' + _chEsc(p.handle) + '</div>' : '';
+    return '<div class="ch-side">' +
+        '<div class="ch-avatar' + winnerCls + '"><div class="ch-avatar-inner">' + _chEsc(_chInitial(p.name)) + '</div></div>' +
+        '<div class="ch-name">' + nameLink + '</div>' +
+        handle +
+        sidePill +
+      '</div>';
+  };
+
+  var center = '<div class="ch-vs">' +
+    '<div class="ch-vs-vs">VS</div>' +
+    (Number(c.stake_flex) > 0
+      ? '<div class="ch-stake">' + c.stake_flex + '</div><div class="ch-stake-label">FLEX</div>'
+      : '') +
+    (status === 'resolved'
+      ? '<div class="ch-winner-line">' + (iAmChallenged === leftIsWinner || iAmChallenger && c.winner_id === c.challenger_id ? 'You won' : 'You lost') + '</div>'
+      : '') +
+    '</div>';
+
+  var market = c.market_title
+    ? '<div class="ch-market"><span class="ch-market-label">On</span>' +
+        (c.market_slug
+          ? '<a href="/market/' + encodeURIComponent(c.market_slug) + '" target="_blank">' + _chEsc(c.market_title) + '</a>'
+          : '<span style="color:var(--ink);font-weight:700">' + _chEsc(c.market_title) + '</span>') +
+      '</div>'
+    : '';
+
+  var thesis = c.thesis ? '<div class="ch-thesis">' + _chEsc(c.thesis) + '</div>' : '';
+
+  var actions = '';
+  if (actionRequired) {
+    actions = '<div class="ch-actions">' +
+      '<button class="ch-btn accept" onclick="respondToChallenge(\'' + _chEsc(c.id) + '\',\'accept\',this)">Accept challenge</button>' +
+      '<button class="ch-btn decline" onclick="respondToChallenge(\'' + _chEsc(c.id) + '\',\'decline\',this)">Decline</button>' +
+    '</div>';
+  } else if (awaiting) {
+    actions = '<div class="ch-awaiting">Awaiting their response · ' + _chEsc(_chTimeAgo(c.created_at)) + '</div>';
+  }
+
+  var roleLabel = actionRequired ? 'Challenged you' : awaiting ? 'You challenged' : (iAmChallenged ? 'Challenged you' : iAmChallenger ? 'You challenged' : '');
+
+  var classes = 'ch-card ' + status + (actionRequired ? ' action-required' : '');
+  return '<div class="' + classes + '">' +
+    '<div class="ch-card-top">' +
+      '<div class="ch-card-meta">' +
+        (roleLabel ? '<span>' + _chEsc(roleLabel) + '</span><span style="color:var(--dim)">·</span>' : '') +
+        '<span>' + _chEsc(_chTimeAgo(c.created_at)) + '</span>' +
+      '</div>' +
+      '<span class="ch-status ' + status + '">' + _chEsc(status) + '</span>' +
+    '</div>' +
+    '<div class="ch-h2h">' +
+      avatarSide(left, leftIsWinner) +
+      center +
+      avatarSide(right, rightIsWinner) +
+    '</div>' +
+    market +
+    thesis +
+    actions +
+  '</div>';
+}
+
+function _chBucket(rows, myId) {
+  var buckets = { actionReq: [], accepted: [], outgoing: [], resolved: [] };
+  rows.forEach(function(c) {
+    var status = (c.status || 'pending').toLowerCase();
+    var iAmChallenged = c.challenged_id === myId;
+    var iAmChallenger = c.challenger_id === myId;
+    if (status === 'pending' && iAmChallenged) buckets.actionReq.push(c);
+    else if (status === 'pending' && iAmChallenger) buckets.outgoing.push(c);
+    else if (status === 'accepted') buckets.accepted.push(c);
+    else if (status === 'resolved') buckets.resolved.push(c);
+  });
+  return buckets;
+}
+
+function _chRenderSection(rows, listId, sectionId, subId, label) {
+  var sec = document.getElementById(sectionId);
+  var list = document.getElementById(listId);
+  var sub = document.getElementById(subId);
+  if (!rows.length) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  if (sub) sub.textContent = rows.length + ' ' + label;
+  list.innerHTML = rows.map(function(c) { return _chCard(c, _challengesMyId); }).join('');
+}
+
+function _chComputeStats(rows, myId) {
+  var open = 0, wins = 0, losses = 0, stake = 0;
+  rows.forEach(function(c) {
+    var status = (c.status || 'pending').toLowerCase();
+    if (status === 'pending' || status === 'accepted') {
+      open++;
+      stake += Number(c.stake_flex) || 0;
+    }
+    if (status === 'resolved' && c.winner_id) {
+      if (c.winner_id === myId) wins++;
+      else losses++;
+    }
+  });
+  return { open: open, wins: wins, losses: losses, stake: stake };
+}
+
+function loadChallengesTab() {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  // Decode JWT for my user id (used to determine which side I'm on per row).
+  if (!_challengesMyId) {
+    try {
+      var payload = JSON.parse(atob(token.split('.')[1]));
+      _challengesMyId = payload.id || payload.user_id || payload.sub || null;
+    } catch (e) {}
+  }
+  fetch('/api/challenges?direction=all&status=all&limit=200', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(d) {
+    if (!d) return;
+    var rows = d.challenges || [];
+    var myId = _challengesMyId;
+    var stats = _chComputeStats(rows, myId);
+    document.getElementById('chMyOpen').textContent   = stats.open;
+    document.getElementById('chMyWins').textContent   = stats.wins;
+    document.getElementById('chMyLosses').textContent = stats.losses;
+    document.getElementById('chMyStake').textContent  = stats.stake;
+
+    var b = _chBucket(rows, myId);
+    _chRenderSection(b.actionReq, 'chActionRequired', 'chActionRequiredSection', 'chActionSub', 'pending response');
+    _chRenderSection(b.accepted,  'chAccepted',       'chAcceptedSection',       'chAcceptedSub',  'accepted');
+    _chRenderSection(b.outgoing,  'chOutgoing',       'chOutgoingSection',       'chOutgoingSub',  'outgoing');
+    _chRenderSection(b.resolved,  'chResolved',       'chResolvedSection',       'chResolvedSub',  'resolved');
+
+    var anySection = b.actionReq.length || b.accepted.length || b.outgoing.length || b.resolved.length;
+    document.getElementById('chEmpty').style.display = anySection ? 'none' : '';
+
+    // Update sidebar badge for action-required count.
+    var badge = document.getElementById('navChallengesBadge');
+    if (badge) {
+      if (b.actionReq.length) {
+        badge.textContent = b.actionReq.length;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  })
+  .catch(function(){});
+}
+
+function respondToChallenge(id, action, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  var token = localStorage.getItem('hf_token');
+  fetch('/api/challenges/' + encodeURIComponent(id) + '/respond', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ action: action }),
+  })
+  .then(function(r) {
+    if (!r.ok) {
+      return r.json().catch(function(){ return {}; }).then(function(e) {
+        alert((e && e.error) || 'Failed');
+        if (btn) btn.disabled = false;
+      });
+    }
+    loadChallengesTab();
+  })
+  .catch(function() {
+    alert('Network error');
+    if (btn) btn.disabled = false;
+  });
+}
+
 function loadFlexPointsTab() {
   var token = localStorage.getItem('hf_token');
   if (!token) return;
