@@ -20377,17 +20377,102 @@ async function _fetchRedditNew(subreddit) {
   } catch { return []; }
 }
 
+// Stopwords that appear across most market questions and post text — match on
+// these is meaningless. Without filtering, "will / between / 2026" alone hit
+// 75% density between a PLTR DD post and a UK GDP market. Expand with care:
+// adding a content word silently kills real matches.
+const _MATCH_STOPWORDS = new Set([
+  'will','about','between','this','that','these','those','than','then',
+  'with','have','their','there','where','which','what','your','here',
+  'into','over','under','before','after','until','since',
+  'some','many','much','more','most','only','also','even','just',
+  'still','very','really','well','make','made',
+  'going','should','could','would','might','must','keep','keeps','gets',
+  'year','years','month','months','week','weeks','days','today','tomorrow',
+  'first','last','later','soon','time','times','next','prev',
+  '2020','2021','2022','2023','2024','2025','2026','2027','2028','2029','2030',
+  'price','prices','target','targets','reach','reaches','reached',
+  'high','highs','low','lows','close','closes','closed','open','opens',
+]);
+
+// Common ticker → name aliases. A PLTR post should match a "Palantir" market.
+// Bidirectional check: post-side ticker hit also satisfies market-side name,
+// and vice versa.
+const _TICKER_ALIASES = {
+  pltr: ['palantir'], palantir: ['pltr'],
+  btc: ['bitcoin'], bitcoin: ['btc'],
+  eth: ['ethereum','ether'], ethereum: ['eth'], ether: ['eth'],
+  sol: ['solana'], solana: ['sol'],
+  xrp: ['ripple'], ripple: ['xrp'],
+  doge: ['dogecoin'], dogecoin: ['doge'],
+  tsla: ['tesla'], tesla: ['tsla'],
+  nvda: ['nvidia'], nvidia: ['nvda'],
+  aapl: ['apple'], apple: ['aapl'],
+  msft: ['microsoft'], microsoft: ['msft'],
+  meta: ['facebook'], facebook: ['meta'],
+  amzn: ['amazon'], amazon: ['amzn'],
+  googl: ['google','alphabet'], google: ['googl','alphabet'], alphabet: ['googl','google'],
+  spx: ['s&p','sp500'],
+};
+
+// Extract entity tokens (tickers, proper nouns) for topical-match validation.
+// Returns a Set of lowercase tokens that should anchor any real match between
+// post text and a market question/slug.
+function _extractMatchEntities(text) {
+  const out = new Set();
+  if (!text) return out;
+  // ALLCAPS tickers: PLTR, BTC, GDP, ETH, UK
+  (text.match(/\b[A-Z]{2,10}\b/g) || []).forEach(t => {
+    const lc = t.toLowerCase();
+    if (!_MATCH_STOPWORDS.has(lc)) out.add(lc);
+  });
+  // Proper nouns: Palantir, Bitcoin, Britain (Capitalized + 3+ letter tail)
+  (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(t => {
+    const lc = t.toLowerCase();
+    if (!_MATCH_STOPWORDS.has(lc)) out.add(lc);
+  });
+  // Slug-style hyphenated tokens (kebab-case from market slugs)
+  (text.match(/\b[a-z]{3,}\b/g) || []).forEach(t => {
+    if (!_MATCH_STOPWORDS.has(t)) out.add(t);
+  });
+  return out;
+}
+
+// True iff any post entity overlaps a market entity, treating ticker aliases
+// as equivalent. PLTR post + Palantir market → true; PLTR post + UK GDP → false.
+function _hasTopicalOverlap(postEntities, marketEntities) {
+  for (const e of postEntities) {
+    if (marketEntities.has(e)) return true;
+    const aliases = _TICKER_ALIASES[e];
+    if (aliases) {
+      for (const a of aliases) if (marketEntities.has(a)) return true;
+    }
+  }
+  return false;
+}
+
 // ── Claude: extract prediction direction + match to a live market ──────────────
 // Returns { market_slug, market_question, predicted_side, confidence_pct } or null
 async function _extractInfluencerPrediction(postText, influencerName) {
   if (!postText || postText.length < 20) return null;
   // Build context from screener cache (live Polymarket markets).
   // Use up to 80 markets so niche/breaking topics don't fall through.
-  const markets = (_screenerCache && _screenerCache.data || [])
-    .slice(0, 80)
+  const allMarkets = (_screenerCache && _screenerCache.data || []).slice(0, 80);
+  const markets = allMarkets
     .map(m => `• ${m.question} [${m.slug}] YES=${Math.round((m.yes_price||0.5)*100)}%`)
     .join('\n');
   if (!markets) return null;
+
+  // Validator: a real match must share an entity (ticker, proper noun, or
+  // content word) between the post and the market. Catches Claude
+  // hallucinations and keyword-fallback noise alike.
+  const postEntities = _extractMatchEntities(postText);
+  const validateMatch = (slug, question) => {
+    if (!slug || !question) return false;
+    const marketEntities = _extractMatchEntities(question + ' ' + (slug.replace(/-/g, ' ')));
+    return _hasTopicalOverlap(postEntities, marketEntities);
+  };
+
   try {
     // Influencer tweet → market match. Background path; gated.
     const resp = await backgroundClaudeCall({
@@ -20403,8 +20488,10 @@ POST from "${influencerName}":
 LIVE POLYMARKET MARKETS (question [slug] YES%):
 ${markets}
 
+Match ONLY if the post is about the same TOPIC/SUBJECT as the market. A post about a stock (e.g. PLTR) does NOT match a macroeconomic market (e.g. UK GDP) just because both mention "2026". The post and market must share the same underlying entity (ticker, person, country, event).
+
 If this post makes a clear prediction on one of the above markets, respond with JSON only:
-{"market_slug":"slug","market_question":"full question","predicted_side":"YES or NO","confidence_pct":0-100,"reasoning":"1 sentence"}
+{"market_slug":"slug","market_question":"full question","predicted_side":"YES or NO","confidence_pct":0-100,"reasoning":"1 sentence naming the shared entity"}
 
 If the post makes no clear prediction on a listed market, respond with: {"no_match":true}
 Respond with JSON only, no other text.`
@@ -20414,42 +20501,62 @@ Respond with JSON only, no other text.`
     const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || 'null');
     if (!json || json.no_match || !json.market_slug || !json.predicted_side) return null;
     if (json.confidence_pct < 55) return null; // only act on clear predictions
+    // Topical sanity check — reject hallucinated matches that share no entity.
+    if (!validateMatch(json.market_slug, json.market_question)) return null;
     return json;
   } catch {
     // Claude unavailable (no credits / disabled) — fall back to keyword matching
-    return _keywordMatchMarket(postText);
+    const fallback = _keywordMatchMarket(postText);
+    if (!fallback) return null;
+    if (!validateMatch(fallback.market_slug, fallback.market_question)) return null;
+    return fallback;
   }
 }
 
 // ── Keyword-based tweet→market matcher (zero API cost fallback) ───────────────
 // Scores each live market by word overlap with the tweet. Used when Claude
 // API is unavailable (out of credits or CLAUDE_BACKGROUND_DISABLED=true).
-// Requires ≥3 matching significant words AND ≥20% density to avoid noise.
+// Requires entity overlap (ticker/proper noun) + ≥2 content matches + ≥35%
+// density on the stopword-filtered question to avoid noise like "PLTR DD"
+// matching "UK GDP" on shared time/intent words.
 function _keywordMatchMarket(postText) {
   const allMarkets = (_screenerCache && _screenerCache.data || []).slice(0, 80);
   if (!allMarkets.length) return null;
 
-  const text = postText.toLowerCase();
-  // Strip punctuation for cleaner matching
-  const textWords = new Set(text.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3));
+  const tokenize = (s) => {
+    const out = new Set();
+    const lc = s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+    for (const w of lc.split(/\s+/)) {
+      if (w.length > 3 && !_MATCH_STOPWORDS.has(w)) out.add(w);
+    }
+    return out;
+  };
+
+  const postTokens = tokenize(postText);
+  const postEntities = _extractMatchEntities(postText);
+  if (postTokens.size === 0 && postEntities.size === 0) return null;
 
   let best = null;
   let bestScore = 0;
 
   for (const m of allMarkets) {
-    const qWords = (m.question || '').toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 3);
-    if (!qWords.length) continue;
+    const q = m.question || '';
+    const slug = m.slug || '';
+    const qTokens = tokenize(q);
+    if (qTokens.size < 2) continue;
+
+    // Topical gate: must share at least one entity (alias-aware).
+    const marketEntities = _extractMatchEntities(q + ' ' + slug.replace(/-/g, ' '));
+    if (!_hasTopicalOverlap(postEntities, marketEntities)) continue;
 
     let hits = 0;
-    for (const w of qWords) {
-      if (textWords.has(w)) hits++;
+    for (const w of qTokens) {
+      if (postTokens.has(w)) hits++;
     }
-    const density = hits / qWords.length;
-    // Require at least 3 matching words AND 20% density
-    if (hits >= 3 && density > bestScore && density >= 0.20) {
+    const density = hits / qTokens.size;
+    // Tighter than before: 2+ content matches + 35% density. Entity gate
+    // above already guarantees topical relevance.
+    if (hits >= 2 && density >= 0.35 && density > bestScore) {
       bestScore = density;
       best = m;
     }
