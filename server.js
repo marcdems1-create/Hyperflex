@@ -12616,6 +12616,95 @@ app.get('/api/challenges/:id', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/challenges/public — anonymous-friendly summary used by the
+// signed-out /challenges page so visitors see real supply (live matchups +
+// top challengers) before the sign-in CTA. 60s in-memory cache.
+const _challengesPublicCache = { at: 0, payload: null };
+app.get('/api/challenges/public', async (req, res) => {
+  if (!pool) return res.json({ stats: { open: 0, accepted: 0, resolved: 0, stake_flex_in_play: 0 }, live: [], top_challengers: [] });
+  try {
+    if (_challengesPublicCache.payload && Date.now() - _challengesPublicCache.at < 60_000) {
+      return res.json(_challengesPublicCache.payload);
+    }
+    const [statsRows, liveRows, topRows] = await Promise.all([
+      dbQuery(`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'pending')  AS open,
+          COUNT(*) FILTER (WHERE status = 'accepted') AS accepted,
+          COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
+          COALESCE(SUM(stake_flex) FILTER (WHERE status IN ('pending','accepted')), 0) AS stake_flex_in_play
+        FROM challenges
+      `),
+      dbQuery(`
+        SELECT c.id, c.status, c.created_at, c.market_title, c.market_slug, c.condition_id,
+               c.challenger_side, c.challenged_side, c.stake_flex,
+               cu.id AS challenger_id, cu.display_name AS challenger_name, cu.username AS challenger_handle,
+               du.id AS challenged_id, du.display_name AS challenged_name, du.username AS challenged_handle
+        FROM challenges c
+        LEFT JOIN users cu ON cu.id = c.challenger_id
+        LEFT JOIN users du ON du.id = c.challenged_id
+        WHERE c.status IN ('accepted','resolved','pending')
+        ORDER BY c.created_at DESC
+        LIMIT 8
+      `),
+      dbQuery(`
+        SELECT u.id, u.display_name AS name, u.username AS handle,
+               COUNT(*) FILTER (WHERE c.winner_id = u.id) AS wins,
+               COUNT(*) FILTER (WHERE c.status = 'resolved' AND c.winner_id <> u.id) AS losses
+        FROM users u
+        JOIN challenges c ON c.status = 'resolved' AND (c.challenger_id = u.id OR c.challenged_id = u.id)
+        GROUP BY u.id
+        HAVING COUNT(*) FILTER (WHERE c.status = 'resolved') >= 1
+        ORDER BY wins DESC, losses ASC
+        LIMIT 5
+      `),
+    ]);
+
+    const s = statsRows[0] || {};
+    const stats = {
+      open:               Number(s.open) || 0,
+      accepted:           Number(s.accepted) || 0,
+      resolved:           Number(s.resolved) || 0,
+      stake_flex_in_play: Number(s.stake_flex_in_play) || 0,
+    };
+
+    const live = (liveRows || []).map(r => ({
+      id:                r.id,
+      status:            r.status,
+      created_at:        r.created_at,
+      market_title:      r.market_title,
+      market_slug:       r.market_slug,
+      condition_id:      r.condition_id,
+      challenger_side:   r.challenger_side,
+      challenged_side:   r.challenged_side,
+      stake_flex:        r.stake_flex,
+      challenger:        { id: r.challenger_id, name: r.challenger_name, handle: r.challenger_handle },
+      challenged:        { id: r.challenged_id, name: r.challenged_name, handle: r.challenged_handle },
+    }));
+
+    const top_challengers = (topRows || []).map(r => {
+      const wins = Number(r.wins) || 0;
+      const losses = Number(r.losses) || 0;
+      const total = wins + losses;
+      return {
+        user_id:  r.id,
+        name:     r.name,
+        handle:   r.handle,
+        wins, losses,
+        win_rate: total ? wins / total : 0,
+      };
+    });
+
+    const payload = { stats, live, top_challengers };
+    _challengesPublicCache.at = Date.now();
+    _challengesPublicCache.payload = payload;
+    res.json(payload);
+  } catch (err) {
+    console.error('[challenges public]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve the challenges management page.
 app.get('/challenges', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'challenges.html'));

@@ -196,6 +196,177 @@ a:hover { text-decoration: underline; }
 }
 .login-gate h2 { margin: 0 0 8px; font-size: 18px; }
 .login-gate p { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
+
+/* Public (signed-out) layout */
+.pub-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 8px; margin-bottom: 22px;
+}
+.pub-stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.pub-stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--text-faint); text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.pub-stat-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px; font-weight: 800; letter-spacing: -0.01em;
+  color: var(--text);
+}
+.pub-stat.gold .pub-stat-val { color: var(--gold); }
+.pub-stat.green .pub-stat-val { color: var(--green); }
+.pub-stat.red .pub-stat-val { color: var(--red); }
+@media (max-width: 600px) {
+  .pub-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin: 28px 0 12px;
+}
+.section-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.section-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.matchup {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.matchup.resolved { border-color: rgba(201,146,13,0.22); }
+.matchup-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px;
+}
+.matchup-name {
+  font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 36%;
+}
+.matchup-name a { color: inherit; }
+.matchup-name a:hover { text-decoration: underline; }
+.matchup-side {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 4px;
+}
+.matchup-side.yes { background: rgba(0,230,138,0.14); color: var(--green); }
+.matchup-side.no  { background: rgba(255,77,106,0.14); color: var(--red); }
+.matchup-vs {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em;
+}
+.matchup-meta {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-dim);
+}
+.matchup-meta a { color: var(--text-dim); }
+.matchup-meta a:hover { color: var(--text); text-decoration: underline; }
+.matchup-stake { color: var(--gold); font-weight: 700; }
+.matchup-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px;
+}
+.matchup-status.accepted { background: rgba(0,230,138,0.12); color: var(--green); }
+.matchup-status.pending  { background: rgba(255,77,106,0.12); color: var(--red); }
+.matchup-status.resolved { background: rgba(201,146,13,0.14); color: var(--gold); }
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+.lb-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 800;
+  color: var(--text-faint);
+}
+.lb-rank.top1 { color: var(--gold); }
+.lb-rank.top2 { color: #a8a8b3; }
+.lb-rank.top3 { color: #b87333; }
+.lb-name { font-weight: 700; font-size: 13px; }
+.lb-name a { color: inherit; }
+.lb-name a:hover { text-decoration: underline; }
+.lb-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--text-dim);
+  text-align: right;
+}
+.lb-rate { color: var(--green); font-weight: 700; }
+
+.mech {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin: 28px 0 18px;
+}
+.mech-line {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 8px 0;
+  font-size: 13px; line-height: 1.5;
+  color: var(--text-dim);
+}
+.mech-line + .mech-line { border-top: 1px dashed var(--border); }
+.mech-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 800;
+  color: var(--text-faint);
+  min-width: 22px;
+}
+.mech-line b { color: var(--text); font-weight: 700; }
+
+.pub-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-top: 12px;
+}
+.pub-cta-text {
+  font-size: 13px; color: var(--text-dim);
+}
+.pub-cta-text b { color: var(--text); font-weight: 700; }
+.pub-cta .btn { white-space: nowrap; }
+
+.skel {
+  background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%);
+  background-size: 200% 100%;
+  animation: skel 1.4s linear infinite;
+  border-radius: 10px;
+  height: 56px;
+  margin-bottom: 8px;
+}
+@keyframes skel {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 </style>
 </head>
 <body>
@@ -208,10 +379,42 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <div id="authGate" class="login-gate" style="display:none">
-    <h2>Sign in to see your challenges</h2>
-    <p>Challenges are tied to your track record. You'll need an account to respond.</p>
-    <a href="/creator/login" class="btn">Sign in →</a>
+  <div id="authGate" style="display:none">
+    <div class="pub-stats" id="pubStats">
+      <div class="pub-stat"><div class="pub-stat-label">Open</div><div class="pub-stat-val" id="psOpen">—</div></div>
+      <div class="pub-stat green"><div class="pub-stat-label">Accepted</div><div class="pub-stat-val" id="psAccepted">—</div></div>
+      <div class="pub-stat"><div class="pub-stat-label">Resolved</div><div class="pub-stat-val" id="psResolved">—</div></div>
+      <div class="pub-stat gold"><div class="pub-stat-label">FLEX in play</div><div class="pub-stat-val" id="psStake">—</div></div>
+    </div>
+
+    <div id="pubLiveSection" style="display:none">
+      <div class="section-head">
+        <div class="section-title">Live matchups</div>
+        <div class="section-sub" id="pubLiveSub"></div>
+      </div>
+      <div id="pubLive">
+        <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+      </div>
+    </div>
+
+    <div id="pubTopSection" style="display:none">
+      <div class="section-head">
+        <div class="section-title">Top challengers</div>
+        <div class="section-sub">By wins, resolved</div>
+      </div>
+      <div id="pubTop"></div>
+    </div>
+
+    <div class="mech">
+      <div class="mech-line"><span class="mech-num">01</span><span><b>Pick a market and a side.</b> Anyone with a posted take is a target.</span></div>
+      <div class="mech-line"><span class="mech-num">02</span><span><b>Stake FLEX, write the thesis.</b> Up to 100 FLEX per challenge.</span></div>
+      <div class="mech-line"><span class="mech-num">03</span><span><b>Resolution settles automatically.</b> Winner's W-L lands on the public leaderboard.</span></div>
+    </div>
+
+    <div class="pub-cta">
+      <div class="pub-cta-text"><b>Track record gated.</b> An account is required to challenge or respond.</div>
+      <a href="/creator/login" class="btn">Sign in →</a>
+    </div>
   </div>
 
   <div id="main" style="display:none">
@@ -260,6 +463,7 @@ async function load() {
       localStorage.removeItem('hf_member_token');
       document.getElementById('authGate').style.display = 'block';
       document.getElementById('main').style.display = 'none';
+      loadPublic();
       return;
     }
     if (!res.ok) { document.getElementById('list').innerHTML = '<div class="empty"><div class="icon">⚠️</div><div class="head">Failed to load</div><p>Try again in a moment.</p></div>'; return; }
@@ -399,8 +603,97 @@ async function respond(id, action, btn) {
   }
 }
 
+function _fmtNum(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function _matchupCard(c) {
+  var a = c.challenger || {};
+  var b = c.challenged || {};
+  var aSide = (c.challenger_side || '').toUpperCase();
+  var bSide = (c.challenged_side || '').toUpperCase();
+  var aSideHtml = aSide ? '<span class="matchup-side ' + (aSide === 'YES' ? 'yes' : 'no') + '">' + esc(aSide) + '</span>' : '';
+  var bSideHtml = bSide ? '<span class="matchup-side ' + (bSide === 'YES' ? 'yes' : 'no') + '">' + esc(bSide) + '</span>' : '';
+  var aLink = a.id ? '<a href="/m/' + encodeURIComponent(a.id) + '">' + esc(a.name || 'Trader') + '</a>' : esc(a.name || 'Trader');
+  var bLink = b.id ? '<a href="/m/' + encodeURIComponent(b.id) + '">' + esc(b.name || 'Trader') + '</a>' : esc(b.name || 'Trader');
+  var marketLine = c.market_title
+    ? (c.market_slug
+        ? '<a href="/market/' + encodeURIComponent(c.market_slug) + '">' + esc(c.market_title) + '</a>'
+        : esc(c.market_title))
+    : '';
+  var stakeLine = Number(c.stake_flex) > 0 ? '<span class="matchup-stake">' + c.stake_flex + ' FLEX</span>' : '';
+  var status = (c.status || 'pending').toLowerCase();
+  return '<div class="matchup ' + esc(status) + '">' +
+    '<div class="matchup-row">' +
+      '<span class="matchup-name">' + aLink + '</span>' +
+      aSideHtml +
+      '<span class="matchup-vs">VS</span>' +
+      bSideHtml +
+      '<span class="matchup-name" style="text-align:right;margin-left:auto">' + bLink + '</span>' +
+    '</div>' +
+    '<div class="matchup-meta">' +
+      '<span class="matchup-status ' + esc(status) + '">' + esc(status) + '</span>' +
+      (marketLine ? '<span>· ' + marketLine + '</span>' : '') +
+      (stakeLine ? '<span>· ' + stakeLine + '</span>' : '') +
+      '<span style="color:var(--text-faint);margin-left:auto">' + esc(timeAgo(c.created_at)) + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+function _renderPublicStats(s) {
+  document.getElementById('psOpen').textContent     = _fmtNum(s.open);
+  document.getElementById('psAccepted').textContent = _fmtNum(s.accepted);
+  document.getElementById('psResolved').textContent = _fmtNum(s.resolved);
+  document.getElementById('psStake').textContent    = _fmtNum(s.stake_flex_in_play);
+}
+
+function _renderPublicLive(rows) {
+  if (!rows || !rows.length) {
+    document.getElementById('pubLiveSection').style.display = 'none';
+    return;
+  }
+  document.getElementById('pubLiveSection').style.display = '';
+  document.getElementById('pubLiveSub').textContent = rows.length + ' showing';
+  document.getElementById('pubLive').innerHTML = rows.map(_matchupCard).join('');
+}
+
+function _renderPublicTop(rows) {
+  if (!rows || rows.length < 3) {
+    document.getElementById('pubTopSection').style.display = 'none';
+    return;
+  }
+  document.getElementById('pubTopSection').style.display = '';
+  document.getElementById('pubTop').innerHTML = rows.map(function(r, i) {
+    var rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+    var nameLink = r.user_id
+      ? '<a href="/m/' + encodeURIComponent(r.user_id) + '">' + esc(r.name || 'Trader') + '</a>'
+      : esc(r.name || 'Trader');
+    return '<div class="lb-row">' +
+      '<div class="lb-rank ' + rankCls + '">#' + (i + 1) + '</div>' +
+      '<div class="lb-name">' + nameLink + (r.handle ? ' <span style="color:var(--text-faint);font-weight:400;font-size:11px">@' + esc(r.handle) + '</span>' : '') + '</div>' +
+      '<div class="lb-num">' + r.wins + '–' + r.losses + '</div>' +
+      '<div class="lb-num lb-rate">' + Math.round((r.win_rate || 0) * 100) + '%</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function loadPublic() {
+  try {
+    var r = await fetch('/api/challenges/public');
+    if (!r.ok) return;
+    var d = await r.json();
+    _renderPublicStats(d.stats || {});
+    _renderPublicLive(d.live || []);
+    _renderPublicTop(d.top_challengers || []);
+  } catch (e) {}
+}
+
 if (!_token) {
   document.getElementById('authGate').style.display = 'block';
+  loadPublic();
 } else {
   // Decode JWT to get our user id so we can distinguish incoming vs
   // outgoing in the "All" tab without re-querying.
