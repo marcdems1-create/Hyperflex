@@ -7670,6 +7670,12 @@ function loadMarketTakes() {
               '<span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(t.display_name || 'Anonymous') + '</span>' +
               badge +
               '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + ';background:' + sideBg + ';padding:2px 7px;border-radius:4px">' + (t.side || '').toUpperCase() + '</span>' +
+              // Outcome label chip \u2014 only renders for multi-outcome markets
+              // where the take's child outcome differs from the parent event
+              // (e.g. "0 bps" / "25 bps" on a Fed rate event). Without this,
+              // every take on a 13-outcome market just reads "NO 62\u00a2" and
+              // the user can't tell which child outcome the whale picked.
+              (t.outcome_label ? '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.25);padding:2px 7px;border-radius:4px">' + escHtml(t.outcome_label) + '</span>' : '') +
               (t.entry_price ? '<span style="font-family:var(--mono);font-size:10px;color:var(--soft)">' + Math.round(t.entry_price * 100) + '\u00a2</span>' : '') +
               correct +
               '<span style="font-size:10px;color:var(--dim);margin-left:auto">' + timeAgo(t.created_at) + '</span>' +

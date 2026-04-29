@@ -28566,11 +28566,39 @@ async function fetchWhalePositions() {
             const sizeStr = evt.size_display || ('$' + Math.round(evt.size / 1000) + 'K');
             const pricePct = evt.price ? Math.round(evt.price * 100) + '¢' : '';
             const actionVerb = evt.action === 'opened' ? 'opened a new' : 'increased their';
-            const thesis = `${evt.trader_name || 'Whale'} (rank #${evt.trader_rank || '?'}) ${actionVerb} ${sizeStr} ${(evt.side || 'YES').toUpperCase()} position${pricePct ? ' at ' + pricePct : ''}.`;
+
+            // Multi-outcome markets (Fed rates, election states, NFL brackets):
+            // resolve the per-outcome label from the screener cache so the take
+            // card can show "YES · 25 bps · 62¢" instead of just "YES 62¢" on
+            // a parent event page where every child shares the parent question.
+            let outcomeLabel = null;
+            try {
+              const cache = _screenerCache && _screenerCache.data;
+              if (cache && evt.condition_id) {
+                const cachedMkt = cache.find(m => m && (m.market_id === evt.condition_id || m.conditionId === evt.condition_id || m.condition_id === evt.condition_id));
+                if (cachedMkt) {
+                  // groupItemTitle is the gamma-api field for the outcome name
+                  // within a multi-outcome event ("0 bps", "Trump", "Lakers").
+                  // Skip when it equals or matches the parent question (binary
+                  // markets often duplicate it — no signal there).
+                  const cand = cachedMkt.groupItemTitle || cachedMkt.group_item || null;
+                  if (cand && String(cand).trim() && String(cand).trim().toLowerCase() !== String(evt.question || '').trim().toLowerCase()) {
+                    outcomeLabel = String(cand).trim().slice(0, 80);
+                  }
+                }
+              }
+            } catch (e) { /* enrichment failed, leave outcome_label null */ }
+
+            // Thesis pulls in the outcome label so users reading historical
+            // takes (where the column may not exist yet) can still tell which
+            // child outcome the whale picked. Once outcome_label is populated
+            // and rendered as a chip, the prose duplication is harmless.
+            const onOutcome = outcomeLabel ? ` on ${outcomeLabel}` : '';
+            const thesis = `${evt.trader_name || 'Whale'} (rank #${evt.trader_rank || '?'}) ${actionVerb} ${sizeStr} ${(evt.side || 'YES').toUpperCase()} position${onOutcome}${pricePct ? ' at ' + pricePct : ''}.`;
 
             await dbQuery(
-              `INSERT INTO takes (user_id, display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'whale')`,
+              `INSERT INTO takes (user_id, display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, outcome_label, source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'whale')`,
               [
                 whaleUserId,
                 evt.trader_name || 'Whale #' + (evt.trader_rank || '?'),
@@ -28581,9 +28609,33 @@ async function fetchWhalePositions() {
                 (evt.side || 'YES').toUpperCase(),
                 evt.price || null,
                 evt.size || null,
-                thesis
+                thesis,
+                outcomeLabel,
               ]
-            ).catch(e => console.warn('[takes] whale synthesis error:', e.message));
+            ).catch(e => {
+              // outcome_label column may not exist on environments where the
+              // migration hasn't run yet. Detect that specifically and retry
+              // without the column rather than dropping the whole synthesis.
+              if (e && (e.code === '42703' || /outcome_label/.test(e.message || ''))) {
+                return dbQuery(
+                  `INSERT INTO takes (user_id, display_name, wallet_address, market_slug, condition_id, question, side, entry_price, amount, thesis, source)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'whale')`,
+                  [
+                    whaleUserId,
+                    evt.trader_name || 'Whale #' + (evt.trader_rank || '?'),
+                    traderWallet || null,
+                    evt.slug || null,
+                    evt.condition_id || null,
+                    evt.question || 'Unknown market',
+                    (evt.side || 'YES').toUpperCase(),
+                    evt.price || null,
+                    evt.size || null,
+                    thesis,
+                  ]
+                );
+              }
+              console.warn('[takes] whale synthesis error:', e.message);
+            });
           }
         } catch (e) { console.warn('[takes] whale batch error:', e.message); }
       })();

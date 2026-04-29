@@ -1116,6 +1116,7 @@ git status   # verify files are dirty
 47. `supabase_migration_sports.sql` ← sport_teams + sport_games + picks tables, immutable pre-game pick triggers (NBA-first tipster wedge)
 48. `supabase_migration_polymarket_v2_trades.sql` ← polymarket_v2_trades table for V2 observability (gates V1 deletion on real usage evidence)
 49. `supabase_migration_incentive_pools.sql` ← incentive_pools + incentive_claims tables for the /incentives surface (sponsor-funded reward pools tied to Polymarket markets, per-trade claims with dedup index). Until run, /api/incentives/stats and /api/incentives/active soft-fall to empty results so /incentives renders honest zeros instead of fake supply.
+50. `supabase_migration_takes_outcome_label.sql` ← adds `outcome_label TEXT` to `takes` so multi-outcome markets (Fed rate bps levels, election states, NFL bracket positions) can render which child outcome a take was on. Whale-take synthesis resolves it from the screener cache via condition_id; market.html renders it as a gold chip next to the side. Synthesis falls back to a no-column INSERT on 42703 so writes don't break before the migration runs.
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
