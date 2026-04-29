@@ -377,6 +377,7 @@
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
     { href: '/challenges', label: '⚔ Challenges', gold: true },
+    { href: '/incentives', label: '💸 Incentives', gold: true },
     { href: '/brief', label: '🧠 AI Brief', gold: true },
     { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/odds', label: '🎲 Odds' },
@@ -384,6 +385,7 @@
     { href: '/data', label: '📈 Data' },
     { href: '/ecosystem', label: '🌐 Ecosystem' },
     { href: '/features', label: '✨ Features' },
+    { href: '/partners', label: '🤝 Partners' },
     { href: '/api-docs', label: '⚙️ API' }
   ];
   // Combined for search index

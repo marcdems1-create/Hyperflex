@@ -29692,13 +29692,73 @@ app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'public',
 // we add NFL/MLB/NHL surfaces. Same /api/challenges/nba/* namespace.
 app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges-nba.html')));
 // Incentives storefront — trader earns + sponsor funds dual-CTA page.
-// Stats endpoint below soft-falls to zero until incentive_pools table lands.
 app.get('/incentives', (req, res) => res.sendFile(path.join(__dirname, 'public', 'incentives.html')));
-app.get('/api/incentives/stats', (req, res) => {
-  // Charter rule: no fake supply, no playful surfaces on empty data. Until
-  // the incentive_pools schema is live, return honest zeros so the page
-  // header reads 0/0/0 instead of mystery placeholders or fake demos.
-  res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
+
+// GET /api/incentives/stats — aggregate counts across all pools. Backs the
+// header strip on /incentives. Soft-falls to zero if the migration hasn't
+// run yet (charter: honest zeros over fake supply).
+app.get('/api/incentives/stats', async (req, res) => {
+  if (!pool) return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
+  try {
+    const rows = await dbQuery(`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'active' AND expires_at > now())::int AS pools_live,
+        COALESCE(SUM(pool_size_usd) FILTER (WHERE status = 'active' AND expires_at > now()), 0)::numeric AS deployed_usd,
+        COALESCE(SUM(paid_out_usd), 0)::numeric AS paid_usd
+      FROM incentive_pools
+    `);
+    const r = rows[0] || {};
+    res.json({
+      pools_live: r.pools_live || 0,
+      deployed_usd: parseFloat(r.deployed_usd || 0),
+      paid_usd: parseFloat(r.paid_usd || 0),
+    });
+  } catch (e) {
+    // Schema-not-provisioned: same fallback the paper-balance pattern uses.
+    if (e && (e.code === '42P01' || /incentive_pools/.test(e.message || ''))) {
+      return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ephemeral: true });
+    }
+    console.error('[incentives/stats]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/incentives/active — public list of currently-claimable pools.
+// Page hides the section entirely when the array is empty (charter:
+// no playful surfaces firing on empty data).
+app.get('/api/incentives/active', async (req, res) => {
+  if (!pool) return res.json({ pools: [] });
+  try {
+    const rows = await dbQuery(`
+      SELECT id, sponsor_label, market_slug, market_question, side,
+             pool_size_usd, reward_per_unit_usd, paid_out_usd,
+             expires_at, notes
+      FROM incentive_pools
+      WHERE status = 'active' AND expires_at > now()
+      ORDER BY (pool_size_usd - paid_out_usd) DESC
+      LIMIT 20
+    `);
+    const pools = rows.map(r => ({
+      id: r.id,
+      sponsor: r.sponsor_label || null,
+      market_slug: r.market_slug,
+      market_question: r.market_question,
+      side: r.side,
+      pool_size_usd: parseFloat(r.pool_size_usd),
+      reward_per_unit_usd: parseFloat(r.reward_per_unit_usd),
+      paid_out_usd: parseFloat(r.paid_out_usd),
+      remaining_usd: Math.max(0, parseFloat(r.pool_size_usd) - parseFloat(r.paid_out_usd)),
+      expires_at: r.expires_at,
+      notes: r.notes,
+    }));
+    res.json({ pools });
+  } catch (e) {
+    if (e && (e.code === '42P01' || /incentive_pools/.test(e.message || ''))) {
+      return res.json({ pools: [], ephemeral: true });
+    }
+    console.error('[incentives/active]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 // Partners — B2B page for platforms, market makers, funds & data buyers.
 app.get('/partners', (req, res) => res.sendFile(path.join(__dirname, 'public', 'partners.html')));

@@ -47,6 +47,22 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 .role.sponsor .role-cta { background:var(--purple); color:#fff; }
 .role-cta:hover { filter:brightness(1.1); text-decoration:none; }
 .foot { margin-top:32px; padding-top:18px; border-top:1px solid var(--border); font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
+.pool { display:block; padding:14px 16px; margin-bottom:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; text-decoration:none; color:inherit; transition:border-color .15s; }
+.pool:hover { border-color:rgba(0,230,138,0.35); text-decoration:none; }
+.pool-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+.pool-side { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:3px 8px; border-radius:5px; text-transform:uppercase; }
+.pool-side.yes { background:rgba(0,230,138,0.14); color:var(--green); }
+.pool-side.no { background:rgba(255,77,106,0.14); color:#ff4d6a; }
+.pool-side.both { background:rgba(77,159,255,0.14); color:var(--blue,#4d9fff); }
+.pool-side.liquidity { background:rgba(168,85,247,0.14); color:var(--purple); }
+.pool-sponsor { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; }
+.pool-sponsor b { color:var(--text); font-weight:700; }
+.pool-q { font-size:14px; font-weight:600; color:var(--text); line-height:1.3; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.pool-stats { display:flex; gap:16px; flex-wrap:wrap; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); }
+.pool-stats b { color:var(--text); font-weight:800; }
+.pool-stats .reward { color:var(--green); }
+.pool-bar { height:3px; background:var(--surface-2); border-radius:2px; margin-top:8px; overflow:hidden; }
+.pool-bar-fill { height:100%; background:linear-gradient(90deg,var(--green),var(--gold)); border-radius:2px; transition:width .3s; }
 </style>
 </head>
 <body>
@@ -59,6 +75,10 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
     <div class="stat"><div class="stat-label">Pools live</div><div class="stat-val" id="sPools">0</div></div>
     <div class="stat"><div class="stat-label">Deployed</div><div class="stat-val gold" id="sDeployed">$0</div></div>
     <div class="stat"><div class="stat-label">Paid to traders</div><div class="stat-val green" id="sPaid">$0</div></div>
+  </div>
+  <div id="poolsSection" style="display:none">
+    <div class="section-title">Active pools</div>
+    <div id="poolsList"></div>
   </div>
   <div class="section-title">How it works</div>
   <div class="mech">
@@ -85,13 +105,36 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 <script>
 // Stats fetch — soft-falls to zero (charter rule: no playful surfaces firing
 // on empty data, no fake supply). When the incentive_pools table lands, this
-// endpoint returns real numbers and the UI ticks up. Until then: 0/0/0,
-// honestly.
+// endpoint returns real numbers and the UI ticks up. Until then: 0/0/0.
 fetch('/api/incentives/stats').then(function(r){return r.ok?r.json():null;}).then(function(d){
   if(!d)return;
   if(d.pools_live!=null)    document.getElementById('sPools').textContent    = d.pools_live;
   if(d.deployed_usd!=null)  document.getElementById('sDeployed').textContent = '$'+Number(d.deployed_usd).toLocaleString();
   if(d.paid_usd!=null)      document.getElementById('sPaid').textContent     = '$'+Number(d.paid_usd).toLocaleString();
+}).catch(function(){});
+
+// Active pools — only renders the section if real pools exist (charter rule).
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+fetch('/api/incentives/active').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if(!d||!d.pools||!d.pools.length)return;
+  document.getElementById('poolsSection').style.display='block';
+  document.getElementById('poolsList').innerHTML=d.pools.map(function(p){
+    var sideKey=String(p.side||'').toLowerCase();
+    var sideLabel=p.side==='LIQUIDITY'?'LP depth':p.side==='BOTH'?'Either side':p.side;
+    var pct=p.pool_size_usd>0?Math.min(100,Math.round((p.pool_size_usd-p.remaining_usd)/p.pool_size_usd*100)):0;
+    var sponsor=p.sponsor?'Sponsored by <b>'+esc(p.sponsor)+'</b>':'Sponsored';
+    var href=p.market_slug?'/market/'+encodeURIComponent(p.market_slug):'#';
+    return '<a class="pool" href="'+href+'">'+
+      '<div class="pool-top"><span class="pool-side '+sideKey+'">'+esc(sideLabel)+'</span><span class="pool-sponsor">'+sponsor+'</span></div>'+
+      '<div class="pool-q">'+esc(p.market_question)+'</div>'+
+      '<div class="pool-stats">'+
+        '<span class="reward">$<b>'+Number(p.reward_per_unit_usd).toFixed(p.reward_per_unit_usd<1?3:2)+'</b> per share</span>'+
+        '<span>$<b>'+Number(p.remaining_usd).toLocaleString()+'</b> remaining</span>'+
+        '<span>Pool $'+Number(p.pool_size_usd).toLocaleString()+'</span>'+
+      '</div>'+
+      '<div class="pool-bar"><div class="pool-bar-fill" style="width:'+pct+'%"></div></div>'+
+    '</a>';
+  }).join('');
 }).catch(function(){});
 </script>
 </body>
