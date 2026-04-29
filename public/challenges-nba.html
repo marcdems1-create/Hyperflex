@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NBA Pick'em — HYPERFLEX</title>
+<meta name="description" content="Lock NBA picks before tipoff. Public track record. Streak that breaks if you skip.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root { --bg:#0d0d10; --surface:#13131a; --surface-2:#1a1a24; --text:#f0f0f5; --dim:#8b8a9a; --faint:#4a4a5a; --border:rgba(255,255,255,0.07); --green:#00e68a; --red:#ff4d6a; --gold:#c9920d; --amber:#f59e0b; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+a { color:var(--text); text-decoration:none; }
+.wrap { max-width:1080px; margin:0 auto; padding:80px 20px 60px; display:grid; grid-template-columns:1fr 320px; gap:24px; }
+@media (max-width:900px) { .wrap { grid-template-columns:1fr; } .rail { order:2; } }
+.head { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
+.eyebrow { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--green); text-transform:uppercase; }
+.eyebrow .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px rgba(0,230,138,0.7); animation:pulse 1.4s infinite; margin-right:6px; vertical-align:middle; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+h1 { font-size:24px; font-weight:900; letter-spacing:-0.02em; margin-bottom:4px; }
+.sub { font-size:13px; color:var(--dim); margin-bottom:18px; }
+.lock-strip { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); margin-bottom:16px; }
+.lock-strip .num { color:var(--gold); font-weight:800; font-size:13px; }
+.game { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:10px; transition:border-color .15s; }
+.game:hover { border-color:rgba(255,255,255,0.14); }
+.game.locked { border-color:rgba(0,230,138,0.30); background:linear-gradient(180deg,rgba(0,230,138,0.04),rgba(22,22,31,0.85)); }
+.game.live { border-color:rgba(245,158,11,0.30); }
+.game.final { opacity:0.7; }
+.g-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; }
+.g-time { color:var(--amber); font-weight:800; }
+.g-status { color:var(--faint); }
+.g-status.live { color:var(--amber); animation:pulse 1.4s infinite; }
+.g-status.final { color:var(--gold); }
+.g-row { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; }
+.g-team { display:flex; align-items:center; gap:8px; min-width:0; }
+.g-team.away { justify-content:flex-end; text-align:right; }
+.g-team img { width:24px; height:24px; flex-shrink:0; }
+.g-team-name { font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.g-vs { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.1em; }
+.g-score { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
+.g-pick-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+.g-pick-btn { padding:10px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:12px; font-weight:700; cursor:pointer; transition:background .12s,border-color .12s; }
+.g-pick-btn:hover { background:rgba(0,230,138,0.10); border-color:rgba(0,230,138,0.35); color:var(--green); }
+.g-pick-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.g-pick-btn .side { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.08em; color:var(--faint); display:block; margin-bottom:2px; }
+.g-locked-pick { padding:10px 12px; background:rgba(0,230,138,0.10); border:1px solid rgba(0,230,138,0.30); border-radius:8px; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:var(--green); display:flex; align-items:center; gap:8px; margin-top:10px; }
+.g-locked-pick .lock-glyph { font-size:13px; }
+.empty { padding:40px 20px; text-align:center; color:var(--faint); font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em; }
+.rail { display:flex; flex-direction:column; gap:12px; }
+.rail-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; }
+.rail-head { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin-bottom:10px; }
+.rec-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--border); font-size:12px; }
+.rec-row:first-of-type { border-top:0; }
+.rec-name { font-weight:700; font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.rec-side { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.08em; padding:2px 6px; border-radius:4px; background:rgba(0,230,138,0.12); color:var(--green); }
+.rec-time { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); }
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.stat { background:rgba(255,255,255,0.025); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-family:'JetBrains Mono',monospace; }
+.stat-label { font-size:9px; font-weight:800; letter-spacing:0.08em; color:var(--faint); text-transform:uppercase; margin-bottom:3px; }
+.stat-val { font-size:18px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; line-height:1; }
+.stat-val.up { color:var(--green); } .stat-val.down { color:var(--red); }
+.streak-warn { margin-top:10px; padding:8px 10px; background:rgba(255,77,106,0.08); border:1px solid rgba(255,77,106,0.25); border-radius:8px; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; color:var(--red); letter-spacing:0.06em; }
+.signin { padding:12px; text-align:center; font-size:12px; color:var(--dim); }
+.signin a { color:var(--gold); font-weight:700; }
+.toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text); z-index:1000; opacity:0; transition:opacity .2s; }
+.toast.show { opacity:1; }
+.toast.err { border-color:rgba(255,77,106,0.35); color:var(--red); }
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<div class="wrap">
+  <main>
+    <div class="head"><span class="eyebrow"><span class="dot"></span>NBA Pick'em · Today</span></div>
+    <h1>Lock a pick before tipoff.</h1>
+    <p class="sub">Public, immutable, scored at final. Streak runs across consecutive correct calls.</p>
+    <div class="lock-strip"><span>Picks locked today:</span><span class="num" id="lockCount">—</span><span style="margin-left:auto" id="serverNow">—</span></div>
+    <div id="slate"><div class="empty">Loading slate…</div></div>
+  </main>
+  <aside class="rail">
+    <div class="rail-card" id="recordCard"><div class="rail-head">Your Record</div><div class="signin"><a href="/creator/login">Sign in</a> to track your record</div></div>
+    <div class="rail-card"><div class="rail-head">Recent Picks</div><div id="recent"><div class="empty" style="padding:8px 0">—</div></div></div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+var TOKEN = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+var H = TOKEN ? { 'Content-Type':'application/json', 'Authorization':'Bearer '+TOKEN } : { 'Content-Type':'application/json' };
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmtCountdown(ms){if(ms<=0)return 'Now';var m=Math.floor(ms/60000);if(m<60)return m+'m';var h=Math.floor(m/60),mm=m%60;return h+'h '+(mm<10?'0':'')+mm+'m';}
+function ago(d){var s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
+function toast(msg,err){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(err?' err':'');setTimeout(function(){t.className='toast';},2400);}
+function gameCard(g){
+  var live=g.status==='live',final=g.status==='final',scheduled=g.status==='scheduled';
+  var statusCls=live?'live':final?'final':'';
+  var topRight=live?'<span class="g-status live">● Live · '+esc(g.period||'')+'</span>':final?'<span class="g-status final">Final</span>':'<span class="g-status">'+(g.my_pick?'Locked':'Open')+'</span>';
+  var timeStr=scheduled?fmtCountdown(new Date(g.starts_at).getTime()-Date.now()):new Date(g.starts_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  var mid=(live||final)?'<div class="g-score">'+(g.away_score||0)+' — '+(g.home_score||0)+'</div>':'<div class="g-vs">@</div>';
+  var awayName=esc(g.away_abbr||g.away_name||'AWAY'),homeName=esc(g.home_abbr||g.home_name||'HOME');
+  var awayLogo=g.away_logo?'<img src="'+esc(g.away_logo)+'" alt="">':'',homeLogo=g.home_logo?'<img src="'+esc(g.home_logo)+'" alt="">':'';
+  var lockSection='';
+  if(g.my_pick){var p=g.my_pick,sideLabel=p.side==='home'?homeName:awayName;
+    lockSection='<div class="g-locked-pick"><span class="lock-glyph">🔒</span>Picked '+sideLabel+' · '+(parseFloat(p.units).toFixed(1))+'u · locked '+ago(p.locked_at)+'</div>';
+  } else if(scheduled && TOKEN){
+    lockSection='<div class="g-pick-row"><button class="g-pick-btn" onclick="lockPick(\''+g.id+'\',\'away\')"><span class="side">AWAY ML</span>'+awayName+'</button><button class="g-pick-btn" onclick="lockPick(\''+g.id+'\',\'home\')"><span class="side">HOME ML</span>'+homeName+'</button></div>';
+  } else if(scheduled && !TOKEN){
+    lockSection='<div class="signin" style="padding:10px 0 0"><a href="/creator/login">Sign in</a> to lock a pick</div>';
+  }
+  return '<div class="game '+statusCls+(g.my_pick?' locked':'')+'"><div class="g-top"><span class="g-time">'+esc(timeStr)+'</span>'+topRight+'</div><div class="g-row"><div class="g-team away">'+awayLogo+'<span class="g-team-name">'+awayName+'</span></div>'+mid+'<div class="g-team">'+homeLogo+'<span class="g-team-name">'+homeName+'</span></div></div>'+lockSection+'</div>';
+}
+async function lockPick(gameId,side){
+  if(!TOKEN){window.location.href='/creator/login';return;}
+  try{var r=await fetch('/api/picks',{method:'POST',headers:H,body:JSON.stringify({game_id:gameId,bet_type:'moneyline',side:side,odds:-110,units:1})});
+    var d=await r.json();if(!r.ok){toast(d.error||'Lock failed',1);return;}
+    toast('Pick locked. '+side.toUpperCase()+' · 1.0u');loadSlate();
+  }catch(e){toast('Network error',1);}
+}
+async function loadSlate(){
+  try{var r=await fetch('/api/challenges/nba/today',{headers:H});var d=await r.json();
+    document.getElementById('lockCount').textContent=d.lock_count||0;
+    document.getElementById('serverNow').textContent=new Date(d.server_now).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    var slate=document.getElementById('slate');
+    if(!d.games||!d.games.length){slate.innerHTML='<div class="empty">No NBA games in the next 36 hours. Check back tomorrow.</div>';return;}
+    slate.innerHTML=d.games.map(gameCard).join('');
+  }catch(e){document.getElementById('slate').innerHTML='<div class="empty">Slate unavailable.</div>';}
+}
+async function loadRecord(){
+  if(!TOKEN)return;
+  try{var r=await fetch('/api/challenges/nba/me',{headers:H});if(!r.ok)return;var d=await r.json();
+    var pnlSign=d.units_pnl>=0?'+':'',pnlCls=d.units_pnl>=0?'up':'down';
+    var winRateStr=d.win_rate==null?'—':d.win_rate.toFixed(1)+'%';
+    var warn=d.current_run>=3?'<div class="streak-warn">'+d.current_run+'-pick run · don\'t skip tomorrow</div>':'';
+    document.getElementById('recordCard').innerHTML='<div class="rail-head">Your Record</div><div class="stat-grid"><div class="stat"><div class="stat-label">W-L</div><div class="stat-val">'+d.wins+'-'+d.losses+'</div></div><div class="stat"><div class="stat-label">Units</div><div class="stat-val '+pnlCls+'">'+pnlSign+d.units_pnl.toFixed(2)+'u</div></div><div class="stat"><div class="stat-label">Run</div><div class="stat-val">'+d.current_run+'</div></div><div class="stat"><div class="stat-label">Win Rate</div><div class="stat-val">'+winRateStr+'</div></div></div>'+warn;
+  }catch(e){}
+}
+async function loadRecent(){
+  try{var r=await fetch('/api/challenges/nba/recent?limit=10');var d=await r.json();var el=document.getElementById('recent');
+    if(!d.picks||!d.picks.length){el.innerHTML='<div class="empty" style="padding:8px 0">No picks yet</div>';return;}
+    el.innerHTML=d.picks.map(function(p){var sideLabel=p.side==='home'?(p.home_abbr||'HOME'):(p.away_abbr||'AWAY');return '<div class="rec-row"><span class="rec-name">'+esc(p.display_name||'Trader')+'</span><span class="rec-side">'+esc(sideLabel)+'</span><span class="rec-time">'+ago(p.locked_at)+'</span></div>';}).join('');
+  }catch(e){}
+}
+loadSlate();loadRecord();loadRecent();
+setInterval(loadSlate,60*1000);setInterval(loadRecent,60*1000);
+</script>
+</body>
+</html>
