@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Casino — HYPERFLEX</title>
+<meta name="description" content="Live bet feed. Every trade. Real-time. Tap to copy.">
+<meta property="og:title" content="HYPERFLEX Casino — Live bet feed">
+<meta property="og:description" content="Every trade routed through HYPERFLEX, live. Tap to copy.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root { --bg:#0a0a10; --surface:#13131a; --surface-2:#1a1a24; --ink:#f0f0f5; --soft:#8b8a9a; --dim:#4a4a5a; --border:rgba(255,255,255,0.07); --green:#00e68a; --red:#ff4d6a; --gold:#c9920d; --indigo:#7c5cfc; --indigo-bg:rgba(124,92,252,0.08); }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--ink); font-family:'Inter',-apple-system,sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; min-height:100vh; }
+a { color:var(--ink); text-decoration:none; }
+
+.wrap { max-width:760px; margin:0 auto; padding:74px 18px 60px; }
+
+.hero { padding:24px 0 22px; border-bottom:1px solid var(--border); margin-bottom:18px; }
+.hero-eyebrow { display:inline-flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--green); text-transform:uppercase; margin-bottom:10px; }
+.hero-eyebrow .dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px rgba(0,230,138,0.7); animation:pulse 1.4s infinite; }
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.hero h1 { font-size:36px; font-weight:900; letter-spacing:-0.025em; line-height:1.05; margin-bottom:10px; }
+.hero h1 em { font-style:normal; color:var(--green); }
+.hero-sub { font-size:15px; color:var(--soft); max-width:560px; }
+
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:24px; }
+@media(max-width:600px){ .stats{grid-template-columns:repeat(2,1fr)} }
+.stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.stat-label { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.1em; color:var(--dim); text-transform:uppercase; margin-bottom:4px; }
+.stat-val { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1; }
+.stat-val.green{color:var(--green)} .stat-val.gold{color:var(--gold)} .stat-val.indigo{color:var(--indigo)}
+
+.feed-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+.feed-title { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; letter-spacing:0.14em; color:var(--ink); text-transform:uppercase; }
+.feed-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px rgba(0,230,138,0.7); animation:pulse 1.4s infinite; }
+.feed-state { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); letter-spacing:0.08em; text-transform:lowercase; }
+.feed-state.live{color:var(--green)} .feed-state.lost{color:var(--red)}
+.feed-list { display:flex; flex-direction:column; }
+
+.bet-row { display:grid; grid-template-columns:36px 1fr auto auto auto; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.04); transition:background .15s; }
+.bet-row:last-child{border-bottom:0}
+.bet-row:hover{background:rgba(255,255,255,0.02)}
+.bet-row.bf-mine{box-shadow:inset 3px 0 0 var(--gold)}
+.avatar { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--indigo),#5a3fd9); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:#fff; flex-shrink:0; }
+.avatar img { width:100%; height:100%; border-radius:50%; object-fit:cover; }
+.row-main { min-width:0; font-size:14px; line-height:1.35; }
+.row-name { color:var(--ink); font-weight:700; }
+.row-name:hover{text-decoration:underline}
+.row-verb { color:var(--soft); font-size:12px; font-weight:500; margin:0 5px; }
+.row-side { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:2px 7px; border-radius:4px; }
+.row-side.yes{background:rgba(0,230,138,0.14);color:var(--green)}
+.row-side.no{background:rgba(255,77,106,0.14);color:var(--red)}
+.row-mkt { display:block; color:var(--soft); font-size:12px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row-mkt:hover{color:var(--ink);text-decoration:underline}
+.row-px { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--dim); text-align:right; font-variant-numeric:tabular-nums; }
+.row-amt { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:800; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
+.row-copy { padding:6px 12px; border:1px solid rgba(201,146,13,0.3); border-radius:7px; background:rgba(201,146,13,0.06); color:var(--gold); font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; cursor:pointer; text-transform:uppercase; transition:all .15s; min-height:36px; -webkit-tap-highlight-color:transparent; }
+.row-copy:hover{background:rgba(201,146,13,0.16);border-color:var(--gold)}
+.row-copy:active{transform:scale(0.96)}
+.row-copied { padding:4px 9px; border-radius:5px; font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.08em; color:var(--green); background:rgba(0,230,138,0.10); border:1px solid rgba(0,230,138,0.25); text-transform:uppercase; }
+.row-you { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.08em; color:var(--dim); text-transform:uppercase; }
+@keyframes slidein{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.bet-row.bf-new{animation:slidein .35s cubic-bezier(.18,.9,.32,1.18)}
+
+.empty { padding:60px 20px; text-align:center; color:var(--dim); font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em; line-height:1.8; }
+.empty b { display:block; color:var(--soft); font-size:13px; margin-bottom:8px; letter-spacing:0; text-transform:none; font-family:'Inter',sans-serif; font-weight:700; }
+.empty a { color:var(--gold); }
+
+.foot-cta { margin-top:22px; padding:16px 18px; background:var(--indigo-bg); border:1px solid rgba(124,92,252,0.18); border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.foot-cta-text { font-size:13px; color:var(--soft); }
+.foot-cta-text b { color:var(--ink); font-weight:700; }
+.foot-cta-btn { padding:10px 16px; background:var(--indigo); color:#fff; font-family:'Inter',sans-serif; font-size:13px; font-weight:800; border-radius:8px; text-decoration:none; }
+.foot-cta-btn:hover{filter:brightness(1.1)}
+
+@media(max-width:480px){
+  .wrap { padding:70px 14px 60px; }
+  .hero h1 { font-size:30px; }
+  .bet-row { grid-template-columns:36px 1fr auto auto; gap:8px; padding:12px 0; }
+  .row-px { display:none; }
+  .row-copy, .row-copied { padding:6px 10px; font-size:10px; min-height:38px; }
+}
+
+/* Copy modal — same vocabulary as the Alpha Drop popup */
+.cm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:1100; display:none; align-items:center; justify-content:center; padding:16px; -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); opacity:0; transition:opacity .22s; }
+.cm-overlay.open{display:flex;opacity:1}
+.cm-card { width:100%; max-width:420px; background:linear-gradient(180deg,#15151c,#0f0f15); border:1px solid rgba(201,146,13,0.32); border-radius:16px; padding:20px; transform:scale(0.94) translateY(8px); opacity:0; transition:transform .26s cubic-bezier(.18,.9,.32,1.18),opacity .22s; box-shadow:0 30px 90px -20px rgba(0,0,0,0.7); }
+.cm-overlay.open .cm-card{transform:scale(1) translateY(0);opacity:1}
+.cm-eye { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--gold); text-transform:uppercase; margin-bottom:10px; }
+.cm-title { font-size:18px; font-weight:800; line-height:1.3; letter-spacing:-0.01em; margin-bottom:10px; }
+.cm-source { padding:10px 12px; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.06); border-radius:10px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--soft); line-height:1.6; margin-bottom:14px; }
+.cm-source b { color:var(--ink); font-weight:800; }
+.cm-source-side { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:2px 7px; border-radius:4px; margin:0 4px; }
+.cm-source-side.yes{background:rgba(0,230,138,0.14);color:var(--green)}
+.cm-source-side.no{background:rgba(255,77,106,0.14);color:var(--red)}
+.cm-amt-label { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.1em; color:var(--soft); text-transform:uppercase; margin-bottom:8px; }
+.cm-chips { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px; }
+.cm-chip { min-height:52px; padding:10px 8px; font-size:15px; font-weight:800; color:var(--ink); background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07); border-radius:10px; cursor:pointer; transition:all .15s; -webkit-tap-highlight-color:transparent; }
+.cm-chip:hover{background:rgba(201,146,13,0.06);border-color:rgba(201,146,13,0.30)}
+.cm-chip:active{transform:scale(0.97)}
+.cm-chip.active{background:rgba(201,146,13,0.16);border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 18px -2px rgba(201,146,13,0.45)}
+.cm-actions { display:flex; gap:10px; }
+.cm-confirm { flex:2; padding:13px; border:none; border-radius:10px; background:var(--gold); color:#000; font-size:14px; font-weight:800; cursor:pointer; letter-spacing:0.01em; }
+.cm-confirm:hover{filter:brightness(1.1)}
+.cm-confirm:disabled{opacity:0.5;cursor:not-allowed}
+.cm-cancel { flex:1; padding:13px; border:1px solid rgba(255,255,255,0.10); border-radius:10px; background:none; color:var(--soft); font-size:13px; font-weight:700; cursor:pointer; }
+.cm-cancel:hover{color:var(--ink);border-color:rgba(255,255,255,0.20)}
+@media(max-width:480px){
+  .cm-card{max-width:100%;border-radius:16px 16px 0 0;padding:18px;transform:translateY(40px)}
+  .cm-overlay{align-items:flex-end;padding:0}
+  .cm-overlay.open .cm-card{transform:translateY(0)}
+  .cm-chip{min-height:56px;font-size:16px}
+}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="hero-eyebrow"><span class="dot"></span>HYPERFLEX · Casino</div>
+    <h1>Every trade. Live. <em>Tap to copy.</em></h1>
+    <p class="hero-sub">Real-money trades routed through HYPERFLEX, slid in within ~1s. Tap any bet to mirror it on your account.</p>
+  </section>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Live Now</div><div class="stat-val green" id="cStatLive">—</div></div>
+    <div class="stat"><div class="stat-label">Bets · 24h</div><div class="stat-val" id="cStat24h">—</div></div>
+    <div class="stat"><div class="stat-label">Volume · 24h</div><div class="stat-val gold" id="cStatVol">—</div></div>
+    <div class="stat"><div class="stat-label">Top Copy</div><div class="stat-val indigo" id="cStatTop">—</div></div>
+  </div>
+
+  <div class="feed-head">
+    <span class="feed-dot"></span>
+    <span class="feed-title">Live Bets</span>
+    <span class="feed-state" id="cFeedState">connecting…</span>
+  </div>
+  <div class="feed-list" id="cFeedList">
+    <div class="empty"><b>Loading the floor…</b>Bets land here within ~1s of execution.</div>
+  </div>
+
+  <div class="foot-cta">
+    <div class="foot-cta-text"><b>Want your bets here?</b> Place trades through HYPERFLEX and they'll land on the casino floor live.</div>
+    <a href="/screener" class="foot-cta-btn">Browse markets →</a>
+  </div>
+</div>
+
+<!-- Copy modal -->
+<div class="cm-overlay" id="cmOverlay" onclick="if(event.target===this)cmClose()">
+  <div class="cm-card">
+    <div class="cm-eye">Copy bet</div>
+    <div class="cm-title" id="cmTitle">—</div>
+    <div class="cm-source" id="cmSource">—</div>
+    <div class="cm-amt-label">Amount</div>
+    <div class="cm-chips" id="cmChips">
+      <button type="button" class="cm-chip"        data-amt="5"   onclick="cmSetAmt(5)">$5</button>
+      <button type="button" class="cm-chip active" data-amt="25"  onclick="cmSetAmt(25)">$25</button>
+      <button type="button" class="cm-chip"        data-amt="100" onclick="cmSetAmt(100)">$100</button>
+    </div>
+    <div class="cm-actions">
+      <button type="button" class="cm-cancel"  onclick="cmClose()">Cancel</button>
+      <button type="button" class="cm-confirm" id="cmConfirm" onclick="cmConfirm()">Confirm copy →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+var _rows = [];   // newest first, capped 60
+var _myUid = null;
+var _es = null;
+var _src = null;  // active modal source bet
+var _amt = 25;
+
+(function _decodeMyUid(){
+  try {
+    var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+    if (!t) return;
+    var p = JSON.parse(atob(t.split('.')[1] || ''));
+    _myUid = p.id || p.sub || p.user_id || null;
+  } catch(e) {}
+})();
+
+// ── Helpers ────────────────────────────────────────────────────────
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function timeAgo(ts){var s=Math.max(0,Math.floor((Date.now()-new Date(ts).getTime())/1000));if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
+function fmtUsd(n){if(!n||!isFinite(n))return '$0';if(n>=1000000)return '$'+(n/1000000).toFixed(1)+'M';if(n>=1000)return '$'+(n/1000).toFixed(0)+'K';return '$'+n.toFixed(n>=100?0:2);}
+function hasCopied(id){try{var ids=JSON.parse(localStorage.getItem('hf_copied_bets')||'[]');return Array.isArray(ids)&&ids.indexOf(String(id))>=0;}catch(e){return false;}}
+function markCopied(id){try{var ids=JSON.parse(localStorage.getItem('hf_copied_bets')||'[]');if(!Array.isArray(ids))ids=[];if(ids.indexOf(String(id))<0)ids.unshift(String(id));if(ids.length>200)ids.length=200;localStorage.setItem('hf_copied_bets',JSON.stringify(ids));}catch(e){}}
+
+// ── Row render ─────────────────────────────────────────────────────
+function rowHtml(b){
+  var name = esc(b.display_name||b.username||'Trader');
+  var initial = (name.charAt(0)||'?').toUpperCase();
+  var side = String(b.side||'').toUpperCase();
+  var sideCls = side==='YES'?'yes':'no';
+  var price = b.price!=null ? Math.round(parseFloat(b.price)*100)+'¢' : '—';
+  var amt = b.usd_amount!=null ? fmtUsd(parseFloat(b.usd_amount)) : '—';
+  var marketHref = b.market_slug ? '/market/'+encodeURIComponent(b.market_slug) : '#';
+  var profileHref = b.user_id ? '/m/'+encodeURIComponent(b.user_id) : '#';
+  var marketLabel = esc(b.outcome_label||b.market_title||'Market');
+  var avatar = b.avatar_url ? '<img src="'+esc(b.avatar_url)+'" alt="">' : initial;
+  var isMine = !!(_myUid && b.user_id===_myUid);
+  var mineCls = isMine ? ' bf-mine' : '';
+  var action;
+  if (isMine) action = '<span class="row-you">You</span>';
+  else if (hasCopied(b.id)) action = '<span class="row-copied">✓ Copied</span>';
+  else action = '<button type="button" class="row-copy" onclick="cmOpen('+JSON.stringify(b.id).replace(/"/g,'&quot;')+')">Copy</button>';
+  return '<div class="bet-row'+mineCls+'" data-id="'+esc(b.id)+'">'+
+    '<a class="avatar" href="'+profileHref+'">'+avatar+'</a>'+
+    '<div class="row-main">'+
+      '<a class="row-name" href="'+profileHref+'">'+name+'</a>'+
+      '<span class="row-verb">bought</span>'+
+      '<span class="row-side '+sideCls+'">'+side+'</span>'+
+      '<a class="row-mkt" href="'+marketHref+'" title="'+marketLabel+'">'+marketLabel+'</a>'+
+    '</div>'+
+    '<span class="row-px">'+price+'</span>'+
+    '<span class="row-amt">'+amt+'</span>'+
+    action+
+  '</div>';
+}
+
+function render(){
+  var list = document.getElementById('cFeedList');
+  if (!_rows.length){
+    list.innerHTML = '<div class="empty"><b>The floor is empty.</b>No HFX-routed trades yet today.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
+    return;
+  }
+  list.innerHTML = _rows.slice(0,40).map(rowHtml).join('');
+}
+
+function prepend(row){
+  if (_rows.some(function(r){return String(r.id)===String(row.id)})) return;
+  _rows.unshift(row);
+  if (_rows.length>60) _rows.length=60;
+  var list = document.getElementById('cFeedList');
+  // If list was empty-state, just full-render. Otherwise surgical insert.
+  if (list.querySelector('.empty')) { render(); return; }
+  var tmp = document.createElement('div');
+  tmp.innerHTML = rowHtml(row);
+  var el = tmp.firstChild;
+  if (el){
+    el.classList.add('bf-new');
+    list.insertBefore(el, list.firstChild);
+    while (list.children.length>40) list.removeChild(list.lastChild);
+    setTimeout(function(){el.classList.remove('bf-new')},400);
+  }
+}
+
+function setState(s){
+  var el = document.getElementById('cFeedState');
+  if (!el) return;
+  el.classList.remove('live','lost');
+  if (s==='live'){el.textContent='live';el.classList.add('live');}
+  else if (s==='lost'){el.textContent='reconnecting…';el.classList.add('lost');}
+  else el.textContent='connecting…';
+}
+
+// ── Fetch + SSE ────────────────────────────────────────────────────
+async function loadInitial(){
+  try {
+    var r = await fetch('/api/bet-feed?limit=50');
+    if (!r.ok) throw new Error('feed '+r.status);
+    var d = await r.json();
+    _rows = (d&&d.items)||[];
+    render();
+    updateStats();
+  } catch(e){
+    document.getElementById('cFeedList').innerHTML = '<div class="empty"><b>Feed unavailable.</b>Refresh in a moment.</div>';
+  }
+}
+
+function connect(){
+  if (typeof EventSource==='undefined') return;
+  try {
+    var es = new EventSource('/api/bet-feed/stream');
+    _es = es;
+    es.addEventListener('open',  function(){setState('live')});
+    es.addEventListener('ready', function(){setState('live')});
+    es.addEventListener('bet', function(ev){
+      try {
+        var row = JSON.parse(ev.data);
+        prepend(row);
+        updateStats();
+      } catch(e){}
+    });
+    es.addEventListener('error', function(){setState('lost')});
+  } catch(e){}
+}
+
+// Lightweight stats from the in-memory _rows. Bets·24h counts every
+// row in the cached window (we only have last 60 rows; fine for a
+// "live" feel — not authoritative, but no extra fetch). Volume·24h
+// sums usd_amount. Top Copy is a placeholder until Phase 5 lands a
+// proper aggregation endpoint.
+function updateStats(){
+  var live = _rows.length;
+  document.getElementById('cStatLive').textContent = live > 0 ? live : '—';
+  var cutoff = Date.now() - 24*60*60*1000;
+  var vol = 0, count = 0;
+  for (var i=0;i<_rows.length;i++){
+    var r = _rows[i];
+    if (!r.created_at) continue;
+    var ts = new Date(r.created_at).getTime();
+    if (ts < cutoff) continue;
+    count++;
+    vol += parseFloat(r.usd_amount)||0;
+  }
+  document.getElementById('cStat24h').textContent = count>0 ? count : '—';
+  document.getElementById('cStatVol').textContent = vol>0 ? fmtUsd(vol) : '—';
+  // Top Copy = highest single bet in the window (approximation until
+  // a real copy-leaderboard endpoint lands).
+  var top = 0;
+  for (var j=0;j<_rows.length;j++){var v=parseFloat(_rows[j].usd_amount)||0;if(v>top)top=v;}
+  document.getElementById('cStatTop').textContent = top>0 ? fmtUsd(top) : '—';
+}
+
+// ── Copy modal ─────────────────────────────────────────────────────
+function cmSetAmt(a){
+  _amt = a;
+  var chips = document.querySelectorAll('#cmChips .cm-chip');
+  for (var i=0;i<chips.length;i++) chips[i].classList.toggle('active', chips[i].getAttribute('data-amt')===String(a));
+}
+function cmOpen(betId){
+  var t = localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+  if (!t) { window.location.href='/creator/login'; return; }
+  var src = _rows.find(function(r){return String(r.id)===String(betId)});
+  if (!src) return;
+  _src = src;
+  var name = esc(src.display_name||src.username||'Trader');
+  var side = String(src.side||'').toUpperCase();
+  var sideCls = side==='YES'?'yes':'no';
+  var price = src.price!=null ? Math.round(parseFloat(src.price)*100)+'¢' : '—';
+  var marketLabel = esc(src.outcome_label||src.market_title||'this market');
+  document.getElementById('cmTitle').textContent = 'Copy '+(src.display_name||src.username||'Trader')+'’s bet';
+  document.getElementById('cmSource').innerHTML =
+    '<b>'+name+'</b> bought '+
+    '<span class="cm-source-side '+sideCls+'">'+side+'</span> on '+
+    '<b>'+marketLabel+'</b> at <b>'+price+'</b>.';
+  cmSetAmt(25);
+  document.getElementById('cmOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', cmEsc);
+}
+function cmEsc(e){if(e.key==='Escape')cmClose();}
+function cmClose(){
+  document.getElementById('cmOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', cmEsc);
+}
+function cmConfirm(){
+  if (!_src) return;
+  var src = _src;
+  var slug = src.market_slug||'';
+  var side = String(src.side||'').toLowerCase();
+  if (!slug || !side) { cmClose(); return; }
+  // Stash attribution + mark copied so the badge appears even before
+  // the SSE round-trip back from the new bet's POST.
+  try { sessionStorage.setItem('hf_copy_attribution', JSON.stringify({ copied_from_bet_id: src.id, copied_from_user_id: src.user_id })); } catch(e){}
+  markCopied(src.id);
+  // Always cross-market from the casino floor — navigate to the
+  // source market with prefill params. market.html's applyAlphaPrefill
+  // accepts from=copy and sets up side+size for us.
+  var params = ['from=copy','side='+side,'size='+_amt,'copy_bet_id='+encodeURIComponent(src.id),'copy_user_id='+encodeURIComponent(src.user_id||'')];
+  var btn = document.getElementById('cmConfirm');
+  if (btn){btn.disabled=true;btn.textContent='Submitting…';}
+  window.location.href = '/market/'+encodeURIComponent(slug)+'?'+params.join('&');
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+loadInitial();
+connect();
+// Re-render every 30s so timestamps would update if we rendered them
+// (and stats stay fresh against the rolling 24h window).
+setInterval(function(){ updateStats(); }, 30000);
+</script>
+</body>
+</html>
