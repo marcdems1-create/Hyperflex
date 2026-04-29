@@ -3511,7 +3511,33 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
       });
       gasEstimate = (gasEstimate * 130n) / 100n;  // 30% headroom
     } catch (estErr) {
-      console.warn('[safe] public-RPC gas estimate failed, using 500k fallback:', estErr.message);
+      // estimateGas FAIL means the simulation reverted — the on-chain tx
+      // will also revert. The old behaviour was to fall back to 500k gas
+      // and submit anyway, which billed the user POL for a guaranteed-fail
+      // transaction. That's worse than failing fast.
+      //
+      // Specifically catch Safe's GS013 (inner-call failed under
+      // safeTxGas=0/gasPrice=0 mode) — the most common cause is missing
+      // ERC-20 allowances or an attempted transfer the proxy can't fund.
+      // Surface a readable message; caller upstack can prompt the user to
+      // re-run the setup approval matrix instead of paying POL to confirm
+      // the same failure on-chain.
+      var revertMsg = String(estErr && (estErr.shortMessage || estErr.message) || '');
+      var isInnerRevert = /GS013/.test(revertMsg) || /execution reverted/.test(revertMsg);
+      if (isInnerRevert) {
+        console.error('[safe] estimateGas reverted — refusing to submit a tx that will fail on-chain:', revertMsg);
+        var hint = /GS013/.test(revertMsg)
+          ? 'The proxy is missing an approval the Safe transaction needs. Re-run setup (token approvals) and try again — do not pay gas to confirm a failure.'
+          : 'Simulation says this tx will revert. Aborting before gas is spent.';
+        var err = new Error('Safe tx will revert: ' + hint);
+        err.code = 'SAFE_WILL_REVERT';
+        err.cause = estErr;
+        throw err;
+      }
+      // Estimate failed for a non-revert reason (RPC flake, timeout, etc).
+      // OK to fall back here — the worst case is over-paying gas, not
+      // burning gas on a guaranteed failure.
+      console.warn('[safe] public-RPC gas estimate failed (non-revert), using 500k fallback:', revertMsg);
       gasEstimate = 500000n;
     }
     console.log('[safe] submitting direct execTransaction | gasLimit=' + gasEstimate);
@@ -3596,6 +3622,24 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
 async function wrapUsdcToPmct(amountAtomic) {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
   if (!proxyAddr) throw new Error('Proxy address missing');
+
+  // CRITICAL: ensure the proxy has approved CollateralOnramp to spend its
+  // USDC.e BEFORE the wrap call. Onramp.wrap() internally does
+  //   USDC.e.transferFrom(msg.sender = proxy, address(this) = onramp, amount)
+  // which requires USDC.e.allowance(proxy, onramp) >= amount. If the
+  // approval isn't set, the wrap reverts on-chain with Safe's GS013
+  // (inner-call failed under safeTxGas=0/gasPrice=0 mode), the user pays
+  // POL for a failed tx, and there's no recovery. This is the same fix
+  // the dashboard shipped in PR #41 — it just never made it to market.html.
+  //
+  // approveUsdceForSpender caches via hfx_usdce_ok_<owner>_<spender> so a
+  // repeat wrap is zero-popup. Only the first ever wrap on a fresh proxy
+  // pays the approval cost.
+  if (!(await isUsdceApprovedForSpender(proxyAddr, COLLATERAL_ONRAMP))) {
+    console.log('[pmct] proxy has no USDC.e→Onramp allowance — approving before wrap');
+    await approveUsdceForSpender(COLLATERAL_ONRAMP);
+  }
+
   var iface = new ethers.Interface([
     'function wrap(address asset, address to, uint256 amount)'
   ]);
