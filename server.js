@@ -32844,17 +32844,48 @@ app.post('/api/admin/bet-feed/backfill', async (req, res) => {
     const stream = Array.isArray(_whaleTradeStream) ? _whaleTradeStream : [];
     if (!stream.length) return res.json({ inserted: 0, reason: 'whale stream empty — wait for first cron cycle' });
 
-    // Filter to plausible bets: opens/increases of $1k+ with valid
-    // price, side, and at least one of (slug, condition_id). Same
-    // gating as the regular synthesis but with a lower size floor
-    // because the goal here is supply, not signal.
-    const candidates = stream.filter(e =>
-      (e.action === 'opened' || e.action === 'increased') &&
-      (e.size || 0) >= 1000 &&
-      e.price && e.price > 0 && e.price < 1 &&
-      (e.slug || e.condition_id) &&
-      (e.side === 'YES' || e.side === 'NO' || e.side === 'Yes' || e.side === 'No')
-    ).slice(0, 50);
+    // Diagnostic counters so a 0-candidates response tells us WHICH
+    // filter rule rejected each event. Lets the caller see at a glance
+    // whether the stream is full of closes/decreases (action_skip)
+    // vs missing-data events (slug_skip / side_skip) without needing
+    // to dump and inspect the raw stream.
+    const reject = { action: 0, size: 0, price: 0, slug: 0, side: 0 };
+    const actionCounts = {};
+    const sideCounts = {};
+    for (const e of stream) {
+      actionCounts[e.action || 'undef'] = (actionCounts[e.action || 'undef'] || 0) + 1;
+      sideCounts[e.side || 'undef']     = (sideCounts[e.side || 'undef']     || 0) + 1;
+    }
+
+    // Loosened filter:
+    //   - action: opens + increases + decreased (decreases are partial
+    //     sells but still bet-like activity; charter says losses get
+    //     the same card layout as wins, so rendering a decrease on the
+    //     casino floor is honest).
+    //   - size: >=$500 floor (snapshot already gates at $1k via the
+    //     line 28311 filter, so this is belt-and-suspenders).
+    //   - side: case-insensitive YES/NO match. Polymarket sometimes
+    //     returns the outcome in mixed casing — 'Yes', 'YES', 'yes'.
+    //     'Unknown' is still rejected because it means we couldn't
+    //     attribute a side at all (defensive, no fake YES rendering).
+    const candidates = [];
+    for (const e of stream) {
+      if (e.action !== 'opened' && e.action !== 'increased' && e.action !== 'decreased') {
+        reject.action++; continue;
+      }
+      if ((e.size || 0) < 500) { reject.size++; continue; }
+      if (!e.price || e.price <= 0 || e.price >= 1) { reject.price++; continue; }
+      if (!e.slug && !e.condition_id) { reject.slug++; continue; }
+      const sideUpper = String(e.side || '').toUpperCase();
+      if (sideUpper !== 'YES' && sideUpper !== 'NO') { reject.side++; continue; }
+      candidates.push(e);
+      if (candidates.length >= 50) break;
+    }
+
+    // ?dump=1 returns the raw stream for one-shot debugging when none
+    // of the diagnostics narrow it down. Admin-secret already gated
+    // above, so leaking trader names + sizes here is fine for ops.
+    const dumpRequested = req.query.dump === '1' || (req.body && req.body.dump);
 
     let inserted = 0;
     for (const evt of candidates) {
@@ -32922,7 +32953,16 @@ app.post('/api/admin/bet-feed/backfill', async (req, res) => {
       }
     }
 
-    res.json({ inserted, candidates: candidates.length, stream_size: stream.length });
+    const payload = {
+      inserted,
+      candidates: candidates.length,
+      stream_size: stream.length,
+      reject,           // count by reason: action / size / price / slug / side
+      actions: actionCounts,
+      sides: sideCounts,
+    };
+    if (dumpRequested) payload.stream = stream;
+    res.json(payload);
   } catch (err) {
     console.error('[bet-feed/backfill]', err);
     res.status(500).json({ error: err.message });
