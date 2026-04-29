@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Incentives — HYPERFLEX</title>
+<meta name="description" content="Get paid to predict. Sponsored markets fund traders who take aligned sides or provide depth.">
+<meta property="og:title" content="HYPERFLEX Incentives — Get paid to predict">
+<meta property="og:description" content="Sponsored markets fund the traders who take aligned sides or provide depth on Polymarket.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root { --bg:#0d0d10; --surface:#13131a; --surface-2:#1a1a24; --text:#f0f0f5; --dim:#8b8a9a; --faint:#4a4a5a; --border:rgba(255,255,255,0.07); --green:#00e68a; --gold:#c9920d; --purple:#a855f7; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+a { color:var(--gold); text-decoration:none; }
+a:hover { text-decoration:underline; }
+.wrap { max-width:760px; margin:0 auto; padding:80px 24px 80px; }
+.eyebrow { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--green); text-transform:uppercase; }
+.eyebrow .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px rgba(0,230,138,0.7); animation:pulse 1.4s infinite; margin-right:6px; vertical-align:middle; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px; line-height:1.1; }
+.sub { font-size:15px; color:var(--dim); margin-bottom:24px; max-width:580px; }
+.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:28px; }
+@media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr)}}
+.stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.stat-label { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.1em; color:var(--faint); text-transform:uppercase; margin-bottom:4px; }
+.stat-val { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
+.stat-val.gold { color:var(--gold); } .stat-val.green { color:var(--green); }
+.section-title { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin:32px 0 12px; }
+.mech { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:6px 18px; }
+.mech-line { display:flex; align-items:flex-start; gap:14px; padding:14px 0; font-size:14px; line-height:1.5; color:var(--dim); border-top:1px dashed var(--border); }
+.mech-line:first-child { border-top:0; }
+.mech-num { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; color:var(--faint); min-width:24px; padding-top:1px; }
+.mech-line b { color:var(--text); font-weight:700; }
+.split { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+@media(max-width:600px){.split{grid-template-columns:1fr}}
+.role { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+.role.trader { border-color:rgba(0,230,138,0.25); background:linear-gradient(180deg,rgba(0,230,138,0.04),rgba(22,22,31,0.85)); }
+.role.sponsor { border-color:rgba(168,85,247,0.25); background:linear-gradient(180deg,rgba(168,85,247,0.04),rgba(22,22,31,0.85)); }
+.role-eyebrow { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+.role.trader .role-eyebrow { color:var(--green); } .role.sponsor .role-eyebrow { color:var(--purple); }
+.role-title { font-size:17px; font-weight:800; letter-spacing:-0.01em; margin-bottom:6px; }
+.role-body { font-size:13px; color:var(--dim); line-height:1.5; margin-bottom:14px; }
+.role-cta { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.01em; text-decoration:none; }
+.role.trader .role-cta { background:var(--green); color:#001a10; }
+.role.sponsor .role-cta { background:var(--purple); color:#fff; }
+.role-cta:hover { filter:brightness(1.1); text-decoration:none; }
+.foot { margin-top:32px; padding-top:18px; border-top:1px solid var(--border); font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<div class="wrap">
+  <div class="eyebrow"><span class="dot"></span>HYPERFLEX · Incentives</div>
+  <h1>Get paid to predict.</h1>
+  <p class="sub">Sponsored markets fund traders who take aligned sides or provide book depth. Sponsors get liquidity routed to their market; traders get paid per unit on top of the prediction's normal payout.</p>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Pools live</div><div class="stat-val" id="sPools">0</div></div>
+    <div class="stat"><div class="stat-label">Deployed</div><div class="stat-val gold" id="sDeployed">$0</div></div>
+    <div class="stat"><div class="stat-label">Paid to traders</div><div class="stat-val green" id="sPaid">$0</div></div>
+  </div>
+  <div class="section-title">How it works</div>
+  <div class="mech">
+    <div class="mech-line"><span class="mech-num">01</span><span><b>Sponsor funds a pool.</b> A market maker, prop desk, or platform deposits a reward pool against a specific Polymarket market — e.g. $5,000 to seed depth on the YES side at 30¢ before resolution.</span></div>
+    <div class="mech-line"><span class="mech-num">02</span><span><b>Traders take the aligned side.</b> Any user who places a YES position through the HYPERFLEX builder route earns a per-unit reward from the pool, on top of the prediction's normal payout. Reward rates are public and ratable per pool.</span></div>
+    <div class="mech-line"><span class="mech-num">03</span><span><b>Pool drains, market resolves.</b> Pool pays out as positions are taken, capped at the pool size. Verified track record + builder-route attribution prove eligibility — no claim form. Funds settle on resolution.</span></div>
+  </div>
+  <div class="split">
+    <div class="role trader">
+      <div class="role-eyebrow">For traders</div>
+      <div class="role-title">Earn on top of the trade.</div>
+      <div class="role-body">If a pool exists for a market you'd already trade, you collect the per-unit reward automatically. No separate claim, no extra steps. Pools live alongside the trade widget on every market page.</div>
+      <a href="/feed" class="role-cta">Browse markets →</a>
+    </div>
+    <div class="role sponsor">
+      <div class="role-eyebrow">For sponsors</div>
+      <div class="role-title">Route real flow into your market.</div>
+      <div class="role-body">Fund a pool, set the side and per-unit reward, and HYPERFLEX's verified-trader network takes the position. Pricing scales with pool size and market liquidity. Custom partnership terms for $25k+ pools.</div>
+      <a href="mailto:partnerships@hyperflex.network?subject=Sponsor%20a%20pool" class="role-cta">Get in touch →</a>
+    </div>
+  </div>
+  <div class="foot">Pools settle in USDC on market resolution. Eligibility requires a verified Polymarket address routed through the HYPERFLEX builder. Per-unit rewards are public and ratable. Stats refresh on page load — no upcoming-pool teasers, no fake supply.</div>
+</div>
+<script>
+// Stats fetch — soft-falls to zero (charter rule: no playful surfaces firing
+// on empty data, no fake supply). When the incentive_pools table lands, this
+// endpoint returns real numbers and the UI ticks up. Until then: 0/0/0,
+// honestly.
+fetch('/api/incentives/stats').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if(!d)return;
+  if(d.pools_live!=null)    document.getElementById('sPools').textContent    = d.pools_live;
+  if(d.deployed_usd!=null)  document.getElementById('sDeployed').textContent = '$'+Number(d.deployed_usd).toLocaleString();
+  if(d.paid_usd!=null)      document.getElementById('sPaid').textContent     = '$'+Number(d.paid_usd).toLocaleString();
+}).catch(function(){});
+</script>
+</body>
+</html>

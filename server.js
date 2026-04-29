@@ -10459,7 +10459,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -29691,6 +29691,15 @@ app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'public',
 // Lives at /challenges/nba so the URL slot reads "challenges hub → nba" once
 // we add NFL/MLB/NHL surfaces. Same /api/challenges/nba/* namespace.
 app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges-nba.html')));
+// Incentives storefront — trader earns + sponsor funds dual-CTA page.
+// Stats endpoint below soft-falls to zero until incentive_pools table lands.
+app.get('/incentives', (req, res) => res.sendFile(path.join(__dirname, 'public', 'incentives.html')));
+app.get('/api/incentives/stats', (req, res) => {
+  // Charter rule: no fake supply, no playful surfaces on empty data. Until
+  // the incentive_pools schema is live, return honest zeros so the page
+  // header reads 0/0/0 instead of mystery placeholders or fake demos.
+  res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
+});
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
