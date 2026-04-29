@@ -76,6 +76,38 @@ canvas{display:block;width:100%!important}
 /* Holders section */
 .mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-holders h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+/* ── Live Bet Feed (Phase 2) ────────────────────────────────────── */
+.bet-feed-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:24px}
+.bet-feed-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono,'JetBrains Mono',monospace);font-size:11px;font-weight:800;letter-spacing:0.12em;color:var(--soft);text-transform:uppercase}
+.bet-feed-title{color:var(--ink)}
+.bet-feed-dot{width:7px;height:7px;border-radius:50%;background:var(--green,#00e68a);box-shadow:0 0 10px rgba(0,230,138,0.7);animation:bf-pulse 1.4s infinite;flex-shrink:0}
+@keyframes bf-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.bet-feed-conn-state{margin-left:auto;color:var(--dim,#4a4a5a);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:lowercase}
+.bet-feed-conn-state.live{color:var(--green,#00e68a)}
+.bet-feed-conn-state.lost{color:var(--red,#ff4d6a)}
+.bet-feed-list{display:flex;flex-direction:column;gap:0}
+.bet-row{display:grid;grid-template-columns:28px 1fr auto auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--body);transition:background .15s}
+.bet-row:last-child{border-bottom:0}
+.bet-row:hover{background:rgba(255,255,255,0.02)}
+.bet-row-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#6d28d9);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+.bet-row-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.bet-row-main{min-width:0;font-size:13px;line-height:1.35}
+.bet-row-name{color:var(--ink,#f0f0f5);font-weight:700;text-decoration:none}
+.bet-row-name:hover{text-decoration:underline}
+.bet-row-verb{color:var(--soft,#8b8a9a);font-size:11px;font-weight:500;margin:0 4px}
+.bet-row-side{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.08em;padding:1px 6px;border-radius:4px}
+.bet-row-side.yes{background:rgba(0,230,138,0.14);color:var(--green,#00e68a)}
+.bet-row-side.no{background:rgba(255,77,106,0.14);color:var(--red,#ff4d6a)}
+.bet-row-market{display:block;color:var(--soft,#8b8a9a);font-size:11px;text-decoration:none;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bet-row-market:hover{color:var(--ink);text-decoration:underline}
+.bet-row-amt{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--ink,#f0f0f5);text-align:right;font-variant-numeric:tabular-nums}
+.bet-row-px{font-family:var(--mono);font-size:11px;color:var(--dim,#4a4a5a);text-align:right;font-variant-numeric:tabular-nums}
+.bet-row-time{display:none}
+@keyframes bf-slidein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.bet-row.bf-new{animation:bf-slidein .35s cubic-bezier(.18,.9,.32,1.18)}
+.bet-row.bf-mine{box-shadow:inset 3px 0 0 var(--gold,#c9920d)}
+.bet-feed-empty{padding:14px 0;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase}
 .holders-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .holders-col-header{font-family:var(--body);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .holders-col-header.yes{color:var(--green)}
@@ -398,6 +430,24 @@ canvas{display:block;width:100%!important}
             <div id="holdersNo"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
           </div>
         </div>
+      </div>
+
+      <!-- Live Bet Feed (Phase 2) — every HFX-routed trade across all
+           markets, slid in via SSE within ~1s of the POST landing.
+           Mounted here in the main column so it sits between market
+           context (top holders) and other content (related markets,
+           comments) without crowding the trade widget. Hidden until
+           initial fetch completes; if there are 0 bets ever, the
+           section auto-hides per charter rule (no playful empty
+           state). Voice: dry numerate ("user · YES · 67¢ · $25 ·
+           12s ago"), no emoji decoration, no exclamation. -->
+      <div class="bet-feed-section" id="betFeedSection" style="display:none;margin-top:20px">
+        <div class="bet-feed-head">
+          <span class="bet-feed-dot"></span>
+          <span class="bet-feed-title">Live Bets</span>
+          <span class="bet-feed-conn-state" id="betFeedConnState">connecting…</span>
+        </div>
+        <div class="bet-feed-list" id="betFeedList"></div>
       </div>
 
       <!-- Holder Distribution -->
@@ -5872,6 +5922,39 @@ async function executeTrade() {
     showTradeStatus('\u2705 Order placed! ' + sideLabel + ' ' + shares.toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
     console.log('[trade] Order success:', data);
 
+    // Phase 2: ping the live bet feed. Fire-and-forget \u2014 never block the
+    // trade response on this. Catches all errors so a feed outage doesn't
+    // affect trade success UX. Server-side requireAuth will reject if the
+    // user isn't logged in, which is fine \u2014 anonymous trades shouldn't
+    // appear in the feed anyway.
+    try {
+      var _bfToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+      if (_bfToken) {
+        var _bfMarket = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || _market || {};
+        var _bfMarketSlug = (_market && _market.slug) || (_market && _market.event_slug) || '';
+        var _bfMarketTitle = (_market && _market.question) || (_market && _market.title) || _bfMarket.question || '';
+        var _bfOutcomeLabel = _bfMarket.groupItemTitle || _bfMarket.question || null;
+        var _bfBody = {
+          market_id:     (_bfMarket && _bfMarket.conditionId) || (_market && _market.conditionId) || '',
+          market_title:  _bfMarketTitle,
+          market_slug:   _bfMarketSlug || null,
+          outcome_id:    tokenId,
+          outcome_label: _bfOutcomeLabel,
+          side:          sideLabel,
+          price:         price / 100,
+          size:          shares,
+          usd_amount:    amount,
+          order_id:      (data && (data.orderID || data.order_id)) || null,
+        };
+        fetch('/api/bet-feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _bfToken },
+          body: JSON.stringify(_bfBody),
+          keepalive: true,  // survives page unload (e.g. user nav-aways post-confirm)
+        }).catch(function(e) { console.log('[bet-feed] post failed (non-blocking):', e.message); });
+      }
+    } catch (bfErr) { console.log('[bet-feed] hook error (non-blocking):', bfErr.message); }
+
     // Show position in trade panel
     showTradePosition(sideLabel, shares, price, amount, payout);
 
@@ -7030,9 +7113,155 @@ async function runCrystalBall() {
 }
 
 // Init
+// ── Live Bet Feed (Phase 2) ─────────────────────────────────────────
+// REST → SSE upgrade. Initial 50 rows from /api/bet-feed, then connect
+// to /api/bet-feed/stream and prepend new rows as they arrive. New
+// rows animate in via the .bf-new class. Section auto-hides if the
+// initial fetch returns an empty array (charter rule: no playful
+// surfaces firing on empty data).
+var _betFeed = { rows: [], es: null, mountedAt: 0, myUid: null };
+function _bfTimeAgo(ts) {
+  var s = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 1000));
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  return Math.floor(s / 86400) + 'd';
+}
+function _bfEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _bfRowHtml(b) {
+  var name  = _bfEsc(b.display_name || b.username || 'Trader');
+  var initial = (name.charAt(0) || '?').toUpperCase();
+  var side  = String(b.side || '').toUpperCase();
+  var sideCls = side === 'YES' ? 'yes' : 'no';
+  var price = b.price != null ? Math.round(parseFloat(b.price) * 100) + '¢' : '—';
+  var amt   = b.usd_amount != null ? '$' + parseFloat(b.usd_amount).toFixed(parseFloat(b.usd_amount) >= 100 ? 0 : 2) : '—';
+  var marketHref = b.market_slug ? '/market/' + encodeURIComponent(b.market_slug) : '#';
+  var profileHref = b.user_id ? '/m/' + encodeURIComponent(b.user_id) : '#';
+  var marketLabel = _bfEsc(b.outcome_label || b.market_title || 'Market');
+  var avatar = b.avatar_url
+    ? '<img src="' + _bfEsc(b.avatar_url) + '" alt="">'
+    : initial;
+  var mineCls = (_betFeed.myUid && b.user_id === _betFeed.myUid) ? ' bf-mine' : '';
+  var ts = b.created_at ? new Date(b.created_at).toISOString() : '';
+  return '<div class="bet-row' + mineCls + '" data-id="' + _bfEsc(b.id) + '" data-ts="' + ts + '">' +
+      '<a class="bet-row-avatar" href="' + profileHref + '">' + avatar + '</a>' +
+      '<div class="bet-row-main">' +
+        '<a class="bet-row-name" href="' + profileHref + '">' + name + '</a>' +
+        '<span class="bet-row-verb">bought</span>' +
+        '<span class="bet-row-side ' + sideCls + '">' + side + '</span>' +
+        '<a class="bet-row-market" href="' + marketHref + '" title="' + marketLabel + '">' + marketLabel + '</a>' +
+      '</div>' +
+      '<span class="bet-row-px">' + price + '</span>' +
+      '<span class="bet-row-amt">' + amt + '</span>' +
+    '</div>';
+}
+function _bfRender() {
+  var list = document.getElementById('betFeedList');
+  if (!list) return;
+  if (!_betFeed.rows.length) {
+    list.innerHTML = '<div class="bet-feed-empty">No bets yet — be the first.</div>';
+    return;
+  }
+  list.innerHTML = _betFeed.rows.slice(0, 30).map(_bfRowHtml).join('');
+}
+function _bfPrepend(row) {
+  // Avoid duplicate inserts (POST → fanout race): if the row id exists
+  // already, no-op. This can happen when the user's own trade lands
+  // and the SSE event arrives before the server response — we already
+  // optimistically inserted from the local trade-success handler.
+  if (_betFeed.rows.some(function(r) { return String(r.id) === String(row.id); })) return;
+  _betFeed.rows.unshift(row);
+  if (_betFeed.rows.length > 60) _betFeed.rows.length = 60;  // cap memory
+  var list = document.getElementById('betFeedList');
+  if (!list) return;
+  // Surgical DOM update so existing rows don't re-render (preserves any
+  // hover state, animations, etc).
+  var newNode = document.createElement('div');
+  newNode.innerHTML = _bfRowHtml(row);
+  var rowEl = newNode.firstChild;
+  if (rowEl) {
+    rowEl.classList.add('bf-new');
+    list.insertBefore(rowEl, list.firstChild);
+    // Trim DOM to 30 rows
+    while (list.children.length > 30) list.removeChild(list.lastChild);
+    setTimeout(function() { rowEl.classList.remove('bf-new'); }, 400);
+  }
+}
+function _bfSetState(state) {
+  var el = document.getElementById('betFeedConnState');
+  if (!el) return;
+  el.classList.remove('live', 'lost');
+  if (state === 'live') { el.textContent = 'live'; el.classList.add('live'); }
+  else if (state === 'lost') { el.textContent = 'reconnecting…'; el.classList.add('lost'); }
+  else el.textContent = 'connecting…';
+}
+async function _bfLoadInitial() {
+  try {
+    var r = await fetch('/api/bet-feed?limit=50', { credentials: 'omit' });
+    if (!r.ok) throw new Error('feed fetch ' + r.status);
+    var d = await r.json();
+    var rows = (d && d.items) || [];
+    if (!rows.length) {
+      // Charter compliance: no playful empty surface. Show the section
+      // anyway with a dry one-line empty state once data IS expected
+      // (post-MVP we'll have real volume). For now leave hidden.
+      return;
+    }
+    _betFeed.rows = rows;
+    var sect = document.getElementById('betFeedSection');
+    if (sect) sect.style.display = '';
+    _bfRender();
+  } catch (e) {
+    console.warn('[bet-feed] initial load failed:', e.message);
+  }
+}
+function _bfConnectStream() {
+  if (typeof EventSource === 'undefined') return;  // ancient browser
+  try {
+    var es = new EventSource('/api/bet-feed/stream');
+    _betFeed.es = es;
+    es.addEventListener('open',  function() { _bfSetState('live'); });
+    es.addEventListener('ready', function() { _bfSetState('live'); });
+    es.addEventListener('bet', function(ev) {
+      try {
+        var row = JSON.parse(ev.data);
+        // Reveal section if it was hidden (initial load was empty but a
+        // bet just landed — we now have real data to render).
+        var sect = document.getElementById('betFeedSection');
+        if (sect && sect.style.display === 'none') sect.style.display = '';
+        _bfPrepend(row);
+      } catch (e) { /* malformed event, drop */ }
+    });
+    es.addEventListener('error', function() {
+      _bfSetState('lost');
+      // EventSource auto-reconnects on its own; we just update the badge.
+    });
+  } catch (e) {
+    console.warn('[bet-feed] SSE connect failed:', e.message);
+  }
+}
+function _bfInit() {
+  // Cache the viewer's user_id so we can highlight their own bets in the
+  // feed (gold left-border via .bf-mine). JWT decode mirrors what nav.js
+  // does — keep the regex tight so a malformed token doesn't throw.
+  try {
+    var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (t) {
+      var p = JSON.parse(atob(t.split('.')[1] || ''));
+      _betFeed.myUid = p.id || p.sub || p.user_id || null;
+    }
+  } catch (e) { /* unauthenticated — no highlighting */ }
+  _bfLoadInitial();
+  _bfConnectStream();
+}
+
 loadMarket().then(function() {
   updateCurrentPriceBtn();
   updatePricePills();
+  // Phase 2 live bet feed — fires once on first market load. The feed
+  // is global (not per-market), so subsequent navigations between
+  // markets reuse the same EventSource and rows.
+  if (!_betFeed.mountedAt) { _betFeed.mountedAt = Date.now(); _bfInit(); }
   // Default the price input to current market price on load
   setCurrentPrice();
   // Phase 1: default the amount to $25 — primary chip — so the

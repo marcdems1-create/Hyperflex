@@ -32545,6 +32545,192 @@ app.get('/api/terminal/stream-stats', requireAdmin, (req, res) => {
   res.json(liveStream.getStats());
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// BET FEED (Phase 2) — live action feed of every HFX-routed trade
+// ════════════════════════════════════════════════════════════════════════
+//
+// Spec called for a WebSocket fan-out. SSE is the right tool here: the
+// connection is one-way broadcast (server → many readonly clients), the
+// codebase already has working SSE patterns (/api/terminal/stream,
+// /api/copy-bot/stream, /api/stops/stream), and SSE survives Cloudflare's
+// 100s idle-tab kill better than ws upgrades. Same payload semantics,
+// half the infra. Documented deviation, no functional regression.
+//
+// Three endpoints:
+//   POST /api/bet-feed         — auth required; trade success handler posts here
+//   GET  /api/bet-feed         — paginated newest-first, public
+//   GET  /api/bet-feed/stream  — SSE; new rows fanout to all listeners
+//
+// In-process listener Set is fine at the volume we expect (sub-thousand
+// concurrent viewers). When the bus needs to span instances, swap the
+// Set for a Postgres LISTEN/NOTIFY or Redis pub/sub here without changing
+// the public surface.
+const _betFeedListeners = new Set();
+function _betFeedFanout(row) {
+  // Best-effort fanout. A buggy listener can't poison the loop because
+  // each send is wrapped — failed writes mean a dead client whose close
+  // handler will deregister it on its own.
+  for (const send of _betFeedListeners) {
+    try { send(row); } catch (e) { /* close handler will clean up */ }
+  }
+}
+
+// Schema soft-create on boot. Parallels the takes / paper_balance pattern:
+// CREATE IF NOT EXISTS so the migration file is the source of truth but
+// a fresh env doesn't crash on first POST. Lives behind `pool` because
+// the supabase fallback path doesn't apply to this surface.
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`CREATE TABLE IF NOT EXISTS bet_feed (
+      id BIGSERIAL PRIMARY KEY,
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      market_id TEXT NOT NULL,
+      market_title TEXT NOT NULL,
+      market_slug TEXT,
+      outcome_id TEXT NOT NULL,
+      outcome_label TEXT,
+      side TEXT NOT NULL CHECK (side IN ('YES','NO')),
+      price NUMERIC NOT NULL,
+      size NUMERIC NOT NULL,
+      usd_amount NUMERIC NOT NULL,
+      order_id TEXT,
+      copied_from_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      copied_from_bet_id BIGINT REFERENCES bet_feed(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_bet_feed_id_desc      ON bet_feed(id DESC)`);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_bet_feed_user_id_desc ON bet_feed(user_id, id DESC)`);
+    await dbQuery(`CREATE INDEX IF NOT EXISTS idx_bet_feed_copied_from  ON bet_feed(copied_from_bet_id) WHERE copied_from_bet_id IS NOT NULL`);
+  } catch (e) { console.warn('[bet-feed] schema ensure failed:', e.message); }
+})();
+
+// POST /api/bet-feed — called fire-and-forget from the trade success
+// handler in market.html. Never block the trade response on this.
+//
+// Validation is deliberately loose (price 0..1, size>0, side YES|NO).
+// Bad rows just get rejected — the trade itself already happened on
+// Polymarket's chain so a feed-insert failure doesn't unwind anything.
+app.post('/api/bet-feed', requireAuth, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const b = req.body || {};
+    const market_id      = String(b.market_id || '').trim();
+    const market_title   = String(b.market_title || '').trim().slice(0, 240);
+    const market_slug    = b.market_slug ? String(b.market_slug).trim().slice(0, 200) : null;
+    const outcome_id     = String(b.outcome_id || '').trim();
+    const outcome_label  = b.outcome_label ? String(b.outcome_label).trim().slice(0, 80) : null;
+    const side           = String(b.side || '').toUpperCase();
+    const price          = parseFloat(b.price);
+    const size           = parseFloat(b.size);
+    const usd_amount     = parseFloat(b.usd_amount);
+    const order_id       = b.order_id ? String(b.order_id).slice(0, 200) : null;
+    const copied_from_user_id = b.copied_from_user_id || null;
+    const copied_from_bet_id  = b.copied_from_bet_id ? parseInt(b.copied_from_bet_id, 10) : null;
+
+    if (!market_id || !market_title || !outcome_id) return res.status(400).json({ error: 'market_id + market_title + outcome_id required' });
+    if (!['YES','NO'].includes(side))                return res.status(400).json({ error: 'side must be YES or NO' });
+    if (!Number.isFinite(price) || price <= 0 || price >= 1) return res.status(400).json({ error: 'price out of range' });
+    if (!Number.isFinite(size) || size <= 0)         return res.status(400).json({ error: 'size must be > 0' });
+    if (!Number.isFinite(usd_amount) || usd_amount <= 0) return res.status(400).json({ error: 'usd_amount must be > 0' });
+
+    const rows = await dbQuery(
+      `INSERT INTO bet_feed (user_id, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id, copied_from_user_id, copied_from_bet_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING id, user_id, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id, copied_from_user_id, copied_from_bet_id, created_at`,
+      [req.userId, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id, copied_from_user_id, copied_from_bet_id]
+    );
+    const row = rows[0];
+
+    // Hydrate display name + avatar so listeners don't have to do a
+    // user lookup of their own. Single small query, fire-and-forget if it
+    // fails — the bet is already persisted, fanout shape just degrades
+    // to "Anonymous" for that one event.
+    let display_name = 'Trader', avatar_url = null;
+    try {
+      const ur = await dbQuery('SELECT display_name, username, avatar_url FROM users WHERE id = $1', [req.userId]);
+      if (ur[0]) {
+        display_name = ur[0].display_name || ur[0].username || 'Trader';
+        avatar_url = ur[0].avatar_url || null;
+      }
+    } catch (e) { /* fan out without identity rather than fail */ }
+
+    const fanoutRow = { ...row, display_name, avatar_url };
+    _betFeedFanout(fanoutRow);
+    res.json({ ok: true, bet: fanoutRow });
+  } catch (err) {
+    console.error('[bet-feed] insert error:', err.message);
+    res.status(500).json({ error: 'Failed to record bet' });
+  }
+});
+
+// GET /api/bet-feed?limit=50&cursor=<id> — paginated newest-first.
+// cursor is the last id seen by the client; results return rows with
+// id < cursor. Public — no auth.
+app.get('/api/bet-feed', async (req, res) => {
+  if (!pool) return res.json({ items: [], next_cursor: null });
+  try {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
+    const args = [limit];
+    let whereClause = '';
+    if (cursor && Number.isFinite(cursor)) {
+      whereClause = 'WHERE bf.id < $2';
+      args.push(cursor);
+    }
+    const rows = await dbQuery(
+      `SELECT bf.id, bf.user_id, bf.market_id, bf.market_title, bf.market_slug,
+              bf.outcome_id, bf.outcome_label, bf.side, bf.price, bf.size,
+              bf.usd_amount, bf.order_id, bf.copied_from_user_id,
+              bf.copied_from_bet_id, bf.created_at,
+              u.display_name, u.username, u.avatar_url
+         FROM bet_feed bf
+         LEFT JOIN users u ON u.id = bf.user_id
+         ${whereClause}
+         ORDER BY bf.id DESC
+         LIMIT $1`,
+      args
+    );
+    const next_cursor = rows.length === limit ? rows[rows.length - 1].id : null;
+    res.json({ items: rows, next_cursor });
+  } catch (err) {
+    console.error('[bet-feed] list error:', err.message);
+    res.status(500).json({ error: 'Failed to load bet feed' });
+  }
+});
+
+// GET /api/bet-feed/stream — SSE broadcast of new bet_feed rows.
+// Public, read-only, no auth. Mirrors the /api/terminal/stream pattern.
+app.get('/api/bet-feed/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+
+  const send = (row) => {
+    try {
+      res.write('event: bet\n');
+      res.write('data: ' + JSON.stringify(row) + '\n\n');
+    } catch (e) { /* client gone */ }
+  };
+  _betFeedListeners.add(send);
+
+  // Ack so the EventSource resolves into 'open' state
+  try { res.write('event: ready\ndata: {}\n\n'); } catch {}
+
+  // Heartbeat every 15s for proxies that drop idle connections
+  const heartbeat = setInterval(() => {
+    try { res.write('event: heartbeat\ndata: {}\n\n'); } catch (e) {}
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    _betFeedListeners.delete(send);
+    try { res.end(); } catch {}
+  });
+});
+
 function filterScreenerResults(markets, query) {
   let filtered = [...markets];
   const minWhales = parseInt(query.min_whales) || 0;
