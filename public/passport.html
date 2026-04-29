@@ -41,6 +41,16 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); -
 .passport-stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1.2; }
 .passport-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
 
+/* Platform breakdown row — one chip per connected platform with W-L + signed PnL */
+.platforms-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-bottom: 20px; }
+.platform-chip { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.platform-name { font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text); margin-bottom: 6px; }
+.platform-stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--soft); }
+.platform-pnl { margin-left: auto; font-weight: 700; }
+.platform-pnl.pos { color: var(--green); }
+.platform-pnl.neg { color: var(--red); }
+.platform-pnl.neu { color: var(--muted); }
+
 /* Top calls */
 .top-calls-title { font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
 .call-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
@@ -125,29 +135,90 @@ function timeAgo(d) {
 
 function fmtK(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'K' : n; }
 
+// Signed dollar with sign-prefix and 0 / 2 / k shortening based on magnitude.
+function fmtPnL(n) {
+  if (n == null || isNaN(n)) return '—';
+  var abs = Math.abs(n);
+  var sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  if (abs >= 1000) return sign + '$' + (abs / 1000).toFixed(1) + 'K';
+  if (abs >= 100)  return sign + '$' + Math.round(abs);
+  return sign + '$' + abs.toFixed(2);
+}
+
+// Friendly platform label.
+function platformLabel(p) {
+  return ({ polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold', hyperflex: 'HYPERFLEX' })[p] || p;
+}
+
 async function load() {
   var el = document.getElementById('passport');
   try {
-    var res = await fetch(API + '/api/member/' + userId);
-    if (!res.ok) { el.innerHTML = '<div class="loading">Profile not found</div>'; return; }
-    var data = await res.json();
+    // Fan out: HFX-side stats + cross-platform portfolio + platform analytics.
+    // Passport has zero requirements on auth so all three are public reads.
+    var [memberRes, portfolioRes, analyticsRes] = await Promise.all([
+      fetch(API + '/api/member/' + userId),
+      fetch(API + '/api/predictors/' + userId + '/portfolio').catch(function(){ return null; }),
+      fetch(API + '/api/predictors/' + userId + '/analytics').catch(function(){ return null; }),
+    ]);
+    if (!memberRes.ok) { el.innerHTML = '<div class="loading">Profile not found</div>'; return; }
+    var data = await memberRes.json();
+    var portfolio = portfolioRes && portfolioRes.ok ? await portfolioRes.json() : null;
+    var analytics = analyticsRes && analyticsRes.ok ? await analyticsRes.json() : null;
+
     var u = data.user, s = data.stats, ts = data.take_stats || {}, takes = data.recent_takes || [];
 
-    var winPct = s.settled_predictions > 0 ? Math.round((s.wins / s.settled_predictions) * 100) : 0;
+    // ── Cross-platform aggregation ────────────────────────────────────────
+    // Active positions = cached_positions where pnl is null or settled is
+    // false (proxy for "live"). Some platforms only fill pnl on resolve.
+    var cached = (portfolio && portfolio.cached_positions) || [];
+    var openPositions = cached.filter(function(p) {
+      return p.settled === false || p.settled === 0 || p.settled == null;
+    }).length;
+
+    // Platform breakdown from analytics endpoint (HFX + cached, pre-aggregated).
+    var platforms = (analytics && analytics.platforms) || {};
+    var connectedPlatforms = Object.keys(platforms).filter(function(k) { return platforms[k].total > 0; });
+
+    // Combined settled / wins / win-rate / pnl across every platform
+    // (analytics already converts HFX centpoints to points, treats other
+    // platforms' pnl as native dollars — close enough for a credential
+    // overview; precise per-platform numbers stay on /m/:userId).
+    var allSettled = 0, allWins = 0, allLosses = 0, allPnL = 0;
+    Object.keys(platforms).forEach(function(k) {
+      var p = platforms[k];
+      allSettled += p.total || 0;
+      allWins    += p.wins  || 0;
+      allLosses  += p.losses|| 0;
+      allPnL     += p.pnl   || 0;
+    });
+    var allWinPct = allSettled > 0 ? Math.round((allWins / allSettled) * 100) : null;
+
+    var hfxWinPct = s.settled_predictions > 0 ? Math.round((s.wins / s.settled_predictions) * 100) : null;
+    // Tier prefers HFX (probability data is richer), falls back to cross-platform.
+    var primaryWinPct = hfxWinPct != null && s.settled_predictions >= 5 ? hfxWinPct
+                      : allWinPct != null && allSettled >= 5             ? allWinPct
+                      : null;
+    var primarySample = (hfxWinPct != null && s.settled_predictions >= 5) ? s.settled_predictions : allSettled;
+
     var flexScore = s.flex_score_alltime != null ? s.flex_score_alltime : s.flex_score_90d;
 
-    // Tier
+    // Tier — same ladder, but driven by the chosen primary win-rate.
     var tier, tierIcon, tierColor;
-    if (winPct >= 70 && s.settled_predictions >= 10) { tier = 'ORACLE'; tierIcon = '🎯'; tierColor = '#c9920d'; }
-    else if (winPct >= 60 && s.settled_predictions >= 5) { tier = 'SHARP'; tierIcon = '🎯'; tierColor = '#00e68a'; }
-    else if (winPct >= 50 && s.settled_predictions >= 5) { tier = 'SOLID'; tierIcon = '📊'; tierColor = '#4d9fff'; }
-    else if (s.settled_predictions >= 3) { tier = 'SPECULATOR'; tierIcon = '🎲'; tierColor = '#a0a0aa'; }
-    else { tier = 'NEWCOMER'; tierIcon = '🆕'; tierColor = '#a0a0aa'; }
+    if (primaryWinPct == null) { tier = 'NEWCOMER'; tierIcon = '🆕'; tierColor = '#a0a0aa'; }
+    else if (primaryWinPct >= 70 && primarySample >= 10) { tier = 'ORACLE';     tierIcon = '🎯'; tierColor = '#c9920d'; }
+    else if (primaryWinPct >= 60 && primarySample >= 5)  { tier = 'SHARP';      tierIcon = '🎯'; tierColor = '#00e68a'; }
+    else if (primaryWinPct >= 50 && primarySample >= 5)  { tier = 'SOLID';      tierIcon = '📊'; tierColor = '#4d9fff'; }
+    else if (primarySample >= 3)                          { tier = 'SPECULATOR'; tierIcon = '🎲'; tierColor = '#a0a0aa'; }
+    else                                                  { tier = 'NEWCOMER';   tierIcon = '🆕'; tierColor = '#a0a0aa'; }
 
     // OG tags
     document.title = u.display_name + ' — Prediction Passport | HYPERFLEX';
     var metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) metaDesc.content = u.display_name + ' is a ' + tier + ' predictor with ' + winPct + '% accuracy across ' + (s.settled_predictions || 0) + ' predictions on HYPERFLEX.';
+    if (metaDesc) {
+      metaDesc.content = primaryWinPct != null
+        ? u.display_name + ' is a ' + tier + ' predictor with ' + primaryWinPct + '% accuracy across ' + primarySample + ' resolved predictions on HYPERFLEX.'
+        : u.display_name + ' on HYPERFLEX — track record building.';
+    }
 
     // Top correct calls
     var correctCalls = takes.filter(function(t) { return t.is_correct === true; }).slice(0, 5);
@@ -157,7 +228,7 @@ async function load() {
         '<span class="call-q">' + (t.question||'').replace(/</g,'&lt;') + '</span>' +
         '<span class="call-result correct">✓ CORRECT</span>' +
       '</div>';
-    }).join('') : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">No resolved predictions yet</div>';
+    }).join('') : '';
 
     var initials = (u.display_name || '?').split(' ').map(function(w){return w[0]}).join('').toUpperCase().slice(0,2);
     var avatarBg = u.is_whale ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'var(--card)';
@@ -169,10 +240,60 @@ async function load() {
     var tweetText = encodeURIComponent(
       'My verified prediction track record:\n\n' +
       '🎯 ' + tier + ' tier\n' +
-      '📊 ' + winPct + '% accuracy across ' + (s.settled_predictions || 0) + ' predictions\n' +
+      (primaryWinPct != null ? '📊 ' + primaryWinPct + '% accuracy across ' + primarySample + ' predictions\n' : '') +
+      (allPnL ? '💰 ' + fmtPnL(allPnL) + ' lifetime P&L\n' : '') +
       (flexScore != null ? '⚡ Flex Score: ' + flexScore + '/100\n' : '') +
       '\nVerify it yourself 👇\n' + passportUrl
     );
+
+    // Tier card body — primary win % when we have data, else a copy block
+    // that doesn't lie about a 0% record.
+    var tierBody = primaryWinPct != null
+      ? '<div class="tier-score" style="color:' + tierColor + '">' + primaryWinPct + '%</div>' +
+        '<div class="tier-subtitle">accuracy across ' + primarySample + ' resolved markets' +
+          (connectedPlatforms.length > 1 ? ' · ' + connectedPlatforms.length + ' platforms' : '') + '</div>'
+      : '<div class="tier-score" style="color:' + tierColor + ';font-size:32px;letter-spacing:-0.01em">No record yet</div>' +
+        '<div class="tier-subtitle">Connect a wallet or post a take to start scoring.</div>';
+
+    // Platform breakdown row — chip per connected platform with W-L and PnL.
+    var platformChips = '';
+    if (connectedPlatforms.length) {
+      platformChips = '<div class="platforms-row">' +
+        connectedPlatforms.map(function(k) {
+          var p = platforms[k];
+          var wr = p.total > 0 ? Math.round((p.wins / p.total) * 100) : null;
+          var pnlCls = (p.pnl || 0) > 0 ? 'pos' : (p.pnl || 0) < 0 ? 'neg' : 'neu';
+          return '<div class="platform-chip">' +
+              '<div class="platform-name">' + platformLabel(k) + '</div>' +
+              '<div class="platform-stats">' +
+                '<span>' + (p.total || 0) + ' resolved</span>' +
+                (wr != null ? '<span>· ' + wr + '%</span>' : '') +
+                '<span class="platform-pnl ' + pnlCls + '">' + fmtPnL(p.pnl) + '</span>' +
+              '</div>' +
+            '</div>';
+        }).join('') +
+      '</div>';
+    }
+
+    // Stats grid — replaced. 6 tiles, every one drives off best available data.
+    var pnlTile = '';
+    if (allPnL || connectedPlatforms.length) {
+      var pnlCls = allPnL > 0 ? 'var(--green)' : allPnL < 0 ? 'var(--red)' : 'var(--text)';
+      pnlTile = '<div class="passport-stat"><div class="passport-stat-value" style="color:' + pnlCls + '">' + fmtPnL(allPnL) + '</div><div class="passport-stat-label">Lifetime P&L</div></div>';
+    }
+    var openTile = openPositions > 0
+      ? '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--blue)">' + openPositions + '</div><div class="passport-stat-label">Open Positions</div></div>'
+      : '';
+    var totalPredictions = (s.settled_predictions || 0) + Math.max(0, allSettled - (s.settled_predictions || 0));
+    var statTiles = [
+      '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--gold)">' + (flexScore != null ? flexScore : '—') + '</div><div class="passport-stat-label">Flex Score</div></div>',
+      '<div class="passport-stat"><div class="passport-stat-value">' + (totalPredictions || 0) + '</div><div class="passport-stat-label">Predictions</div></div>',
+      '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--green)">' + (allWins || s.wins || 0) + '</div><div class="passport-stat-label">Correct</div></div>',
+    ];
+    if (pnlTile) statTiles.push(pnlTile);
+    if (openTile) statTiles.push(openTile);
+    statTiles.push('<div class="passport-stat"><div class="passport-stat-value">' + (s.followers || 0) + '</div><div class="passport-stat-label">Followers</div></div>');
+    if (s.streak > 0) statTiles.push('<div class="passport-stat"><div class="passport-stat-value" style="color:#ff8c00">🔥' + s.streak + '</div><div class="passport-stat-label">Streak</div></div>');
 
     el.innerHTML =
       '<div class="passport-badge">🛂 Prediction Passport</div>' +
@@ -189,20 +310,14 @@ async function load() {
       '<div class="tier-card" style="--tier-color:' + tierColor + '">' +
         '<div class="tier-icon">' + tierIcon + '</div>' +
         '<div class="tier-label" style="color:' + tierColor + '">' + tier + '</div>' +
-        '<div class="tier-score" style="color:' + tierColor + '">' + winPct + '%</div>' +
-        '<div class="tier-subtitle">prediction accuracy across ' + (s.settled_predictions || 0) + ' resolved markets</div>' +
+        tierBody +
       '</div>' +
 
-      '<div class="passport-stats">' +
-        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--gold)">' + (flexScore != null ? flexScore : '—') + '</div><div class="passport-stat-label">Flex Score</div></div>' +
-        '<div class="passport-stat"><div class="passport-stat-value">' + (s.settled_predictions || 0) + '</div><div class="passport-stat-label">Predictions</div></div>' +
-        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--green)">' + (s.wins || 0) + '</div><div class="passport-stat-label">Correct</div></div>' +
-        '<div class="passport-stat"><div class="passport-stat-value" style="color:var(--purple)">' + fmtK(s.flex_points || 0) + '</div><div class="passport-stat-label">FLEX Points</div></div>' +
-        '<div class="passport-stat"><div class="passport-stat-value">' + (s.followers || 0) + '</div><div class="passport-stat-label">Followers</div></div>' +
-        '<div class="passport-stat"><div class="passport-stat-value" style="color:' + (s.streak >= 3 ? '#ff8c00' : 'var(--text)') + '">' + (s.streak > 0 ? '🔥' + s.streak : '—') + '</div><div class="passport-stat-label">Streak</div></div>' +
-      '</div>' +
+      platformChips +
 
-      (ts.total > 0 ? '<div class="top-calls-title">Top Correct Calls</div>' + callsHtml : '') +
+      '<div class="passport-stats">' + statTiles.join('') + '</div>' +
+
+      (correctCalls.length ? '<div class="top-calls-title">Top Correct Calls</div>' + callsHtml : '') +
 
       '<div class="verified-footer">' +
         '<div class="verified-badge">✓ Verified by HYPERFLEX</div>' +
