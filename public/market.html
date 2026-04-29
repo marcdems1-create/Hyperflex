@@ -5785,58 +5785,34 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     if (builderHeaders.hasOwnProperty(bk)) orderHeaders[bk] = builderHeaders[bk];
   }
 
-  // Order: Direct CLOB → CF Worker → Railway server proxy
-  // Direct works when user's IP is in an allowed region.
-  // CF Worker runs at nearest edge to user (same region).
-  // Railway is US-based (blocked by Polymarket) — last resort only.
+  // Routing: CF Worker → Railway (Direct CLOB removed — see note below).
+  //
+  // Pre-Apr-28-cutover, direct browser → clob-v2.polymarket.com worked
+  // because preflight + POST landed on the same host with no redirect.
+  // Post-cutover, Polymarket's edge redirects clob-v2 → clob (canonical)
+  // and the browser rejects the OPTIONS preflight with "Redirect is not
+  // allowed for a preflight request". That breaks every direct-CLOB
+  // submission until Polymarket changes their edge policy — outside
+  // our control.
+  //
+  // The CF Worker proxy was always the designed fallback for exactly this
+  // case (CORS shifts, geo-blocks, header rewrites). Making it primary
+  // removes the dependency on Polymarket's CORS configuration — Worker
+  // forwards server-side, no preflight involved. Railway is the deepest
+  // fallback (US IP, geo-blocked for trading endpoints — only useful when
+  // the Worker is misconfigured, not a steady-state path).
 
   // Helper to check for geo-block in response
   function isGeoBlocked(resData) {
     return JSON.stringify(resData || {}).toLowerCase().includes('restricted');
   }
 
-  // 1) DIRECT CLOB
+  // 1) CF WORKER — primary path. Edge fetch runs server-to-server with no
+  // preflight, so Polymarket's redirect policy doesn't apply. Worker also
+  // handles host fallback (clob.polymarket.com → clob-v2 on 5xx) so we
+  // don't re-implement that here.
   try {
-    tradeDebug('submitting via direct CLOB (primary)', clobHost + '/order');
-    var res = await fetch(clobHost + '/order', {
-      method: 'POST',
-      headers: orderHeaders,
-      body: requestBody
-    });
-
-    var resText = await res.text().catch(function() { return ''; });
-    var resData;
-    try { resData = JSON.parse(resText); } catch (e) { resData = { _raw: resText }; }
-    tradeDebug('direct CLOB ' + res.status, resText.substring(0, 500));
-
-    if (res.ok) return resData;
-
-    // If NOT geo-blocked, handle the error normally
-    if (!isGeoBlocked(resData)) {
-      if (res.status === 401) {
-        localStorage.removeItem('poly_api_key');
-        localStorage.removeItem('poly_api_secret');
-        localStorage.removeItem('poly_api_passphrase');
-        localStorage.removeItem('hf_clob_api_key');
-        localStorage.removeItem('hf_clob_api_secret');
-        localStorage.removeItem('hf_clob_api_passphrase');
-        localStorage.removeItem('poly_eoa_address');
-        updateTradingUI();
-        return { _expired: true, _errorMsg: 'CLOB 401: ' + (resData.error || resData.message || 'Unauthorized') };
-      }
-      var errMsg = resData.error || resData.message || JSON.stringify(resData);
-      return { _error: true, _errorMsg: 'CLOB ' + res.status + ': ' + errMsg };
-    }
-
-    // Geo-blocked — fall through to CF Worker
-    tradeDebug('direct CLOB geo-blocked — trying CF Worker');
-  } catch (directErr) {
-    tradeDebug('direct CLOB THREW', directErr.message + ' — trying CF Worker');
-  }
-
-  // 2) CF WORKER (runs at nearest Cloudflare edge to user)
-  try {
-    tradeDebug('submitting via CF edge proxy', 'hyperflex-trade-proxy.hyperflex.workers.dev/order');
+    tradeDebug('submitting via CF edge proxy (primary)', 'hyperflex-trade-proxy.hyperflex.workers.dev/order');
     var cfRes = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
       method: 'POST',
       headers: orderHeaders,
@@ -5926,13 +5902,28 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 var _livePriceInterval = null;
 
 async function fetchLivePrices() {
-  // Collect all YES token IDs
+  // Polling strategy: only fetch the books the user is actually looking at.
+  // For multi-outcome events (Fed rate cuts: 13 outcomes, NFL bracket: 32+,
+  // election: 50 states), polling every YES token every 10s wasted ~5x the
+  // bandwidth and got us close to Polymarket's per-IP rate limit on mobile.
+  //
+  // New rules:
+  //   1. Multi-outcome event: poll ONLY the active outcome (the one the
+  //      user has selected via _activeOutcomeIndex). The other rows in the
+  //      outcomes table refresh on click via fetchPriceForOutcome (the
+  //      already-existing per-row fetch hook), not on a timer.
+  //   2. Binary market: poll the single token (no change).
+  // Result on a 13-outcome event: ~6 requests/min instead of ~78/min.
   var tokens = [];
   if (_eventMarkets && _eventMarkets.length > 1) {
-    for (var i = 0; i < _eventMarkets.length; i++) {
-      var tids = _eventMarkets[i].clobTokenIds || '[]';
+    var activeIdx = (typeof _activeOutcomeIndex === 'number' && _activeOutcomeIndex >= 0 && _activeOutcomeIndex < _eventMarkets.length)
+      ? _activeOutcomeIndex
+      : 0;
+    var em = _eventMarkets[activeIdx];
+    if (em) {
+      var tids = em.clobTokenIds || '[]';
       if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
-      tokens.push({ src: 'event', idx: i, tokenId: (Array.isArray(tids) && tids[0]) || null });
+      tokens.push({ src: 'event', idx: activeIdx, tokenId: (Array.isArray(tids) && tids[0]) || null });
     }
   } else if (_market) {
     var tids = _market.clobTokenIds || '[]';
@@ -6725,7 +6716,11 @@ loadMarket().then(function() {
   // First live price fetch 1s after load (backend already fetches CLOB, but this catches any delta)
   setTimeout(fetchLivePrices, 1000);
   // Poll every 10 seconds
-  _livePriceInterval = setInterval(fetchLivePrices, 10000);
+  // 15s cadence — bumped from 10s alongside the active-outcome-only
+  // polling change. CLOB book moves at sub-second pace but the user's
+  // perception delta between 10s and 15s is negligible, while the request
+  // budget on mobile is meaningfully better.
+  _livePriceInterval = setInterval(fetchLivePrices, 15000);
   // Alpha-terminal prefill runs after market is loaded + rendered
   setTimeout(applyAlphaPrefill, 400);
 

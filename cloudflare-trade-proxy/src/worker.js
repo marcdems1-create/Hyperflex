@@ -7,26 +7,24 @@
  * client-side — this worker just forwards it.
  *
  * Deploy: cd cloudflare-trade-proxy && npx wrangler deploy
+ * (auto-deploys via .github/workflows/deploy-cf-worker.yml on push to main)
  */
 
-const CLOB_BASE_V1 = 'https://clob.polymarket.com';
-const CLOB_BASE_V2 = 'https://clob-v2.polymarket.com';
-
-// Pre-Apr-28-cutover, V2-signed orders MUST hit the dedicated V2 host.
-// clob.polymarket.com still routes through V1's parser until Polymarket
-// flips the backend; sending a V2 order there returns "invalid signature"
-// because V1 reconstructs the EIP-712 hash over V1 fields. Mirror of the
-// Railway-proxy fix in server.js:40087 (commit f7c30d3). Detect V2 by
-// presence of order.builder in the body.
-function pickClobHost(body) {
-  try {
-    const parsed = JSON.parse(body);
-    const isV2 = !!(parsed && parsed.order && typeof parsed.order.builder === 'string' && parsed.order.builder.startsWith('0x'));
-    return isV2 ? CLOB_BASE_V2 : CLOB_BASE_V1;
-  } catch (e) {
-    return CLOB_BASE_V1;
-  }
-}
+// Post-Apr-28 cutover (~11:00 UTC 2026-04-28), `clob.polymarket.com` IS the
+// V2 backend. The dedicated `clob-v2.polymarket.com` host now redirects to
+// the canonical URL, which (a) breaks browser preflight (302 on OPTIONS is
+// not allowed for CORS preflights — that's the symptom that brought us
+// here), and (b) when the Worker followed the redirect with default
+// fetch settings, some Polymarket pops fired without the auth headers
+// the redirect dropped.
+//
+// New strategy: target `clob.polymarket.com` directly (canonical, V2-aware
+// post-cutover). Keep `clob-v2.polymarket.com` only as a fallback if the
+// canonical host returns a network-style failure. The V1/V2 host split
+// in the old `pickClobHost` logic is no longer meaningful — both hosts
+// run V2, the dedicated host is a holdover that's actively breaking.
+const CLOB_PRIMARY  = 'https://clob.polymarket.com';
+const CLOB_FALLBACK = 'https://clob-v2.polymarket.com';
 
 // Headers we forward from the client to Polymarket CLOB
 const POLY_HEADERS = [
@@ -59,6 +57,27 @@ function corsHeaders(origin) {
     ].join(', '),
     'Access-Control-Max-Age': '86400',
   };
+}
+
+// Forward a single attempt to a CLOB host. Returns the response object
+// regardless of status — caller decides whether to fall through. We set
+// redirect:'follow' explicitly: Polymarket's redirects across the cutover
+// strip auth headers we'd need to re-add, and silent header loss reads as
+// "invalid signature" downstream. Worker's `fetch` follows by default
+// AND replays headers (unlike the browser preflight), but pinning it makes
+// the contract explicit.
+//
+// User-Agent matters: the default `Cloudflare-Workers/...` UA hits a
+// per-host rate limit on data-api.polymarket.com that the canonical UA
+// doesn't. Sending our own UA also makes the upstream logs identify our
+// traffic when we ping the partnerships team about routing.
+async function forwardToClob(host, body, headers) {
+  return fetch(`${host}/order`, {
+    method: 'POST',
+    headers: { ...headers, 'User-Agent': 'Hyperflex/1.0' },
+    body,
+    redirect: 'follow',
+  });
 }
 
 export default {
@@ -110,31 +129,47 @@ export default {
       if (val) clobHeaders[h] = val;
     }
 
-    // Forward the signed order body to CLOB
+    // Forward the signed order body.
     const body = await request.text();
-    const clobBase = pickClobHost(body);
 
-    try {
-      const clobRes = await fetch(`${clobBase}/order`, {
-        method: 'POST',
-        headers: clobHeaders,
-        body: body,
-      });
+    // Two-host attempt chain. If the canonical post-cutover host throws or
+    // returns 5xx we try the legacy V2-only host as a last resort. Don't
+    // chain on 4xx — those are real CLOB errors (signature, balance,
+    // allowance) that we want to surface to the user verbatim.
+    let lastErr = null;
+    for (const host of [CLOB_PRIMARY, CLOB_FALLBACK]) {
+      try {
+        const clobRes = await forwardToClob(host, body, clobHeaders);
+        const clobText = await clobRes.text();
 
-      const clobText = await clobRes.text();
+        // 5xx → fall through to fallback host. 4xx → return as-is so the
+        // client sees the real error (CLOB 401, 400 invalid signature, etc).
+        if (clobRes.status >= 500 && host === CLOB_PRIMARY) {
+          lastErr = `upstream ${clobRes.status} from ${host}`;
+          continue;
+        }
 
-      return new Response(clobText, {
-        status: clobRes.status,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders(origin),
-        },
-      });
-    } catch (err) {
-      return new Response(JSON.stringify({ error: 'Proxy error: ' + err.message }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-      });
+        return new Response(clobText, {
+          status: clobRes.status,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clob-Host': host,  // expose which host actually answered (debug only)
+            ...corsHeaders(origin),
+          },
+        });
+      } catch (err) {
+        lastErr = `${host} threw: ${err && err.message ? err.message : 'unknown'}`;
+        // Network error on primary → try fallback. Network error on
+        // fallback → fall through to the 502 response below.
+      }
     }
+
+    return new Response(JSON.stringify({
+      error: 'Proxy error: both CLOB hosts unreachable',
+      detail: lastErr,
+    }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   },
 };
