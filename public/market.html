@@ -5314,12 +5314,42 @@ async function executeTrade() {
       // with string in arithmetic throws TypeError — coerce makerAmt into a
       // BigInt once and reuse it for the comparison + subtraction below.
       var makerAmtBI = BigInt(makerAmt);
-      if (pUsdBal < makerAmtBI) {
-        var shortfall = makerAmtBI - pUsdBal;
+
+      // Wrap target = makerAmount + fee headroom. CLOB's pre-trade balance
+      // check requires `balance >= makerAmount + estimatedFee`, not just
+      // makerAmount — even though the fee is taken from the taker output at
+      // match time, it's locked from the maker side at submit. We've seen
+      // CLOB reject with "balance: 4000000, order amount: 4001190" on a
+      // proxy holding exactly $4.00 — short by ~0.03% of the order size,
+      // approximately the per-trade fee curve.
+      //
+      // Curve: fee ≈ feeRateBps/10000 × p × (1-p) × order_amount, with a 3%
+      // floor for any non-zero feeRateBps to cover the worst case (extreme
+      // p, rounding, indexer lag). This MUST be wrapped on top of the
+      // shortfall — the upstream fee headroom that adjusts makerAmount in
+      // the SDK-amounts block doesn't always fire (logs show the conditional
+      // sometimes skipping), and even when it does, the same headroom needs
+      // to be reflected in the wrap target. Wrapping here is defensive
+      // because over-wrapping is harmless (extra pUSD sits unused on the
+      // proxy until the next trade) but under-wrapping costs the user POL
+      // on a CLOB rejection.
+      var feeRateBpsNumLocal = Number(feeRateBps) || 0;
+      var feeBufAtomic = 0n;
+      if (feeRateBpsNumLocal > 0) {
+        // 3% of makerAmount, atomic. floor((makerAmtBI * 3) / 100) gives
+        // ~$0.12 buffer on a $4 order — well over the ~$0.0012 we were
+        // short by, with room for higher-fee markets without re-tuning.
+        feeBufAtomic = (makerAmtBI * 3n) / 100n;
+      }
+      var targetBI = makerAmtBI + feeBufAtomic;
+
+      if (pUsdBal < targetBI) {
+        var shortfall = targetBI - pUsdBal;
         var have = ethers.formatUnits(pUsdBal, 6);
-        var need = ethers.formatUnits(makerAmtBI, 6);
+        var need = ethers.formatUnits(targetBI, 6);
         var shortfallHuman = ethers.formatUnits(shortfall, 6);
-        console.log('[trade-v2] pUSD short — have=' + have + ' need=' + need + ' wrapping=' + shortfallHuman);
+        var bufHuman = ethers.formatUnits(feeBufAtomic, 6);
+        console.log('[trade-v2] pUSD short — have=' + have + ' need=' + need + ' (incl ' + bufHuman + ' fee buffer) wrapping=' + shortfallHuman);
         showTradeStatus('Wrapping ' + shortfallHuman + ' USDC → pUSD before order...', 'info');
         try {
           await wrapUsdcToPmct(shortfall);
