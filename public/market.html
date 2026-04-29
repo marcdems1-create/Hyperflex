@@ -108,6 +108,44 @@ canvas{display:block;width:100%!important}
 .bet-row.bf-new{animation:bf-slidein .35s cubic-bezier(.18,.9,.32,1.18)}
 .bet-row.bf-mine{box-shadow:inset 3px 0 0 var(--gold,#c9920d)}
 .bet-feed-empty{padding:14px 0;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase}
+
+/* ── Phase 3: Copy button + modal ──────────────────────────────── */
+.bet-row-copy{padding:5px 10px;border:1px solid rgba(201,146,13,0.25);border-radius:6px;background:rgba(201,146,13,0.06);color:var(--gold,#c9920d);font-family:var(--mono,'JetBrains Mono',monospace);font-size:10px;font-weight:800;letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;transition:background .15s,border-color .15s,transform .12s;-webkit-tap-highlight-color:transparent}
+.bet-row-copy:hover{background:rgba(201,146,13,0.14);border-color:var(--gold,#c9920d)}
+.bet-row-copy:active{transform:scale(0.96)}
+.bet-row-copied{padding:3px 8px;border-radius:5px;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.08em;color:var(--green,#00e68a);background:rgba(0,230,138,0.10);border:1px solid rgba(0,230,138,0.25);text-transform:uppercase}
+/* Re-grid the row to fit the action column */
+.bet-row{grid-template-columns:28px 1fr auto auto auto !important}
+
+.bf-copy-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:1100;display:none;align-items:center;justify-content:center;padding:16px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .22s}
+.bf-copy-overlay.open{display:flex;opacity:1}
+.bf-copy-card{width:100%;max-width:420px;background:linear-gradient(180deg,#15151c,#0f0f15);border:1px solid rgba(201,146,13,0.32);border-radius:16px;padding:20px;transform:scale(0.94) translateY(8px);opacity:0;transition:transform .26s cubic-bezier(.18,.9,.32,1.18),opacity .22s;box-shadow:0 30px 90px -20px rgba(0,0,0,0.7)}
+.bf-copy-overlay.open .bf-copy-card{transform:scale(1) translateY(0);opacity:1}
+.bf-copy-eyebrow{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.14em;color:var(--gold,#c9920d);text-transform:uppercase;margin-bottom:10px}
+.bf-copy-title{font-family:var(--body);font-size:18px;font-weight:800;color:var(--ink,#f0f0f5);line-height:1.3;letter-spacing:-0.01em;margin-bottom:10px}
+.bf-copy-source{padding:10px 12px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:10px;font-family:var(--mono);font-size:12px;color:var(--soft,#8b8a9a);line-height:1.6;margin-bottom:14px}
+.bf-copy-source b{color:var(--ink,#f0f0f5);font-weight:800}
+.bf-copy-source-side{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.08em;padding:2px 7px;border-radius:4px;margin:0 4px}
+.bf-copy-source-side.yes{background:rgba(0,230,138,0.14);color:var(--green,#00e68a)}
+.bf-copy-source-side.no{background:rgba(255,77,106,0.14);color:var(--red,#ff4d6a)}
+.bf-copy-amt-label{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--soft);text-transform:uppercase;margin-bottom:8px}
+.bf-copy-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.bf-copy-chip{min-height:52px;padding:10px 8px;font-family:var(--body);font-size:15px;font-weight:800;color:var(--ink);background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .12s;-webkit-tap-highlight-color:transparent}
+.bf-copy-chip:hover{background:rgba(201,146,13,0.06);border-color:rgba(201,146,13,0.30)}
+.bf-copy-chip:active{transform:scale(0.97)}
+.bf-copy-chip.active{background:rgba(201,146,13,0.16);border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 18px -2px rgba(201,146,13,0.45)}
+.bf-copy-actions{display:flex;gap:10px}
+.bf-copy-confirm{flex:2;padding:13px;border:none;border-radius:10px;background:var(--gold,#c9920d);color:#000;font-family:var(--body);font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.01em;transition:background .15s,transform .12s}
+.bf-copy-confirm:hover{background:#e0a820;transform:translateY(-1px)}
+.bf-copy-confirm:disabled{opacity:0.5;cursor:not-allowed}
+.bf-copy-cancel{flex:1;padding:13px;border:1px solid rgba(255,255,255,0.10);border-radius:10px;background:none;color:var(--soft);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer}
+.bf-copy-cancel:hover{color:var(--ink);border-color:rgba(255,255,255,0.20)}
+@media(max-width:480px){
+  .bf-copy-card{max-width:100%;border-radius:16px 16px 0 0;padding:18px;transform:translateY(40px)}
+  .bf-copy-overlay{align-items:flex-end;padding:0}
+  .bf-copy-overlay.open .bf-copy-card{transform:translateY(0)}
+  .bf-copy-chip{min-height:56px;font-size:16px}
+}
 .holders-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .holders-col-header{font-family:var(--body);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .holders-col-header.yes{color:var(--green)}
@@ -428,6 +466,33 @@ canvas{display:block;width:100%!important}
           <div>
             <div class="holders-col-header no">NO Holders</div>
             <div id="holdersNo"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 3: Copy modal — replicate a feed bet with one tap.
+           Same-market copy fires inline (prefill widget + executeTrade);
+           cross-market copy navigates to the source market with
+           ?from=copy&copy_bet_id=...&side=...&size=... so the existing
+           applyAlphaPrefill path picks it up and auto-fires. The
+           copied_from_bet_id stamp on the new bet_feed row gives us
+           viral-coefficient analytics out of the box (Phase 3 spec).
+           Modal is voice-charter compliant — no exclamation, no
+           emoji decoration, dry numerate copy. -->
+      <div class="bf-copy-overlay" id="bfCopyOverlay" onclick="if(event.target===this)closeCopyModal()">
+        <div class="bf-copy-card">
+          <div class="bf-copy-eyebrow">Copy bet</div>
+          <div class="bf-copy-title" id="bfCopyTitle">—</div>
+          <div class="bf-copy-source" id="bfCopySource">—</div>
+          <div class="bf-copy-amt-label">Amount</div>
+          <div class="bf-copy-chips" id="bfCopyChips">
+            <button type="button" class="bf-copy-chip" data-amt="5"   onclick="bfCopySetAmt(5)">$5</button>
+            <button type="button" class="bf-copy-chip active" data-amt="25"  onclick="bfCopySetAmt(25)">$25</button>
+            <button type="button" class="bf-copy-chip" data-amt="100" onclick="bfCopySetAmt(100)">$100</button>
+          </div>
+          <div class="bf-copy-actions">
+            <button type="button" class="bf-copy-cancel"  onclick="closeCopyModal()">Cancel</button>
+            <button type="button" class="bf-copy-confirm" id="bfCopyConfirm" onclick="confirmCopyBet()">Confirm copy →</button>
           </div>
         </div>
       </div>
@@ -5946,6 +6011,17 @@ async function executeTrade() {
           usd_amount:    amount,
           order_id:      (data && (data.orderID || data.order_id)) || null,
         };
+        // Phase 3: stamp copy attribution onto the bet so the server
+        // can compute viral coefficient (copies-per-source-bet, copy
+        // depth) without instrumenting a separate event stream. Cleared
+        // after consumption so a SECOND non-copy trade in the same
+        // session doesn't accidentally inherit the previous copy's
+        // source attribution.
+        if (window._bfCopyAttribution) {
+          _bfBody.copied_from_bet_id  = window._bfCopyAttribution.copied_from_bet_id || null;
+          _bfBody.copied_from_user_id = window._bfCopyAttribution.copied_from_user_id || null;
+          window._bfCopyAttribution = null;
+        }
         fetch('/api/bet-feed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _bfToken },
@@ -6490,7 +6566,12 @@ function applyAlphaPrefill() {
   try {
     var p = new URLSearchParams(window.location.search);
     var from = p.get('from');
-    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge' && from !== 'mirror' && from !== 'copy-exit') return;
+    // 'copy' is the Phase 3 cross-market copy path. side + size flow
+    // through the same prefill machinery as alpha/terminal/etc. The
+    // destination page also reads copy_bet_id + copy_user_id from the
+    // URL (via _bfHydrateCopyAttribution) so the bet_feed POST stamps
+    // copied_from_* on the new row.
+    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge' && from !== 'mirror' && from !== 'copy-exit' && from !== 'copy') return;
     var side = (p.get('side') || '').toLowerCase();
     var size = parseFloat(p.get('size') || '');
     if (side === 'yes' || side === 'no') {
@@ -7128,6 +7209,28 @@ function _bfTimeAgo(ts) {
   return Math.floor(s / 86400) + 'd';
 }
 function _bfEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _bfHasCopied(betId) {
+  // Viewer's copy history lives in localStorage as a JSON-encoded
+  // Set-equivalent. Cheap, no follow-up server fetch on render. The
+  // canonical truth is bet_feed.copied_from_bet_id but server lookup
+  // per-row would tank the feed render. Stays in sync because the
+  // confirmCopyBet handler writes here on success.
+  try {
+    var raw = localStorage.getItem('hf_copied_bets') || '[]';
+    var ids = JSON.parse(raw);
+    return Array.isArray(ids) && ids.indexOf(String(betId)) >= 0;
+  } catch (e) { return false; }
+}
+function _bfMarkCopied(betId) {
+  try {
+    var raw = localStorage.getItem('hf_copied_bets') || '[]';
+    var ids = JSON.parse(raw);
+    if (!Array.isArray(ids)) ids = [];
+    if (ids.indexOf(String(betId)) < 0) ids.unshift(String(betId));
+    if (ids.length > 200) ids.length = 200;  // cap memory
+    localStorage.setItem('hf_copied_bets', JSON.stringify(ids));
+  } catch (e) { /* private mode / storage full — silent */ }
+}
 function _bfRowHtml(b) {
   var name  = _bfEsc(b.display_name || b.username || 'Trader');
   var initial = (name.charAt(0) || '?').toUpperCase();
@@ -7141,8 +7244,23 @@ function _bfRowHtml(b) {
   var avatar = b.avatar_url
     ? '<img src="' + _bfEsc(b.avatar_url) + '" alt="">'
     : initial;
-  var mineCls = (_betFeed.myUid && b.user_id === _betFeed.myUid) ? ' bf-mine' : '';
+  var isMine = !!(_betFeed.myUid && b.user_id === _betFeed.myUid);
+  var mineCls = isMine ? ' bf-mine' : '';
   var ts = b.created_at ? new Date(b.created_at).toISOString() : '';
+
+  // Action column: hide for the viewer's own bets (can't copy yourself);
+  // show "✓ Copied" badge if viewer has previously copied this row;
+  // otherwise show the Copy button. Phase 3 acceptance is "3 taps from
+  // feed to placed bet" — Copy → chip → Confirm.
+  var actionHtml;
+  if (isMine) {
+    actionHtml = '<span class="bet-row-px" style="color:var(--dim);font-size:9px;letter-spacing:0.06em;text-transform:uppercase">you</span>';
+  } else if (_bfHasCopied(b.id)) {
+    actionHtml = '<span class="bet-row-copied">✓ Copied</span>';
+  } else {
+    actionHtml = '<button type="button" class="bet-row-copy" onclick="openCopyModal(' + JSON.stringify(b.id).replace(/"/g, '&quot;') + ')">Copy</button>';
+  }
+
   return '<div class="bet-row' + mineCls + '" data-id="' + _bfEsc(b.id) + '" data-ts="' + ts + '">' +
       '<a class="bet-row-avatar" href="' + profileHref + '">' + avatar + '</a>' +
       '<div class="bet-row-main">' +
@@ -7153,6 +7271,7 @@ function _bfRowHtml(b) {
       '</div>' +
       '<span class="bet-row-px">' + price + '</span>' +
       '<span class="bet-row-amt">' + amt + '</span>' +
+      actionHtml +
     '</div>';
 }
 function _bfRender() {
@@ -7240,6 +7359,155 @@ function _bfConnectStream() {
     console.warn('[bet-feed] SSE connect failed:', e.message);
   }
 }
+// ── Phase 3: Copy modal ────────────────────────────────────────────
+// State for the active modal — populated when openCopyModal fires,
+// cleared on close. _bfCopySource holds the source bet shape so
+// confirmCopyBet can read all fields without re-querying.
+var _bfCopySource = null;
+var _bfCopyAmt = 25;  // default $25 chip — matches the trade-widget default
+function bfCopySetAmt(amt) {
+  _bfCopyAmt = amt;
+  var chips = document.querySelectorAll('#bfCopyChips .bf-copy-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.toggle('active', chips[i].getAttribute('data-amt') === String(amt));
+  }
+}
+function openCopyModal(betId) {
+  // Auth gate. Anonymous viewers can browse the feed but not copy.
+  var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!t) { window.location.href = '/creator/login'; return; }
+
+  // Find the source bet in the in-memory feed cache. The feed only
+  // holds the last 60 rows, so an old bet id may not resolve — fall
+  // back to a one-shot fetch in that case.
+  var src = (_betFeed.rows || []).find(function(r) { return String(r.id) === String(betId); });
+  if (!src) {
+    // Fetch by cursor — the GET endpoint paginates by id<cursor, so
+    // we can fetch the page that contains betId+1 to find this row.
+    fetch('/api/bet-feed?limit=50&cursor=' + (parseInt(betId, 10) + 1)).then(function(r) {
+      return r.ok ? r.json() : null;
+    }).then(function(d) {
+      if (!d || !d.items) return;
+      var match = d.items.find(function(r) { return String(r.id) === String(betId); });
+      if (match) { _bfCopySource = match; _bfRenderCopyModal(); }
+    }).catch(function() { /* silent */ });
+    return;
+  }
+  _bfCopySource = src;
+  _bfRenderCopyModal();
+}
+function _bfRenderCopyModal() {
+  if (!_bfCopySource) return;
+  var b = _bfCopySource;
+  var name = _bfEsc(b.display_name || b.username || 'Trader');
+  var side = String(b.side || '').toUpperCase();
+  var sideCls = side === 'YES' ? 'yes' : 'no';
+  var price = b.price != null ? Math.round(parseFloat(b.price) * 100) + '¢' : '—';
+  var marketLabel = _bfEsc(b.outcome_label || b.market_title || 'this market');
+
+  document.getElementById('bfCopyTitle').textContent = 'Copy ' + (b.display_name || b.username || 'Trader') + '’s bet';
+  document.getElementById('bfCopySource').innerHTML =
+    '<b>' + name + '</b> bought ' +
+    '<span class="bf-copy-source-side ' + sideCls + '">' + side + '</span> on ' +
+    '<b>' + marketLabel + '</b> at <b>' + price + '</b>.';
+
+  // Reset chip state to default $25 each time the modal opens — fresh
+  // intent, no carryover from a prior copy session.
+  bfCopySetAmt(25);
+  document.getElementById('bfCopyOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', _bfCopyEscHandler);
+}
+function _bfCopyEscHandler(e) { if (e.key === 'Escape') closeCopyModal(); }
+function closeCopyModal() {
+  var ov = document.getElementById('bfCopyOverlay');
+  if (ov) ov.classList.remove('open');
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', _bfCopyEscHandler);
+}
+
+async function confirmCopyBet() {
+  if (!_bfCopySource) return;
+  var src = _bfCopySource;
+  var amt = _bfCopyAmt || 25;
+  var slug = src.market_slug || '';
+  var side = String(src.side || '').toLowerCase();
+
+  if (!slug || !side) {
+    showTradeStatus && showTradeStatus('This bet is missing market data — try again later.', 'error');
+    closeCopyModal();
+    return;
+  }
+
+  // Stash copy attribution in window state so the trade-success POST
+  // to /api/bet-feed can stamp copied_from_user_id + copied_from_bet_id
+  // on the new row. Window-scoped so it survives executeTrade's async
+  // chain. Also stored against the source bet id in localStorage so
+  // the feed renders ✓ Copied immediately after the local trade-success
+  // path completes (vs waiting for SSE round-trip).
+  window._bfCopyAttribution = {
+    copied_from_bet_id: src.id,
+    copied_from_user_id: src.user_id,
+  };
+  _bfMarkCopied(src.id);
+
+  // Confirm button → "Submitting…" so the user sees something happen
+  // even if navigation takes a beat on cross-market copies.
+  var btn = document.getElementById('bfCopyConfirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+
+  // Same market: prefill the trade widget + execute inline. 3-tap path
+  // when the source bet is on the market we're already viewing.
+  var currentSlug = (window._market && (window._market.slug || window._market.event_slug)) || (typeof slug !== 'undefined' && window.location.pathname.split('/market/')[1]) || '';
+  // Strip any query params from currentSlug for comparison
+  if (currentSlug) currentSlug = currentSlug.split('?')[0].split('/')[0];
+
+  if (currentSlug && currentSlug === slug) {
+    closeCopyModal();
+    if (typeof setTradeSide === 'function')   setTradeSide(side);
+    if (typeof setQuickAmount === 'function') setQuickAmount(amt);
+    // Tiny delay so the chip-set updates settle in the DOM before we
+    // fire executeTrade. Not strictly necessary but keeps the visual
+    // sequence "chip glows → trade fires" rather than "blank → trade
+    // fires" under fast hardware.
+    setTimeout(function() { if (typeof executeTrade === 'function') executeTrade(); }, 50);
+    return;
+  }
+
+  // Cross-market: navigate to source market with prefill params. The
+  // existing applyAlphaPrefill path on market.html (line ~6160) accepts
+  // from=copy + side= + size= and sets up the widget. We add
+  // copy_bet_id so the destination page can re-stash window
+  // ._bfCopyAttribution and the trade-success POST tags the new row.
+  // Note: cross-market is technically 4 taps (Copy → chip → Confirm →
+  // Buy on destination) because we don't auto-submit on the new page —
+  // an autosubmit-after-nav pattern is too risky given V2's setup
+  // matrix can require 5-7 MetaMask popups on a fresh wallet, and
+  // having those fire without an explicit "yes I want to do this on
+  // THIS market" press could feel coercive.
+  var params = ['from=copy', 'side=' + side, 'size=' + amt, 'copy_bet_id=' + encodeURIComponent(src.id), 'copy_user_id=' + encodeURIComponent(src.user_id || '')];
+  window.location.href = '/market/' + encodeURIComponent(slug) + '?' + params.join('&');
+}
+
+// On destination market page, restore copy attribution from URL params
+// so the trade-success POST stamps the new bet_feed row with the source
+// bet id. Fires once on init via the same applyAlphaPrefill hook.
+function _bfHydrateCopyAttribution() {
+  try {
+    var p = new URLSearchParams(window.location.search);
+    if (p.get('from') !== 'copy') return;
+    var betId = p.get('copy_bet_id');
+    var userId = p.get('copy_user_id');
+    if (betId) {
+      window._bfCopyAttribution = {
+        copied_from_bet_id: betId,
+        copied_from_user_id: userId || null,
+      };
+    }
+  } catch (e) { /* silent */ }
+}
+_bfHydrateCopyAttribution();
+
 function _bfInit() {
   // Cache the viewer's user_id so we can highlight their own bets in the
   // feed (gold left-border via .bf-mine). JWT decode mirrors what nav.js
