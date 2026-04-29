@@ -3157,23 +3157,50 @@ async function approveTokens() {
     var signer = await provider.getSigner();
     var abi = ['function approve(address spender, uint256 amount) returns (bool)'];
     var usdc = new ethers.Contract(USDC_ADDRESS, abi, signer);
-    var pmct = new ethers.Contract(PMCT_ADDRESS, abi, signer);
 
     var status = await checkTokenApproval();
     var v2On = isClobV2Enabled();
+
+    // Each pending step has either an EOA-direct path (V1, where Polymarket
+    // expected the EOA to hold the token) or a Safe-routed path (V2, where
+    // the proxy holds the token and approving from the EOA bills POL gas
+    // and approves the wrong account). Route declared per-entry so the loop
+    // body stays one shape.
     var pending = [];
-    if (!status.ctf)     pending.push({ label: 'USDC.e → CTF V1',      contract: usdc, addr: CTF_EXCHANGE });
-    if (!status.negRisk) pending.push({ label: 'USDC.e → NegRisk V1',  contract: usdc, addr: NEG_RISK_EXCHANGE });
-    if (v2On && !status.ctfV2)    pending.push({ label: 'pUSD → CTF V2',      contract: pmct, addr: CTF_EXCHANGE_V2 });
-    if (v2On && !status.negRiskV2) pending.push({ label: 'pUSD → NegRisk V2', contract: pmct, addr: NEG_RISK_EXCHANGE_V2 });
-    if (v2On && !status.onramp)   pending.push({ label: 'USDC.e → Onramp',    contract: usdc, addr: COLLATERAL_ONRAMP });
+    // V1 (legacy) — EOA-direct. Polymarket V1 onboarding put USDC.e on the
+    // EOA so a direct approval was correct. V1 markets are deprecated post
+    // 2026-04-28 cutover but the approvals remain valid for any V1 markets
+    // that haven't migrated.
+    if (!status.ctf)     pending.push({ label: 'USDC.e → CTF V1',      route: 'eoa', contract: usdc, addr: CTF_EXCHANGE });
+    if (!status.negRisk) pending.push({ label: 'USDC.e → NegRisk V1',  route: 'eoa', contract: usdc, addr: NEG_RISK_EXCHANGE });
+    // V2 — Safe-routed. Proxy holds the token, Safe relayer pays gas
+    // (falls back to direct execTransaction from EOA on relayer 401 — that
+    // path still costs POL but only once, not double-spent like the old
+    // bug where the EOA approved AND then the V2 pre-flight in executeTrade
+    // re-dispatched the same approval via Safe).
+    if (v2On && !status.ctfV2)     pending.push({ label: 'pUSD → CTF V2',      route: 'safe-pusd',  addr: CTF_EXCHANGE_V2 });
+    if (v2On && !status.negRiskV2) pending.push({ label: 'pUSD → NegRisk V2', route: 'safe-pusd',  addr: NEG_RISK_EXCHANGE_V2 });
+    if (v2On && !status.onramp)    pending.push({ label: 'USDC.e → Onramp',    route: 'safe-usdce', addr: COLLATERAL_ONRAMP });
 
     for (var i = 0; i < pending.length; i++) {
       var step = pending[i];
       showTradeStatus('Approve ' + step.label + ' (' + (i + 1) + '/' + pending.length + ')...', 'info');
-      console.log('[setup] Approving ' + step.label + ' (' + step.addr + ')...');
-      var tx = await step.contract.approve(step.addr, APPROVAL_CAP);
-      await tx.wait();
+      console.log('[setup] Approving ' + step.label + ' (' + step.addr + ') via ' + step.route + '...');
+      if (step.route === 'safe-pusd') {
+        // Safe execTransaction → pUSD.approve(spender, CAP). EOA signs the
+        // SafeTx hash; relayer dispatches (or direct execTransaction
+        // fallback if relayer 401s).
+        await approvePmctForSpender(step.addr);
+      } else if (step.route === 'safe-usdce') {
+        // Same pattern for USDC.e → Onramp. Without this, the wrap reverts
+        // on transferFrom because the proxy's USDC.e allowance to onramp
+        // is 0 (we only set the EOA's allowance, which onramp doesn't care
+        // about — the wrap is dispatched by the proxy, not the EOA).
+        await approveUsdceForSpender(step.addr);
+      } else {
+        var tx = await step.contract.approve(step.addr, APPROVAL_CAP);
+        await tx.wait();
+      }
       console.log('[setup] ' + step.label + ' approved');
     }
 
@@ -3679,6 +3706,49 @@ async function approvePmctForSpender(spender) {
   var p = executeViaProxy(PMCT_ADDRESS, data, 0n)
     .finally(function() { delete _pmctApprovalInFlight[key]; });
   _pmctApprovalInFlight[key] = p;
+  return p;
+}
+
+// USDC.e Safe-routed approval — sibling of approvePmctForSpender for the
+// V2 Onramp wrap path. Proxy holds USDC.e in V2 land; the EOA does not, so
+// approving from the EOA sets allowance on a wallet that holds nothing and
+// the wrap reverts on transferFrom. dispatch via executeViaProxy so the
+// Safe is the one approving.
+//
+// Cache + in-flight dedup mirrors the pUSD helper. Cap is the same 10B
+// atomic threshold (MaxUint256 → Blockaid scam banner on the unfamiliar
+// CollateralOnramp contract).
+async function isUsdceApprovedForSpender(ownerAddr, spender) {
+  if (!ownerAddr || !spender) return false;
+  var _cacheKey = 'hfx_usdce_ok_' + ownerAddr.slice(-8).toLowerCase() + '_' + spender.slice(-8).toLowerCase();
+  if (localStorage.getItem(_cacheKey) === '1') return true;
+  try {
+    var provider = await getPublicProvider();
+    var usdc = new ethers.Contract(USDC_ADDRESS, [
+      'function allowance(address owner, address spender) view returns (uint256)'
+    ], provider);
+    var raw = await usdc.allowance(ownerAddr, spender);
+    var ok = raw > BigInt('1000000000000'); // 1M USDC.e atomic threshold
+    if (ok) localStorage.setItem(_cacheKey, '1');
+    return ok;
+  } catch (e) {
+    console.warn('[usdce] allowance check failed:', e.message);
+    return false;
+  }
+}
+
+var _usdceApprovalInFlight = Object.create(null);
+async function approveUsdceForSpender(spender) {
+  if (!spender) throw new Error('Spender address missing');
+  var key = spender.toLowerCase();
+  if (_usdceApprovalInFlight[key]) return _usdceApprovalInFlight[key];
+  var APPROVAL_CAP = '10000000000000000';
+  var iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);
+  var data = iface.encodeFunctionData('approve', [spender, APPROVAL_CAP]);
+  console.log('[usdce] approve ' + spender.slice(0,10) + '…=CAP via Safe');
+  var p = executeViaProxy(USDC_ADDRESS, data, 0n)
+    .finally(function() { delete _usdceApprovalInFlight[key]; });
+  _usdceApprovalInFlight[key] = p;
   return p;
 }
 
