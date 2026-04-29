@@ -28636,6 +28636,91 @@ async function fetchWhalePositions() {
               }
               console.warn('[takes] whale synthesis error:', e.message);
             });
+
+            // ── Casino floor: write to bet_feed alongside takes ──
+            // Without this, /casino sits empty until real HFX users start
+            // routing trades through us — but whale activity is already
+            // happening every cycle and is real, attributable, and exactly
+            // the kind of "live action" the floor is supposed to surface.
+            // Side-channel that into bet_feed using the same whale's user
+            // profile (auto-created by ensureWhaleProfile above).
+            //
+            // Best-effort: a bet_feed insert failure shouldn't unwind the
+            // takes write or the trade-stream side effects. The whale-take
+            // synthesis already swallows errors, this just adds a sibling
+            // INSERT inside the same try.
+            try {
+              const tokenIds = (() => {
+                try {
+                  if (!evt.clob_token_ids) return [null, null];
+                  const tids = typeof evt.clob_token_ids === 'string' ? JSON.parse(evt.clob_token_ids) : evt.clob_token_ids;
+                  return Array.isArray(tids) ? [tids[0] || null, tids[1] || null] : [null, null];
+                } catch (e) { return [null, null]; }
+              })();
+              const sideUpper = (evt.side || 'YES').toUpperCase();
+              // YES side maps to clobTokenIds[0], NO to [1] — same convention
+              // the rest of the codebase uses (see _getActiveTokenIdForTrade).
+              const outcomeId = sideUpper === 'YES' ? (tokenIds[0] || evt.condition_id || '') : (tokenIds[1] || evt.condition_id || '');
+              const usdAmount = parseFloat(evt.size || 0);
+              const sharePrice = parseFloat(evt.price || 0);
+              const shareCount = sharePrice > 0 ? usdAmount / sharePrice : usdAmount;
+              if (usdAmount > 0 && sharePrice > 0 && sharePrice < 1 && outcomeId) {
+                await dbQuery(
+                  `INSERT INTO bet_feed (user_id, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                  [
+                    whaleUserId,
+                    evt.condition_id || evt.slug || 'unknown',
+                    evt.question || 'Unknown market',
+                    evt.slug || null,
+                    outcomeId,
+                    outcomeLabel,
+                    sideUpper,
+                    sharePrice,
+                    shareCount,
+                    usdAmount,
+                    null,  // no order_id — these are upstream trades observed via WS, not HFX-routed
+                  ]
+                );
+                // Fan out to /api/bet-feed/stream listeners so the casino
+                // floor gets a slide-in animation in real time, not just on
+                // next page reload. Mirrors the shape POST /api/bet-feed
+                // returns. We don't have the bet's id without a second
+                // round-trip — fanout uses the row we just built; consumers
+                // that key by id will skip duplicates if they later see
+                // the same row via a paginated GET.
+                if (typeof _betFeedFanout === 'function') {
+                  try {
+                    _betFeedFanout({
+                      id: 'wt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                      user_id: whaleUserId,
+                      market_id: evt.condition_id || evt.slug || 'unknown',
+                      market_title: evt.question || 'Unknown market',
+                      market_slug: evt.slug || null,
+                      outcome_id: outcomeId,
+                      outcome_label: outcomeLabel,
+                      side: sideUpper,
+                      price: sharePrice,
+                      size: shareCount,
+                      usd_amount: usdAmount,
+                      created_at: new Date().toISOString(),
+                      display_name: evt.trader_name || 'Whale',
+                      avatar_url: null,
+                    });
+                  } catch (fanErr) { /* listener error, not our problem */ }
+                }
+              }
+            } catch (bfErr) {
+              // bet_feed table may not exist yet on a fresh env; the
+              // server-boot ensureTable should have created it but we
+              // tolerate the 42P01 case anyway. Anything else is a real
+              // bug — log and move on, takes write already succeeded.
+              if (bfErr && (bfErr.code === '42P01' || /bet_feed/.test(bfErr.message || ''))) {
+                /* table not yet provisioned, silent */
+              } else {
+                console.warn('[bet-feed] whale synthesis error:', bfErr && bfErr.message);
+              }
+            }
           }
         } catch (e) { console.warn('[takes] whale batch error:', e.message); }
       })();
@@ -32733,6 +32818,113 @@ app.get('/api/bet-feed/stream', (req, res) => {
     _betFeedListeners.delete(send);
     try { res.end(); } catch {}
   });
+});
+
+// POST /api/admin/bet-feed/backfill — one-shot bootstrap. Pulls recent
+// trades from the in-memory _whaleTradeStream ring buffer (populated
+// every 5min by the whale-watch cron) and writes them into bet_feed so
+// /casino has supply immediately instead of waiting for the next cycle.
+//
+// Idempotent-ish: doesn't dedup against existing bet_feed rows, so
+// running it twice in quick succession will create duplicate entries.
+// Intended as a one-time bootstrap, not a recurring cron. After the
+// regular whale synthesis path is running, every subsequent cycle adds
+// new rows naturally — this endpoint is a fast-forward, not a steady
+// state.
+//
+// Admin-secret gated. Returns the number of rows inserted.
+app.post('/api/admin/bet-feed/backfill', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET && req.query.secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const stream = Array.isArray(_whaleTradeStream) ? _whaleTradeStream : [];
+    if (!stream.length) return res.json({ inserted: 0, reason: 'whale stream empty — wait for first cron cycle' });
+
+    // Filter to plausible bets: opens/increases of $1k+ with valid
+    // price, side, and at least one of (slug, condition_id). Same
+    // gating as the regular synthesis but with a lower size floor
+    // because the goal here is supply, not signal.
+    const candidates = stream.filter(e =>
+      (e.action === 'opened' || e.action === 'increased') &&
+      (e.size || 0) >= 1000 &&
+      e.price && e.price > 0 && e.price < 1 &&
+      (e.slug || e.condition_id) &&
+      (e.side === 'YES' || e.side === 'NO' || e.side === 'Yes' || e.side === 'No')
+    ).slice(0, 50);
+
+    let inserted = 0;
+    for (const evt of candidates) {
+      try {
+        // Find or create the whale's user profile (ensureWhaleProfile is
+        // idempotent so calling it on every backfill row is fine).
+        let traderWallet = null;
+        if (_whalePositionSnapshot) {
+          for (const [w, positions] of _whalePositionSnapshot.entries()) {
+            if (positions.some(p => p.trader === evt.trader_name)) { traderWallet = w; break; }
+          }
+        }
+        const whaleUserId = await ensureWhaleProfile(traderWallet, evt.trader_name, evt.trader_rank, evt.trader_pnl);
+
+        const tokenIds = (() => {
+          try {
+            if (!evt.clob_token_ids) return [null, null];
+            const tids = typeof evt.clob_token_ids === 'string' ? JSON.parse(evt.clob_token_ids) : evt.clob_token_ids;
+            return Array.isArray(tids) ? [tids[0] || null, tids[1] || null] : [null, null];
+          } catch (e) { return [null, null]; }
+        })();
+        const sideUpper = (evt.side || 'YES').toUpperCase();
+        const outcomeId = sideUpper === 'YES' ? (tokenIds[0] || evt.condition_id || '') : (tokenIds[1] || evt.condition_id || '');
+        const usdAmount = parseFloat(evt.size || 0);
+        const sharePrice = parseFloat(evt.price || 0);
+        const shareCount = sharePrice > 0 ? usdAmount / sharePrice : usdAmount;
+        if (!outcomeId || !sharePrice) continue;
+
+        // Outcome label resolution from the screener cache, same
+        // approach as the takes synthesis.
+        let outcomeLabel = null;
+        try {
+          const cache = _screenerCache && _screenerCache.data;
+          if (cache && evt.condition_id) {
+            const cachedMkt = cache.find(m => m && (m.market_id === evt.condition_id || m.conditionId === evt.condition_id));
+            if (cachedMkt) {
+              const cand = cachedMkt.groupItemTitle || cachedMkt.group_item || null;
+              if (cand && String(cand).trim() && String(cand).trim().toLowerCase() !== String(evt.question || '').trim().toLowerCase()) {
+                outcomeLabel = String(cand).trim().slice(0, 80);
+              }
+            }
+          }
+        } catch (e) { /* leave null */ }
+
+        await dbQuery(
+          `INSERT INTO bet_feed (user_id, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            whaleUserId,
+            evt.condition_id || evt.slug || 'unknown',
+            evt.question || 'Unknown market',
+            evt.slug || null,
+            outcomeId,
+            outcomeLabel,
+            sideUpper,
+            sharePrice,
+            shareCount,
+            usdAmount,
+            null,
+          ]
+        );
+        inserted++;
+      } catch (rowErr) {
+        console.warn('[bet-feed/backfill] row failed:', rowErr.message);
+      }
+    }
+
+    res.json({ inserted, candidates: candidates.length, stream_size: stream.length });
+  } catch (err) {
+    console.error('[bet-feed/backfill]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 function filterScreenerResults(markets, query) {
