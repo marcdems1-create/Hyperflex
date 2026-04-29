@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Partners — HYPERFLEX</title>
+<meta name="description" content="The social graph of prediction markets. Verified track records, real-money flow, builder fee infrastructure. For platforms, market makers, and funds.">
+<meta property="og:title" content="HYPERFLEX Partners — Liquidity, flow, and verified predictors at scale">
+<meta property="og:description" content="Route real-money flow through HYPERFLEX. For platforms, market makers, and funds.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root { --bg:#0d0d10; --surface:#13131a; --surface-2:#1a1a24; --text:#f0f0f5; --dim:#8b8a9a; --faint:#4a4a5a; --border:rgba(255,255,255,0.07); --gold:#c9920d; --green:#00e68a; --blue:#4d9fff; --purple:#a855f7; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+a { color:var(--gold); text-decoration:none; }
+a:hover { text-decoration:underline; }
+.wrap { max-width:880px; margin:0 auto; padding:80px 24px 80px; }
+.eyebrow { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--gold); text-transform:uppercase; }
+h1 { font-size:36px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 10px; line-height:1.1; }
+.sub { font-size:16px; color:var(--dim); margin-bottom:28px; max-width:680px; line-height:1.5; }
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:32px; }
+@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.kpi-label { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.1em; color:var(--faint); text-transform:uppercase; margin-bottom:4px; }
+.kpi-val { font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
+.kpi-val.gold{color:var(--gold)} .kpi-val.green{color:var(--green)} .kpi-val.blue{color:var(--blue)}
+.section-title { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin:36px 0 14px; }
+.audience { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+@media(max-width:800px){.audience{grid-template-columns:1fr}}
+.aud { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; }
+.aud.platform { border-color:rgba(77,159,255,0.25); background:linear-gradient(180deg,rgba(77,159,255,0.04),rgba(22,22,31,0.85)); }
+.aud.mm { border-color:rgba(168,85,247,0.25); background:linear-gradient(180deg,rgba(168,85,247,0.04),rgba(22,22,31,0.85)); }
+.aud.fund { border-color:rgba(201,146,13,0.25); background:linear-gradient(180deg,rgba(201,146,13,0.04),rgba(22,22,31,0.85)); }
+.aud-eye { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+.aud.platform .aud-eye{color:var(--blue)} .aud.mm .aud-eye{color:var(--purple)} .aud.fund .aud-eye{color:var(--gold)}
+.aud-title { font-size:17px; font-weight:800; letter-spacing:-0.01em; margin-bottom:8px; }
+.aud-body { font-size:13px; color:var(--dim); line-height:1.5; margin-bottom:14px; flex:1; }
+.aud-pts { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text); margin-bottom:14px; line-height:1.7; }
+.aud-pts li { list-style:none; padding-left:14px; position:relative; }
+.aud-pts li::before { content:'✓'; position:absolute; left:0; color:var(--green); font-weight:800; }
+.aud-cta { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.01em; text-decoration:none; align-self:flex-start; background:var(--surface-2); border:1px solid var(--border); color:var(--text); }
+.aud-cta:hover { border-color:var(--gold); color:var(--gold); text-decoration:none; }
+.term { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:6px 18px; }
+.term-line { display:flex; align-items:flex-start; gap:14px; padding:14px 0; font-size:14px; line-height:1.5; color:var(--dim); border-top:1px dashed var(--border); }
+.term-line:first-child { border-top:0; }
+.term-num { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; color:var(--faint); min-width:24px; padding-top:1px; }
+.term-line b { color:var(--text); font-weight:700; }
+.foot { margin-top:40px; padding:18px 22px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.foot-text { font-size:13px; color:var(--dim); } .foot-text b { color:var(--text); font-weight:700; }
+.foot-cta { padding:10px 18px; border-radius:8px; background:var(--gold); color:#000; font-family:'Inter',sans-serif; font-size:13px; font-weight:800; text-decoration:none; }
+.foot-cta:hover { filter:brightness(1.1); text-decoration:none; }
+.disc { margin-top:18px; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<div class="wrap">
+  <div class="eyebrow">HYPERFLEX · Partners</div>
+  <h1>The social graph of prediction markets.</h1>
+  <p class="sub">Verified track records, real-money flow, builder-fee infrastructure already wired to Polymarket V2. For platforms, market makers, and funds who want to route flow into prediction markets at scale.</p>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Verified predictors</div><div class="kpi-val gold" id="kPred">—</div></div>
+    <div class="kpi"><div class="kpi-label">Markets tracked</div><div class="kpi-val blue" id="kMkts">—</div></div>
+    <div class="kpi"><div class="kpi-label">Whale wallets indexed</div><div class="kpi-val">50</div></div>
+    <div class="kpi"><div class="kpi-label">Builder route</div><div class="kpi-val green">Live</div></div>
+  </div>
+  <div class="section-title">Who we partner with</div>
+  <div class="audience">
+    <div class="aud platform">
+      <div class="aud-eye">Platforms</div>
+      <div class="aud-title">Send your markets our flow.</div>
+      <div class="aud-body">If you're Polymarket-adjacent or building a prediction-market venue, we route verified retail traders into your books in exchange for builder-fee splits or co-marketing.</div>
+      <ul class="aud-pts"><li>Builder-fee revenue share</li><li>Featured-market placements</li><li>API + co-marketing terms</li></ul>
+      <a href="mailto:partnerships@hyperflex.network?subject=Platform%20partnership" class="aud-cta">Email partnerships →</a>
+    </div>
+    <div class="aud mm">
+      <div class="aud-eye">Market makers</div>
+      <div class="aud-title">Deploy capital with rebates.</div>
+      <div class="aud-body">Sponsor pool incentives or run book-depth programs through HYPERFLEX. Maker rebates from the V2 fee pool, custom volume tiers, and direct partnerships above $250k AUM.</div>
+      <ul class="aud-pts"><li>Sponsored pool integration</li><li>Maker rebate structure</li><li>$250k+ custom terms</li></ul>
+      <a href="mailto:partnerships@hyperflex.network?subject=Market%20maker%20partnership" class="aud-cta">Email partnerships →</a>
+    </div>
+    <div class="aud fund">
+      <div class="aud-eye">Funds &amp; data buyers</div>
+      <div class="aud-title">Trade signals before the crowd.</div>
+      <div class="aud-body">Programmatic access to whale flow, consensus signals, and the proprietary edge-score model. Hedge funds, prop desks, quant teams. $500–2,000/mo per key, custom enterprise tiers above.</div>
+      <ul class="aud-pts"><li>Whale flow + consensus API</li><li>Edge-score historical data</li><li>Webhook + bulk-export tiers</li></ul>
+      <a href="mailto:partnerships@hyperflex.network?subject=Data%20API%20access" class="aud-cta">Email partnerships →</a>
+    </div>
+  </div>
+  <div class="section-title">How partnerships work</div>
+  <div class="term">
+    <div class="term-line"><span class="term-num">01</span><span><b>Intro call.</b> 30 minutes — what flow you're trying to capture or deploy, what numbers we can move for you.</span></div>
+    <div class="term-line"><span class="term-num">02</span><span><b>Term sheet.</b> Builder-fee split, rebate structure, API tier, or pool deployment — written, signed, no surprises.</span></div>
+    <div class="term-line"><span class="term-num">03</span><span><b>Wire and route.</b> Most partnerships land within 5 business days of signing. Live attribution dashboards from day one.</span></div>
+  </div>
+  <div class="foot">
+    <div class="foot-text"><b>Currently routing flow for retail traders, market-maker pools, and one institutional data buyer.</b> Capacity for 3–4 more partnerships this quarter.</div>
+    <a href="mailto:partnerships@hyperflex.network?subject=Partnership%20enquiry" class="foot-cta">partnerships@hyperflex.network</a>
+  </div>
+  <div class="disc">All partnership terms negotiated individually. Numbers above (AUM thresholds, API pricing) are starting points — actual terms scale with deployment size and integration depth. HYPERFLEX is a Polymarket builder, not a counterparty.</div>
+</div>
+<script>
+// KPIs from existing /api/stats. Soft-fall — page reads dashes if endpoint
+// is unreachable rather than zeros (KPIs at zero on a partner page reads
+// as "nobody uses this", whereas dashes read as "loading/unknown").
+fetch('/api/stats').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if(!d)return;
+  if(d.predictors!=null) document.getElementById('kPred').textContent = Number(d.predictors).toLocaleString();
+  if(d.markets!=null)    document.getElementById('kMkts').textContent = Number(d.markets).toLocaleString();
+}).catch(function(){});
+</script>
+</body>
+</html>

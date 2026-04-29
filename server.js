@@ -29700,6 +29700,8 @@ app.get('/api/incentives/stats', (req, res) => {
   // header reads 0/0/0 instead of mystery placeholders or fake demos.
   res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
 });
+// Partners — B2B page for platforms, market makers, funds & data buyers.
+app.get('/partners', (req, res) => res.sendFile(path.join(__dirname, 'public', 'partners.html')));
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
