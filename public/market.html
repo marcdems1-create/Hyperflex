@@ -166,6 +166,69 @@ canvas{display:block;width:100%!important}
 .trade-quick-btns{display:flex;gap:6px;margin-bottom:14px;justify-content:center}
 .trade-quick-btn{padding:6px 14px;font-family:var(--body);font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--soft);cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1)}
 .trade-quick-btn:hover,.trade-quick-btn.active{background:var(--gold);color:#141412;border-color:var(--gold)}
+
+/* ── Quick-bet chips (Phase 1) ───────────────────────────────────────
+   Primary amount entry: $5 / $25 / $100 / All-in. Tap → populate +
+   updateTradeCalc + scroll to Buy CTA so the user can confirm in 2
+   taps. Manual input + additive +$X buttons hidden behind a Custom
+   toggle for power users. */
+.qb-chips {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-bottom: 10px;
+}
+.qb-chip {
+  min-height: 56px; padding: 12px 8px;
+  font-family: var(--body, 'Inter', sans-serif);
+  font-size: 15px; font-weight: 800;
+  color: var(--ink, #f0f0f5);
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border, rgba(255,255,255,0.07));
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .12s;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: -0.01em;
+}
+.qb-chip:hover {
+  background: rgba(201,146,13,0.06);
+  border-color: rgba(201,146,13,0.30);
+}
+.qb-chip:active { transform: scale(0.98); }
+.qb-chip.active {
+  background: rgba(201,146,13,0.16);
+  border-color: var(--gold, #c9920d);
+  color: var(--gold, #c9920d);
+  box-shadow: 0 0 0 1px var(--gold, #c9920d), 0 0 18px -2px rgba(201,146,13,0.45);
+}
+.qb-chip-allin { font-size: 13px; }
+.qb-chip-allin.active {
+  background: rgba(0,230,138,0.12);
+  border-color: #00e68a;
+  color: #00e68a;
+  box-shadow: 0 0 0 1px #00e68a, 0 0 18px -2px rgba(0,230,138,0.45);
+}
+.qb-custom-toggle {
+  display: block; width: 100%;
+  padding: 9px 10px; margin-bottom: 12px;
+  background: transparent;
+  border: 1px dashed var(--border, rgba(255,255,255,0.07));
+  border-radius: 8px;
+  color: var(--soft, #8b8a9a);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.qb-custom-toggle:hover {
+  color: var(--ink, #f0f0f5);
+  border-color: rgba(201,146,13,0.35);
+}
+@media (max-width: 480px) {
+  .qb-chips { gap: 6px; }
+  .qb-chip { min-height: 56px; font-size: 16px; padding: 14px 4px; }
+  .qb-chip-allin { font-size: 14px; }
+}
 .trade-summary{border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px}
 .trade-summary-row{display:flex;justify-content:space-between;font-family:var(--body);font-size:13px;margin-bottom:6px}
 .trade-summary-row .label{color:var(--dim);font-weight:400}
@@ -462,20 +525,38 @@ canvas{display:block;width:100%!important}
           <button class="trade-quick-btn" id="currentPriceBtn" onclick="setCurrentPrice()" style="background:rgba(201,146,13,0.12);border-color:rgba(201,146,13,0.3);color:var(--gold);font-weight:700">Mkt</button>
         </div>
 
-        <div class="trade-field">
-          <div class="trade-field-label"><span id="tradeAmountLabel">Amount (USD)</span><a id="tradeMaxBtn" href="#" onclick="event.preventDefault();setMaxShares()" style="display:none;color:var(--green);font-size:12px;font-weight:700;text-decoration:none">Max</a></div>
-          <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="_onAmountInput()"/>
+        <!-- Quick-bet chips (Phase 1) — primary amount entry.
+             $5 / $25 / $100 / All-in. Tap → populate the (hidden) input,
+             updateTradeCalc, then scroll to the Buy CTA. Acceptance:
+             $25 trade in 2 taps from the market page. -->
+        <div class="qb-chips" id="qbChips" role="radiogroup" aria-label="Bet amount">
+          <button type="button" class="qb-chip"             data-amt="5"   onclick="setQuickAmount(5)">$5</button>
+          <button type="button" class="qb-chip"             data-amt="25"  onclick="setQuickAmount(25)">$25</button>
+          <button type="button" class="qb-chip"             data-amt="100" onclick="setQuickAmount(100)">$100</button>
+          <button type="button" class="qb-chip qb-chip-allin" data-amt="all" onclick="setQuickAllIn()">All-in</button>
         </div>
+        <button type="button" class="qb-custom-toggle" onclick="toggleCustomAmount()">Custom amount</button>
 
         <!-- SELL mode: proactively show user's share balance on this outcome.
-             Populated by updateSellBalanceBadge(). Hidden in BUY mode. -->
+             Populated by updateSellBalanceBadge(). Hidden in BUY mode.
+             Lives outside the custom block so the badge stays visible
+             on SELL (Max share button is the primary action there). -->
         <div id="sellBalanceBadge" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin-top:6px;border:1px solid;border-radius:8px;font-size:11px;font-family:var(--mono)"></div>
 
-        <div class="trade-quick-btns" id="tradeQuickBtns">
-          <button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>
-          <button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>
-          <button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>
-          <button class="trade-quick-btn" onclick="setAmount(500)">+$500</button>
+        <!-- Custom amount block: manual numeric input + additive +$X chips.
+             Hidden by default — chips above are the primary entry. Power
+             users toggle this open via the Custom button above. -->
+        <div id="qbCustomBlock" style="display:none">
+          <div class="trade-field">
+            <div class="trade-field-label"><span id="tradeAmountLabel">Amount (USD)</span><a id="tradeMaxBtn" href="#" onclick="event.preventDefault();setMaxShares()" style="display:none;color:var(--green);font-size:12px;font-weight:700;text-decoration:none">Max</a></div>
+            <input type="number" class="trade-input" id="tradeAmount" value="10" min="0" step="1" oninput="_onAmountInput()"/>
+          </div>
+          <div class="trade-quick-btns" id="tradeQuickBtns">
+            <button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>
+            <button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>
+            <button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>
+            <button class="trade-quick-btn" onclick="setAmount(500)">+$500</button>
+          </div>
         </div>
 
         <div class="trade-summary">
@@ -1706,6 +1787,79 @@ function setAmount(a) {
   updateTradeCalc();
 }
 
+// ── Quick-bet chips (Phase 1) ─────────────────────────────────────
+// setQuickAmount(amt) — tap a $5/$25/$100 chip: SET (not add) the input
+// value, refresh the calc, glow the chip, and scroll the Buy CTA into
+// view so the user can confirm in one more tap. Acceptance: $25 trade
+// in 2 taps. The chips drive the SAME #tradeAmount input the manual
+// path uses, so executeTrade() reads the same value either way and the
+// trade flow is untouched.
+function _qbHighlight(key) {
+  var chips = document.querySelectorAll('#qbChips .qb-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.toggle('active', chips[i].getAttribute('data-amt') === String(key));
+  }
+}
+function _qbScrollToCta() {
+  var cta = document.getElementById('tradeCta');
+  if (cta && typeof cta.scrollIntoView === 'function') {
+    // 'nearest' avoids yanking the page when CTA is already visible
+    cta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+function setQuickAmount(amt, noScroll) {
+  var input = document.getElementById('tradeAmount');
+  if (!input) return;
+  input.value = amt;
+  _qbHighlight(amt);
+  if (typeof updateTradeCalc === 'function') updateTradeCalc();
+  // Skip scroll on init-time set (would yank the view to the Buy CTA
+  // before the user even sees the market). Tap-time calls scroll so
+  // the user can confirm in one more tap without hunting for the CTA.
+  if (!noScroll) _qbScrollToCta();
+}
+function setQuickAllIn() {
+  // Read the displayed balance — already updated by fetchTradeBalance.
+  // 95% leaves headroom for the V2 fee buffer (3% on the wrap target)
+  // plus rounding + small POL gas on the SafeTx fallback path. Floor
+  // at $1 so the chip never produces an unsubmittable amount.
+  var balEl = document.getElementById('tradeBalance');
+  var bal = 0;
+  if (balEl) {
+    var m = /\$([\d,.]+)/.exec(balEl.textContent || '');
+    if (m) bal = parseFloat(m[1].replace(/,/g, '')) || 0;
+  }
+  if (!bal || bal <= 0) {
+    if (typeof showTradeStatus === 'function') {
+      showTradeStatus('Balance not loaded yet — try again in a moment.', 'info');
+    }
+    return;
+  }
+  var allIn = Math.max(1, Math.floor(bal * 0.95 * 100) / 100);
+  var input = document.getElementById('tradeAmount');
+  if (!input) return;
+  input.value = allIn;
+  _qbHighlight('all');
+  if (typeof updateTradeCalc === 'function') updateTradeCalc();
+  _qbScrollToCta();
+}
+// Custom toggle — reveals the manual numeric input + additive +$X chips
+// for power users (e.g. typing "$73.42" or stacking "+$50 +$50 +$50").
+// Default is hidden; the button text flips on each tap so the user
+// knows the state.
+function toggleCustomAmount() {
+  var block = document.getElementById('qbCustomBlock');
+  var btn   = document.querySelector('.qb-custom-toggle');
+  if (!block) return;
+  var hidden = block.style.display === 'none' || block.style.display === '';
+  block.style.display = hidden ? 'block' : 'none';
+  if (btn) btn.textContent = hidden ? 'Hide custom' : 'Custom amount';
+  // Opening reveals the input; clear chip highlight since the user is
+  // about to type a non-chip value (typing fires _onAmountInput which
+  // doesn't know about chip state, so any stale highlight would lie).
+  if (hidden) _qbHighlight('__none__');
+}
+
 function adjustSharesBy(delta) {
   var input = document.getElementById('tradeAmount');
   if (!input) return;
@@ -1829,6 +1983,11 @@ var _pendingMaxShares = null;
 // updateTradeCalc directly and so doesn't hit this handler.
 function _onAmountInput() {
   _pendingMaxShares = null;
+  // Typing in the custom input invalidates any chip highlight — the
+  // user is now off-chip and a stale glow would lie about the active
+  // value. _qbHighlight is defensive about a missing DOM (no chip row
+  // → no-op) so this is safe even if chips haven't rendered yet.
+  if (typeof _qbHighlight === 'function') _qbHighlight('__none__');
   updateTradeCalc();
 }
 
@@ -6876,6 +7035,13 @@ loadMarket().then(function() {
   updatePricePills();
   // Default the price input to current market price on load
   setCurrentPrice();
+  // Phase 1: default the amount to $25 — primary chip — so the
+  // user lands ready to confirm. This is the "1-tap to buy $25"
+  // path. Other chips are 2-tap from here. Skipped silently if the
+  // chip row hasn't rendered yet (e.g. legacy embed views).
+  if (typeof setQuickAmount === 'function' && document.getElementById('qbChips')) {
+    setQuickAmount(25, true /* noScroll — init, don't yank the view */);
+  }
   fetchTradeBalance();
   // Fetch user positions (non-blocking) — shows badges on outcomes + sidebar
   setTimeout(function() {
