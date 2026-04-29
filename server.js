@@ -12592,33 +12592,13 @@ app.get('/api/challenges', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/challenges/:id — single challenge detail
-app.get('/api/challenges/:id', requireAuth, async (req, res) => {
-  if (!pool) return res.status(503).json({ error: 'Database not configured' });
-  try {
-    const rows = await dbQuery(`
-      SELECT c.*,
-             cu.display_name AS challenger_name, cu.username AS challenger_handle,
-             du.display_name AS challenged_name, du.username AS challenged_handle
-      FROM challenges c
-      LEFT JOIN users cu ON cu.id = c.challenger_id
-      LEFT JOIN users du ON du.id = c.challenged_id
-      WHERE c.id = $1 LIMIT 1`, [req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    const c = rows[0];
-    if (c.challenger_id !== req.user.id && c.challenged_id !== req.user.id) {
-      return res.status(403).json({ error: 'Not a party to this challenge' });
-    }
-    res.json({ challenge: c });
-  } catch (err) {
-    console.error('[challenges get]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // GET /api/challenges/public — anonymous-friendly summary used by the
 // signed-out /challenges page so visitors see real supply (live matchups +
 // top challengers) before the sign-in CTA. 60s in-memory cache.
+//
+// MUST be registered BEFORE the /:id route below — Express matches routes
+// in registration order, and /:id (with requireAuth) was eating /public
+// requests with a silent 401 before this was hoisted (PR #57 routing bug).
 const _challengesPublicCache = { at: 0, payload: null };
 app.get('/api/challenges/public', async (req, res) => {
   if (!pool) return res.json({ stats: { open: 0, accepted: 0, resolved: 0, stake_flex_in_play: 0 }, live: [], top_challengers: [] });
@@ -12704,6 +12684,35 @@ app.get('/api/challenges/public', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// GET /api/challenges/:id — single challenge detail
+app.get('/api/challenges/:id', requireAuth, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(`
+      SELECT c.*,
+             cu.display_name AS challenger_name, cu.username AS challenger_handle,
+             du.display_name AS challenged_name, du.username AS challenged_handle
+      FROM challenges c
+      LEFT JOIN users cu ON cu.id = c.challenger_id
+      LEFT JOIN users du ON du.id = c.challenged_id
+      WHERE c.id = $1 LIMIT 1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const c = rows[0];
+    if (c.challenger_id !== req.user.id && c.challenged_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not a party to this challenge' });
+    }
+    res.json({ challenge: c });
+  } catch (err) {
+    console.error('[challenges get]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// /api/challenges/public moved above /:id route — see line 12603 (Express
+// matches in registration order; the original placement was eaten by /:id's
+// requireAuth and silent 401'd visitors, leaving the /challenges public
+// page stuck on skeletons forever).
 
 // POST /api/admin/seed-challenges — seed N fake challenges using real users
 // (whales preferred) and real Polymarket markets from _screenerCache.
@@ -16743,11 +16752,13 @@ app.get('/api/challenges/nba/today', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/challenges/me — viewer's pick'em digest.
+// GET /api/challenges/nba/me — viewer's pick'em digest.
 // Returns lifetime W-L-P-V, current run, longest run, units P&L, plus
 // active (unsettled) picks for the dashboard strip on /challenges/nba.
 // Auth-required — anonymous viewers don't have a record to show.
-app.get('/api/challenges/me', requireAuth, async (req, res) => {
+// Multi-segment path so it doesn't collide with the head-to-head
+// /api/challenges/:id route registered earlier in the file.
+app.get('/api/challenges/nba/me', requireAuth, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'Database not configured' });
     const userId = req.userId;
@@ -16837,11 +16848,12 @@ app.get('/api/challenges/me', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/challenges/recent — public picks feed across all users.
+// GET /api/challenges/nba/recent — public picks feed across all users.
 // Powers a "live picks" strip on the page so visitors see momentum
 // (real users locking real calls) before they sign up. Last 30 picks,
 // joined with display_name + team info. Public — no auth.
-app.get('/api/challenges/recent', async (req, res) => {
+// Multi-segment path so it doesn't collide with /api/challenges/:id.
+app.get('/api/challenges/nba/recent', async (req, res) => {
   try {
     if (!pool) return res.json({ picks: [] });
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 30);
@@ -16869,10 +16881,11 @@ app.get('/api/challenges/recent', async (req, res) => {
   }
 });
 
-// GET /api/challenges/leaderboard — alias around the existing
+// GET /api/challenges/nba/leaderboard — alias around the existing
 // /api/sports-predictors/leaderboard so the challenges page reads a
-// single /api/challenges/* namespace. Same gating, same data.
-app.get('/api/challenges/leaderboard', async (req, res) => {
+// single /api/challenges/nba/* namespace. Same gating, same data.
+// Multi-segment path so it doesn't collide with /api/challenges/:id.
+app.get('/api/challenges/nba/leaderboard', async (req, res) => {
   try {
     if (!pool) return res.json({ gated: true, reason: 'no_db' });
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
@@ -29674,7 +29687,10 @@ app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alp
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
 app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges.html')));
-app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges.html')));
+// Sports pick'em page — distinct from /challenges (which is head-to-head).
+// Lives at /challenges/nba so the URL slot reads "challenges hub → nba" once
+// we add NFL/MLB/NHL surfaces. Same /api/challenges/nba/* namespace.
+app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges-nba.html')));
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
