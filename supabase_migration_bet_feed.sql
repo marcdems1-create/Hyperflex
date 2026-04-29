@@ -15,7 +15,13 @@
 
 CREATE TABLE IF NOT EXISTS bet_feed (
   id BIGSERIAL PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  -- users.id on Railway Postgres is TEXT, not UUID. Several earlier
+  -- migrations (takes, paper_trading) declared UUID and the FK silently
+  -- never created (same "incompatible types: uuid and text" we hit on
+  -- our first attempt). Match the canonical users.id type explicitly so
+  -- the FK lands and we can JOIN cleanly. picks migration sets the
+  -- precedent: TEXT REFERENCES users(id).
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   market_id TEXT NOT NULL,
   market_title TEXT NOT NULL,
   market_slug TEXT,
@@ -26,10 +32,7 @@ CREATE TABLE IF NOT EXISTS bet_feed (
   size NUMERIC NOT NULL,
   usd_amount NUMERIC NOT NULL,
   order_id TEXT,
-  -- Phase 3 viral-coefficient tracking. Fresh user-initiated bets have
-  -- both NULL; bets placed via "Copy this bet" carry the source row's
-  -- user_id + id so we can compute copy depth and rate.
-  copied_from_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  copied_from_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   copied_from_bet_id BIGINT REFERENCES bet_feed(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

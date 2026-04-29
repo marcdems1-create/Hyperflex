@@ -32673,7 +32673,9 @@ function _betFeedFanout(row) {
   try {
     await dbQuery(`CREATE TABLE IF NOT EXISTS bet_feed (
       id BIGSERIAL PRIMARY KEY,
-      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      -- users.id is TEXT on Railway, not UUID — see migration file
+      -- comment for the why. Mismatch silently fails FK creation.
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       market_id TEXT NOT NULL,
       market_title TEXT NOT NULL,
       market_slug TEXT,
@@ -32684,7 +32686,7 @@ function _betFeedFanout(row) {
       size NUMERIC NOT NULL,
       usd_amount NUMERIC NOT NULL,
       order_id TEXT,
-      copied_from_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      copied_from_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       copied_from_bet_id BIGINT REFERENCES bet_feed(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
