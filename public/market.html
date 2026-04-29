@@ -3623,14 +3623,43 @@ async function wrapUsdcToPmct(amountAtomic) {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
   if (!proxyAddr) throw new Error('Proxy address missing');
 
-  // CRITICAL: ensure the proxy has approved CollateralOnramp to spend its
-  // USDC.e BEFORE the wrap call. Onramp.wrap() internally does
+  // GUARD #1 (balance): the wrap calls Onramp.wrap which internally does
   //   USDC.e.transferFrom(msg.sender = proxy, address(this) = onramp, amount)
-  // which requires USDC.e.allowance(proxy, onramp) >= amount. If the
-  // approval isn't set, the wrap reverts on-chain with Safe's GS013
-  // (inner-call failed under safeTxGas=0/gasPrice=0 mode), the user pays
-  // POL for a failed tx, and there's no recovery. This is the same fix
-  // the dashboard shipped in PR #41 — it just never made it to market.html.
+  // If the proxy has 0 USDC.e (because the user deposited to the EOA, or
+  // the funds are sitting on a different proxy from a prior wallet), the
+  // transferFrom reverts. Check the PROXY balance specifically — the
+  // combined Alchemy "usdc_total" number sums EOA + proxy, so a 18 USDC
+  // user can still have a 0-USDC proxy.
+  try {
+    var provider = await getPublicProvider();
+    var usdc = new ethers.Contract(USDC_ADDRESS, [
+      'function balanceOf(address) view returns (uint256)'
+    ], provider);
+    var proxyBal = await usdc.balanceOf(proxyAddr);
+    if (proxyBal < BigInt(amountAtomic)) {
+      var haveStr = ethers.formatUnits(proxyBal, 6);
+      var needStr = ethers.formatUnits(String(amountAtomic), 6);
+      throw new Error(
+        'Proxy has ' + haveStr + ' USDC.e but the wrap needs ' + needStr + '. ' +
+        'Your funds are likely on your EOA (' + (localStorage.getItem('poly_eoa_address') || '0x?').slice(0, 8) + '…), ' +
+        'not the proxy (' + proxyAddr.slice(0, 8) + '…). Send the USDC.e to the proxy ' +
+        'address first, or onboard via polymarket.com which deposits directly to the proxy.'
+      );
+    }
+  } catch (balErr) {
+    // Only re-throw if it's our explicit "Proxy has X but needs Y" error;
+    // if balanceOf itself failed (RPC flake), let the wrap try anyway —
+    // worst case we hit GS013 below and the user pays POL we tried to save.
+    if (/Proxy has.*USDC\.e/.test(balErr.message)) throw balErr;
+    console.warn('[pmct] balance pre-check failed (RPC flake), proceeding:', balErr.message);
+  }
+
+  // GUARD #2 (allowance): ensure the proxy has approved CollateralOnramp
+  // to spend its USDC.e BEFORE the wrap call. Onramp.wrap() requires
+  // USDC.e.allowance(proxy, onramp) >= amount. If unset, the wrap reverts
+  // with Safe's GS013 (inner-call failed under safeTxGas=0/gasPrice=0
+  // mode), the user pays POL for a failed tx, and there's no recovery.
+  // Same fix the dashboard shipped in PR #41.
   //
   // approveUsdceForSpender caches via hfx_usdce_ok_<owner>_<spender> so a
   // repeat wrap is zero-popup. Only the first ever wrap on a fresh proxy
