@@ -6,6 +6,12 @@
 
 ---
 
+# ⚠️ STRATEGIC PIVOT — APRIL 30, 2026
+
+HYPERFLEX is Polymarket-native. Kalshi and Manifold are dropped. New positioning: the social and analytical layer for Polymarket traders. Receipts, leaderboards, takes, mention market base rates, sharp predictor follows.
+
+---
+
 ## 🎯 NORTH STAR — RETENTION & ADDICTION (read this before every response)
 
 **Goal:** build the most addicting gambling/investing platform ever built. Every feature, every UI decision, every endpoint, every piece of copy must be evaluated through this lens:
@@ -41,132 +47,82 @@ When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy ch
 
 ---
 
-## 🎙️ VOICE & POSTURE (canonical — read before writing any user-facing copy)
+## Design System (Current — April 2026)
 
-Canonical. Every copy decision on the platform references this document. If a surface contradicts the charter, the surface is wrong.
+The old Voice & Posture Charter (gold `#c9920d`, Syne, Space Mono, "zero decorative emoji", dry-numerate as the only register) is fully retired. Don't apply it to new work. Existing pages still using it will be migrated as touched.
 
-### 1. Who writes HYPERFLEX
+### Tokens
 
-A sharp who made it, stopped posting publicly, and runs the back room where real bettors actually hang out. Dry, numerate, controlled. Reads more like a WSJ gambling columnist who's also a degen than like anything on betting Twitter in 2026.
+**Background:**
+- `--bg: #0a0a0a` — true black, page background
+- `--bg-2: #0f0f0f` — slightly lifted (ticker bars, countdown card)
+- `--surface: #141414` — primary card surface
+- `--surface-2: #1a1a1a` — nested surface
+- `--border: #1f1f1f` — hairline divider
+- `--border-2: #2a2a2a` — slightly stronger divider
 
-Assumes the reader knows spreads, odds, units, CLV. Never condescends. Never explains what a push is. Never links to a glossary.
+**Text:**
+- `--text: #fafafa` — primary
+- `--text-dim: #a3a3a3` — secondary
+- `--text-muted: #737373` — labels, metadata
+- `--text-faint: #525252` — disabled, tertiary
 
-Does not participate in the meme cycle. No "fr fr." No all-lowercase affectation. No phrase that depends on a trend younger than 24 months. Writes like the copy will still ship in 2028.
+**Brand accent (primary):**
+- `--cyan: #22d3ee` and `--cyan-2: #0ea5e9` — used as gradient on hero words
+- `--cyan-soft: rgba(34, 211, 238, 0.1)` — backgrounds for verdict cards
+- This is the HYPERFLEX brand color. Gold is dead.
 
-### 2. Register: 90/10 dry to warm
+**Categorical accents:**
+- `--yellow: #fbbf24` — Alpha section identifier (lightning bolt)
+- `--purple: #a78bfa` — Whale data, whale chips
+- `--pink: #ec4899` — Mention/event identifiers, timer chips
+- `--orange: #fb923c` — Movers, urgency callouts
+- `--blue: #3b82f6` — Capital/volume bars in score breakdowns
 
-Default register is dry. Factual, numerate, slightly approving when earned. Reader does the emotional work.
+**Outcome semantic colors:**
+- `--green: #22c55e` — YES outcomes, dovish stance, positive deltas, live indicators
+- `--red: #ef4444` — NO outcomes, hawkish stance, negative deltas, anomaly alerts
+- `--green-block: rgba(34, 197, 94, 0.25)` — solid YES ROI block fill
+- `--red-block: rgba(248, 113, 113, 0.3)` — solid NO ROI block fill
 
-- ✅ "Pick landed. +2.73u."
-- ❌ "Nice hit! 🎯 +2.73u!"
-- ❌ "Finally. +2.73u."
+### Typography
 
-Warmth is reserved, not sprinkled. The only moments the platform speaks warmly:
+- **Display + Body:** Inter (weights 400, 500, 600, 700, 800), with `font-feature-settings: 'cv11', 'ss01'` for tabular alts and stylistic set
+- **Numbers + Labels:** JetBrains Mono (weights 400, 500, 700)
+- **All numbers** use `font-variant-numeric: tabular-nums` so columns align
+- **Letterspacing:** -0.02em to -0.04em on display headlines, default on body
+- **Hero headlines:** 28-32px, 800 weight, 1.05 line-height
+- **Section h2:** 16px, 700 weight
+- **Body:** 13-14px, 400-500 weight, 1.5 line-height
+- **Mono labels:** 9-11px, uppercase, 0.05-0.15em letter-spacing
 
-- First locked pick ever (once per account, lifetime)
-- First graded win after a 5+ loss streak (the comeback)
-- 12-week continuous posting milestone, then every 26 weeks after (durability)
-- Top-decile finish in a seasonal cohort (real achievement)
-- Anniversary of joining (annual, "still here")
+### Component patterns
 
-Everything else stays dry. Routine wins, daily opens, fresh signups, setup completions, feature discovery, and losses all receive default register. Tempting moments for warmth — welcome flows, onboarding, payment confirmations — are explicitly excluded.
+**Cards:** `var(--surface)` background, `1px solid var(--border)`, `border-radius: 12px`, padding 14-16px
 
-### 3. Side-taking on losses
+**Chips:** small rounded pills with semantic background tints. Format: `<span class="tag purple">🐋 4 Whales $890k</span>`. Use cyan for "mention", purple for "whale", pink for "timer", green for "live".
 
-The platform takes a position: surviving losses publicly is status-conferring. The capper who ghosts at 0-4 loses what the survivor earns.
+**ROI blocks:** big solid colored bands at the bottom of market cards. Green block for YES path, red block for NO path. Format: `+61% max ROI [YES tag] 62¢ → 100¢`
 
-This is the posture Pikkit cannot copy, because their product philosophy treats a loss as private. Ours treats it as visible and, when weathered, dignified.
+**Hero gradient text:** `linear-gradient(90deg, var(--cyan) 0%, var(--cyan-2) 100%)` clipped to text. Use sparingly — one word per page maximum.
 
-Concrete expressions:
+**Live pill:** small green chip with pulsing dot. Use only for genuinely live data.
 
-- "Posted every week, 12 weeks" profile chip
-- "Survived a −12u week" profile chip
-- Losing cards share the same layout dignity as winning cards (different color, same weight)
-- Weekly recaps don't flinch from the ugly number
+**Live ticker:** auto-scrolling strip at top of data-heavy pages. JetBrains Mono, 10px, with cyan label + tabular value + green/red delta arrow.
 
-What the platform does not do: mock losses, celebrate losses, or console losses. It records them.
+### Iconography
 
-### 4. Platform funny vs community funny
+Sparing emoji is now allowed where it serves data labeling — `🐋` for whales, `⚡` for alpha, `⏱` for timers, `📊` for mentions. **Decorative emoji in body copy is still avoided.** Don't add a 🚀 to a paragraph just because it's exciting.
 
-Humor lives in exactly three surfaces: loading states, empty states, and error screens (404/500/timeout/auth/rate-limit/payment-declined).
+### Voice (residual rules from the old charter that still apply)
 
-Everywhere else — notifications, feed copy, profile surfaces, email, modals, tooltips, confirmations — is numerate and neutral. Users perform jokes on top of the platform; the platform sets the stage.
-
-The platform never editorializes on user content. It can narrate system events ("Pick locked. Cannot be edited.") but never comments on the take itself. No "🔥 Hot pick!", no "Bold call!", no "Interesting play." The content speaks for itself. Labels describe mechanics, never quality.
-
-### 5. The meme-cycle test
-
-Before any copy ships, ask: *Would this still read right in 2 years?*
-
-If the phrase depends on a current meme, it fails. If it depends on permanent betting vocabulary, it passes.
-
-| ❌ Don't | ✅ Do |
-|---|---|
-| "This one's cooked." | "Resolved a loss." |
-| "Locked in 🔒" (decorative) | "Locked at 7:14 PM." |
-| "Tailing the sharps 📈" | "Following three tipsters." |
-| "We're so back." | "Four wins after four losses." |
-| "It's giving sharp energy." | "Top decile this week." |
-| "Chalk it up." | "Favorite covered." |
-| "Fade the public." | Allowed — permanent term. |
-
-Permanent vocabulary is welcome: units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML.
-
-### 6. Emoji policy
-
-Zero decorative emoji. Functional glyphs only, used for semantic meaning:
-
-- `✓` verified
-- `●` live
-- `—` push / void
-- `🔒` on the literal "locked" state of a pick (the one permitted emoji, because it's functional shorthand the audience already reads semantically)
-
-No 🎯 🔥 📈 💰 🏆 ⚡ 💎 anywhere, ever. No flag emoji on team names. No confetti on wins. No sad face on losses.
-
-### 7. Numeric formatting
-
-Dry voice is violated instantly by inconsistent numbers. Lock it.
-
-- **Units:** always 2 decimals, always with sign. `+2.73u`, `−3.00u`, `0.00u`. Never `+2.7u`, never `+2.732u`.
-- **ROI:** always signed, one decimal. `+14.3%`, `−8.1%`.
-- **Win rate:** one decimal when shown as percentage. `63.4%`.
-- **Odds:** American format only. `−110`, `+145`. Never decimal (`1.91`), never fractional.
-- **Timestamps:** relative inside 24h (`14 min ago`, `3h ago`), absolute after (`Apr 18, 7:14 PM`). Timezone respected per user setting.
-- **Sample size:** performance numbers on profiles and leaderboards show sample size inline (`63.4% (47 picks)`). On compact surfaces (pick cards, mobile tiles, embeds), sample size is accessible in one tap or hover. Never hidden, always reachable. Performance without a path to sample size is a lie.
-
-### 8. FLEX Score rule
-
-FLEX Score is a derived rating, not an accumulated currency. It is bounded and normalized. It appears on profiles and leaderboards — nowhere else.
-
-- Derived from recent performance, not a sum of actions
-- Posting volume does not increase FLEX Score
-- Bad picks lower it; good picks raise it; dormancy decays it
-- Displayed as a bounded number users read as a rating, not a balance
-
-The old "FLEX Points" framing — earn-on-trade, accumulate, spend — is retired. No accumulation currency, no shop, no spend, no tiers to unlock. One score, earned by being right.
-
-### 9. What the platform never does
-
-- Never uses exclamation points in default register (reserved for the 5 warmth triggers, and even there, used once per message maximum)
-- Never addresses the user by first name in copy ("Welcome back, Marc" is forbidden; "Welcome back" is fine)
-- Never implies urgency it can't back up ("Act now!" / "Don't miss out!")
-- Never apologizes for system events that aren't failures
-- Never asks the user "How are you feeling?" or equivalent
-- Never uses "we" to refer to the platform — **except** in error copy, explicit policy, or FAQ contexts. Example: `We couldn't reach the server. Try again.` is allowed (beats the passive `The server couldn't be reached.`). `We're excited to have you!` is forbidden.
-- Never uses second person in data displays ("Your record: 47-32-3" → "Record: 47-32-3")
-- Never compliments a take, call, thesis, or opinion
-- Never uses a word where a number would communicate faster
-
-### 10. Voice smell test
-
-Before shipping copy, read it aloud. If any of these are true, rewrite:
-
-- Sounds like it came from a bank app
-- Sounds like it came from Duolingo
-- Sounds like it came from a crypto project
-- Sounds like it's trying to be your friend
-- Sounds like it was written by someone who doesn't bet
-- Contains a word the reader would never say out loud in this context
+- Numerate. Show the number, sign and decimal it. `+2.73u`, `−3.00u`, `+14.3%`, `63.4% (47 picks)`. Sample size always reachable.
+- "FLEX Score" never "FLEX Points." Score is a derived rating, not an accumulated currency. No NEWCOMER badge anywhere.
+- Don't compliment a take, call, thesis, or opinion. The platform records, doesn't editorialize.
+- Don't use exclamation points in default register (reserved for the 5 warmth triggers documented in earlier sessions: first-locked-pick-ever, comeback-from-5-loss-streak, 12-week-durability, top-decile cohort finish, signup anniversary).
+- Don't address the user by first name. "Welcome back" not "Welcome back, Marc."
+- Don't use second person in data displays. `Record: 47-32-3` not `Your record: 47-32-3`.
+- "Fade the public." stays. Permanent betting vocabulary is welcome (units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML).
 
 ---
 
@@ -416,7 +372,7 @@ Social products compound. Every take posted is content. Every follow is a connec
 ## Rules Claude Must Follow Every Session
 
 1. **Read this file at session start** before touching anything
-2. **Font/color system:** **Inter** (display/sans) + **JetBrains Mono** (mono). Multi-accent palette: gold `#c9920d`, green `#00e68a`, red `#ff4d6a`, blue `#4d9fff`, purple `#a855f7`, amber `#f59e0b`. Paper `#0e0e15`, ink `#f0f0f5`, border `#1e1e2a`. The old Syne + Space Mono + single-gold-accent system is deprecated as of the alpha terminal redesign (commits `4188aa6` + `d48cbef`).
+2. **Font/color system:** see the **Design System** section near the top of this file. Inter (display/body) + JetBrains Mono (numbers/labels). Brand accent is `--cyan: #22d3ee` on `--bg: #0a0a0a` (true black). Categorical accents: yellow / purple / pink / orange / blue per section. Outcome colors: green `#22c55e` for YES, red `#ef4444` for NO. The earlier gold/paper (`#c9920d` on `#0e0e15`) and the older Syne + Space Mono single-gold-accent palette are both retired.
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
