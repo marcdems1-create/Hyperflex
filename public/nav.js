@@ -325,7 +325,7 @@
   // townsquare per spec §6; once that lands the two URLs diverge.
   var primaryLinks = [
     { href: '/feed', label: 'Feed', gold: true },
-    { href: '/casino', label: '🎰 Casino', gold: true },
+    { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },

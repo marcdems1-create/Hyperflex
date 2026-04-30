@@ -10459,7 +10459,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino', 'live',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -29899,10 +29899,13 @@ app.get('/api/incentives/active', async (req, res) => {
 });
 // Partners — B2B page for platforms, market makers, funds & data buyers.
 app.get('/partners', (req, res) => res.sendFile(path.join(__dirname, 'public', 'partners.html')));
-// Casino-mode landing — full-screen live bet feed + tap-to-copy.
-// Phase 1-3 of the casino sprint live here; Phase 4-6 (share cards,
-// parlays, squads) hang off this page or get linked from it.
-app.get('/casino', (req, res) => res.sendFile(path.join(__dirname, 'public', 'casino.html')));
+// Live — full-screen live bet feed + tap-to-copy. Phase 1-3 of the
+// live-action sprint live here; Phase 4-6 (share cards, parlays, squads)
+// hang off this page or get linked from it.
+app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
+// /casino kept as a 301 to /live so any existing links/backlinks continue
+// to land users on the same surface under its new name.
+app.get('/casino', (req, res) => res.redirect(301, '/live'));
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
