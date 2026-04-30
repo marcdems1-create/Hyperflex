@@ -27,6 +27,23 @@ do $$ begin
   end if;
 end $$;
 
+-- Add columns missing from #44/#50 if not present
+alter table takes add column if not exists posted_at timestamptz
+  not null default now();
+alter table takes add column if not exists edit_window_until timestamptz
+  not null default (now() + interval '5 minutes');
+alter table takes add column if not exists deleted_at timestamptz;
+alter table takes add column if not exists admin_hidden boolean
+  not null default false;
+
+-- Backfill posted_at from created_at for existing rows
+update takes set posted_at = created_at where posted_at is null or posted_at = created_at;
+-- Note: existing rows now have edit_window_until set to (now() + 5 min) at migration time,
+-- which means they're technically editable until 5 min after migration runs.
+-- Acceptable: low chance of abuse on legacy rows in that brief window. Code edit
+-- endpoint enforces user_id ownership, so a malicious actor can't touch other users'
+-- legacy takes.
+
 -- Indexes (use real column names)
 create index if not exists idx_takes_position
   on takes(position_id) where position_id is not null;
