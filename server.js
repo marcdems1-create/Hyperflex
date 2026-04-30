@@ -17204,39 +17204,6 @@ function classifyPolymarketTitle(title) {
   return null; // not sports
 }
 
-// classifyKalshiTicker — Kalshi event tickers carry the sport in the prefix.
-// Pattern: `KX<SPORT>-<series>-<sub>` or older `<SPORT>GAME-...`. Map common
-// prefixes to our sport vocab; anything unmatched returns null (sweep leaves
-// it untagged, doesn't guess).
-function classifyKalshiTicker(ticker) {
-  if (!ticker || typeof ticker !== 'string') return null;
-  const t = ticker.toUpperCase();
-  const PREFIX = [
-    { re: /^KX?NFL[-_]/,        sport: 'nfl',    league: 'NFL' },
-    { re: /^KX?NBA[-_]/,        sport: 'nba',    league: 'NBA' },
-    { re: /^KX?MLB[-_]/,        sport: 'mlb',    league: 'MLB' },
-    { re: /^KX?NHL[-_]/,        sport: 'nhl',    league: 'NHL' },
-    { re: /^KX?UFC[-_]/,        sport: 'ufc',    league: 'UFC' },
-    { re: /^KX?CFB[-_]|^KX?NCAAF[-_]/,   sport: 'ncaaf',  league: 'NCAAF' },
-    { re: /^KX?CBB[-_]|^KX?NCAAB[-_]/,   sport: 'ncaab',  league: 'NCAAB' },
-    { re: /^KX?F1[-_]|^KX?GP[-_]/,       sport: 'f1',     league: 'F1' },
-    { re: /^KX?BOX[-_]|^KX?BOXING[-_]/,  sport: 'boxing', league: null },
-    { re: /^KX?PGA[-_]|^KX?GOLF[-_]/,    sport: 'golf',   league: 'PGA' },
-    { re: /^KX?TENNIS[-_]|^KX?ATP[-_]|^KX?WTA[-_]|^KX?WIMB|^KX?USOPEN|^KX?AUSOPEN|^KX?FRENCH/, sport: 'tennis', league: null },
-    { re: /^KX?EPL[-_]|^KX?UCL[-_]|^KX?MLS[-_]|^KX?SOCCER[-_]|^KX?WC[-_]|^KX?FIFA/, sport: 'soccer', league: null },
-    { re: /^(NFL|NBA|MLB|NHL)GAME[-_]/,  sport: (function(){})(), league: null }, // legacy; handled below
-  ];
-  for (const p of PREFIX) {
-    if (p.re.test(t)) {
-      if (p.sport) return { sport: p.sport, league: p.league, confidence: 0.98 };
-    }
-  }
-  // Legacy SPORTGAME- prefix
-  const legacy = t.match(/^(NFL|NBA|MLB|NHL)GAME[-_]/);
-  if (legacy) return { sport: legacy[1].toLowerCase(), league: legacy[1], confidence: 0.98 };
-  return null;
-}
-
 // Upsert a classification. ON CONFLICT: only overwrite when the existing row
 // isn't manual (manual overrides are sacred) AND the new confidence is at
 // least as high as the stored one.
@@ -17282,7 +17249,7 @@ async function sweepMarketSportTags() {
         UNION ALL
         SELECT 'polymarket'::text AS source, condition_id    AS external_id, market_question AS market_title FROM polymarket_trades WHERE condition_id IS NOT NULL
         UNION ALL
-        SELECT platform::text      AS source, external_id   AS external_id, market_title    AS market_title FROM cached_positions  WHERE platform IN ('polymarket','kalshi') AND external_id IS NOT NULL
+        SELECT platform::text      AS source, external_id   AS external_id, market_title    AS market_title FROM cached_positions  WHERE platform = 'polymarket' AND external_id IS NOT NULL
       ) t
       LEFT JOIN market_sport_tags mst USING (source, external_id)
       WHERE mst.source IS NULL
@@ -17298,12 +17265,9 @@ async function sweepMarketSportTags() {
     }
     scanned = rows.length;
     for (const r of rows) {
-      const cls = r.source === 'kalshi'
-        ? classifyKalshiTicker(r.external_id)
-        : classifyPolymarketTitle(r.market_title);
+      const cls = classifyPolymarketTitle(r.market_title);
       if (!cls) { skipped++; continue; }
-      const taggedBy = r.source === 'kalshi' ? 'kalshi_taxonomy' : 'regex';
-      const ok = await upsertSportTag(r.source, r.external_id, r.market_title, cls, taggedBy);
+      const ok = await upsertSportTag(r.source, r.external_id, r.market_title, cls, 'regex');
       if (ok) tagged++;
     }
     if (scanned) console.log(`[market-sport-tags] sweep scanned=${scanned} tagged=${tagged} skipped=${skipped}`);
@@ -17325,7 +17289,7 @@ app.get('/api/markets/sport-tag', async (req, res) => {
   try {
     const source = String(req.query.source || '').toLowerCase();
     const externalId = String(req.query.external_id || '').trim();
-    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (source !== 'polymarket') return res.status(400).json({ error: 'source must be polymarket' });
     if (!externalId) return res.status(400).json({ error: 'external_id required' });
     const rows = await dbQuery(
       'SELECT source, external_id, sport, league, confidence, tagged_by, tagged_at FROM market_sport_tags WHERE source=$1 AND external_id=$2 LIMIT 1',
@@ -17342,7 +17306,7 @@ app.post('/api/admin/markets/sport-tag', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const { source, external_id, sport, league } = req.body || {};
-    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (source !== 'polymarket') return res.status(400).json({ error: 'source must be polymarket' });
     if (!external_id || !SPORT_VOCAB.includes(sport)) return res.status(400).json({ error: 'external_id + valid sport required' });
     await pool.query(
       `INSERT INTO market_sport_tags (source, external_id, sport, league, confidence, tagged_by)
@@ -17421,34 +17385,6 @@ async function _fetchPolymarketCloseBooks(tokens) {
   } catch { return null; }
 }
 
-// Fetch Kalshi market by ticker. Public endpoint — no auth required for
-// reading market status + quoted bid/ask.
-async function _fetchKalshiMeta(ticker) {
-  try {
-    const r = await fetch(`https://trading-api.kalshi.com/trade-api/v2/markets/${encodeURIComponent(ticker)}`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const m = d.market || d;
-    if (!m) return null;
-    // Kalshi returns prices in cents (0..100). Normalise to 0..1.
-    const yBid = m.yes_bid  != null ? parseFloat(m.yes_bid)  / 100 : null;
-    const yAsk = m.yes_ask  != null ? parseFloat(m.yes_ask)  / 100 : null;
-    const nBid = m.no_bid   != null ? parseFloat(m.no_bid)   / 100 : null;
-    const nAsk = m.no_ask   != null ? parseFloat(m.no_ask)   / 100 : null;
-    const yes_price = (yBid != null && yAsk != null) ? (yBid + yAsk) / 2 : (yBid != null ? yBid : yAsk);
-    const no_price  = (nBid != null && nAsk != null) ? (nBid + nAsk) / 2 : (nBid != null ? nBid : nAsk);
-    return {
-      close_ts: m.close_time || m.expiration_time || null,
-      status: m.status,   // 'active' | 'closed' | 'settled' | 'finalized' | 'determined'
-      yes_price: yes_price != null ? Math.round(yes_price * 1e6) / 1e6 : null,
-      no_price:  no_price  != null ? Math.round(no_price  * 1e6) / 1e6 : null,
-    };
-  } catch { return null; }
-}
-
 // Sweep pending sports markets, snapshot those nearing/past close.
 // Window: close_ts within next 15 min OR already in past (up to 48h back)
 // AND no snapshot row yet. Capped at 40 markets per run so one sweep
@@ -17497,25 +17433,6 @@ async function sweepClosingPrices() {
             [row.external_id, prices.yes_price, prices.no_price, new Date(endTs).toISOString()]
           );
           snapped++;
-        } else if (row.source === 'kalshi') {
-          const meta = await _fetchKalshiMeta(row.external_id);
-          if (!meta || !meta.close_ts) { skipped++; continue; }
-          const closeTs = Date.parse(meta.close_ts);
-          if (!Number.isFinite(closeTs)) { skipped++; continue; }
-          const now = Date.now();
-          const windowMs = 15 * 60 * 1000;
-          const backfillMs = 48 * 60 * 60 * 1000;
-          const isFinal = /closed|settled|finalized|determined/.test(meta.status || '');
-          const inWindow = (closeTs - now <= windowMs) && (now - closeTs <= backfillMs);
-          if (!inWindow && !isFinal) { skipped++; continue; }
-          if (meta.yes_price == null) { skipped++; continue; }
-          await pool.query(
-            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
-             VALUES ('kalshi', $1, $2, $3, $4, now())
-             ON CONFLICT (source, external_id) DO NOTHING`,
-            [row.external_id, meta.yes_price, meta.no_price, new Date(closeTs).toISOString()]
-          );
-          snapped++;
         }
         // Small pause between markets so we don't hammer the upstream APIs.
         await new Promise(res => setTimeout(res, 250));
@@ -17540,7 +17457,7 @@ app.get('/api/markets/closing-price', async (req, res) => {
   try {
     const source = String(req.query.source || '').toLowerCase();
     const externalId = String(req.query.external_id || '').trim();
-    if (!['polymarket','kalshi'].includes(source)) return res.status(400).json({ error: 'source must be polymarket|kalshi' });
+    if (source !== 'polymarket') return res.status(400).json({ error: 'source must be polymarket' });
     if (!externalId) return res.status(400).json({ error: 'external_id required' });
     const rows = await dbQuery(
       'SELECT source, external_id, yes_price, no_price, close_ts, captured_at FROM market_closing_prices WHERE source=$1 AND external_id=$2 LIMIT 1',
@@ -27262,52 +27179,8 @@ app.get('/api/admin/v2-trades', async (req, res) => {
 // ── MARKET SEARCH AGGREGATOR ─────────────────────────────────────────────────
 // (Duplicate route removed — comprehensive search at line ~17621)
 
-// ── CROSS-PLATFORM MARKET SEARCH ────────────────────────────────────────────
+// ── POLYMARKET MARKET SEARCH ────────────────────────────────────────────────
 const _mktSearchCache = new Map();
-// --- Kalshi event cache: paginate ALL events, cache for 10 min ---
-let _kalshiAllEvents = { events: [], ts: 0 };
-async function getKalshiEvents() {
-  if (_kalshiAllEvents.events.length > 0 && Date.now() - _kalshiAllEvents.ts < 10 * 60 * 1000) {
-    return _kalshiAllEvents.events;
-  }
-  const allEvents = [];
-  let cursor = '';
-  const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
-  try {
-    for (let page = 0; page < 6; page++) { // max 6 pages = 1200 events
-      const url = `https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true${cursor ? '&cursor=' + cursor : ''}`;
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 12000);
-      const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(tid));
-      if (!r.ok) break;
-      // Some Kalshi pages have control chars that break strict JSON parsing
-      let data;
-      try {
-        data = await r.json();
-      } catch (jsonErr) {
-        try {
-          const text = await r.text();
-          // Strip control characters (except newline/tab) before parsing
-          data = JSON.parse(text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''));
-        } catch (e2) {
-          console.error(`[kalshi-cache] JSON parse failed on page ${page}:`, e2.message);
-          break; // Stop pagination but keep what we have
-        }
-      }
-      const events = data.events || [];
-      allEvents.push(...events);
-      if (events.length < 200 || !data.cursor) break;
-      cursor = data.cursor;
-    }
-    _kalshiAllEvents = { events: allEvents, ts: Date.now() };
-    console.log(`[kalshi-cache] Cached ${allEvents.length} Kalshi events across ${Math.ceil(allEvents.length / 200)} pages`);
-  } catch (e) {
-    console.error('[kalshi-cache] Failed to fetch:', e.message);
-    // Return stale cache if available
-    if (_kalshiAllEvents.events.length > 0) return _kalshiAllEvents.events;
-  }
-  return allEvents;
-}
 
 app.get('/api/markets/search', async (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
@@ -27499,8 +27372,6 @@ app.get('/api/markets/search', async (req, res) => {
       ...polyExtraSearches,
       // Polymarket — broad top-200 by liquidity (catches synonym matches not in search results)
       fetchWithTimeout(`https://gamma-api.polymarket.com/events/keyset?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
-      // Kalshi — paginated cache of ALL events (10-min TTL)
-      getKalshiEvents(),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
       ...(ODDS_API_KEY ? (matchedSports.size > 0
         ? [...matchedSports].slice(0, 2).map(sport =>
@@ -27510,12 +27381,11 @@ app.get('/api/markets/search', async (req, res) => {
       ) : [])
     ]);
 
-    // Split results: [publicSearch, ...extraSearches(N), broadPoly, kalshi, ...odds]
+    // Split results: [publicSearch, ...extraSearches(N), broadPoly, ...odds]
     const polySearchResult = allResults[0];
     const polyExtraResults = allResults.slice(1, 1 + polyExtraSearches.length);
     const polyBroadResult = allResults[1 + polyExtraSearches.length];
-    const kalshiEventsResult = allResults[2 + polyExtraSearches.length];
-    const oddsResults = allResults.slice(3 + polyExtraSearches.length);
+    const oddsResults = allResults.slice(2 + polyExtraSearches.length);
 
     // --- Parse Polymarket /public-search results (returns {events: [{...markets:[]}]}) ---
     let polyMarkets = [];
@@ -27643,162 +27513,8 @@ app.get('/api/markets/search', async (req, res) => {
       }
     }
 
-    // --- Supplement Kalshi cache with targeted series ticker queries ---
-    // Some Kalshi event types (hourly crypto, sports props) don't appear in status=open pagination
-    const kalshiSeriesMap = {
-      bitcoin: 'KXBTC', btc: 'KXBTC', crypto: 'KXBTC',
-      ethereum: 'KXETH', eth: 'KXETH',
-      solana: 'KXSOL', sol: 'KXSOL',
-      xrp: 'KXXRP', ripple: 'KXXRP',
-      dogecoin: 'KXDOGE', doge: 'KXDOGE',
-      gold: 'KXGOLD', silver: 'KXSILVER',
-      oil: 'KXOIL', crude: 'KXOIL',
-      sp500: 'KXSP500', 'spy': 'KXSP500', 'nasdaq': 'KXNASDAQ',
-    };
-    let kalshiSupplemental = [];
-    const seriesMatch = kalshiSeriesMap[q] || kalshiSeriesMap[qWords[0]];
-    if (seriesMatch) {
-      try {
-        const sRes = await fetchWithTimeout(
-          `https://api.elections.kalshi.com/trade-api/v2/events?limit=3&with_nested_markets=true&series_ticker=${seriesMatch}`,
-          { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 15000
-        );
-        if (sRes.ok) {
-          // Read as text first to handle control characters in Kalshi JSON
-          const sText = await sRes.text();
-          let sData;
-          try {
-            sData = JSON.parse(sText);
-          } catch (jsonErr) {
-            sData = JSON.parse(sText.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''));
-          }
-          kalshiSupplemental = sData.events || [];
-          console.log(`[kalshi-series] ${seriesMatch}: ${kalshiSupplemental.length} events, ${kalshiSupplemental.reduce((s,e) => s + (e.markets||[]).length, 0)} markets`);
-        }
-      } catch (e) {
-        console.error(`[kalshi-series] ${seriesMatch} failed:`, e.message);
-      }
-    }
-
-    // --- Parse Kalshi (from paginated cache + supplemental) ---
-    let kalshiMarkets = [];
-    const kalshiEvents = [
-      ...((kalshiEventsResult.status === 'fulfilled' ? kalshiEventsResult.value : []) || []),
-      ...kalshiSupplemental
-    ];
-    // Deduplicate by event_ticker
-    const seenTickers = new Set();
-    const dedupedEvents = kalshiEvents.filter(e => {
-      const t = e.event_ticker || e.ticker || '';
-      if (seenTickers.has(t)) return false;
-      seenTickers.add(t);
-      return true;
-    });
-    if (dedupedEvents.length > 0) {
-      for (const evt of dedupedEvents) {
-        const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
-        const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
-        if (mkts.length === 0) continue;
-
-        // Detect range/multi-outcome events (10+ markets = likely price ranges or multi-option)
-        const isRangeEvent = mkts.length >= 10;
-
-        if (isRangeEvent && evtMatch) {
-          // Collapse into single card showing the most likely outcome
-          let bestMarket = null;
-          let bestPct = 0;
-          for (const m of mkts) {
-            const lp = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : 0);
-            const pct = Math.round(lp * 100);
-            if (pct > bestPct) { bestPct = pct; bestMarket = m; }
-          }
-          if (bestMarket && bestPct > 0) {
-            const subTitle = bestMarket.yes_sub_title || bestMarket.no_sub_title || '';
-            const question = subTitle
-              ? `${evt.title || bestMarket.title}: Most likely ${subTitle} (${bestPct}%)`
-              : evt.title || bestMarket.title || '';
-            kalshiMarkets.push({
-              question,
-              yes_pct: bestPct,
-              close_date: bestMarket.close_time || bestMarket.expiration_time || null,
-              url: `https://kalshi.com/markets/${(evt.event_ticker || bestMarket.event_ticker || '').replace(/-\d+$/, '').toLowerCase()}`,
-              volume: mkts.reduce((sum, m) => sum + parseFloat(m.volume_fp || m.volume || 0), 0),
-              _ticker: bestMarket.ticker || null
-            });
-          }
-        } else {
-          // Standard per-market processing for binary events
-          for (const m of mkts) {
-            if (!evtMatch && !matchesQuery(m.title)) continue;
-            const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.yes_ask != null ? m.yes_ask : null);
-            const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.last_price != null ? m.last_price : null);
-            const yesBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : (m.yes_bid != null ? m.yes_bid : null);
-            const _kYesPct = yesAsk != null ? Math.round(yesAsk * 100) : (lastPrice != null ? Math.round(lastPrice * 100) : (yesBid != null ? Math.round(yesBid * 100) : null));
-            if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue;
-            kalshiMarkets.push({
-              question: (m.yes_sub_title && m.title ? m.title + ': ' + m.yes_sub_title : m.title) || evt.title || '',
-              yes_pct: _kYesPct,
-              close_date: m.close_time || m.expiration_time || null,
-              url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
-              volume: parseFloat(m.volume_fp || m.volume || 0),
-              _ticker: m.ticker || null
-            });
-            if (kalshiMarkets.length >= 15) break;
-          }
-        }
-        if (kalshiMarkets.length >= 15) break;
-      }
-    }
-
-    // --- Backfill Kalshi prices via orderbook (market endpoint returns null) ---
-    const kalshiNullPrice = kalshiMarkets.filter(m => m.yes_pct == null && m._ticker);
-    if (kalshiNullPrice.length > 0) {
-      const priceFetches = kalshiNullPrice.slice(0, 8).map(async (m) => {
-        try {
-          // Orderbook has real bid/ask data even when market endpoint doesn't
-          const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}/orderbook`, { headers: { Accept: 'application/json' } }, 5000);
-          if (r.ok) {
-            const ob = await r.json();
-            const book = ob.orderbook_fp || ob.orderbook || {};
-            const yesBids = book.yes_dollars || book.yes || [];
-            const noBids = book.no_dollars || book.no || [];
-            // Best YES price = lowest yes ask, or infer from NO side (yes = 1 - best_no)
-            let yesPrice = null;
-            if (yesBids.length > 0) {
-              yesPrice = parseFloat(yesBids[0][0]);
-            }
-            if (noBids.length > 0) {
-              const impliedYes = 1 - parseFloat(noBids[0][0]);
-              // Use the midpoint if both sides exist
-              if (yesPrice != null) yesPrice = (yesPrice + impliedYes) / 2;
-              else yesPrice = impliedYes;
-            }
-            if (yesPrice != null) {
-              m.yes_pct = Math.round(yesPrice * 100);
-            }
-          }
-        } catch {}
-      });
-      await Promise.allSettled(priceFetches);
-    }
-    // Truncate long Kalshi titles (cabinet definitions etc)
-    kalshiMarkets.forEach(m => {
-      if (m.question && m.question.length > 120) {
-        // Try to cut at a meaningful point
-        const cut = m.question.substring(0, 120);
-        const lastQ = cut.lastIndexOf('?');
-        const lastParen = cut.lastIndexOf(')');
-        const breakPoint = Math.max(lastQ, lastParen);
-        m.question = breakPoint > 40 ? m.question.substring(0, breakPoint + 1) : cut + '...';
-      }
-      delete m._ticker;
-    });
-    // Re-filter: remove markets that are now confirmed 95%+ or 5%- after price backfill
-    const kalshiFiltered = kalshiMarkets
-      .filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95))
-      // Same relevance-first sort as Polymarket so the two panels stay
-      // in sync when the pair-matcher runs below.
-      .sort((a, b) => scoreRelevance(b.question, b.volume) - scoreRelevance(a.question, a.volume));
+    // Kalshi parse + orderbook backfill removed: Polymarket-only post-pivot.
+    const kalshiFiltered = [];
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
@@ -27982,39 +27698,9 @@ app.get('/api/markets/search', async (req, res) => {
       }
       return [...normalized];
     }
-    const pairs = [];
-    const usedKalshi = new Set();
-    const usedPoly = new Set();
-    for (let pi = 0; pi < polyMarkets.length; pi++) {
-      const pFP = _extractFingerprint(polyMarkets[pi].question);
-      let bestMatch = -1, bestScore = 0;
-      for (let ki = 0; ki < kalshiFiltered.length; ki++) {
-        if (usedKalshi.has(ki)) continue;
-        const kFP = _extractFingerprint(kalshiFiltered[ki].question);
-        // Count shared fingerprint tokens (includes semantic groups)
-        const shared = pFP.filter(w => kFP.includes(w));
-        const score = shared.length;
-        // Require: at least 2 shared tokens AND at least one must be a non-semantic entity (proper noun)
-        const hasEntity = shared.some(w => !w.startsWith('~') && w.length > 3);
-        const minScore = hasEntity ? 2 : 3;
-        if (score > bestScore && score >= minScore) { bestScore = score; bestMatch = ki; }
-      }
-      if (bestMatch >= 0) {
-        const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiFiltered[bestMatch].yes_pct;
-        const spread = (pPct != null && kPct != null) ? Math.abs(pPct - kPct) : null;
-        if (pPct != null || kPct != null) {
-          pairs.push({ poly: polyMarkets[pi], kalshi: kalshiFiltered[bestMatch], spread });
-          usedPoly.add(pi);
-          usedKalshi.add(bestMatch);
-        }
-      }
-    }
-    // Sort pairs by spread descending (biggest arbitrage first), nulls last
-    pairs.sort((a, b) => (b.spread ?? -1) - (a.spread ?? -1));
-    const unpairedPoly = polyMarkets.filter((_, i) => !usedPoly.has(i));
-    const unpairedKalshi = kalshiFiltered.filter((_, i) => !usedKalshi.has(i));
-
-    const data = { polymarket: unpairedPoly, kalshi: unpairedKalshi, pairs, sportsbooks, smart_money };
+    // Kalshi pair-matching removed (post-pivot). Pass through all polymarket
+    // markets as unpaired.
+    const data = { polymarket: polyMarkets.slice(), pairs: [], sportsbooks, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
     setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
     res.json(data);
@@ -32814,400 +32500,6 @@ function filterScreenerResults(markets, query) {
   return filtered;
 }
 
-// ── ARBITRAGE SCANNER — cross-platform price discrepancies ────────────────
-let _arbCache = null;
-let _arbScannerCache = null; // separate cache for the scanner endpoint (different format from legacy cron)
-let _arbV1Cache = null;      // v1 endpoint cache (richer: orderbook prices + true arb detection)
-
-// ── Fingerprint helpers for arb market matching (module-level, shared) ──────
-const _ARB_STOPWORDS = new Set(['will','the','before','after','from','this','that','with','have','been','does','would','should','could','about','into','than','them','then','what','when','where','which','their','there','these','those','other','some','more','very','just','only','also','most','next','each','both','during','being','between','defined','member','2024','2025','2026','2027','2028','2029']);
-const _ARB_SEMANTIC = {
-  'impeach':  ['impeach','impeached','impeachment','removed from office'],
-  'win':      ['win','winner','champion','victory','championship','take'],
-  'price':    ['price','hit','above','below','reach','exceed','fall'],
-  'election': ['election','elected','vote','nominee','nomination','presidential'],
-  'rate':     ['rate','rates','cut','hike','basis points','fomc'],
-  'ceasefire':['ceasefire','peace','truce','war ends','conflict ends'],
-  'resign':   ['resign','resignation','step down','leave office','out as'],
-};
-function _arbFingerprint(text) {
-  const t = (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
-  const words = t.split(/\s+/).filter(w => w.length > 2 && !_ARB_STOPWORDS.has(w));
-  const normalized = new Set();
-  for (const w of words) {
-    let mapped = false;
-    for (const [group, variants] of Object.entries(_ARB_SEMANTIC)) {
-      if (variants.some(v => w.includes(v) || v.includes(w))) {
-        normalized.add('~' + group);
-        mapped = true;
-        break;
-      }
-    }
-    if (!mapped) normalized.add(w);
-  }
-  return [...normalized];
-}
-function _arbMatchScore(qA, qB) {
-  const fpA = _arbFingerprint(qA);
-  const fpB = _arbFingerprint(qB);
-  const shared = fpA.filter(w => fpB.includes(w));
-  const hasEntity = shared.some(w => !w.startsWith('~') && w.length > 3);
-  const score = shared.length / Math.max(fpA.length, fpB.length, 1);
-  return { score, hasEntity, sharedCount: shared.length };
-}
-// Kalshi taker fee formula: 0.07 × P × (1−P) per contract
-function _kalshiFee(price) { return 0.07 * price * (1 - price); }
-
-app.get('/api/arbitrage', async (req, res) => {
-  try {
-    // 5-min cache (use dedicated scanner cache, not the legacy cron cache)
-    if (_arbScannerCache && (Date.now() - _arbScannerCache.ts < 5 * 60 * 1000)) {
-      return res.json(_arbScannerCache.data);
-    }
-
-    const fetch = _nodeFetch;
-
-    // Fetch Polymarket top markets (use screener cache if available)
-    let polyMarkets = [];
-    if (_screenerCache && _screenerCache.data) {
-      polyMarkets = _screenerCache.data.map(m => ({
-        question: m.question,
-        yes_price: m.yes_price,
-        volume: m.volume,
-        slug: m.slug,
-        platform: 'polymarket'
-      }));
-    }
-
-    // Fetch Kalshi events
-    let kalshiEvents = [];
-    try { kalshiEvents = await getKalshiEvents(); } catch(e) {}
-
-    // Build Kalshi market list with prices
-    const kalshiMarkets = [];
-    for (const evt of kalshiEvents) {
-      const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
-      for (const m of mkts) {
-        const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null);
-        if (yesAsk == null || yesAsk >= 0.95 || yesAsk <= 0.05) continue;
-        kalshiMarkets.push({
-          question: (evt.title || m.title || '').toLowerCase().trim(),
-          title_raw: evt.title || m.title || '',
-          yes_price: yesAsk,
-          volume: parseFloat(m.volume_fp || m.volume || 0),
-          ticker: m.event_ticker || m.ticker || '',
-          platform: 'kalshi'
-        });
-      }
-    }
-
-    // Fuzzy match: find Polymarket ↔ Kalshi pairs on similar questions
-    const opportunities = [];
-    const usedKalshi = new Set();
-
-    for (const pm of polyMarkets) {
-      if (!pm.yes_price || pm.yes_price <= 0.05 || pm.yes_price >= 0.95) continue;
-      const pq = (pm.question || '').toLowerCase().trim();
-      const pWords = pq.split(/\s+/).filter(w => w.length > 3);
-      if (pWords.length < 2) continue;
-
-      // Find best Kalshi match by word overlap
-      let bestMatch = null;
-      let bestScore = 0;
-      for (let ki = 0; ki < kalshiMarkets.length; ki++) {
-        if (usedKalshi.has(ki)) continue;
-        const kq = kalshiMarkets[ki].question;
-        const kWords = kq.split(/\s+/).filter(w => w.length > 3);
-        const overlap = pWords.filter(w => kWords.includes(w)).length;
-        const score = overlap / Math.max(pWords.length, kWords.length);
-        if (score > bestScore && score >= 0.35) { // 35% word overlap minimum
-          bestScore = score;
-          bestMatch = ki;
-        }
-      }
-
-      if (bestMatch !== null) {
-        const km = kalshiMarkets[bestMatch];
-        const spread = Math.abs(pm.yes_price - km.yes_price);
-        if (spread >= 0.02) { // Minimum 2¢ spread to be an opportunity
-          const polyPct = Math.round(pm.yes_price * 100);
-          const kalshiPct = Math.round(km.yes_price * 100);
-          const spreadPct = Math.round(spread * 100);
-
-          // Determine trade direction
-          const buyPlatform = pm.yes_price < km.yes_price ? 'polymarket' : 'kalshi';
-          const buyPrice = Math.min(pm.yes_price, km.yes_price);
-          const sellPrice = Math.max(pm.yes_price, km.yes_price);
-          const roi = buyPrice > 0 ? Math.round(((sellPrice - buyPrice) / buyPrice) * 100) : 0;
-
-          opportunities.push({
-            question: pm.question,
-            polymarket_price: pm.yes_price,
-            kalshi_price: km.yes_price,
-            spread: parseFloat(spread.toFixed(3)),
-            spread_pct: spreadPct,
-            buy_on: buyPlatform,
-            buy_price: parseFloat(buyPrice.toFixed(3)),
-            sell_price: parseFloat(sellPrice.toFixed(3)),
-            arb_roi: roi,
-            poly_volume: pm.volume,
-            kalshi_volume: km.volume,
-            poly_slug: pm.slug,
-            kalshi_ticker: km.ticker,
-            match_confidence: Math.round(bestScore * 100)
-          });
-          usedKalshi.add(bestMatch);
-        }
-      }
-    }
-
-    // Sort by spread (biggest arb first)
-    opportunities.sort((a, b) => b.spread - a.spread);
-
-    const result = {
-      opportunities: opportunities.slice(0, 30),
-      total_found: opportunities.length,
-      avg_spread: opportunities.length > 0 ? parseFloat((opportunities.reduce((s, o) => s + o.spread, 0) / opportunities.length).toFixed(3)) : 0,
-      updated_at: new Date().toISOString()
-    };
-
-    _arbScannerCache = { ts: Date.now(), data: result };
-    res.json(result);
-  } catch (err) {
-    console.error('[arbitrage]', err.message);
-    if (_arbScannerCache) return res.json(_arbScannerCache.data);
-    res.status(500).json({ error: 'Failed to compute arbitrage', detail: err.message });
-  }
-});
-
-// ── V1 ARBITRAGE — live orderbook prices + true arb detection + fee-adj ROI ──
-// This is the primary endpoint. /api/arbitrage is the legacy fallback.
-app.get('/api/v1/arbitrage', async (req, res) => {
-  const minSpread = Math.max(0, parseFloat(req.query.min_spread || '0.01'));
-  const limit = Math.min(Math.max(1, parseInt(req.query.limit || '30')), 100);
-
-  if (_arbV1Cache && Date.now() - _arbV1Cache.ts < 5 * 60 * 1000) {
-    return res.json(_arbV1Cache.data);
-  }
-
-  try {
-    // ── 1. Polymarket: pull from screener cache (has live CLOB mid + best_bid/ask) ──
-    const polyMarkets = [];
-    if (_screenerCache && Array.isArray(_screenerCache.data)) {
-      for (const m of _screenerCache.data) {
-        if (!m.yes_price || m.yes_price <= 0.05 || m.yes_price >= 0.95) continue;
-        if (!m.volume || m.volume < 10000) continue;
-        polyMarkets.push({
-          question:     m.question || '',
-          yes_price:    m.yes_price,    // CLOB mid
-          yes_bid:      m.best_bid  ?? null,
-          yes_ask:      m.best_ask  ?? null,
-          volume:       m.volume    || 0,
-          slug:         m.slug      || '',
-          condition_id: m.condition_id || '',
-        });
-      }
-    }
-    if (polyMarkets.length === 0) {
-      return res.json({ opportunities: [], total_found: 0, true_arb_count: 0, avg_spread: 0, updated_at: new Date().toISOString() });
-    }
-
-    // ── 2. Kalshi: paginated events cache (10-min TTL) ──
-    let kalshiEvents = [];
-    try { kalshiEvents = await getKalshiEvents(); } catch(e) {}
-
-    // ── 3. Build Kalshi market list with initial prices from event data ──
-    const kalshiMarkets = [];
-    for (const evt of kalshiEvents) {
-      const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
-      for (const m of mkts) {
-        const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null;
-        const yesAsk    = m.yes_ask_dollars   != null ? parseFloat(m.yes_ask_dollars)   : null;
-        const yesBid    = m.yes_bid_dollars   != null ? parseFloat(m.yes_bid_dollars)   : null;
-        // Mid: prefer bid/ask midpoint, fallback to ask or last price
-        const yesMid = (yesBid != null && yesAsk != null) ? (yesBid + yesAsk) / 2
-                     : yesAsk ?? lastPrice;
-        if (yesMid == null || yesMid <= 0.05 || yesMid >= 0.95) continue;
-        const ticker = m.ticker || m.event_ticker || '';
-        kalshiMarkets.push({
-          question:        (evt.title || m.title || '').trim(),
-          yes_mid:         yesMid,
-          yes_bid:         yesBid,
-          yes_ask:         yesAsk,
-          volume:          parseFloat(m.volume_fp || m.volume || 0),
-          ticker,
-          event_ticker:    m.event_ticker || ticker,
-          needs_orderbook: (yesBid == null || yesAsk == null) && !!ticker,
-        });
-      }
-    }
-
-    // ── 4. Enrich top Kalshi markets with live orderbook bid/ask ──
-    // Kalshi orderbook: yes_dollars = YES bids, no_dollars = NO bids
-    // A YES bid at X means someone will buy YES at X  → that's the YES bid
-    // A NO bid at Y means someone will buy NO at Y   → YES ask = 1 - Y
-    const toFetch = kalshiMarkets.filter(m => m.needs_orderbook).slice(0, 25);
-    if (toFetch.length > 0) {
-      await Promise.allSettled(toFetch.map(async (m) => {
-        try {
-          const ctrl = new AbortController();
-          const tid  = setTimeout(() => ctrl.abort(), 6000);
-          const r = await _nodeFetch(
-            `https://api.elections.kalshi.com/trade-api/v2/markets/${m.ticker}/orderbook`,
-            { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }, signal: ctrl.signal }
-          ).finally(() => clearTimeout(tid));
-          if (!r.ok) return;
-          const ob   = await r.json();
-          const book = ob.orderbook_fp || ob.orderbook || {};
-          // Arrays sorted descending by price by Kalshi API
-          const yesBids = book.yes_dollars || book.yes || [];
-          const noBids  = book.no_dollars  || book.no  || [];
-          const bestYesBid = yesBids.length > 0 ? parseFloat(yesBids[0][0]) : null;
-          const bestNoBid  = noBids.length  > 0 ? parseFloat(noBids[0][0])  : null;
-          // YES ask = 1 − best NO bid (crossing the NO side lets you buy YES)
-          const computedYesAsk = bestNoBid != null ? parseFloat((1 - bestNoBid).toFixed(4)) : null;
-          const mid = (bestYesBid != null && computedYesAsk != null)
-            ? (bestYesBid + computedYesAsk) / 2
-            : bestYesBid ?? computedYesAsk;
-          if (mid != null && mid > 0.03 && mid < 0.97) {
-            m.yes_bid = bestYesBid;
-            m.yes_ask = computedYesAsk;
-            m.yes_mid = mid;
-          }
-        } catch { /* orderbook fetch failure is non-fatal */ }
-      }));
-    }
-
-    // Filter to valid price range after enrichment
-    const kalshiValid = kalshiMarkets.filter(m => m.yes_mid > 0.05 && m.yes_mid < 0.95);
-
-    // ── 5. Match Polymarket ↔ Kalshi via fingerprint (semantic entity overlap) ──
-    const usedKalshi = new Set();
-    const opportunities = [];
-
-    for (const pm of polyMarkets) {
-      if (!pm.question) continue;
-      let bestMatch = null, bestIdx = -1, bestScore = 0;
-
-      for (let ki = 0; ki < kalshiValid.length; ki++) {
-        if (usedKalshi.has(ki)) continue;
-        const { score, hasEntity, sharedCount } = _arbMatchScore(pm.question, kalshiValid[ki].question);
-        if (score > bestScore && sharedCount >= 2 && hasEntity) {
-          bestScore = score;
-          bestIdx = ki;
-          bestMatch = kalshiValid[ki];
-        }
-      }
-      if (!bestMatch || bestScore < 0.30) continue;
-
-      const km = bestMatch;
-      const polyMid   = pm.yes_price;
-      const kalshiMid = km.yes_mid;
-      const spread    = Math.abs(polyMid - kalshiMid);
-      if (spread < minSpread) continue;
-
-      // ── Price-spread direction ──
-      const buyPlatform  = polyMid < kalshiMid ? 'polymarket' : 'kalshi';
-      const sellPlatform = buyPlatform === 'polymarket' ? 'kalshi' : 'polymarket';
-      const buyPrice     = Math.min(polyMid, kalshiMid);
-      const sellPrice    = Math.max(polyMid, kalshiMid);
-      const grossRoi     = buyPrice > 0 ? Math.round((spread / buyPrice) * 100) : 0;
-
-      // Kalshi fee on the Kalshi leg (fee = 0.07 × P × (1-P) on winning contracts)
-      const kalshiLegPrice = buyPlatform === 'kalshi' ? buyPrice : sellPrice;
-      const feeAmt         = _kalshiFee(kalshiLegPrice);
-      const netSpread      = Math.max(0, spread - feeAmt);
-      const netRoi         = buyPrice > 0 ? Math.round((netSpread / buyPrice) * 100) : 0;
-
-      // ── True arb check — buying both sides totals < $1 ──
-      // Use best available prices (orderbook ask if available, else mid)
-      const polyYesAsk  = pm.yes_ask  ?? polyMid;
-      const polyNoAsk   = pm.yes_bid  != null ? parseFloat((1 - pm.yes_bid).toFixed(4)) : (1 - polyMid);
-      const kalshiYesAsk = km.yes_ask ?? kalshiMid;
-      const kalshiNoAsk  = km.yes_bid != null ? parseFloat((1 - km.yes_bid).toFixed(4)) : (1 - kalshiMid);
-
-      // Dir 1: YES on Poly + NO on Kalshi
-      const costDir1 = polyYesAsk + kalshiNoAsk;
-      // Dir 2: NO on Poly + YES on Kalshi
-      const costDir2 = polyNoAsk  + kalshiYesAsk;
-      const bestArbCost = Math.min(costDir1, costDir2);
-      // Apply Kalshi fee to the Kalshi leg in the arb
-      const trueArbFee  = _kalshiFee(bestArbCost < 1 ? (costDir1 <= costDir2 ? kalshiNoAsk : kalshiYesAsk) : 0);
-      const trueArb     = bestArbCost < 0.98; // 2% buffer for slippage/execution
-      const trueArbProfit = trueArb
-        ? Math.round((1 - bestArbCost - trueArbFee) * 100)
-        : null;
-
-      // ── Category ──
-      const q = (pm.question).toLowerCase();
-      const category = /bitcoin|btc|eth(ereum)?|crypto|solana|defi|token|blockchain/.test(q) ? 'crypto'
-        : /fed\b|interest rate|inflation|recession|stock|nasdaq|economy|tariff|treasury/.test(q) ? 'finance'
-        : /trump|biden|democrat|republican|election|congress|senate|president|pope|war\b|military/.test(q) ? 'politics'
-        : /nba|nfl|mlb|ufc|championship|playoff|series|soccer|tennis|golf/.test(q) ? 'sports'
-        : /oscar|emmy|grammy|movie|music|celebrity|streaming/.test(q) ? 'entertainment'
-        : 'other';
-
-      // Kalshi link: strip trailing -NNN from event ticker for cleaner URL
-      const kalshiUrlTicker = (km.event_ticker || km.ticker || '').replace(/-\d+$/, '').toLowerCase();
-
-      usedKalshi.add(bestIdx);
-      opportunities.push({
-        title_a:            pm.question,
-        source_a:           'polymarket',
-        source_b:           'kalshi',
-        price_a:            parseFloat(polyMid.toFixed(3)),
-        price_b:            parseFloat(kalshiMid.toFixed(3)),
-        spread:             parseFloat(spread.toFixed(3)),
-        spread_pct:         Math.round(spread * 100),
-        buy_on:             buyPlatform,
-        sell_on:            sellPlatform,
-        buy_price:          parseFloat(buyPrice.toFixed(3)),
-        sell_price:         parseFloat(sellPrice.toFixed(3)),
-        arb_roi:            grossRoi,
-        net_roi:            netRoi,
-        confidence:         Math.round(bestScore * 100),
-        category,
-        hfx_id_a:           'polymarket:' + (pm.slug || ''),
-        hfx_id_b:           'kalshi:' + kalshiUrlTicker,
-        poly_volume:        pm.volume,
-        kalshi_volume:      km.volume,
-        true_arb:           trueArb,
-        true_arb_profit_pct: trueArbProfit,
-        kalshi_fee_pct:     Math.round(feeAmt * 100),
-        kalshi_yes_bid:     km.yes_bid  != null ? parseFloat(km.yes_bid.toFixed(3))  : null,
-        kalshi_yes_ask:     km.yes_ask  != null ? parseFloat(km.yes_ask.toFixed(3))  : null,
-        poly_yes_bid:       pm.yes_bid  != null ? parseFloat(pm.yes_bid.toFixed(3))  : null,
-        poly_yes_ask:       pm.yes_ask  != null ? parseFloat(pm.yes_ask.toFixed(3))  : null,
-      });
-    }
-
-    // Sort: true arb first (by profit), then by spread
-    opportunities.sort((a, b) => {
-      if (a.true_arb !== b.true_arb) return b.true_arb ? 1 : -1;
-      if (a.true_arb && b.true_arb) return (b.true_arb_profit_pct || 0) - (a.true_arb_profit_pct || 0);
-      return b.spread - a.spread;
-    });
-
-    const limited = opportunities.slice(0, limit);
-    const result = {
-      opportunities:   limited,
-      total_found:     opportunities.length,
-      true_arb_count:  opportunities.filter(o => o.true_arb).length,
-      avg_spread:      opportunities.length > 0
-        ? parseFloat((opportunities.reduce((s, o) => s + o.spread, 0) / opportunities.length).toFixed(3))
-        : 0,
-      best_net_roi:    limited.length > 0 ? Math.max(...limited.map(o => o.net_roi || 0)) : 0,
-      updated_at:      new Date().toISOString(),
-    };
-
-    _arbV1Cache = { ts: Date.now(), data: result };
-    res.json(result);
-  } catch (err) {
-    console.error('[arb-v1]', err.message);
-    if (_arbV1Cache) return res.json(_arbV1Cache.data);
-    res.status(500).json({ error: 'Failed to compute v1 arbitrage', detail: err.message });
-  }
-});
 
 // ── SIGNAL ACCURACY TRACKING — prove the edge ────────────────────────────
 app.get('/api/accuracy/signals', async (req, res) => {
@@ -42931,253 +42223,6 @@ app.get('/api/signals', async (req, res) => {
 // GET /signals — alpha signals page
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 
-// ── ARBITRAGE DETECTION (legacy — used by detectArbitrageOpportunities) ──
-// _arbCache declared earlier in /api/arbitrage section
-let _prevArbIds = new Set();
-
-async function detectArbitrageOpportunities() {
-  try {
-    const fetch = _nodeFetch;
-    // Fetch Polymarket events
-    const polyRes = await fetch('https://gamma-api.polymarket.com/events/keyset?closed=false&limit=50&order=liquidity&ascending=false', {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    }).catch(() => null);
-    // Kalshi events come from the paginated cache (getKalshiEvents)
-
-    const polyMarkets = [];
-    if (polyRes && polyRes.ok) {
-      const raw = _gammaUnwrap(await polyRes.json());;
-      for (const evt of (Array.isArray(raw) ? raw : [])) {
-        for (const m of (evt.markets || [])) {
-          if (m.closed) continue;
-          let yp = 0.5;
-          try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yp = parseFloat(prices[0]); } catch {}
-          polyMarkets.push({ question: (m.question || m.groupItemTitle || evt.title || '').toLowerCase(), yes: yp, url: evt.slug ? `https://polymarket.com/event/${evt.slug}` : 'https://polymarket.com', title: m.question || m.groupItemTitle || evt.title || '' });
-        }
-      }
-    }
-
-    const kalshiMarkets = [];
-    // Use the cached paginated Kalshi events instead of a separate fetch
-    const kalshiEvts = await getKalshiEvents();
-    for (const evt of kalshiEvts) {
-      for (const m of (evt.markets || [])) {
-        if (m.status !== 'active' && m.status !== 'open') continue;
-        // Use correct dollar-denominated fields
-        const yAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : null;
-        const lPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null;
-        const yBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : null;
-        const yp = yAsk || lPrice || yBid;
-        if (yp == null || yp <= 0.01 || yp >= 0.99) continue; // Skip markets with no real price
-        kalshiMarkets.push({ question: (m.title || evt.title || '').toLowerCase(), yes: yp, url: `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}`, title: m.title || evt.title || '' });
-      }
-    }
-
-    // Deduplicate kalshiMarkets by question (Kalshi pagination can produce dupes)
-    const kSeen = new Set();
-    const dedupedKalshi = kalshiMarkets.filter(m => kSeen.has(m.question) ? false : (kSeen.add(m.question), true));
-    kalshiMarkets.length = 0;
-    kalshiMarkets.push(...dedupedKalshi);
-
-    // Match markets across platforms by keyword overlap
-    const arbStopWords = new Set(['will','before','after','this','that','what','when','where','which','with','from','have','been','does','price','range','more','than','least','year','2026','2027','2028','2029','march','april','january','february','may','june','july','august','september','october','november','december','the','win','presidential','election','president']);
-    const arbs = [];
-    for (const pm of polyMarkets) {
-      const pWords = pm.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
-      if (pWords.length < 2) continue;
-      for (const km of kalshiMarkets) {
-        const kWords = km.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
-        const overlap = pWords.filter(w => kWords.includes(w)).length;
-        const overlapRatio = overlap / Math.min(pWords.length, kWords.length);
-        // Require 3+ shared meaningful words AND >60% overlap ratio (tight to avoid false matches)
-        if (overlap < 3 || overlapRatio < 0.6) continue;
-        // Skip if either side has near-zero/near-100 price (likely bad match)
-        if (pm.yes < 0.02 || pm.yes > 0.98 || km.yes < 0.02 || km.yes > 0.98) continue;
-        // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
-        const kalshiNo = 1 - km.yes;
-        const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
-        const arbEdge2 = 1 - (km.yes + (1 - pm.yes)); // reverse direction
-        const bestEdge = Math.max(arbEdge1, arbEdge2);
-        if (bestEdge > 0.005 && bestEdge < 0.10) { // > 0.5% edge, < 10% (real arbs are 0.5-5%, above 10% = likely mismatched markets)
-          const edgePct = Math.round(bestEdge * 10000) / 100;
-          const direction = arbEdge1 >= arbEdge2 ? 'Buy YES Poly + NO Kalshi' : 'Buy YES Kalshi + NO Poly';
-          arbs.push({
-            id: pm.question.slice(0, 30) + '_' + km.question.slice(0, 30),
-            market: pm.title || km.title,
-            polymarket_yes: Math.round(pm.yes * 100),
-            kalshi_yes: Math.round(km.yes * 100),
-            edge_pct: edgePct,
-            direction,
-            poly_url: pm.url,
-            kalshi_url: km.url,
-            detected_at: new Date().toISOString()
-          });
-        }
-      }
-    }
-    // ── SPORTSBOOK vs POLYMARKET arb detection ──
-    // Convert decimal odds to implied probability: implied% = 1/decimalOdds
-    const ODDS_KEY = process.env.ODDS_API_KEY;
-    if (ODDS_KEY) {
-      try {
-        // Fetch upcoming sports events with h2h odds
-        const sportKeys = ['basketball_nba', 'baseball_mlb', 'americanfootball_nfl', 'icehockey_nhl', 'mma_mixed_martial_arts', 'soccer_epl'];
-        const sportFetches = await Promise.allSettled(
-          sportKeys.map(sk => fetch(`https://api.the-odds-api.com/v4/sports/${sk}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []))
-        );
-        const sbEvents = [];
-        for (const r of sportFetches) {
-          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-            for (const game of r.value) {
-              if (!game.bookmakers || !game.bookmakers.length) continue;
-              // Average odds across bookmakers for each outcome
-              const outcomeOdds = {};
-              let bookCount = 0;
-              for (const bk of game.bookmakers.slice(0, 5)) {
-                const h2h = (bk.markets || []).find(m => m.key === 'h2h');
-                if (!h2h) continue;
-                bookCount++;
-                for (const o of (h2h.outcomes || [])) {
-                  if (!outcomeOdds[o.name]) outcomeOdds[o.name] = [];
-                  outcomeOdds[o.name].push(parseFloat(o.price));
-                }
-              }
-              if (bookCount < 2) continue; // need 2+ bookmakers for reliable odds
-              for (const [name, prices] of Object.entries(outcomeOdds)) {
-                const avgDecimal = prices.reduce((a, b) => a + b, 0) / prices.length;
-                const impliedPct = Math.round((1 / avgDecimal) * 100); // e.g. 2.5 odds = 40%
-                if (impliedPct < 5 || impliedPct > 95) continue;
-                sbEvents.push({
-                  question: `${game.home_team} vs ${game.away_team}`.toLowerCase(),
-                  outcome: name,
-                  impliedPct,
-                  avgDecimal: Math.round(avgDecimal * 100) / 100,
-                  bookmakers: bookCount,
-                  sport: game.sport_title || '',
-                  commence: game.commence_time
-                });
-              }
-            }
-          }
-        }
-        // Match sportsbook events to Polymarket markets
-        for (const sb of sbEvents) {
-          const sbWords = sb.question.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
-          if (sbWords.length < 2) continue;
-          for (const pm of polyMarkets) {
-            const pWords = pm.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
-            const overlap = sbWords.filter(w => pWords.includes(w)).length;
-            if (overlap < 2) continue;
-            const overlapRatio = overlap / Math.min(sbWords.length, pWords.length);
-            if (overlapRatio < 0.4) continue;
-            if (pm.yes < 0.02 || pm.yes > 0.98) continue;
-            // Compare implied probability vs Polymarket price
-            const polyPct = Math.round(pm.yes * 100);
-            const gap = Math.abs(polyPct - sb.impliedPct);
-            if (gap >= 5) { // 5%+ discrepancy — show all real edges, let users decide
-              const direction = polyPct < sb.impliedPct
-                ? `Buy YES on Polymarket at ${polyPct}¢ — books price at ${sb.impliedPct}¢. Sell when Poly catches up to lock ${gap}¢ profit, or hold to resolution for ${100-polyPct}¢ upside.`
-                : `Buy NO on Polymarket at ${100-polyPct}¢ — books only give ${sb.impliedPct}% chance. Sell when Poly corrects down for ${gap}¢ profit, or hold to resolution.`;
-              arbs.push({
-                id: 'sb_' + pm.question.slice(0, 20) + '_' + sb.outcome.slice(0, 15),
-                market: pm.title + ' (' + sb.outcome + ')',
-                polymarket_yes: polyPct,
-                kalshi_yes: sb.impliedPct,
-                edge_pct: Math.round(gap * 100) / 100,
-                direction,
-                poly_url: pm.url,
-                kalshi_url: '', // no direct sportsbook link
-                type: 'sportsbook',
-                bookmakers: sb.bookmakers,
-                decimal_odds: sb.avgDecimal,
-                detected_at: new Date().toISOString()
-              });
-            }
-          }
-        }
-        console.log(`[arb] Sportsbook scan: ${sbEvents.length} outcomes checked, ${arbs.filter(a => a.type === 'sportsbook').length} discrepancies found`);
-      } catch (e) { console.warn('[arb] sportsbook scan error:', e.message); }
-    }
-
-    // Deduplicate by id (same Poly+Kalshi pair can match multiple times from Kalshi pagination dupes)
-    const arbSeen = new Set();
-    const uniqueArbs = arbs.filter(a => arbSeen.has(a.id) ? false : (arbSeen.add(a.id), true));
-    uniqueArbs.sort((a, b) => b.edge_pct - a.edge_pct);
-
-    // Push notify for new arbs >= 3%
-    const newArbIds = new Set(uniqueArbs.map(a => a.id));
-    if (webpush) {
-      const freshArbs = uniqueArbs.filter(a => a.edge_pct >= 3 && !_prevArbIds.has(a.id));
-      for (const arb of freshArbs.slice(0, 3)) {
-        // Fire to all push subscribers
-        let subs;
-        try {
-          if (pool) subs = await dbQuery('SELECT endpoint, p256dh, auth FROM push_subscriptions');
-          else { const { data } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth'); subs = data || []; }
-        } catch { subs = []; }
-        const payload = JSON.stringify({
-          title: `\u26A1 Arb Alert: ${arb.edge_pct}% edge`,
-          body: `${arb.market.substring(0, 50)} \u2014 Poly ${arb.polymarket_yes}% vs Kalshi ${arb.kalshi_yes}%`,
-          url: 'https://hyperflex.network/odds#arb'
-        });
-        for (const sub of subs) {
-          webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload).catch(err => {
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
-              else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
-            }
-          });
-        }
-        console.log(`[arb-push] Sent alert for ${arb.edge_pct}% edge on ${arb.market.substring(0, 40)}`);
-      }
-    }
-    _prevArbIds = newArbIds;
-    _arbCache = { ts: Date.now(), data: uniqueArbs.slice(0, 20) };
-    if (uniqueArbs.length) {
-      console.log(`[arb] Detected ${uniqueArbs.length} unique arb opportunities, best edge: ${uniqueArbs[0].edge_pct}%`);
-      // Tweet the biggest arb opportunity
-      const topArb = uniqueArbs[0];
-      if (topArb.edge_pct >= 3) {
-        tweetArbAlert({ market: topArb.market, poly_pct: topArb.poly_yes, kalshi_pct: topArb.kalshi_yes, edge: Math.round(topArb.edge_pct), direction: topArb.direction }).catch(() => {});
-      }
-      // Telegram alert for fresh edges ≥5%
-      const TG_ALERT_CHAT = process.env.TELEGRAM_ALERT_CHAT_ID;
-      if (TELEGRAM_BOT_TOKEN && TG_ALERT_CHAT) {
-        const freshForTg = uniqueArbs.filter(a => a.edge_pct >= 5 && !_prevArbIds.has(a.id));
-        if (freshForTg.length > 0) {
-          const top3 = freshForTg.slice(0, 3);
-          const lines = top3.map(a => {
-            const isSB = a.type === 'sportsbook';
-            const platform = isSB ? 'Sportsbooks' : 'Kalshi';
-            return `⚡ <b>${a.edge_pct}% edge</b> ${isSB ? '📊' : '🔄'}\n` +
-              `${(a.market || '').substring(0, 60)}\n` +
-              `Poly: ${a.polymarket_yes}% | ${platform}: ${a.kalshi_yes}%\n` +
-              `${a.direction}\n` +
-              (a.poly_url ? `<a href="${a.poly_url}">Trade →</a>` : '');
-          });
-          const msg = `🔔 <b>HYPERFLEX Edge Scanner</b>\n${freshForTg.length} new discrepanc${freshForTg.length === 1 ? 'y' : 'ies'} detected\n\n${lines.join('\n\n')}\n\n<a href="https://hyperflex.network/odds#arb">View all →</a>`;
-          sendTelegramAlert(TG_ALERT_CHAT, msg);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[arb] detection error:', e.message);
-  }
-}
-
-// Refresh whale data every 10 minutes to keep F&G and signals fresh
-cron.schedule('*/10 * * * *', safeCron('refreshWhaleData', async () => {
-  try {
-    const data = await fetchWhalePositions();
-    _whaleWatchCache = { ts: Date.now(), data };
-    _healthTimestamps.lastWhaleFetch = new Date().toISOString();
-    console.log('[whale-refresh] Updated whale cache:', (data.whales || []).length, 'positions');
-  } catch (e) { console.warn('[whale-refresh]', e.message); }
-}));
-
-// Run arb detection every 5 minutes
-cron.schedule('*/5 * * * *', safeCron('detectArbitrageOpportunities', detectArbitrageOpportunities));
-setTimeout(detectArbitrageOpportunities, 30000); // First run 30s after boot
 
 // POST /api/trade-intentions — log when a user decides to trade (from Kelly calculator)
 app.post('/api/trade-intentions', requireAuth, async (req, res) => {
