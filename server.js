@@ -1265,7 +1265,6 @@ app.get('/api/debug-fetch', async (req, res) => {
   };
   await Promise.allSettled([
     testFetch('polymarket', 'https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=1'),
-    testFetch('kalshi', 'https://api.elections.kalshi.com/trade-api/v2/events?limit=1'),
     testFetch('httpbin', 'https://httpbin.org/get'),
   ]);
   res.json(results);
@@ -1679,8 +1678,6 @@ function optionalAuth(req, res, next) {
 }
 
 // ── EXTERNAL API CACHES ───────────────────────────
-const _kalshiCache = new Map();
-const _manifoldCache = new Map();
 const _polyCache = new Map();
 const _predictorFollowCache = new Map();
 
@@ -11492,8 +11489,6 @@ app.get('/api/trader-profile/:username', async (req, res) => {
     // Platforms connected
     const platforms = [];
     if (user.polymarket_address) platforms.push('polymarket');
-    if (user.kalshi_api_key || user.kalshi_username) platforms.push('kalshi');
-    if (user.manifold_username) platforms.push('manifold');
 
     // Fetch HFX positions (with market data for best calls)
     let hfBets = [];
@@ -12284,9 +12279,9 @@ async function fetchHFXCommunityLeaderboard(p) {
 
   let userRows;
   if (pool) {
-    userRows = await dbQuery('SELECT id, display_name, polymarket_address, kalshi_api_key, manifold_username FROM users WHERE id = ANY($1)', [userIds]);
+    userRows = await dbQuery('SELECT id, display_name, polymarket_address FROM users WHERE id = ANY($1)', [userIds]);
   } else {
-    const { data } = await supabase.from('users').select('id, display_name, polymarket_address, kalshi_api_key, manifold_username').in('id', userIds);
+    const { data } = await supabase.from('users').select('id, display_name, polymarket_address').in('id', userIds);
     userRows = data;
   }
   const userMap = {};
@@ -12299,8 +12294,6 @@ async function fetchHFXCommunityLeaderboard(p) {
     const totalPnl = u.pnl / 100;
     const platforms = [...u.platforms];
     if (info.polymarket_address && !platforms.includes('POLY')) platforms.push('POLY');
-    if (info.kalshi_api_key && !platforms.includes('KALSHI')) platforms.push('KALSHI');
-    if (info.manifold_username && !platforms.includes('MANIFOLD')) platforms.push('MANIFOLD');
 
     const sharpScore = Math.min(100, Math.round(
       winRate * 0.8 +
@@ -20216,10 +20209,10 @@ async function syncAllUserPositions() {
   try {
     let users;
     if (pool) {
-      const _rows = await dbQuery('SELECT * FROM users WHERE (polymarket_address IS NOT NULL OR kalshi_api_key IS NOT NULL OR kalshi_username IS NOT NULL OR manifold_username IS NOT NULL)', []);
+      const _rows = await dbQuery('SELECT * FROM users WHERE polymarket_address IS NOT NULL', []);
       users = _rows;
     } else {
-      const { data: _u } = await supabase .from('users') .select('*') .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
+      const { data: _u } = await supabase .from('users') .select('*') .not('polymarket_address', 'is', null);
       users = _u;
     }
     if (!users || users.length === 0) return;
@@ -20306,66 +20299,6 @@ async function syncUserPositions(user) {
         }
       }
     } catch(e) { console.warn('[sync-poly]', e.message); }
-  }
-
-  // Kalshi
-  if (user.kalshi_api_key) {
-    try {
-      const resp = await fetch('https://trading-api.kalshi.com/trade-api/v2/portfolio/positions?limit=50', {
-        headers: { Authorization: `Bearer ${user.kalshi_api_key}` }
-      });
-      const data = await resp.json();
-      ((data.market_positions || [])).forEach(p => {
-        upserts.push({
-          user_id: user.id,
-          platform: 'kalshi',
-          external_id: p.market_id,
-          market_title: p.market_title || p.market_id,
-          side: (p.position > 0) ? 'YES' : 'NO',
-          shares: Math.abs(p.position) || 0,
-          pnl: parseFloat(p.realized_pnl || 0) / 100,
-          probability: parseFloat(p.market_exposure || 0) / 100,
-          market_url: `https://kalshi.com/markets/${p.market_id}`,
-          updated_at: new Date().toISOString()
-        });
-      });
-    } catch(e) { console.warn('[sync-kalshi]', e.message); }
-  }
-
-  // Manifold
-  const _manifoldUser = user.manifold_username || user.kalshi_username;
-  if (_manifoldUser) {
-    try {
-      const res = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(_manifoldUser)}&limit=50`);
-      const bets = await res.json();
-      const grouped = {};
-      (Array.isArray(bets) ? bets : []).filter(b => !b.isRedemption && b.amount > 0).forEach(b => {
-        if (!grouped[b.contractId]) grouped[b.contractId] = { bets: [], contractId: b.contractId };
-        grouped[b.contractId].bets.push(b);
-      });
-      for (const contractId of Object.keys(grouped).slice(0, 20)) {
-        try {
-          const mRes = await fetch(`https://api.manifold.markets/v0/market/${contractId}`);
-          const market = await mRes.json();
-          if (market.isResolved) continue;
-          const group = grouped[contractId];
-          const totalAmount = group.bets.reduce((s, b) => s + b.amount, 0);
-          const lastSide = group.bets[group.bets.length - 1]?.outcome || 'YES';
-          upserts.push({
-            user_id: user.id,
-            platform: 'manifold',
-            external_id: contractId,
-            market_title: market.question,
-            side: lastSide,
-            shares: totalAmount,
-            pnl: 0,
-            probability: parseFloat(market.probability) || 0,
-            market_url: market.url,
-            updated_at: new Date().toISOString()
-          });
-        } catch(e2) { /* skip */ }
-      }
-    } catch(e) { console.warn('[sync-manifold]', e.message); }
   }
 
   if (upserts.length > 0) {
@@ -26188,9 +26121,6 @@ app.get('/api/user/wallets', requireAuth, async (req, res) => {
     }
     res.json({
       polymarket_address: data?.polymarket_address || null,
-      kalshi_api_key_set: !!(data?.kalshi_api_key),
-      kalshi_username:    data?.kalshi_username    || null,
-      manifold_username:  data?.manifold_username  || null,
     });
   } catch (err) {
     console.error('[wallets GET]', err.message);
@@ -26401,7 +26331,7 @@ async function fireWhaleAlerts(newPositions) {
 // PUT /api/user/wallets — update connected wallet/platform info
 app.put('/api/user/wallets', requireAuth, async (req, res) => {
   try {
-    const { polymarket_address, kalshi_api_key, kalshi_username, manifold_username, email } = req.body;
+    const { polymarket_address, email } = req.body;
     const updates = {};
 
     if (email !== undefined) {
@@ -26431,22 +26361,6 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
       if (addr && !/^0x[0-9a-fA-F]{40}$/.test(addr))
         return res.status(400).json({ error: 'Invalid Ethereum address format' });
       updates.polymarket_address = addr || null;
-    }
-
-    if (manifold_username !== undefined) {
-      updates.manifold_username = (manifold_username || '').trim() || null;
-    }
-
-    if (kalshi_username !== undefined) {
-      updates.kalshi_username = (kalshi_username || '').trim() || null;
-    }
-
-    if (kalshi_api_key !== undefined) {
-      const key = (kalshi_api_key || '').trim();
-      if (key && !/^[0-9a-f-]{36}$/.test(key))
-        return res.status(400).json({ error: 'Invalid Kalshi API key format (expected UUID)' });
-      updates.kalshi_api_key = key || null;
-      if (key) _kalshiCache.delete(key);
     }
 
     if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
@@ -26500,88 +26414,6 @@ app.post('/api/telegram/connect', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[telegram connect]', err.message);
     res.status(500).json({ error: 'Failed to save Telegram chat ID' });
-  }
-});
-
-// GET /api/kalshi/positions — proxy Kalshi API using stored user API key
-app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
-  try {
-    let user;
-    if (pool) {
-      const rows = await dbQuery('SELECT kalshi_api_key FROM users WHERE id = $1 LIMIT 1', [req.userId]);
-      user = rows[0] || null;
-    } else {
-      const { data } = await supabase.from('users').select('kalshi_api_key').eq('id', req.userId).maybeSingle();
-      user = data;
-    }
-    if (!user?.kalshi_api_key) return res.status(400).json({ error: 'No Kalshi API key connected' });
-
-    const apiKey = user.kalshi_api_key;
-    const cached = _kalshiCache.get(apiKey);
-    if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
-
-    const r = await fetch('https://trading-api.kalshi.com/trade-api/v2/portfolio/positions', {
-      headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' }
-    });
-    if (r.status === 401) return res.status(401).json({ error: 'Invalid Kalshi API key' });
-    if (!r.ok) throw new Error('Kalshi API returned ' + r.status);
-    const raw = await r.json();
-
-    // Enrich with market details (batch up to 20 unique tickers)
-    const positions = raw.positions || [];
-    const tickers = [...new Set(positions.map(p => p.ticker))].slice(0, 20);
-    const marketMap = {};
-    await Promise.all(tickers.map(async ticker => {
-      try {
-        const mr = await fetch('https://trading-api.kalshi.com/trade-api/v2/markets/' + ticker, {
-          headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' }
-        });
-        if (mr.ok) { const md = await mr.json(); marketMap[ticker] = md.market; }
-      } catch {}
-    }));
-
-    const normalized = positions
-      .filter(p => p.position !== 0)
-      .map(p => {
-        const m = marketMap[p.ticker] || {};
-        const isYes = p.position > 0;
-        const currentPrice = isYes ? (m.yes_bid || 0.5) : (1 - (m.yes_ask || 0.5));
-        const contracts = Math.abs(p.position);
-        return {
-          id:              p.ticker,
-          question:        m.title || p.ticker,
-          side:            isYes ? 'YES' : 'NO',
-          contracts,
-          current_price:   currentPrice,
-          cash_value:      Math.round(contracts * currentPrice * 100) / 100,
-          realized_pnl:    p.realized_pnl   || 0,
-          unrealized_pnl:  p.unrealized_pnl || 0,
-          market_url:      'https://kalshi.com/markets/' + p.ticker,
-          end_date:        m.close_time || null,
-          closed:          m.status === 'finalized',
-          pnl_pct:         p.unrealized_pnl && contracts > 0
-            ? Math.round((p.unrealized_pnl / (contracts * 0.5)) * 100) : 0,
-          platform:        'kalshi',
-        };
-      });
-
-    const data = { positions: normalized, fetched_at: new Date().toISOString() };
-    _kalshiCache.set(apiKey, { ts: Date.now(), data });
-    res.json(data);
-  } catch (err) {
-    console.error('[kalshi proxy]', err.message);
-    // Fallback: return cached_positions from DB if fresh (within 30 min)
-    try {
-      let fallback;
-      if (pool) {
-        const _rows = await dbQuery('SELECT * FROM cached_positions WHERE user_id = $1 AND platform = $2 AND updated_at >= $3', [req.userId, 'kalshi', new Date(Date.now() - 30 * 60 * 1000).toISOString()]);
-        fallback = _rows;
-      } else {
-        const { data: fallback } = await supabase .from('cached_positions') .select('*') .eq('user_id', req.userId) .eq('platform', 'kalshi') .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
-      }
-      if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
-    } catch {}
-    res.status(502).json({ error: 'Failed to fetch Kalshi positions', detail: err.message });
   }
 });
 
@@ -27428,71 +27260,7 @@ app.get('/api/admin/v2-trades', async (req, res) => {
 // The new route forwards all POLY_* auth headers through Railway's US IP.
 
 // ── MARKET SEARCH AGGREGATOR ─────────────────────────────────────────────────
-// (Duplicate route removed — comprehensive search with synonym expansion,
-//  full-text _q search, Kalshi series tickers, and sportsbook odds is at line ~17621)
-
-app.get('/api/manifold/positions/:username', async (req, res) => {
-  let username = req.params.username.trim();
-  if (!username || !/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return res.status(400).json({ error: 'Invalid username' });
-  const cached = _manifoldCache.get(username.toLowerCase());
-  if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
-  try {
-    // Resolve canonical username — Manifold user API is case-sensitive, try variants
-    let resolvedUsername = null;
-    const variants = [username];
-    const lower = username.toLowerCase();
-    const pascal = username.replace(/(?:^|[-_])(\w)/g, (_, c) => c.toUpperCase());
-    if (pascal !== username) variants.push(pascal);
-    if (lower !== username && lower !== pascal) variants.push(lower);
-    for (const v of variants) {
-      const ur = await fetch(`https://api.manifold.markets/v0/user/${encodeURIComponent(v)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
-      if (ur.ok) { const ud = await ur.json(); resolvedUsername = ud.username || v; break; }
-    }
-    if (!resolvedUsername) return res.status(404).json({ error: 'Manifold user not found. Check your exact username (case-sensitive) at manifold.markets/profile' });
-    username = resolvedUsername;
-    const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(username)}&limit=200`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
-    if (!betsRes.ok) throw new Error('Manifold bets API ' + betsRes.status);
-    const bets = await betsRes.json();
-    const contractMap = {};
-    for (const b of bets) {
-      if (b.isRedemption) continue;
-      if (!contractMap[b.contractId]) contractMap[b.contractId] = { shares: 0, amount: 0, outcome: b.outcome, contractId: b.contractId };
-      contractMap[b.contractId].shares += (b.shares || 0);
-      contractMap[b.contractId].amount += (b.amount || 0);
-    }
-    const openContracts = Object.values(contractMap).filter(c => c.shares > 0.01);
-    if (!openContracts.length) { const data = { positions: [], fetched_at: new Date().toISOString() }; _manifoldCache.set(username.toLowerCase(), { ts: Date.now(), data }); return res.json(data); }
-    const enriched = await Promise.all(openContracts.slice(0, 20).map(async c => {
-      try {
-        const mr = await fetch(`https://api.manifold.markets/v0/market/${c.contractId}`, { headers: { Accept: 'application/json' } });
-        const m = mr.ok ? await mr.json() : {};
-        if (m.isResolved) return null;
-        const currentProb = m.probability || 0.5;
-        const currentPrice = c.outcome === 'YES' ? currentProb : (1 - currentProb);
-        const cashValue = Math.round(c.shares * currentPrice * 100) / 100;
-        return { id: c.contractId, question: m.question || c.contractId, side: c.outcome, shares: Math.round(c.shares * 100) / 100, current_price: Math.round(currentPrice * 1000) / 1000, cash_value: cashValue, cost_basis: Math.round(c.amount * 100) / 100, pnl_pct: c.amount > 0 ? Math.round(((cashValue - c.amount) / c.amount) * 100) : 0, market_url: m.url || `https://manifold.markets/market/${c.contractId}`, end_date: m.closeTime ? new Date(m.closeTime).toISOString() : null, closed: !!m.isResolved, platform: 'manifold' };
-      } catch { return null; }
-    }));
-    const positions = enriched.filter(Boolean);
-    const data = { positions, username, fetched_at: new Date().toISOString() };
-    _manifoldCache.set(username.toLowerCase(), { ts: Date.now(), data });
-    res.json(data);
-  } catch (err) {
-    console.error('[manifold proxy]', err.message);
-    // Fallback: return cached_positions from DB if fresh (within 30 min)
-    try {
-      let fallback;
-      if (pool) {
-        const _rows = await dbQuery('SELECT * FROM cached_positions WHERE platform = $1 AND updated_at >= $2', ['manifold', new Date(Date.now() - 30 * 60 * 1000).toISOString()]);
-        fallback = _rows;
-      } else {
-        const { data: fallback } = await supabase .from('cached_positions') .select('*') .eq('platform', 'manifold') .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
-      }
-      if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
-    } catch {}
-    res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message });
-  }
-});
+// (Duplicate route removed — comprehensive search at line ~17621)
 
 // ── CROSS-PLATFORM MARKET SEARCH ────────────────────────────────────────────
 const _mktSearchCache = new Map();
@@ -47271,32 +47039,6 @@ app.get('/api/whale-patterns', async (req, res) => {
   }
 });
 
-// TEMP DEBUG: test Kalshi series fetch
-app.get('/api/debug/kalshi-series', async (req, res) => {
-  const ticker = req.query.t || 'KXBTC';
-  try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 15000);
-    const r = await fetch(`https://api.elections.kalshi.com/trade-api/v2/events?limit=2&with_nested_markets=true&series_ticker=${ticker}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
-      signal: ctrl.signal
-    }).finally(() => clearTimeout(tid));
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = JSON.parse(text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')); }
-    const events = data.events || [];
-    res.json({
-      status: r.status,
-      events: events.length,
-      textLen: text.length,
-      firstTitle: events[0]?.title,
-      firstMarketsCount: events[0]?.markets?.length
-    });
-  } catch (e) {
-    res.json({ error: e.message, name: e.name });
-  }
-});
-
 // Auto-migrate: create all tables on fresh DB, add missing columns on existing DB
 if (pool) {
   (async () => {
@@ -47306,7 +47048,7 @@ if (pool) {
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         email TEXT UNIQUE, display_name TEXT, password_hash TEXT,
         google_id TEXT, x_id TEXT, x_username TEXT,
-        polymarket_address TEXT, kalshi_api_key TEXT, manifold_username TEXT,
+        polymarket_address TEXT,
         email_unsubscribe_token TEXT, email_unsubscribed BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
@@ -47318,7 +47060,7 @@ if (pool) {
         custom_points_name TEXT DEFAULT 'Flex Points', primary_color TEXT DEFAULT '#c9920d',
         community_description TEXT, logo_url TEXT, banner_url TEXT,
         starting_balance INTEGER DEFAULT 10000, is_active BOOLEAN DEFAULT true,
-        polymarket_address TEXT, kalshi_api_key TEXT, manifold_username TEXT,
+        polymarket_address TEXT,
         plan_trial_expires_at TIMESTAMPTZ, api_key TEXT,
         password_reset_token TEXT, password_reset_expires TIMESTAMPTZ,
         youtube_channel_id TEXT, auto_scan_enabled BOOLEAN DEFAULT false,
@@ -47578,8 +47320,6 @@ if (pool) {
       )`).catch(() => {});
 
       // Self-healing: missing columns on existing tables
-      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS kalshi_username TEXT`).catch(() => {});
-      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS manifold_username TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_address TEXT`).catch(() => {});
 
       // Dedup wallet users: keep earliest row per polymarket_address, delete rest
