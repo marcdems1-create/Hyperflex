@@ -18105,11 +18105,23 @@ function recomputeSportsFlexForUser(userId) {
 }
 module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
 
-// POST /api/takes — create a take (user prediction with optional thesis)
+// POST /api/takes — create a take (user prediction with optional thesis).
+// Auto-attaches to an open position on the same market if the caller has
+// one (per §3A of v2 spec). Falls back to freestanding mode if no open
+// position is found, in which case `stance` must be provided in
+// {leaning_yes, leaning_no, watching}.
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
-    const { market_slug, condition_id, question, side, entry_price, amount, thesis, parent_take_id } = req.body;
+    const { condition_id, market_slug, thesis, body, side, question, amount, parent_take_id } = req.body;
+    const text = thesis || body;
+    if (!text || text.length < 10 || text.length > 500) {
+      return res.status(400).json({ error: 'Thesis must be 10-500 characters' });
+    }
+    if (!condition_id && !market_slug) {
+      return res.status(400).json({ error: 'condition_id or market_slug required' });
+    }
     if (!question || !side) return res.status(400).json({ error: 'question and side are required' });
+    const userId = req.userId;
 
     // Get user info for denormalized display. Pull display_name from the
     // most specific source first. Users who signed up as a creator have
@@ -18140,6 +18152,46 @@ app.post('/api/takes', requireAuth, async (req, res) => {
       }
     }
 
+    // Auto-attach: look up an open position on this market for this user.
+    // Translated from the Supabase JS spec snippet (§3A) to the dbQuery
+    // pattern used elsewhere in this endpoint. If a position is found,
+    // entry_price / stance / side are derived from it; otherwise the
+    // caller must supply a freestanding stance.
+    let positionRows = [];
+    if (condition_id) {
+      positionRows = await dbQuery(
+        `SELECT id, side, avg_entry_price FROM positions
+         WHERE user_id = $1 AND status = 'open' AND condition_id = $2 LIMIT 1`,
+        [userId, condition_id]
+      );
+    } else if (market_slug) {
+      positionRows = await dbQuery(
+        `SELECT id, side, avg_entry_price FROM positions
+         WHERE user_id = $1 AND status = 'open' AND market_slug = $2 LIMIT 1`,
+        [userId, market_slug]
+      );
+    }
+    const position = positionRows[0] || null;
+
+    let position_id = null;
+    let entry_price = req.body.entry_price || null;
+    let attached_at = null;
+    let stance = req.body.stance;
+    let resolved_side = side;
+    if (position) {
+      position_id = position.id;
+      entry_price = position.avg_entry_price;
+      attached_at = new Date().toISOString();
+      stance = position.side === 'yes' ? 'backing' : 'fading';
+      resolved_side = position.side;
+    } else {
+      if (!['leaning_yes','leaning_no','watching'].includes(stance)) {
+        return res.status(400).json({
+          error: 'Freestanding takes require stance: leaning_yes, leaning_no, or watching'
+        });
+      }
+    }
+
     // If quote-predicting, validate parent exists
     let parentTake = null;
     if (parent_take_id) {
@@ -18149,23 +18201,24 @@ app.post('/api/takes', requireAuth, async (req, res) => {
     }
 
     const rows = await dbQuery(
-      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, amount, thesis, source, sharp_score, parent_take_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'user',$11,$12) RETURNING *`,
-      [req.userId, displayName, avatarUrl, market_slug || null, condition_id || null,
-       String(question).slice(0, 500), String(side).toUpperCase().slice(0, 20),
+      `INSERT INTO takes (user_id, display_name, avatar_url, market_slug, condition_id, question, side, entry_price, amount, thesis, source, sharp_score, parent_take_id, position_id, attached_at, stance)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'user',$11,$12,$13,$14,$15) RETURNING *`,
+      [userId, displayName, avatarUrl, market_slug || null, condition_id || null,
+       String(question).slice(0, 500), String(resolved_side).toUpperCase().slice(0, 20),
        entry_price != null ? parseFloat(entry_price) : null,
        amount != null ? parseFloat(amount) : null,
-       thesis ? String(thesis).slice(0, 500) : null,
-       sharpScore, parent_take_id || null]
+       text ? String(text).slice(0, 500) : null,
+       sharpScore, parent_take_id || null,
+       position_id, attached_at, stance]
     );
 
     // Notify parent take author of quote-predict
-    if (parentTake && parentTake.user_id && parentTake.user_id !== req.userId) {
+    if (parentTake && parentTake.user_id && parentTake.user_id !== userId) {
       const shortQ = (parentTake.question || '').substring(0, 50);
       pushNotification(
         parentTake.user_id, 'take_quoted',
         `\u21A9 ${displayName} counter-predicted your take`,
-        `They went ${String(side).toUpperCase()} on "${shortQ}"`,
+        `They went ${String(resolved_side).toUpperCase()} on "${shortQ}"`,
         null, null
       );
     }
