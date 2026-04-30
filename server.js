@@ -14794,7 +14794,6 @@ const INFLUENCER_SEED = [
   { handle: 'PickDawgz', name: 'PickDawgz', category: 'sports', followers: 150000 },
   // General / Commentary
   { handle: 'Polymarket', name: 'Polymarket', category: 'crypto', followers: 400000 },
-  { handle: 'kalaborahq', name: 'Kalshi', category: 'finance', followers: 100000 },
   { handle: 'elikiefficiency', name: 'Eli', category: 'politics', followers: 80000 },
   { handle: 'staboralotto', name: 'Star Lottery', category: 'general', followers: 50000 },
   { handle: 'PeterSchiff', name: 'Peter Schiff', category: 'finance', followers: 1000000 },
@@ -14984,7 +14983,7 @@ function isPredictionRelevant(text) {
   if (!text || text.length < 20) return false;
   const lower = text.toLowerCase();
   // Must contain at least one prediction signal word
-  const predictionWords = /\bpredict|\bbet\b|\bwager|\bfavor|\bodds\b|\bprobab|\bforecast|\bexpect|\bwill win|\bwon't win|\bgoing to|\bnot going|\bbullish|\bbearish|\blong\b|\bshort\b|\bbuy\b|\bsell\b|\byes\b|\bno\b|\bover\b|\bunder\b|\bspread|\b%\s*chance|\blikely|\bunlikely|\binevitable|\bimpossible|\bcalling it|\bmy take|\bhottest take|\bbold call|\btrade\b|\bmarket\b|\bpolymarket|\bkalshi|\belection|\bwinner|\bloser|\bchampion/i;
+  const predictionWords = /\bpredict|\bbet\b|\bwager|\bfavor|\bodds\b|\bprobab|\bforecast|\bexpect|\bwill win|\bwon't win|\bgoing to|\bnot going|\bbullish|\bbearish|\blong\b|\bshort\b|\bbuy\b|\bsell\b|\byes\b|\bno\b|\bover\b|\bunder\b|\bspread|\b%\s*chance|\blikely|\bunlikely|\binevitable|\bimpossible|\bcalling it|\bmy take|\bhottest take|\bbold call|\btrade\b|\bmarket\b|\bpolymarket|\belection|\bwinner|\bloser|\bchampion/i;
   if (!predictionWords.test(lower)) return false;
   // Filter out retweets, replies, ads
   if (lower.startsWith('rt @')) return false;
@@ -15926,7 +15925,7 @@ app.get('/api/activity', async (req, res) => {
         user:          userMap[s.user_id] || 'Anonymous',
         question:      s.question,
         side:          (s.side || 'YES').toUpperCase(),
-        platform:      s.platform || 'kalshi',
+        platform:      s.platform || 'polymarket',
         current_price: s.current_price,
         pnl_pct:       s.pnl_pct,
         cash_value:    s.cash_value,
@@ -15949,7 +15948,7 @@ app.get('/api/activity', async (req, res) => {
       }
     }
 
-    // ── Trending external markets (Polymarket + Kalshi top volume) ──
+    // ── Trending external markets (Polymarket top volume) ──
     try {
       const fetchExt = (url, ms = 10000) => {
         const ctrl = new AbortController();
@@ -16202,7 +16201,7 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
   try {
     const { question, side, platform, current_price, pnl_pct, cash_value, market_url } = req.body;
     if (!question || !side || !platform) return res.status(400).json({ error: 'question, side, and platform are required' });
-    const validPlatforms = ['kalshi', 'manifold', 'polymarket'];
+    const validPlatforms = ['polymarket'];
     if (!validPlatforms.includes(platform.toLowerCase())) return res.status(400).json({ error: 'Invalid platform' });
 
     const insertData = {
@@ -17109,11 +17108,10 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
 });
 
 // ── T2 · MARKET SPORT TAGS ─────────────────────────────────────────────────
-// Classifies external (Polymarket + Kalshi) markets by sport/league so T4
+// Classifies external (Polymarket) markets by sport/league so T4
 // (CLV) and T5 (Flex Score for Sports) can filter to sports-only trades.
 //
-// Two classifiers:
-//   classifyKalshiTicker(ticker)    — ticker prefix parse, high confidence
+// Single classifier:
 //   classifyPolymarketTitle(title)  — regex on question text, variable conf
 //
 // sweepMarketSportTags() walks all (source, external_id) pairs present in
@@ -17122,7 +17120,7 @@ app.get('/api/tipsters/leaderboard', async (req, res) => {
 // (tagged_by='manual') are never overwritten.
 
 // Sport vocab — aligned with existing picks.sport values on main (nba, nfl…).
-// Adding the rest that Kalshi + Polymarket actually list as markets.
+// Plus the rest that Polymarket actually lists as markets.
 const SPORT_VOCAB = ['nba','nfl','mlb','nhl','soccer','ncaaf','ncaab','ufc','boxing','tennis','golf','f1','esports','other'];
 
 // Team names → sport. Lowercase, anchored to word boundaries at match time.
@@ -20597,7 +20595,7 @@ cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight 
 
 const POLY_KEYWORDS = [
   'polymarket','prediction market','predicting','odds on','probability of',
-  'betting on','yes shares','no shares','kalshi','manifold','metaculus',
+  'betting on','yes shares','no shares','metaculus',
   'markets are showing','market says','market gives','market puts','contracts',
   'odds say','betting markets','political betting','market odds',
   'forecast','forecasting','probability','percent chance',
@@ -20610,7 +20608,7 @@ const POLY_KEYWORDS = [
 ];
 // Accounts where ALL tweets are relevant (prediction market platforms + key traders)
 const ALWAYS_RELEVANT_HANDLES = new Set([
-  'Polymarket','ManifoldMarkets','metaculus','Kalshi','PredictIt',
+  'Polymarket','metaculus','PredictIt',
   'NotSoEasyMoney','Tradermayne','csp_trading','massieforky',
   'NateSilver538','PTetlock','slatestarcodex',
 ]);
@@ -27194,9 +27192,9 @@ app.get('/api/markets/search', async (req, res) => {
       const tid = setTimeout(() => ctrl.abort(), ms);
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
     };
-    // Build search keywords with broad topic expansion for cross-platform matching
-    // Key insight: Kalshi uses generic titles ("Presidential Election") while Polymarket
-    // uses specific names ("Will Trump win?"). Expansions must bridge both naming styles.
+    // Build search keywords with broad topic expansion for Polymarket query matching.
+    // Polymarket questions vary in specificity ("Will Trump win?" vs "2024 Presidential
+    // Election") so synonyms expand short queries into the more verbose forms.
     const synonyms = {
       trump: ['trump', 'donald trump', 'president trump', 'maga'],
       biden: ['biden', 'joe biden', 'democrat', 'democratic'],
@@ -27513,9 +27511,6 @@ app.get('/api/markets/search', async (req, res) => {
       }
     }
 
-    // Kalshi parse + orderbook backfill removed: Polymarket-only post-pivot.
-    const kalshiFiltered = [];
-
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
     if (ODDS_API_KEY) {
@@ -27698,9 +27693,7 @@ app.get('/api/markets/search', async (req, res) => {
       }
       return [...normalized];
     }
-    // Kalshi pair-matching removed (post-pivot). Pass through all polymarket
-    // markets as unpaired.
-    const data = { polymarket: polyMarkets.slice(), pairs: [], sportsbooks, smart_money };
+    const data = { polymarket: polyMarkets.slice(), sportsbooks, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
     setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
     res.json(data);
@@ -33691,7 +33684,7 @@ const FLEX_PTS_CACHE_TTL = 5 * 60 * 1000;
 async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trade') {
   if (!userId) return 0;
   // Only real-money trades earn FLEX points
-  const VALID_SOURCES = ['polymarket_trade', 'kalshi_trade'];
+  const VALID_SOURCES = ['polymarket_trade'];
   if (!VALID_SOURCES.includes(source)) return 0;
   const basePoints = Math.max(1, Math.round(tradeAmountUsd));
 
@@ -34589,9 +34582,9 @@ app.get('/api/quests', requireAuth, async (req, res) => {
     // Get this week's trading data
     let trades = [];
     if (pool) {
-      trades = await dbQuery(`SELECT trade_amount_usd, source, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+      trades = await dbQuery(`SELECT trade_amount_usd, source, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source = 'polymarket_trade'`, [userId, weekStart]);
     } else if (supabase) {
-      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, source, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, source, created_at').eq('user_id', userId).gte('created_at', weekStart).eq('source', 'polymarket_trade');
       trades = data || [];
     }
 
@@ -34665,12 +34658,12 @@ app.post('/api/quests/:questId/claim', requireAuth, async (req, res) => {
     // Verify quest is actually completed (recheck progress)
     let tradeCount = 0, totalVolume = 0, streakDays = 0;
     if (pool) {
-      const trades = await dbQuery(`SELECT trade_amount_usd, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+      const trades = await dbQuery(`SELECT trade_amount_usd, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source = 'polymarket_trade'`, [userId, weekStart]);
       tradeCount = trades.length;
       totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
       streakDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10))).size;
     } else if (supabase) {
-      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, created_at').eq('user_id', userId).gte('created_at', weekStart).eq('source', 'polymarket_trade');
       const trades = data || [];
       tradeCount = trades.length;
       totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
@@ -34794,10 +34787,10 @@ app.get('/api/leaderboard/weekly', async (req, res) => {
     let leaders = [];
 
     if (pool) {
-      leaders = await dbQuery(`SELECT fp.user_id, u.display_name, SUM(fp.trade_amount_usd) as volume, COUNT(*) as trades FROM flex_points_log fp LEFT JOIN users u ON u.id = fp.user_id WHERE fp.created_at >= $1 AND fp.source IN ('polymarket_trade','kalshi_trade') GROUP BY fp.user_id, u.display_name ORDER BY volume DESC LIMIT 20`, [weekStart]);
+      leaders = await dbQuery(`SELECT fp.user_id, u.display_name, SUM(fp.trade_amount_usd) as volume, COUNT(*) as trades FROM flex_points_log fp LEFT JOIN users u ON u.id = fp.user_id WHERE fp.created_at >= $1 AND fp.source = 'polymarket_trade' GROUP BY fp.user_id, u.display_name ORDER BY volume DESC LIMIT 20`, [weekStart]);
     } else if (supabase) {
       // Supabase doesn't support GROUP BY easily, use RPC or raw query
-      const { data } = await supabase.from('flex_points_log').select('user_id, trade_amount_usd').gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const { data } = await supabase.from('flex_points_log').select('user_id, trade_amount_usd').gte('created_at', weekStart).eq('source', 'polymarket_trade');
       const grouped = {};
       (data || []).forEach(r => {
         if (!grouped[r.user_id]) grouped[r.user_id] = { volume: 0, trades: 0 };
@@ -35908,7 +35901,7 @@ app.get('/api/ecosystem/rewards', async (req, res) => {
 app.get('/api/ecosystem/tools', (req, res) => {
   const tools = [
     // Trading
-    { name: 'HYPERFLEX', description: 'Universal prediction market dashboard — track Polymarket, Kalshi & Manifold positions, P&L, and sharp scores in one place', category: 'Trading', url: 'https://hyperflex.network', twitter: 'hyperflexhq', verified: true },
+    { name: 'HYPERFLEX', description: 'Polymarket-native social layer — track positions, P&L, and sharp scores; post takes; build a verified prediction track record', category: 'Trading', url: 'https://hyperflex.network', twitter: 'hyperflexhq', verified: true },
     { name: 'PolyWallet', description: 'Portfolio tracker and wallet manager for Polymarket positions with real-time P&L', category: 'Trading', url: 'https://polywallet.xyz', twitter: 'polywallet_xyz', verified: true },
     { name: 'Polymarket CLOB', description: 'Official Central Limit Order Book for advanced trading with limit orders and API access', category: 'Trading', url: 'https://docs.polymarket.com', twitter: 'Polymarket', verified: true },
     { name: 'PolyBot', description: 'Automated trading bot for Polymarket with configurable strategies and risk limits', category: 'Trading', url: 'https://polybot.trade', twitter: 'polybot_trade', verified: false },
@@ -35947,9 +35940,7 @@ app.get('/api/ecosystem/tools', (req, res) => {
     // Social
     { name: 'Polymarket Feeds', description: 'Curated Twitter/X feed aggregating top Polymarket traders and market commentary', category: 'Social', url: 'https://polymarketfeeds.xyz', twitter: 'polyfeeds', verified: false },
     { name: 'Prediction Markets Daily', description: 'Newsletter covering prediction market news, big trades, and resolution outcomes', category: 'Social', url: 'https://pmdaily.substack.com', twitter: 'pm_daily', verified: false },
-    { name: 'Manifold Markets', description: 'Play-money prediction market platform — great for practice and community markets', category: 'Social', url: 'https://manifold.markets', twitter: 'ManifoldMarkets', verified: true },
-    { name: 'Metaculus', description: 'Forecasting platform with calibration scoring and tournament-style competitions', category: 'Social', url: 'https://metaculus.com', twitter: 'metaculus', verified: true },
-    { name: 'Kalshi', description: 'CFTC-regulated prediction exchange for US event contracts with real-money trading', category: 'Social', url: 'https://kalshi.com', twitter: 'Kalshi', verified: true }
+    { name: 'Metaculus', description: 'Forecasting platform with calibration scoring and tournament-style competitions', category: 'Social', url: 'https://metaculus.com', twitter: 'metaculus', verified: true }
   ];
 
   // Optional category filter
@@ -36681,7 +36672,7 @@ app.post('/api/bets', requireAuth, async (req, res) => {
     if (!question || !side || amount === undefined || amount === null) {
       return res.status(400).json({ error: 'question, side, and amount are required' });
     }
-    const validPlatforms = ['draftkings', 'fanduel', 'betmgm', 'bet365', 'bovada', 'polymarket', 'kalshi', 'other'];
+    const validPlatforms = ['draftkings', 'fanduel', 'betmgm', 'bet365', 'bovada', 'polymarket', 'other'];
     const plat = validPlatforms.includes((platform || '').toLowerCase()) ? platform.toLowerCase() : 'other';
     const amt = parseFloat(amount) || 0;
     const pp = potential_payout !== undefined && potential_payout !== null ? parseFloat(potential_payout) : null;
@@ -41870,48 +41861,7 @@ app.get('/api/signals', async (req, res) => {
       }
     } catch (e) { console.warn('[signals] whale-stream source error:', e.message); }
 
-    // Source 4: Cross-platform arbitrage — compare Polymarket vs Kalshi prices from market search cache
-    try {
-      for (const [, cached] of _mktSearchCache) {
-        if (!cached || !cached.data) continue;
-        const polyMarkets = cached.data.polymarket || [];
-        const kalshiMarkets = cached.data.kalshi || [];
-        // Simple keyword match between platforms
-        for (const pm of polyMarkets) {
-          for (const km of kalshiMarkets) {
-            const pQ = (pm.question || '').toLowerCase();
-            const kQ = (km.question || km.title || '').toLowerCase();
-            // Check for significant keyword overlap
-            const pWords = pQ.split(/\s+/).filter(w => w.length > 4);
-            const kWords = kQ.split(/\s+/).filter(w => w.length > 4);
-            const overlap = pWords.filter(w => kWords.includes(w)).length;
-            if (overlap >= 3) {
-              const pPrice = (pm.yes_price || pm.yes_pct || 50) / 100;
-              const kPrice = (km.yes_price || km.yes_pct || 50) / 100;
-              const diff = Math.abs(pPrice - kPrice);
-              if (diff > 0.03) {
-                const cheaperPlatform = pPrice < kPrice ? 'Polymarket' : 'Kalshi';
-                const cheaperPrice = Math.min(pPrice, kPrice);
-                signals.push({
-                  type: 'arbitrage',
-                  badge: 'Arbitrage',
-                  market: pm.question || km.question || 'Unknown',
-                  action: `${(diff * 100).toFixed(1)}% gap — buy YES on ${cheaperPlatform} at ${(cheaperPrice * 100).toFixed(0)}%`,
-                  side: 'YES',
-                  price: cheaperPrice,
-                  confidence: diff > 0.08 ? 'HIGH' : diff > 0.05 ? 'MEDIUM' : 'LOW',
-                  whale_count: 0,
-                  price_diff: diff,
-                  detected_at: now,
-                  url: pm.url || 'https://polymarket.com'
-                });
-              }
-            }
-          }
-        }
-        break; // Only check first cached search result
-      }
-    } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
+    // Source 4 (cross-platform arbitrage) removed: Polymarket-only post-pivot.
 
     // Source 5: Volume Surge — unusual volume, price velocity, and whale convergence
     try {
@@ -44511,7 +44461,6 @@ async function searchAndDraftReplies() {
   try {
     const queries = [
       'polymarket odds',
-      'kalshi prediction',
       '"prediction market" whale',
     ];
     const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
@@ -47124,14 +47073,14 @@ app.post('/api/admin/rewards/distribute', requireAdmin, async (req, res) => {
         `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol
          FROM flex_points_log
          WHERE created_at >= $1 AND created_at < $2
-           AND source IN ('polymarket_trade','kalshi_trade')`,
+           AND source = 'polymarket_trade'`,
         [weekStartISO, weekEndISO]);
       totalVolume = parseFloat(rows[0]?.vol || 0);
     } else if (supabase) {
       const { data } = await supabase.from('flex_points_log')
         .select('trade_amount_usd')
         .gte('created_at', weekStartISO).lt('created_at', weekEndISO)
-        .in('source', ['polymarket_trade','kalshi_trade']);
+        .eq('source', 'polymarket_trade');
       totalVolume = (data || []).reduce((s, r) => s + (parseFloat(r.trade_amount_usd) || 0), 0);
     }
 
@@ -47196,7 +47145,7 @@ app.post('/api/admin/rewards/distribute', requireAdmin, async (req, res) => {
          FROM flex_points_log
          WHERE user_id IS NOT NULL
            AND created_at >= $1 AND created_at < $2
-           AND source IN ('polymarket_trade','kalshi_trade')
+           AND source = 'polymarket_trade'
          GROUP BY user_id`,
         [weekStartISO, weekEndISO]);
       clickRows = await dbQuery(
@@ -47209,7 +47158,7 @@ app.post('/api/admin/rewards/distribute', requireAdmin, async (req, res) => {
       const { data: td } = await supabase.from('flex_points_log')
         .select('user_id, trade_amount_usd')
         .gte('created_at', weekStartISO).lt('created_at', weekEndISO)
-        .in('source', ['polymarket_trade','kalshi_trade'])
+        .eq('source', 'polymarket_trade')
         .not('user_id', 'is', null);
       const tMap = {};
       (td || []).forEach(r => {
@@ -47527,7 +47476,7 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
         `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol, COUNT(*) as trades
          FROM flex_points_log
          WHERE user_id = $1 AND created_at >= $2::date AND created_at < ($2::date + interval '7 days')
-           AND source IN ('polymarket_trade','kalshi_trade')`,
+           AND source = 'polymarket_trade'`,
         [userId, weekStart]);
       volumeThisWeek = parseFloat(vRows[0]?.vol) || 0;
       tradesThisWeek = parseInt(vRows[0]?.trades) || 0;
@@ -47550,7 +47499,7 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
         `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol
          FROM flex_points_log
          WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
-           AND source IN ('polymarket_trade','kalshi_trade')`,
+           AND source = 'polymarket_trade'`,
         [weekStart]);
       totalVolumeThisWeek = parseFloat(tvRows[0]?.vol) || 0;
 
@@ -47574,7 +47523,7 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
           `SELECT COUNT(DISTINCT user_id) as above
            FROM flex_points_log
            WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
-             AND source IN ('polymarket_trade','kalshi_trade')
+             AND source = 'polymarket_trade'
            GROUP BY user_id
            HAVING SUM(trade_amount_usd) > $2`,
           [weekStart, volumeThisWeek]).catch(() => []);
@@ -47583,7 +47532,7 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
           `SELECT COUNT(DISTINCT user_id) as cnt
            FROM flex_points_log
            WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
-             AND source IN ('polymarket_trade','kalshi_trade')`,
+             AND source = 'polymarket_trade'`,
           [weekStart]);
         const totalActive = parseInt(totalActiveRows[0]?.cnt) || 1;
         const userRankPct = usersAbove / totalActive;
@@ -47784,16 +47733,6 @@ setInterval(() => {
     if (typeof _polyCache !== 'undefined' && _polyCache instanceof Map && _polyCache.size > MAX_CACHE_SIZE) {
       console.log(`[cleanup] _polyCache: ${_polyCache.size} → clearing`);
       _polyCache.clear();
-    }
-
-    // _kalshiCache — Kalshi position lookups
-    if (typeof _kalshiCache !== 'undefined' && _kalshiCache instanceof Map && _kalshiCache.size > MAX_CACHE_SIZE) {
-      _kalshiCache.clear();
-    }
-
-    // _manifoldCache
-    if (typeof _manifoldCache !== 'undefined' && _manifoldCache instanceof Map && _manifoldCache.size > MAX_CACHE_SIZE) {
-      _manifoldCache.clear();
     }
 
     // _mktSearchCache — market search results
