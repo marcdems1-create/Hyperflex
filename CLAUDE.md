@@ -1,6 +1,9 @@
 # HYPERFLEX — Claude Session Memory
 
 > This file is auto-read by Claude at the start of every session. Keep it updated.
+> **MANTRA.md** — read this FIRST, before any feature decision. The One Question
+> ("Does this help someone build a following through demonstrated ROI?") gates
+> every code change, design choice, and copy decision. The mantra governs.
 > Full details in HYPERFLEX_Complete_Brief.md. Read that too.
 > **CHANGELOG.md** — read this before every build. Every code change is logged there with commit hash, files touched, and "don't break" notes for the next agent.
 
