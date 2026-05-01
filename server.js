@@ -32785,8 +32785,63 @@ app.get('/api/bet-feed', async (req, res) => {
          LIMIT $1`,
       args
     );
-    const next_cursor = rows.length === limit ? rows[rows.length - 1].id : null;
-    res.json({ items: rows, next_cursor });
+    // Self-healing fallback: while bet_feed warms up (whale synthesis writes
+    // there every 5min, but the table can be empty on a fresh deploy or if
+    // migration #51 hasn't run), pull recent whale/consensus takes and shape
+    // them into bet_feed rows. Same data either way — the takes table is
+    // populated by the same synthesis path. Only fires on the first page so
+    // pagination cursors keep working when real bet_feed rows arrive.
+    let items = rows;
+    if (!rows.length && !cursor) {
+      try {
+        const fallback = await dbQuery(
+          `SELECT t.id, t.user_id, t.condition_id, t.question, t.market_slug,
+                  t.outcome_label, t.side, t.entry_price, t.amount, t.created_at,
+                  u.display_name, u.username, u.avatar_url
+             FROM takes t
+             LEFT JOIN users u ON u.id = t.user_id
+            WHERE t.source IN ('whale', 'consensus')
+              AND t.market_slug IS NOT NULL
+              AND t.entry_price IS NOT NULL
+              AND t.amount IS NOT NULL
+            ORDER BY t.created_at DESC
+            LIMIT $1`,
+          [limit]
+        );
+        items = fallback.map(t => {
+          const price = parseFloat(t.entry_price) || 0;
+          const usd = parseFloat(t.amount) || 0;
+          return {
+            id: 'wt_' + t.id,
+            user_id: t.user_id,
+            market_id: t.condition_id || t.market_slug || 'unknown',
+            market_title: t.question || 'Unknown market',
+            market_slug: t.market_slug,
+            outcome_id: null,
+            outcome_label: t.outcome_label || null,
+            side: t.side,
+            price: price,
+            size: price > 0 ? usd / price : usd,
+            usd_amount: usd,
+            order_id: null,
+            copied_from_user_id: null,
+            copied_from_bet_id: null,
+            created_at: t.created_at,
+            display_name: t.display_name,
+            username: t.username,
+            avatar_url: t.avatar_url,
+          };
+        });
+      } catch (fbErr) {
+        // Fallback is best-effort — if takes table is also missing, return
+        // the original empty array. Frontend handles empty cleanly.
+        console.warn('[bet-feed] takes fallback failed:', fbErr.message);
+      }
+    }
+    const next_cursor = items.length === limit && rows.length === limit
+      ? items[items.length - 1].id
+      : null;
+    res.json({ items, next_cursor });
   } catch (err) {
     console.error('[bet-feed] list error:', err.message);
     res.status(500).json({ error: 'Failed to load bet feed' });

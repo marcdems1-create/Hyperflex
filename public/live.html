@@ -225,7 +225,7 @@ function rowHtml(b){
 function render(){
   var list = document.getElementById('cFeedList');
   if (!_rows.length){
-    list.innerHTML = '<div class="empty"><b>The floor is empty.</b>No HFX-routed trades yet today.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
+    list.innerHTML = '<div class="empty"><b>Quiet on the wire.</b>No HFX-routed trades in the last cycle.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
     return;
   }
   list.innerHTML = _rows.slice(0,40).map(rowHtml).join('');
