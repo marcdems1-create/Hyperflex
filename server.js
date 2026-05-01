@@ -800,6 +800,12 @@ const _nodeFetch = require('node-fetch');
 // will be migrated incrementally — start with /api/market/:slug below.
 polymarket.init({ fetch: _nodeFetch });
 
+// Mention-pages phase 2b — Federal Reserve transcript scraper. The actual
+// init() call sits below the supabase client definition (~line 1247) so
+// the scraper has a real client to write through. Required at boot here
+// purely to surface load-time syntax errors early.
+const fedTranscripts = require('./scrapers/fed_transcripts');
+
 // Direct Postgres pool — this is the reliable connection
 const pool = process.env.DATABASE_URL
   ? new Pool({
@@ -1245,6 +1251,18 @@ function createSupabaseProxy() {
 }
 
 const supabase = createSupabaseProxy();
+
+// Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
+// is available. Word counter from phase 2c; stubbed below until that module
+// ships. Once phase 2c lands, replace the stub callsite by requiring
+// './lib/word_counts' and passing wordCounts.computeWordCounts.
+fedTranscripts.init({
+  fetch: _nodeFetch,
+  supabase,
+  computeWordCounts: async (id) => {
+    console.log(`[fed_transcripts] word counter not yet implemented, skipping for ${id}`);
+  },
+});
 
 // Diagnostic endpoint — fast, non-blocking
 // Debug: test external API connectivity
