@@ -1252,16 +1252,24 @@ function createSupabaseProxy() {
 
 const supabase = createSupabaseProxy();
 
+// Mention-pages phase 2c — word counting engine. Backed by the same pg.Pool
+// that the rest of server.js uses for direct queries.
+const wordCounts = require('./lib/word_counts');
+if (pool) wordCounts.init({ pool });
+
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
-// is available. Word counter from phase 2c; stubbed below until that module
-// ships. Once phase 2c lands, replace the stub callsite by requiring
-// './lib/word_counts' and passing wordCounts.computeWordCounts.
+// and the word counter are both available. The scraper calls
+// wordCounts.computeWordCounts(transcript_id) after each successful insert.
 fedTranscripts.init({
   fetch: _nodeFetch,
   supabase,
-  computeWordCounts: async (id) => {
-    console.log(`[fed_transcripts] word counter not yet implemented, skipping for ${id}`);
-  },
+  computeWordCounts: pool
+    ? wordCounts.computeWordCounts
+    : async (id) => {
+        // Falls through only if DATABASE_URL is unset (dev env without DB).
+        // Production always has pool — this branch is just a safety net.
+        console.warn(`[fed_transcripts] no pg pool, skipping word counts for ${id}`);
+      },
 });
 
 // Diagnostic endpoint — fast, non-blocking
