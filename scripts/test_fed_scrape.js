@@ -23,7 +23,6 @@
 'use strict';
 
 require('dotenv').config({ path: '.env' });
-const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 const fedTranscripts = require('../scrapers/fed_transcripts');
 
@@ -69,17 +68,87 @@ function jsonCard(obj) {
 }
 
 // ── Pre-flight ─────────────────────────────────────────────────────────────
-const supabaseUrl = process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseUrl || !serviceKey) {
+// Database is Railway Postgres (per phase 2b.2). The previous Supabase URL
+// `cukmymrmivsqneyrkmuo.supabase.co` no longer resolves — that project is
+// dead. Talk to pg directly via DATABASE_URL.
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
   header('PRE-FLIGHT', c.red);
-  bad('SUPABASE_URL or SUPABASE_SERVICE_KEY missing in env.');
-  next('Add them to .env and re-run.');
+  bad('DATABASE_URL missing in env.');
+  next('Add it to .env (Railway dashboard → Postgres service → Variables → DATABASE_URL).');
   console.log('');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, serviceKey);
+const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: { rejectUnauthorized: false }, // Railway proxy uses SSL with their cert
+});
+
+// ── Supabase-shape adapter over pg ─────────────────────────────────────────
+// Intentionally minimal: covers ONLY the methods scrapers/fed_transcripts.js
+// uses against this client. Specifically:
+//   .from(t).select(c).eq(k,v).eq(k,v).eq(k,v).maybeSingle()
+//   .from(t).insert(row).select(c).single()
+// Anything else ( .update, .delete, .rpc, .order, .limit chained off select )
+// will throw "method not implemented" rather than silently fail. The full
+// Supabase→pg scrub across server.js + lib/ is a separate follow-up.
+function pgAdapter() {
+  function notImpl(name) {
+    return () => { throw new Error(`pg adapter: .${name}() not implemented`); };
+  }
+  return {
+    from(table) {
+      const filters = [];
+      let selectCols = '*';
+      const builder = {
+        _table: table,
+        select(cols = '*') { selectCols = cols; return builder; },
+        eq(col, val) { filters.push([col, val]); return builder; },
+        async maybeSingle() {
+          const where = filters.map(([c], i) => `${c} = $${i+1}`).join(' AND ');
+          const sql = `select ${selectCols} from ${table}${where ? ' where ' + where : ''} limit 1`;
+          try {
+            const { rows } = await pool.query(sql, filters.map(([, v]) => v));
+            return { data: rows[0] || null, error: null };
+          } catch (err) {
+            return { data: null, error: { message: err.message } };
+          }
+        },
+        async single() {
+          const r = await builder.maybeSingle();
+          if (!r.data && !r.error) return { data: null, error: { message: 'no row' } };
+          return r;
+        },
+        insert(row) {
+          const cols = Object.keys(row);
+          const vals = Object.values(row);
+          const placeholders = cols.map((_, i) => `$${i+1}`).join(', ');
+          let sql = `insert into ${table} (${cols.join(', ')}) values (${placeholders})`;
+          const insertBuilder = {
+            select(retCols = '*') { sql += ` returning ${retCols}`; return insertBuilder; },
+            async single() {
+              try {
+                const { rows } = await pool.query(sql, vals);
+                return { data: rows[0] || null, error: null };
+              } catch (err) {
+                return { data: null, error: { message: err.message } };
+              }
+            },
+          };
+          return insertBuilder;
+        },
+        update: notImpl('update'),
+        delete: notImpl('delete'),
+        rpc: notImpl('rpc'),
+      };
+      return builder;
+    },
+  };
+}
+
+const supabase = pgAdapter();
 
 fedTranscripts.init({
   fetch,
@@ -182,5 +251,9 @@ fedTranscripts.init({
   bad(c.bold(c.red(`FATAL: ${err.message}`)));
   if (err.stack) console.log(c.dim(err.stack.split('\n').slice(1, 4).join('\n')));
   console.log('');
-  process.exit(1);
+  process.exitCode = 1;
+}).finally(async () => {
+  // Release idle pg connections so the process exits instead of hanging
+  // on the pool's keep-alive timers.
+  try { await pool.end(); } catch (_) {}
 });
