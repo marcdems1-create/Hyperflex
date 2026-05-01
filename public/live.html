@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Casino — HYPERFLEX</title>
+<title>Live — HYPERFLEX</title>
 <meta name="description" content="Live bet feed. Every trade. Real-time. Tap to copy.">
-<meta property="og:title" content="HYPERFLEX Casino — Live bet feed">
+<meta property="og:title" content="HYPERFLEX Live — Live bet feed">
 <meta property="og:description" content="Every trade routed through HYPERFLEX, live. Tap to copy.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <script src="/nav.js" defer></script>
@@ -120,7 +120,7 @@ a { color:var(--ink); text-decoration:none; }
 
 <div class="wrap">
   <section class="hero">
-    <div class="hero-eyebrow"><span class="dot"></span>HYPERFLEX · Casino</div>
+    <div class="hero-eyebrow"><span class="dot"></span>HYPERFLEX · Live</div>
     <h1>Every trade. Live. <em>Tap to copy.</em></h1>
     <p class="hero-sub">Real-money trades routed through HYPERFLEX, slid in within ~1s. Tap any bet to mirror it on your account.</p>
   </section>
@@ -138,11 +138,11 @@ a { color:var(--ink); text-decoration:none; }
     <span class="feed-state" id="cFeedState">connecting…</span>
   </div>
   <div class="feed-list" id="cFeedList">
-    <div class="empty"><b>Loading the floor…</b>Bets land here within ~1s of execution.</div>
+    <div class="empty"><b>Loading the feed…</b>Bets land here within ~1s of execution.</div>
   </div>
 
   <div class="foot-cta">
-    <div class="foot-cta-text"><b>Want your bets here?</b> Place trades through HYPERFLEX and they'll land on the casino floor live.</div>
+    <div class="foot-cta-text"><b>Want your bets here?</b> Place trades through HYPERFLEX and they'll land in the live feed.</div>
     <a href="/screener" class="foot-cta-btn">Browse markets →</a>
   </div>
 </div>
@@ -225,7 +225,7 @@ function rowHtml(b){
 function render(){
   var list = document.getElementById('cFeedList');
   if (!_rows.length){
-    list.innerHTML = '<div class="empty"><b>The floor is empty.</b>No HFX-routed trades yet today.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
+    list.innerHTML = '<div class="empty"><b>Quiet on the wire.</b>No HFX-routed trades in the last cycle.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
     return;
   }
   list.innerHTML = _rows.slice(0,40).map(rowHtml).join('');
@@ -360,7 +360,7 @@ function cmConfirm(){
   // the SSE round-trip back from the new bet's POST.
   try { sessionStorage.setItem('hf_copy_attribution', JSON.stringify({ copied_from_bet_id: src.id, copied_from_user_id: src.user_id })); } catch(e){}
   markCopied(src.id);
-  // Always cross-market from the casino floor — navigate to the
+  // Always cross-market from the live feed — navigate to the
   // source market with prefill params. market.html's applyAlphaPrefill
   // accepts from=copy and sets up side+size for us.
   var params = ['from=copy','side='+side,'size='+_amt,'copy_bet_id='+encodeURIComponent(src.id),'copy_user_id='+encodeURIComponent(src.user_id||'')];
