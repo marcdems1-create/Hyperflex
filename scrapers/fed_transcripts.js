@@ -23,7 +23,10 @@
 'use strict';
 
 const FED_BASE = 'https://www.federalreserve.gov';
-const PRESCONF_PATH = '/monetarypolicy/fomcpresconf';
+// PDF transcripts (per phase 2b.1 — the .htm landing pages are video
+// players with no transcript text). Casing matters on fed.gov:
+// FOMCpresconf is camelCase, all-caps F-O-M-C.
+const PRESCONF_PATH = '/mediacenter/files/FOMCpresconf';
 const ROBOTS_URL = `${FED_BASE}/robots.txt`;
 const USER_AGENT = 'HYPERFLEX/1.0 (https://hyperflex.network; bot@hyperflex.network)';
 const FETCH_DELAY_MS = 1000;
@@ -101,8 +104,8 @@ async function fetchWithBackoff(url) {
       if (!res.ok) {
         throw new Error(`fed.gov ${res.status} ${res.statusText} on ${url}`);
       }
-      const html = await res.text();
-      return { html };
+      const buffer = Buffer.from(await res.arrayBuffer());
+      return { buffer };
     } catch (err) {
       if (attempt === MAX_RETRIES) throw err;
       await sleep(500 * (attempt + 1));
@@ -110,26 +113,47 @@ async function fetchWithBackoff(url) {
   }
 }
 
-// ── HTML extraction ─────────────────────────────────────────────────────────
-// fed.gov press conference pages currently wrap the transcript in
-// <div id="article">. The fallback regex matches any class containing
-// "article". If the structure changes, update here — re-extracting later
-// means re-running word counts.
-function extractTranscriptText(html) {
-  let s = html.replace(/<script[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[\s\S]*?<\/style>/gi, '');
-  const articleMatch = s.match(/<div[^>]+id=["']article["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)
-                    || s.match(/<div[^>]+class=["'][^"']*article[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-  const body = articleMatch ? articleMatch[1] : s;
-  const text = body.replace(/<[^>]+>/g, ' ')
-                   .replace(/&nbsp;/g, ' ')
-                   .replace(/&amp;/g, '&')
-                   .replace(/&quot;/g, '"')
-                   .replace(/&#39;/g, "'")
-                   .replace(/&lt;/g, '<')
-                   .replace(/&gt;/g, '>')
-                   .replace(/\s+/g, ' ')
-                   .trim();
+// ── PDF extraction ──────────────────────────────────────────────────────────
+// fed.gov FOMC press conference transcripts are PDFs. We strip page
+// numbers, repeating headers, normalise speaker labels, and clean common
+// PDF artifacts (ligatures, soft hyphens, smart quotes) so word counts
+// in phase 2c get clean input.
+//
+// pdf-parse is required lazily inside the function (not at module top)
+// because v1.1.1 has a known footgun: it tries to read a debug fixture
+// at require-time when NODE_ENV is unset, which crashes on Railway boot
+// if the fixture file isn't shipped. Lazy require dodges that.
+/**
+ * Parse a Fed FOMC presser PDF buffer to clean transcript text.
+ *
+ * @param {Buffer} pdfBuffer
+ * @returns {Promise<string>} cleaned transcript text
+ */
+async function extractTranscriptText(pdfBuffer) {
+  const pdfParse = require('pdf-parse');
+  const parsed = await pdfParse(pdfBuffer);
+  let text = parsed.text || '';
+
+  // Strip recurring page header (Fed PDFs repeat date + page number on
+  // every page). Patterns: "Page X of Y", "Chair Powell's Press Conference FINAL".
+  text = text.replace(/Page\s+\d+\s+of\s+\d+/gi, ' ');
+  text = text.replace(/Chair\s+(Powell|Warsh|Yellen)['’]s?\s+Press\s+Conference\s*FINAL/gi, ' ');
+
+  // Normalise speaker labels to a consistent marker. Fed PDFs use:
+  //   "CHAIR POWELL." or "MR. POWELL." or "MS. JONES."
+  // One canonical form so word counts don't double-count names mentioned in answers.
+  text = text.replace(/\b(CHAIR|MR\.|MS\.)\s+([A-Z]+)\.\s*/g, ' $1 $2. ');
+
+  // Common PDF artifacts → ASCII; collapse whitespace.
+  text = text
+    .replace(/­/g, '')          // soft hyphen
+    .replace(/‐|‑/g, '-')  // various hyphens → ascii
+    .replace(/‘|’/g, "'")  // smart single quotes → ascii
+    .replace(/“|”/g, '"')  // smart double quotes → ascii
+    .replace(/\f/g, ' ')             // form feed (page break)
+    .replace(/\s+/g, ' ')
+    .trim();
+
   return text;
 }
 
@@ -144,7 +168,7 @@ function chairAtDate(date) {
 }
 
 function buildPresconfUrl(yyyymmdd) {
-  return `${FED_BASE}${PRESCONF_PATH}${yyyymmdd}.htm`;
+  return `${FED_BASE}${PRESCONF_PATH}${yyyymmdd}.pdf`;
 }
 
 // ── Single-presser ingest ───────────────────────────────────────────────────
@@ -160,7 +184,7 @@ async function ingestOnePresconf(yyyymmdd) {
   }
 
   const url = buildPresconfUrl(yyyymmdd);
-  const path = PRESCONF_PATH + yyyymmdd + '.htm';
+  const path = PRESCONF_PATH + yyyymmdd + '.pdf';
 
   // robots.txt gate
   const robots = await fetchRobots();
@@ -187,7 +211,18 @@ async function ingestOnePresconf(yyyymmdd) {
   if (result.notFound) {
     return { ok: false, skipped: '404 not found (no presser this date)', error: null };
   }
-  const text = extractTranscriptText(result.html);
+  // Sanity-check: an HTML error page masquerading as a PDF will be tiny.
+  // Real Fed transcripts are 100KB+. Anything under 10KB is almost certainly
+  // a fed.gov error page returned with a 200 (we've seen this before).
+  if (!result.buffer || result.buffer.length < 10 * 1024) {
+    return { ok: false, error: `pdf too small (${result.buffer?.length || 0} bytes), likely an error page disguised as a PDF` };
+  }
+  let text;
+  try {
+    text = await extractTranscriptText(result.buffer);
+  } catch (err) {
+    return { ok: false, error: `pdf parse failed: ${err.message}` };
+  }
   if (!text || text.length < 1000) {
     return { ok: false, error: `extracted text too short (${text.length} chars), parse may have failed` };
   }

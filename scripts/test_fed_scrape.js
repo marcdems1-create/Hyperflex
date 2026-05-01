@@ -135,7 +135,7 @@ fedTranscripts.init({
 
   const date = arg && /^\d{8}$/.test(arg) ? arg : '20240131';
   header(`SINGLE · ${date}`, c.pink);
-  info(`source: ${c.mono(`https://www.federalreserve.gov/monetarypolicy/fomcpresconf${date}.htm`)}`);
+  info(`source: ${c.mono(`https://www.federalreserve.gov/mediacenter/files/FOMCpresconf${date}.pdf`)}`);
   info(`expected speaker: ${c.mono(fedTranscripts.chairAtDate(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`))}`);
   console.log('');
 
