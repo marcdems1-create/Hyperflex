@@ -15,41 +15,6 @@ HYPERFLEX is Polymarket-native. Kalshi and Manifold are dropped. New positioning
 
 ---
 
-## 🎯 NORTH STAR — RETENTION & ADDICTION (read this before every response)
-
-**Goal:** build the most addicting gambling/investing platform ever built. Every feature, every UI decision, every endpoint, every piece of copy must be evaluated through this lens:
-
-> **"Does this make the user want to come back tomorrow, and again the day after?"**
-
-When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy change, a bugfix — the default thought process is:
-1. **What's the dopamine loop?** Every interaction should produce a small reward. Wins get celebrated. Losses get re-engagement (streak warnings, "your take came close," revenge-trade prompts). Neutral states should be rare.
-2. **What's the return hook?** Unread count. Streak at risk. Market resolving in 2h. Whale just took a side. Someone agreed with your take. Your passport got a new follower. Something new since last visit, surfaced the moment they open the app.
-3. **What's the social proof?** Leaderboards, profile flex, ORACLE/SHARP/FLEXIN tiers, "X just made $Y," "N traders are watching this." Status is the only infinite resource.
-4. **What's the variable reward?** Every whale signal, every market flip, every resolution outcome is a pull of the slot-machine lever. Make them feel like that — even when the data is the same, the *framing* should shift (new leader, divergence spike, sharp vs crowd).
-5. **What's the identity attachment?** Every FLEX point, every take with a CORRECT badge, every tier upgrade is something the user can't get back once they leave. Sunk identity = retention.
-
-**Concrete mechanics already in the codebase** (keep compounding these, don't regress):
-- FLEX Score — domain-agnostic composite tied to real performance (accuracy + ROI + sample + dog rate + recency). Replaces the old "FLEX Points as rep currency" framing. One number, earned by being right, visible everywhere. No accumulation currency, no spend, no shop. See Voice & Posture below for why.
-- Streaks + streak-warning emails (loss aversion)
-- Tier ladder (Building → TRADER → PROFITABLE → SHARP → SHARK → WHALE → FLEXIN)
-- Take reactions + reaction-gated comments (forces commitment, creates feed)
-- Notifications bell (always-on unread hook)
-- Predictor Passport (shareable credential = off-platform flex → on-platform return)
-- Weekly email digest + Predictor Spotlight (inbox hook)
-- Whale-take auto-synthesis (feed never empty)
-- Quote-predict (challenge mechanic → engagement flywheel)
-
-**Forbidden anti-patterns**:
-- Generic "nothing here yet" empty states. Every empty state needs a CTA with a clear path to a dopamine hit.
-- Silent background updates with no user-facing signal. If a whale moves, if their tier advances, if a streak risks breaking — SURFACE IT with a badge, notification, or toast.
-- Killing a lever to "clean up the UI." Streaks, badges, glows, counts, chips — these are not decoration, they're the product.
-- Features that only pay off monthly/quarterly. Aim for daily dopamine, not annual ROI.
-- Playful surfaces (share cards, roast cards, weekly recaps, "fade the public" feeds) firing on empty data. Gate them behind real supply thresholds — a user with 3 picks is not ready for a weekly recap. Empty playfulness reads as desperation.
-
-**When in doubt, ask:** would a degenerate Polymarket trader check this 5x a day? If the answer is no, either add a hook or don't ship it.
-
----
-
 ## Design System (Current — April 2026)
 
 The old Voice & Posture Charter (gold `#c9920d`, Syne, Space Mono, "zero decorative emoji", dry-numerate as the only register) is fully retired. Don't apply it to new work. Existing pages still using it will be migrated as touched.
