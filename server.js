@@ -13285,7 +13285,11 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
     const userRows = await dbQuery(
       'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
     );
-    const addr = userRows[0]?.polymarket_address;
+    // Reject empty strings — `if (addr)` truthy-checks pass on '' and
+    // fire a wasted query. Polygon addresses are 42 chars (0x + 40 hex);
+    // anything shorter than that is junk from a half-completed connect flow.
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
 
     let polyRows = [];
     if (addr) {
@@ -13451,7 +13455,10 @@ app.get('/api/predictors/:userId/best-call', async (req, res) => {
     const userRows = await dbQuery(
       'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
     );
-    const addr = userRows[0]?.polymarket_address;
+    // 42-char minimum: 0x + 40 hex. Empty strings from half-finished
+    // connect flows truthy-pass `if (addr)` and waste a query.
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
     if (addr) {
       const polyRows = await dbQuery(`
         SELECT side, amount_usd, pnl, market_question, market_slug, condition_id, created_at, closed_at
