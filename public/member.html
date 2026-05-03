@@ -4,178 +4,261 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Member Profile — HYPERFLEX</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --paper:#0b0b12;--paper-2:#0e0e17;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);
-  --border:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.14);
-  --text:#f0f0f5;--text-soft:#b4b4c4;--muted:#6b6b80;--faint:#3a3a4a;
-  --gold:#f5a623;--gold-soft:#c9920d;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;
+  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
+  --panel:#14102A;--panel-2:#1B1638;
+  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
+  --border:rgba(140,120,255,0.10);--border-strong:rgba(140,120,255,0.22);
+  --surface:rgba(255,255,255,0.025);--surface-2:rgba(255,255,255,0.05);
+  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;--faint:#3A3458;
+  --text:#F5F0E8;--text-soft:#C5BEDD;
+  --indigo:#5B4DFF;--indigo-deep:#3B2FB8;
+  --electric:#00FF94;--green:#00FF94;--electric-glow:rgba(0,255,148,0.45);
+  --danger:#FF3D5A;--red:#FF3D5A;
+  --gold:#FFB800;--gold-2:#FFD96B;--gold-soft:#FFB800;
+  --cyan:#00D4FF;--blue:#00D4FF;
+  --magenta:#FF3D9A;--purple:#9D5BFF;--amber:#FFB800;
+  --display:'Anton',sans-serif;
+  --serif:'Instrument Serif',serif;
+  --sans:'Geist','Inter',system-ui,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
-  --shadow-lg:0 24px 60px -20px rgba(0,0,0,0.6),0 12px 32px -8px rgba(0,0,0,0.4);
-  --shadow-glow:0 0 48px -12px rgba(245,166,35,0.35);
+  --shadow-lg:0 24px 60px -20px rgba(0,0,0,0.7),0 12px 32px -8px rgba(0,0,0,0.5);
+  --shadow-glow:0 0 48px -12px rgba(255,184,0,0.35);
 }
-html,body{background:var(--paper);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-body{min-height:100vh;background:radial-gradient(ellipse 1200px 800px at 50% -200px,rgba(245,166,35,0.08),transparent 60%),radial-gradient(ellipse 800px 600px at 90% 20%,rgba(168,85,247,0.05),transparent 60%),var(--paper)}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;min-height:100vh;overflow-x:hidden}
+/* Atmosphere — grid + radial glow + grain */
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+body::after{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 20% 10%,rgba(91,77,255,0.18),transparent 70%),radial-gradient(ellipse 50% 40% at 90% 20%,rgba(255,61,154,0.10),transparent 70%),radial-gradient(ellipse 80% 50% at 50% 100%,rgba(0,255,148,0.06),transparent 70%);pointer-events:none;z-index:0}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:0.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 /* ── Nav ── */
-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;position:sticky;top:0;z-index:50;background:rgba(11,11,18,0.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--border)}
-.nav-logo{font-family:'Inter',sans-serif;font-size:17px;font-weight:800;color:var(--text);display:inline-flex;align-items:center;gap:8px;letter-spacing:-0.02em}
-.nav-logo:hover{color:var(--gold)}
-.nav-back{color:var(--muted);font-size:13px;display:inline-flex;align-items:center;min-height:44px;padding:0 6px;transition:color .15s}
-.nav-back:hover{color:var(--text)}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 36px;position:sticky;top:0;z-index:50;background:rgba(7,5,15,0.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--line)}
+.nav-logo{font-family:var(--display);font-size:22px;letter-spacing:0.18em;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
+.nav-logo .x{color:var(--electric);filter:drop-shadow(0 0 12px var(--electric-glow))}
+.nav-logo:hover{color:var(--gold-2)}
+.nav-back{color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;display:inline-flex;align-items:center;min-height:44px;padding:0 10px;transition:color .15s}
+.nav-back:hover{color:var(--ink)}
+@media(max-width:640px){nav{padding:14px 18px}.nav-logo{font-size:18px}}
 /* ── Page shell ── */
-.page{max-width:720px;margin:0 auto;padding:28px 18px 80px}
+.page,.wrap{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:28px 36px 80px}
+@media(max-width:980px){.page,.wrap{padding:20px}}
 /* ── Glass cards ── */
-.glass{background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015));border:1px solid var(--border);border-radius:18px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-lg)}
-.glass-inset{background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:14px}
-/* ── Hero ── */
-.hero{display:flex;align-items:flex-start;gap:18px;margin-bottom:20px}
-.avatar{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:28px;font-weight:800;flex-shrink:0;border:2px solid var(--border-strong);background:linear-gradient(135deg,rgba(245,166,35,0.18),rgba(168,85,247,0.12));box-shadow:0 8px 28px -8px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.1);position:relative;overflow:hidden}
-.avatar::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 50%,rgba(255,255,255,0.08) 100%);pointer-events:none}
-.avatar-whale{background:linear-gradient(135deg,#a855f7,#6d28d9);color:#fff;border-color:rgba(168,85,247,0.5);box-shadow:0 8px 28px -8px rgba(168,85,247,0.5),inset 0 1px 0 rgba(255,255,255,0.2)}
-.hero-info{flex:1;min-width:0}
-.hero-name{font-family:'Inter',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.15;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hero-verify{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;background:var(--blue);border-radius:50%;color:#000;font-size:11px;font-weight:900}
-.hero-username{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px}
-.hero-bio{font-size:13.5px;color:var(--text-soft);line-height:1.5;margin:6px 0 10px;max-width:460px}
-.hero-whale-meta{display:flex;align-items:center;gap:8px;margin:6px 0 4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px}
-.whale-pill{font-size:10px;font-weight:700;color:var(--purple);background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);padding:3px 10px;border-radius:100px;letter-spacing:0.5px;text-transform:uppercase}
-.whale-rank{color:var(--gold);font-weight:700}
-.whale-pnl{font-weight:700}
-.whale-pnl.pos{color:var(--green)}
-.whale-pnl.neg{color:var(--red)}
-.wallet-row{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-row button,.wallet-row a{font-family:var(--mono);font-size:10px;color:var(--text-soft);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;transition:all .15s}
-.wallet-row button:hover,.wallet-row a:hover{border-color:var(--border-strong);color:var(--text)}
-/* ── Follow strip ── */
-.social-row{display:flex;align-items:center;gap:18px;margin:8px 0 12px;font-family:var(--mono);font-size:12px}
-.social-row strong{color:var(--text);font-size:15px;font-family:'Inter',sans-serif;font-weight:800}
-.social-row .lbl{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;margin-left:4px}
-.action-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
-.btn{display:inline-flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:100px;transition:all .15s;min-height:38px;white-space:nowrap;border:1px solid transparent}
-.btn-primary{background:var(--text);color:#000}
-.btn-primary:hover{background:#fff}
-.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text-soft)}
-.btn-ghost:hover{border-color:var(--border-strong);color:var(--text);background:var(--surface-2)}
-.btn-gold{background:linear-gradient(180deg,rgba(245,166,35,0.16),rgba(245,166,35,0.08));border-color:rgba(245,166,35,0.4);color:var(--gold)}
-.btn-gold:hover{background:linear-gradient(180deg,rgba(245,166,35,0.28),rgba(245,166,35,0.14));border-color:rgba(245,166,35,0.6)}
-.btn-purple{background:linear-gradient(180deg,rgba(168,85,247,0.16),rgba(168,85,247,0.08));border-color:rgba(168,85,247,0.35);color:#c4a3ff}
-.btn-purple:hover{background:linear-gradient(180deg,rgba(168,85,247,0.28),rgba(168,85,247,0.14));border-color:rgba(168,85,247,0.55)}
-.btn-challenge{background:linear-gradient(135deg,rgba(255,77,106,0.15),rgba(245,166,35,0.12));border-color:rgba(255,77,106,0.35);color:#ff8a9e}
-.btn-challenge:hover{background:linear-gradient(135deg,rgba(255,77,106,0.28),rgba(245,166,35,0.22));border-color:rgba(255,77,106,0.55);color:#fff}
-.btn.following{background:var(--surface-2);border-color:var(--border-strong);color:var(--text)}
-/* ── Tier hero card ── */
-.tier-card{position:relative;border-radius:20px;padding:28px 24px 26px;margin:24px 0 18px;overflow:hidden;border:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))}
-.tier-card::before{content:'';position:absolute;inset:-1px;border-radius:20px;padding:1px;background:linear-gradient(135deg,var(--tier-color,var(--gold)) 0%,transparent 50%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.5}
-.tier-glow{position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:420px;height:320px;background:radial-gradient(ellipse at center,var(--tier-color,var(--gold)) 0%,transparent 60%);opacity:.18;pointer-events:none;animation:tierPulse 4s ease-in-out infinite}
-@keyframes tierPulse{0%,100%{opacity:.14;transform:translateX(-50%) scale(1)}50%{opacity:.24;transform:translateX(-50%) scale(1.08)}}
-.tier-inner{position:relative;text-align:center}
-.tier-emoji{font-size:40px;margin-bottom:6px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4))}
-.tier-label{font-family:var(--mono);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;margin-bottom:10px}
-.tier-pct{font-family:'Inter',sans-serif;font-size:72px;font-weight:900;line-height:1;letter-spacing:-0.04em;background:linear-gradient(180deg,currentColor,color-mix(in srgb,currentColor 70%,transparent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.tier-desc{font-size:13px;color:var(--text-soft);margin-top:10px;line-height:1.45}
-.tier-record{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
-.tier-bar{margin:16px auto 0;max-width:260px;height:4px;background:rgba(255,255,255,0.06);border-radius:100px;overflow:hidden}
-.tier-bar-fill{height:100%;border-radius:100px;transition:width .6s cubic-bezier(.2,.9,.3,1)}
-.tier-actions{display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap}
-/* ── Stats grid ── */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
-@media(max-width:640px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
-.stat{padding:14px 14px 12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;text-align:left;cursor:default;transition:border-color .15s,background .15s;position:relative;overflow:hidden}
+.glass{background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015));border:1px solid var(--line);border-radius:4px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-lg)}
+.glass-inset{background:var(--panel);border:1px solid var(--line);border-radius:4px}
+/* ── HERO ── */
+.hero{position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:36px;align-items:center;padding:40px 44px;background:linear-gradient(135deg,rgba(91,77,255,0.08),rgba(0,212,255,0.02) 60%,transparent),var(--panel);border:1px solid var(--line-strong);border-radius:4px;overflow:hidden;animation:rise 0.7s 0.05s both cubic-bezier(.2,.8,.2,1);margin-bottom:16px}
+.hero::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0,transparent 3px,rgba(255,255,255,0.012) 3px,rgba(255,255,255,0.012) 4px);pointer-events:none}
+.hero::after{content:"";position:absolute;inset:12px;pointer-events:none;background:linear-gradient(to right,var(--electric) 0,var(--electric) 18px,transparent 18px) 0 0/100% 1px no-repeat,linear-gradient(to bottom,var(--electric) 0,var(--electric) 18px,transparent 18px) 0 0/1px 100% no-repeat,linear-gradient(to left,var(--electric) 0,var(--electric) 18px,transparent 18px) 100% 100%/100% 1px no-repeat,linear-gradient(to top,var(--electric) 0,var(--electric) 18px,transparent 18px) 100% 100%/1px 100% no-repeat;opacity:0.5}
+/* Avatar with holographic ring */
+.avatar-wrap{position:relative;width:132px;height:132px;flex-shrink:0;z-index:1}
+.holo-ring{position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(from 0deg,#FF3D9A,#FFB800,#00FF94,#00D4FF,#5B4DFF,#FF3D9A);animation:spin 6s linear infinite;filter:blur(0.5px)}
+.holo-ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--bg-2)}
+.avatar{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 30%,#FFD96B,#FFB800 40%,#B07A00);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:56px;color:#2A1A00;text-shadow:0 2px 0 rgba(255,255,255,0.3);z-index:1;box-shadow:inset 0 -8px 24px rgba(0,0,0,0.4),0 12px 40px rgba(255,184,0,0.3)}
+.avatar-whale{background:radial-gradient(circle at 30% 30%,#C4A3FF,#9D5BFF 40%,#5B2FB8);color:#1A0030}
+.live-dot{position:absolute;bottom:4px;right:4px;width:18px;height:18px;border-radius:50%;background:var(--electric);border:3px solid var(--bg-2);z-index:2;box-shadow:0 0 12px var(--electric);animation:pulse 1.6s ease-in-out infinite}
+/* Identity block */
+.ident{display:flex;flex-direction:column;gap:10px;min-width:0;position:relative;z-index:1}
+.handle-row{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.handle{font-family:var(--display);font-size:60px;line-height:0.9;letter-spacing:0.02em;color:var(--ink);max-width:100%;overflow-wrap:break-word}
+.handle .at{color:var(--muted);font-size:34px;margin-right:4px}
+.display-name{font-family:var(--serif);font-style:italic;font-size:20px;color:var(--ink-2);line-height:1.3}
+.display-name .verify{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;background:var(--cyan);border-radius:50%;color:#001a23;font-size:11px;font-weight:900;font-family:var(--sans);font-style:normal;margin-left:6px;vertical-align:middle}
+.meta{display:flex;gap:14px;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.meta .sep{color:var(--muted-2)}
+.tier-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:linear-gradient(135deg,rgba(255,184,0,0.18),rgba(255,184,0,0.04));border:1px solid rgba(255,184,0,0.4);color:var(--gold-2);font-weight:700;letter-spacing:0.22em;font-family:var(--mono);font-size:11px}
+.tier-badge::before{content:"★";font-size:14px;color:var(--gold)}
+.tier-badge.tier-whale{background:linear-gradient(135deg,rgba(157,91,255,0.22),rgba(157,91,255,0.04));border-color:rgba(157,91,255,0.45);color:#D4B5FF}
+.tier-badge.tier-whale::before{content:"●";color:var(--purple)}
+.tier-badge.tier-shark{background:linear-gradient(135deg,rgba(0,212,255,0.22),rgba(0,212,255,0.04));border-color:rgba(0,212,255,0.45);color:#9BEBFF}
+.tier-badge.tier-shark::before{content:"◆";color:var(--cyan)}
+.tier-badge.tier-sharp,.tier-badge.tier-profitable{background:linear-gradient(135deg,rgba(0,255,148,0.20),rgba(0,255,148,0.04));border-color:rgba(0,255,148,0.45);color:#9BFFD0}
+.tier-badge.tier-sharp::before,.tier-badge.tier-profitable::before{content:"▲";color:var(--electric)}
+.tier-badge.tier-trader,.tier-badge.tier-building{background:rgba(255,255,255,0.03);border-color:var(--line-strong);color:var(--ink-2)}
+.tier-badge.tier-trader::before,.tier-badge.tier-building::before{content:"○";color:var(--muted)}
+/* FLEX score block */
+.flex-score{text-align:right;padding-left:28px;border-left:1px solid var(--line-strong);align-self:stretch;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1;min-width:200px}
+.flex-label{font-family:var(--mono);font-size:11px;letter-spacing:0.3em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.flex-num{font-family:var(--display);font-size:96px;line-height:0.85;background:linear-gradient(180deg,#FFFFFF 0%,#FFD96B 60%,#FFB800 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 24px rgba(255,184,0,0.25));letter-spacing:-0.01em}
+.flex-num.mute{background:linear-gradient(180deg,#9590B0,#6E6790);-webkit-background-clip:text;background-clip:text;color:transparent;filter:none}
+.flex-num .denom{font-size:32px;color:var(--muted);background:none;-webkit-text-fill-color:var(--muted);filter:none;margin-left:4px}
+.flex-delta{font-family:var(--mono);font-size:12px;color:var(--electric);margin-top:8px;letter-spacing:0.1em}
+.flex-delta.muted{color:var(--muted)}
+/* Action row in hero */
+.hero-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase}
+.hero-actions .stat-chip{padding:6px 10px;border:1px solid var(--line);background:rgba(255,255,255,0.02);color:var(--ink-2);cursor:pointer;transition:all .15s}
+.hero-actions .stat-chip:hover{border-color:var(--electric);color:var(--ink)}
+.hero-actions .stat-chip strong{font-family:var(--display);font-size:14px;color:var(--ink);margin-right:6px;letter-spacing:0.04em}
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:700;padding:10px 16px;letter-spacing:0.2em;text-transform:uppercase;transition:all .18s;min-height:40px;white-space:nowrap;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);border-radius:0;cursor:pointer}
+.btn:hover{color:var(--ink);border-color:var(--electric);box-shadow:0 0 24px var(--electric-glow)}
+.btn-primary{background:var(--electric);color:#001A0F;border-color:var(--electric);box-shadow:0 0 24px var(--electric-glow)}
+.btn-primary:hover{transform:translateY(-1px);color:#001A0F}
+.btn-ghost{background:rgba(255,255,255,0.02);border-color:var(--line-strong);color:var(--ink-2)}
+.btn-gold{background:linear-gradient(135deg,rgba(255,184,0,0.18),rgba(255,184,0,0.04));border-color:rgba(255,184,0,0.4);color:var(--gold-2)}
+.btn-gold:hover{background:linear-gradient(135deg,rgba(255,184,0,0.32),rgba(255,184,0,0.08));border-color:var(--gold);box-shadow:0 0 24px rgba(255,184,0,0.4);color:#FFE9A8}
+.btn-purple{background:linear-gradient(135deg,rgba(157,91,255,0.16),rgba(157,91,255,0.04));border-color:rgba(157,91,255,0.45);color:#D4B5FF}
+.btn-purple:hover{border-color:var(--purple);box-shadow:0 0 24px rgba(157,91,255,0.4);color:#fff}
+.btn-challenge{background:linear-gradient(135deg,rgba(255,61,90,0.16),rgba(255,184,0,0.06));border-color:rgba(255,61,90,0.45);color:#FFB5C2}
+.btn-challenge:hover{border-color:var(--danger);box-shadow:0 0 24px rgba(255,61,90,0.4);color:#fff}
+.btn.following{background:rgba(0,255,148,0.06);border-color:rgba(0,255,148,0.45);color:var(--electric)}
+/* Wallet / username strip */
+.wallet-row{font-family:var(--mono);font-size:11px;color:var(--muted);margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;letter-spacing:0.06em}
+.wallet-row button,.wallet-row a{font-family:var(--mono);font-size:10px;color:var(--ink-2);background:rgba(255,255,255,0.02);border:1px solid var(--line);padding:4px 10px;letter-spacing:0.14em;text-transform:uppercase;transition:all .15s}
+.wallet-row button:hover,.wallet-row a:hover{border-color:var(--electric);color:var(--ink)}
+.hero-bio{font-family:var(--serif);font-style:italic;font-size:16px;color:var(--ink-2);line-height:1.5;margin:8px 0 4px;max-width:520px}
+/* ── STATS GRID ── */
+.stats,.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px;margin-bottom:14px}
+.stat{position:relative;padding:24px 24px 22px;background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden;transition:border-color 0.2s ease,transform 0.2s ease;animation:rise 0.6s both cubic-bezier(.2,.8,.2,1);cursor:default}
+.stat:nth-child(1){animation-delay:0.10s}
+.stat:nth-child(2){animation-delay:0.16s}
+.stat:nth-child(3){animation-delay:0.22s}
+.stat:nth-child(4){animation-delay:0.28s}
 .stat.interactive{cursor:pointer}
-.stat.interactive:hover{border-color:var(--border-strong);background:var(--surface-2)}
-.stat-lbl{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;display:flex;align-items:center;gap:4px}
-.stat-val{font-family:'Inter',sans-serif;font-size:22px;font-weight:800;line-height:1.05;letter-spacing:-0.02em}
-.stat-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.stat:hover{border-color:var(--line-strong);transform:translateY(-2px)}
+.stat-label,.stat-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0}
+.stat-label .ticker,.stat-lbl .ticker{color:var(--muted-2);font-size:9px;letter-spacing:0.18em}
+.stat-num,.stat-val{font-family:var(--display);font-size:60px;line-height:0.95;margin-top:14px;color:var(--ink);letter-spacing:-0.005em;font-weight:400}
+.stat-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;letter-spacing:0.06em}
+.stat.green .stat-num,.stat.green .stat-val{color:var(--electric);text-shadow:0 0 32px var(--electric-glow)}
+.stat.green::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--electric)}
+.stat.red .stat-num,.stat.red .stat-val{color:var(--danger);text-shadow:0 0 24px rgba(255,61,90,0.35)}
+.stat.red::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--danger)}
+.stat.gold .stat-num,.stat.gold .stat-val{background:linear-gradient(180deg,#FFFFFF,#FFD96B 55%,#FFB800);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,184,0,0.3))}
+.stat.gold::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#FFD96B,#FFB800)}
+.stat.fire .stat-num,.stat.fire .stat-val{background:linear-gradient(180deg,#FFFFFF,#FF6B3D 60%,#FF3D5A);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat.fire::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#FFB800,#FF3D5A)}
+.stat .pct-bar{margin-top:14px;height:4px;background:rgba(255,255,255,0.05);overflow:hidden;border-radius:1px}
+.stat .pct-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--indigo));width:0;transition:width 1.4s 0.4s cubic-bezier(.2,.8,.2,1)}
+/* Connect-wallet banner */
+.unlock-banner{display:flex;align-items:center;gap:18px;padding:18px 24px;background:linear-gradient(135deg,rgba(255,184,0,0.08),rgba(157,91,255,0.06));border:1px solid rgba(255,184,0,0.3);border-radius:4px;margin-bottom:16px;flex-wrap:wrap;animation:rise 0.6s both cubic-bezier(.2,.8,.2,1)}
+.unlock-banner .glyph{font-family:var(--display);font-size:32px;color:var(--gold-2);letter-spacing:0.04em;flex-shrink:0}
+.unlock-banner .body{flex:1;min-width:200px}
+.unlock-banner .body strong{font-family:var(--display);font-size:18px;letter-spacing:0.06em;color:var(--ink);display:block;margin-bottom:2px}
+.unlock-banner .body p{font-size:13px;color:var(--ink-2);line-height:1.5}
+/* ── ROW: chart + best calls ── */
+.row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}
+.chart-card,.calls-card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px 28px;animation:rise 0.6s 0.34s both cubic-bezier(.2,.8,.2,1)}
+.calls-card{animation-delay:0.40s}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px}
+.card-title{font-family:var(--display);font-size:22px;letter-spacing:0.1em;color:var(--ink)}
+.card-tabs{display:flex;gap:4px;font-family:var(--mono);font-size:10px;letter-spacing:0.18em;text-transform:uppercase}
+.card-tabs .tab{padding:6px 10px;color:var(--muted);cursor:pointer;border:1px solid transparent;transition:all 0.15s;background:none}
+.card-tabs .tab.active{color:var(--electric);border-color:var(--line-strong);background:rgba(0,255,148,0.05)}
+.card-tabs .tab:hover{color:var(--ink-2)}
+.chart-wrap{position:relative;height:240px}
+.chart-svg{width:100%;height:100%;display:block}
+.chart-meta{display:flex;justify-content:space-between;margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+.chart-marker{position:absolute;background:var(--bg-2);border:1px solid var(--electric);padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--electric);pointer-events:none;transform:translate(-50%,-120%);box-shadow:0 4px 16px rgba(0,255,148,0.2);letter-spacing:0.06em}
+.chart-empty{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;text-align:center;flex-direction:column;gap:8px}
+.chart-empty small{font-size:10px;letter-spacing:0.12em;color:var(--muted-2);text-transform:none;font-family:var(--sans);font-style:italic}
+/* Best calls list */
+.call{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid var(--line);transition:background 0.2s;text-decoration:none;color:inherit}
+.call:first-of-type{border-top:none;padding-top:4px}
+.call:hover{background:rgba(255,255,255,0.015)}
+.call-rank{font-family:var(--display);font-size:28px;color:var(--muted-2);width:30px;text-align:center;letter-spacing:0.04em}
+.call.top .call-rank{color:var(--gold)}
+.call-body{display:flex;flex-direction:column;gap:4px;min-width:0}
+.call-market{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.call-side{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase}
+.call-side .yes{color:var(--electric)}
+.call-side .no{color:var(--danger)}
+.call-return{font-family:var(--display);font-size:24px;color:var(--electric);text-align:right;line-height:1;letter-spacing:0.02em}
+.call-return small{font-family:var(--mono);font-size:9px;color:var(--muted);display:block;letter-spacing:0.14em;margin-top:4px;font-weight:400}
+.calls-empty{padding:32px 12px;text-align:center}
+.calls-empty .glyph{font-family:var(--display);font-size:32px;color:var(--muted-2);letter-spacing:0.04em}
+.calls-empty .lbl{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.2em;text-transform:uppercase;margin-top:8px}
+.calls-empty .hint{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--ink-2);margin-top:8px}
 /* ── Tabs ── */
-.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin:8px 0 18px;position:sticky;top:64px;background:rgba(11,11,18,0.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:20;padding:0 2px}
-.tab-btn{flex:1;background:none;border:none;padding:14px 12px;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s,border-color .15s;min-height:48px;letter-spacing:-0.01em}
-.tab-btn:hover{color:var(--text-soft)}
-.tab-btn.active{color:var(--text);border-bottom-color:var(--gold)}
-.tab-btn .tab-count{color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:500;margin-left:4px}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin:24px 0 18px;position:sticky;top:64px;background:rgba(7,5,15,0.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:20;padding:0 2px}
+.tab-btn{flex:1;background:none;border:none;padding:14px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s,border-color .15s;min-height:48px;letter-spacing:0.18em;text-transform:uppercase}
+.tab-btn:hover{color:var(--ink-2)}
+.tab-btn.active{color:var(--electric);border-bottom-color:var(--electric)}
+.tab-btn .tab-count{color:var(--muted);font-family:var(--mono);font-size:10px;font-weight:500;margin-left:4px;letter-spacing:0.12em}
 .tab-pane{display:none;animation:fadeIn .25s ease}
 .tab-pane.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-/* ── Take / Trade cards ── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;transition:border-color .15s,background .15s}
-.card:hover{border-color:var(--border-strong);background:var(--surface-2)}
-.card a{color:inherit}
-.card-q{font-size:14px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px}
-.card-thesis{font-size:13px;color:var(--text-soft);line-height:1.55;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.card-meta{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
-.card-actions{display:flex;gap:14px;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted)}
-.side{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:100px;letter-spacing:0.04em;display:inline-block}
-.side-yes{background:rgba(0,230,138,0.12);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
-.side-no{background:rgba(255,77,106,0.12);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
-.badge-correct{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(0,230,138,0.12);color:var(--green)}
-.badge-wrong{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(255,77,106,0.12);color:var(--red)}
-/* ── Empty state ── */
-.empty{text-align:center;padding:48px 20px;border:1px dashed var(--border);border-radius:16px;background:rgba(255,255,255,0.01)}
-.empty-emoji{font-size:32px;margin-bottom:8px}
-.empty-title{font-size:15px;font-weight:700;margin-bottom:6px;color:var(--text)}
-.empty-sub{font-size:13px;color:var(--muted);margin-bottom:18px;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.5}
-/* ── Loading/error states ── */
-.loading{text-align:center;padding:80px 20px;color:var(--muted);font-size:13px}
-.loading-spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+/* Animations */
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--electric-glow);transform:scale(1)}50%{box-shadow:0 0 0 10px transparent;transform:scale(1.08)}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+/* ── Take / Trade cards ── */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px 16px;margin-bottom:10px;transition:border-color .15s,background .15s}
+.card:hover{border-color:var(--line-strong);background:var(--panel-2)}
+.card a{color:inherit}
+.card-q{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4;margin-bottom:4px}
+.card-thesis{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);line-height:1.55;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:0.06em}
+.card-actions{display:flex;gap:14px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.06em}
+.side{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;letter-spacing:0.16em;display:inline-block;text-transform:uppercase;border-radius:0}
+.side-yes{background:rgba(0,255,148,0.12);color:var(--electric);border:1px solid rgba(0,255,148,0.4)}
+.side-no{background:rgba(255,61,90,0.12);color:var(--danger);border:1px solid rgba(255,61,90,0.4)}
+.badge-correct{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;background:rgba(0,255,148,0.12);color:var(--electric);letter-spacing:0.16em;text-transform:uppercase}
+.badge-correct::before{content:"✓ "}
+.badge-wrong{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;background:rgba(255,61,90,0.12);color:var(--danger);letter-spacing:0.16em;text-transform:uppercase}
+.badge-wrong::before{content:"✕ "}
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 20px;border:1px dashed var(--line);border-radius:4px;background:rgba(255,255,255,0.01)}
+.empty-emoji,.empty-glyph{font-family:var(--display);font-size:36px;color:var(--muted-2);letter-spacing:0.04em;margin-bottom:8px}
+.empty-title{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:8px;color:var(--ink)}
+.empty-sub{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);margin-bottom:18px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.5}
+/* ── Loading/error states ── */
+.loading{text-align:center;padding:80px 20px;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase}
+.loading-spinner{width:28px;height:28px;border:2px solid var(--line);border-top-color:var(--electric);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
 .error-state{text-align:center;padding:80px 20px}
-.error-icon{font-size:40px;margin-bottom:12px}
-.error-msg{font-size:15px;font-weight:700;margin-bottom:6px}
-.error-sub{font-size:13px;color:var(--muted)}
-/* ── Badges on hero ── */
-.hero-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:100px;letter-spacing:0.04em;text-transform:uppercase;border:1px solid transparent}
-.badge-streak{background:rgba(255,140,0,0.12);color:#ff9a3c;border-color:rgba(255,140,0,0.3)}
-.badge-oracle{background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)}
-.badge-sharp{background:rgba(0,230,138,0.12);color:var(--green);border-color:rgba(0,230,138,0.3)}
-.badge-verified{background:rgba(77,159,255,0.12);color:var(--blue);border-color:rgba(77,159,255,0.3)}
+.error-icon{font-family:var(--display);font-size:48px;color:var(--muted-2);letter-spacing:0.04em;margin-bottom:12px}
+.error-msg{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px}
+.error-sub{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2)}
+/* Hero secondary badges (streak, sharp etc) */
+.hero-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;letter-spacing:0.16em;text-transform:uppercase;border:1px solid transparent}
+.badge-streak{background:rgba(255,107,61,0.12);color:#FF9A6B;border-color:rgba(255,107,61,0.4)}
+.badge-oracle{background:rgba(255,184,0,0.14);color:var(--gold-2);border-color:rgba(255,184,0,0.4)}
+.badge-sharp{background:rgba(0,255,148,0.12);color:var(--electric);border-color:rgba(0,255,148,0.4)}
+.badge-verified{background:rgba(0,212,255,0.12);color:var(--cyan);border-color:rgba(0,212,255,0.4)}
 /* ── Mobile ── */
+@media(max-width:980px){
+  .hero{grid-template-columns:1fr;text-align:left;padding:28px;gap:20px}
+  .flex-score{padding-left:0;border-left:none;border-top:1px solid var(--line-strong);padding-top:20px;text-align:left;min-width:0}
+  .handle{font-size:44px}
+  .handle .at{font-size:28px}
+  .flex-num{font-size:72px}
+  .stats,.stats-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-num,.stat-val{font-size:48px}
+  .row{grid-template-columns:1fr}
+}
 @media(max-width:600px){
-  .page{padding:20px 14px 60px}
-  .hero{gap:14px}
-  .avatar{width:62px;height:62px;font-size:22px}
-  .hero-name{font-size:20px}
-  .tier-pct{font-size:56px}
-  .tier-card{padding:24px 18px 22px}
-  .btn{font-size:12px;padding:9px 14px}
+  .page,.wrap{padding:18px 14px 60px}
+  .nav-back{font-size:10px;padding:0 6px}
+  .hero{padding:24px 20px}
+  .avatar-wrap{width:96px;height:96px}
+  .avatar{font-size:42px}
+  .handle{font-size:36px;letter-spacing:0.01em}
+  .handle .at{font-size:24px}
+  .display-name{font-size:16px}
+  .flex-num{font-size:60px}
+  .flex-num .denom{font-size:22px}
+  .stats,.stats-grid{grid-template-columns:1fr}
+  .stat-num,.stat-val{font-size:48px}
+  .chart-card,.calls-card{padding:18px 18px}
+  .btn{font-size:10px;padding:9px 12px}
   input,textarea,select{font-size:16px!important}
 }
 
-/* ── Unified Flex Score card (Charter §8) ── */
-.flex-card{position:relative;border-radius:20px;padding:24px 24px 20px;margin:18px 0 22px;background:linear-gradient(180deg,rgba(245,166,35,0.04),rgba(245,166,35,0.008));border:1px solid rgba(245,166,35,0.16);overflow:hidden}
-.flex-card::before{content:'';position:absolute;inset:0;background:radial-gradient(60% 80% at 0% 0%,rgba(245,166,35,0.08),transparent 55%);pointer-events:none}
-.flex-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;position:relative}
-.flex-head-l{min-width:0;flex:1}
-.flex-eyebrow{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--gold);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:4px}
-.flex-score-n{font-family:'Inter',sans-serif;font-weight:900;font-size:68px;line-height:1;color:var(--text);letter-spacing:-0.035em;display:flex;align-items:baseline;gap:10px}
-.flex-score-n .out{font-size:22px;font-weight:700;color:var(--muted);letter-spacing:0}
-.flex-score-n.mute{color:var(--muted)}
-.flex-head-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
-.flex-tier{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;padding:6px 14px;border:1px solid rgba(245,166,35,0.3);border-radius:100px;background:rgba(245,166,35,0.08)}
-.flex-tier.tier-oracle{color:var(--gold)}
-.flex-tier.tier-sharp{color:var(--green);border-color:rgba(0,230,138,0.3);background:rgba(0,230,138,0.08)}
-.flex-tier.tier-solid{color:var(--blue);border-color:rgba(77,159,255,0.3);background:rgba(77,159,255,0.08)}
-.flex-tier.tier-speculator,.flex-tier.tier-building{color:var(--muted);border-color:var(--border);background:var(--surface)}
-.flex-sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.04em}
-.flex-components{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border);position:relative}
-.flex-comp{text-align:center}
-.flex-comp-label{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px}
-.flex-comp-bar{height:5px;background:var(--surface-2,rgba(255,255,255,0.05));border-radius:100px;overflow:hidden;margin-bottom:5px}
-.flex-comp-bar .fill{height:100%;background:var(--gold);border-radius:100px;transition:width 0.8s ease-out}
-.flex-comp-val{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
-.flex-comp-val.mute{color:var(--faint,#3a3a4a)}
-.flex-building-note{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--surface);border:1px dashed var(--border);font-size:12.5px;color:var(--text-soft);line-height:1.5;position:relative}
-.flex-building-note strong{color:var(--text)}
-
-@media(max-width:560px){
-  .flex-score-n{font-size:56px}
-  .flex-components{grid-template-columns:repeat(5,1fr);gap:6px}
-  .flex-comp-label{font-size:8.5px;letter-spacing:0.05em}
-  .flex-comp-val{font-size:11px}
-}
+/* ── Flex score component bars (rendered inside chart-card on Track Record tab) ── */
+.flex-components{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.flex-comp{text-align:left}
+.flex-comp-label{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.18em;margin-bottom:6px}
+.flex-comp-bar{height:3px;background:rgba(255,255,255,0.05);overflow:hidden;margin-bottom:5px}
+.flex-comp-bar .fill{height:100%;background:linear-gradient(90deg,var(--gold-2),var(--gold));transition:width 0.8s ease-out}
+.flex-comp-val{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink);letter-spacing:0.04em}
+.flex-comp-val.mute{color:var(--muted-2)}
+.flex-building-note{margin-top:14px;padding:14px 16px;background:var(--panel);border:1px dashed var(--line-strong);font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);line-height:1.5}
+.flex-building-note strong{font-family:var(--mono);font-style:normal;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--gold-2);display:block;margin-bottom:4px}
 
 /* ── T7 · Sports tab ── */
 .sfs-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 20px 18px;background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.015));border:1px solid rgba(245,166,35,0.25);border-radius:18px;margin-bottom:14px;flex-wrap:wrap}
@@ -223,17 +306,13 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 <script src="/utils.js"></script>
 </head>
 <body>
+<div class="grain"></div>
 <nav>
-  <a href="/" class="nav-logo">
-    <svg viewBox="0 0 32 32" fill="none" style="width:24px;height:24px;margin-right:8px;vertical-align:middle">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-    </svg>HYPERFLEX
-  </a>
+  <a href="/" class="nav-logo">HYPER<span class="x">FLEX</span></a>
   <div style="display:flex;align-items:center;gap:10px">
-    <a href="/predictors" class="nav-back" style="border:none">Predictors</a>
-    <a href="/" class="nav-back" style="border:none">Explore</a>
-    <a id="creatorDashPill" href="/creator/dashboard" style="display:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);padding:6px 14px;border-radius:20px;text-decoration:none;transition:background 0.15s;min-height:44px;align-items:center" onmouseover="this.style.background='rgba(201,146,13,0.2)'" onmouseout="this.style.background='rgba(201,146,13,0.1)'">Dashboard</a>
+    <a href="/predictors" class="nav-back">Predictors</a>
+    <a href="/" class="nav-back">Explore</a>
+    <a id="creatorDashPill" href="/creator/dashboard" class="btn btn-gold" style="display:none">Dashboard</a>
     <a href="javascript:history.back()" class="nav-back">← Back</a>
   </div>
 </nav>
@@ -270,10 +349,10 @@ async function _resolveProfileUserId() {
 
 function tierBadge(winRate, streak) {
   let badges = '';
-  if (streak >= 7)       badges += `<span class="badge badge-oracle">⚡ ${streak} STREAK</span>`;
-  else if (streak >= 3)  badges += `<span class="badge badge-streak">🔥 ${streak} WIN STREAK</span>`;
-  if (winRate >= 70)     badges += `<span class="badge badge-oracle">🎯 ORACLE</span>`;
-  else if (winRate >= 60) badges += `<span class="badge badge-sharp">🎯 SHARP</span>`;
+  if (streak >= 7)       badges += `<span class="badge badge-oracle">${streak} STREAK</span>`;
+  else if (streak >= 3)  badges += `<span class="badge badge-streak">${streak} WIN STREAK</span>`;
+  if (winRate >= 70)     badges += `<span class="badge badge-oracle">ORACLE</span>`;
+  else if (winRate >= 60) badges += `<span class="badge badge-sharp">SHARP</span>`;
   return badges;
 }
 
@@ -295,29 +374,40 @@ function shareProfile() {
 // read directly from the server-computed value.
 function renderFlexScoreCard() {
   const p = window._profilePayload;
-  if (!p) return;  // legacy /m/:userId path — no Flex card (yet)
-  const host = document.getElementById('profileContent');
-  if (!host) return;
-  // Defensive: don't double-render if load() was called twice.
-  if (document.getElementById('flexScoreCard')) return;
+  if (!p) return;  // legacy /m/:userId path — handle resolved without payload
 
   const qualifies = p.flex_qualifies === true;
   const score     = qualifies && p.flex_score != null ? p.flex_score : null;
-  const tier      = p.flex_tier || 'Building';
   const settled   = p.flex_settled_events || 0;
   const comps     = p.flex_components || {};
 
-  const wrCopy = (settled > 0 && p.flex_raw_win_rate != null)
-    ? `${(p.flex_raw_win_rate * 100).toFixed(1)}% win rate · ${settled} settled`
-    : `${settled} settled`;
+  // Update the inline FLEX score in the hero.
+  const numEl = document.getElementById('flexScoreNum');
+  if (numEl && score != null) {
+    numEl.classList.remove('mute');
+    numEl.innerHTML = `${score}<span class="denom">/100</span>`;
+  } else if (numEl && !qualifies) {
+    numEl.classList.add('mute');
+    numEl.innerHTML = `—<span class="denom">/100</span>`;
+  }
 
-  // Building state — score null, target is 25 settled events
-  const buildingNote = !qualifies ? `
-    <div class="flex-building-note">
-      <strong>Building.</strong> Score unlocks at 25 settled events — ${Math.max(0, 25 - settled)} to go. Sample size below that makes the number a lie.
-    </div>` : '';
+  // Update the delta line under the FLEX number.
+  const deltaEl = document.getElementById('flexScoreDelta');
+  if (deltaEl) {
+    if (qualifies && p.flex_raw_win_rate != null) {
+      deltaEl.classList.remove('muted');
+      deltaEl.textContent = `${(p.flex_raw_win_rate * 100).toFixed(1)}% win rate · ${settled} settled`;
+    } else if (!qualifies) {
+      deltaEl.classList.add('muted');
+      deltaEl.textContent = `Building · ${Math.max(0, 25 - settled)} settled to unlock`;
+    }
+  }
 
-  // Five components. Each bar shows filled / max ratio.
+  // Render the 5-component breakdown into the Track Record tab so visitors
+  // who care about composition can see it without crowding the hero.
+  const recordPane = document.getElementById('tab-record');
+  if (!recordPane || document.getElementById('flexComponentsHost')) return;
+
   const maxes = { accuracy: 35, calibration: 25, pnl: 20, consistency: 10, breadth: 10 };
   const labels = { accuracy: 'Accuracy', calibration: 'Calibration', pnl: 'PnL', consistency: 'Consistency', breadth: 'Breadth' };
   const compHtml = Object.keys(maxes).map(k => {
@@ -334,29 +424,25 @@ function renderFlexScoreCard() {
       </div>`;
   }).join('');
 
-  const tierClass = 'tier-' + tier.toLowerCase();
-  const scoreDisplay = score != null
-    ? `<div class="flex-score-n"><span>${score}</span><span class="out">/ 100</span></div>`
-    : `<div class="flex-score-n mute"><span>—</span><span class="out">/ 100</span></div>`;
+  const buildingNote = !qualifies ? `
+    <div class="flex-building-note">
+      <strong>Building</strong>
+      Score unlocks at 25 settled events — ${Math.max(0, 25 - settled)} to go. Sample size below that makes the number a lie.
+    </div>` : '';
 
-  const card = document.createElement('div');
-  card.id = 'flexScoreCard';
-  card.className = 'flex-card';
-  card.innerHTML = `
-    <div class="flex-head">
-      <div class="flex-head-l">
-        <div class="flex-eyebrow">Flex Score</div>
-        ${scoreDisplay}
-      </div>
-      <div class="flex-head-r">
-        <div class="flex-tier ${tierClass}">${tier}</div>
-        <div class="flex-sub">${wrCopy}</div>
-      </div>
+  const host = document.createElement('div');
+  host.id = 'flexComponentsHost';
+  host.className = 'chart-card';
+  host.style.marginBottom = '16px';
+  host.innerHTML = `
+    <div class="card-head">
+      <div class="card-title">FLEX SCORE BREAKDOWN</div>
+      <div class="card-tabs"><div class="tab active">${qualifies ? 'LIVE' : 'BUILDING'}</div></div>
     </div>
     <div class="flex-components">${compHtml}</div>
     ${buildingNote}
   `;
-  host.insertBefore(card, host.firstElementChild);
+  recordPane.insertBefore(host, recordPane.firstChild);
 }
 
 function _showInfoModal(title, bodyHtml) {
@@ -588,9 +674,11 @@ async function submitChallenge() {
   }
   const challengedId = window._profileUserId || userId;
   if (!challengedId) { alert('Profile not loaded yet.'); return; }
-  const u = document.querySelector('.hero-name')?.childNodes[0]?.textContent?.trim() || 'this predictor';
-  const handle = (document.querySelector('.hero-username')?.textContent || '').trim();
-  const tag = handle.startsWith('@') ? handle : '';
+  // Pull display name from new hero structure. Handle text starts with "@"
+  // when there's a username; otherwise the handle IS the display name.
+  const handleText = (document.querySelector('.handle')?.textContent || '').trim();
+  const u = (document.querySelector('.display-name')?.textContent || handleText || 'this predictor').trim().replace(/\s*✓\s*$/, '');
+  const tag = handleText.startsWith('@') ? handleText : '';
   try {
     const res = await fetch(`${API}/api/challenges`, {
       method: 'POST',
@@ -616,7 +704,7 @@ async function submitChallenge() {
     }
     // Challenge posted — fire the X share intent as a secondary step so
     // users can still amplify on-platform. Close the modal regardless.
-    const text = `⚔️ Challenging ${tag || u} on @hyperflex:\n\n"${thesis}"\n\nWinner takes the track record.\nhyperflex.network/m/${challengedId}`;
+    const text = `Challenging ${tag || u} on @hyperflex:\n\n"${thesis}"\n\nWinner takes the track record.\nhyperflex.network/m/${challengedId}`;
     window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
     closeChallenge();
     if (input) input.value = '';
@@ -643,7 +731,7 @@ function showFlexScoreInfo() {
 }
 
 function showFlexPointsInfo() {
-  _showInfoModal('⚡ FLEX Points', `
+  _showInfoModal('FLEX Points', `
     <p style="margin:0 0 10px">Reputation currency earned by posting takes, winning predictions, and getting agrees from other traders.</p>
     <p style="margin:0 0 10px;color:var(--text-soft)">Every correct call pays out in FLEX. Every take that racks up agrees earns FLEX. It's a running score of how much signal you've contributed to the network.</p>
     <p style="margin:0;color:var(--muted);font-size:12px">Can't be bought — only earned.</p>
@@ -790,137 +878,171 @@ async function load() {
     const flexPointsFmt = (stats.flex_points || 0) >= 1000 ? ((stats.flex_points/1000).toFixed(1) + 'K') : (stats.flex_points || 0);
     const flexScoreFmt = stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—';
 
+    // ── New layout: tier slug for badge styling
+    const tierSlug = (tierLabel || 'building').toLowerCase().split(/\s+/)[0];
+    // Display name resolution: handle (Anton) + display name (serif italic)
+    const handleDisplay = (user.username || (walletAddr ? shortWallet : initials)).toUpperCase();
+    const displaySub = user.username
+      ? user.display_name
+      : (isWhale && whaleRank ? `Polymarket whale · Rank ${whaleRank}` : (user.member_since ? `Member since ${new Date(user.member_since).getFullYear()}` : 'Predictor'));
+    // Best calls list — render from recent_wins immediately. loadTrophyCard
+    // can later upgrade entry #1 with multiplier data from /best-call.
+    const bestCallsHtml = (recent_wins || []).slice(0, 5).map((w, i) => {
+      const sideUp = (w.side || '').toUpperCase();
+      const sideClass = sideUp === 'YES' ? 'yes' : 'no';
+      const payoutFmt = w.payout > 0
+        ? '+$' + (w.payout >= 1000 ? Math.round(w.payout/1000) + 'K' : Math.round(w.payout).toLocaleString())
+        : '+';
+      const when = w.resolved_at ? timeAgo(w.resolved_at) : '';
+      const rank = String(i + 1).padStart(2, '0');
+      const href = w.community_slug ? '/' + w.community_slug : '#';
+      return `<a class="call ${i === 0 ? 'top' : ''}" href="${href}">
+        <div class="call-rank">${rank}</div>
+        <div class="call-body">
+          <div class="call-market">${(w.question || '').replace(/</g,'&lt;')}</div>
+          <div class="call-side"><span class="${sideClass}">${sideUp}</span>${when ? ' · settled ' + when : ''}</div>
+        </div>
+        <div class="call-return">${payoutFmt}<small>RESOLVED</small></div>
+      </a>`;
+    }).join('');
+
     page.innerHTML = `
       ${!user.polymarket_address ? `
-        <div class="card" style="margin-bottom:20px;padding:20px 22px;background:linear-gradient(135deg,rgba(245,166,35,0.08),rgba(168,85,247,0.06));border:1px solid rgba(245,166,35,0.3);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="font-size:28px;flex-shrink:0">🔒</div>
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:15px;font-weight:700;margin-bottom:4px">${isOwner ? 'Activate your profile' : 'Unverified predictor'}</div>
-            <div style="font-size:13px;color:var(--text-soft);line-height:1.45">${isOwner ? 'Sign in and connect a Polymarket wallet to unlock your stats, Passport, and take-posting.' : 'This user hasn&apos;t connected a wallet yet. Their stats aren&apos;t verifiable on-chain.'}</div>
+        <div class="unlock-banner">
+          <div class="glyph">${isOwner ? 'CONNECT' : 'UNVERIFIED'}</div>
+          <div class="body">
+            <strong>${isOwner ? 'Activate your profile' : 'Unverified predictor'}</strong>
+            <p>${isOwner ? 'Connect a Polymarket wallet to unlock your stats, Passport, and take-posting.' : 'This user has not connected a wallet. Stats are not verifiable on-chain.'}</p>
           </div>
-          <a href="${isOwner ? '/creator/dashboard' : '/creator/login'}" class="btn btn-gold">${isOwner ? 'Connect wallet' : 'Sign in'} →</a>
+          <a href="${isOwner ? '/creator/dashboard' : '/creator/login'}" class="btn btn-gold">${isOwner ? 'Connect →' : 'Sign in →'}</a>
         </div>
       ` : ''}
-      <div class="hero">
-        <div class="avatar ${isWhale ? 'avatar-whale' : ''}">${isWhale ? '🐋' : initials}</div>
-        <div class="hero-info">
-          <div class="hero-name">
-            ${user.display_name}
-            ${user.wallet_verified ? '<span class="hero-verify" title="Verified Wallet">✓</span>' : ''}
-            ${!isBuilding ? (() => {
-              const tint = tierColorCss === 'var(--gold)' ? ['rgba(245,166,35,0.15)','rgba(245,166,35,0.4)']
-                         : tierColorCss === 'var(--purple)' ? ['rgba(168,85,247,0.15)','rgba(168,85,247,0.4)']
-                         : tierColorCss === 'var(--blue)' ? ['rgba(77,159,255,0.15)','rgba(77,159,255,0.4)']
-                         : tierColorCss === 'var(--green)' ? ['rgba(0,230,138,0.15)','rgba(0,230,138,0.4)']
-                         : ['rgba(255,255,255,0.06)','var(--border)'];
-              return `<span class="tier-pill" style="background:${tint[0]};color:${tierColorCss};border:1px solid ${tint[1]};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>`;
-            })() : ''}
+
+      <!-- HERO -->
+      <section class="hero">
+        <div class="avatar-wrap">
+          <div class="holo-ring"></div>
+          <div class="avatar ${isWhale ? 'avatar-whale' : ''}">${isWhale ? 'W' : (initials || '?').slice(0,1).toUpperCase()}</div>
+          ${stats.streak >= 1 ? '<div class="live-dot" title="Active"></div>' : ''}
+        </div>
+
+        <div class="ident">
+          <div class="handle-row">
+            <div class="handle">${user.username ? `<span class="at">@</span>${(user.username || '').toUpperCase()}` : (user.display_name || 'PREDICTOR').toUpperCase()}</div>
           </div>
-          ${user.username ? `<div class="hero-username">@${user.username}</div>` : ''}
-          ${isWhale ? `
-            <div class="hero-whale-meta">
-              <span class="whale-pill">Polymarket Whale</span>
-              ${whaleRank ? `<span class="whale-rank">Rank #${whaleRank}</span>` : ''}
-              ${pnlDisplay ? `<span class="whale-pnl ${whalePnl >= 0 ? 'pos' : 'neg'}">${pnlDisplay} PnL</span>` : ''}
-            </div>
-            ${walletAddr ? `<div class="wallet-row">
-              <span>${shortWallet}</span>
-              <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
-              <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
-            </div>` : ''}
-          ` : (user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-username">Joined ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : '')}
-          ${(!isWhale && walletAddr) ? `<div class="wallet-row" style="margin-top:6px">
-            <span style="font-family:var(--mono,monospace);font-size:11px;color:var(--muted)">${shortWallet}</span>
-            <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
-            <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">Polygonscan ↗</a>
-            <a href="https://polymarket.com/profile/${walletAddr}" target="_blank" rel="noopener" style="margin-left:auto">Polymarket ↗</a>
-          </div>` : ''}
+          <div class="display-name">
+            ${user.username ? (user.display_name || '').replace(/</g,'&lt;') : displaySub}
+            ${user.wallet_verified ? '<span class="verify" title="Verified wallet">✓</span>' : ''}
+          </div>
+          <div class="meta">
+            <span id="tierBadge" class="tier-badge tier-${tierSlug}" title="${rankDesc.replace(/"/g,'&quot;')}">${tierLabel}</span>
+            <span class="sep">·</span>
+            <span id="metaFollowers" onclick="openFollowersModal()" style="cursor:pointer">${(stats.followers || 0).toLocaleString()} FOLLOWERS</span>
+            <span class="sep">·</span>
+            <span>${(stats.following || 0).toLocaleString()} FOLLOWING</span>
+            ${(take_stats && take_stats.total_agrees) ? `<span class="sep">·</span><span style="color:var(--gold-2)">${take_stats.total_agrees.toLocaleString()} AGREES</span>` : ''}
+          </div>
+
           ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
-          <div class="hero-badges">
-            ${tierBadge(stats.win_rate, stats.streak)}
-            <span id="sharpBadge" class="badge" style="display:none;background:rgba(245,166,35,0.14);color:var(--gold);border-color:rgba(245,166,35,0.35)"></span>
-          </div>
-          <div class="social-row">
-            <span id="followerCountChip" onclick="openFollowersModal()" style="cursor:pointer" title="View followers"><strong>${(stats.followers || 0).toLocaleString()}</strong><span class="lbl">Followers</span></span>
-            <span><strong>${(stats.following || 0).toLocaleString()}</strong><span class="lbl">Following</span></span>
-            ${(take_stats && take_stats.total_agrees) ? `<span><strong style="color:var(--gold)">${take_stats.total_agrees.toLocaleString()}</strong><span class="lbl">Agrees</span></span>` : ''}
-          </div>
-          <div class="action-row">
+
+          ${walletAddr ? `<div class="wallet-row">
+            <span>${shortWallet}</span>
+            <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='COPIED';setTimeout(()=>this.textContent='COPY',1500)">COPY</button>
+            <a href="https://polygonscan.com/address/${walletAddr}" target="_blank" rel="noopener">POLYGONSCAN ↗</a>
+            ${!isWhale ? `<a href="https://polymarket.com/profile/${walletAddr}" target="_blank" rel="noopener">POLYMARKET ↗</a>` : ''}
+          </div>` : ''}
+
+          <div class="hero-actions">
             ${!isOwner ? `<button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>` : ''}
-            ${!isOwner ? `<button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">🔔 Copy</button>` : ''}
-            ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">⚔️ Challenge</button>` : ''}
-            <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">📋 Copy link</button>
-            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('Check out my prediction track record on HYPERFLEX\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Share</button>
+            ${!isOwner ? `<button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">Copy</button>` : ''}
+            ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">Challenge</button>` : ''}
+            <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">Copy link</button>
+            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isOwner ? 'My prediction track record on HYPERFLEX' : 'Tracking ' + (user.username ? '@'+user.username : user.display_name) + ' on HYPERFLEX'}\\n\\nhyperflex.network/m/${userId}'),'_blank')">Share on X</button>
+            <a href="/passport/${userId}" class="btn btn-gold">Passport →</a>
+          </div>
+          <div class="hero-badges" style="margin-top:6px">
+            ${tierBadge(stats.win_rate, stats.streak)}
+            <span id="sharpBadge" class="badge badge-oracle" style="display:none"></span>
           </div>
         </div>
-      </div>
 
-      <!-- Tier Hero Card -->
-      <div class="tier-card" style="--tier-color:${tierColorCss}">
-        <div class="tier-glow"></div>
-        <div class="tier-inner">
-          <div class="tier-emoji">${tierEmoji}</div>
-          <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
-          ${isBuilding ? `
-            <div class="tier-pct" style="color:${tierColorCss};font-size:44px">${tierProgress.current}<span style="opacity:0.45">/${tierProgress.target}</span></div>
-            <div class="tier-desc">Close ${tierProgress.target - tierProgress.current} more position${(tierProgress.target - tierProgress.current) === 1 ? '' : 's'} to unlock your first tier.</div>
-            <div class="tier-record">Tiers measure realized P&amp;L, close-at-profit rate, and trading volume.</div>
-            <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.round((tierProgress.current / tierProgress.target) * 100)}%;background:${tierColorCss}"></div></div>
-          ` : `
-            <div class="tier-pct" style="color:${tierColorCss}">${displayPnl >= 0 ? '+' : '-'}$${Math.abs(displayPnl) >= 1000000 ? (Math.abs(displayPnl)/1000000).toFixed(1)+'M' : Math.abs(displayPnl) >= 1000 ? Math.round(Math.abs(displayPnl)/1000)+'K' : Math.round(Math.abs(displayPnl))}${displayPnlIsLifetime ? '<span style="font-size:14px;font-weight:600;letter-spacing:0;margin-left:6px;color:var(--text-dim)">lifetime</span>' : ''}</div>
-            <div class="tier-desc">${rankDesc}</div>
-            <div class="tier-record">${closeRate}% close-at-profit · ${closedCount} closed · ${positionCount} total positions</div>
-            <div class="tier-bar"><div class="tier-bar-fill" style="width:${Math.min(100, closeRate)}%;background:${tierColorCss}"></div></div>
-          `}
-          <div class="tier-actions">
-            <a href="/passport/${userId}" class="btn btn-gold">🛂 Passport</a>
-            <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isBuilding ? 'Building my Polymarket track record on HYPERFLEX' : 'I&apos;m ' + tierLabel + ' on HYPERFLEX' + (pStats.pnl_usd > 0 ? ' · +$' + Math.round(pStats.pnl_usd).toLocaleString() + ' realized P&L' : '')}\\n\\nhyperflex.network/m/${userId}'),'_blank')">🐦 Flex on X</button>
+        <div class="flex-score">
+          <div class="flex-label">Flex Score</div>
+          <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
+          <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? 'Building track record' : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
+        </div>
+      </section>
+
+      <!-- STATS GRID -->
+      <section class="stats">
+        <div class="stat ${pStats.pnl_usd >= 0 ? 'gold' : 'red'}" id="statPnlCard">
+          <div class="stat-label"><span>Realized P&L</span><span class="ticker">${pStats.total_trades > 0 ? 'ALL-TIME' : '—'}</span></div>
+          <div class="stat-num" id="statPnl">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
+          <div class="stat-sub" id="statPnlSub">${pStats.total_trades > 0 ? `${pStats.closed_wins}W / ${pStats.closed_losses}L` : 'Awaiting first close'}</div>
+        </div>
+        <div class="stat" id="statWinRateCard">
+          <div class="stat-label"><span>Win Rate</span><span class="ticker" id="statWinRateTicker">${closedCount} CLOSED</span></div>
+          <div class="stat-num" id="statWinRate">${closedCount >= 5 ? closeRate + '%' : '—'}</div>
+          <div class="pct-bar"><div class="pct-fill" id="statWinRateBar" style="width:${closedCount >= 5 ? closeRate : 0}%"></div></div>
+        </div>
+        <div class="stat green" id="statVolumeCard">
+          <div class="stat-label"><span>Volume</span><span class="ticker" id="statVolumeTicker">${pStats.total_trades > 0 ? 'TRADES' : '—'}</span></div>
+          <div class="stat-num" id="statVolume">${pStats.total_trades > 0 ? volFmt : '—'}</div>
+          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades > 0 ? `${pStats.total_trades} positions` : 'No trades yet'}</div>
+        </div>
+        <div class="stat ${stats.streak >= 3 ? 'fire' : ''}" id="statStreakCard">
+          <div class="stat-label"><span>Streak</span><span class="ticker">${stats.streak >= 1 ? 'ACTIVE' : '—'}</span></div>
+          <div class="stat-num" id="statStreak">${stats.streak || 0}<span style="font-size:0.5em;color:var(--muted);margin-left:6px">W</span></div>
+          <div class="stat-sub">${(take_stats && take_stats.total) ? take_stats.total + ' takes posted' : 'Predict to start'}</div>
+        </div>
+      </section>
+
+      <!-- BEST CALLS + ACTIVITY ROW -->
+      <section class="row">
+        <div class="chart-card" id="trophyCard">
+          <div class="card-head">
+            <div class="card-title">BEST CALL</div>
+            <div class="card-tabs"><div class="tab active" id="trophyShareBtn" onclick="shareTrophyOnX()">SHARE ↗</div></div>
+          </div>
+          <div id="trophyBody">
+            ${recent_wins && recent_wins.length ? `
+              <div id="trophyQuestion" style="font-family:var(--display);font-size:32px;line-height:1.05;letter-spacing:0.01em;color:var(--ink);margin:8px 0 18px">${(recent_wins[0].question || '').replace(/</g,'&lt;')}</div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span id="trophySide" class="side ${(recent_wins[0].side||'').toUpperCase() === 'YES' ? 'side-yes' : 'side-no'}">${(recent_wins[0].side||'').toUpperCase()}</span>
+                <span id="trophyMultiplier" style="font-family:var(--display);font-size:32px;color:var(--electric);letter-spacing:0.02em">${recent_wins[0].payout > 0 ? '+$' + Math.round(recent_wins[0].payout).toLocaleString() : 'CORRECT'}</span>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase;margin-left:auto">${timeAgo(recent_wins[0].resolved_at)}</span>
+              </div>
+            ` : `
+              <div class="calls-empty">
+                <div class="glyph">—</div>
+                <div class="lbl">No resolved calls yet</div>
+                <div class="hint">${isOwner ? 'Post a take. Best call lands here on resolution.' : 'Track record builds on resolution.'}</div>
+              </div>
+            `}
           </div>
         </div>
-      </div>
 
-      <!-- 4-stat grid -->
-      <div class="stats-grid">
-        <button class="stat interactive" onclick="showFlexScoreInfo()">
-          <div class="stat-lbl">Flex Score <span style="font-size:9px">ⓘ</span></div>
-          <div class="stat-val" style="color:var(--gold)">${flexScoreFmt}</div>
-        </button>
-        <div class="stat" id="statVolumeCard">
-          <div class="stat-lbl">Volume</div>
-          <div class="stat-val" id="statVolume" style="color:var(--green)">${volFmt}</div>
-          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades} trades</div>
+        <div class="calls-card">
+          <div class="card-head">
+            <div class="card-title">RECENT WINS</div>
+            <div class="card-tabs"><div class="tab active">${(recent_wins||[]).length}</div></div>
+          </div>
+          <div id="bestCallsList">
+            ${bestCallsHtml || `<div class="calls-empty"><div class="glyph">—</div><div class="lbl">No wins yet</div><div class="hint">Every resolved market scores your takes.</div></div>`}
+          </div>
         </div>
-        <div class="stat" id="statPnlCard">
-          <div class="stat-lbl">P&amp;L</div>
-          <div class="stat-val" id="statPnl" style="color:${pStats.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${pStats.total_trades > 0 ? pnlFmt : '—'}</div>
-          <div class="stat-sub" id="statPnlSub">${pStats.total_trades > 0 ? `${pStats.closed_wins}W / ${pStats.closed_losses}L` : ''}</div>
-        </div>
-        <button class="stat interactive" onclick="showFlexPointsInfo()">
-          <div class="stat-lbl">⚡ Flex Pts <span style="font-size:9px">ⓘ</span></div>
-          <div class="stat-val" style="color:var(--purple)">${flexPointsFmt}</div>
-        </button>
-      </div>
+      </section>
 
       <!-- Polymarket open positions — shown for verified whale profiles -->
-      ${isWhale && walletAddr ? '<div id="whalePositions" style="margin:16px 0 24px"></div>' : ''}
-
-      <!-- Best Call trophy -->
-      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
-        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
-        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
-          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
-          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;min-height:32px">🐦 Share</button>
-        </div>
-      </div>
+      ${isWhale && walletAddr ? '<div id="whalePositions" style="margin:18px 0 0"></div>' : ''}
 
       <!-- Tabs -->
       <div class="tabs" role="tablist">
-        <button class="tab-btn active" onclick="switchProfileTab('takes',this)">Takes${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
-        <button class="tab-btn" onclick="switchProfileTab('trades',this)">Trades${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
-        <button class="tab-btn" onclick="switchProfileTab('record',this)">Track Record</button>
-        <button class="tab-btn" onclick="switchProfileTab('sports',this)">🏆 Sports</button>
+        <button class="tab-btn active" onclick="switchProfileTab('takes',this)">TAKES${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('trades',this)">TRADES${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('record',this)">TRACK RECORD</button>
+        <button class="tab-btn" onclick="switchProfileTab('sports',this)">SPORTS</button>
+      </div>
 
       <!-- TAKES -->
       <div id="tab-takes" class="tab-pane active">
@@ -954,12 +1076,12 @@ async function load() {
           }).join('')}
         ` : (isOwner ? `
           <div class="empty">
-            <div class="empty-emoji">✍️</div>
+            <div class="empty-glyph">—</div>
             <div class="empty-title">Post your first take</div>
             <div class="empty-sub">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
             <a href="/feed" class="btn btn-gold">Post a take →</a>
           </div>
-        ` : `<div class="empty"><div class="empty-emoji">💭</div><div class="empty-title">No takes yet</div><div class="empty-sub">${user.display_name} hasn't posted any takes yet.</div></div>`)}
+        ` : `<div class="empty"><div class="empty-glyph">—</div><div class="empty-title">No takes yet</div><div class="empty-sub">${user.display_name} hasn't posted any takes yet.</div></div>`)}
       </div>
 
       <!-- TRADES (Polymarket) -->
@@ -992,51 +1114,39 @@ async function load() {
               </div>
             </div>`;
           }).join('')}
-        ` : `<div class="empty" id="tradesEmpty"><div class="empty-emoji">💹</div><div class="empty-title">${user.polymarket_address ? 'Loading live trades…' : 'No Polymarket trades yet'}</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Fetching from Polymarket directly.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner && !user.polymarket_address ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}</div>
+        ` : `<div class="empty" id="tradesEmpty"><div class="empty-glyph">—</div><div class="empty-title">${user.polymarket_address ? 'Loading live trades' : 'No Polymarket trades yet'}</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Fetching from Polymarket directly.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner && !user.polymarket_address ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}</div>
       </div>
 
       <!-- TRACK RECORD -->
       <div id="tab-record" class="tab-pane">
-        <div id="trophyCard" class="card" style="display:none;border-color:rgba(245,166,35,0.35);background:linear-gradient(180deg,rgba(245,166,35,0.08),rgba(245,166,35,0.02));padding:18px">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px">🏆 Best Call</div>
-          <div id="trophyQuestion" style="font-size:15px;font-weight:600;margin-bottom:10px;line-height:1.4"></div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span id="trophySide" class="side"></span>
-            <span id="trophyMultiplier" style="color:var(--gold);font-weight:700;font-family:var(--mono);font-size:14px"></span>
-            <button class="btn btn-ghost" style="margin-left:auto" onclick="shareTrophyOnX()">🐦 Share</button>
-          </div>
-        </div>
-
-        ${recent_wins.length ? `
-        <div style="margin-top:18px">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Recent Wins</div>
-          ${winsHtml}
-        </div>` : ''}
-
-        <div id="analyticsSection" style="margin:24px 0;display:none">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px" id="platformCards"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-            <div class="card" style="padding:16px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">Calibration</div>
-              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Predicted vs actual</div>
-              <canvas id="calibrationChart" width="300" height="160"></canvas>
+        <div id="analyticsSection" style="margin:0 0 16px;display:none">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="platformCards"></div>
+          <div class="row" style="margin-top:0">
+            <div class="chart-card">
+              <div class="card-head">
+                <div class="card-title">CALIBRATION</div>
+                <div class="card-tabs"><div class="tab active">PRED VS ACTUAL</div></div>
+              </div>
+              <canvas id="calibrationChart" width="300" height="160" style="width:100%;max-width:100%"></canvas>
             </div>
-            <div class="card" style="padding:16px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:700">P&amp;L (30d)</div>
-              <div style="font-size:11px;color:var(--faint);margin-bottom:10px">Cumulative</div>
-              <canvas id="pnlChart" width="300" height="160"></canvas>
+            <div class="chart-card">
+              <div class="card-head">
+                <div class="card-title">P&amp;L · 30D</div>
+                <div class="card-tabs"><div class="tab active">CUMULATIVE</div></div>
+              </div>
+              <canvas id="pnlChart" width="300" height="160" style="width:100%;max-width:100%"></canvas>
             </div>
           </div>
         </div>
 
         ${communities.length ? `
-        <div style="margin-top:20px">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700">Active Communities</div>
+        <div style="margin-top:18px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.18em;margin-bottom:12px;font-weight:700">Active Communities</div>
           ${commHtml}
         </div>` : ''}
 
-        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:18px 0;border-top:1px solid var(--border);margin-top:22px">
-          ${stats.settled_predictions || 0} settled · ${stats.wins || 0} correct · ${stats.total_predictions || 0} total
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:20px 0;border-top:1px solid var(--line);margin-top:22px;letter-spacing:0.2em;text-transform:uppercase">
+          <span style="color:var(--ink)">${stats.settled_predictions || 0}</span> settled · <span style="color:var(--electric)">${stats.wins || 0}</span> correct · <span style="color:var(--ink-2)">${stats.total_predictions || 0}</span> total
         </div>
       </div>
 
@@ -1048,29 +1158,31 @@ async function load() {
       <!-- Owner tools -->
       <div id="ownerTools" style="display:none;margin:22px 0">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="btn btn-ghost" style="display:none;color:var(--green);border-color:rgba(0,230,138,0.3)">🔗 Verify Wallet</button>
-          <button id="editBioBtn" onclick="toggleBioEdit()" class="btn btn-ghost">✏️ Edit Bio</button>
+          <button id="verifyWalletBtn" onclick="startWalletVerify()" class="btn btn-ghost" style="display:none;color:var(--electric);border-color:rgba(0,255,148,0.4)">Verify Wallet</button>
+          <button id="editBioBtn" onclick="toggleBioEdit()" class="btn btn-ghost">Edit Bio</button>
         </div>
         <div id="bioEditArea" style="display:none">
-          <textarea id="bioInput" maxlength="280" placeholder="Write a short bio (280 chars max)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:60px;margin:6px 0;transition:border-color .15s" onfocus="this.style.borderColor='var(--border-strong)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+          <textarea id="bioInput" maxlength="280" placeholder="Write a short bio (280 chars max)" style="width:100%;background:var(--panel);border:1px solid var(--line);padding:12px 14px;color:var(--ink);font-family:var(--serif);font-style:italic;font-size:15px;resize:none;outline:none;min-height:72px;margin:6px 0;transition:border-color .15s" onfocus="this.style.borderColor='var(--electric)'" onblur="this.style.borderColor='var(--line)'"></textarea>
           <div style="display:flex;gap:8px;align-items:center">
             <button onclick="saveBio()" class="btn btn-primary">Save</button>
             <button onclick="toggleBioEdit()" class="btn btn-ghost">Cancel</button>
-            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto;font-family:var(--mono)"></span>
+            <span id="bioCharCount" style="font-size:11px;color:var(--muted);margin-left:auto;font-family:var(--mono);letter-spacing:0.1em"></span>
           </div>
         </div>
       </div>
 
       <!-- Invite section (owner only) -->
-      <div id="inviteSection" style="display:none;margin-top:24px" class="card">
-        <div style="font-family:var(--mono);font-size:10.5px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">📣 Grow Your Following</div>
-        <div style="font-size:13px;color:var(--text-soft);margin-bottom:14px">Share your profile to build your audience:</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"/>
-          <button onclick="copyInviteUrl()" id="inviteCopyBtn" class="btn btn-gold" style="min-height:36px">Copy</button>
+      <div id="inviteSection" style="display:none;margin-top:18px" class="chart-card">
+        <div class="card-head">
+          <div class="card-title">GROW YOUR FOLLOWING</div>
+          <div class="card-tabs"><div class="tab active" id="inviteStats" style="font-family:var(--mono)"></div></div>
         </div>
-        <button onclick="shareProfileOnX()" class="btn btn-ghost">🐦 Share on X</button>
-        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
+        <div style="font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);margin-bottom:14px">Share your profile to build your audience.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}" style="flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line);padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--ink);outline:none;letter-spacing:0.04em"/>
+          <button onclick="copyInviteUrl()" id="inviteCopyBtn" class="btn btn-gold">Copy</button>
+        </div>
+        <button onclick="shareProfileOnX()" class="btn btn-ghost">Share on X</button>
       </div>
 
       <!-- Followers modal — click the follower count chip to open -->
@@ -1093,7 +1205,7 @@ async function load() {
       <div id="challengeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px">
         <div onclick="event.stopPropagation()" style="background:linear-gradient(180deg,#16161f,#0e0e17);border:1px solid var(--border-strong);border-radius:20px;padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg),0 0 120px -40px rgba(255,77,106,0.3)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div style="font-size:18px;font-weight:800;letter-spacing:-0.01em">⚔️ Challenge ${user.display_name}</div>
+            <div style="font-family:var(--display);font-size:24px;letter-spacing:0.06em;color:var(--ink)">CHALLENGE ${user.display_name.toUpperCase()}</div>
             <button onclick="closeChallenge()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px">×</button>
           </div>
           <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
@@ -1350,80 +1462,51 @@ async function enrichFromLivePolymarket() {
   } catch (e) { console.warn('[live-polymarket]', e); }
 }
 
-// Recompute + re-render tier using live Polymarket numbers. Mirrors the
-// logic in load()'s template but runs after enrichFromLivePolymarket so
-// the card reflects actual positions, not an empty polymarket_trades table.
+// Recompute tier + KPI tiles using live Polymarket numbers. Runs after
+// enrichFromLivePolymarket so the hero badge + stat grid reflect actual
+// positions, not the stale polymarket_trades table.
 function recomputeTierFromLive({ pnl, wins, losses, positionCount, isTopWhale }) {
   const closedCount = wins + losses;
   const closeRate = closedCount > 0 ? Math.round((wins / closedCount) * 100) : 0;
-  let tierEmoji, tierLabel, tierColorCss, rankDesc, tierProgress = null;
-  if (pnl >= 200000) {
-    tierEmoji = '💎'; tierLabel = 'FLEXIN'; tierColorCss = 'var(--gold)';
-    rankDesc = 'Quarter-million+ realized P&L. Top 0.05% of Polymarket.';
-  } else if (pnl >= 100000 || isTopWhale) {
-    tierEmoji = '🐋'; tierLabel = 'WHALE'; tierColorCss = 'var(--purple)';
-    rankDesc = 'Six-figure P&L or top-50 Polymarket all-time.';
-  } else if (pnl >= 25000 && closeRate >= 60 && positionCount >= 50) {
-    tierEmoji = '🦈'; tierLabel = 'SHARK'; tierColorCss = 'var(--blue)';
-    rankDesc = 'Institutional-sized moves with sharp exit discipline.';
-  } else if (pnl >= 5000 && closeRate >= 60 && positionCount >= 25) {
-    tierEmoji = '🎯'; tierLabel = 'SHARP'; tierColorCss = 'var(--green)';
-    rankDesc = 'Consistent profits, strong market reads.';
-  } else if (pnl >= 500 && closeRate >= 55 && positionCount >= 10) {
-    tierEmoji = '✅'; tierLabel = 'PROFITABLE'; tierColorCss = 'var(--green)';
-    rankDesc = 'Trading at a real profit — the track record is working.';
-  } else if (closedCount >= 5) {
-    tierEmoji = '📊'; tierLabel = 'TRADER'; tierColorCss = 'var(--text-soft)';
-    rankDesc = 'Actively trading Polymarket — building toward profit.';
-  } else {
-    tierEmoji = '🌱'; tierLabel = 'Building track record'; tierColorCss = 'var(--text-soft)';
-    tierProgress = { current: closedCount, target: 5 };
-    rankDesc = `${closedCount}/5 closed positions before your first tier unlocks`;
+  let tierLabel, tierSlug, rankDesc, isBuilding = false;
+  if (pnl >= 200000)                                                      { tierLabel = 'FLEXIN';      tierSlug = 'flexin';      rankDesc = 'Quarter-million+ realized P&L. Top 0.05% of Polymarket.'; }
+  else if (pnl >= 100000 || isTopWhale)                                   { tierLabel = 'WHALE';       tierSlug = 'whale';       rankDesc = 'Six-figure P&L or top-50 Polymarket all-time.'; }
+  else if (pnl >= 25000 && closeRate >= 60 && positionCount >= 50)        { tierLabel = 'SHARK';       tierSlug = 'shark';       rankDesc = 'Institutional-sized moves with sharp exit discipline.'; }
+  else if (pnl >= 5000  && closeRate >= 60 && positionCount >= 25)        { tierLabel = 'SHARP';       tierSlug = 'sharp';       rankDesc = 'Consistent profits, strong market reads.'; }
+  else if (pnl >= 500   && closeRate >= 55 && positionCount >= 10)        { tierLabel = 'PROFITABLE';  tierSlug = 'profitable';  rankDesc = 'Trading at a real profit — the track record is working.'; }
+  else if (closedCount >= 5)                                              { tierLabel = 'TRADER';      tierSlug = 'trader';      rankDesc = 'Actively trading Polymarket — building toward profit.'; }
+  else                                                                    { tierLabel = 'BUILDING';    tierSlug = 'building';    isBuilding = true; rankDesc = `${closedCount}/5 closed positions before your first tier unlocks`; }
+
+  // Update tier badge in the hero meta row.
+  const badge = document.getElementById('tierBadge');
+  if (badge) {
+    badge.className = 'tier-badge tier-' + tierSlug;
+    badge.textContent = tierLabel;
+    badge.title = rankDesc;
   }
-  const isBuilding = !!tierProgress;
 
-  // Re-render the tier card's inner body
-  const card = document.querySelector('.tier-card');
-  const inner = document.querySelector('.tier-card .tier-inner');
-  if (card) card.style.setProperty('--tier-color', tierColorCss);
-  if (!inner) return;
-
-  const pnlBody = pnl >= 0 ? '+' : '-';
-  const pnlAbs = Math.abs(pnl);
-  const pnlFmt = pnlBody + '$' + (pnlAbs >= 1000000 ? (pnlAbs/1000000).toFixed(1)+'M' : pnlAbs >= 1000 ? Math.round(pnlAbs/1000)+'K' : Math.round(pnlAbs));
-  const barPct = isBuilding ? Math.round((tierProgress.current / tierProgress.target) * 100) : Math.min(100, closeRate);
-
-  inner.innerHTML = `
-    <div class="tier-emoji">${tierEmoji}</div>
-    <div class="tier-label" style="color:${tierColorCss}">${tierLabel}</div>
-    ${isBuilding
-      ? `<div class="tier-pct" style="color:${tierColorCss};font-size:44px">${tierProgress.current}<span style="opacity:0.45">/${tierProgress.target}</span></div>
-         <div class="tier-desc">Close ${tierProgress.target - tierProgress.current} more position${(tierProgress.target - tierProgress.current) === 1 ? '' : 's'} to unlock your first tier.</div>
-         <div class="tier-record">Tiers measure realized P&amp;L, close-at-profit rate, and trading volume.</div>`
-      : `<div class="tier-pct" style="color:${tierColorCss}">${pnlFmt}</div>
-         <div class="tier-desc">${rankDesc}</div>
-         <div class="tier-record">${closeRate}% close-at-profit · ${closedCount} closed · ${positionCount} total positions</div>`}
-    <div class="tier-bar"><div class="tier-bar-fill" style="width:${barPct}%;background:${tierColorCss}"></div></div>
-    <div class="tier-actions">
-      <a href="/passport/${window._profileUserId || userId}" class="btn btn-gold">🛂 Passport</a>
-      <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isBuilding ? 'Building my Polymarket track record on HYPERFLEX' : 'I&apos;m ' + tierLabel + ' on HYPERFLEX' + (pnl > 0 ? ' · +$' + Math.round(pnl).toLocaleString() + ' realized P&L' : '')}\\n\\nhyperflex.network/m/${window._profileUserId || userId}'),'_blank')">🐦 Flex on X</button>
-    </div>
-  `;
-
-  // Also inject/refresh the inline tier pill next to the display_name
-  if (!isBuilding) {
-    const name = document.querySelector('.hero-name');
-    const existing = name && name.querySelector('.tier-pill');
-    if (existing) existing.remove();
-    if (name) {
-      const tint = tierColorCss === 'var(--gold)' ? ['rgba(245,166,35,0.15)','rgba(245,166,35,0.4)']
-                 : tierColorCss === 'var(--purple)' ? ['rgba(168,85,247,0.15)','rgba(168,85,247,0.4)']
-                 : tierColorCss === 'var(--blue)' ? ['rgba(77,159,255,0.15)','rgba(77,159,255,0.4)']
-                 : tierColorCss === 'var(--green)' ? ['rgba(0,230,138,0.15)','rgba(0,230,138,0.4)']
-                 : ['rgba(255,255,255,0.06)','var(--border)'];
-      name.insertAdjacentHTML('beforeend', `<span class="tier-pill" style="background:${tint[0]};color:${tierColorCss};border:1px solid ${tint[1]};font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:0.06em;white-space:nowrap;vertical-align:middle;display:inline-flex;align-items:center;gap:4px" title="${rankDesc.replace(/"/g,'&quot;')}">${tierEmoji} ${tierLabel}</span>`);
-    }
+  // Update P&L tile.
+  const pnlEl = document.getElementById('statPnl');
+  const pnlSub = document.getElementById('statPnlSub');
+  const pnlCard = document.getElementById('statPnlCard');
+  if (pnlEl) {
+    const pnlAbs = Math.abs(pnl);
+    const pnlFmt = (pnl >= 0 ? '+$' : '-$') + (pnlAbs >= 1e6 ? (pnlAbs/1e6).toFixed(1)+'M' : pnlAbs >= 1e3 ? Math.round(pnlAbs/1e3)+'K' : Math.round(pnlAbs));
+    pnlEl.textContent = pnlFmt;
   }
+  if (pnlSub) pnlSub.textContent = `${wins}W / ${losses}L`;
+  if (pnlCard) {
+    pnlCard.classList.remove('gold', 'red');
+    pnlCard.classList.add(pnl >= 0 ? 'gold' : 'red');
+  }
+
+  // Update Win Rate tile.
+  const wrEl = document.getElementById('statWinRate');
+  const wrBar = document.getElementById('statWinRateBar');
+  const wrTicker = document.getElementById('statWinRateTicker');
+  if (wrEl) wrEl.textContent = closedCount >= 5 ? closeRate + '%' : '—';
+  if (wrBar) wrBar.style.width = (closedCount >= 5 ? closeRate : 0) + '%';
+  if (wrTicker) wrTicker.textContent = closedCount + ' CLOSED';
 }
 
 function showCreatorDashPill() {
@@ -1478,7 +1561,7 @@ async function loadAnalytics(userId) {
     // Sharp score badge
     const sharpEl = document.getElementById('sharpBadge');
     if (sharpEl) {
-      sharpEl.textContent = `⚡ ${data.sharp_score} Sharp Score`;
+      sharpEl.textContent = `${data.sharp_score} SHARP SCORE`;
       sharpEl.style.display = 'inline-block';
     }
 
@@ -1633,7 +1716,7 @@ async function loadFollowStatus() {
       const cd = await cr.json();
       const copyBtn = document.getElementById('copyTradeBtn');
       if (copyBtn && cd.is_subscribed) {
-        copyBtn.textContent = '🔔 Copying';
+        copyBtn.textContent = 'Copying';
         copyBtn.dataset.subscribed = '1';
       }
     }
@@ -1769,7 +1852,7 @@ async function toggleCopyTrade() {
     if (!r.ok) throw new Error('Failed');
     const d = await r.json();
     if (btn) {
-      btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy';
+      btn.textContent = d.subscribed ? 'Copying' : 'Copy';
       btn.dataset.subscribed = d.subscribed ? '1' : '';
     }
   } catch (e) {
@@ -1781,20 +1864,27 @@ async function toggleCopyTrade() {
 
 // loadFollowStatus() is called after load() resolves (button is injected by load())
 
-// ── TROPHY CARD ───────────────────────────────────────────────────────────────
+// ── BEST CALL — upgrades the always-visible #trophyCard with richer data
+// (multiplier from /best-call). Card is rendered in the template from
+// recent_wins[0]; this swaps in better data when the API returns.
 async function loadTrophyCard(userId) {
   try {
     const res = await fetch(`/api/predictors/${userId}/best-call`);
     const data = await res.json();
     if (!data.best) return;
     const b = data.best;
-    document.getElementById('trophyCard').style.display = 'block';
-    document.getElementById('trophyQuestion').textContent = b.question;
+    const qEl = document.getElementById('trophyQuestion');
     const sideEl = document.getElementById('trophySide');
-    sideEl.textContent = b.side;
-    sideEl.style.background = b.side === 'YES' ? '#10b98122' : '#ef444422';
-    sideEl.style.color = b.side === 'YES' ? '#10b981' : '#ef4444';
-    document.getElementById('trophyMultiplier').textContent = b.multiplier ? `${b.multiplier}× payout` : '';
+    const multEl = document.getElementById('trophyMultiplier');
+    if (qEl) qEl.textContent = b.question;
+    if (sideEl) {
+      const sideUp = (b.side || '').toUpperCase();
+      sideEl.textContent = sideUp;
+      sideEl.className = 'side ' + (sideUp === 'YES' ? 'side-yes' : 'side-no');
+    }
+    if (multEl) {
+      multEl.textContent = b.multiplier ? `${b.multiplier}× PAYOUT` : (b.payout ? '+$' + Math.round(b.payout).toLocaleString() : 'CORRECT');
+    }
     window._trophyData = b;
   } catch (e) { console.warn('trophy', e); }
 }

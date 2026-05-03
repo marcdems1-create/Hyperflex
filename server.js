@@ -13261,125 +13261,240 @@ app.get('/api/predictors/:userId/portfolio', async (req, res) => {
 
 // P&L analytics for a user — win rate by platform, calibration, cumulative PnL
 app.get('/api/predictors/:userId/analytics', async (req, res) => {
-  const { userId } = req.params;
-
-  let hfBets = [], cachedPositions = [];
   try {
-    const hfRes = await supabase.from('positions').select('side, amount, potential_payout, won, settled, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(500);
-    hfBets = hfRes.data || [];
-  } catch (e) { console.warn('[predictor analytics] positions:', e.message); }
-  try {
-    const cachedRes = await supabase.from('cached_positions').select('*').eq('user_id', userId);
-    cachedPositions = cachedRes.data || [];
-  } catch (e) { console.warn('[predictor analytics] cached_positions:', e.message); }
+    const { userId } = req.params;
+    const empty = {
+      win_rate: 0, total_pnl: 0, sharp_score: 0,
+      platforms: {
+        hyperflex:  { wins: 0, losses: 0, total: 0, pnl: 0 },
+        polymarket: { wins: 0, losses: 0, total: 0, pnl: 0 },
+        kalshi:     { wins: 0, losses: 0, total: 0, pnl: 0 },
+        manifold:   { wins: 0, losses: 0, total: 0, pnl: 0 },
+      },
+      calibration: [], timeline: [],
+    };
+    if (!pool) return res.json(empty);
 
-  // ── Platform breakdown ──────────────────────────────────────────────────────
-  const platforms = { hyperflex: { wins: 0, losses: 0, total: 0, pnl: 0 } };
-  for (const p of cachedPositions) {
-    const pl = p.platform;
-    if (!platforms[pl]) platforms[pl] = { wins: 0, losses: 0, total: 0, pnl: 0 };
-    platforms[pl].total++;
-    platforms[pl].pnl += Number(p.pnl) || 0;
-    if ((p.pnl || 0) > 0) platforms[pl].wins++;
-    else platforms[pl].losses++;
-  }
-  const hfSettled = hfBets.filter(p => p.settled);
-  platforms.hyperflex.total = hfSettled.length;
-  platforms.hyperflex.wins = hfSettled.filter(p => p.won).length;
-  platforms.hyperflex.losses = hfSettled.filter(p => !p.won).length;
-  platforms.hyperflex.pnl = hfSettled.reduce((s, p) => {
-    return s + (p.won ? (p.potential_payout - p.amount) : -p.amount);
-  }, 0) / 100; // centpoints → points
+    // HFX settled positions — amounts in cents
+    const hfxRows = await dbQuery(`
+      SELECT side, amount, potential_payout, won, price_at_buy, created_at
+      FROM positions WHERE user_id = $1 AND settled = true
+    `, [userId]).catch(() => []);
 
-  // ── Calibration (HFX only — we have probability data) ──────────────────────
-  const buckets = Array.from({ length: 9 }, (_, i) => ({
-    label: `${(i + 1) * 10}%`,
-    predicted: (i + 1) * 10,
-    correct: 0,
-    total: 0,
-  }));
-  for (const p of hfSettled) {
-    // Use side as proxy for predicted probability
-    const prob = p.side === 'YES' ? 70 : 30; // simplified; refine if you store odds
-    const idx = Math.min(Math.floor(prob / 10) - 1, 8);
-    if (idx >= 0) {
-      buckets[idx].total++;
-      if (p.won) buckets[idx].correct++;
+    // Polymarket address (mixed case in users; lowercased in polymarket_trades)
+    const userRows = await dbQuery(
+      'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
+    );
+    // Reject empty strings — `if (addr)` truthy-checks pass on '' and
+    // fire a wasted query. Polygon addresses are 42 chars (0x + 40 hex);
+    // anything shorter than that is junk from a half-completed connect flow.
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
+
+    let polyRows = [];
+    if (addr) {
+      polyRows = await dbQuery(`
+        SELECT side, amount_usd, entry_price, pnl, created_at, closed_at
+        FROM polymarket_trades
+        WHERE LOWER(eoa_address) = LOWER($1) AND status = 'closed'
+      `, [addr]).catch(() => []);
     }
-  }
-  const calibration = buckets.map(b => ({
-    ...b,
-    actual: b.total > 0 ? Math.round((b.correct / b.total) * 100) : null,
-  }));
 
-  // ── Cumulative PnL timeline (last 30 days, HFX only) ─────────────────────
-  const now = Date.now();
-  const days = 30;
-  const dailyPnl = {};
-  for (let i = 0; i < days; i++) {
-    const d = new Date(now - i * 86400000).toISOString().slice(0, 10);
-    dailyPnl[d] = 0;
-  }
-  for (const p of hfSettled) {
-    const d = (p.markets?.resolved_at || p.created_at || '').slice(0, 10);
-    if (d in dailyPnl) {
-      dailyPnl[d] += p.won ? (p.potential_payout - p.amount) : -p.amount;
+    // Kalshi + Manifold from cached_positions (hourly sync target)
+    const cachedRows = await dbQuery(`
+      SELECT platform, side, pnl, probability
+      FROM cached_positions
+      WHERE user_id = $1 AND platform IN ('kalshi','manifold')
+    `, [userId]).catch(() => []);
+
+    // ── platforms ────────────────────────────────────────────────────────────
+    const platforms = {
+      hyperflex:  { wins: 0, losses: 0, total: 0, pnl: 0 },
+      polymarket: { wins: 0, losses: 0, total: 0, pnl: 0 },
+      kalshi:     { wins: 0, losses: 0, total: 0, pnl: 0 },
+      manifold:   { wins: 0, losses: 0, total: 0, pnl: 0 },
+    };
+
+    for (const p of hfxRows) {
+      platforms.hyperflex.total++;
+      const amount = (p.amount || 0) / 100;
+      const profit = p.won ? ((p.potential_payout || 0) / 100) - amount : -amount;
+      platforms.hyperflex.pnl += profit;
+      if (p.won) platforms.hyperflex.wins++; else platforms.hyperflex.losses++;
     }
+    for (const t of polyRows) {
+      platforms.polymarket.total++;
+      const pnl = parseFloat(t.pnl) || 0;
+      platforms.polymarket.pnl += pnl;
+      if (pnl > 0) platforms.polymarket.wins++;
+      else if (pnl < 0) platforms.polymarket.losses++;
+    }
+    for (const c of cachedRows) {
+      const plat = platforms[c.platform];
+      if (!plat) continue;
+      plat.total++;
+      const pnl = parseFloat(c.pnl) || 0;
+      plat.pnl += pnl;
+      if (pnl > 0) plat.wins++; else if (pnl < 0) plat.losses++;
+    }
+    Object.values(platforms).forEach(p => { p.pnl = +p.pnl.toFixed(2); });
+
+    const totalWins   = Object.values(platforms).reduce((s, p) => s + p.wins, 0);
+    const totalLosses = Object.values(platforms).reduce((s, p) => s + p.losses, 0);
+    const resolved    = totalWins + totalLosses;
+    const win_rate    = resolved > 0 ? Math.round((totalWins / resolved) * 100) : 0;
+    const total_pnl   = +Object.values(platforms).reduce((s, p) => s + p.pnl, 0).toFixed(2);
+
+    // ── calibration: 9 buckets keyed by confidence in chosen side ───────────
+    // Better than the old fixed 70/30 stand-in — uses actual entry price.
+    const buckets = Array.from({ length: 9 }, (_, i) => ({
+      label: `${(i + 1) * 10}%`,
+      predicted: +(((i + 1) * 0.1)).toFixed(2),
+      correct: 0, total: 0, actual: 0,
+    }));
+    const bucketIdx = p => {
+      if (p == null || isNaN(p)) return null;
+      const idx = Math.floor(p * 10) - 1;
+      return Math.min(8, Math.max(0, idx));
+    };
+    const addCal = (entryPrice, side, won) => {
+      const ep = parseFloat(entryPrice);
+      if (isNaN(ep)) return;
+      const conf = side === 'YES' ? ep : 1 - ep;
+      const i = bucketIdx(conf);
+      if (i == null) return;
+      buckets[i].total++;
+      if (won) buckets[i].correct++;
+    };
+    for (const p of hfxRows)  addCal(p.price_at_buy, p.side, !!p.won);
+    for (const t of polyRows) addCal(t.entry_price, t.side, (parseFloat(t.pnl) || 0) > 0);
+    buckets.forEach(b => { b.actual = b.total > 0 ? +(b.correct / b.total).toFixed(2) : 0; });
+
+    // ── timeline: cumulative pnl, last 30 days UTC ──────────────────────────
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today); d.setUTCDate(d.getUTCDate() - i);
+      days.push({ date: d.toISOString().slice(0, 10), _daily: 0, pnl: 0 });
+    }
+    const dayMap = Object.fromEntries(days.map((d, i) => [d.date, i]));
+    const addDay = (when, profit) => {
+      if (!when) return;
+      const k = new Date(when).toISOString().slice(0, 10);
+      if (k in dayMap) days[dayMap[k]]._daily += profit;
+    };
+    for (const p of hfxRows) {
+      const amount = (p.amount || 0) / 100;
+      const profit = p.won ? ((p.potential_payout || 0) / 100) - amount : -amount;
+      addDay(p.created_at, profit);
+    }
+    for (const t of polyRows) addDay(t.closed_at || t.created_at, parseFloat(t.pnl) || 0);
+    let cum = 0;
+    for (const d of days) { cum += d._daily; d.pnl = +cum.toFixed(2); delete d._daily; }
+
+    // ── sharp_score: canonical formula (server.js original at L13345).
+    // Buckets store predicted/actual as 0-1 decimals; the canonical formula
+    // works in 0-100 percentage space, so multiply the abs diff by 100.
+    const validBuckets = buckets.filter(b => b.total > 0);
+    const calibrationError = validBuckets.length > 0
+      ? validBuckets.reduce((s, b) => s + Math.abs(b.predicted - b.actual) * 100, 0) / validBuckets.length
+      : 0;
+    const sharp_score = Math.round(win_rate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4);
+
+    res.json({ win_rate, total_pnl, sharp_score, platforms, calibration: buckets, timeline: days });
+  } catch (err) {
+    console.error('[analytics]', err);
+    res.status(500).json({ error: 'server_error' });
   }
-  // Convert to cumulative
-  const sortedDays = Object.keys(dailyPnl).sort();
-  let cumulative = 0;
-  const timeline = sortedDays.map(date => {
-    cumulative += dailyPnl[date] / 100;
-    return { date, pnl: Math.round(cumulative * 100) / 100 };
-  });
-
-  // ── Sharp score ────────────────────────────────────────────────────────────
-  const totalSettled = hfSettled.length;
-  const totalWins = hfSettled.filter(p => p.won).length;
-  const winRate = totalSettled > 0 ? Math.round((totalWins / totalSettled) * 100) : 0;
-  const calibrationError = calibration
-    .filter(b => b.actual !== null)
-    .reduce((s, b) => s + Math.abs(b.predicted - b.actual), 0) /
-    Math.max(1, calibration.filter(b => b.actual !== null).length);
-  const sharpScore = Math.round(winRate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4);
-
-  const totalPnl = Object.values(platforms).reduce((s, p) => s + p.pnl, 0);
-
-  res.json({
-    win_rate: winRate,
-    total_pnl: Math.round(totalPnl * 100) / 100,
-    sharp_score: sharpScore,
-    platforms,
-    calibration,
-    timeline,
-  });
 });
 
-// Best single HFX call for a user — highest-payout win
+// Best single call across HFX + Polymarket — picks whichever had the
+// bigger absolute profit. Polymarket is where the real volume lives now,
+// so the trophy needs to surface dollar wins, not just HFX point wins.
 app.get('/api/predictors/:userId/best-call', async (req, res) => {
-  const { userId } = req.params;
-  let data;
-  if (pool) {
-    data = await dbQuery(`SELECT positions.*, row_to_json(markets.*) as markets FROM positions LEFT JOIN markets ON positions.user_id = markets.id WHERE user_id = $1 ORDER BY potential_payout DESC LIMIT 20`, [userId]).catch(() => []);
-  } else {
-    const { data } = await supabase .from('positions') .select('side, amount, potential_payout, created_at, markets(question, tenant_slug, id, outcome, resolved)') .eq('user_id', userId) .order('potential_payout', { ascending: false }) .limit(20);
-  }
-  const wins = (data || []).filter(p => p.markets?.resolved && p.markets?.outcome === p.side);
-  if (!wins.length) return res.json({ best: null });
-  const best = wins[0];
-  res.json({
-    best: {
-      question: best.markets.question,
-      side: best.side,
-      amount: best.amount,
-      payout: best.potential_payout,
-      multiplier: best.amount > 0 ? (best.potential_payout / best.amount).toFixed(1) : null,
-      community_slug: best.markets.tenant_slug,
-      market_id: best.markets.id,
-      date: best.created_at,
+  try {
+    const { userId } = req.params;
+    if (!pool) return res.json({ best: null });
+
+    let best = null;
+
+    // HFX internal — amounts are cents. Pull primary_color from
+    // creator_settings (markets has no color column — it's keyed by slug).
+    const hfxRows = await dbQuery(`
+      SELECT p.market_id, p.side, p.amount, p.potential_payout, p.created_at,
+             m.question, m.tenant_slug, m.resolved_at,
+             cs.primary_color
+      FROM positions p
+      JOIN markets m ON p.market_id = m.id
+      LEFT JOIN creator_settings cs ON cs.slug = m.tenant_slug
+      WHERE p.user_id = $1 AND p.won = true AND p.settled = true
+            AND p.amount > 0 AND p.potential_payout > 0
+      ORDER BY (p.potential_payout - p.amount) DESC
+      LIMIT 1
+    `, [userId]).catch(() => []);
+
+    if (hfxRows[0]) {
+      const r = hfxRows[0];
+      const amount = (r.amount || 0) / 100;
+      const payout = (r.potential_payout || 0) / 100;
+      best = {
+        source: 'hyperflex',
+        question: r.question,
+        side: r.side,
+        amount, payout,
+        multiplier: amount > 0 ? +(payout / amount).toFixed(2) : null,
+        community_slug: r.tenant_slug,
+        community_color: r.primary_color || '#c9920d',
+        market_id: r.market_id,
+        date: r.resolved_at || r.created_at,
+      };
     }
-  });
+
+    // Polymarket — pnl is dollars (numeric 12,2). LOWER() both sides because
+    // users.polymarket_address is mixed-case but eoa_address is lowercase.
+    const userRows = await dbQuery(
+      'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
+    );
+    // 42-char minimum: 0x + 40 hex. Empty strings from half-finished
+    // connect flows truthy-pass `if (addr)` and waste a query.
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
+    if (addr) {
+      const polyRows = await dbQuery(`
+        SELECT side, amount_usd, pnl, market_question, market_slug, condition_id, created_at, closed_at
+        FROM polymarket_trades
+        WHERE LOWER(eoa_address) = LOWER($1) AND status = 'closed' AND pnl > 0
+        ORDER BY pnl DESC LIMIT 1
+      `, [addr]).catch(() => []);
+
+      if (polyRows[0]) {
+        const r = polyRows[0];
+        const amount = parseFloat(r.amount_usd) || 0;
+        const pnl = parseFloat(r.pnl) || 0;
+        const payout = amount + pnl;
+        const polyBest = {
+          source: 'polymarket',
+          question: r.market_question,
+          side: r.side,
+          amount, payout,
+          multiplier: amount > 0 ? +(payout / amount).toFixed(2) : null,
+          community_slug: 'polymarket',
+          community_color: '#2D9CDB',
+          market_id: r.condition_id,
+          market_slug: r.market_slug,
+          date: r.closed_at || r.created_at,
+        };
+        const hfxProfit = best ? best.payout - best.amount : -1;
+        const polyProfit = polyBest.payout - polyBest.amount;
+        if (polyProfit > hfxProfit) best = polyBest;
+      }
+    }
+
+    res.json({ best });
+  } catch (err) {
+    console.error('[best-call]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // GET /api/admin/member-debug/:userId — raw data sources for a profile so
