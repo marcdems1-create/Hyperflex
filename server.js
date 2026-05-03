@@ -35295,11 +35295,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   const allPos = [...(await collect(losingRes)), ...(await collect(winningRes))];
   if (!allPos.length) return { imported: 0, scanned: 0 };
 
-  let imported = 0, scanned = 0;
+  let imported = 0, scanned = 0, resolvedCount = 0;
   for (const pos of allPos) {
     scanned++;
     const isResolved = pos.resolved === true || pos.market_resolved === true;
     if (!isResolved) continue;
+    resolvedCount++;
     const size = parseFloat(pos.size) || 0;
     if (size <= 0) continue;
 
@@ -35354,8 +35355,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
   }
 
-  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} scanned=${scanned} imported=${imported}`);
-  return { imported, scanned, total_found: allPos.length };
+  // scanned/resolved/imported triangulates the failure mode at a glance:
+  // scanned>0, resolved=0  → field name on data-api response changed (look at raw shape)
+  // scanned>0, resolved>0, imported=0 → all rows already imported (ON CONFLICT DO NOTHING)
+  // scanned>0, resolved>0, imported>0 → working
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} scanned=${scanned} resolved=${resolvedCount} imported=${imported}`);
+  return { imported, scanned, resolved: resolvedCount, total_found: allPos.length };
 }
 
 // POST /api/trades/backfill — manual trigger. Lazy-fires from /api/member
