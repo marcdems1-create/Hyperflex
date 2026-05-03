@@ -882,9 +882,22 @@ async function load() {
     const tierSlug = (tierLabel || 'building').toLowerCase().split(/\s+/)[0];
     // Display name resolution: handle (Anton) + display name (serif italic)
     const handleDisplay = (user.username || (walletAddr ? shortWallet : initials)).toUpperCase();
+    // "Member since 2026" reads silly inside 2026 — show the month instead
+    // for current-year accounts, fall back to year for older ones.
+    const _memberSinceLabel = (() => {
+      if (!user.member_since) return null;
+      const d = new Date(user.member_since);
+      if (isNaN(d.getTime())) return null;
+      const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
+      return sameYear
+        ? `Joined ${d.toLocaleString('en-US', { month: 'long' })}`
+        : `Member since ${d.getUTCFullYear()}`;
+    })();
     const displaySub = user.username
       ? user.display_name
-      : (isWhale && whaleRank ? `Polymarket whale · Rank ${whaleRank}` : (user.member_since ? `Member since ${new Date(user.member_since).getFullYear()}` : 'Predictor'));
+      : (isWhale && whaleRank
+          ? `Polymarket whale · Rank ${whaleRank}`
+          : (_memberSinceLabel || 'Predictor'));
     // Best calls list — render from recent_wins immediately. loadTrophyCard
     // can later upgrade entry #1 with multiplier data from /best-call.
     const bestCallsHtml = (recent_wins || []).slice(0, 5).map((w, i) => {
@@ -1558,11 +1571,16 @@ async function loadAnalytics(userId) {
         </div>`;
       }).join('');
 
-    // Sharp score badge
+    // Sharp score badge — server returns null when no settled events.
+    // Hide on null instead of rendering "null SHARP SCORE".
     const sharpEl = document.getElementById('sharpBadge');
     if (sharpEl) {
-      sharpEl.textContent = `${data.sharp_score} SHARP SCORE`;
-      sharpEl.style.display = 'inline-block';
+      if (data.sharp_score == null) {
+        sharpEl.style.display = 'none';
+      } else {
+        sharpEl.style.display = 'inline-block';
+        sharpEl.textContent = `${data.sharp_score} SHARP SCORE`;
+      }
     }
 
     // Calibration chart — bar chart per 10%-probability bucket.

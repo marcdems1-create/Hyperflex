@@ -13395,11 +13395,14 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
     // ── sharp_score: canonical formula (server.js original at L13345).
     // Buckets store predicted/actual as 0-1 decimals; the canonical formula
     // works in 0-100 percentage space, so multiply the abs diff by 100.
+    // Gate on sample size — a "score" off zero settled events is a lie.
     const validBuckets = buckets.filter(b => b.total > 0);
     const calibrationError = validBuckets.length > 0
       ? validBuckets.reduce((s, b) => s + Math.abs(b.predicted - b.actual) * 100, 0) / validBuckets.length
       : 0;
-    const sharp_score = Math.round(win_rate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4);
+    const sharp_score = resolved > 0
+      ? Math.round(win_rate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4)
+      : null;
 
     res.json({ win_rate, total_pnl, sharp_score, platforms, calibration: buckets, timeline: days });
   } catch (err) {
