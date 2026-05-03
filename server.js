@@ -35391,6 +35391,125 @@ app.post('/api/trades/backfill', async (req, res) => {
   }
 });
 
+// ── Batch primer: seed realized_trades across the whole user base ──────────
+// Lazy-trigger on /api/member only fires when someone visits a profile.
+// For migrations / fresh deploys we want the table populated NOW, not when
+// organic traffic eventually hits every profile. This walks every user with
+// a connected Polymarket address and runs backfillRealizedTrades on each
+// in a slow loop (250ms gap = ~4 users/sec, polite to data-api).
+//
+// Long-running (~3-5 min for 851 users) so it runs as fire-and-forget — POST
+// returns immediately with the work plan, GET reports live progress. Admin-
+// secret gated. Idempotent: ON CONFLICT DO NOTHING in the underlying writer
+// means re-running is safe (only new resolved positions get added).
+//
+// Query params on POST:
+//   ?limit=N      — only process first N users (dry-run small batches first)
+//   ?delay_ms=N   — override 250ms inter-user delay (lower = faster, riskier)
+//   ?min_pnl=N    — only users where users.whale_pnl >= N (prioritize whales)
+let _seedProgress = null;
+
+app.post('/api/admin/realized-trades/seed', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  if (_seedProgress && _seedProgress.status === 'running') {
+    return res.status(409).json({ error: 'Seed already running', progress: _seedProgress });
+  }
+
+  const limit = Math.min(parseInt(req.query.limit) || 10000, 10000);
+  const delayMs = Math.max(parseInt(req.query.delay_ms) || 250, 50);
+  const minPnl = parseFloat(req.query.min_pnl) || null;
+
+  // Pull eligible users — 42-char address guard matches the rest of the codebase.
+  let userRows;
+  try {
+    const minPnlClause = minPnl != null ? 'AND COALESCE(whale_pnl, 0) >= $2' : '';
+    const params = minPnl != null ? [42, minPnl] : [42];
+    userRows = await dbQuery(
+      `SELECT id, polymarket_address, COALESCE(whale_pnl, 0) AS whale_pnl
+       FROM users
+       WHERE polymarket_address IS NOT NULL
+         AND LENGTH(polymarket_address) >= $1
+         ${minPnlClause}
+       ORDER BY whale_pnl DESC NULLS LAST, id
+       LIMIT ${limit}`,
+      params
+    );
+  } catch (e) {
+    return res.status(500).json({ error: 'user fetch failed: ' + e.message });
+  }
+
+  _seedProgress = {
+    status: 'running',
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    users_total: userRows.length,
+    users_processed: 0,
+    users_with_trades: 0,
+    users_failed: 0,
+    total_imported: 0,
+    total_scanned: 0,
+    total_resolved: 0,
+    delay_ms: delayMs,
+    min_pnl: minPnl,
+    last_error: null,
+  };
+
+  // Fire-and-forget — do NOT await. Response returns immediately.
+  (async () => {
+    for (const u of userRows) {
+      try {
+        const proxy = await ensureProxyStored(u.id, u.polymarket_address);
+        if (!proxy) {
+          _seedProgress.users_processed++;
+          _seedProgress.users_failed++;
+          continue;
+        }
+        const r = await backfillRealizedTrades(u.id, u.polymarket_address, proxy);
+        _seedProgress.users_processed++;
+        _seedProgress.total_scanned += r.scanned || 0;
+        _seedProgress.total_resolved += r.resolved || 0;
+        _seedProgress.total_imported += r.imported || 0;
+        if ((r.imported || 0) > 0) _seedProgress.users_with_trades++;
+      } catch (e) {
+        _seedProgress.users_processed++;
+        _seedProgress.users_failed++;
+        _seedProgress.last_error = e.message;
+        console.warn('[seed]', u.id, e.message);
+      }
+      // Polite spacing between users. data-api rate limits aren't published
+      // but Cloudflare's default for unauthed traffic is ~100 req/min — we
+      // burn 2 reqs per user, so 250ms = 480 reqs/min headroom across 4
+      // users/sec. Drop to 100ms only if you trust the upstream.
+      if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+    }
+    _seedProgress.status = 'done';
+    _seedProgress.finished_at = new Date().toISOString();
+    console.log('[seed] done', _seedProgress);
+  })().catch(e => {
+    _seedProgress.status = 'crashed';
+    _seedProgress.last_error = e.message;
+    _seedProgress.finished_at = new Date().toISOString();
+    console.error('[seed] crashed', e);
+  });
+
+  res.json({
+    started: true,
+    users_to_process: userRows.length,
+    estimated_seconds: Math.ceil(userRows.length * (delayMs + 200) / 1000),
+    progress_url: '/api/admin/realized-trades/seed',
+  });
+});
+
+app.get('/api/admin/realized-trades/seed', (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  res.json(_seedProgress || { status: 'never_run' });
+});
+
 // Earn FLEX points endpoint — called after successful CLOB trade
 // GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
 app.get('/api/flex-points/user/:userId', async (req, res) => {
