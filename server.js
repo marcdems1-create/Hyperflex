@@ -35520,6 +35520,80 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     }
   }
 
+  // ── Redeemed positions (held through market resolution) ─────────────────
+  // /activity?type=TRADE only captures BUY/SELL events. Users who held a
+  // position through resolution (didn't sell, just claimed the payout)
+  // never generate a SELL event — they produce a REDEEM. Without this
+  // path, pure-buyer users with resolved markets show "no realized" forever.
+  // Each redeemed position is a single aggregated event: size shares
+  // realized at $1 (winning) or $0 (losing) regardless of entry.
+  let redeemedImported = 0, redeemedCount = 0;
+  try {
+    const [winRes, loseRes] = await Promise.allSettled([
+      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=true&limit=500`, { headers: { Accept: 'application/json' } }),
+      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=false&limit=500`, { headers: { Accept: 'application/json' } }),
+    ]);
+    const collect = async r => {
+      if (r.status !== 'fulfilled' || !r.value.ok) return [];
+      try { const j = await r.value.json(); return Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); } catch { return []; }
+    };
+    const winners = await collect(winRes);
+    const losers = await collect(loseRes);
+    const allRedeemed = [...winners, ...losers];
+    redeemedCount = allRedeemed.length;
+    if (allRedeemed[0]) {
+      try {
+        const sample = JSON.stringify(allRedeemed[0]).slice(0, 500);
+        console.log(`[backfill-redeem-shape] user=${userId.slice(0,8)} count=${allRedeemed.length} sample=${sample}`);
+      } catch {}
+    }
+    for (const pos of allRedeemed) {
+      const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
+      let outcome = String(pos.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = pos.outcomeIndex !== undefined ? pos.outcomeIndex : pos.outcome_index;
+        if (idx === 0) outcome = 'YES';
+        else if (idx === 1) outcome = 'NO';
+      }
+      if (!condId || !outcome) continue;
+      const shares = parseFloat(pos.size || pos.shares || 0);
+      const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
+      if (shares <= 0) continue;
+      const winning = pos.winning === true || (parseFloat(pos.realizedPnl || 0) > 0);
+      const exitPrice = winning ? 1.0 : 0.0;
+      const entryCost = +(shares * avgPrice).toFixed(4);
+      const exitValue = winning ? +shares.toFixed(4) : 0;
+      const realizedPnl = +(exitValue - entryCost).toFixed(4);
+      const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
+      const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
+      const tokenId = pos.asset || pos.token_id || null;
+      const closedAt = pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at || new Date().toISOString();
+      const closeReason = winning ? 'redeemed-win' : 'redeemed-loss';
+      const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+      try {
+        const result = await dbQuery(
+          `INSERT INTO realized_trades (
+            user_id, polymarket_address, condition_id, token_id, market_question, side,
+            shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          ON CONFLICT (external_sync_id) DO NOTHING
+          RETURNING id`,
+          [userId, eoaLower || null, condId, tokenId, question, outcome,
+           +shares.toFixed(4), avgPrice, exitPrice, entryCost, exitValue,
+           realizedPnl, realizedRoi, null, closedAt, closeReason, externalSyncId]
+        );
+        if (result.length) redeemedImported++;
+      } catch (e) {
+        console.warn('[backfillRealizedTrades] redeem insert', externalSyncId, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[backfillRealizedTrades] redeem fetch:', e.message);
+  }
+
+  imported += redeemedImported;
+
   // Refresh user aggregates — count + median ROI. percentile_cont returns
   // NULL on empty filter sets so we exclude NULLs from the WITHIN GROUP.
   if (imported > 0) {
@@ -35539,8 +35613,8 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
   // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
   // trades>0, closed>0, imported>0 → working
-  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} imported=${imported}`);
-  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length };
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} total_imported=${imported}`);
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount };
 }
 
 // POST /api/trades/backfill — manual trigger. Lazy-fires from /api/member
