@@ -35401,6 +35401,28 @@ async function ensureProxyStored(userId, eoa) {
   }
 }
 
+// Polymarket /activity returns `timestamp` as a Unix-seconds integer
+// (e.g. 1776474398). Passing the raw int to a TIMESTAMPTZ column makes
+// Postgres throw "date/time field value out of range" — every closed
+// group's insert fails and realized_trades stays empty for /activity-only
+// traders. Normalise to ISO before binding. Accepts seconds, ms, or an
+// existing ISO/parseable string; returns null on garbage so the column
+// stays NULL rather than tripping the constraint.
+function _toIsoTs(v) {
+  if (v == null || v === '') return null;
+  // Number or all-digit string → Unix seconds (10 digits) or ms (>=13).
+  if (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v))) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const ms = n < 1e12 ? n * 1000 : n;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // Anything else: trust it's an ISO/RFC-2822 string the driver can take.
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 // Backfill realized Polymarket trades into realized_trades. Uses the
 // /activity?type=TRADE endpoint (the append-only trade log) — NOT
 // /positions, which only returns currently-open positions and drops rows
@@ -35465,10 +35487,14 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   let imported = 0, resolvedCount = 0;
 
   for (const group of groups.values()) {
-    // Sort ascending by timestamp so FIFO is correct
+    // Sort ascending by timestamp so FIFO is correct. Date.parse on a raw
+    // Unix-seconds int returns NaN, so the previous comparator collapsed
+    // every event to 0 and FIFO degraded to "API order" — fine in practice
+    // (Polymarket returns events newest-first), but flip via _toIsoTs for
+    // correctness either way.
     group.events.sort((a, b) => {
-      const ta = Date.parse(a.timestamp || a.created_at || a.time || 0) || 0;
-      const tb = Date.parse(b.timestamp || b.created_at || b.time || 0) || 0;
+      const ta = Date.parse(_toIsoTs(a.timestamp || a.created_at || a.time)) || 0;
+      const tb = Date.parse(_toIsoTs(b.timestamp || b.created_at || b.time)) || 0;
       return ta - tb;
     });
 
@@ -35480,7 +35506,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const side = String(t.side || '').toUpperCase();
       const shares = parseFloat(t.size || t.shares || 0);
       const price = parseFloat(t.price || 0);
-      const ts = t.timestamp || t.created_at || t.time || null;
+      const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
       if (shares <= 0) continue;
 
       if (side === 'BUY') {
@@ -35579,7 +35605,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
       const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
       const tokenId = pos.asset || pos.token_id || null;
-      const closedAt = pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at || new Date().toISOString();
+      const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
       const closeReason = winning ? 'redeemed-win' : 'redeemed-loss';
       const externalSyncId = `pm-redeem:${condId}:${outcome}`;
       try {
@@ -35612,12 +35638,17 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // don't leave realized_trade_count stale at 0 even though rows exist.
   // The lazy-trigger from /api/member uses realized_trade_count to decide
   // whether to await; stale count means it skips await on every load.
+  // users.id is TEXT (boot-time create) but realized_trades.user_id is UUID
+  // (per migration). Postgres doesn't auto-cast for `=`, so the subqueries
+  // need an explicit $1::uuid cast or the whole UPDATE throws "operator
+  // does not exist: uuid = text" — which leaves realized_trade_count stale
+  // at 0, forcing the lazy-trigger to re-run backfill on every page load.
   try {
     await dbQuery(
       `UPDATE users SET
-         realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1),
+         realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1::uuid),
          realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
-                                 FROM realized_trades WHERE user_id = $1 AND realized_roi IS NOT NULL)
+                                 FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL)
        WHERE id = $1`,
       [userId]
     );
