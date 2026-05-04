@@ -4,6 +4,19 @@
 > Full details in HYPERFLEX_Complete_Brief.md. Read that too.
 > **CHANGELOG.md** — read this before every build. Every code change is logged there with commit hash, files touched, and "don't break" notes for the next agent.
 
+## ⛔ Marc hates going in circles. Read this BEFORE every response.
+
+The user has explicitly told me he hates back-and-forth, "run this then paste it back" loops, and dragging a single bug across many turns. Operating rules that follow from this:
+
+1. **Don't ask the user to run psql, run SQL in Railway console, or run multi-step diagnostics from the terminal.** If a diagnostic is needed, build a one-shot admin endpoint and have him hit it with a single curl. Better: run the diagnostic from server-side code in the same PR as the fix.
+2. **Don't volley.** If hypothesis A and hypothesis B both have a plausible fix, ship the fix that's correct under either hypothesis. Don't say "first run this curl, then I'll know which to ship."
+3. **Don't make him merge multiple PRs to validate one bug.** Combine diagnostic + fix in a single PR when at all possible.
+4. **Don't use placeholder text in commands.** `<PROXY_FROM_STEP_1>`, `PASTE_DATABASE_URL_HERE`, etc. Either pre-fill the value yourself or have an endpoint that takes no args.
+5. **When he says "merge it for me," merge it.** Don't wait for him to ask twice.
+6. **When stuck, propose the speculative fix and offer to ship it now or diagnose further — let him pick.** Don't default to "let's diagnose more."
+
+If a turn would be the third "okay now run this and paste it back" in a row, stop and ship a fix instead.
+
 ---
 
 ## 🎯 NORTH STAR — RETENTION & ADDICTION (read this before every response)
