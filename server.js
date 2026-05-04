@@ -1273,6 +1273,13 @@ if (pool) clusterer.init({ pool });
 // created — see further down in this file.
 const clustererJudge = require('./lib/clusterer/judge');
 
+// Mention-pages phase 2e — atomic blurb generator. For each
+// speaker_word_stance row with a non-insufficient_signal llm_stance,
+// asks Claude Sonnet 4.6 to write one observational line about how the
+// speaker treats the term. Same shape as the judge module — pool +
+// anthropic client injected via init() once both exist.
+const clustererBlurb = require('./lib/clusterer/blurb');
+
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
 // wordCounts.computeWordCounts(transcript_id) after each successful insert.
@@ -1368,6 +1375,9 @@ const anthropic = new Anthropic({
 // the pg pool and the Anthropic client exist. The endpoint guards
 // against a missing API key separately, so this init is unconditional.
 if (pool) clustererJudge.init({ pool, anthropic });
+
+// Phase 2e — same wiring for the blurb module.
+if (pool) clustererBlurb.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
 // Every background cron that hits Claude (alpha-hooks, news-impact,
@@ -14269,6 +14279,52 @@ app.post('/api/clusterer/judge', async (req, res) => {
   } catch (err) {
     console.error('[clusterer.judge]', err);
     res.status(500).json({ error: 'judge_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/blurb — Phase 2e atomic blurb generator. For each
+// speaker_word_stance row with a usable llm_stance (not null, not
+// insufficient_signal), writes a one-line observational blurb grounded
+// in the same up-to-5 sentence excerpts the judge saw, plus the
+// speaker's corpus date range for temporal framing.
+//
+// Query params (mirror /api/clusterer/judge for parity):
+//   ?since=<iso>     skip rows already blurbed after timestamp
+//   ?limit=N         cap rows processed
+//   ?dry_run=1       build prompts only; no API call, no DB write
+//   ?sample=N        in dry-run, also live-call first N rows for review
+//                    (returns blurbs without writing)
+//   ?concurrency=N   parallel API calls (default 4, capped at 8)
+//
+// Admin-gated, requires ANTHROPIC_API_KEY in env. Returns rows_written,
+// flag_counts (quote_used + temporal_framing_applied), token usage, and
+// est_cost_usd. The flag counts are the post-run self-diagnostic we use
+// to spot-check whether temporal framing actually got applied where it
+// should have (the Brainard/Waller catch from the 2d.5 retrospective).
+app.post('/api/clusterer/blurb', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    const stats = await clustererBlurb.run({
+      since:       req.query.since || null,
+      limit:       req.query.limit || 0,
+      dryRun:      req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:      req.query.sample || 0,
+      concurrency: req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.blurb]', err);
+    res.status(500).json({ error: 'blurb_failed', detail: err.message });
   }
 });
 
