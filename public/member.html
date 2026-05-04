@@ -1367,31 +1367,24 @@ async function enrichFromLivePolymarket() {
     // as "1 position · $25 volume." Now the max of the two wins.
     const dbStats = (typeof data !== 'undefined' && data && data.polymarket_stats) ? data.polymarket_stats : null;
     let vol = 0, pnl = 0, open = 0, wins = 0, losses = 0;
+    // Live positions feed the TRADES tab + open count only. We DO NOT use
+    // mark-to-market PnL on open positions to compute "wins/losses" — that
+    // conflates unrealized with realized and was painting users with
+    // phantom records (e.g. "1W/4L" when realized history was 0W/7L).
+    // Per voice charter: track records must be real or we don't show them.
     if (serverTotals) {
-      vol    = Number(serverTotals.total_volume_usd) || 0;
-      pnl    = (Number(serverTotals.realized_pnl) || 0) + (Number(serverTotals.unrealized_pnl) || 0);
-      open   = Number(serverTotals.open_positions) || 0;
-      wins   = Number(serverTotals.wins) || 0;
-      losses = Number(serverTotals.losses) || 0;
+      open = Number(serverTotals.open_positions) || 0;
     } else {
       for (const p of positions) {
-        const size = Math.max(
-          Math.abs(p.cost_basis || 0),
-          Math.abs(p.cash_value || 0),
-          Math.abs(p.pnl || 0),
-          (p.shares || 0) * (p.current_price || 0)
-        );
-        vol += size;
-        pnl += p.pnl || 0;
         if ((p.cash_value || 0) > 0.01) open++;
-        if (p.pnl > 0) wins++; else if (p.pnl < 0) losses++;
       }
     }
-    // Overlay DB stats where they exceed the live fetch. polymarket_trades
-    // (our append-only log — what the admin dashboard surfaces) is the
-    // ground truth for trade count + volume. Live positions is the
-    // ground truth for open/unrealised. Take the max of each so neither
-    // source silently loses to the other.
+
+    // Hero stats (P&L, Win Rate, Volume) are SOURCED FROM dbStats only —
+    // realized closed-out trades. Live position state never overrides
+    // realized truth. The "wins/losses/pnl" variables below mirror dbStats
+    // for tier computation; if dbStats is missing, they stay at zero
+    // ("Building" tier rather than fake numbers from open positions).
     let totalPositions = positions.length;
     if (dbStats) {
       const dbTotal   = Number(dbStats.total_trades  || 0);
@@ -1399,13 +1392,13 @@ async function enrichFromLivePolymarket() {
       const dbWins    = Number(dbStats.closed_wins   || 0);
       const dbLosses  = Number(dbStats.closed_losses || 0);
       const dbPnl     = Number(dbStats.pnl_usd       || 0);
-      if (dbTotal   > totalPositions) totalPositions = dbTotal;
-      if (dbVol     > vol)            vol    = dbVol;
-      if (dbWins    > wins)           wins   = dbWins;
-      if (dbLosses  > losses)         losses = dbLosses;
-      // PnL: prefer whichever source has larger magnitude — reflects the
-      // real realised+unrealised total over the full history.
-      if (Math.abs(dbPnl) > Math.abs(pnl)) pnl = dbPnl;
+      if (dbTotal > totalPositions) totalPositions = dbTotal;
+      vol    = dbVol;
+      wins   = dbWins;
+      losses = dbLosses;
+      pnl    = dbPnl;
+    } else {
+      vol = 0; wins = 0; losses = 0; pnl = 0;
     }
 
     const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
