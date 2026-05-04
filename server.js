@@ -13929,34 +13929,63 @@ app.get('/api/member/:userId', async (req, res) => {
     }
 
     // ── Polymarket trade stats (the real data source post-pivot) ──────────
+    // Pulls from BOTH realized_trades (primary, populated by the lazy backfill
+    // from /activity) AND polymarket_trades (legacy HFX-routed log). Dedup'd
+    // by (condition_id, side) — realized_trades wins on collision. Without
+    // the realized_trades union, profiles with a connected wallet but no
+    // HFX-routed trades render with "—" for Volume / P&L / Win Rate even
+    // after the backfill successfully imports their full Polymarket history.
     let polyTrades = [];
     let polyStats = { total: 0, volume: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
     if (pool && userData.polymarket_address) {
+      // realized_trades (keyed on user_id, populated by /activity FIFO)
+      let realizedRows = [];
       try {
-        // LOWER() on both sides — eoa_address is stored lowercase by the
-        // builder-fee pipeline, but polymarket_address on users can carry
-        // mixed case from older connections. Without normalisation the
-        // join silently returns 0 rows and the profile looks empty even
-        // though the admin dashboard clearly tracks trades for this
-        // wallet. Bumped LIMIT 100 → 500 so active traders don't get
-        // truncated.
+        realizedRows = await dbQuery(
+          `SELECT condition_id, side, entry_cost_usd, exit_value_usd, realized_pnl
+           FROM realized_trades WHERE user_id = $1`,
+          [userData.id]
+        );
+      } catch (e) { /* table may not exist yet on fresh envs */ }
+
+      // polymarket_trades (legacy, keyed on lower(eoa))
+      try {
         polyTrades = await dbQuery(
-          `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at
+          `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at, condition_id
            FROM polymarket_trades WHERE LOWER(eoa_address) = LOWER($1) ORDER BY created_at DESC LIMIT 500`,
           [userData.polymarket_address]
         );
-        polyStats.total = polyTrades.length;
-        polyStats.open = polyTrades.filter(t => t.status === 'open').length;
-        for (const t of polyTrades) {
-          polyStats.volume += parseFloat(t.amount_usd) || 0;
-          if (t.status === 'closed' && t.pnl != null) {
-            const p = parseFloat(t.pnl);
-            polyStats.pnl += p;
-            if (p > 0) polyStats.wins++;
-            else polyStats.losses++;
-          }
-        }
       } catch (e) { /* polymarket_trades table may not exist */ }
+
+      // Dedup keys from realized_trades — polymarket_trades rows on the same
+      // (condition_id, side) get filtered so they don't double-count.
+      const realizedKeys = new Set(
+        realizedRows.map(r => `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`)
+      );
+
+      // realized_trades contributions
+      for (const r of realizedRows) {
+        polyStats.total++;
+        polyStats.volume += parseFloat(r.entry_cost_usd) || 0;
+        const pnl = parseFloat(r.realized_pnl) || 0;
+        polyStats.pnl += pnl;
+        if (pnl > 0) polyStats.wins++;
+        else if (pnl < 0) polyStats.losses++;
+      }
+      // polymarket_trades contributions (only rows NOT already in realized)
+      for (const t of polyTrades) {
+        const key = `${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`;
+        if (realizedKeys.has(key)) continue;
+        polyStats.total++;
+        polyStats.volume += parseFloat(t.amount_usd) || 0;
+        if (t.status === 'open') polyStats.open++;
+        if (t.status === 'closed' && t.pnl != null) {
+          const p = parseFloat(t.pnl);
+          polyStats.pnl += p;
+          if (p > 0) polyStats.wins++;
+          else polyStats.losses++;
+        }
+      }
     }
 
     // Context-aware display name — see resolveDisplayName() near L1524
