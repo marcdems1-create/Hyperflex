@@ -1892,7 +1892,11 @@ async function loadTrophyCard(userId) {
   try {
     const res = await fetch(`/api/predictors/${userId}/best-call`);
     const data = await res.json();
-    if (!data.best) return;
+    console.log('[trophy] /best-call response:', data);
+    if (!data.best) {
+      console.log('[trophy] no best-call data — leaving empty state in place');
+      return;
+    }
     const b = data.best;
     const body = document.getElementById('trophyBody');
     if (!body) return;
@@ -1970,10 +1974,13 @@ async function loadSocialPredictions(profileUserId) {
     if (!d.predictions?.length) return;
 
     const section = document.getElementById('socialPredictions');
-    if (section) section.style.display = 'block';
-    document.getElementById('socialPredCount').textContent = `${d.stats?.total || d.predictions.length} total · ${d.stats?.win_rate != null ? d.stats.win_rate + '% win rate' : ''}`;
-
-    document.getElementById('socialPredList').innerHTML = d.predictions.map(p => {
+    if (!section) return; // section was removed in profile redesign — bail without throwing
+    section.style.display = 'block';
+    const countEl = document.getElementById('socialPredCount');
+    if (countEl) countEl.textContent = `${d.stats?.total || d.predictions.length} total · ${d.stats?.win_rate != null ? d.stats.win_rate + '% win rate' : ''}`;
+    const listEl = document.getElementById('socialPredList');
+    if (!listEl) return;
+    listEl.innerHTML = d.predictions.map(p => {
       const sideColor = p.side === 'YES' ? '#22c55e' : '#ef4444';
       const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
       const statusClass = p.status || 'active';
