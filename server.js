@@ -35227,7 +35227,8 @@ app.get('/api/trades/:address', async (req, res) => {
 // Derive a user's Polymarket proxy (Safe wallet) address from their EOA via
 // Safe factory eth_call. Public RPCs only — no MetaMask popup. Returns the
 // proxy address (lowercase 0x...) or null if both RPCs fail / EOA has no
-// proxy deployed yet.
+// proxy deployed yet. Per-RPC failures logged with reason — silent null
+// returns made the seed primer impossible to debug.
 async function derivePolymarketProxy(eoaAddress) {
   if (!eoaAddress) return null;
   const eoa = eoaAddress.toLowerCase();
@@ -35235,6 +35236,7 @@ async function derivePolymarketProxy(eoaAddress) {
   // Selector 0x4d0c6cdb = proxies(address) on Safe factory
   // 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b
   const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
+  const failures = [];
   for (const rpc of rpcs) {
     try {
       const r = await fetch(rpc, {
@@ -35246,12 +35248,25 @@ async function derivePolymarketProxy(eoaAddress) {
           id: 1,
         }),
       });
-      const json = await r.json();
-      if (json.result && json.result !== '0x' && json.result.length >= 42) {
-        return '0x' + json.result.slice(-40);
+      if (!r.ok) {
+        failures.push(`${rpc} HTTP ${r.status}`);
+        continue;
       }
-    } catch (e) { /* try next RPC */ }
+      const json = await r.json();
+      if (json.error) {
+        failures.push(`${rpc} jsonrpc-err: ${JSON.stringify(json.error).slice(0, 120)}`);
+        continue;
+      }
+      if (!json.result || json.result === '0x' || json.result.length < 42) {
+        failures.push(`${rpc} empty-result (eoa has no proxy yet)`);
+        continue;
+      }
+      return '0x' + json.result.slice(-40);
+    } catch (e) {
+      failures.push(`${rpc} threw: ${e.message}`);
+    }
   }
+  console.warn('[derivePolymarketProxy] all rpcs failed for', eoa.slice(0, 10), '— ' + failures.join(' | '));
   return null;
 }
 
@@ -35463,8 +35478,13 @@ app.post('/api/admin/realized-trades/seed', async (req, res) => {
       try {
         const proxy = await ensureProxyStored(u.id, u.polymarket_address);
         if (!proxy) {
+          // Silent null from ensureProxyStored — proxy derivation failed.
+          // Capture this as a structured last_error so the GET endpoint
+          // shows the failure mode instead of returning null.
           _seedProgress.users_processed++;
           _seedProgress.users_failed++;
+          _seedProgress.last_error = `proxy_derivation_failed for ${u.id.slice(0, 8)} (eoa=${u.polymarket_address.slice(0, 10)})`;
+          console.warn('[seed]', u.id.slice(0, 8), 'proxy derivation returned null — see [derivePolymarketProxy] log above for RPC failure detail');
           continue;
         }
         const r = await backfillRealizedTrades(u.id, u.polymarket_address, proxy);
@@ -35476,8 +35496,8 @@ app.post('/api/admin/realized-trades/seed', async (req, res) => {
       } catch (e) {
         _seedProgress.users_processed++;
         _seedProgress.users_failed++;
-        _seedProgress.last_error = e.message;
-        console.warn('[seed]', u.id, e.message);
+        _seedProgress.last_error = `${u.id.slice(0, 8)}: ${e.message}`;
+        console.warn('[seed]', u.id.slice(0, 8), e.message);
       }
       // Polite spacing between users. data-api rate limits aren't published
       // but Cloudflare's default for unauthed traffic is ~100 req/min — we
