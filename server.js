@@ -35276,8 +35276,18 @@ async function derivePolymarketProxy(eoaAddress) {
 async function ensureProxyStored(userId, eoa) {
   if (!pool || !userId || !eoa) return null;
   try {
-    const u = await dbQuery('SELECT polymarket_proxy FROM users WHERE id = $1 LIMIT 1', [userId]);
+    const u = await dbQuery('SELECT polymarket_proxy, is_whale FROM users WHERE id = $1 LIMIT 1', [userId]);
     if (u[0]?.polymarket_proxy) return u[0].polymarket_proxy;
+    // Whale wallets are ingested from the Polymarket leaderboard, which
+    // exposes the proxy address (that's where positions live). The stored
+    // polymarket_address IS the proxy — calling Safe factory proxies(proxy)
+    // reverts because the proxy isn't an EOA in the factory mapping. Skip
+    // derivation for whales and store the address as the proxy directly.
+    if (u[0]?.is_whale) {
+      const lower = eoa.toLowerCase();
+      await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
+      return lower;
+    }
     const proxy = await derivePolymarketProxy(eoa);
     if (proxy) {
       await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [proxy, userId]);
