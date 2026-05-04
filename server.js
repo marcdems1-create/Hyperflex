@@ -35826,7 +35826,48 @@ app.get('/api/admin/seed-debug', async (req, res) => {
   }
 });
 
-// Earn FLEX points endpoint — called after successful CLOB trade
+// One-shot backfill diagnostic for a single user. Returns the full counts
+// from backfillRealizedTrades so we can diagnose "BEST CALL is empty for
+// my profile" without grepping Railway logs. Admin-secret gated.
+//   GET /api/admin/backfill-debug?user_id=<uuid>
+app.get('/api/admin/backfill-debug', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(500).json({ error: 'pool not configured' });
+  const userId = req.query.user_id;
+  if (!userId) return res.status(400).json({ error: 'user_id query param required' });
+  try {
+    const u = await dbQuery(
+      'SELECT id, display_name, polymarket_address, polymarket_proxy, is_whale, realized_trade_count FROM users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
+    if (!u.length) return res.status(404).json({ error: 'user not found' });
+    const user = u[0];
+    if (!user.polymarket_address) {
+      return res.json({ user, error: 'user has no polymarket_address' });
+    }
+    const proxy = await ensureProxyStored(user.id, user.polymarket_address);
+    if (!proxy) {
+      return res.json({ user, proxy: null, error: 'proxy derivation failed (factory revert + /activity returned no trades)' });
+    }
+    const result = await backfillRealizedTrades(user.id, user.polymarket_address, proxy);
+    // Re-read row counts post-backfill so the response shows the truth
+    const counts = await dbQuery(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE realized_pnl > 0)::int AS winners,
+         COUNT(*) FILTER (WHERE realized_pnl < 0)::int AS losers,
+         COALESCE(SUM(realized_pnl), 0)::numeric AS total_pnl,
+         MAX(realized_pnl)::numeric AS biggest_win
+       FROM realized_trades WHERE user_id = $1`,
+      [userId]
+    );
+    res.json({ user, proxy, backfill: result, realized_trades_table: counts[0] || {} });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 5) });
+  }
+});
 // GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
 app.get('/api/flex-points/user/:userId', async (req, res) => {
   try {
