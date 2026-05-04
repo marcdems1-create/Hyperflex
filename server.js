@@ -35530,6 +35530,63 @@ app.get('/api/admin/realized-trades/seed', (req, res) => {
   res.json(_seedProgress || { status: 'never_run' });
 });
 
+// Diagnostic — for each whale candidate the seed primer would process, show
+// the stored address + a live probe of data-api so we can tell at a glance
+// whether the address is junk, the proxy derivation is broken, or the
+// endpoint is wrong. Read-only, admin-secret gated.
+app.get('/api/admin/seed-debug', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(500).json({ error: 'pool not configured' });
+  const minPnl = Number(req.query.min_pnl || 100000);
+  const limit = Math.min(20, Number(req.query.limit || 5));
+  try {
+    const rows = await dbQuery(
+      `SELECT id, display_name, polymarket_address, polymarket_proxy,
+              is_whale, whale_pnl, whale_rank, realized_trade_count
+         FROM users
+        WHERE whale_pnl > $1 AND polymarket_address IS NOT NULL
+        ORDER BY whale_pnl DESC NULLS LAST
+        LIMIT $2`,
+      [minPnl, limit]
+    );
+    const probes = await Promise.all(rows.map(async (u) => {
+      const probe = { user_id: u.id, name: u.display_name, eoa_len: (u.polymarket_address || '').length };
+      probe.eoa = u.polymarket_address;
+      probe.proxy_stored = u.polymarket_proxy;
+      probe.is_whale = u.is_whale;
+      probe.whale_pnl = u.whale_pnl;
+      probe.whale_rank = u.whale_rank;
+      probe.realized_trade_count = u.realized_trade_count;
+      // Probe Safe factory for proxy derivation
+      try {
+        const eoa = u.polymarket_address.toLowerCase();
+        const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
+        const r = await fetch('https://polygon-bor-rpc.publicnode.com', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data }, 'latest'], id: 1 }),
+        });
+        const j = await r.json();
+        if (j.error) probe.factory_result = `revert: ${j.error.message}`;
+        else if (j.result && j.result !== '0x' && j.result.length >= 42) probe.factory_result = '0x' + j.result.slice(-40);
+        else probe.factory_result = 'empty';
+      } catch (e) { probe.factory_result = `err: ${e.message}`; }
+      // Probe data-api with the stored address as-is (no derivation)
+      try {
+        const r = await fetch(`https://data-api.polymarket.com/positions?user=${u.polymarket_address}&limit=1`);
+        const j = await r.json();
+        probe.dataapi_direct = Array.isArray(j) ? `array(len=${j.length})` : (j.error || JSON.stringify(j).slice(0, 80));
+      } catch (e) { probe.dataapi_direct = `err: ${e.message}`; }
+      return probe;
+    }));
+    res.json({ candidates: probes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Earn FLEX points endpoint — called after successful CLOB trade
 // GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
 app.get('/api/flex-points/user/:userId', async (req, res) => {
