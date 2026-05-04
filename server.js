@@ -1257,6 +1257,13 @@ const supabase = createSupabaseProxy();
 const wordCounts = require('./lib/word_counts');
 if (pool) wordCounts.init({ pool });
 
+// Mention-pages phase 2d — clusterer. Reads transcripts +
+// transcript_word_counts, classifies each (speaker, word) by rhetorical
+// posture, writes speaker_word_stance. Runs on demand via the admin
+// endpoint below; future phases may schedule it post-ingest.
+const clusterer = require('./lib/clusterer');
+if (pool) clusterer.init({ pool });
+
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
 // wordCounts.computeWordCounts(transcript_id) after each successful insert.
@@ -14169,6 +14176,29 @@ app.post('/api/admin/predictors-edit/:userId', async (req, res) => {
   } catch (err) {
     console.error('[admin/predictors-edit POST]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/clusterer/run — Phase 2d clusterer. Recomputes
+// speaker_word_stance by comparing each speaker's per-1k-words usage of
+// each tracked word against the corpus baseline. Idempotent (deletes and
+// rebuilds inside a transaction). Returns row count + duration.
+//
+// Admin-gated via x-admin-secret header (or ?secret= query for one-shot
+// curl from a workstation), matching the pattern used elsewhere in this
+// file. Read-mostly endpoint but it writes — keep behind the secret.
+app.get('/api/clusterer/run', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    const stats = await clusterer.run();
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.run]', err);
+    res.status(500).json({ error: 'clusterer_failed', detail: err.message });
   }
 });
 
