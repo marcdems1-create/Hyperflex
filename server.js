@@ -13996,25 +13996,26 @@ app.get('/api/member/:userId', async (req, res) => {
         );
       } catch (e) { /* polymarket_trades table may not exist */ }
 
-      // Dedup keys from realized_trades — polymarket_trades rows on the same
-      // (condition_id, side) get filtered so they don't double-count.
-      const realizedKeys = new Set(
-        realizedRows.map(r => `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`)
+      // polymarket_trades is the per-event log — each row is ONE trade event.
+      // realized_trades is the FIFO-collapsed rollup — ONE row aggregates every
+      // BUY/SELL on (condition_id, outcome) into a single closed-position record.
+      // The two sources are different granularities, NOT redundant:
+      //   - polymarket_trades: 29 rows for a wallet that traded the same market 29×
+      //   - realized_trades:    1 row for the same activity (rollup)
+      // Previous logic dedup'd polymarket_trades against realized_trades, which
+      // collapsed the granular log into the rollup and silently dropped 28 of
+      // 29 trade events. Profile rendered "1 trade, $25 volume" while admin
+      // (which counts polymarket_trades raw) correctly showed "29 trades, $395".
+      // Fix: prefer polymarket_trades as the source of truth for trade count +
+      // volume; only fall back to realized_trades for (condition_id, side) keys
+      // NOT present in polymarket_trades (the wallet-only-on-Polymarket.com case
+      // where the backfill imported activity we never logged ourselves).
+      const polyKeys = new Set(
+        polyTrades.map(t => `${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`)
       );
 
-      // realized_trades contributions
-      for (const r of realizedRows) {
-        polyStats.total++;
-        polyStats.volume += parseFloat(r.entry_cost_usd) || 0;
-        const pnl = parseFloat(r.realized_pnl) || 0;
-        polyStats.pnl += pnl;
-        if (pnl > 0) polyStats.wins++;
-        else if (pnl < 0) polyStats.losses++;
-      }
-      // polymarket_trades contributions (only rows NOT already in realized)
+      // polymarket_trades contributions — every row counts
       for (const t of polyTrades) {
-        const key = `${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`;
-        if (realizedKeys.has(key)) continue;
         polyStats.total++;
         polyStats.volume += parseFloat(t.amount_usd) || 0;
         if (t.status === 'open') polyStats.open++;
@@ -14024,6 +14025,17 @@ app.get('/api/member/:userId', async (req, res) => {
           if (p > 0) polyStats.wins++;
           else polyStats.losses++;
         }
+      }
+      // realized_trades contributions — only markets NOT already in polymarket_trades
+      for (const r of realizedRows) {
+        const key = `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`;
+        if (polyKeys.has(key)) continue;
+        polyStats.total++;
+        polyStats.volume += parseFloat(r.entry_cost_usd) || 0;
+        const pnl = parseFloat(r.realized_pnl) || 0;
+        polyStats.pnl += pnl;
+        if (pnl > 0) polyStats.wins++;
+        else if (pnl < 0) polyStats.losses++;
       }
     }
 
