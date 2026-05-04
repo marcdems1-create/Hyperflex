@@ -3376,6 +3376,15 @@ async function deleteMyPrediction(predId, btn) {
   loadWhaleMoves();      // right rail — biggest whale positions, live
   loadDailyPick();       // right rail — daily pick widget
   loadYourLoop();        // left rail — personal progression card
+
+  // Auto-open the post composer when arriving with #post in the URL.
+  // Used by deep-links from /m/<userId> empty-state CTAs so the user
+  // lands on /feed and immediately gets the picker, no extra click.
+  if (window.location.hash === '#post') {
+    setTimeout(function() {
+      try { openFeedPostPicker(); } catch (e) { console.warn('[hash:post]', e); }
+    }, 600);
+  }
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
   // Refresh predictors every 5 min (stats don't tick by the second)
