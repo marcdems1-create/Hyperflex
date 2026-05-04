@@ -35299,76 +35299,116 @@ async function ensureProxyStored(userId, eoa) {
   }
 }
 
-// Backfill realized (resolved) Polymarket positions into realized_trades.
-// Hits data-api /positions twice (winning=false + winning=true) and writes
-// only resolved positions — open ones are not "realized" yet. Idempotent
-// via external_sync_id UNIQUE constraint. Refreshes user aggregates after.
+// Backfill realized Polymarket trades into realized_trades. Uses the
+// /activity?type=TRADE endpoint (the append-only trade log) — NOT
+// /positions, which only returns currently-open positions and drops rows
+// the moment a winning position is redeemed. We FIFO-match BUY/SELL events
+// per (conditionId, outcome) to compute realized PnL on closed-out
+// positions. Idempotent via external_sync_id UNIQUE constraint.
 async function backfillRealizedTrades(userId, eoa, proxy) {
   if (!pool || !userId || !proxy) return { imported: 0, scanned: 0 };
   const proxyLower = proxy.toLowerCase();
   const eoaLower = (eoa || '').toLowerCase();
 
-  // Two requests for max coverage — losers + winners
-  const [losingRes, winningRes] = await Promise.allSettled([
-    fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&limit=500&sortBy=CURRENT&winning=false`, { headers: { Accept: 'application/json' } }),
-    fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&limit=500&sortBy=CURRENT&winning=true`, { headers: { Accept: 'application/json' } }),
-  ]);
-  const collect = async r => {
-    if (r.status !== 'fulfilled' || !r.value.ok) return [];
-    try { const j = await r.value.json(); return Array.isArray(j) ? j : []; } catch { return []; }
-  };
-  const allPos = [...(await collect(losingRes)), ...(await collect(winningRes))];
-  if (!allPos.length) return { imported: 0, scanned: 0 };
-
-  // One-shot raw shape log so future field-name drift is visible without
-  // adding a debug endpoint. Logs the first position's full JSON.
-  if (allPos[0]) {
-    try {
-      const sample = JSON.stringify(allPos[0]).slice(0, 800);
-      console.log(`[backfill-shape] user=${userId.slice(0,8)} sample=${sample}`);
-    } catch {}
+  // Pull full trade history. /activity returns BUY/SELL events with
+  // conditionId, outcome (YES/NO), side, size (shares), price, timestamp.
+  let trades = [];
+  try {
+    const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxyLower}&limit=500&type=TRADE`, { headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      const j = await r.json();
+      trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+    }
+  } catch (e) {
+    console.warn('[backfillRealizedTrades] /activity fetch failed:', e.message);
+  }
+  if (!trades.length) {
+    console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} no_activity`);
+    return { imported: 0, scanned: 0 };
   }
 
-  const nowMs = Date.now();
-  let imported = 0, scanned = 0, resolvedCount = 0;
-  for (const pos of allPos) {
-    scanned++;
-    // Polymarket data-api uses several field shapes for "this market is
-    // settled and the position is realized." Check every known signal:
-    //   - resolved / market_resolved / is_resolved (older / alt names)
-    //   - redeemable: true (market resolved, position not yet claimed)
-    //   - closed: true (position fully closed out)
-    //   - endDate / end_date in the past (market closed by time)
-    const endDateRaw = pos.endDate || pos.end_date || pos.market_end_date || null;
-    const endMs = endDateRaw ? Date.parse(endDateRaw) : NaN;
-    const pastEnd = Number.isFinite(endMs) && endMs < nowMs;
-    const isResolved = pos.resolved === true
-      || pos.market_resolved === true
-      || pos.is_resolved === true
-      || pos.redeemable === true
-      || pos.closed === true
-      || pastEnd;
-    if (!isResolved) continue;
-    resolvedCount++;
-    const size = parseFloat(pos.size) || 0;
-    if (size <= 0) continue;
+  // One-shot raw shape log so future field-name drift is visible without a
+  // debug endpoint. Logs the first trade event's full JSON.
+  try {
+    const sample = JSON.stringify(trades[0]).slice(0, 800);
+    console.log(`[backfill-shape] user=${userId.slice(0,8)} count=${trades.length} sample=${sample}`);
+  } catch {}
 
-    const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
-    if (!condId) continue;
-    const side = String(pos.outcome || pos.side || 'YES').toUpperCase();
-    const tokenId = pos.asset || pos.token_id || null;
-    const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
-    const avgPrice = parseFloat(pos.avgPrice) || parseFloat(pos.average_price) || 0;
-    const winning = pos.winning === true;
-    const exitPrice = winning ? 1.0 : 0.0;
-    const entryCost = +(size * avgPrice).toFixed(4);
-    const exitValue = winning ? +size.toFixed(4) : 0;
-    const realizedPnl = +(exitValue - entryCost).toFixed(4);
-    const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
-    const openedAt = pos.created_at || pos.timestamp || null;
-    const closedAt = pos.resolved_at || pos.market_resolved_at || pos.closed_at || new Date().toISOString();
-    const closeReason = winning ? 'won' : 'lost';
-    const externalSyncId = `pm-pos:${condId}:${side}`;
+  // Group trades by (conditionId, outcome). Each group becomes one
+  // realized_trades row aggregating all closed-out shares for that
+  // (market, side).
+  const groups = new Map();
+  for (const t of trades) {
+    const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+    let outcome = String(t.outcome || '').toUpperCase();
+    // Some shapes use outcomeIndex (0 = YES, 1 = NO) instead of outcome label
+    if (!outcome) {
+      const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+      if (idx === 0) outcome = 'YES';
+      else if (idx === 1) outcome = 'NO';
+    }
+    if (!condId || !outcome) continue;
+    const key = `${condId}:${outcome}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        condId, outcome,
+        events: [],
+        question: String(t.title || t.question || t.market || '').slice(0, 500),
+        tokenId: t.asset || t.token_id || null,
+      });
+    }
+    groups.get(key).events.push(t);
+  }
+
+  let imported = 0, resolvedCount = 0;
+
+  for (const group of groups.values()) {
+    // Sort ascending by timestamp so FIFO is correct
+    group.events.sort((a, b) => {
+      const ta = Date.parse(a.timestamp || a.created_at || a.time || 0) || 0;
+      const tb = Date.parse(b.timestamp || b.created_at || b.time || 0) || 0;
+      return ta - tb;
+    });
+
+    const lots = []; // { shares, price }
+    let totalCost = 0, totalProceeds = 0, totalSharesClosed = 0;
+    let firstOpenAt = null, lastCloseAt = null;
+
+    for (const t of group.events) {
+      const side = String(t.side || '').toUpperCase();
+      const shares = parseFloat(t.size || t.shares || 0);
+      const price = parseFloat(t.price || 0);
+      const ts = t.timestamp || t.created_at || t.time || null;
+      if (shares <= 0) continue;
+
+      if (side === 'BUY') {
+        if (!firstOpenAt) firstOpenAt = ts;
+        lots.push({ shares, price });
+      } else if (side === 'SELL') {
+        let remaining = shares;
+        while (remaining > 0 && lots.length > 0) {
+          const lot = lots[0];
+          const take = Math.min(lot.shares, remaining);
+          totalCost += take * lot.price;
+          totalProceeds += take * price;
+          totalSharesClosed += take;
+          remaining -= take;
+          lot.shares -= take;
+          if (lot.shares <= 0.0000001) lots.shift();
+        }
+        lastCloseAt = ts;
+      }
+    }
+
+    if (totalSharesClosed <= 0) continue;
+    resolvedCount++;
+
+    const realizedPnl = +(totalProceeds - totalCost).toFixed(4);
+    const realizedRoi = totalCost > 0 ? +(realizedPnl / totalCost).toFixed(6) : null;
+    const avgEntryPrice = +(totalCost / totalSharesClosed).toFixed(4);
+    const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
+    const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
+    const externalSyncId = `pm-act:${group.condId}:${group.outcome}`;
 
     try {
       const result = await dbQuery(
@@ -35379,9 +35419,10 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         ON CONFLICT (external_sync_id) DO NOTHING
         RETURNING id`,
-        [userId, eoaLower || null, condId, tokenId, question, side,
-         size, avgPrice, exitPrice, entryCost, exitValue,
-         realizedPnl, realizedRoi, openedAt, closedAt, closeReason, externalSyncId]
+        [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
+         +totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
+         +totalCost.toFixed(4), +totalProceeds.toFixed(4),
+         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId]
       );
       if (result.length) imported++;
     } catch (e) {
@@ -35404,12 +35445,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
   }
 
-  // scanned/resolved/imported triangulates the failure mode at a glance:
-  // scanned>0, resolved=0  → field name on data-api response changed (look at raw shape)
-  // scanned>0, resolved>0, imported=0 → all rows already imported (ON CONFLICT DO NOTHING)
-  // scanned>0, resolved>0, imported>0 → working
-  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} scanned=${scanned} resolved=${resolvedCount} imported=${imported}`);
-  return { imported, scanned, resolved: resolvedCount, total_found: allPos.length };
+  // trades/groups/closed/imported triangulates the failure mode at a glance:
+  // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
+  // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
+  // trades>0, closed>0, imported>0 → working
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} imported=${imported}`);
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length };
 }
 
 // POST /api/trades/backfill — manual trigger. Lazy-fires from /api/member
