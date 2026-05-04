@@ -35288,11 +35288,33 @@ async function ensureProxyStored(userId, eoa) {
       await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
       return lower;
     }
+    // Try Safe factory derivation first — works for browser-wallet (MetaMask)
+    // users who deployed via Polymarket's standard factory.
     const proxy = await derivePolymarketProxy(eoa);
     if (proxy) {
       await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [proxy, userId]);
+      return proxy;
     }
-    return proxy;
+    // Factory derivation failed (returned null — revert / empty / non-EOA).
+    // The stored address may already BE the proxy: users who pasted their
+    // Polymarket profile URL on landing-page Quick Preview, or use Magic /
+    // email-link wallets that deploy via a different factory. Probe
+    // /activity at the address — if Polymarket has trade history there,
+    // the address IS the proxy. Use as-is.
+    try {
+      const lower = eoa.toLowerCase();
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${lower}&limit=1&type=TRADE`, { headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const j = await r.json();
+        const trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+        if (trades.length > 0) {
+          await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
+          console.log(`[ensureProxyStored] user=${userId.slice(0,8)} address-is-proxy fallback (factory failed, /activity has trades)`);
+          return lower;
+        }
+      }
+    } catch (e) { /* fall through and return null */ }
+    return null;
   } catch (e) {
     console.warn('[ensureProxyStored]', e.message);
     return null;
