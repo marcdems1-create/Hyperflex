@@ -1,96 +1,202 @@
 # HYPERFLEX — Claude Session Memory
 
-> This file is auto-read by Claude at the start of every session. Keep it updated.
-> **MANTRA.md** — read this FIRST, before any feature decision. The One Question
-> ("Does this help someone build a following through demonstrated ROI?") gates
-> every code change, design choice, and copy decision. The mantra governs.
-> Full details in HYPERFLEX_Complete_Brief.md. Read that too.
-> **CHANGELOG.md** — read this before every build. Every code change is logged there with commit hash, files touched, and "don't break" notes for the next agent.
+> Auto-read at session start. Keep current. Full detail in HYPERFLEX_Complete_Brief.md. Code-change log in CHANGELOG.md (read before every build).
+
+## 🎯 The mantra (read before every feature decision)
+
+**HYPERFLEX is the industry standard for building on top of Polymarket.** Every feature answers one question: *does this help someone build a following through demonstrated ROI?* If the answer isn't yes, don't ship it.
+
+Polymarket is the only live data source. Kalshi/Manifold integrations were dropped April 30 in the Polymarket-native pivot — any old reference to "all 3 platforms" or Kalshi gating is stale.
+
+## 🤝 Multi-Claude workflow contract
+
+Multiple Claude instances may work this repo in parallel. Two non-negotiable rules to prevent crossed wires:
+
+1. **No "shipped" claims without a verifiable commit hash.** Every "I shipped X" reply must include the commit hash and confirm `git push` succeeded. If you haven't pushed, you haven't shipped — say "drafted, not pushed" instead. We learned this the hard way mid-Phase 2d.
+2. **Verify before describing.** Before saying what shipped, run `git log origin/<branch> --oneline -1` and quote the hash you see on origin. If your local HEAD ≠ origin, push first.
+
+## 🛠️ Operating papercuts
+
+- **TablePlus only** for DB queries. Marc's zsh chokes on backslash-prefixed pasted SQL. Always say "in TablePlus" when giving SQL. If TablePlus prefixes a paste with a stray `\`, instruct him to delete it.
+- **Sonnet model ID** is `claude-sonnet-4-6` — no date suffix, ever. Old `claude-sonnet-4-20250514` strings parroted from artifact-rendering conventions are stale.
+- **Migration filenames** still use the `supabase_migration_*.sql` prefix. **This is legacy naming, not a database hint.** Production DB is Railway Postgres only. Run migrations in TablePlus or Railway's SQL console; never Supabase. Naming stays for git history continuity.
+
+## ⛔ Marc hates going in circles. Read this BEFORE every response.
+
+The user has explicitly told me he hates back-and-forth, "run this then paste it back" loops, and dragging a single bug across many turns. Operating rules that follow from this:
+
+1. **Don't ask the user to run psql, run SQL in Railway console, or run multi-step diagnostics from the terminal.** If a diagnostic is needed, build a one-shot admin endpoint and have him hit it with a single curl. Better: run the diagnostic from server-side code in the same PR as the fix.
+2. **Don't volley.** If hypothesis A and hypothesis B both have a plausible fix, ship the fix that's correct under either hypothesis. Don't say "first run this curl, then I'll know which to ship."
+3. **Don't make him merge multiple PRs to validate one bug.** Combine diagnostic + fix in a single PR when at all possible.
+4. **Don't use placeholder text in commands.** `<PROXY_FROM_STEP_1>`, `PASTE_DATABASE_URL_HERE`, etc. Either pre-fill the value yourself or have an endpoint that takes no args.
+5. **When he says "merge it for me," merge it.** Don't wait for him to ask twice.
+6. **When stuck, propose the speculative fix and offer to ship it now or diagnose further — let him pick.** Don't default to "let's diagnose more."
+
+If a turn would be the third "okay now run this and paste it back" in a row, stop and ship a fix instead.
 
 ---
 
-# ⚠️ STRATEGIC PIVOT — APRIL 30, 2026
+## 🎯 NORTH STAR — RETENTION & ADDICTION (read this before every response)
 
-HYPERFLEX is Polymarket-native. Kalshi and Manifold are dropped. New positioning: the social and analytical layer for Polymarket traders. Receipts, leaderboards, takes, mention market base rates, sharp predictor follows.
+**Goal:** build the most addicting gambling/investing platform ever built. Every feature, every UI decision, every endpoint, every piece of copy must be evaluated through this lens:
+
+> **"Does this make the user want to come back tomorrow, and again the day after?"**
+
+When Claude is asked to ship *anything* — a new feature, a UI tweak, a copy change, a bugfix — the default thought process is:
+1. **What's the dopamine loop?** Every interaction should produce a small reward. Wins get celebrated. Losses get re-engagement (streak warnings, "your take came close," revenge-trade prompts). Neutral states should be rare.
+2. **What's the return hook?** Unread count. Streak at risk. Market resolving in 2h. Whale just took a side. Someone agreed with your take. Your passport got a new follower. Something new since last visit, surfaced the moment they open the app.
+3. **What's the social proof?** Leaderboards, profile flex, ORACLE/SHARP/FLEXIN tiers, "X just made $Y," "N traders are watching this." Status is the only infinite resource.
+4. **What's the variable reward?** Every whale signal, every market flip, every resolution outcome is a pull of the slot-machine lever. Make them feel like that — even when the data is the same, the *framing* should shift (new leader, divergence spike, sharp vs crowd).
+5. **What's the identity attachment?** Every FLEX point, every take with a CORRECT badge, every tier upgrade is something the user can't get back once they leave. Sunk identity = retention.
+
+**Concrete mechanics already in the codebase** (keep compounding these, don't regress):
+- FLEX Score — domain-agnostic composite tied to real performance (accuracy + ROI + sample + dog rate + recency). Replaces the old "FLEX Points as rep currency" framing. One number, earned by being right, visible everywhere. No accumulation currency, no spend, no shop. See Voice & Posture below for why.
+- Streaks + streak-warning emails (loss aversion)
+- Tier ladder (Building → TRADER → PROFITABLE → SHARP → SHARK → WHALE → FLEXIN)
+- Take reactions + reaction-gated comments (forces commitment, creates feed)
+- Notifications bell (always-on unread hook)
+- Predictor Passport (shareable credential = off-platform flex → on-platform return)
+- Weekly email digest + Predictor Spotlight (inbox hook)
+- Whale-take auto-synthesis (feed never empty)
+- Quote-predict (challenge mechanic → engagement flywheel)
+
+**Forbidden anti-patterns**:
+- Generic "nothing here yet" empty states. Every empty state needs a CTA with a clear path to a dopamine hit.
+- Silent background updates with no user-facing signal. If a whale moves, if their tier advances, if a streak risks breaking — SURFACE IT with a badge, notification, or toast.
+- Killing a lever to "clean up the UI." Streaks, badges, glows, counts, chips — these are not decoration, they're the product.
+- Features that only pay off monthly/quarterly. Aim for daily dopamine, not annual ROI.
+- Playful surfaces (share cards, roast cards, weekly recaps, "fade the public" feeds) firing on empty data. Gate them behind real supply thresholds — a user with 3 picks is not ready for a weekly recap. Empty playfulness reads as desperation.
+
+**When in doubt, ask:** would a degenerate Polymarket trader check this 5x a day? If the answer is no, either add a hook or don't ship it.
 
 ---
 
-## Design System (Current — April 2026)
+## 🎙️ VOICE & POSTURE (canonical — read before writing any user-facing copy)
 
-The old Voice & Posture Charter (gold `#c9920d`, Syne, Space Mono, "zero decorative emoji", dry-numerate as the only register) is fully retired. Don't apply it to new work. Existing pages still using it will be migrated as touched.
+Canonical. Every copy decision on the platform references this document. If a surface contradicts the charter, the surface is wrong.
 
-### Tokens
+### 1. Who writes HYPERFLEX
 
-**Background:**
-- `--bg: #0a0a0a` — true black, page background
-- `--bg-2: #0f0f0f` — slightly lifted (ticker bars, countdown card)
-- `--surface: #141414` — primary card surface
-- `--surface-2: #1a1a1a` — nested surface
-- `--border: #1f1f1f` — hairline divider
-- `--border-2: #2a2a2a` — slightly stronger divider
+A sharp who made it, stopped posting publicly, and runs the back room where real bettors actually hang out. Dry, numerate, controlled. Reads more like a WSJ gambling columnist who's also a degen than like anything on betting Twitter in 2026.
 
-**Text:**
-- `--text: #fafafa` — primary
-- `--text-dim: #a3a3a3` — secondary
-- `--text-muted: #737373` — labels, metadata
-- `--text-faint: #525252` — disabled, tertiary
+Assumes the reader knows spreads, odds, units, CLV. Never condescends. Never explains what a push is. Never links to a glossary.
 
-**Brand accent (primary):**
-- `--cyan: #22d3ee` and `--cyan-2: #0ea5e9` — used as gradient on hero words
-- `--cyan-soft: rgba(34, 211, 238, 0.1)` — backgrounds for verdict cards
-- This is the HYPERFLEX brand color. Gold is dead.
+Does not participate in the meme cycle. No "fr fr." No all-lowercase affectation. No phrase that depends on a trend younger than 24 months. Writes like the copy will still ship in 2028.
 
-**Categorical accents:**
-- `--yellow: #fbbf24` — Alpha section identifier (lightning bolt)
-- `--purple: #a78bfa` — Whale data, whale chips
-- `--pink: #ec4899` — Mention/event identifiers, timer chips
-- `--orange: #fb923c` — Movers, urgency callouts
-- `--blue: #3b82f6` — Capital/volume bars in score breakdowns
+### 2. Register: 90/10 dry to warm
 
-**Outcome semantic colors:**
-- `--green: #22c55e` — YES outcomes, dovish stance, positive deltas, live indicators
-- `--red: #ef4444` — NO outcomes, hawkish stance, negative deltas, anomaly alerts
-- `--green-block: rgba(34, 197, 94, 0.25)` — solid YES ROI block fill
-- `--red-block: rgba(248, 113, 113, 0.3)` — solid NO ROI block fill
+Default register is dry. Factual, numerate, slightly approving when earned. Reader does the emotional work.
 
-### Typography
+- ✅ "Pick landed. +2.73u."
+- ❌ "Nice hit! 🎯 +2.73u!"
+- ❌ "Finally. +2.73u."
 
-- **Display + Body:** Inter (weights 400, 500, 600, 700, 800), with `font-feature-settings: 'cv11', 'ss01'` for tabular alts and stylistic set
-- **Numbers + Labels:** JetBrains Mono (weights 400, 500, 700)
-- **All numbers** use `font-variant-numeric: tabular-nums` so columns align
-- **Letterspacing:** -0.02em to -0.04em on display headlines, default on body
-- **Hero headlines:** 28-32px, 800 weight, 1.05 line-height
-- **Section h2:** 16px, 700 weight
-- **Body:** 13-14px, 400-500 weight, 1.5 line-height
-- **Mono labels:** 9-11px, uppercase, 0.05-0.15em letter-spacing
+Warmth is reserved, not sprinkled. The only moments the platform speaks warmly:
 
-### Component patterns
+- First locked pick ever (once per account, lifetime)
+- First graded win after a 5+ loss streak (the comeback)
+- 12-week continuous posting milestone, then every 26 weeks after (durability)
+- Top-decile finish in a seasonal cohort (real achievement)
+- Anniversary of joining (annual, "still here")
 
-**Cards:** `var(--surface)` background, `1px solid var(--border)`, `border-radius: 12px`, padding 14-16px
+Everything else stays dry. Routine wins, daily opens, fresh signups, setup completions, feature discovery, and losses all receive default register. Tempting moments for warmth — welcome flows, onboarding, payment confirmations — are explicitly excluded.
 
-**Chips:** small rounded pills with semantic background tints. Format: `<span class="tag purple">🐋 4 Whales $890k</span>`. Use cyan for "mention", purple for "whale", pink for "timer", green for "live".
+### 3. Side-taking on losses
 
-**ROI blocks:** big solid colored bands at the bottom of market cards. Green block for YES path, red block for NO path. Format: `+61% max ROI [YES tag] 62¢ → 100¢`
+The platform takes a position: surviving losses publicly is status-conferring. The capper who ghosts at 0-4 loses what the survivor earns.
 
-**Hero gradient text:** `linear-gradient(90deg, var(--cyan) 0%, var(--cyan-2) 100%)` clipped to text. Use sparingly — one word per page maximum.
+This is the posture Pikkit cannot copy, because their product philosophy treats a loss as private. Ours treats it as visible and, when weathered, dignified.
 
-**Live pill:** small green chip with pulsing dot. Use only for genuinely live data.
+Concrete expressions:
 
-**Live ticker:** auto-scrolling strip at top of data-heavy pages. JetBrains Mono, 10px, with cyan label + tabular value + green/red delta arrow.
+- "Posted every week, 12 weeks" profile chip
+- "Survived a −12u week" profile chip
+- Losing cards share the same layout dignity as winning cards (different color, same weight)
+- Weekly recaps don't flinch from the ugly number
 
-### Iconography
+What the platform does not do: mock losses, celebrate losses, or console losses. It records them.
 
-Sparing emoji is now allowed where it serves data labeling — `🐋` for whales, `⚡` for alpha, `⏱` for timers, `📊` for mentions. **Decorative emoji in body copy is still avoided.** Don't add a 🚀 to a paragraph just because it's exciting.
+### 4. Platform funny vs community funny
 
-### Voice (residual rules from the old charter that still apply)
+Humor lives in exactly three surfaces: loading states, empty states, and error screens (404/500/timeout/auth/rate-limit/payment-declined).
 
-- Numerate. Show the number, sign and decimal it. `+2.73u`, `−3.00u`, `+14.3%`, `63.4% (47 picks)`. Sample size always reachable.
-- "FLEX Score" never "FLEX Points." Score is a derived rating, not an accumulated currency. No NEWCOMER badge anywhere.
-- Don't compliment a take, call, thesis, or opinion. The platform records, doesn't editorialize.
-- Don't use exclamation points in default register (reserved for the 5 warmth triggers documented in earlier sessions: first-locked-pick-ever, comeback-from-5-loss-streak, 12-week-durability, top-decile cohort finish, signup anniversary).
-- Don't address the user by first name. "Welcome back" not "Welcome back, Marc."
-- Don't use second person in data displays. `Record: 47-32-3` not `Your record: 47-32-3`.
-- "Fade the public." stays. Permanent betting vocabulary is welcome (units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML).
+Everywhere else — notifications, feed copy, profile surfaces, email, modals, tooltips, confirmations — is numerate and neutral. Users perform jokes on top of the platform; the platform sets the stage.
+
+The platform never editorializes on user content. It can narrate system events ("Pick locked. Cannot be edited.") but never comments on the take itself. No "🔥 Hot pick!", no "Bold call!", no "Interesting play." The content speaks for itself. Labels describe mechanics, never quality.
+
+### 5. The meme-cycle test
+
+Before any copy ships, ask: *Would this still read right in 2 years?*
+
+If the phrase depends on a current meme, it fails. If it depends on permanent betting vocabulary, it passes.
+
+| ❌ Don't | ✅ Do |
+|---|---|
+| "This one's cooked." | "Resolved a loss." |
+| "Locked in 🔒" (decorative) | "Locked at 7:14 PM." |
+| "Tailing the sharps 📈" | "Following three tipsters." |
+| "We're so back." | "Four wins after four losses." |
+| "It's giving sharp energy." | "Top decile this week." |
+| "Chalk it up." | "Favorite covered." |
+| "Fade the public." | Allowed — permanent term. |
+
+Permanent vocabulary is welcome: units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML.
+
+### 6. Emoji policy
+
+Zero decorative emoji. Functional glyphs only, used for semantic meaning:
+
+- `✓` verified
+- `●` live
+- `—` push / void
+- `🔒` on the literal "locked" state of a pick (the one permitted emoji, because it's functional shorthand the audience already reads semantically)
+
+No 🎯 🔥 📈 💰 🏆 ⚡ 💎 anywhere, ever. No flag emoji on team names. No confetti on wins. No sad face on losses.
+
+### 7. Numeric formatting
+
+Dry voice is violated instantly by inconsistent numbers. Lock it.
+
+- **Units:** always 2 decimals, always with sign. `+2.73u`, `−3.00u`, `0.00u`. Never `+2.7u`, never `+2.732u`.
+- **ROI:** always signed, one decimal. `+14.3%`, `−8.1%`.
+- **Win rate:** one decimal when shown as percentage. `63.4%`.
+- **Odds:** American format only. `−110`, `+145`. Never decimal (`1.91`), never fractional.
+- **Timestamps:** relative inside 24h (`14 min ago`, `3h ago`), absolute after (`Apr 18, 7:14 PM`). Timezone respected per user setting.
+- **Sample size:** performance numbers on profiles and leaderboards show sample size inline (`63.4% (47 picks)`). On compact surfaces (pick cards, mobile tiles, embeds), sample size is accessible in one tap or hover. Never hidden, always reachable. Performance without a path to sample size is a lie.
+
+### 8. FLEX Score rule
+
+FLEX Score is a derived rating, not an accumulated currency. It is bounded and normalized. It appears on profiles and leaderboards — nowhere else.
+
+- Derived from recent performance, not a sum of actions
+- Posting volume does not increase FLEX Score
+- Bad picks lower it; good picks raise it; dormancy decays it
+- Displayed as a bounded number users read as a rating, not a balance
+
+The old "FLEX Points" framing — earn-on-trade, accumulate, spend — is retired. No accumulation currency, no shop, no spend, no tiers to unlock. One score, earned by being right.
+
+### 9. What the platform never does
+
+- Never uses exclamation points in default register (reserved for the 5 warmth triggers, and even there, used once per message maximum)
+- Never addresses the user by first name in copy ("Welcome back, Marc" is forbidden; "Welcome back" is fine)
+- Never implies urgency it can't back up ("Act now!" / "Don't miss out!")
+- Never apologizes for system events that aren't failures
+- Never asks the user "How are you feeling?" or equivalent
+- Never uses "we" to refer to the platform — **except** in error copy, explicit policy, or FAQ contexts. Example: `We couldn't reach the server. Try again.` is allowed (beats the passive `The server couldn't be reached.`). `We're excited to have you!` is forbidden.
+- Never uses second person in data displays ("Your record: 47-32-3" → "Record: 47-32-3")
+- Never compliments a take, call, thesis, or opinion
+- Never uses a word where a number would communicate faster
+
+### 10. Voice smell test
+
+Before shipping copy, read it aloud. If any of these are true, rewrite:
+
+- Sounds like it came from a bank app
+- Sounds like it came from Duolingo
+- Sounds like it came from a crypto project
+- Sounds like it's trying to be your friend
+- Sounds like it was written by someone who doesn't bet
+- Contains a word the reader would never say out loud in this context
 
 ---
 
@@ -118,7 +224,7 @@ Changes to the feed tabs/rendering must be made in BOTH files or (preferably) on
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
-**Stack:** Node.js + Express + Supabase + Anthropic SDK. All frontend is plain HTML/CSS in `public/`.
+**Stack:** Node.js + Express + Railway Postgres + Anthropic SDK. All frontend is plain HTML/CSS in `public/`. (Supabase JS client still exists in code as a fallback shape but the production DB is Railway only.)
 
 ---
 
@@ -296,15 +402,12 @@ Social products compound. Every take posted is content. Every follow is a connec
 
 ---
 
-## Platform Integrations (the aggregator core)
+## Platform Integrations (Polymarket-native)
 
 - **Polymarket**: `GET /api/polymarket/positions/:address` (public, no auth) — wallet address lookup, 5-min cache
-- **Kalshi**: `GET /api/kalshi/positions` (auth'd) — UUID API key, enriched with market details
-- **Manifold**: `GET /api/manifold/positions/:username` (public) — aggregates bets by contract, M$ labels
-- **Unified portfolio**: `GET /api/portfolio/:userId` — merges all platforms, P&L, win rate
-- **Auto-sync cron**: `syncAllUserPositions()` runs hourly — fetches all connected users' positions into `cached_positions`
-- **P&L analytics**: `GET /api/predictors/:userId/analytics` — platform breakdown, calibration chart, 30d timeline, sharp score
-- **Wallet/key storage**: `PUT/GET /api/user/wallets` — Polymarket address, Kalshi API key (masked in GET), Manifold username
+- **Auto-sync cron**: `syncAllUserPositions()` runs hourly — fetches Polymarket positions into `cached_positions`
+- **P&L analytics**: `GET /api/predictors/:userId/analytics` — calibration chart, 30d timeline, sharp score
+- **Wallet storage**: `PUT/GET /api/user/wallets` — Polymarket address (Kalshi/Manifold endpoints kept for legacy data; not promoted in UI)
 
 ---
 
@@ -328,7 +431,7 @@ Social products compound. Every take posted is content. Every follow is a connec
 - Market discovery: trending/hot/new badges, category filter pills, truth feed, carousel
 
 ### Aggregator Portfolio
-- Portfolio tab in creator dashboard — connect Polymarket/Kalshi/Manifold
+- Portfolio tab in creator dashboard — Polymarket connect (legacy Kalshi/Manifold endpoints exist but not promoted)
 - Quick Preview on landing page (wallet/username → instant stats card)
 - Member profiles show cross-platform stats, calibration charts, P&L timeline
 - Predictor leaderboard with sharp scores, follow system, Following feed on explore
@@ -340,7 +443,7 @@ Social products compound. Every take posted is content. Every follow is a connec
 ## Rules Claude Must Follow Every Session
 
 1. **Read this file at session start** before touching anything
-2. **Font/color system:** see the **Design System** section near the top of this file. Inter (display/body) + JetBrains Mono (numbers/labels). Brand accent is `--cyan: #22d3ee` on `--bg: #0a0a0a` (true black). Categorical accents: yellow / purple / pink / orange / blue per section. Outcome colors: green `#22c55e` for YES, red `#ef4444` for NO. The earlier gold/paper (`#c9920d` on `#0e0e15`) and the older Syne + Space Mono single-gold-accent palette are both retired.
+2. **Font/color system:** **Inter** (display/sans) + **JetBrains Mono** (mono). Multi-accent palette: gold `#c9920d`, green `#00e68a`, red `#ff4d6a`, blue `#4d9fff`, purple `#a855f7`, amber `#f59e0b`. Paper `#0e0e15`, ink `#f0f0f5`, border `#1e1e2a`. The old Syne + Space Mono + single-gold-accent system is deprecated as of the alpha terminal redesign (commits `4188aa6` + `d48cbef`).
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
@@ -651,574 +754,40 @@ SELL market: rawMakerAmt = roundDown(shares, 4);      rawTakerAmt = roundDown(sh
 
 ---
 
-## This session (March 16, session 6) — committed `a6a2b7d`, needs push + new commits
 
-- **Rewards tab fix**: `'rewards'` was missing from `showTab()` array — tab was permanently invisible. Fixed.
-- **Reward unlocks in explore feed**: `reward_unlocks` table + `maybeLogRewardUnlocks()` in `setCommunityBalance` + `reward_unlock` card in explore.html. Migration: `supabase_migration_reward_unlocks.sql`
-- **Market burst consolidation**: 2+ markets from same creator within 5 min → single `markets_burst` card in explore feed showing count + preview list.
-- **A — Live stats bar**: Public `/api/stats` endpoint (5-min cache). Landing page shows live markets / predictions / communities below hero.
-- **B — Admin outreach tool**: ✉️ Outreach tab in admin.html. Compose + send personalized invite emails to creators. `creator_invites` table tracks sent/accepted. Auto-marks accepted on creator signup.
-- **C — Embeddable widget**: `/embed/:slug` + `/api/embed/:slug`. Lightweight iframeable widget showing top 3 markets, branded colors. Creator dashboard Settings tab has "Get Embed Code" section.
-- **D — Creator referral**: `/ref/:slug` → redirects to `/creator/signup?ref=slug`. `creator_referrals` table. Share tab shows referral link + stats. Referrer gets credited on tracked signups.
-- **E — Resolution disputes**: Members can file dispute within 24h of resolution via ⚠ Dispute button. `market_disputes` table. Creator reviews (uphold/overturn) in Resolution Queue tab. Email notification on dispute filed.
-- **F — Cross-community follows**: `creator_follows` table + `/api/community/:slug/follow-social` toggle + `/api/user/following`. Follow button on community hero + creator profile page. Explore sidebar shows Following card.
-
-**Landing page embed section** — `public/index.html` now has full two-column embed showcase between VIDEO comment and PRICING section. Mock widget preview, copy bullets, embed code snippet, CTA. Committed `a6a2b7d`.
-
-**New migrations to run (in order after existing list):**
-12. `supabase_migration_reward_unlocks.sql`
-13. `supabase_migration_creator_invites.sql`
-14. `supabase_migration_creator_referrals.sql`
-15. `supabase_migration_market_disputes.sql`
-16. `supabase_migration_creator_follows.sql`
-
----
-
-## Session 6 continued — email lifecycle + engagement automation
-
-**J — Email unsubscribe** (`/unsubscribe?token=XXX` route in server.js):
-- Token-based, one-click, no login needed
-- `getMemberUnsubToken()` / `getCreatorUnsubToken()` helpers generate + cache UUID tokens
-- `unsubscribeFooterHtml()` / `creatorUnsubscribeFooterHtml()` injected into weekly digest + streak warnings
-- Weekly digest + streak warning emails now skip `email_unsubscribed = true` users
-- Migration: `supabase_migration_email_unsubscribe.sql` — adds columns to `users` + `creator_settings`
-
-**K — Creator milestone emails** (`maybeFireMilestoneEmail(slug)` in server.js):
-- Fires async (fire-and-forget) from the community join/follow endpoint
-- Milestones: 5, 10, 25, 50, 100, 250, 500 members
-- Tracks `creator_settings.last_milestone_notified` to prevent re-sends
-- Branded email with community accent color, two CTAs (dashboard + community)
-- Respects `email_unsubscribed` flag on creator
-
-**L — Dead market nudge emails** (`sendDeadMarketNudges()`, Wed 10am UTC):
-- Finds markets open 7+ days with < 3 traders
-- Groups by creator, sends one email per creator listing their dead markets
-- Includes age + trader count per market, tip copy to share or archive
-- Skips unsubscribed creators
-
-**Migration for J + K:** `supabase_migration_email_unsubscribe.sql`
-- `users`: `email_unsubscribe_token TEXT`, `email_unsubscribed BOOLEAN DEFAULT false`
-- `creator_settings`: same columns + `last_milestone_notified INTEGER DEFAULT 0`
-
----
-
-## AARRR gap closers (session 6 continued)
-
-**M — Referral accepted fix**: `maybeAcceptReferral(slug)` fires from both POST /markets and PUT /markets when `is_public` flips to true. Checks if this is creator's first public market; if so, flips `creator_referrals.accepted = true` and sets `accepted_at`. Resolves the known bug.
-
-**N — Signup drop-off email**: 2h after creator signup, `maybeFireSignupDropoffEmail()` checks if they have zero public markets and sends a "publish your first market" nudge with three paths. Fires via `setTimeout` in signup handler.
-
-**O — Free plan limit banner**: Inline banner in Markets tab appears at 4/5 and 5/5 active markets for free creators. On 403 limit hit, banner shows + upgrade modal opens. Removes the invisible wall.
-
-**P — Member win-back emails**: `sendMemberWinBackEmails()` every Friday 11am UTC. Targets members active at some point but idle for 14–60 days. Personalised with days-away count + 3 hot markets from their communities.
-
----
-
-## SaaS Pillar features (session 6)
-
-**G — Streak warning emails** (`sendStreakWarningEmails()` in server.js):
-- Cron: daily 6pm UTC
-- Targets users with streak ≥ 3 who haven't bet in last 24h
-- Finds open markets in their communities, sends urgency email
-- Three urgency tiers based on streak length (3+, 5+, 7+)
-
-**H — Market template gallery** at `/templates`:
-- 12 niches × 6 markets = 72 ready-to-use prediction questions
-- Niches: Sports, Crypto, Podcast, Finance, Entertainment, YouTube, Tech, Gaming, Fitness, Music, Newsletter, Politics
-- `GET /api/templates` returns gallery metadata; `GET /api/templates/:id` returns full market list
-- Filter pills, expandable cards, "Use this template →" links to `/creator/signup?template=id`
-- After signup, dashboard detects `?template=` param, auto-opens create modal with first question pre-filled
-- "Templates" added to landing page nav
-- `'templates'` added to RESERVED_SLUGS
-
-**I — Win card acquisition loop**:
-- `win-card.html` now shows a full acquisition CTA block below every win card
-- Shows after card loads; names the community; 4 feature bullets; CTA: "Start free — takes 2 min →"
-- Links to `/creator/signup?ref=wincard` for tracking
-- "Free forever / No card needed" social proof
-- Premium creator note: CTA shows on all tiers (win cards are a viral acquisition surface, not a Premium feature)
-
----
-
-## Session 7 — Multi-option markets (commit `fb9c67d`)
-
-**Q — Multi-option markets** — creators can now create markets with 3–6 answer options instead of just YES/NO:
-
-- **Create modal**: Binary/Multi-option toggle. Multi-option reveals an options builder — add/remove up to 6 options, enter labels + starting %, "Balance %" auto-splits evenly. Validation: all pcts must sum to 100.
-- **`POST /markets`**: accepts `options[]` array (`[{label, pct}]`), stores normalised as JSONB in `options` column. `null` = binary (unchanged).
-- **`/trade`**: multi-option branch already in place (vote-share parimutuel: `payout = amount / (pct/100)`). Options array updated with new vote counts + recalculated pcts.
-- **`POST /markets/:id/resolve`**: validates outcome against option labels for multi-option; winners identified by `pos.side === outcome`; payout uses stored `potential_payout`, credits `community_balances`.
-- **Community card**: segmented colour bar (up to 6 colours); N coloured option bet buttons replace YES/NO.
-- **Predict modal**: shows multi-option grid buttons (label + live % + payout multiplier per option); `updatePayout`/`updateMultiplier` calculate from option pct.
-- **Resolve modal** (creator dashboard): renders option label buttons instead of YES/NO; AI suggestion hidden for multi-option (not yet supported).
-- **Migration**: `supabase_migration_multi_option.sql` → `ALTER TABLE markets ADD COLUMN IF NOT EXISTS options JSONB`
-
-**New migration to run:** 20. `supabase_migration_multi_option.sql`
-
----
-
-## Session 7 continued — view toggle, search, Discord, notifications (commit `ee1733c`)
-
-**R — Creator/Member view toggle:**
-- Styled pill toggle in creator dashboard topbar: 🛠 Creator (active) | 👤 Member Dashboard (links to own community)
-- Same toggle in community creatorLoginBar when creator views their own community: 🛠 Creator | 👤 Member Dashboard (active)
-- Replaces the old plain-text "← Back to Dashboard" bar
-
-**S — Market search on community page:**
-- Instant search input above market grid; debounced 180ms, client-side on `market.question`
-- Respects active category filter + sort mode simultaneously; shows result count
-
-**T — Discord webhook integration:**
-- Creator pastes incoming webhook URL in Settings → Discord Integration
-- `sendDiscordWebhook()` fires from POST /markets + PUT /markets on publish transition
-- Rich embed: question, category, close date, multi-option list; community brand color
-- Test button sends test embed directly from browser; `PUT /api/creator/discord-webhook`
-- Migration: `supabase_migration_discord_webhook.sql`
-
-**U — In-app notification bell:**
-- 🔔 bell + unread badge in community header AND creator dashboard topbar
-- Dropdown: last 30 notifications, unread gold-highlighted, mark-all-read, click → navigate
-- Types: `you_won`, `you_lost` (resolution payout loop), `new_market` (on publish)
-- `pushNotification()` helper — non-blocking; `GET /api/notifications`, `POST /api/notifications/read`
-- Migration: `supabase_migration_notifications.sql`
-
-**New migrations to run:**
-21. `supabase_migration_discord_webhook.sql`
-22. `supabase_migration_notifications.sql`
-
----
-
-## Session 7 continued — global search bars (commit `30e9d10`)
-
-**V — Search bars across pages:**
-- **creator-dashboard Markets tab**: debounced text search above filter pills; filters across Live/Expired/Archived by question text (`_dashMktSearchQuery` + `onDashMarketSearch()`)
-- **explore.html**: full-width search bar above tabs; filters Activity feed (by question + community + username), Hot/New markets (by question + community name), and Communities tab (shows filtered community cards)
-- **templates.html**: search input above filter pills; filters by template name, description, and preview questions; stacks with niche pills (`applyTemplateFilter()`)
-- **profile.html**: search input on Active Markets grid; now shows ALL active markets (was capped at 6); filters by question + category (`renderProfileMarkets()`, `onProfileSearch()`)
-- **community.html**: already had search (session 7, feature S above)
-
----
-
-## Session 7 continued — profile page discussion + wall (commit `95d6053`)
-
-**W — Profile page engagement tabs:**
-- Two tabs on `/u/:slug` below the leaderboard: 💬 Market Discussion | 📌 Community Wall
-- **Market Discussion**: aggregates recent comments from across ALL the creator's markets; each item shows username, time, market pill linking back to source market; auto-loads on page open
-  - API: `GET /api/profile/:slug/comments` (joins `market_comments` × `markets` filtered by `creator_slug`)
-- **Community Wall**: freestanding message board — logged-in members post directly; non-members see join nudge; new posts prepend inline without refresh; 280 char limit
-  - API: `GET /api/profile/:slug/wall`, `POST /api/profile/:slug/wall` (auth required)
-  - New table: `creator_wall` (id, creator_slug, user_id, content, created_at)
-- Migration: `supabase_migration_creator_wall.sql` → run as #23 in ordered list
-
----
-
-## Session 8 — Seasons & Tournaments (commit `553c8b4`)
-
-**X — Prediction Seasons** — Pro/Premium only — first dedicated paid conversion driver:
-- Creator creates a named season (e.g. "Q2 2026 Crypto Season") with end date + prize description
-- Assigns any of their active markets to the season
-- Members automatically compete on a season-specific leaderboard (PnL across season markets)
-- Creator can end the season at any time (leaderboard freezes; history preserved)
-
-**Creator dashboard — 🏆 Seasons tab:**
-- Season cards showing status badge (Active/Ended), days left, market count, prize
-- Create/Edit modal: name, description, end date, prize, market picker
-- "End Season" button
-- Free creators see upgrade gate with explanation
-
-**Community page:**
-- Active season banner auto-renders above the markets grid (non-blocking fetch)
-- Shows season name, description, days remaining, prize text
-- Mini top-5 season leaderboard with PnL + win count right in the banner
-
-**API (server.js):**
-- `POST /api/creator/seasons` — create (Pro/Premium gate)
-- `GET /api/creator/seasons` — list creator's seasons with market counts
-- `PUT /api/creator/seasons/:id` — edit / end
-- `POST /api/creator/seasons/:id/markets` — assign/remove markets
-- `GET /api/community/:slug/seasons` — public season list
-- `GET /api/community/:slug/seasons/:id` — season detail + live leaderboard
-
-**Migration:** `supabase_migration_seasons.sql` → run as #24 in ordered list
-- `seasons` table
-- `markets.season_id` nullable FK column
-
----
-
-## Session 9 — Members tab + community fixes (commit `ada5a38`)
-
-**AA — Members tab** (creator dashboard `👥 Members` nav item):
-- `GET /api/creator/members` — full roster with per-member: display_name, email (Pro+ only), balance (centpoints), total_bets, wins, win_rate, joined_at, last_active. Summary: total_members, active_members (bet in last 30d), total_predictions, engagement_rate, est_engagement_value ($0.80/prediction = industry avg CPC), new_this_week
-- ROI summary bar: 5 stat cards including 💰 Est. Engagement Value to anchor upgrade conversations
-- Member table: Name, Balance, Predictions, Win Rate, Joined, Last Active, Actions
-- Search (name/email), sort (joined, predictions, win rate, balance), CSV export
-- Email column gated for Pro+ — free plan sees upgrade nudge
-- `showTab('members')` triggers `loadMembers()` — tab title: "Members"
-
-**BB — Per-market email blast** (📬 Blast to members in ⋯ menu):
-- `POST /api/creator/markets/:marketId/blast` — sends market-focused email to all community members. Rate-limited: `blasted_at` column, once per market ever. Returns `{ sent, skipped }`.
-- Migration: `supabase_migration_blast.sql` → `ALTER TABLE markets ADD COLUMN blasted_at TIMESTAMPTZ`
-- Confirms via dialog, shows toast with send count
-
-**⋯ dropdown menu on market rows:**
-- Replaced standalone Duplicate button with ⋯ dropdown containing: Share, 📬 Blast, 📋 Duplicate, QR Code, Edit/Archive
-
-**Critical fixes this session:**
-- **PUT /api/creator/settings/slug** — cascade slug rename across markets.tenant_slug, community_balances.creator_slug, creator_follows, seasons, creator_wall, users.tenant_slug. Skips duplicate-question conflicts (returns partial success). Community URL field added to Settings tab.
-- **POST /markets 23505** — catches unique constraint violation, returns friendly "A market with this question already exists". Bulk create retries one-by-one.
-- **GET /api/community/:slug** + **/share/:marketId** — `select('*')` replaces explicit column list, prevents 0-markets bug caused by non-existent columns from pending migrations (e.g. season_id).
-- **Carousel fix** — hot filter uses raw `trader_count >= 2` instead of `realTraders()`. Legacy CPMM markets (yes_price=0.5) had realTraders()=0, making carousel always empty.
-- **predict-in-widget** (embed.html) — auth via localStorage hf_token, balance bar, YES/NO buttons, mini bottom-sheet predict modal, post-bet share nudge.
-- **Post-bet share nudge** (community.html) — captures market context before closePredict() clears pendingMarket, shows "Share your YES call on X →" after successful bet.
-
-**New migration to run:** 25. `supabase_migration_blast.sql`
-
----
-
-## Session 10 — Share cards, demo mode, community-gated resolution (commits `ceda3ed` → `4a84d63`)
-
-**Members tab wired**: `showTab('members')` now calls `loadMembers()` + tab titles object includes `'members':'Members'`. Was the final missing wire from session 9.
-
-**One-click X/Twitter market share card** (commit `ceda3ed`):
-- `openShareCard(marketId)` → modal with 1200×630 canvas preview
-- `_drawShareCard()`: full canvas rendering — gradient background, card border, category pill, HYPERFLEX wordmark, word-wrapped question, YES/NO odds buttons, branded footer
-- Actions: 🐦 Post on X (opens tweet intent), ⬇ Download PNG (canvas toBlob), 📋 Copy Link
-- `GET /og/:marketId.png` server endpoint — builds SVG card → `sharp` converts to PNG; OG/Twitter meta tags on `/share/:marketId` and `/win/:marketId/:userId` updated to use per-market OG images
-- `sharp` added to `package.json`; lazy-loaded via `getSharp()` so server starts without it
-- Win card OG upgraded to `summary_large_image`
-
-**YouTube scanner demo mode** (commits `6216449`, `477377a`):
-- Free-tier creators see a multi-step animated scan (4 steps: fetch → analyze → debates → generate)
-- Fetches real YouTube meta via `GET /api/public/youtube-meta/:videoId` (YouTube Data API v3) — real title, channelTitle, commentCount, viewCount, durationSec
-- Category-aware demo markets: 7 sets × 6 markets each (Sports, Crypto, Gaming, Fitness, Tech, Music, Finance)
-- Real thumbnail from YouTube CDN; real stats shown when available
-- Deterministic seeded fallback via `_seedRand(videoId, min, max)` for consistent small-channel numbers
-- Locked results with upgrade CTA; "Upgrade to Pro to unlock AI scanner →" button
-
-**Community-gated resolution** (commit `4a84d63`):
-- **Removed creator self-resolution**: creators can no longer resolve markets whenever they want
-- Markets must be **expired** before resolution is possible (403 if not expired)
-- Markets with ≥3 traders require **community vote threshold**: `Math.max(3, ceil(traderCount × 0.30))` resolution votes
-- Auto-resolution cron bypasses gate (writes directly — not an API call)
-- `POST /api/markets/:id/dispute` extended: `dispute_type` = `'resolution_vote'` | `'outcome_contest'`; `requested_outcome` = YES/NO for resolution_vote type
-- `GET /api/market/:id/votes`: public endpoint → `{ vote_count, threshold, yes_votes, no_votes, unlocked, trader_count }`
-- Creator dashboard Resolution Queue: vote progress bar per market, locked/unlocked Resolve button, toast with votes_needed on 403
-- Community.html: expired unresolved markets show vote bar + Vote YES / Vote NO buttons; `voteOutcome()` + `loadMarketVoteData()` + `window._marketVoteCache` / `window._myVotes`
-- `GET /api/public/youtube-meta/:videoId`: calls YouTube Data API v3, returns real stats
-- **New migration**: `supabase_migration_dispute_votes.sql` (#26)
-
-**New migrations to run:**
-25. `supabase_migration_blast.sql`
-26. `supabase_migration_dispute_votes.sql`
-
----
-
-## Roadmap — Next Highest-ROI Builds
-
-### 1. Mobile Audit ✅ (in progress — session 13)
-- 44px touch targets across all pages
-- Bottom sheet modals on mobile
-- Single-column layouts, no horizontal scroll
-- overflow-x hidden, iOS zoom prevention
-
-### 2. Core Community Polish ✅ (in progress — session 13)
-- Trending/hot/new badges with velocity detection (`📈 Trending`, `🆕 New`, `🔥 Hot 7`)
-- Category filter pills with colored dots + per-category counts
-- Compelling empty states with contextual CTAs per filter tab
-- Carousel gains Trending + Just Added lanes
-
-### 3. Post-Signup Onboarding ✅ (session 13)
-- Full-page welcome screen replacing old modal interstitial
-- All 3 platforms (Polymarket + Kalshi + Manifold) with LIVE badges
-- Progress bar tracking connections, cards turn green on success
-- Multi-connect before proceeding, CTA upgrades after first connect
-
-### 4. Monetization Gating (next up)
-- **Early Access → paid flip**: all platform connections currently free; need gate logic for when EA ends
-- **Kalshi = Premium only**: real-money platform, highest value — gate behind $99/mo tier
-- **Calibration score = Premium only**: advanced analytics feature, strong upgrade driver
-- **Portfolio sync frequency tiers**: Free = manual refresh, Pro = daily auto-sync, Premium = hourly auto-sync
-- Stripe checkout already wired — just need UI gates + middleware checks per feature
-
-### Known Issues
-- **Creator referral acceptance**: `accepted` on `creator_referrals` stays false — needs flip on first public market publish
-- **Admin invite emails**: Require SMTP env vars — silently skips if not set
-- Video section on landing page needs real YouTube VIDEO_ID
-- Old `index.html` at project root should be removed eventually
-
----
-
-## Workflow
-
-**Plan in Cowork (VM), build in Claude Code (Mac).**
-- Cowork sessions: strategy, feature planning, architecture decisions, CLAUDE.md updates
-- Claude Code sessions: file edits, git commits, pushes, code implementation
-- Only Claude Code (Mac) should run git commands
-
-**⚠️ VirtioFS SYNC ISSUE — happens every session:**
-VirtioFS does NOT reliably flush Cowork VM writes to the Mac in real time.
-Claude Code at `/Users/marcdems/Desktop/HYPERFLEX` will show a clean working tree
-even after Cowork has made changes.
-
-**Fix (Cowork must do this at the end of every coding session):**
-```bash
-cd /sessions/relaxed-determined-euler/mnt/hyperflex
-git diff HEAD > cowork-latest.patch
-```
-Then tell the user: "Run `git apply cowork-latest.patch` in Claude Code before committing."
-
-**Claude Code apply + commit flow:**
-```bash
-cd /Users/marcdems/Desktop/HYPERFLEX
-git apply cowork-latest.patch
-git status   # verify files are dirty
-# then commit + push as normal
-```
-
----
-
-## ⚠️ MUST DO BEFORE DEPLOY — Run ALL migrations in Railway Postgres (NOT Supabase)
-
-**The production DB is Railway Postgres, not Supabase.** `server.js:799` connects via `DATABASE_URL`, which Railway sets to its own Postgres service (`centerbeam.proxy.rlwy.net` or similar). The `supabase_migration_*.sql` filename prefix is historical — keep the filenames as-is for continuity, but run them in Railway's SQL console, not Supabase's.
-
-**To run migrations:**
-1. Railway dashboard → your **Postgres** service → **Data** tab → built-in SQL editor, OR
-2. `psql "$DATABASE_URL"` from a machine with `pg` installed, OR
-3. Any GUI (TablePlus/DBeaver/pgAdmin) connected via the Railway `DATABASE_URL`
-
-**To verify a migration landed:** `node scripts/schema-diff.js` — reports every table/column expected by `supabase_migration_*.sql` files vs. what Railway Postgres actually has. Run this after every migration and after every deploy that adds schema.
-
-**If you run SQL in Supabase by mistake:** it goes into a dead DB with ~9 users and no production traffic. Symptoms: Railway logs spam `relation "foo" does not exist` every cron cycle even though the table "exists" in Supabase. Fix is always "run it again in Railway".
-
-### Ordered migration list
-  1. `supabase_migration_community_economy.sql`
-  2. `supabase_migration_refill_history.sql`
-  3. `supabase_migration_cpmm.sql`
-  4. `supabase_migration_referrals.sql`
-  5. `supabase_migration_custom_domains.sql`
-  6. `supabase_migration_challenges.sql`
-  7. `supabase_migration_plan_trial.sql`
-  8. `supabase_migration_market_suggestions.sql`
-  9. `supabase_migration_announcements_comments.sql`
-  10. `supabase_migration_tweet_markets.sql`
-  11. `supabase_migration_autoscan_autoresolve.sql`
-  12. `supabase_migration_vote_consensus.sql`
-  13. `supabase_migration_creator_rewards.sql`
-  14. `supabase_migration_reward_unlocks.sql`
-  15. `supabase_migration_creator_invites.sql`
-  16. `supabase_migration_creator_referrals.sql`
-  17. `supabase_migration_market_disputes.sql`
-  18. `supabase_migration_creator_follows.sql`
-19. `supabase_migration_email_unsubscribe.sql`
-20. `supabase_migration_multi_option.sql`
-21. `supabase_migration_discord_webhook.sql`
-22. `supabase_migration_notifications.sql`
-23. `supabase_migration_creator_wall.sql`
-24. `supabase_migration_seasons.sql`
-25. `supabase_migration_blast.sql`
-26. `supabase_migration_dispute_votes.sql`
-27. `supabase_migration_kalshi.sql`
-28. `supabase_migration_shared_positions.sql`
-29. `supabase_migration_predictor_follows.sql`
-30. `supabase_migration_cached_positions.sql`
-31. `supabase_migration_archived.sql` ← adds `archived` col to markets
-32. `supabase_migration_banner_position.sql` ← banner focal point on creator_settings
-33. `supabase_migration_branding.sql` ← custom branding cols
-34. `supabase_migration_community_category.sql` ← community_category on creator_settings
-35. `supabase_migration_news_scanner.sql` ← news feed settings on creator_settings
-36. `supabase_migration_pending_emails.sql` ← creates pending_emails queue table
-37. `supabase_migration_plan_scheduling.sql` ← plan_scheduled_change on creator_settings
-38. `supabase_migration_resonance.sql` ← resonance_score on markets
-39. `supabase_migration_sponsored_embed.sql` ← sponsored markets + embed attribution
-40. `supabase_migration_narrative_snapshots.sql` ← narrative dominance snapshots for screener (Claude Code creates this)
-41. `supabase_migration_errors.sql` ← error logging table for reliability monitoring
-42. `supabase_migration_platform_referrals.sql` ← referral_code + referred_by on users, platform_referrals table
-43. `supabase_migration_login_streak.sql` ← login_streak, last_login_date, streak_multiplier on users
-44. `supabase_migration_normalized_snapshots.sql` ← normalized_snapshots + cross_market_refs + api_keys tables for data engine
-45. `supabase_migration_influencer_feed.sql` ← external_influencers + influencer_posts tables, seed data for 30+ influencers
-46. `supabase_migration_influencer_social.sql` ← influencer_post_reactions + influencer_post_comments + influencer_follows + engagement counters
-47. `supabase_migration_sports.sql` ← sport_teams + sport_games + picks tables, immutable pre-game pick triggers (NBA-first tipster wedge)
-48. `supabase_migration_polymarket_v2_trades.sql` ← polymarket_v2_trades table for V2 observability (gates V1 deletion on real usage evidence)
-49. `supabase_migration_incentive_pools.sql` ← incentive_pools + incentive_claims tables for the /incentives surface (sponsor-funded reward pools tied to Polymarket markets, per-trade claims with dedup index). Until run, /api/incentives/stats and /api/incentives/active soft-fall to empty results so /incentives renders honest zeros instead of fake supply.
-50. `supabase_migration_takes_outcome_label.sql` ← adds `outcome_label TEXT` to `takes` so multi-outcome markets (Fed rate bps levels, election states, NFL bracket positions) can render which child outcome a take was on. Whale-take synthesis resolves it from the screener cache via condition_id; market.html renders it as a gold chip next to the side. Synthesis falls back to a no-column INSERT on 42703 so writes don't break before the migration runs.
-51. `supabase_migration_bet_feed.sql` ← Phase 2 of the casino-mode sprint. Creates `bet_feed` table for the live action surface (every HFX-routed trade slid into the feed within ~1s via SSE). Includes `copied_from_user_id` + `copied_from_bet_id` columns up-front so Phase 3 (one-tap copy) doesn't need a follow-up migration. Server soft-creates the table on boot via `CREATE TABLE IF NOT EXISTS` so a fresh env doesn't crash on first POST. Endpoints: `POST /api/bet-feed` (auth, fire-and-forget from trade success), `GET /api/bet-feed?limit=50&cursor=<id>` (public paginated), `GET /api/bet-feed/stream` (SSE — chosen over WebSocket per spec deviation: matches existing `/api/terminal/stream` + `/api/copy-bot/stream` patterns, no new dependency, simpler client).
-- **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
-  - Fires after both manual resolve and cron settlement
-  - No-op if SMTP_HOST is not set — safe to deploy without configuring
-- Video section on landing page needs real YouTube VIDEO_ID
-- Old `index.html` at project root should be removed eventually
-- **This session (March 13, final)** — all committed, needs push (latest: `81b5c65`):
-  - Community page: full Polymarket-style 2-col card grid, featured hero card, big odds numbers, category pills, hot badge (commit `2c9897e`)
-  - Free tier: 3 → 5 active markets
-  - Resolution note: creator adds context on resolve; shown in resolved banner on community page
-  - Creator announcements: post/pin/delete from dashboard Overview; rendered above markets grid
-  - Market comments: inline expandable threads per card, lazy loaded, 280 char limit
-  - Email notifications: `sendResolutionEmails()` with branded HTML email; fires on manual + cron resolution
-  - `supabase_migration_announcements_comments.sql`: new tables + resolution_note column (commit `81b5c65`)
-  - Member market suggestion queue (commit `e06ecc2`)
-- **Economy Phase 3** — streak broken toast ✅ built (March 16)
-- **This session (March 15)** — committed `068b03c`, needs push:
-  - Tweet → Market feature: Tweet tab in AI Scanner modal (creator-dashboard.html)
-    - Paste tweet URL + author + text → generates 1-3 focused markets via AI
-    - Markets saved with `source_tweet_url`, `tweet_text`, `tweet_author` columns
-    - After publish: toast with clickable `/share/:marketId` link
-  - `/share/:marketId` route in server.js: public OG-friendly share page with tweet card + market odds
-  - `supabase_migration_tweet_markets.sql`: adds 3 columns to markets table ← RUN THIS
-  - **Community page tweet feed**: `renderTweetFeed()` renders tweet-sourced markets as X-style cards above announcements
-  - **Critical bug fix** in `/api/community/:slug`:
-    - Removed non-existent `resolution_outcome` column from SELECT (was silently nulling all data)
-    - Fixed `is_public` filter to `.neq('is_public', false)` (was dropping legacy NULL rows)
-    - Added tweet fields to SELECT
-- **This session (March 16)** — committed `64b92c3`, needs push:
-  - **Twitter-like activity feed** on explore.html: new ⚡ Activity tab replaces Live Feed; Twitter-style cards for bets/resolutions/market creations; live polling every 20s with "N new activities" banner; `/api/activity` endpoint
-  - **Member public profiles** at `/m/:userId` — stats (win rate, streak, correct calls), recent wins, community chips; leaderboard rows now clickable → member profile
-  - **Nominate your creator** page at `/nominate` — fan form with creator name/URL/message, sends admin email; "Nominate Your Creator" CTA in explore sidebar
-  - **Weekly digest email** — `sendWeeklyDigests()` sends branded HTML with hot markets + top 3 leaderboard to all community members; cron: Mon 9am UTC
-  - **Streak broken toast** — `checkStreakBroken()` in community.html uses localStorage to detect streak collapse ≥3→0, shows motivational toast
-  - **Win cards fully wired** (commit `93428a4`): `openWinCard()` now takes marketId + userId, `shareWinOnX()` uses `/win/:marketId/:userId` URL, Copy link button added
-  - **Creator public profiles** at `/u/:slug` — `public/profile.html`
-  - `'m'` + `'nominate'` + `'win'` + `'u'` added to RESERVED_SLUGS
-
-- **Audience Intelligence + AI Recommendations** (commit `16822d7`) — needs push:
-  - `POST /api/creator/insights` — sends real analytics to Claude Haiku, returns 4 data-specific growth recommendations with type/priority/metric
-  - Creator dashboard Analytics tab: Audience Intelligence section (engagement rate ring gauge, 14d member growth chart, category breakdown bars, sentiment by category)
-  - AI Growth Recommendations panel with "Generate Insights" button
-  - Community page: Community Pulse bar (category sentiment pills showing weighted avg YES% from active markets)
-
-- **This session (March 16, session 4)** — committed, needs push:
-  - **Market card redesign** on community.html: slim 4px odds bar, inline YES%/NO% bet buttons, cleaner card style matching profile page
-  - **Predict modal enhancements**: expiry date, payout multiplier (e.g. 2×), optional comment field that posts to activity feed
-  - **Comments → activity feed**: comment events wired to global explore.html feed as Twitter-style cards
-  - **Source links**: `getMarketSource()` helper, 📰 source link on card meta + predict modal; fixed anonymous comment posting
-  - **Full mobile audit**: tweet cards overflow fixed, bottom-sheet predict modal at ≤480px, all pages audited
-  - **Feature 1 — Onboarding wizard**: YouTube channel ID field in step 1 (seeds auto-scan), Share on X button in step 3
-  - **Feature 2 — Member display name prompt**: modal after first login if no name set; `PUT /api/user/display-name`; localStorage key `hf_named_{userId}`
-  - **Feature 3 — Auto-scan per creator**: `youtube_channel_id`, `auto_scan_enabled`, `auto_scan_cadence` columns; `scanCreatorYouTubeChannels()` cron (daily 8am UTC); GET/PUT `/api/creator/youtube-scan-settings`; Auto-Scan panel in Settings tab
-  - **Feature 4 — Market auto-resolution**: `autoResolveExpiredMarkets()` cron (every 30 min); fetches resolution_source URL → Claude Haiku → auto-resolves at ≥82% confidence or flags + emails creator for manual review
-  - **Migration**: `supabase_migration_autoscan_autoresolve.sql` — adds `youtube_channel_id`, `auto_scan_enabled`, `auto_scan_cadence`, `auto_scan_last_run` to `creator_settings`; adds `resolution_outcome`, `resolved_at` to `markets`
-  - ⚠️ Add migration to the ordered list below
-
-- **⚠️ MUST DO BEFORE DEPLOY**: Also run `supabase_migration_autoscan_autoresolve.sql` (11th in the list)
-
----
-
-## Session 11 (March 17, 2026)
-
-**Phase 2 + 3 complete (commits e33da8d → 2153f90):**
-- Follow system: predictor_follows table, toggle follow endpoint, follower count on member profiles + predictor cards
-- Following feed: 👥 Following tab on explore.html — activity from followed users (external bets + HFX bets)
-- Public portfolio API: `GET /api/predictors/:userId/portfolio` pulls cached_positions + HFX bets
-- Auto-sync cron: `syncAllUserPositions()` runs hourly — Polymarket/Kalshi/Manifold fetched for all connected users, stored in cached_positions table; portfolio tab reads from cache first
-- P&L analytics: `GET /api/predictors/:userId/analytics` — platform win/loss/PnL breakdown, calibration chart, cumulative 30d timeline, sharp score composite
-- member.html: analytics section with platform stat cards, calibration canvas chart, PnL line chart, sharp score badge
-- predictors.html: sharp score badge on predictor cards
-
-**New migrations to run:**
-29. `supabase_migration_predictor_follows.sql`
-30. `supabase_migration_cached_positions.sql`
-
-**Latest commit: `2153f90`**
-
----
-
-## Session 12 (March 17, 2026)
-
-**Migrations #29 + #30 confirmed run in Supabase.**
-
-**Predictor ecosystem polish (commits `4a20ba4` → `d29d68d`):**
-
-- **Portfolio Early Access banner + Polymarket LIVE connect UI** (`4a20ba4`): tier-gated portfolio tab — Free shows HFX-only + upgrade banner, Pro unlocks Polymarket + Manifold, Premium gets auto-sync; Polymarket card marked LIVE with wallet connect UI
-- **Trophy card + share to X** (`7413493`): best-call trophy card on member profiles — shows top resolved win (question, outcome, payout), 1-click "Share on X" intent with pre-filled copy; replaces earlier draft commit `68bc9ad`
-- **Predictor Spotlight weekly email + profile share stats** (`c28084f`): `sendPredictorSpotlight()` cron (Mon 9am UTC) — picks top predictor by 30d PnL, sends branded HTML email to all connected users; `GET /api/predictors/:userId/share-stats` returns win rate + top call for share cards
-- **Profile referral/invite section** (`b2af9d2`): member.html owner-only panel — shows referral link, invite copy, tracks invites sent via existing `creator_referrals` system
-- **Polymarket LIVE fix** (`e9476a8`): marquee updated to reflect Kalshi + Manifold now live
-- **SEO meta tags on /predictors** (`9d29ce1`): full SEO head — `<title>` targeting "polymarket portfolio tracker", meta description, keywords, Open Graph (og:title, og:description, og:url `https://hyperflex.network/predictors`, og:image), Twitter card (summary_large_image)
-- **Predictors tracked stat** (`9d29ce1`): `/api/stats` now returns `predictors` field (distinct user_id count from positions table, Set-dedup in JS, 5-min cache); landing page stats bar has 4th tile "Predictors Tracked" (`id="stat-predictors"`)
-- **Quick Preview hook on landing page** (`d29d68d`): dark card between marquee and How It Works — wallet + username inputs, gold "Show my stats →" button; calls `GET /api/polymarket/positions/:address` (new public endpoint) or `GET /api/manifold/positions/:username`; shows inline result card with platform badge, open position count, total P&L (green/red), top market; upgrade CTA "Save your full portfolio + track Kalshi → Get started free" → `/creator/signup`; Enter key supported
-- **`GET /api/polymarket/positions/:address`** (new, public, no auth): validates `0x...` hex address, proxies `data-api.polymarket.com`, 5-min cache via `_polyCache`, normalised response shape
-
-**Latest commits: `b2af9d2`, `c28084f`, `7413493`, `4a20ba4` + `e9476a8`, `9d29ce1`, `d29d68d`**
-
----
-
-## Session 13 (March 18, 2026) — Claude Code
-
-**Mobile responsiveness** (commit `8c21f5e`):
-- 44px touch targets on all interactive elements across all 6 pages
-- Bottom sheet modals on explore.html auth + creator-dashboard modals
-- overflow-x hidden, single-column enforcement, hamburger 44px
-
-**Market discovery** (commit `747dfea`):
-- 📈 Trending badge (velocity: 3+ traders in <72h)
-- 🆕 New badge (created <24h ago)
-- 🔥 Hot badge now shows trader count
-- Category filter pills row with colored dots + counts
-- Compelling empty states with contextual CTAs per filter
-- Carousel gains Trending + Just Added lanes
-
-**CLAUDE.md rewrite** (commit `af5da7c`):
-- Aggregator-first vision in "What This Project Is"
-- New Platform Integrations section
-- Updated file map + current state
-
-**Post-signup welcome screen** (commit `af3e765`):
-- Full-page onboarding with all 3 platforms (Polymarket/Kalshi/Manifold)
-- Progress bar, green checkmarks on connect, multi-connect flow
-- CTA upgrades after first connection
-
----
-
-## Session 14 (April 13, 2026) — Social Media Pivot
-
-**The pivot:** HYPERFLEX is no longer a terminal. It's the social media of prediction markets. Whale signals are commoditized — the moat is the social graph + verified track records.
-
-**Takes system** (commit `6a85728`):
-- `takes` + `take_reactions` tables, 6 API endpoints
-- Whale take synthesis: $50k+ trades and consensus signals auto-generate takes
-- explore.html: Takes feed with For You / Following / Trending tabs, compose modal, agree/disagree/quote-predict
-- market.html: post-trade "Share your take" bottom bar with thesis input
-
-**Resolution scoring + notifications** (commit `bd7b41b`):
-- `scoreTakesForMarket()`: marks takes correct/incorrect on market resolution
-- Notification hooks: reactions notify author, quote-predicts notify parent, correct takes get celebration
-- market.html: Community Takes section above comments
-- member.html: Takes section on profiles with accuracy stats
-
-**Whale profiles** (commit `1c809bc`):
-- `ensureWhaleProfile()`: auto-creates user records for whale wallets
-- Top 30 whales get profiles on every leaderboard fetch
-- member.html: purple WHALE badge, rank, PnL, wallet address with Polygonscan link
-- explore.html: take authors link to profiles, correctness badges on resolved takes
-- `GET /api/whale-profiles`: whale discovery endpoint
-
-**Strategy docs updated:**
-- `HYPERFLEX_Complete_Brief.md` rewritten for social media vision
-- `CLAUDE.md` updated with strategy, revenue plan, social attack plan
-
-**New migrations:** #44 `supabase_migration_takes.sql`, #45 `supabase_migration_whale_profiles.sql`
-
----
-
-## Session 15 (April 23, 2026) — Cleanup + Profile Fix
-
-**Rewards system removal** (commits `a9d20c0`, `b843949`):
-- Removed "Earn USDC" / rewards banners from explore.html and signals.html
-- `/rewards` route now redirects to `/` — dead page purged
-- Removed rewards nav link from nav.js (shared nav bar)
-
-**Dead file cleanup + shared utilities** (commit `a360646`):
-- Extracted `public/utils.js` — shared utility functions across pages
-- Deleted 4 dead HTML pages: `alpha-preview.html`, `user-dashboard.html`, `meet-kevin-oil-market.html`, `twitter-banner.html`
-
-**Profile data mismatch fix** (commit `101f195`):
-- **Bug**: Whale profiles at `/m/:userId` showed 0/0/0 stats (no HFX bets) while hero card showed correct Polymarket PnL — confusing split between HFX `positions` table data and live Polymarket data
-- **Fix**: Added `loadWhalePositions(walletAddr)` in member.html — auto-fetches live Polymarket positions via `/api/trader/:address/profile` for whale profiles; renders up to 8 open positions inline with side badge, price, size, PnL
-- **Bug**: HFX user profile links in predictors.html routed UUID user_ids to `/p/:UUID` → `profile-trader.html` → display_name search → always 404
-- **Fix**: Updated `renderPodium`, `renderTable`, `renderHallOfFame` in predictors.html — UUID user_ids (non-`0x`) now route to `/m/:userId`; wallet addresses still go to `/trader/:wallet`
-- **Bug**: `loadSocialPredictions()` and `showOwnerTools()` in member.html were never called — dead `_origLoad` override at bottom of file ran after `load()` had already executed
-- **Fix**: Removed dead override; wired `loadAnalytics`, `loadTrophyCard`, `loadInviteSection`, `loadWhalePositions`, `showOwnerTools`, `loadSocialPredictions` directly at the end of `load()`
-
-**Latest commits:** `a360646` → `b843949` → `a9d20c0` → `101f195` (all on branch `claude/fix-clob-order-attribution-UiZjd`)
+## Phase 2 — Mention Pages (active work, branch `claude/mention-pages-v1`)
+
+Polymarket-native receipts feature: scrape Fed transcripts → cluster word usage → LLM-judge stance → blurb → compose into mention_events → render. Hero validation event = Warsh's first FOMC, mid-June 2026.
+
+| Phase | Status | What |
+|---|---|---|
+| 0   | shipped | Schema scaffold (mention_events, stance_entries — migration #50) |
+| 1   | shipped | Supporting tables + RLS |
+| 2a  | shipped | robots.txt-aware fetch infra |
+| 2b  | shipped | Fed presconf PDF scraper (`scrapers/fed_transcripts.js`) |
+| 2c  | shipped | Word counter (`lib/word_counts.js`), 30 tracked terms |
+| 2c.5| shipped | Synthetic-seed speech ingest (Waller/Brainard/Cook/Jefferson, 36 PDFs, `scrapers/fed_speeches.js`) |
+| 2d  | shipped | Rule-based clusterer (`lib/clusterer/index.js`, migration #51, rate-vs-corpus rule pass) |
+| 2d.5| shipped | LLM context-judgment (`lib/clusterer/judge.js`, migration #53, Sonnet 4.6); 65% disagreement with rule-based — judge is authoritative downstream |
+| 2e  | shipped | Atomic blurb generator (`lib/clusterer/blurb.js`, migration #54); voice charter + temporal framing |
+| 2f  | scoped | Speaker-driven mention_event composition; bulk all 86 transcripts, `published=false` default |
+| 2g  | not started | Real Warsh transcript ingest (lands mid-June 2026) |
+| 3   | not started | Frontend event page; viz reframes "Warsh vs late-Powell" not "vs neutral baseline" |
+| 4   | not started | OG card composition for shareable receipts |
+
+Decisions locked across phases:
+- `llm_stance` authoritative downstream; rule-based `stance` is audit trail
+- Downstream queries filter `llm_stance != 'insufficient_signal'` (partial index on `speaker_word_stance`)
+- `llm_confidence` drives 2f frontend tinting (high/medium/low → full/muted/greyed)
+- Powell baseline is NOT neutral — comparisons frame "Warsh vs late-Powell's actual stance"
+- Phase 2c.5 synthetic seed flagged via `transcripts.synthetic_seed = true` (migration #52)
+
+Backlog (consolidate before Phase 3):
+- 3 leaked secrets pending rotation
+- `server.js` 50K+ lines — route module split overdue
+- `sentence-extract.js` v2: topic-aware filtering (Cook "patient" medical-context false-positive caught in 2d.5)
+- Brainard period-bounded sourcing (2022 only) — re-source 2024+ if she returns to public speaking
+- 2e blurb prompt: add varied-opening examples (every Brainard blurb leads with the same phrase)
 
 ---
 

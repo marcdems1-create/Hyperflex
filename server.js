@@ -10530,7 +10530,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino', 'live',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -13332,125 +13332,291 @@ app.get('/api/predictors/:userId/portfolio', async (req, res) => {
 
 // P&L analytics for a user — win rate by platform, calibration, cumulative PnL
 app.get('/api/predictors/:userId/analytics', async (req, res) => {
-  const { userId } = req.params;
-
-  let hfBets = [], cachedPositions = [];
   try {
-    const hfRes = await supabase.from('positions').select('side, amount, potential_payout, won, settled, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(500);
-    hfBets = hfRes.data || [];
-  } catch (e) { console.warn('[predictor analytics] positions:', e.message); }
-  try {
-    const cachedRes = await supabase.from('cached_positions').select('*').eq('user_id', userId);
-    cachedPositions = cachedRes.data || [];
-  } catch (e) { console.warn('[predictor analytics] cached_positions:', e.message); }
+    const { userId } = req.params;
+    const empty = {
+      win_rate: 0, total_pnl: 0, sharp_score: 0,
+      platforms: {
+        hyperflex:  { wins: 0, losses: 0, total: 0, pnl: 0 },
+        polymarket: { wins: 0, losses: 0, total: 0, pnl: 0 },
+        kalshi:     { wins: 0, losses: 0, total: 0, pnl: 0 },
+        manifold:   { wins: 0, losses: 0, total: 0, pnl: 0 },
+      },
+      calibration: [], timeline: [],
+    };
+    if (!pool) return res.json(empty);
 
-  // ── Platform breakdown ──────────────────────────────────────────────────────
-  const platforms = { hyperflex: { wins: 0, losses: 0, total: 0, pnl: 0 } };
-  for (const p of cachedPositions) {
-    const pl = p.platform;
-    if (!platforms[pl]) platforms[pl] = { wins: 0, losses: 0, total: 0, pnl: 0 };
-    platforms[pl].total++;
-    platforms[pl].pnl += Number(p.pnl) || 0;
-    if ((p.pnl || 0) > 0) platforms[pl].wins++;
-    else platforms[pl].losses++;
-  }
-  const hfSettled = hfBets.filter(p => p.settled);
-  platforms.hyperflex.total = hfSettled.length;
-  platforms.hyperflex.wins = hfSettled.filter(p => p.won).length;
-  platforms.hyperflex.losses = hfSettled.filter(p => !p.won).length;
-  platforms.hyperflex.pnl = hfSettled.reduce((s, p) => {
-    return s + (p.won ? (p.potential_payout - p.amount) : -p.amount);
-  }, 0) / 100; // centpoints → points
+    // HFX settled positions — amounts in cents
+    const hfxRows = await dbQuery(`
+      SELECT side, amount, potential_payout, won, price_at_buy, created_at
+      FROM positions WHERE user_id = $1 AND settled = true
+    `, [userId]).catch(() => []);
 
-  // ── Calibration (HFX only — we have probability data) ──────────────────────
-  const buckets = Array.from({ length: 9 }, (_, i) => ({
-    label: `${(i + 1) * 10}%`,
-    predicted: (i + 1) * 10,
-    correct: 0,
-    total: 0,
-  }));
-  for (const p of hfSettled) {
-    // Use side as proxy for predicted probability
-    const prob = p.side === 'YES' ? 70 : 30; // simplified; refine if you store odds
-    const idx = Math.min(Math.floor(prob / 10) - 1, 8);
-    if (idx >= 0) {
-      buckets[idx].total++;
-      if (p.won) buckets[idx].correct++;
+    // Polymarket address (mixed case in users; lowercased in polymarket_trades).
+    // 42-char minimum guards against half-finished connect flows leaving ''.
+    const userRows = await dbQuery(
+      'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
+    );
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
+
+    // realized_trades is the new source of truth (keyed on user_id; backfilled
+    // from data-api on first profile load). polymarket_trades is the legacy
+    // pool of HFX-routed direct trades — keep readable for dedup fallback.
+    const realizedRows = await dbQuery(`
+      SELECT side, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+             realized_pnl, condition_id, opened_at, closed_at
+      FROM realized_trades WHERE user_id = $1
+    `, [userId]).catch(() => []);
+
+    let polyRows = [];
+    if (addr) {
+      polyRows = await dbQuery(`
+        SELECT side, amount_usd, entry_price, pnl, condition_id, created_at, closed_at
+        FROM polymarket_trades
+        WHERE LOWER(eoa_address) = LOWER($1) AND status = 'closed'
+      `, [addr]).catch(() => []);
     }
-  }
-  const calibration = buckets.map(b => ({
-    ...b,
-    actual: b.total > 0 ? Math.round((b.correct / b.total) * 100) : null,
-  }));
 
-  // ── Cumulative PnL timeline (last 30 days, HFX only) ─────────────────────
-  const now = Date.now();
-  const days = 30;
-  const dailyPnl = {};
-  for (let i = 0; i < days; i++) {
-    const d = new Date(now - i * 86400000).toISOString().slice(0, 10);
-    dailyPnl[d] = 0;
-  }
-  for (const p of hfSettled) {
-    const d = (p.markets?.resolved_at || p.created_at || '').slice(0, 10);
-    if (d in dailyPnl) {
-      dailyPnl[d] += p.won ? (p.potential_payout - p.amount) : -p.amount;
+    // Dedup: realized_trades wins on (condition_id, side) collisions.
+    const realizedKeys = new Set(
+      realizedRows.map(r => `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`)
+    );
+    const polyOnlyRows = polyRows.filter(t => {
+      const k = `${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`;
+      return !realizedKeys.has(k);
+    });
+
+    // Kalshi + Manifold from cached_positions (hourly sync target)
+    const cachedRows = await dbQuery(`
+      SELECT platform, side, pnl, probability
+      FROM cached_positions
+      WHERE user_id = $1 AND platform IN ('kalshi','manifold')
+    `, [userId]).catch(() => []);
+
+    // ── platforms ────────────────────────────────────────────────────────────
+    const platforms = {
+      hyperflex:  { wins: 0, losses: 0, total: 0, pnl: 0 },
+      polymarket: { wins: 0, losses: 0, total: 0, pnl: 0 },
+      kalshi:     { wins: 0, losses: 0, total: 0, pnl: 0 },
+      manifold:   { wins: 0, losses: 0, total: 0, pnl: 0 },
+    };
+
+    for (const p of hfxRows) {
+      platforms.hyperflex.total++;
+      const amount = (p.amount || 0) / 100;
+      const profit = p.won ? ((p.potential_payout || 0) / 100) - amount : -amount;
+      platforms.hyperflex.pnl += profit;
+      if (p.won) platforms.hyperflex.wins++; else platforms.hyperflex.losses++;
     }
+    for (const r of realizedRows) {
+      platforms.polymarket.total++;
+      const pnl = parseFloat(r.realized_pnl) || 0;
+      platforms.polymarket.pnl += pnl;
+      if (pnl > 0) platforms.polymarket.wins++;
+      else if (pnl < 0) platforms.polymarket.losses++;
+    }
+    for (const t of polyOnlyRows) {
+      platforms.polymarket.total++;
+      const pnl = parseFloat(t.pnl) || 0;
+      platforms.polymarket.pnl += pnl;
+      if (pnl > 0) platforms.polymarket.wins++;
+      else if (pnl < 0) platforms.polymarket.losses++;
+    }
+    for (const c of cachedRows) {
+      const plat = platforms[c.platform];
+      if (!plat) continue;
+      plat.total++;
+      const pnl = parseFloat(c.pnl) || 0;
+      plat.pnl += pnl;
+      if (pnl > 0) plat.wins++; else if (pnl < 0) plat.losses++;
+    }
+    Object.values(platforms).forEach(p => { p.pnl = +p.pnl.toFixed(2); });
+
+    const totalWins   = Object.values(platforms).reduce((s, p) => s + p.wins, 0);
+    const totalLosses = Object.values(platforms).reduce((s, p) => s + p.losses, 0);
+    const resolved    = totalWins + totalLosses;
+    const win_rate    = resolved > 0 ? Math.round((totalWins / resolved) * 100) : 0;
+    const total_pnl   = +Object.values(platforms).reduce((s, p) => s + p.pnl, 0).toFixed(2);
+
+    // ── calibration: 9 buckets keyed by confidence in chosen side ───────────
+    // Uses actual entry price, not the old fixed 70/30 stand-in.
+    const buckets = Array.from({ length: 9 }, (_, i) => ({
+      label: `${(i + 1) * 10}%`,
+      predicted: +(((i + 1) * 0.1)).toFixed(2),
+      correct: 0, total: 0, actual: 0,
+    }));
+    const bucketIdx = p => {
+      if (p == null || isNaN(p)) return null;
+      const idx = Math.floor(p * 10) - 1;
+      return Math.min(8, Math.max(0, idx));
+    };
+    const addCal = (entryPrice, side, won) => {
+      const ep = parseFloat(entryPrice);
+      if (isNaN(ep)) return;
+      const conf = side === 'YES' ? ep : 1 - ep;
+      const i = bucketIdx(conf);
+      if (i == null) return;
+      buckets[i].total++;
+      if (won) buckets[i].correct++;
+    };
+    for (const p of hfxRows)      addCal(p.price_at_buy, p.side, !!p.won);
+    for (const r of realizedRows) addCal(r.entry_price, r.side, (parseFloat(r.realized_pnl) || 0) > 0);
+    for (const t of polyOnlyRows) addCal(t.entry_price, t.side, (parseFloat(t.pnl) || 0) > 0);
+    buckets.forEach(b => { b.actual = b.total > 0 ? +(b.correct / b.total).toFixed(2) : 0; });
+
+    // ── timeline: cumulative pnl, last 30 days UTC ──────────────────────────
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today); d.setUTCDate(d.getUTCDate() - i);
+      days.push({ date: d.toISOString().slice(0, 10), _daily: 0, pnl: 0 });
+    }
+    const dayMap = Object.fromEntries(days.map((d, i) => [d.date, i]));
+    const addDay = (when, profit) => {
+      if (!when) return;
+      const k = new Date(when).toISOString().slice(0, 10);
+      if (k in dayMap) days[dayMap[k]]._daily += profit;
+    };
+    for (const p of hfxRows) {
+      const amount = (p.amount || 0) / 100;
+      const profit = p.won ? ((p.potential_payout || 0) / 100) - amount : -amount;
+      addDay(p.created_at, profit);
+    }
+    for (const r of realizedRows) addDay(r.closed_at, parseFloat(r.realized_pnl) || 0);
+    for (const t of polyOnlyRows) addDay(t.closed_at || t.created_at, parseFloat(t.pnl) || 0);
+    let cum = 0;
+    for (const d of days) { cum += d._daily; d.pnl = +cum.toFixed(2); delete d._daily; }
+
+    // ── sharp_score: canonical formula (server.js original at L13345).
+    // Buckets store predicted/actual as 0-1 decimals; the canonical formula
+    // works in 0-100 percentage space, so multiply the abs diff by 100.
+    // Gate on sample size — a "score" off zero settled events is a lie.
+    const validBuckets = buckets.filter(b => b.total > 0);
+    const calibrationError = validBuckets.length > 0
+      ? validBuckets.reduce((s, b) => s + Math.abs(b.predicted - b.actual) * 100, 0) / validBuckets.length
+      : 0;
+    const sharp_score = resolved > 0
+      ? Math.round(win_rate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4)
+      : null;
+
+    res.json({ win_rate, total_pnl, sharp_score, platforms, calibration: buckets, timeline: days });
+  } catch (err) {
+    console.error('[analytics]', err);
+    res.status(500).json({ error: 'server_error' });
   }
-  // Convert to cumulative
-  const sortedDays = Object.keys(dailyPnl).sort();
-  let cumulative = 0;
-  const timeline = sortedDays.map(date => {
-    cumulative += dailyPnl[date] / 100;
-    return { date, pnl: Math.round(cumulative * 100) / 100 };
-  });
-
-  // ── Sharp score ────────────────────────────────────────────────────────────
-  const totalSettled = hfSettled.length;
-  const totalWins = hfSettled.filter(p => p.won).length;
-  const winRate = totalSettled > 0 ? Math.round((totalWins / totalSettled) * 100) : 0;
-  const calibrationError = calibration
-    .filter(b => b.actual !== null)
-    .reduce((s, b) => s + Math.abs(b.predicted - b.actual), 0) /
-    Math.max(1, calibration.filter(b => b.actual !== null).length);
-  const sharpScore = Math.round(winRate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4);
-
-  const totalPnl = Object.values(platforms).reduce((s, p) => s + p.pnl, 0);
-
-  res.json({
-    win_rate: winRate,
-    total_pnl: Math.round(totalPnl * 100) / 100,
-    sharp_score: sharpScore,
-    platforms,
-    calibration,
-    timeline,
-  });
 });
 
-// Best single HFX call for a user — highest-payout win
+// Best single call across HFX + Polymarket — picks whichever had the
+// bigger absolute profit. Polymarket is where the real volume lives now,
+// so the trophy needs to surface dollar wins, not just HFX point wins.
 app.get('/api/predictors/:userId/best-call', async (req, res) => {
-  const { userId } = req.params;
-  let data;
-  if (pool) {
-    data = await dbQuery(`SELECT positions.*, row_to_json(markets.*) as markets FROM positions LEFT JOIN markets ON positions.user_id = markets.id WHERE user_id = $1 ORDER BY potential_payout DESC LIMIT 20`, [userId]).catch(() => []);
-  } else {
-    const { data } = await supabase .from('positions') .select('side, amount, potential_payout, created_at, markets(question, tenant_slug, id, outcome, resolved)') .eq('user_id', userId) .order('potential_payout', { ascending: false }) .limit(20);
-  }
-  const wins = (data || []).filter(p => p.markets?.resolved && p.markets?.outcome === p.side);
-  if (!wins.length) return res.json({ best: null });
-  const best = wins[0];
-  res.json({
-    best: {
-      question: best.markets.question,
-      side: best.side,
-      amount: best.amount,
-      payout: best.potential_payout,
-      multiplier: best.amount > 0 ? (best.potential_payout / best.amount).toFixed(1) : null,
-      community_slug: best.markets.tenant_slug,
-      market_id: best.markets.id,
-      date: best.created_at,
+  try {
+    const { userId } = req.params;
+    if (!pool) return res.json({ best: null });
+
+    let best = null;
+
+    // HFX internal — amounts are cents. Pull primary_color from
+    // creator_settings (markets has no color column — it's keyed by slug).
+    const hfxRows = await dbQuery(`
+      SELECT p.market_id, p.side, p.amount, p.potential_payout, p.created_at,
+             m.question, m.tenant_slug, m.resolved_at,
+             cs.primary_color
+      FROM positions p
+      JOIN markets m ON p.market_id = m.id
+      LEFT JOIN creator_settings cs ON cs.slug = m.tenant_slug
+      WHERE p.user_id = $1 AND p.won = true AND p.settled = true
+            AND p.amount > 0 AND p.potential_payout > 0
+      ORDER BY (p.potential_payout - p.amount) DESC
+      LIMIT 1
+    `, [userId]).catch(() => []);
+
+    if (hfxRows[0]) {
+      const r = hfxRows[0];
+      const amount = (r.amount || 0) / 100;
+      const payout = (r.potential_payout || 0) / 100;
+      best = {
+        source: 'hyperflex',
+        question: r.question,
+        side: r.side,
+        amount, payout,
+        multiplier: amount > 0 ? +(payout / amount).toFixed(2) : null,
+        community_slug: r.tenant_slug,
+        community_color: r.primary_color || '#c9920d',
+        market_id: r.market_id,
+        date: r.resolved_at || r.created_at,
+      };
     }
-  });
+
+    // Polymarket — UNION across realized_trades (new source of truth, keyed
+    // on user_id) + polymarket_trades (legacy, keyed on lowered eoa). Picks
+    // the single largest profit row across both. realized_trades carries
+    // realized_pnl as a numeric column; polymarket_trades.pnl is the same
+    // shape. LOWER() the eoa join — users.polymarket_address is mixed-case.
+    const userRows = await dbQuery(
+      'SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]
+    );
+    const addrRaw = userRows[0]?.polymarket_address;
+    const addr = (addrRaw && addrRaw.length >= 42) ? addrRaw : null;
+
+    const polyRows = await dbQuery(`
+      WITH candidates AS (
+        SELECT 'realized'::text AS source,
+               market_question  AS question,
+               side,
+               entry_cost_usd::numeric AS amount,
+               exit_value_usd::numeric AS payout,
+               realized_pnl::numeric    AS profit,
+               condition_id,
+               NULL::text       AS market_slug,
+               closed_at        AS date
+        FROM realized_trades
+        WHERE user_id = $1 AND realized_pnl > 0
+        UNION ALL
+        SELECT 'polymarket'::text AS source,
+               market_question     AS question,
+               side,
+               amount_usd::numeric AS amount,
+               (amount_usd + pnl)::numeric AS payout,
+               pnl::numeric        AS profit,
+               condition_id,
+               market_slug,
+               COALESCE(closed_at, created_at) AS date
+        FROM polymarket_trades
+        WHERE $2::text IS NOT NULL
+          AND LOWER(eoa_address) = LOWER($2)
+          AND status = 'closed' AND pnl > 0
+      )
+      SELECT * FROM candidates ORDER BY profit DESC LIMIT 1
+    `, [userId, addr]).catch(e => { console.warn('[best-call poly union]', e.message); return []; });
+
+    if (polyRows[0]) {
+      const r = polyRows[0];
+      const amount = parseFloat(r.amount) || 0;
+      const payout = parseFloat(r.payout) || 0;
+      const polyBest = {
+        source: r.source, // 'realized' | 'polymarket'
+        question: r.question,
+        side: r.side,
+        amount, payout,
+        multiplier: amount > 0 ? +(payout / amount).toFixed(2) : null,
+        community_slug: 'polymarket',
+        community_color: '#2D9CDB',
+        market_id: r.condition_id,
+        market_slug: r.market_slug,
+        date: r.date,
+      };
+      const hfxProfit = best ? best.payout - best.amount : -1;
+      const polyProfit = parseFloat(r.profit) || 0;
+      if (polyProfit > hfxProfit) best = polyBest;
+    }
+
+    res.json({ best });
+  } catch (err) {
+    console.error('[best-call]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // GET /api/admin/member-debug/:userId — raw data sources for a profile so
@@ -13709,6 +13875,23 @@ app.get('/api/member/:userId', async (req, res) => {
 
     if (!userData) return res.status(404).json({ error: 'User not found' });
 
+    // Lazy-trigger realized_trades backfill from Polymarket data API.
+    // Polymarket is where the real volume lives — without this, profiles
+    // with a connected wallet but no HFX-routed trades render empty.
+    // First-ever load: await so the response sees the freshly-imported
+    // rows. Subsequent loads: fire-and-forget so we don't block the page.
+    if (pool && userData.polymarket_address) {
+      try {
+        const proxy = await ensureProxyStored(userData.id, userData.polymarket_address);
+        if (proxy) {
+          const fresh = !userData.realized_trade_count || userData.realized_trade_count === 0;
+          const job = backfillRealizedTrades(userData.id, userData.polymarket_address, proxy)
+            .catch(e => console.error('[member backfill]', userData.id, e.message));
+          if (fresh) await job;
+        }
+      } catch (e) { console.warn('[member backfill outer]', e.message); }
+    }
+
     const positions = positionsData || [];
     const settled   = positions.filter(p => p.settled);
     const wins      = settled.filter(p => p.won);
@@ -13741,20 +13924,59 @@ app.get('/api/member/:userId', async (req, res) => {
     for (const c of (communitySettings || [])) communityMap[c.slug] = c;
 
     // Recent wins (resolved markets user predicted correctly)
-    const recentWins = wins
+    // Sources merged in priority order:
+    //   1. HFX in-app positions (in-house prediction system)
+    //   2. realized_trades with realized_pnl > 0 (Polymarket history via FIFO)
+    // Both surfaces feed the BEST CALL hero card + RECENT WINS list. Without
+    // the realized side, the cards stay empty for users whose entire history
+    // is on Polymarket — even after backfill successfully imports their data.
+    const hfxWins = wins
       .filter(p => p.markets?.resolved_at)
-      .slice(0, 6)
       .map(p => ({
         market_id:      p.market_id,
         question:       p.markets.question,
         outcome:        p.markets.outcome,
         side:           p.side,
         payout:         Math.round((p.potential_payout || 0) / 100),
+        amount:         Math.round((p.amount || 0) / 100),
         community_slug: p.markets.tenant_slug,
         community_name: communityMap[p.markets.tenant_slug]?.display_name || p.markets.tenant_slug,
         community_color: communityMap[p.markets.tenant_slug]?.primary_color || '#c9920d',
         resolved_at:    p.markets.resolved_at,
+        source:         'hfx',
       }));
+
+    let realizedWins = [];
+    if (pool) {
+      try {
+        const realizedWinRows = await dbQuery(
+          `SELECT condition_id, market_question, side, exit_value_usd, entry_cost_usd, realized_pnl, closed_at
+           FROM realized_trades
+           WHERE user_id = $1 AND realized_pnl > 0
+           ORDER BY realized_pnl DESC LIMIT 6`,
+          [userId]
+        );
+        realizedWins = realizedWinRows.map(r => ({
+          market_id:      r.condition_id,
+          question:       r.market_question,
+          outcome:        r.side,
+          side:           r.side,
+          payout:         Math.round(parseFloat(r.exit_value_usd) || 0),
+          amount:         Math.round(parseFloat(r.entry_cost_usd) || 0),
+          community_slug: 'polymarket',
+          community_name: 'Polymarket',
+          community_color: '#2D9CDB',
+          resolved_at:    r.closed_at,
+          source:         'polymarket',
+        }));
+      } catch (e) { /* realized_trades may not exist yet */ }
+    }
+
+    // Merge by realized payout descending so the biggest win lands first
+    // (drives BEST CALL hero card via recent_wins[0]).
+    const recentWins = [...hfxWins, ...realizedWins]
+      .sort((a, b) => (b.payout - b.amount) - (a.payout - a.amount))
+      .slice(0, 6);
 
     // Takes stats + recent takes (25 — this is the primary profile artifact)
     let takeStats = { total: 0, correct: 0, incorrect: 0, accuracy: 0, total_agrees: 0 };
@@ -13817,34 +14039,75 @@ app.get('/api/member/:userId', async (req, res) => {
     }
 
     // ── Polymarket trade stats (the real data source post-pivot) ──────────
+    // Pulls from BOTH realized_trades (primary, populated by the lazy backfill
+    // from /activity) AND polymarket_trades (legacy HFX-routed log). Dedup'd
+    // by (condition_id, side) — realized_trades wins on collision. Without
+    // the realized_trades union, profiles with a connected wallet but no
+    // HFX-routed trades render with "—" for Volume / P&L / Win Rate even
+    // after the backfill successfully imports their full Polymarket history.
     let polyTrades = [];
     let polyStats = { total: 0, volume: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
     if (pool && userData.polymarket_address) {
+      // realized_trades (keyed on user_id, populated by /activity FIFO)
+      let realizedRows = [];
       try {
-        // LOWER() on both sides — eoa_address is stored lowercase by the
-        // builder-fee pipeline, but polymarket_address on users can carry
-        // mixed case from older connections. Without normalisation the
-        // join silently returns 0 rows and the profile looks empty even
-        // though the admin dashboard clearly tracks trades for this
-        // wallet. Bumped LIMIT 100 → 500 so active traders don't get
-        // truncated.
+        realizedRows = await dbQuery(
+          `SELECT condition_id, side, entry_cost_usd, exit_value_usd, realized_pnl
+           FROM realized_trades WHERE user_id = $1`,
+          [userData.id]
+        );
+      } catch (e) { /* table may not exist yet on fresh envs */ }
+
+      // polymarket_trades (legacy, keyed on lower(eoa))
+      try {
         polyTrades = await dbQuery(
-          `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at
+          `SELECT side, amount_usd, shares, entry_price, status, pnl, market_slug, market_question, created_at, condition_id
            FROM polymarket_trades WHERE LOWER(eoa_address) = LOWER($1) ORDER BY created_at DESC LIMIT 500`,
           [userData.polymarket_address]
         );
-        polyStats.total = polyTrades.length;
-        polyStats.open = polyTrades.filter(t => t.status === 'open').length;
-        for (const t of polyTrades) {
-          polyStats.volume += parseFloat(t.amount_usd) || 0;
-          if (t.status === 'closed' && t.pnl != null) {
-            const p = parseFloat(t.pnl);
-            polyStats.pnl += p;
-            if (p > 0) polyStats.wins++;
-            else polyStats.losses++;
-          }
-        }
       } catch (e) { /* polymarket_trades table may not exist */ }
+
+      // polymarket_trades is the per-event log — each row is ONE trade event.
+      // realized_trades is the FIFO-collapsed rollup — ONE row aggregates every
+      // BUY/SELL on (condition_id, outcome) into a single closed-position record.
+      // The two sources are different granularities, NOT redundant:
+      //   - polymarket_trades: 29 rows for a wallet that traded the same market 29×
+      //   - realized_trades:    1 row for the same activity (rollup)
+      // Previous logic dedup'd polymarket_trades against realized_trades, which
+      // collapsed the granular log into the rollup and silently dropped 28 of
+      // 29 trade events. Profile rendered "1 trade, $25 volume" while admin
+      // (which counts polymarket_trades raw) correctly showed "29 trades, $395".
+      // Fix: prefer polymarket_trades as the source of truth for trade count +
+      // volume; only fall back to realized_trades for (condition_id, side) keys
+      // NOT present in polymarket_trades (the wallet-only-on-Polymarket.com case
+      // where the backfill imported activity we never logged ourselves).
+      const polyKeys = new Set(
+        polyTrades.map(t => `${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`)
+      );
+
+      // polymarket_trades contributions — every row counts
+      for (const t of polyTrades) {
+        polyStats.total++;
+        polyStats.volume += parseFloat(t.amount_usd) || 0;
+        if (t.status === 'open') polyStats.open++;
+        if (t.status === 'closed' && t.pnl != null) {
+          const p = parseFloat(t.pnl);
+          polyStats.pnl += p;
+          if (p > 0) polyStats.wins++;
+          else polyStats.losses++;
+        }
+      }
+      // realized_trades contributions — only markets NOT already in polymarket_trades
+      for (const r of realizedRows) {
+        const key = `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`;
+        if (polyKeys.has(key)) continue;
+        polyStats.total++;
+        polyStats.volume += parseFloat(r.entry_cost_usd) || 0;
+        const pnl = parseFloat(r.realized_pnl) || 0;
+        polyStats.pnl += pnl;
+        if (pnl > 0) polyStats.wins++;
+        else if (pnl < 0) polyStats.losses++;
+      }
     }
 
     // Context-aware display name — see resolveDisplayName() near L1524
@@ -30081,10 +30344,13 @@ app.get('/api/incentives/active', async (req, res) => {
 });
 // Partners — B2B page for platforms, market makers, funds & data buyers.
 app.get('/partners', (req, res) => res.sendFile(path.join(__dirname, 'public', 'partners.html')));
-// Casino-mode landing — full-screen live bet feed + tap-to-copy.
-// Phase 1-3 of the casino sprint live here; Phase 4-6 (share cards,
-// parlays, squads) hang off this page or get linked from it.
-app.get('/casino', (req, res) => res.sendFile(path.join(__dirname, 'public', 'casino.html')));
+// Live — full-screen live bet feed + tap-to-copy. Phase 1-3 of the
+// live-action sprint live here; Phase 4-6 (share cards, parlays, squads)
+// hang off this page or get linked from it.
+app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
+// /casino kept as a 301 to /live so any existing links/backlinks continue
+// to land users on the same surface under its new name.
+app.get('/casino', (req, res) => res.redirect(301, '/live'));
 // Arbitrage page retired — the standalone surface wasn't valuable enough to
 // justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
 // stays live for odds.html, creator-dashboard, and the public Data API docs.
@@ -32964,8 +33230,63 @@ app.get('/api/bet-feed', async (req, res) => {
          LIMIT $1`,
       args
     );
-    const next_cursor = rows.length === limit ? rows[rows.length - 1].id : null;
-    res.json({ items: rows, next_cursor });
+    // Self-healing fallback: while bet_feed warms up (whale synthesis writes
+    // there every 5min, but the table can be empty on a fresh deploy or if
+    // migration #51 hasn't run), pull recent whale/consensus takes and shape
+    // them into bet_feed rows. Same data either way — the takes table is
+    // populated by the same synthesis path. Only fires on the first page so
+    // pagination cursors keep working when real bet_feed rows arrive.
+    let items = rows;
+    if (!rows.length && !cursor) {
+      try {
+        const fallback = await dbQuery(
+          `SELECT t.id, t.user_id, t.condition_id, t.question, t.market_slug,
+                  t.outcome_label, t.side, t.entry_price, t.amount, t.created_at,
+                  u.display_name, u.username, u.avatar_url
+             FROM takes t
+             LEFT JOIN users u ON u.id = t.user_id
+            WHERE t.source IN ('whale', 'consensus')
+              AND t.market_slug IS NOT NULL
+              AND t.entry_price IS NOT NULL
+              AND t.amount IS NOT NULL
+            ORDER BY t.created_at DESC
+            LIMIT $1`,
+          [limit]
+        );
+        items = fallback.map(t => {
+          const price = parseFloat(t.entry_price) || 0;
+          const usd = parseFloat(t.amount) || 0;
+          return {
+            id: 'wt_' + t.id,
+            user_id: t.user_id,
+            market_id: t.condition_id || t.market_slug || 'unknown',
+            market_title: t.question || 'Unknown market',
+            market_slug: t.market_slug,
+            outcome_id: null,
+            outcome_label: t.outcome_label || null,
+            side: t.side,
+            price: price,
+            size: price > 0 ? usd / price : usd,
+            usd_amount: usd,
+            order_id: null,
+            copied_from_user_id: null,
+            copied_from_bet_id: null,
+            created_at: t.created_at,
+            display_name: t.display_name,
+            username: t.username,
+            avatar_url: t.avatar_url,
+          };
+        });
+      } catch (fbErr) {
+        // Fallback is best-effort — if takes table is also missing, return
+        // the original empty array. Frontend handles empty cleanly.
+        console.warn('[bet-feed] takes fallback failed:', fbErr.message);
+      }
+    }
+    const next_cursor = items.length === limit && rows.length === limit
+      ? items[items.length - 1].id
+      : null;
+    res.json({ items, next_cursor });
   } catch (err) {
     console.error('[bet-feed] list error:', err.message);
     res.status(500).json({ error: 'Failed to load bet feed' });
@@ -35161,139 +35482,619 @@ app.get('/api/trades/:address', async (req, res) => {
   }
 });
 
-// POST /api/trades/backfill — import historical trades from Polymarket data API
-// Uses the proxy wallet address to fetch positions and convert them to trade records
+// ─────────────────────────────────────────────────────────────────────────
+// Polymarket proxy derivation + realized_trades backfill
+// ─────────────────────────────────────────────────────────────────────────
+
+// Derive a user's Polymarket proxy (Safe wallet) address from their EOA via
+// Safe factory eth_call. Public RPCs only — no MetaMask popup. Returns the
+// proxy address (lowercase 0x...) or null if both RPCs fail / EOA has no
+// proxy deployed yet. Per-RPC failures logged with reason — silent null
+// returns made the seed primer impossible to debug.
+async function derivePolymarketProxy(eoaAddress) {
+  if (!eoaAddress) return null;
+  const eoa = eoaAddress.toLowerCase();
+  const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+  // Selector 0x4d0c6cdb = proxies(address) on Safe factory
+  // 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b
+  const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
+  const failures = [];
+  for (const rpc of rpcs) {
+    try {
+      const r = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', method: 'eth_call',
+          params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data }, 'latest'],
+          id: 1,
+        }),
+      });
+      if (!r.ok) {
+        failures.push(`${rpc} HTTP ${r.status}`);
+        continue;
+      }
+      const json = await r.json();
+      if (json.error) {
+        failures.push(`${rpc} jsonrpc-err: ${JSON.stringify(json.error).slice(0, 120)}`);
+        continue;
+      }
+      if (!json.result || json.result === '0x' || json.result.length < 42) {
+        failures.push(`${rpc} empty-result (eoa has no proxy yet)`);
+        continue;
+      }
+      return '0x' + json.result.slice(-40);
+    } catch (e) {
+      failures.push(`${rpc} threw: ${e.message}`);
+    }
+  }
+  console.warn('[derivePolymarketProxy] all rpcs failed for', eoa.slice(0, 10), '— ' + failures.join(' | '));
+  return null;
+}
+
+// Cache the derived proxy on users.polymarket_proxy so we don't re-eth_call
+// on every profile load (rate-limited public RPCs). Returns the cached or
+// freshly-derived proxy. No-op if the column already has a value.
+async function ensureProxyStored(userId, eoa) {
+  if (!pool || !userId || !eoa) return null;
+  try {
+    const u = await dbQuery('SELECT polymarket_proxy, is_whale FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (u[0]?.polymarket_proxy) return u[0].polymarket_proxy;
+    // Whale wallets are ingested from the Polymarket leaderboard, which
+    // exposes the proxy address (that's where positions live). The stored
+    // polymarket_address IS the proxy — calling Safe factory proxies(proxy)
+    // reverts because the proxy isn't an EOA in the factory mapping. Skip
+    // derivation for whales and store the address as the proxy directly.
+    if (u[0]?.is_whale) {
+      const lower = eoa.toLowerCase();
+      await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
+      return lower;
+    }
+    // Try Safe factory derivation first — works for browser-wallet (MetaMask)
+    // users who deployed via Polymarket's standard factory.
+    const proxy = await derivePolymarketProxy(eoa);
+    if (proxy) {
+      await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [proxy, userId]);
+      return proxy;
+    }
+    // Factory derivation failed (returned null — revert / empty / non-EOA).
+    // The stored address may already BE the proxy: users who pasted their
+    // Polymarket profile URL on landing-page Quick Preview, or use Magic /
+    // email-link wallets that deploy via a different factory. Probe
+    // /activity at the address — if Polymarket has trade history there,
+    // the address IS the proxy. Use as-is.
+    try {
+      const lower = eoa.toLowerCase();
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${lower}&limit=1&type=TRADE`, { headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const j = await r.json();
+        const trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+        if (trades.length > 0) {
+          await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
+          console.log(`[ensureProxyStored] user=${userId.slice(0,8)} address-is-proxy fallback (factory failed, /activity has trades)`);
+          return lower;
+        }
+      }
+    } catch (e) { /* fall through and return null */ }
+    return null;
+  } catch (e) {
+    console.warn('[ensureProxyStored]', e.message);
+    return null;
+  }
+}
+
+// Polymarket /activity returns `timestamp` as a Unix-seconds integer
+// (e.g. 1776474398). Passing the raw int to a TIMESTAMPTZ column makes
+// Postgres throw "date/time field value out of range" — every closed
+// group's insert fails and realized_trades stays empty for /activity-only
+// traders. Normalise to ISO before binding. Accepts seconds, ms, or an
+// existing ISO/parseable string; returns null on garbage so the column
+// stays NULL rather than tripping the constraint.
+function _toIsoTs(v) {
+  if (v == null || v === '') return null;
+  // Number or all-digit string → Unix seconds (10 digits) or ms (>=13).
+  if (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v))) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const ms = n < 1e12 ? n * 1000 : n;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // Anything else: trust it's an ISO/RFC-2822 string the driver can take.
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// Backfill realized Polymarket trades into realized_trades. Uses the
+// /activity?type=TRADE endpoint (the append-only trade log) — NOT
+// /positions, which only returns currently-open positions and drops rows
+// the moment a winning position is redeemed. We FIFO-match BUY/SELL events
+// per (conditionId, outcome) to compute realized PnL on closed-out
+// positions. Idempotent via external_sync_id UNIQUE constraint.
+async function backfillRealizedTrades(userId, eoa, proxy) {
+  if (!pool || !userId || !proxy) return { imported: 0, scanned: 0 };
+  const proxyLower = proxy.toLowerCase();
+  const eoaLower = (eoa || '').toLowerCase();
+
+  // Pull full trade history. /activity returns BUY/SELL events with
+  // conditionId, outcome (YES/NO), side, size (shares), price, timestamp.
+  let trades = [];
+  try {
+    const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxyLower}&limit=500&type=TRADE`, { headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      const j = await r.json();
+      trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+    }
+  } catch (e) {
+    console.warn('[backfillRealizedTrades] /activity fetch failed:', e.message);
+  }
+  if (!trades.length) {
+    console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} no_activity`);
+    return { imported: 0, scanned: 0 };
+  }
+
+  // One-shot raw shape log so future field-name drift is visible without a
+  // debug endpoint. Logs the first trade event's full JSON.
+  try {
+    const sample = JSON.stringify(trades[0]).slice(0, 800);
+    console.log(`[backfill-shape] user=${userId.slice(0,8)} count=${trades.length} sample=${sample}`);
+  } catch {}
+
+  // Group trades by (conditionId, outcome). Each group becomes one
+  // realized_trades row aggregating all closed-out shares for that
+  // (market, side).
+  const groups = new Map();
+  for (const t of trades) {
+    const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+    let outcome = String(t.outcome || '').toUpperCase();
+    // Some shapes use outcomeIndex (0 = YES, 1 = NO) instead of outcome label
+    if (!outcome) {
+      const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+      if (idx === 0) outcome = 'YES';
+      else if (idx === 1) outcome = 'NO';
+    }
+    if (!condId || !outcome) continue;
+    const key = `${condId}:${outcome}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        condId, outcome,
+        events: [],
+        question: String(t.title || t.question || t.market || '').slice(0, 500),
+        tokenId: t.asset || t.token_id || null,
+      });
+    }
+    groups.get(key).events.push(t);
+  }
+
+  let imported = 0, resolvedCount = 0;
+
+  for (const group of groups.values()) {
+    // Sort ascending by timestamp so FIFO is correct. Date.parse on a raw
+    // Unix-seconds int returns NaN, so the previous comparator collapsed
+    // every event to 0 and FIFO degraded to "API order" — fine in practice
+    // (Polymarket returns events newest-first), but flip via _toIsoTs for
+    // correctness either way.
+    group.events.sort((a, b) => {
+      const ta = Date.parse(_toIsoTs(a.timestamp || a.created_at || a.time)) || 0;
+      const tb = Date.parse(_toIsoTs(b.timestamp || b.created_at || b.time)) || 0;
+      return ta - tb;
+    });
+
+    const lots = []; // { shares, price }
+    let totalCost = 0, totalProceeds = 0, totalSharesClosed = 0;
+    let firstOpenAt = null, lastCloseAt = null;
+
+    for (const t of group.events) {
+      const side = String(t.side || '').toUpperCase();
+      const shares = parseFloat(t.size || t.shares || 0);
+      const price = parseFloat(t.price || 0);
+      const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
+      if (shares <= 0) continue;
+
+      if (side === 'BUY') {
+        if (!firstOpenAt) firstOpenAt = ts;
+        lots.push({ shares, price });
+      } else if (side === 'SELL') {
+        let remaining = shares;
+        while (remaining > 0 && lots.length > 0) {
+          const lot = lots[0];
+          const take = Math.min(lot.shares, remaining);
+          totalCost += take * lot.price;
+          totalProceeds += take * price;
+          totalSharesClosed += take;
+          remaining -= take;
+          lot.shares -= take;
+          if (lot.shares <= 0.0000001) lots.shift();
+        }
+        lastCloseAt = ts;
+      }
+    }
+
+    if (totalSharesClosed <= 0) continue;
+    resolvedCount++;
+
+    const realizedPnl = +(totalProceeds - totalCost).toFixed(4);
+    const realizedRoi = totalCost > 0 ? +(realizedPnl / totalCost).toFixed(6) : null;
+    const avgEntryPrice = +(totalCost / totalSharesClosed).toFixed(4);
+    const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
+    const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
+    const externalSyncId = `pm-act:${group.condId}:${group.outcome}`;
+
+    try {
+      const result = await dbQuery(
+        `INSERT INTO realized_trades (
+          user_id, polymarket_address, condition_id, token_id, market_question, side,
+          shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+          realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        ON CONFLICT (external_sync_id) DO NOTHING
+        RETURNING id`,
+        [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
+         +totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
+         +totalCost.toFixed(4), +totalProceeds.toFixed(4),
+         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId]
+      );
+      if (result.length) imported++;
+    } catch (e) {
+      console.warn('[backfillRealizedTrades] insert', externalSyncId, e.message);
+    }
+  }
+
+  // ── Redeemed positions (held through market resolution) ─────────────────
+  // /activity?type=TRADE only captures BUY/SELL events. Users who held a
+  // position through resolution (didn't sell, just claimed the payout)
+  // never generate a SELL event — they produce a REDEEM. Without this
+  // path, pure-buyer users with resolved markets show "no realized" forever.
+  // Each redeemed position is a single aggregated event: size shares
+  // realized at $1 (winning) or $0 (losing) regardless of entry.
+  let redeemedImported = 0, redeemedCount = 0;
+  try {
+    const [winRes, loseRes] = await Promise.allSettled([
+      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=true&limit=500`, { headers: { Accept: 'application/json' } }),
+      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=false&limit=500`, { headers: { Accept: 'application/json' } }),
+    ]);
+    const collect = async r => {
+      if (r.status !== 'fulfilled' || !r.value.ok) return [];
+      try { const j = await r.value.json(); return Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); } catch { return []; }
+    };
+    const winners = await collect(winRes);
+    const losers = await collect(loseRes);
+    const allRedeemed = [...winners, ...losers];
+    redeemedCount = allRedeemed.length;
+    if (allRedeemed[0]) {
+      try {
+        const sample = JSON.stringify(allRedeemed[0]).slice(0, 500);
+        console.log(`[backfill-redeem-shape] user=${userId.slice(0,8)} count=${allRedeemed.length} sample=${sample}`);
+      } catch {}
+    }
+    for (const pos of allRedeemed) {
+      const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
+      let outcome = String(pos.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = pos.outcomeIndex !== undefined ? pos.outcomeIndex : pos.outcome_index;
+        if (idx === 0) outcome = 'YES';
+        else if (idx === 1) outcome = 'NO';
+      }
+      if (!condId || !outcome) continue;
+      const shares = parseFloat(pos.size || pos.shares || 0);
+      const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
+      if (shares <= 0) continue;
+      const winning = pos.winning === true || (parseFloat(pos.realizedPnl || 0) > 0);
+      const exitPrice = winning ? 1.0 : 0.0;
+      const entryCost = +(shares * avgPrice).toFixed(4);
+      const exitValue = winning ? +shares.toFixed(4) : 0;
+      const realizedPnl = +(exitValue - entryCost).toFixed(4);
+      const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
+      const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
+      const tokenId = pos.asset || pos.token_id || null;
+      const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
+      const closeReason = winning ? 'redeemed-win' : 'redeemed-loss';
+      const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+      try {
+        const result = await dbQuery(
+          `INSERT INTO realized_trades (
+            user_id, polymarket_address, condition_id, token_id, market_question, side,
+            shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          ON CONFLICT (external_sync_id) DO NOTHING
+          RETURNING id`,
+          [userId, eoaLower || null, condId, tokenId, question, outcome,
+           +shares.toFixed(4), avgPrice, exitPrice, entryCost, exitValue,
+           realizedPnl, realizedRoi, null, closedAt, closeReason, externalSyncId]
+        );
+        if (result.length) redeemedImported++;
+      } catch (e) {
+        console.warn('[backfillRealizedTrades] redeem insert', externalSyncId, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[backfillRealizedTrades] redeem fetch:', e.message);
+  }
+
+  imported += redeemedImported;
+
+  // Refresh user aggregates — count + median ROI. percentile_cont returns
+  // NULL on empty filter sets so we exclude NULLs from the WITHIN GROUP.
+  // Always refresh (not just imported>0) so re-runs that hit ON CONFLICT
+  // don't leave realized_trade_count stale at 0 even though rows exist.
+  // The lazy-trigger from /api/member uses realized_trade_count to decide
+  // whether to await; stale count means it skips await on every load.
+  // users.id is TEXT (boot-time create) but realized_trades.user_id is UUID
+  // (per migration). Postgres doesn't auto-cast for `=`, so the subqueries
+  // need an explicit $1::uuid cast or the whole UPDATE throws "operator
+  // does not exist: uuid = text" — which leaves realized_trade_count stale
+  // at 0, forcing the lazy-trigger to re-run backfill on every page load.
+  try {
+    await dbQuery(
+      `UPDATE users SET
+         realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1::uuid),
+         realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
+                                 FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL)
+       WHERE id = $1`,
+      [userId]
+    );
+  } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
+
+  // trades/groups/closed/imported triangulates the failure mode at a glance:
+  // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
+  // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
+  // trades>0, closed>0, imported>0 → working
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} total_imported=${imported}`);
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount };
+}
+
+// POST /api/trades/backfill — manual trigger. Lazy-fires from /api/member
+// on first profile load; this route is for admin/debug.
 app.post('/api/trades/backfill', async (req, res) => {
   try {
-    const { eoa_address } = req.body;
+    if (!pool) return res.status(503).json({ error: 'Database not configured' });
+    const { eoa_address, user_id } = req.body;
     if (!eoa_address) return res.status(400).json({ error: 'eoa_address required' });
     const eoa = eoa_address.toLowerCase();
 
-    // Compute proxy address
-    let proxy = null;
-    try {
-      const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
-      for (const rpc of rpcs) {
-        try {
-          const r = await fetch(rpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data: '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x','').padStart(64,'0') }, 'latest'], id: 1 })
-          });
-          const data = await r.json();
-          if (data.result && data.result !== '0x') {
-            proxy = '0x' + data.result.slice(-40);
-            break;
-          }
-        } catch(e) {}
-      }
-    } catch(e) {}
-
-    if (!proxy) {
-      return res.status(400).json({ error: 'Could not resolve proxy wallet' });
+    // Resolve user_id from address if not passed
+    let userId = user_id;
+    if (!userId) {
+      const u = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [eoa]);
+      userId = u[0]?.id;
     }
+    if (!userId) return res.status(404).json({ error: 'No user found for that address' });
 
-    // Fetch positions from Polymarket data API
-    const [openRes, wonRes] = await Promise.allSettled([
-      fetch(`https://data-api.polymarket.com/positions?user=${proxy.toLowerCase()}&limit=200&sortBy=CURRENT&winning=false`, { headers: { Accept: 'application/json' } }),
-      fetch(`https://data-api.polymarket.com/positions?user=${proxy.toLowerCase()}&limit=200&sortBy=CURRENT&winning=true`, { headers: { Accept: 'application/json' } })
-    ]);
+    const proxy = await ensureProxyStored(userId, eoa);
+    if (!proxy) return res.status(400).json({ error: 'Could not derive Polymarket proxy' });
 
-    let openPos = [];
-    let wonPos = [];
-    if (openRes.status === 'fulfilled' && openRes.value.ok) {
-      openPos = await openRes.value.json();
-      if (!Array.isArray(openPos)) openPos = [];
-    }
-    if (wonRes.status === 'fulfilled' && wonRes.value.ok) {
-      wonPos = await wonRes.value.json();
-      if (!Array.isArray(wonPos)) wonPos = [];
-    }
-
-    const allPos = [...openPos, ...wonPos];
-    if (!allPos.length) {
-      return res.json({ imported: 0, message: 'No positions found on Polymarket for proxy ' + proxy.slice(0, 10) });
-    }
-
-    // Check which positions we already have
-    const { data: existing } = await supabase
-      .from('polymarket_trades')
-      .select('condition_id, side')
-      .eq('eoa_address', eoa);
-    const existingSet = new Set((existing || []).map(e => e.condition_id + '_' + e.side));
-
-    let imported = 0;
-    for (const pos of allPos) {
-      // Skip if already recorded
-      const condId = (pos.conditionId || pos.condition_id || '').toLowerCase();
-      const side = (pos.outcome || pos.side || 'YES').toUpperCase();
-      if (!condId || existingSet.has(condId + '_' + side)) continue;
-
-      const size = parseFloat(pos.size) || 0;
-      if (size <= 0) continue;
-
-      const avgPrice = parseFloat(pos.avgPrice) || parseFloat(pos.average_price) || 0;
-      const currentPrice = parseFloat(pos.curPrice) || parseFloat(pos.current_price) || avgPrice;
-      const costBasis = size * avgPrice;
-      const currentValue = size * currentPrice;
-      const cashPnl = parseFloat(pos.cashPnl) || parseFloat(pos.pnl) || (currentValue - costBasis);
-
-      // Determine status
-      let status = 'open';
-      let closeReason = null;
-      let exitPrice = null;
-      if (pos.resolved || pos.market_resolved) {
-        const won = (parseFloat(pos.cashPnl) || 0) > 0 || pos.winning === true;
-        status = won ? 'won' : 'lost';
-        closeReason = won ? 'resolved_win' : 'resolved_loss';
-        exitPrice = won ? 1.0 : 0.0;
-      }
-
-      // Find market slug from our screener cache if possible
-      let slug = null;
-      let question = pos.title || pos.question || pos.market || '';
-      try {
-        if (pos.slug || pos.market_slug) slug = pos.slug || pos.market_slug;
-      } catch(e) {}
-
-      const { error } = await supabase.from('polymarket_trades').insert({
-        eoa_address: eoa,
-        proxy_address: proxy.toLowerCase(),
-        market_slug: slug,
-        market_question: question.slice(0, 500),
-        condition_id: condId,
-        token_id: pos.asset || pos.token_id || null,
-        side: side,
-        trade_mode: 'buy',
-        order_type: 'GTC',
-        entry_price: avgPrice,
-        entry_price_cents: Math.round(avgPrice * 100),
-        amount_usd: Math.round(costBasis * 100) / 100,
-        shares: size,
-        market_price_at_entry: avgPrice,
-        status: status,
-        exit_price: exitPrice,
-        exit_amount_usd: status !== 'open' ? (status === 'won' ? Math.round(size * 100) / 100 : 0) : null,
-        pnl: status !== 'open' ? Math.round(cashPnl * 100) / 100 : null,
-        pnl_percent: costBasis > 0 && status !== 'open' ? Math.round((cashPnl / costBasis) * 10000) / 100 : null,
-        closed_at: status !== 'open' ? new Date().toISOString() : null,
-        close_reason: closeReason,
-        created_at: pos.created_at || pos.timestamp || new Date().toISOString()
-      });
-
-      if (!error) imported++;
-      else console.warn('[backfill] insert error:', error.message);
-    }
-
-    console.log(`[trades/backfill] Imported ${imported} positions for ${eoa.slice(0, 10)} (proxy: ${proxy.slice(0, 10)})`);
-    res.json({ imported, total_found: allPos.length, proxy });
+    const result = await backfillRealizedTrades(userId, eoa, proxy);
+    res.json({ ...result, proxy });
   } catch (err) {
-    console.error('[trades/backfill]', err.message);
+    console.error('[trades/backfill]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Earn FLEX points endpoint — called after successful CLOB trade
+// ── Batch primer: seed realized_trades across the whole user base ──────────
+// Lazy-trigger on /api/member only fires when someone visits a profile.
+// For migrations / fresh deploys we want the table populated NOW, not when
+// organic traffic eventually hits every profile. This walks every user with
+// a connected Polymarket address and runs backfillRealizedTrades on each
+// in a slow loop (250ms gap = ~4 users/sec, polite to data-api).
+//
+// Long-running (~3-5 min for 851 users) so it runs as fire-and-forget — POST
+// returns immediately with the work plan, GET reports live progress. Admin-
+// secret gated. Idempotent: ON CONFLICT DO NOTHING in the underlying writer
+// means re-running is safe (only new resolved positions get added).
+//
+// Query params on POST:
+//   ?limit=N      — only process first N users (dry-run small batches first)
+//   ?delay_ms=N   — override 250ms inter-user delay (lower = faster, riskier)
+//   ?min_pnl=N    — only users where users.whale_pnl >= N (prioritize whales)
+let _seedProgress = null;
+
+app.post('/api/admin/realized-trades/seed', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  if (_seedProgress && _seedProgress.status === 'running') {
+    return res.status(409).json({ error: 'Seed already running', progress: _seedProgress });
+  }
+
+  const limit = Math.min(parseInt(req.query.limit) || 10000, 10000);
+  const delayMs = Math.max(parseInt(req.query.delay_ms) || 250, 50);
+  const minPnl = parseFloat(req.query.min_pnl) || null;
+
+  // Pull eligible users — 42-char address guard matches the rest of the codebase.
+  let userRows;
+  try {
+    const minPnlClause = minPnl != null ? 'AND COALESCE(whale_pnl, 0) >= $2' : '';
+    const params = minPnl != null ? [42, minPnl] : [42];
+    userRows = await dbQuery(
+      `SELECT id, polymarket_address, COALESCE(whale_pnl, 0) AS whale_pnl
+       FROM users
+       WHERE polymarket_address IS NOT NULL
+         AND LENGTH(polymarket_address) >= $1
+         ${minPnlClause}
+       ORDER BY whale_pnl DESC NULLS LAST, id
+       LIMIT ${limit}`,
+      params
+    );
+  } catch (e) {
+    return res.status(500).json({ error: 'user fetch failed: ' + e.message });
+  }
+
+  _seedProgress = {
+    status: 'running',
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    users_total: userRows.length,
+    users_processed: 0,
+    users_with_trades: 0,
+    users_failed: 0,
+    total_imported: 0,
+    total_scanned: 0,
+    total_resolved: 0,
+    delay_ms: delayMs,
+    min_pnl: minPnl,
+    last_error: null,
+  };
+
+  // Fire-and-forget — do NOT await. Response returns immediately.
+  (async () => {
+    for (const u of userRows) {
+      try {
+        const proxy = await ensureProxyStored(u.id, u.polymarket_address);
+        if (!proxy) {
+          // Silent null from ensureProxyStored — proxy derivation failed.
+          // Capture this as a structured last_error so the GET endpoint
+          // shows the failure mode instead of returning null.
+          _seedProgress.users_processed++;
+          _seedProgress.users_failed++;
+          _seedProgress.last_error = `proxy_derivation_failed for ${u.id.slice(0, 8)} (eoa=${u.polymarket_address.slice(0, 10)})`;
+          console.warn('[seed]', u.id.slice(0, 8), 'proxy derivation returned null — see [derivePolymarketProxy] log above for RPC failure detail');
+          continue;
+        }
+        const r = await backfillRealizedTrades(u.id, u.polymarket_address, proxy);
+        _seedProgress.users_processed++;
+        _seedProgress.total_scanned += r.scanned || 0;
+        _seedProgress.total_resolved += r.resolved || 0;
+        _seedProgress.total_imported += r.imported || 0;
+        if ((r.imported || 0) > 0) _seedProgress.users_with_trades++;
+      } catch (e) {
+        _seedProgress.users_processed++;
+        _seedProgress.users_failed++;
+        _seedProgress.last_error = `${u.id.slice(0, 8)}: ${e.message}`;
+        console.warn('[seed]', u.id.slice(0, 8), e.message);
+      }
+      // Polite spacing between users. data-api rate limits aren't published
+      // but Cloudflare's default for unauthed traffic is ~100 req/min — we
+      // burn 2 reqs per user, so 250ms = 480 reqs/min headroom across 4
+      // users/sec. Drop to 100ms only if you trust the upstream.
+      if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+    }
+    _seedProgress.status = 'done';
+    _seedProgress.finished_at = new Date().toISOString();
+    console.log('[seed] done', _seedProgress);
+  })().catch(e => {
+    _seedProgress.status = 'crashed';
+    _seedProgress.last_error = e.message;
+    _seedProgress.finished_at = new Date().toISOString();
+    console.error('[seed] crashed', e);
+  });
+
+  res.json({
+    started: true,
+    users_to_process: userRows.length,
+    estimated_seconds: Math.ceil(userRows.length * (delayMs + 200) / 1000),
+    progress_url: '/api/admin/realized-trades/seed',
+  });
+});
+
+app.get('/api/admin/realized-trades/seed', (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  res.json(_seedProgress || { status: 'never_run' });
+});
+
+// Diagnostic — for each whale candidate the seed primer would process, show
+// the stored address + a live probe of data-api so we can tell at a glance
+// whether the address is junk, the proxy derivation is broken, or the
+// endpoint is wrong. Read-only, admin-secret gated.
+app.get('/api/admin/seed-debug', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(500).json({ error: 'pool not configured' });
+  const minPnl = Number(req.query.min_pnl || 100000);
+  const limit = Math.min(20, Number(req.query.limit || 5));
+  try {
+    const rows = await dbQuery(
+      `SELECT id, display_name, polymarket_address, polymarket_proxy,
+              is_whale, whale_pnl, whale_rank, realized_trade_count
+         FROM users
+        WHERE whale_pnl > $1 AND polymarket_address IS NOT NULL
+        ORDER BY whale_pnl DESC NULLS LAST
+        LIMIT $2`,
+      [minPnl, limit]
+    );
+    const probes = await Promise.all(rows.map(async (u) => {
+      const probe = { user_id: u.id, name: u.display_name, eoa_len: (u.polymarket_address || '').length };
+      probe.eoa = u.polymarket_address;
+      probe.proxy_stored = u.polymarket_proxy;
+      probe.is_whale = u.is_whale;
+      probe.whale_pnl = u.whale_pnl;
+      probe.whale_rank = u.whale_rank;
+      probe.realized_trade_count = u.realized_trade_count;
+      // Probe Safe factory for proxy derivation
+      try {
+        const eoa = u.polymarket_address.toLowerCase();
+        const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
+        const r = await fetch('https://polygon-bor-rpc.publicnode.com', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data }, 'latest'], id: 1 }),
+        });
+        const j = await r.json();
+        if (j.error) probe.factory_result = `revert: ${j.error.message}`;
+        else if (j.result && j.result !== '0x' && j.result.length >= 42) probe.factory_result = '0x' + j.result.slice(-40);
+        else probe.factory_result = 'empty';
+      } catch (e) { probe.factory_result = `err: ${e.message}`; }
+      // Probe data-api with the stored address as-is (no derivation)
+      try {
+        const r = await fetch(`https://data-api.polymarket.com/positions?user=${u.polymarket_address}&limit=1`);
+        const j = await r.json();
+        probe.dataapi_direct = Array.isArray(j) ? `array(len=${j.length})` : (j.error || JSON.stringify(j).slice(0, 80));
+      } catch (e) { probe.dataapi_direct = `err: ${e.message}`; }
+      return probe;
+    }));
+    res.json({ candidates: probes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// One-shot backfill diagnostic for a single user. Returns the full counts
+// from backfillRealizedTrades so we can diagnose "BEST CALL is empty for
+// my profile" without grepping Railway logs. Admin-secret gated.
+//   GET /api/admin/backfill-debug?user_id=<uuid>
+app.get('/api/admin/backfill-debug', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(500).json({ error: 'pool not configured' });
+  const userId = req.query.user_id;
+  if (!userId) return res.status(400).json({ error: 'user_id query param required' });
+  try {
+    const u = await dbQuery(
+      'SELECT id, display_name, polymarket_address, polymarket_proxy, is_whale, realized_trade_count FROM users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
+    if (!u.length) return res.status(404).json({ error: 'user not found' });
+    const user = u[0];
+    if (!user.polymarket_address) {
+      return res.json({ user, error: 'user has no polymarket_address' });
+    }
+    const proxy = await ensureProxyStored(user.id, user.polymarket_address);
+    if (!proxy) {
+      return res.json({ user, proxy: null, error: 'proxy derivation failed (factory revert + /activity returned no trades)' });
+    }
+    const result = await backfillRealizedTrades(user.id, user.polymarket_address, proxy);
+    // Re-read row counts post-backfill so the response shows the truth
+    const counts = await dbQuery(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE realized_pnl > 0)::int AS winners,
+         COUNT(*) FILTER (WHERE realized_pnl < 0)::int AS losers,
+         COALESCE(SUM(realized_pnl), 0)::numeric AS total_pnl,
+         MAX(realized_pnl)::numeric AS biggest_win
+       FROM realized_trades WHERE user_id = $1`,
+      [userId]
+    );
+    res.json({ user, proxy, backfill: result, realized_trades_table: counts[0] || {} });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 5) });
+  }
+});
 // GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
 app.get('/api/flex-points/user/:userId', async (req, res) => {
   try {
