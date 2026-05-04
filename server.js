@@ -13853,20 +13853,59 @@ app.get('/api/member/:userId', async (req, res) => {
     for (const c of (communitySettings || [])) communityMap[c.slug] = c;
 
     // Recent wins (resolved markets user predicted correctly)
-    const recentWins = wins
+    // Sources merged in priority order:
+    //   1. HFX in-app positions (in-house prediction system)
+    //   2. realized_trades with realized_pnl > 0 (Polymarket history via FIFO)
+    // Both surfaces feed the BEST CALL hero card + RECENT WINS list. Without
+    // the realized side, the cards stay empty for users whose entire history
+    // is on Polymarket — even after backfill successfully imports their data.
+    const hfxWins = wins
       .filter(p => p.markets?.resolved_at)
-      .slice(0, 6)
       .map(p => ({
         market_id:      p.market_id,
         question:       p.markets.question,
         outcome:        p.markets.outcome,
         side:           p.side,
         payout:         Math.round((p.potential_payout || 0) / 100),
+        amount:         Math.round((p.amount || 0) / 100),
         community_slug: p.markets.tenant_slug,
         community_name: communityMap[p.markets.tenant_slug]?.display_name || p.markets.tenant_slug,
         community_color: communityMap[p.markets.tenant_slug]?.primary_color || '#c9920d',
         resolved_at:    p.markets.resolved_at,
+        source:         'hfx',
       }));
+
+    let realizedWins = [];
+    if (pool) {
+      try {
+        const realizedWinRows = await dbQuery(
+          `SELECT condition_id, market_question, side, exit_value_usd, entry_cost_usd, realized_pnl, closed_at
+           FROM realized_trades
+           WHERE user_id = $1 AND realized_pnl > 0
+           ORDER BY realized_pnl DESC LIMIT 6`,
+          [userId]
+        );
+        realizedWins = realizedWinRows.map(r => ({
+          market_id:      r.condition_id,
+          question:       r.market_question,
+          outcome:        r.side,
+          side:           r.side,
+          payout:         Math.round(parseFloat(r.exit_value_usd) || 0),
+          amount:         Math.round(parseFloat(r.entry_cost_usd) || 0),
+          community_slug: 'polymarket',
+          community_name: 'Polymarket',
+          community_color: '#2D9CDB',
+          resolved_at:    r.closed_at,
+          source:         'polymarket',
+        }));
+      } catch (e) { /* realized_trades may not exist yet */ }
+    }
+
+    // Merge by realized payout descending so the biggest win lands first
+    // (drives BEST CALL hero card via recent_wins[0]).
+    const recentWins = [...hfxWins, ...realizedWins]
+      .sort((a, b) => (b.payout - b.amount) - (a.payout - a.amount))
+      .slice(0, 6);
 
     // Takes stats + recent takes (25 — this is the primary profile artifact)
     let takeStats = { total: 0, correct: 0, incorrect: 0, accuracy: 0, total_agrees: 0 };

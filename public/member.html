@@ -1883,26 +1883,32 @@ async function toggleCopyTrade() {
 // loadFollowStatus() is called after load() resolves (button is injected by load())
 
 // ── BEST CALL — upgrades the always-visible #trophyCard with richer data
-// (multiplier from /best-call). Card is rendered in the template from
-// recent_wins[0]; this swaps in better data when the API returns.
+// (multiplier from /best-call). Card initially renders from recent_wins[0];
+// when /best-call returns we rebuild the entire body so we work whether or
+// not the template rendered the empty state. Updating individual elements
+// only worked when the template path had already populated them, which is
+// false for users whose only wins are on Polymarket.
 async function loadTrophyCard(userId) {
   try {
     const res = await fetch(`/api/predictors/${userId}/best-call`);
     const data = await res.json();
     if (!data.best) return;
     const b = data.best;
-    const qEl = document.getElementById('trophyQuestion');
-    const sideEl = document.getElementById('trophySide');
-    const multEl = document.getElementById('trophyMultiplier');
-    if (qEl) qEl.textContent = b.question;
-    if (sideEl) {
-      const sideUp = (b.side || '').toUpperCase();
-      sideEl.textContent = sideUp;
-      sideEl.className = 'side ' + (sideUp === 'YES' ? 'side-yes' : 'side-no');
-    }
-    if (multEl) {
-      multEl.textContent = b.multiplier ? `${b.multiplier}× PAYOUT` : (b.payout ? '+$' + Math.round(b.payout).toLocaleString() : 'CORRECT');
-    }
+    const body = document.getElementById('trophyBody');
+    if (!body) return;
+    const sideUp = (b.side || '').toUpperCase();
+    const sideClass = sideUp === 'YES' ? 'side-yes' : 'side-no';
+    const payoutText = b.multiplier ? `${b.multiplier}× PAYOUT` : (b.payout ? '+$' + Math.round(b.payout).toLocaleString() : 'CORRECT');
+    const dateText = b.date ? timeAgo(b.date) : '';
+    const escQ = (b.question || '').replace(/</g, '&lt;');
+    body.innerHTML = `
+      <div id="trophyQuestion" style="font-family:var(--display);font-size:32px;line-height:1.05;letter-spacing:0.01em;color:var(--ink);margin:8px 0 18px">${escQ}</div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span id="trophySide" class="side ${sideClass}">${sideUp}</span>
+        <span id="trophyMultiplier" style="font-family:var(--display);font-size:32px;color:var(--electric);letter-spacing:0.02em">${payoutText}</span>
+        ${dateText ? `<span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase;margin-left:auto">${dateText}</span>` : ''}
+      </div>
+    `;
     window._trophyData = b;
   } catch (e) { console.warn('trophy', e); }
 }
