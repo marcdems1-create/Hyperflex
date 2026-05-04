@@ -35596,18 +35596,20 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
 
   // Refresh user aggregates — count + median ROI. percentile_cont returns
   // NULL on empty filter sets so we exclude NULLs from the WITHIN GROUP.
-  if (imported > 0) {
-    try {
-      await dbQuery(
-        `UPDATE users SET
-           realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1),
-           realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
-                                   FROM realized_trades WHERE user_id = $1 AND realized_roi IS NOT NULL)
-         WHERE id = $1`,
-        [userId]
-      );
-    } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
-  }
+  // Always refresh (not just imported>0) so re-runs that hit ON CONFLICT
+  // don't leave realized_trade_count stale at 0 even though rows exist.
+  // The lazy-trigger from /api/member uses realized_trade_count to decide
+  // whether to await; stale count means it skips await on every load.
+  try {
+    await dbQuery(
+      `UPDATE users SET
+         realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1),
+         realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
+                                 FROM realized_trades WHERE user_id = $1 AND realized_roi IS NOT NULL)
+       WHERE id = $1`,
+      [userId]
+    );
+  } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
 
   // trades/groups/closed/imported triangulates the failure mode at a glance:
   // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
