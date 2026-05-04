@@ -1264,6 +1264,15 @@ if (pool) wordCounts.init({ pool });
 const clusterer = require('./lib/clusterer');
 if (pool) clusterer.init({ pool });
 
+// Mention-pages phase 2d.5 — LLM judgment pass over the rule-based
+// clusterer output. Reads each speaker_word_stance row, fetches up to 5
+// representative sentences from that speaker's transcripts, asks Claude
+// Sonnet 4.6 to classify the rhetorical posture in context, and writes
+// the verdict to the row's llm_* columns. Original `stance` stays as
+// audit trail. Initialized after the global `anthropic` client is
+// created — see further down in this file.
+const clustererJudge = require('./lib/clusterer/judge');
+
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
 // wordCounts.computeWordCounts(transcript_id) after each successful insert.
@@ -1354,6 +1363,11 @@ app.get('/api/health', async (req, res) => {
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// Phase 2d.5 — finish wiring the clusterer-judge module now that both
+// the pg pool and the Anthropic client exist. The endpoint guards
+// against a missing API key separately, so this init is unconditional.
+if (pool) clustererJudge.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
 // Every background cron that hits Claude (alpha-hooks, news-impact,
@@ -14213,6 +14227,48 @@ app.get('/api/clusterer/run', async (req, res) => {
   } catch (err) {
     console.error('[clusterer.run]', err);
     res.status(500).json({ error: 'clusterer_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/judge — Phase 2d.5 LLM judgment pass. For each
+// speaker_word_stance row, fetches up to 5 representative sentences from
+// the speaker's transcripts and asks Claude Sonnet 4.6 to classify the
+// rhetorical posture in context. Writes verdicts to llm_* columns.
+//
+// Query params:
+//   ?since=<iso>       skip rows already judged after this timestamp
+//   ?limit=N           cap rows processed this run
+//   ?dry_run=1         build prompts only; don't write or call API
+//   ?sample=N          in dry-run mode, also live-call the first N rows
+//                      and return their verdicts (without writing)
+//   ?concurrency=N     parallel API calls (default 4, max 8)
+//
+// Admin-gated like /api/clusterer/run. Requires ANTHROPIC_API_KEY in env;
+// the endpoint 503s with a clear message if it's missing.
+app.post('/api/clusterer/judge', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    const stats = await clustererJudge.run({
+      since:       req.query.since || null,
+      limit:       req.query.limit || 0,
+      dryRun:      req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:      req.query.sample || 0,
+      concurrency: req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.judge]', err);
+    res.status(500).json({ error: 'judge_failed', detail: err.message });
   }
 });
 
