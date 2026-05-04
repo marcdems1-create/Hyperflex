@@ -121,10 +121,147 @@ async function fetchWithBackoff(url) {
  *   { url, speaker, date: 'YYYY-MM-DD', eventType: 'speech'|'testimony',
  *     expectedStance: 'hawkish'|'dovish'|'neutral', title (optional, for grep) }
  */
+// Speaker selection note: the user spec asked for Williams (NY Fed) and
+// optionally Bostic / Daly. All three are regional Fed presidents whose
+// speeches live on newyorkfed.org / atlantafed.org / frbsf.org — not
+// federalreserve.gov, which is what this scraper is restricted to.
+// Substituting Vice Chair Jefferson (centrist tone, FRB) and Governor
+// Cook (dovish-leaning, FRB) keeps the multi-speaker shape without
+// extending the scraper to additional hosts. Phase 2g can broaden hosts
+// when production speech ingest ships.
 const KNOWN_SPEECHES = [
-  // Populated in a follow-up commit. Keep this empty for the skeleton ship
-  // so the seed CLI is testable (will report 0 ingests until URLs land).
+  // ── Waller (Governor, hawkish-leaning archive) ──────────────────────────
+  { speaker: 'Waller', date: '2022-02-24', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'fighting inflation with rate hikes and balance sheet reduction',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20220224a.pdf' },
+  { speaker: 'Waller', date: '2022-05-30', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and thoughts on a soft landing',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20220530a.pdf' },
+  { speaker: 'Waller', date: '2023-03-31', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'the unstable Phillips Curve',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20230331a.pdf' },
+  { speaker: 'Waller', date: '2023-06-16', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'financial stability and macroeconomic policy',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20230616a.pdf' },
+  { speaker: 'Waller', date: '2023-07-13', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'economic outlook',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20230713a.pdf' },
+  { speaker: 'Waller', date: '2023-10-10', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'the evolution of monetary policy',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20231010a.pdf' },
+  { speaker: 'Waller', date: '2023-11-28', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'economic outlook (inflation still too high)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20231128a.pdf' },
+  { speaker: 'Waller', date: '2024-03-01', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'thoughts on quantitative tightening',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20240301a.pdf' },
+  { speaker: 'Waller', date: '2024-05-21', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20240521a.pdf' },
+  { speaker: 'Waller', date: '2024-07-17', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook (data dependent)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20240717a.pdf' },
+  { speaker: 'Waller', date: '2024-09-06', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook (labor cooling)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20240906a.pdf' },
+  { speaker: 'Waller', date: '2024-10-14', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook (Hoover Institution)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20241014a.pdf' },
+  { speaker: 'Waller', date: '2024-12-02', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20241202a.pdf' },
+  { speaker: 'Waller', date: '2025-07-17', eventType: 'speech', expectedStance: 'dovish',
+    title: 'economic outlook (close to neutral, not restrictive)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20250717a.pdf' },
+  { speaker: 'Waller', date: '2025-11-17', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/waller20251117a.pdf' },
+
+  // ── Brainard (Vice Chair, dovish-leaning, archive ends Feb 2023) ────────
+  { speaker: 'Brainard', date: '2022-04-05', eventType: 'speech', expectedStance: 'neutral',
+    title: 'variation in the inflation experiences of households',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20220405a.pdf' },
+  { speaker: 'Brainard', date: '2022-09-07', eventType: 'speech', expectedStance: 'hawkish',
+    title: 'bringing inflation down',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20220907a.pdf' },
+  { speaker: 'Brainard', date: '2022-09-30', eventType: 'speech', expectedStance: 'neutral',
+    title: 'global financial stability considerations in a high-inflation environment',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20220930a.pdf' },
+  { speaker: 'Brainard', date: '2022-10-10', eventType: 'speech', expectedStance: 'neutral',
+    title: 'restoring price stability in an uncertain economic environment',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20221010a.pdf' },
+  { speaker: 'Brainard', date: '2022-11-28', eventType: 'speech', expectedStance: 'dovish',
+    title: 'what we can learn from the pandemic (supply-side framing)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20221128.pdf' },
+  { speaker: 'Brainard', date: '2023-01-19', eventType: 'speech', expectedStance: 'dovish',
+    title: 'economic outlook (her last FRB speech)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/brainard20230119a.pdf' },
+
+  // ── Cook (Governor, dovish-leaning supplement to Brainard) ──────────────
+  { speaker: 'Cook', date: '2024-03-25', eventType: 'speech', expectedStance: 'dovish',
+    title: 'the dual mandate and the balance of risks',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20240325a.pdf' },
+  { speaker: 'Cook', date: '2024-07-10', eventType: 'speech', expectedStance: 'neutral',
+    title: 'global inflation and monetary policy challenges',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20240710a.pdf' },
+  { speaker: 'Cook', date: '2024-09-26', eventType: 'speech', expectedStance: 'neutral',
+    title: 'artificial intelligence and the labor force',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20240926a.pdf' },
+  { speaker: 'Cook', date: '2024-11-20', eventType: 'speech', expectedStance: 'dovish',
+    title: 'economic outlook (inflation moving sustainably toward 2%)',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20241120a.pdf' },
+  { speaker: 'Cook', date: '2025-01-06', eventType: 'speech', expectedStance: 'dovish',
+    title: 'economic outlook and financial stability',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20250106a.pdf' },
+  { speaker: 'Cook', date: '2025-11-03', eventType: 'speech', expectedStance: 'dovish',
+    title: 'economic outlook and monetary policy',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/cook20251103a.pdf' },
+
+  // ── Jefferson (Vice Chair, centrist, substitute for Williams) ───────────
+  { speaker: 'Jefferson', date: '2024-04-16', eventType: 'speech', expectedStance: 'neutral',
+    title: 'monetary policy during periods of uncertainty',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20240416a.pdf' },
+  { speaker: 'Jefferson', date: '2024-05-20', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and housing price dynamics',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20240520a.pdf' },
+  { speaker: 'Jefferson', date: '2025-02-04', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and monetary policy',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20250204a.pdf' },
+  { speaker: 'Jefferson', date: '2025-02-05', eventType: 'speech', expectedStance: 'neutral',
+    title: 'do non-inflationary economic expansions promote shared prosperity',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20250205a.pdf' },
+  { speaker: 'Jefferson', date: '2025-04-03', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and central bank communications',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20250403a.pdf' },
+  { speaker: 'Jefferson', date: '2025-05-14', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20250514a.pdf' },
+  { speaker: 'Jefferson', date: '2025-10-03', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and monetary policy framework',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20251003a.pdf' },
+  { speaker: 'Jefferson', date: '2025-11-17', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and monetary policy',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20251117a.pdf' },
+  { speaker: 'Jefferson', date: '2026-01-16', eventType: 'speech', expectedStance: 'neutral',
+    title: 'economic outlook and monetary policy implementation',
+    url: 'https://www.federalreserve.gov/newsevents/speech/files/jefferson20260116a.pdf' },
 ];
+
+// Sourcing notes for the entries above:
+//   - 36 URLs total (vs ~45 in original spec). Hard cap on Brainard at 6 — she
+//     left FRB Feb 2023 so her relevant archive is bounded; Cook supplements
+//     the dovish bucket.
+//   - All PDF URLs follow the /newsevents/speech/files/<lastname><yyyymmdd>a.pdf
+//     pattern. brainard20221128.pdf is the one exception (no trailing 'a'),
+//     matching what the search result actually returned.
+//   - URLs pulled from federalreserve.gov search results; speech existence
+//     is verified at the URL level (search returned them) but PDF reachability
+//     wasn't fetch-tested from this sandbox (federalreserve.gov returns 403
+//     to outbound calls from here). Run with --dry-run first locally; any
+//     404s will surface in the seed CLI's failure list and can be swapped.
+//   - expectedStance is editorial judgment from the speech title alone, not
+//     from reading body text. Calibrating those tags against the rule-based
+//     classifier output is exactly the seed for Phase 2d.5.
 
 /**
  * Ingest one speech / testimony transcript by URL. Speaker, date, and
