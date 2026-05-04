@@ -1280,6 +1280,11 @@ const clustererJudge = require('./lib/clusterer/judge');
 // anthropic client injected via init() once both exist.
 const clustererBlurb = require('./lib/clusterer/blurb');
 
+// Mention-pages phase 2f — speaker-driven event composer. For each
+// transcript, rolls up the speaker's atomic stance calls and generates
+// one event-level mention_event row with a 60-100 word narrative blurb.
+const clustererCompose = require('./lib/clusterer/compose');
+
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
 // wordCounts.computeWordCounts(transcript_id) after each successful insert.
@@ -1378,6 +1383,9 @@ if (pool) clustererJudge.init({ pool, anthropic });
 
 // Phase 2e — same wiring for the blurb module.
 if (pool) clustererBlurb.init({ pool, anthropic });
+
+// Phase 2f — composer module wiring.
+if (pool) clustererCompose.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
 // Every background cron that hits Claude (alpha-hooks, news-impact,
@@ -14588,6 +14596,53 @@ app.post('/api/clusterer/blurb', async (req, res) => {
   } catch (err) {
     console.error('[clusterer.blurb]', err);
     res.status(500).json({ error: 'blurb_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/compose — Phase 2f composer. For each transcript,
+// rolls up the speaker's atomic stance calls (joined via word in
+// transcript_word_counts) and asks Claude Sonnet 4.6 to write one event-
+// level blurb. One mention_event per transcript, 1:1 grain. Preserves
+// `published` flag across recompose. Below MIN_ROWS_FOR_COMPOSE (3),
+// row exists with blurb=null and published=false for FK cleanliness.
+//
+// Hard-rejects opposite-direction stance disagreement (computed dominant
+// vs model's call) with one retry. Soft-validates same-axis disagreement
+// (logs to stance_disagreement field, accepts blurb).
+//
+// Comparison-speaker fixture via env var:
+//   MENTION_COMPARISON_OVERRIDES="<transcript_uuid>:Powell,<other>:Powell"
+//
+// Query params (mirror /api/clusterer/blurb):
+//   ?transcript_id=<uuid>  one-off per-transcript recompose
+//   ?limit=N
+//   ?dry_run=1             prompts only, no API call, no DB write
+//   ?sample=N              in dry-run, also live-call first N
+//   ?concurrency=N         default 4, capped at 8
+app.post('/api/clusterer/compose', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    const stats = await clustererCompose.run({
+      transcript_id: req.query.transcript_id || null,
+      limit:         req.query.limit || 0,
+      dryRun:        req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:        req.query.sample || 0,
+      concurrency:   req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.compose]', err);
+    res.status(500).json({ error: 'compose_failed', detail: err.message });
   }
 });
 
