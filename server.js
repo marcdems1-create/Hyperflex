@@ -35320,10 +35320,34 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   const allPos = [...(await collect(losingRes)), ...(await collect(winningRes))];
   if (!allPos.length) return { imported: 0, scanned: 0 };
 
+  // One-shot raw shape log so future field-name drift is visible without
+  // adding a debug endpoint. Logs the first position's full JSON.
+  if (allPos[0]) {
+    try {
+      const sample = JSON.stringify(allPos[0]).slice(0, 800);
+      console.log(`[backfill-shape] user=${userId.slice(0,8)} sample=${sample}`);
+    } catch {}
+  }
+
+  const nowMs = Date.now();
   let imported = 0, scanned = 0, resolvedCount = 0;
   for (const pos of allPos) {
     scanned++;
-    const isResolved = pos.resolved === true || pos.market_resolved === true;
+    // Polymarket data-api uses several field shapes for "this market is
+    // settled and the position is realized." Check every known signal:
+    //   - resolved / market_resolved / is_resolved (older / alt names)
+    //   - redeemable: true (market resolved, position not yet claimed)
+    //   - closed: true (position fully closed out)
+    //   - endDate / end_date in the past (market closed by time)
+    const endDateRaw = pos.endDate || pos.end_date || pos.market_end_date || null;
+    const endMs = endDateRaw ? Date.parse(endDateRaw) : NaN;
+    const pastEnd = Number.isFinite(endMs) && endMs < nowMs;
+    const isResolved = pos.resolved === true
+      || pos.market_resolved === true
+      || pos.is_resolved === true
+      || pos.redeemable === true
+      || pos.closed === true
+      || pastEnd;
     if (!isResolved) continue;
     resolvedCount++;
     const size = parseFloat(pos.size) || 0;
