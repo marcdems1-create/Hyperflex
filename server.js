@@ -1279,6 +1279,20 @@ fedTranscripts.init({
       },
 });
 
+// Mention-pages phase 2c.5 — speech / testimony scraper. Sibling to
+// fed_transcripts (which is presconf-only). Used to seed Williams /
+// Waller / Brainard transcripts as a non-Powell baseline so the
+// clusterer's rate-vs-corpus math has a second voice. Same init shape;
+// the seed CLI (scripts/seed_synthetic_speakers.js) walks KNOWN_SPEECHES.
+const fedSpeeches = require('./scrapers/fed_speeches');
+fedSpeeches.init({
+  fetch: _nodeFetch,
+  supabase,
+  computeWordCounts: pool
+    ? wordCounts.computeWordCounts
+    : async (id) => { console.warn(`[fed_speeches] no pg pool, skipping word counts for ${id}`); },
+});
+
 // Diagnostic endpoint — fast, non-blocking
 // Debug: test external API connectivity
 app.get('/api/debug-fetch', async (req, res) => {
