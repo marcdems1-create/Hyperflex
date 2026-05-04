@@ -1003,10 +1003,22 @@ async function load() {
           <div class="stat-num" id="statVolume">${pStats.total_trades > 0 ? volFmt : '—'}</div>
           <div class="stat-sub" id="statVolumeSub">${pStats.total_trades > 0 ? `${pStats.total_trades} positions` : 'No trades yet'}</div>
         </div>
-        <div class="stat ${stats.streak >= 3 ? 'fire' : ''}" id="statStreakCard">
+        <div class="stat ${stats.streak >= 3 ? 'fire' : ''}" id="statStreakCard" style="${(stats.streak > 0 || (take_stats && take_stats.total > 0)) ? '' : 'display:none'}">
           <div class="stat-label"><span>Streak</span><span class="ticker">${stats.streak >= 1 ? 'ACTIVE' : '—'}</span></div>
           <div class="stat-num" id="statStreak">${stats.streak || 0}<span style="font-size:0.5em;color:var(--muted);margin-left:6px">W</span></div>
           <div class="stat-sub">${(take_stats && take_stats.total) ? take_stats.total + ' takes posted' : 'Predict to start'}</div>
+        </div>
+        <!-- Open Book: live mark-to-market on currently-open Polymarket
+             positions. Real and forward-looking — most profitable Polymarket
+             traders close before expiry, so open-book P&L is a meaningful
+             signal of in-flight skin-in-the-game. Distinct from realized
+             P&L; never conflated. Renders only when user has no HFX
+             streak/take history (the slot it replaces). enrichFromLive
+             populates the values. -->
+        <div class="stat" id="statOpenBookCard" style="${(stats.streak > 0 || (take_stats && take_stats.total > 0)) ? 'display:none' : ''}">
+          <div class="stat-label"><span>Open Book</span><span class="ticker" id="statOpenBookTicker">—</span></div>
+          <div class="stat-num" id="statOpenBookNum">—</div>
+          <div class="stat-sub" id="statOpenBookSub">Live positions</div>
         </div>
       </section>
 
@@ -1412,6 +1424,29 @@ async function enrichFromLivePolymarket() {
     if (vSub) vSub.textContent = totalPositions + ' positions';
     if (pEl) { pEl.textContent = pnlFmt; pEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
     if (pSub) pSub.textContent = wins + 'W / ' + losses + 'L';
+
+    // Populate Open Book stat from live positions. Sums unrealized P&L across
+    // all open positions (cash_value > 0) and counts how many are currently
+    // in the green. Distinct from realized history — labeled as such via the
+    // OPEN ticker so it can never be mistaken for a track record.
+    const obCard = document.getElementById('statOpenBookCard');
+    if (obCard && obCard.style.display !== 'none') {
+      const openPositions = positions.filter(p => (p.cash_value || 0) > 0.01);
+      const upCount = openPositions.filter(p => (p.pnl || 0) > 0).length;
+      const totalUnrealized = openPositions.reduce((s, p) => s + (p.pnl || 0), 0);
+      const obNum = document.getElementById('statOpenBookNum');
+      const obSub = document.getElementById('statOpenBookSub');
+      const obTicker = document.getElementById('statOpenBookTicker');
+      if (openPositions.length > 0) {
+        const fmt = (totalUnrealized >= 0 ? '+$' : '-$') + (Math.abs(totalUnrealized) >= 1e3 ? Math.round(Math.abs(totalUnrealized)/1e3) + 'K' : Math.round(Math.abs(totalUnrealized)));
+        if (obNum) { obNum.textContent = fmt; obNum.style.color = totalUnrealized >= 0 ? 'var(--green)' : 'var(--red)'; }
+        if (obSub) obSub.textContent = `${upCount} of ${openPositions.length} up`;
+        if (obTicker) obTicker.textContent = 'OPEN';
+      } else {
+        // No live open positions — hide the card so we don't show "—" awkwardly
+        obCard.style.display = 'none';
+      }
+    }
 
     // Recompute tier from live data and re-render the tier card. The initial
     // template uses DB stats (often empty for newly-connected wallets) —
