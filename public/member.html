@@ -1015,11 +1015,11 @@ async function load() {
              P&L; never conflated. Renders only when user has no HFX
              streak/take history (the slot it replaces). enrichFromLive
              populates the values. -->
-        <div class="stat" id="statOpenBookCard" style="${(stats.streak > 0 || (take_stats && take_stats.total > 0)) ? 'display:none' : ''}">
+        <a class="stat" id="statOpenBookCard" href="${walletAddr ? 'https://polymarket.com/profile/' + walletAddr : '#'}" ${walletAddr ? 'target="_blank" rel="noopener"' : ''} style="${(stats.streak > 0 || (take_stats && take_stats.total > 0)) ? 'display:none' : ''};text-decoration:none;color:inherit">
           <div class="stat-label"><span>Open Book</span><span class="ticker" id="statOpenBookTicker">—</span></div>
           <div class="stat-num" id="statOpenBookNum">—</div>
           <div class="stat-sub" id="statOpenBookSub">Live positions</div>
-        </div>
+        </a>
       </section>
 
       <!-- BEST CALLS + ACTIVITY ROW -->
@@ -1037,13 +1037,22 @@ async function load() {
                 <span id="trophyMultiplier" style="font-family:var(--display);font-size:32px;color:var(--electric);letter-spacing:0.02em">${recent_wins[0].payout > 0 ? '+$' + Math.round(recent_wins[0].payout).toLocaleString() : 'CORRECT'}</span>
                 <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase;margin-left:auto">${timeAgo(recent_wins[0].resolved_at)}</span>
               </div>
-            ` : `
-              <div class="calls-empty">
+            ` : (() => {
+              // Context-aware empty state: a user who has closed positions but
+              // no winners gets honest copy ("X closed, none winning yet")
+              // instead of the generic "Post a take" CTA — they've already
+              // traded; what they need is a winner.
+              const closedTotal = (pStats.closed_wins || 0) + (pStats.closed_losses || 0);
+              const lbl = closedTotal > 0 ? 'No winners yet' : 'No resolved calls yet';
+              const hint = closedTotal > 0
+                ? `${closedTotal} closed · Best call lands on first profitable close.`
+                : (isOwner ? 'Best call lands here when a market you predicted resolves in your favor.' : 'Track record builds on resolution.');
+              return `<div class="calls-empty">
                 <div class="glyph">—</div>
-                <div class="lbl">No resolved calls yet</div>
-                <div class="hint">${isOwner ? 'Post a take. Best call lands here on resolution.' : 'Track record builds on resolution.'}</div>
-              </div>
-            `}
+                <div class="lbl">${lbl}</div>
+                <div class="hint">${hint}</div>
+              </div>`;
+            })()}
           </div>
         </div>
 
@@ -1053,7 +1062,14 @@ async function load() {
             <div class="card-tabs"><div class="tab active">${(recent_wins||[]).length}</div></div>
           </div>
           <div id="bestCallsList">
-            ${bestCallsHtml || `<div class="calls-empty"><div class="glyph">—</div><div class="lbl">No wins yet</div><div class="hint">Every resolved market scores your takes.</div></div>`}
+            ${bestCallsHtml || (() => {
+              const closedTotal = (pStats.closed_wins || 0) + (pStats.closed_losses || 0);
+              const lbl = 'No wins yet';
+              const hint = closedTotal > 0
+                ? `${closedTotal} resolved · ${pStats.closed_losses || 0}L`
+                : 'Every resolved market scores your record.';
+              return `<div class="calls-empty"><div class="glyph">—</div><div class="lbl">${lbl}</div><div class="hint">${hint}</div></div>`;
+            })()}
           </div>
         </div>
       </section>
@@ -1104,7 +1120,7 @@ async function load() {
             <div class="empty-glyph">—</div>
             <div class="empty-title">Post your first take</div>
             <div class="empty-sub">Every take is scored when the market resolves. Build a track record that speaks for itself.</div>
-            <a href="/feed" class="btn btn-gold">Post a take →</a>
+            <a href="/feed#post" class="btn btn-gold">Post a take →</a>
           </div>
         ` : `<div class="empty"><div class="empty-glyph">—</div><div class="empty-title">No takes yet</div><div class="empty-sub">${user.display_name} hasn't posted any takes yet.</div></div>`)}
       </div>
