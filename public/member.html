@@ -790,7 +790,7 @@ async function load() {
     const winsHtml = recent_wins.length
       ? `<div style="display:flex;flex-direction:column;gap:8px">${recent_wins.map(w => {
           const sideUp = (w.side || '').toUpperCase();
-          return `<a href="/${w.community_slug}" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+          return `<div class="card" style="display:flex;align-items:center;gap:12px">
             <div style="width:30px;height:30px;border-radius:50%;background:rgba(0,230,138,0.12);border:1px solid rgba(0,230,138,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--green);flex-shrink:0">✓</div>
             <div style="flex:1;min-width:0">
               <div class="card-q" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${w.question}</div>
@@ -802,7 +802,7 @@ async function load() {
               </div>
             </div>
             <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
-          </a>`;
+          </div>`;
         }).join('')}</div>`
       : `<div class="empty"><div class="empty-emoji">🎯</div><div class="empty-title">No wins yet</div><div class="empty-sub">Keep predicting — every resolved market scores your takes.</div></div>`;
 
