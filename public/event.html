@@ -36,39 +36,41 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 @media(max-width:768px){.page{padding:24px 18px 64px}}
 
 /* ── HEADER ── */
-.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .eyebrow .sep{color:var(--muted-2)}
 .event-type-chip{display:inline-block;padding:3px 10px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase}
-.headline{font-family:var(--display);font-size:48px;line-height:1.0;letter-spacing:0.01em;color:var(--ink);margin-bottom:18px}
-@media(max-width:640px){.headline{font-size:34px}}
-.subhead{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2);line-height:1.4;margin-bottom:26px}
-.dominant-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+.headline{font-family:var(--sans);font-weight:800;font-size:30px;line-height:1.1;letter-spacing:-0.01em;color:var(--ink);margin-bottom:6px}
+@media(max-width:640px){.headline{font-size:24px}}
+.subhead{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:12px;max-width:680px}
+.clarifier{font-family:var(--mono);font-size:12px;color:var(--ink-2);line-height:1.55;letter-spacing:0.02em;margin-bottom:14px;padding:10px 14px;background:rgba(0,212,255,0.04);border-left:2px solid var(--cyan);max-width:680px}
+.clarifier strong{color:var(--cyan);font-weight:700}
+.dominant-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
 
-/* ── stance pills ── */
+/* ── stance pills (confidence three-state amplified) ── */
 .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
-.pill.s-hawkish.c-high{background:rgba(255,107,77,0.16);border-color:rgba(255,107,77,0.65);color:#FFB199}
-.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.08);border-color:rgba(255,107,77,0.32);color:#E89A87}
-.pill.s-hawkish.c-low{background:rgba(255,107,77,0.04);border-color:rgba(255,107,77,0.18);color:rgba(232,154,135,0.55);text-decoration:underline dotted;text-underline-offset:3px}
-.pill.s-dovish.c-high{background:rgba(0,212,255,0.16);border-color:rgba(0,212,255,0.65);color:#9BEBFF}
-.pill.s-dovish.c-medium{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.32);color:#7FCFE8}
-.pill.s-dovish.c-low{background:rgba(0,212,255,0.04);border-color:rgba(0,212,255,0.18);color:rgba(127,207,232,0.55);text-decoration:underline dotted;text-underline-offset:3px}
-.pill.s-neutral.c-high{background:rgba(149,144,176,0.16);border-color:rgba(149,144,176,0.55);color:#C5BEDD}
-.pill.s-neutral.c-medium{background:rgba(149,144,176,0.08);border-color:rgba(149,144,176,0.28);color:rgba(197,190,221,0.75)}
-.pill.s-neutral.c-low{background:rgba(149,144,176,0.04);border-color:rgba(149,144,176,0.16);color:rgba(197,190,221,0.5);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-hawkish.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-hawkish.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-dovish.c-high{background:rgba(0,212,255,0.20);border-color:rgba(0,212,255,0.85);color:#9BEBFF}
+.pill.s-dovish.c-medium{background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.32);color:rgba(127,207,232,0.65)}
+.pill.s-dovish.c-low{background:rgba(0,212,255,0.025);border-color:rgba(0,212,255,0.15);color:rgba(127,207,232,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-neutral.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-neutral.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-neutral.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
 
 .source-link{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase}
 .source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
 .source-link a:hover{color:#9BEBFF;border-bottom-color:var(--cyan)}
 
 /* ── lead blurb ── */
-.lead{font-family:var(--serif);font-size:22px;line-height:1.55;color:var(--ink);margin-bottom:48px;max-width:720px}
-@media(max-width:640px){.lead{font-size:18px}}
+.lead{font-family:var(--serif);font-size:18px;line-height:1.55;color:var(--ink);margin-bottom:22px;max-width:720px}
+@media(max-width:640px){.lead{font-size:16px}}
 
 /* ── section header ── */
-.section-h{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.section-h{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 
 /* ── divergence cards ── */
-.divergence-list{display:flex;flex-direction:column;gap:18px;margin-bottom:48px}
+.divergence-list{display:flex;flex-direction:column;gap:14px;margin-bottom:36px}
 .dcard{background:var(--panel);border:1px solid var(--line);padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;position:relative}
 .dcard::before{content:attr(data-word);position:absolute;top:-10px;left:18px;background:var(--bg-2);padding:0 10px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:lowercase;color:var(--cyan)}
 .dside{display:flex;flex-direction:column;gap:10px}
@@ -146,7 +148,7 @@ function pill(stance, confidence) {
   return `<span class="pill s-${esc(s)} c-${esc(c)}">${esc(s)}</span>`;
 }
 
-function renderHeader(ev) {
+function renderHeader(ev, atomic, comparison) {
   const dateStr = fmtDate(ev.event_date || ev.event_at);
   const typeLabel = fmtEventType(ev.event_type);
   const headline = `${esc(ev.speaker)}'s stance posture as of ${esc(dateStr)}`;
@@ -166,6 +168,7 @@ function renderHeader(ev) {
     </div>
     <h1 class="headline">${headline}</h1>
     <p class="subhead">${sub}</p>
+    ${renderClarifier(ev, atomic, comparison)}
     <div class="dominant-row">
       ${pill(ev.dominant_stance, ev.dominant_confidence)}
       <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase">dominant posture</span>
@@ -177,6 +180,44 @@ function renderHeader(ev) {
 function renderLead(ev) {
   if (!ev.blurb) return '';
   return `<div class="lead">${esc(ev.blurb)}</div>`;
+}
+
+// Reconciles the apparent contradiction between corpus-grain dominant
+// stance (e.g. neutral overall) and event-shape stance (e.g. hawkish on
+// the divergent terms). One line, plain English, anchored to the data.
+function renderClarifier(ev, atomic, comparison) {
+  const dom = (ev.dominant_stance || 'neutral').toLowerCase();
+  const domLabel = `<strong>${esc(dom)}</strong>`;
+  // Comparison + divergence: report what the speaker leans on the
+  // divergent subset specifically.
+  if (ev.compared_to_speaker && !ev.comparison_yielded_no_divergence) {
+    const subjMap = new Map(atomic.map(r => [r.word, r]));
+    const foilMap = new Map((comparison || []).map(r => [r.word, r]));
+    const divergent = [];
+    for (const [word, subj] of subjMap) {
+      const foil = foilMap.get(word);
+      if (foil && foil.llm_stance !== subj.llm_stance) divergent.push(subj);
+    }
+    if (!divergent.length) return '';
+    const counts = { hawkish: 0, dovish: 0, neutral: 0 };
+    for (const r of divergent) if (r.llm_stance in counts) counts[r.llm_stance]++;
+    let divStance = 'hawkish';
+    for (const k of ['hawkish','dovish','neutral']) if (counts[k] > counts[divStance]) divStance = k;
+    const divLabel = `<strong>${esc(divStance)}</strong>`;
+    const n = divergent.length;
+    const noun = n === 1 ? 'term' : 'terms';
+    return `<div class="clarifier">Net posture ${domLabel}. ${divLabel} on the ${n} ${noun} below where ${esc(ev.speaker)} breaks from ${esc(ev.compared_to_speaker)}.</div>`;
+  }
+  // Comparison + no divergence
+  if (ev.compared_to_speaker && ev.comparison_yielded_no_divergence) {
+    return `<div class="clarifier">Net posture ${domLabel}. ${esc(ev.speaker)} aligned with ${esc(ev.compared_to_speaker)} on every overlapping term.</div>`;
+  }
+  // Solo
+  const sum = ev.stance_summary || {};
+  const nTotal = (sum.hawkish||[]).length + (sum.dovish||[]).length + (sum.neutral||[]).length;
+  if (!nTotal) return '';
+  const noun = nTotal === 1 ? 'tracked term' : 'tracked terms';
+  return `<div class="clarifier">Net posture ${domLabel}. Stance summary across ${nTotal} ${noun} below.</div>`;
 }
 
 function renderDivergence(ev, atomic, comparison) {
@@ -271,7 +312,7 @@ async function load() {
     const ev = data.event;
     document.title = `${ev.speaker} · ${fmtDate(ev.event_date || ev.event_at)} — HYPERFLEX`;
     page.innerHTML = `
-      ${renderHeader(ev)}
+      ${renderHeader(ev, data.atomic || [], data.comparison || [])}
       ${renderLead(ev)}
       ${renderDivergence(ev, data.atomic || [], data.comparison || [])}
       ${renderSoloGrid(ev)}
