@@ -26,6 +26,13 @@ a{color:inherit;text-decoration:none}
 
 #nav-root{position:relative;z-index:200}
 
+/* ── page intro (Phase 4.0 — generic header above the featured-event hero) ── */
+.page-intro{background:var(--bg);border-bottom:1px solid var(--line);padding:32px 36px 28px;position:relative;z-index:2}
+.page-intro-inner{max-width:1240px;margin:0 auto}
+.page-intro-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.24em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.page-intro-sub{font-family:var(--sans);font-size:15px;color:var(--ink-2);line-height:1.5;max-width:600px;margin:0}
+@media(max-width:768px){.page-intro{padding:22px 18px 20px}.page-intro-eyebrow{font-size:11px}.page-intro-sub{font-size:14px}}
+
 /* ── HERO BANNER (Phase 3.7) ── */
 .hero{position:relative;background:var(--bg-2);border-bottom:1px solid var(--line);padding:120px 36px 132px;overflow:hidden}
 .hero-grain{position:absolute;inset:0;background-image:radial-gradient(rgba(0,212,255,0.08) 1px,transparent 1px);background-size:14px 14px;mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);pointer-events:none;opacity:0.7}
@@ -134,6 +141,13 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <div id="nav-root"></div>
 <script src="/nav.js?v=20"></script>
 
+<section class="page-intro">
+  <div class="page-intro-inner">
+    <div class="page-intro-eyebrow">Mentions · market-moving statements</div>
+    <p class="page-intro-sub">Public figures, what they said, how the market reacted.</p>
+  </div>
+</section>
+
 <!--HERO_HTML-->
 
 <main class="page" id="page">
@@ -144,6 +158,9 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   <div id="filters" class="filters" style="display:none">
     <div class="filter-row" id="domain-row" style="display:none">
       <span class="filter-label">Domain</span>
+    </div>
+    <div class="filter-row" id="subject-row" style="display:none">
+      <span class="filter-label">Subject</span>
     </div>
     <div class="filter-row" id="type-row">
       <span class="filter-label">Event type</span>
@@ -161,16 +178,24 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 </main>
 
 <script>
-const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all', domainFilter: 'all' };
+const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all', domainFilter: 'all', subjectFilter: 'all' };
 
 // Friendly labels for the Domain filter chips. Falls through to the
-// raw value (capitalized) when an unknown domain shows up — gives the
+// raw value (formatted) when an unknown domain shows up — gives the
 // page graceful behavior the moment a new domain row lands.
-const DOMAIN_LABELS = { fed: 'Federal Reserve' };
+const DOMAIN_LABELS = {
+  fed_monetary_policy: 'Federal Reserve',
+  us_politics:         'US Politics',
+  geopolitics:         'Geopolitics',
+  corporate_earnings:  'Corporate',
+  tech_executives:     'Tech',
+  central_banks_intl:  'Intl Banks',
+};
 function fmtDomain(d) {
   if (!d) return 'Unknown';
   if (DOMAIN_LABELS[d]) return DOMAIN_LABELS[d];
-  return d.charAt(0).toUpperCase() + d.slice(1);
+  // Snake_case → Title Case for unknown values
+  return d.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function esc(s) {
@@ -276,7 +301,8 @@ function applyCollapse(events) {
 
 function applyFilters() {
   const events = STATE.events.filter(ev => {
-    if (STATE.domainFilter !== 'all' && (ev.domain || 'fed') !== STATE.domainFilter) return false;
+    if (STATE.domainFilter !== 'all' && (ev.domain || 'fed_monetary_policy') !== STATE.domainFilter) return false;
+    if (STATE.subjectFilter !== 'all' && (ev.subject || '') !== STATE.subjectFilter) return false;
     if (STATE.typeFilter !== 'all' && ev.event_type !== STATE.typeFilter) return false;
     if (STATE.speakerFilter !== 'all' && ev.speaker !== STATE.speakerFilter) return false;
     return true;
@@ -307,59 +333,88 @@ function applyFilters() {
     (events.length !== STATE.events.length ? ` <span style="color:var(--muted)">of ${STATE.events.length}</span>` : '');
 }
 
+// Filter chips reshape per-domain: when the user picks a domain, the
+// subject + speaker rows rebuild to show only values present in that
+// domain. Subject row stays hidden when the active domain has no
+// non-null subjects (Fed events don't carry meaningful subjects).
+function _eventsInDomain() {
+  if (STATE.domainFilter === 'all') return STATE.events;
+  return STATE.events.filter(e => (e.domain || 'fed_monetary_policy') === STATE.domainFilter);
+}
+
+function _renderChipRow(rowEl, values, currentValue, onChoose, formatter, allLabel) {
+  rowEl.querySelectorAll('.fchip').forEach(c => c.remove());
+  const allValues = ['all'].concat(values);
+  for (const v of allValues) {
+    const btn = document.createElement('button');
+    btn.className = 'fchip' + (v === currentValue ? ' active' : '');
+    btn.textContent = v === 'all' ? allLabel : formatter(v);
+    btn.dataset.value = v;
+    btn.onclick = () => onChoose(v);
+    rowEl.appendChild(btn);
+  }
+}
+
+function rebuildSubjectAndSpeakerRows() {
+  const subjectRow = document.getElementById('subject-row');
+  const speakerRow = document.getElementById('speaker-row');
+  const inDomain = _eventsInDomain();
+  const subjects = Array.from(new Set(inDomain.map(e => e.subject).filter(Boolean))).sort();
+  const speakers = Array.from(new Set(inDomain.map(e => e.speaker).filter(Boolean))).sort();
+
+  // If the current subject filter no longer applies in the new domain,
+  // reset to 'all' so the user isn't filtered down to zero rows.
+  if (STATE.subjectFilter !== 'all' && !subjects.includes(STATE.subjectFilter)) {
+    STATE.subjectFilter = 'all';
+  }
+  if (STATE.speakerFilter !== 'all' && !speakers.includes(STATE.speakerFilter)) {
+    STATE.speakerFilter = 'all';
+  }
+
+  if (subjects.length >= 1) {
+    _renderChipRow(subjectRow, subjects, STATE.subjectFilter, v => {
+      STATE.subjectFilter = v;
+      rebuildSubjectAndSpeakerRows();
+      applyFilters();
+    }, s => s, 'All subjects');
+    subjectRow.style.display = 'flex';
+  } else {
+    subjectRow.style.display = 'none';
+  }
+
+  _renderChipRow(speakerRow, speakers, STATE.speakerFilter, v => {
+    STATE.speakerFilter = v;
+    rebuildSubjectAndSpeakerRows();
+    applyFilters();
+  }, sp => sp, 'All speakers');
+}
+
 function buildFilters() {
   const domainRow = document.getElementById('domain-row');
   const typeRow = document.getElementById('type-row');
-  const speakerRow = document.getElementById('speaker-row');
-  // Distinct values in the data, with friendly labels
-  const distinctDomains = Array.from(new Set(STATE.events.map(e => e.domain || 'fed'))).sort();
-  const types = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.event_type).filter(Boolean))).sort());
-  const speakers = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.speaker).filter(Boolean))).sort());
+
+  const distinctDomains = Array.from(new Set(STATE.events.map(e => e.domain || 'fed_monetary_policy'))).sort();
+  const types = Array.from(new Set(STATE.events.map(e => e.event_type).filter(Boolean))).sort();
 
   // Domain row only renders when 2+ distinct domains exist. Phase 4
   // foundation: with one domain (Fed), the row stays hidden so the UI
   // doesn't surface a meaningless single-option filter.
   if (distinctDomains.length >= 2) {
-    const domains = ['all'].concat(distinctDomains);
-    for (const d of domains) {
-      const btn = document.createElement('button');
-      btn.className = 'fchip' + (d === STATE.domainFilter ? ' active' : '');
-      btn.textContent = d === 'all' ? 'All domains' : fmtDomain(d);
-      btn.dataset.value = d;
-      btn.onclick = () => {
-        STATE.domainFilter = d;
-        domainRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === d));
-        applyFilters();
-      };
-      domainRow.appendChild(btn);
-    }
+    _renderChipRow(domainRow, distinctDomains, STATE.domainFilter, v => {
+      STATE.domainFilter = v;
+      rebuildSubjectAndSpeakerRows();
+      applyFilters();
+    }, fmtDomain, 'All domains');
     domainRow.style.display = 'flex';
   }
 
-  for (const t of types) {
-    const btn = document.createElement('button');
-    btn.className = 'fchip' + (t === STATE.typeFilter ? ' active' : '');
-    btn.textContent = t === 'all' ? 'All' : fmtEventType(t);
-    btn.dataset.value = t;
-    btn.onclick = () => {
-      STATE.typeFilter = t;
-      typeRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === t));
-      applyFilters();
-    };
-    typeRow.appendChild(btn);
-  }
-  for (const sp of speakers) {
-    const btn = document.createElement('button');
-    btn.className = 'fchip' + (sp === STATE.speakerFilter ? ' active' : '');
-    btn.textContent = sp === 'all' ? 'All speakers' : sp;
-    btn.dataset.value = sp;
-    btn.onclick = () => {
-      STATE.speakerFilter = sp;
-      speakerRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === sp));
-      applyFilters();
-    };
-    speakerRow.appendChild(btn);
-  }
+  _renderChipRow(typeRow, types, STATE.typeFilter, v => {
+    STATE.typeFilter = v;
+    applyFilters();
+  }, fmtEventType, 'All');
+
+  rebuildSubjectAndSpeakerRows();
+
   document.getElementById('filters').style.display = 'flex';
   document.getElementById('count-line').style.display = 'block';
 }
