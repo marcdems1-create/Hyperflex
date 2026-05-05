@@ -443,7 +443,7 @@ function renderPreview(p) {
     ? `<div class="section-h">What the market is pricing · ${markets.length} listed</div>
        <div class="market-grid">${markets.map(previewMarketCard).join('')}</div>`
     : `<div class="section-h">What the market is pricing</div>
-       <div class="preview-empty">No Polymarket markets tagged to this event yet.<br>Section auto-populates when markets get listed.</div>`;
+       <div class="preview-empty">Polymarket markets pending listing — check back closer to the FOMC date.</div>`;
 
   const anchorsByCid = p.powell_anchors || {};
   const matchedMarkets = markets.filter(m => (anchorsByCid[m.conditionId] || []).length);

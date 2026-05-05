@@ -14703,13 +14703,23 @@ function _previewCacheSet(key, value) {
 }
 
 // Search Polymarket via gamma keyset by multiple terms, dedupe on
-// conditionId, filter to active+open, sort by volume desc, take top N.
+// conditionId, filter to active+open, then apply the registry's
+// must_match_any precision filter, sort by volume desc, take top N.
 // Returns [] on any fetch failure — page falls back to the placeholder.
-async function _fetchPreviewMarkets(terms, n = 8) {
-  if (!Array.isArray(terms) || !terms.length) return [];
-  const cacheKey = `preview_markets:${terms.join('|')}`;
+//
+// Takes the full preview cfg so it can read both the broad search
+// terms (recall) and the strict question-match patterns (precision).
+// Gamma's `?search=` is loose — it returns sports/crypto/sports
+// markets for queries like "fed rate june" because it tokenizes
+// liberally. Cast the candidate net wide via `terms`, then enforce
+// macro-policy semantics via `must_match_any`.
+async function _fetchPreviewMarkets(cfg, n = 8) {
+  const terms = (cfg && Array.isArray(cfg.polymarket_search_terms)) ? cfg.polymarket_search_terms : [];
+  const mustMatch = (cfg && Array.isArray(cfg.must_match_any)) ? cfg.must_match_any : [];
+  if (!terms.length) return [];
+  const cacheKey = `preview_markets:${terms.join('|')}|${mustMatch.length}`;
   const cached = _previewCacheGet(cacheKey);
-  if (cached) return cached;
+  if (cached) return cached.slice(0, n);
   const merged = new Map();
   for (const term of terms) {
     try {
@@ -14742,12 +14752,14 @@ async function _fetchPreviewMarkets(terms, n = 8) {
       console.warn('[event-preview] gamma fetch failed for term:', term, e.message);
     }
   }
-  const out = Array.from(merged.values())
-    .filter(m => m.question && m.question.length > 6)
-    .sort((a, b) => (b.volume || 0) - (a.volume || 0))
-    .slice(0, n);
+  let out = Array.from(merged.values())
+    .filter(m => m.question && m.question.length > 6);
+  if (mustMatch.length) {
+    out = out.filter(m => mustMatch.some(re => re.test(m.question)));
+  }
+  out = out.sort((a, b) => (b.volume || 0) - (a.volume || 0));
   _previewCacheSet(cacheKey, out);
-  return out;
+  return out.slice(0, n);
 }
 
 // For each market in the list, find Powell stance rows for tracked
@@ -14802,7 +14814,7 @@ app.get('/api/event/:slug', async (req, res) => {
     if (!eventRows.length) {
       const cfg = eventPreviews.getPreview(slug);
       if (cfg) {
-        const markets = await _fetchPreviewMarkets(cfg.polymarket_search_terms);
+        const markets = await _fetchPreviewMarkets(cfg);
         const powellAnchorsByCid = cfg.powell_compare
           ? await _fetchPowellAnchorsForMarkets(markets)
           : {};
@@ -15000,7 +15012,7 @@ async function _renderMentionsHero() {
   // Fetch markets (top 4) — same data path as the preview-page API
   let markets = [];
   try {
-    markets = await _fetchPreviewMarkets(cfg.polymarket_search_terms, 4);
+    markets = await _fetchPreviewMarkets(cfg, 4);
   } catch (e) { markets = []; }
 
   const cd = _fmtCountdownParts(eventIso, nowMs);
