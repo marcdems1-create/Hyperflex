@@ -26,6 +26,44 @@ a{color:inherit;text-decoration:none}
 
 #nav-root{position:relative;z-index:50}
 
+/* ── HERO BANNER (Phase 3.7) ── */
+.hero{position:relative;background:var(--bg-2);border-bottom:1px solid var(--line);padding:120px 36px 132px;overflow:hidden;z-index:2}
+.hero-grain{position:absolute;inset:0;background-image:radial-gradient(rgba(0,212,255,0.08) 1px,transparent 1px);background-size:14px 14px;mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);pointer-events:none;opacity:0.7}
+.hero-inner{position:relative;max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.hero-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.28em;color:var(--cyan);text-transform:uppercase;padding:5px 12px;border:1px solid rgba(0,212,255,0.45);align-self:flex-start;background:rgba(0,212,255,0.06)}
+.hero-headline{font-family:var(--sans);font-weight:800;font-size:68px;line-height:1.0;letter-spacing:-0.015em;color:var(--ink);margin:0}
+.hero-sub{font-family:var(--sans);font-size:19px;color:var(--ink-2);line-height:1.55;max-width:600px;margin:0}
+.hero-countdown{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.hero-cd-digits{font-family:var(--mono);font-weight:700;font-size:48px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums}
+.hero-cd-label{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.hero-live-badge{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--cyan);background:rgba(0,212,255,0.10);font-family:var(--mono);font-size:13px;color:var(--cyan);letter-spacing:0.18em;text-transform:uppercase;font-weight:700;align-self:flex-start;margin-top:6px}
+.hero-live-badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:hero-pulse 1.6s ease-in-out infinite}
+@keyframes hero-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.hero-strip{margin-top:8px}
+.hero-strip-h{font-family:var(--mono);font-size:10px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.hero-strip-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.hero-mini{display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:rgba(255,255,255,0.025);border:1px solid var(--line);transition:border-color .15s,background .15s,transform .15s;text-decoration:none;color:inherit;min-height:120px}
+.hero-mini:hover{border-color:var(--cyan);background:rgba(0,212,255,0.05);transform:translateY(-1px)}
+.hero-mini-q{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.4;flex:1}
+.hero-mini-yes-row{display:flex;align-items:baseline;gap:8px;margin-top:auto}
+.hero-mini-yes{font-family:var(--sans);font-weight:800;font-size:32px;line-height:1;letter-spacing:-0.01em}
+.hero-mini-yes.high{color:var(--cyan)}
+.hero-mini-yes.low{color:#FF6B4D}
+.hero-mini-yes.mid{color:var(--ink-2)}
+.hero-mini-yes-lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.hero-mini-foot{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase}
+.hero-cta{display:inline-flex;align-items:center;gap:8px;padding:14px 22px;background:var(--cyan);color:#001a23;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid var(--cyan);text-decoration:none;align-self:flex-start;transition:transform .15s,box-shadow .15s,filter .15s;margin-top:8px}
+.hero-cta:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,0.35);filter:brightness(1.1)}
+@media(max-width:960px){.hero-strip-row{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){
+  .hero{padding:64px 18px 72px}
+  .hero-headline{font-size:40px}
+  .hero-sub{font-size:16px}
+  .hero-cd-digits{font-size:34px}
+  .hero-strip-row{grid-template-columns:1fr}
+  .hero-cta{align-self:stretch;justify-content:center;width:100%}
+}
+
 .page{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:32px 36px 80px}
 @media(max-width:768px){.page{padding:20px 16px 56px}}
 
@@ -46,18 +84,22 @@ a{color:inherit;text-decoration:none}
 .fchip.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,0.08)}
 @media(max-width:640px){.filter-label{min-width:auto;width:100%;margin-bottom:2px}}
 
+/* ── archive divider ── */
+.archive-divider{display:flex;align-items:center;gap:14px;margin:0 0 22px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase}
+.archive-divider::before,.archive-divider::after{content:"";flex:1;height:1px;background:rgba(0,212,255,0.18)}
+
 /* ── card grid ── */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 @media(max-width:1024px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.grid{grid-template-columns:1fr}}
 
+/* ── speaker collapse expander ── */
+.speaker-expand{grid-column:1 / -1;padding:14px 18px;background:rgba(0,212,255,0.04);border:1px dashed rgba(0,212,255,0.32);font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:0.04em;cursor:pointer;text-align:center;transition:background .15s,border-color .15s}
+.speaker-expand:hover{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.5);border-style:solid}
+.speaker-expand strong{font-weight:700}
+
 .card{background:var(--panel);border:1px solid var(--line);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;cursor:pointer;position:relative;min-height:170px}
 .card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
-.card.featured{border-color:rgba(0,212,255,0.45);background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(255,255,255,0.02));grid-column:1 / -1;min-height:200px}
-.card.featured:hover{border-color:var(--cyan)}
-.card.featured .card-headline{font-size:22px;line-height:1.2;font-weight:800}
-.card.featured .preview-badge{position:absolute;top:14px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase;padding:3px 8px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.4)}
-@media(max-width:640px){.card.featured{grid-column:1}.card.featured .card-headline{font-size:18px}}
 .card-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .card-eyebrow .sep{color:var(--muted-2)}
 .card-eyebrow .speaker{color:var(--ink-2);font-weight:700}
@@ -92,10 +134,10 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <div id="nav-root"></div>
 <script src="/nav.js?v=20"></script>
 
+<!--HERO_HTML-->
+
 <main class="page" id="page">
-  <div class="eyebrow">Stance receipts · Federal Reserve</div>
-  <h1 class="headline">Mentions</h1>
-  <p class="subhead">Roll-up of every Fed speaker, presser, and testimony in the corpus, with stance posture computed per speaker as of each event date. Click through for the divergence breakdown.</p>
+  <div class="archive-divider">Recent posture archive</div>
 
   <div id="count-line" class="count-line" style="display:none"></div>
 
@@ -109,7 +151,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   </div>
 
   <div id="grid-host">
-    <div id="loading">Loading mentions…</div>
+    <div id="loading">Loading archive…</div>
   </div>
 
   <footer>HYPERFLEX · receipts on what was said</footer>
@@ -160,36 +202,63 @@ function truncate(s, n) {
 function renderCard(ev) {
   const dateStr = fmtDate(ev.event_date || ev.event_at);
   const typeLabel = fmtEventType(ev.event_type);
-  const isPreview = !!ev.is_preview;
-  const blurbShort = truncate(ev.blurb || '', isPreview ? 220 : 140);
+  const blurbShort = truncate(ev.blurb || '', 140);
   const compared = ev.compared_to_speaker
     ? `<div class="compared-chip">vs <strong>${esc(ev.compared_to_speaker)}</strong></div>`
     : '<div class="compared-chip" style="visibility:hidden">·</div>';
-  const headline = isPreview
-    ? `${esc(ev.speaker)}'s first FOMC · pre-event preview`
-    : `${esc(ev.speaker)}'s posture as of ${esc(dateStr)}`;
-  const arrow = isPreview ? 'open preview →' : 'read →';
-  const badge = isPreview ? '<span class="preview-badge">Live preview</span>' : '';
   return `
-    <a class="card${isPreview ? ' featured' : ''}" href="/event/${esc(ev.slug)}">
-      ${badge}
+    <a class="card" href="/event/${esc(ev.slug)}">
       <div class="card-eyebrow">
         <span class="speaker">${esc(ev.speaker)}</span>
         <span class="sep">·</span>
         <span>${esc(dateStr)}</span>
         <span class="card-type">${esc(typeLabel)}</span>
       </div>
-      <div class="card-headline">${headline}</div>
+      <div class="card-headline">${esc(ev.speaker)}'s posture as of ${esc(dateStr)}</div>
       <div class="card-blurb">${esc(blurbShort)}</div>
       <div class="card-foot">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           ${pill(ev.dominant_stance, ev.dominant_confidence)}
           ${compared}
         </div>
-        <span class="card-arrow">${arrow}</span>
+        <span class="card-arrow">read →</span>
       </div>
     </a>
   `;
+}
+
+// Powell-collapse — when a speaker has > THRESHOLD published events,
+// show first INLINE inline + an expander that reveals the rest. Per-
+// speaker state lives in STATE.expandedSpeakers (Set of speaker names).
+const COLLAPSE_THRESHOLD = 5;
+const COLLAPSE_INLINE = 3;
+STATE.expandedSpeakers = new Set();
+
+function applyCollapse(events) {
+  // Group by speaker, collapsing only when filter doesn't already pin
+  // a single speaker (no point hiding within a single-speaker view).
+  if (STATE.speakerFilter !== 'all') return { rendered: events, collapsed: [] };
+  const counts = new Map();
+  for (const ev of events) counts.set(ev.speaker, (counts.get(ev.speaker) || 0) + 1);
+  const seen = new Map();
+  const rendered = [];
+  const expanders = [];
+  for (const ev of events) {
+    const total = counts.get(ev.speaker) || 0;
+    const so_far = seen.get(ev.speaker) || 0;
+    if (total > COLLAPSE_THRESHOLD && so_far >= COLLAPSE_INLINE && !STATE.expandedSpeakers.has(ev.speaker)) {
+      // Skip rendering this row, but make sure exactly one expander
+      // exists per collapsed speaker.
+      if (!expanders.find(e => e.speaker === ev.speaker)) {
+        expanders.push({ speaker: ev.speaker, hidden: total - COLLAPSE_INLINE });
+      }
+      seen.set(ev.speaker, so_far + 1);
+      continue;
+    }
+    rendered.push(ev);
+    seen.set(ev.speaker, so_far + 1);
+  }
+  return { rendered, expanders };
 }
 
 function applyFilters() {
@@ -202,7 +271,22 @@ function applyFilters() {
   if (!events.length) {
     host.innerHTML = '<div id="empty"><div>No matches</div><div id="empty-msg">Try a different filter combination.</div></div>';
   } else {
-    host.innerHTML = '<div class="grid">' + events.map(renderCard).join('') + '</div>';
+    const { rendered, expanders } = applyCollapse(events);
+    // Render cards in original event_date order, but interleave the
+    // expander chip after a speaker's last visible card. Simpler:
+    // render all visible cards first, then a row of expanders below.
+    const cards = rendered.map(renderCard).join('');
+    const expanderHtml = (expanders || []).map(e =>
+      `<div class="speaker-expand" data-speaker="${esc(e.speaker)}">View all <strong>${e.hidden + COLLAPSE_INLINE}</strong> ${esc(e.speaker)} events →</div>`
+    ).join('');
+    host.innerHTML = '<div class="grid">' + cards + expanderHtml + '</div>';
+    // Wire expander clicks
+    host.querySelectorAll('.speaker-expand').forEach(el => {
+      el.onclick = () => {
+        STATE.expandedSpeakers.add(el.dataset.speaker);
+        applyFilters();
+      };
+    });
   }
   const count = document.getElementById('count-line');
   count.innerHTML = `<strong>${events.length}</strong> ${events.length === 1 ? 'event' : 'events'}` +
@@ -243,6 +327,32 @@ function buildFilters() {
   document.getElementById('filters').style.display = 'flex';
   document.getElementById('count-line').style.display = 'block';
 }
+
+// Live countdown ticker — reads the SSR'd target ISO from the hero
+// data attribute. Server already rendered a static value; this just
+// ticks it forward every minute. Skips silently if the hero is in
+// 'live' mode (no countdown digits) or absent.
+function startCountdownTicker() {
+  const el = document.getElementById('hero-cd-digits');
+  if (!el || !el.dataset.target) return;
+  const target = new Date(el.dataset.target).getTime();
+  if (!isFinite(target)) return;
+  function tick() {
+    const diff = target - Date.now();
+    if (diff <= 0) {
+      el.textContent = 'live';
+      return;
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diff / dayMs);
+    const hours = Math.floor((diff % dayMs) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    el.textContent = `${days}d ${hours}h ${minutes}m`;
+  }
+  tick();
+  setInterval(tick, 60 * 1000);
+}
+startCountdownTicker();
 
 async function load() {
   try {

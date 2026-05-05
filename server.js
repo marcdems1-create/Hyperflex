@@ -14897,6 +14897,8 @@ app.get('/event/:slug', (req, res) => {
 app.get('/api/mentions', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'database unavailable' });
   try {
+    // Plain archive only. Phase 3.7 hero banner replaces the previous
+    // featured-card injection — Warsh now lives in the hero, not the grid.
     const rows = await dbQuery(`
       select slug, speaker, event_type, event_date, event_at, blurb,
              dominant_stance, dominant_confidence, compared_to_speaker
@@ -14904,44 +14906,154 @@ app.get('/api/mentions', async (req, res) => {
       where published = true and blurb is not null
       order by event_date desc nulls last, event_at desc nulls last
     `);
-
-    // Phase 3.6 — surface registered preview slugs at the top of the
-    // grid as featured cards, only when no composed mention_event row
-    // exists for that slug yet. The moment Phase 2g writes the row,
-    // the card disappears from this list (the composed row takes its
-    // spot in the natural date order). No dedup-against-real-row needed.
-    const previewSlugs = eventPreviews.previewSlugs();
-    const composedSlugs = new Set(rows.map(r => r.slug));
-    const featured = [];
-    for (const ps of previewSlugs) {
-      if (composedSlugs.has(ps)) continue;
-      const cfg = eventPreviews.getPreview(ps);
-      if (!cfg) continue;
-      featured.push({
-        slug:                 ps,
-        speaker:              cfg.speaker,
-        event_type:           cfg.event_type,
-        event_date:           cfg.event_date,
-        event_at:             cfg.event_date ? cfg.event_date + 'T17:00:00Z' : null,
-        blurb:                cfg.subhead,
-        dominant_stance:      'neutral',
-        dominant_confidence:  'low',
-        compared_to_speaker:  cfg.powell_compare ? 'Powell' : null,
-        is_preview:           true,
-      });
-    }
-
-    res.json({ events: featured.concat(rows) });
+    res.json({ events: rows });
   } catch (err) {
     console.error('[mentions-api]', err);
     res.status(500).json({ error: 'mentions_api_failed', detail: err.message });
   }
 });
 
-// GET /mentions — Phase 3 mentions index. Static shell + client-side
-// fetch of /api/mentions. Same architectural pattern as /event/:slug.
-app.get('/mentions', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+// GET /mentions — hero-banner SSR + static archive shell. The hero
+// is rendered server-side (mode = preview / live / none based on
+// today's date vs the registered preview event_date and whether the
+// composed mention_events row exists yet) so it survives a JS-disabled
+// browser. Archive grid below stays client-rendered via /api/mentions.
+//
+// Template is read once at startup; the hero placeholder
+// `<!--HERO_HTML-->` is replaced per request with the computed markup.
+let _mentionsTemplate = null;
+function _loadMentionsTemplate() {
+  if (!_mentionsTemplate) {
+    _mentionsTemplate = require('fs').readFileSync(path.join(__dirname, 'public', 'mentions.html'), 'utf8');
+  }
+  return _mentionsTemplate;
+}
+
+function _fmtCountdownParts(targetIso, nowMs) {
+  const target = new Date(targetIso).getTime();
+  if (!isFinite(target)) return null;
+  const diff = target - nowMs;
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, passed: true };
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = Math.floor(diff / dayMs);
+  const hours = Math.floor((diff % dayMs) / (60 * 60 * 1000));
+  const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+  return { days, hours, minutes, passed: false };
+}
+
+function _escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function _fmtDateLong(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function _renderHeroMiniCard(m) {
+  const yes = m.yesPrice;
+  const yesCls = yes == null ? 'mid' : (yes >= 0.6 ? 'high' : (yes <= 0.4 ? 'low' : 'mid'));
+  const yesLabel = yes == null ? '—' : Math.round(yes * 100) + '%';
+  const vol = m.volume || 0;
+  const volLabel = vol >= 1e6 ? '$' + (vol / 1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol / 1e3) + 'K' : '$' + Math.round(vol);
+  let href = '#';
+  if (m.slug) href = '/market/' + m.slug;
+  else if (m.eventSlug) href = 'https://polymarket.com/event/' + m.eventSlug;
+  const target = href.startsWith('http') ? ' target="_blank" rel="noopener"' : '';
+  const q = m.question.length > 60 ? m.question.slice(0, 58).trim() + '…' : m.question;
+  return `<a class="hero-mini" href="${_escHtml(href)}"${target}>
+    <div class="hero-mini-q">${_escHtml(q)}</div>
+    <div class="hero-mini-yes-row">
+      <span class="hero-mini-yes ${yesCls}">${_escHtml(yesLabel)}</span>
+      <span class="hero-mini-yes-lbl">YES</span>
+    </div>
+    <div class="hero-mini-foot">vol ${_escHtml(volLabel)}</div>
+  </a>`;
+}
+
+async function _renderMentionsHero() {
+  const cfg = eventPreviews.getPreview('warsh-2026-06-fomc-presser');
+  if (!cfg || !cfg.event_date) return '';
+  const eventIso = cfg.event_date + 'T17:00:00Z';
+  const eventMs = new Date(eventIso).getTime();
+  const nowMs = Date.now();
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+  // Mode decision
+  let mode;
+  if (nowMs < eventMs) {
+    mode = 'preview';
+  } else if (nowMs < eventMs + fourteenDaysMs) {
+    // Composed row check
+    let composed = [];
+    try {
+      composed = await dbQuery(`select 1 from mention_events where slug = $1 and published = true limit 1`, ['warsh-2026-06-fomc-presser']);
+    } catch (e) { composed = []; }
+    mode = composed.length ? 'live' : 'none';
+  } else {
+    mode = 'none';
+  }
+  if (mode === 'none') return '';
+
+  // Fetch markets (top 4) — same data path as the preview-page API
+  let markets = [];
+  try {
+    markets = await _fetchPreviewMarkets(cfg.polymarket_search_terms, 4);
+  } catch (e) { markets = []; }
+
+  const cd = _fmtCountdownParts(eventIso, nowMs);
+  const eyebrow = `UPCOMING — ${_fmtDateLong(eventIso).toUpperCase()}`;
+  const ctaHref = '/event/warsh-2026-06-fomc-presser';
+
+  let countdownBlock;
+  let ctaLabel;
+  if (mode === 'live') {
+    countdownBlock = `<div class="hero-live-badge">LIVE RECEIPT — READ NOW</div>`;
+    ctaLabel = 'Read live receipt →';
+  } else {
+    const digits = cd ? `${cd.days}d ${cd.hours}h ${cd.minutes}m` : '';
+    const staticDigits = cd ? `${cd.days} days, ${cd.hours} hours` : '';
+    countdownBlock = `
+      <div class="hero-countdown">
+        <span class="hero-cd-digits" id="hero-cd-digits" data-target="${_escHtml(eventIso)}" data-static="${_escHtml(staticDigits)}">${_escHtml(digits)}</span>
+        <div class="hero-cd-label">until the press conference</div>
+      </div>`;
+    ctaLabel = 'View Warsh preview →';
+  }
+
+  const stripBlock = markets.length ? `
+    <div class="hero-strip">
+      <div class="hero-strip-h">WHAT THE MARKET IS PRICING</div>
+      <div class="hero-strip-row">${markets.map(_renderHeroMiniCard).join('')}</div>
+    </div>` : '';
+
+  return `
+<section class="hero" data-mode="${_escHtml(mode)}">
+  <div class="hero-grain"></div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">${_escHtml(eyebrow)}</div>
+    <h1 class="hero-headline">${_escHtml(cfg.headline)}</h1>
+    <p class="hero-sub">Live receipt within 24h of the press conference. Powell's posture on the same terms below.</p>
+    ${countdownBlock}
+    ${stripBlock}
+    <a class="hero-cta" href="${_escHtml(ctaHref)}">${_escHtml(ctaLabel)}</a>
+  </div>
+</section>
+`;
+}
+
+app.get('/mentions', async (req, res) => {
+  try {
+    const tpl = _loadMentionsTemplate();
+    const heroHtml = await _renderMentionsHero();
+    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Content-Type', 'text/html; charset=utf-8').send(body);
+  } catch (err) {
+    console.error('[mentions-route]', err);
+    res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+  }
 });
 
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
