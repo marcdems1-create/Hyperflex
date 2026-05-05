@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mention event — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
+  --panel:#14102A;--panel-2:#1B1638;
+  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
+  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;
+  --cyan:#00D4FF;--cyan-glow:rgba(0,212,255,0.35);
+  --hawk:#FF6B4D;--hawk-glow:rgba(255,107,77,0.35);
+  --dove:#00D4FF;
+  --neut:#9590B0;
+  --display:'Anton',sans-serif;
+  --serif:'Instrument Serif',serif;
+  --sans:'Geist','Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+a{color:inherit;text-decoration:none}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 36px;position:sticky;top:0;z-index:50;background:rgba(7,5,15,0.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--line)}
+.nav-logo{font-family:var(--display);font-size:22px;letter-spacing:0.18em;color:var(--ink)}
+.nav-back{color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;padding:0 10px}
+.nav-back:hover{color:var(--ink)}
+@media(max-width:640px){nav{padding:14px 18px}.nav-logo{font-size:18px}}
+
+.page{position:relative;z-index:2;max-width:920px;margin:0 auto;padding:32px 36px 80px}
+@media(max-width:768px){.page{padding:24px 18px 64px}}
+
+/* ── HEADER ── */
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow .sep{color:var(--muted-2)}
+.event-type-chip{display:inline-block;padding:3px 10px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase}
+.headline{font-family:var(--display);font-size:48px;line-height:1.0;letter-spacing:0.01em;color:var(--ink);margin-bottom:18px}
+@media(max-width:640px){.headline{font-size:34px}}
+.subhead{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2);line-height:1.4;margin-bottom:26px}
+.dominant-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+
+/* ── stance pills ── */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
+.pill.s-hawkish.c-high{background:rgba(255,107,77,0.16);border-color:rgba(255,107,77,0.65);color:#FFB199}
+.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.08);border-color:rgba(255,107,77,0.32);color:#E89A87}
+.pill.s-hawkish.c-low{background:rgba(255,107,77,0.04);border-color:rgba(255,107,77,0.18);color:rgba(232,154,135,0.55);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-dovish.c-high{background:rgba(0,212,255,0.16);border-color:rgba(0,212,255,0.65);color:#9BEBFF}
+.pill.s-dovish.c-medium{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.32);color:#7FCFE8}
+.pill.s-dovish.c-low{background:rgba(0,212,255,0.04);border-color:rgba(0,212,255,0.18);color:rgba(127,207,232,0.55);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-neutral.c-high{background:rgba(149,144,176,0.16);border-color:rgba(149,144,176,0.55);color:#C5BEDD}
+.pill.s-neutral.c-medium{background:rgba(149,144,176,0.08);border-color:rgba(149,144,176,0.28);color:rgba(197,190,221,0.75)}
+.pill.s-neutral.c-low{background:rgba(149,144,176,0.04);border-color:rgba(149,144,176,0.16);color:rgba(197,190,221,0.5);text-decoration:underline dotted;text-underline-offset:3px}
+
+.source-link{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase}
+.source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
+.source-link a:hover{color:#9BEBFF;border-bottom-color:var(--cyan)}
+
+/* ── lead blurb ── */
+.lead{font-family:var(--serif);font-size:22px;line-height:1.55;color:var(--ink);margin-bottom:48px;max-width:720px}
+@media(max-width:640px){.lead{font-size:18px}}
+
+/* ── section header ── */
+.section-h{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+
+/* ── divergence cards ── */
+.divergence-list{display:flex;flex-direction:column;gap:18px;margin-bottom:48px}
+.dcard{background:var(--panel);border:1px solid var(--line);padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;position:relative}
+.dcard::before{content:attr(data-word);position:absolute;top:-10px;left:18px;background:var(--bg-2);padding:0 10px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:lowercase;color:var(--cyan)}
+.dside{display:flex;flex-direction:column;gap:10px}
+.dside-h{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+.dside-h.subject{color:var(--ink-2)}
+.dside-blurb{font-family:var(--sans);font-size:13px;line-height:1.5;color:var(--ink-2)}
+.dside.foil{opacity:0.78}
+.dside.foil .dside-blurb{font-size:12px;color:var(--muted)}
+@media(max-width:768px){.dcard{grid-template-columns:1fr;gap:18px}.dside.foil{padding-top:14px;border-top:1px dashed var(--line)}}
+
+/* ── solo stance summary (3-column) ── */
+.solo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:48px}
+@media(max-width:768px){.solo-grid{grid-template-columns:1fr}}
+.solo-col{background:var(--panel);border:1px solid var(--line);padding:18px 20px}
+.solo-col-h{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.solo-col-h.hawk{color:#FFB199}
+.solo-col-h.dove{color:#9BEBFF}
+.solo-col-h.neut{color:var(--ink-2)}
+.solo-chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:5px 11px;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.025);border:1px solid var(--line);color:var(--ink-2)}
+
+/* ── atomic table ── */
+.atomic-list{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.atomic-row{display:grid;grid-template-columns:140px auto 1fr;gap:16px;padding:14px 4px;border-bottom:1px solid var(--line);align-items:start}
+.atomic-word{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600}
+.atomic-rationale{font-family:var(--sans);font-size:12px;line-height:1.5;color:var(--muted)}
+@media(max-width:640px){.atomic-row{grid-template-columns:1fr;gap:6px}.atomic-rationale{padding-left:0}}
+
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--cyan)}
+
+#loading{padding:80px 0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+#err{padding:80px 0;text-align:center;font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2)}
+#err small{display:block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;font-style:normal}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-logo">HYPER<span style="color:var(--cyan)">F</span>LEX</a>
+  <a href="/" class="nav-back">← back</a>
+</nav>
+
+<main class="page" id="page">
+  <div id="loading">Loading event…</div>
+</main>
+
+<script>
+const SLUG = location.pathname.replace(/^\/event\//, '').replace(/\/$/, '');
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function fmtEventType(t) {
+  if (!t) return '';
+  if (t === 'fomc_presser') return 'FOMC presser';
+  if (t === 'speech') return 'Speech';
+  if (t === 'testimony') return 'Testimony';
+  if (t === 'op_ed') return 'Op-Ed';
+  return t.replace(/_/g, ' ');
+}
+
+function pill(stance, confidence) {
+  const s = (stance || 'neutral').toLowerCase();
+  const c = (confidence || 'medium').toLowerCase();
+  return `<span class="pill s-${esc(s)} c-${esc(c)}">${esc(s)}</span>`;
+}
+
+function renderHeader(ev) {
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const typeLabel = fmtEventType(ev.event_type);
+  const headline = `${esc(ev.speaker)}'s stance posture as of ${esc(dateStr)}`;
+  const sub = ev.compared_to_speaker
+    ? `Where ${esc(ev.speaker)} diverges from ${esc(ev.compared_to_speaker)}'s posture on the same terms.`
+    : `Roll-up of ${esc(ev.speaker)}'s stance on tracked monetary-policy terms as of this point in their tenure.`;
+  const sourceLink = ev.source_url
+    ? `<div class="source-link">Source · <a href="${esc(ev.source_url)}" target="_blank" rel="noopener">verify on FRB.gov ↗</a></div>`
+    : '';
+  return `
+    <div class="eyebrow">
+      <span>${esc(ev.speaker)}</span>
+      <span class="sep">·</span>
+      <span>${esc(dateStr)}</span>
+      <span class="sep">·</span>
+      <span class="event-type-chip">${esc(typeLabel)}</span>
+    </div>
+    <h1 class="headline">${headline}</h1>
+    <p class="subhead">${sub}</p>
+    <div class="dominant-row">
+      ${pill(ev.dominant_stance, ev.dominant_confidence)}
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase">dominant posture</span>
+      ${sourceLink}
+    </div>
+  `;
+}
+
+function renderLead(ev) {
+  if (!ev.blurb) return '';
+  return `<div class="lead">${esc(ev.blurb)}</div>`;
+}
+
+function renderDivergence(ev, atomic, comparison) {
+  if (!ev.compared_to_speaker) return '';
+  if (ev.comparison_yielded_no_divergence) {
+    return `
+      <div class="section-h">Comparison: ${esc(ev.compared_to_speaker)}</div>
+      <p style="font-family:var(--serif);font-style:italic;font-size:15px;color:var(--ink-2);margin-bottom:48px;max-width:680px">
+        ${esc(ev.speaker)} and ${esc(ev.compared_to_speaker)} aligned on every overlapping term.
+        No divergent rows to render.
+      </p>
+    `;
+  }
+  // Build same-word divergence map
+  const subjMap = new Map(atomic.map(r => [r.word, r]));
+  const foilMap = new Map(comparison.map(r => [r.word, r]));
+  const divergent = [];
+  for (const [word, subj] of subjMap) {
+    const foil = foilMap.get(word);
+    if (foil && foil.llm_stance !== subj.llm_stance) {
+      divergent.push({ word, subj, foil });
+    }
+  }
+  if (!divergent.length) return '';
+  const cards = divergent.map(d => `
+    <div class="dcard" data-word="${esc(d.word)}">
+      <div class="dside">
+        <div class="dside-h subject">${esc(ev.speaker)} · as of event date</div>
+        ${pill(d.subj.llm_stance, d.subj.llm_confidence)}
+        <div class="dside-blurb">${esc(d.subj.blurb || d.subj.llm_rationale || '')}</div>
+      </div>
+      <div class="dside foil">
+        <div class="dside-h">${esc(ev.compared_to_speaker)} · posture for comparison</div>
+        ${pill(d.foil.llm_stance, d.foil.llm_confidence)}
+        <div class="dside-blurb">${esc(d.foil.blurb || '')}</div>
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-h">Where ${esc(ev.speaker)} diverged from ${esc(ev.compared_to_speaker)} as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="divergence-list">${cards}</div>
+  `;
+}
+
+function renderSoloGrid(ev) {
+  if (ev.compared_to_speaker) return '';
+  const sum = ev.stance_summary || {};
+  const col = (label, words, cls) => {
+    const chips = (words || []).map(w => `<span class="chip">${esc(w)}</span>`).join('');
+    return `
+      <div class="solo-col">
+        <div class="solo-col-h ${cls}">${esc(label)} · ${(words||[]).length}</div>
+        <div class="solo-chips">${chips || '<span style="font-family:var(--mono);font-size:11px;color:var(--muted-2)">—</span>'}</div>
+      </div>
+    `;
+  };
+  return `
+    <div class="section-h">Stance posture as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="solo-grid">
+      ${col('Hawkish', sum.hawkish, 'hawk')}
+      ${col('Dovish',  sum.dovish,  'dove')}
+      ${col('Neutral', sum.neutral, 'neut')}
+    </div>
+  `;
+}
+
+function renderAtomic(ev, atomic) {
+  if (!atomic.length) return '';
+  const rows = atomic.map(r => `
+    <div class="atomic-row">
+      <div class="atomic-word">${esc(r.word)}</div>
+      <div>${pill(r.llm_stance, r.llm_confidence)}</div>
+      <div class="atomic-rationale">${esc(r.llm_rationale || '')}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-h">Atomic stance breakdown · ${esc(ev.speaker)}'s posture as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="atomic-list">${rows}</div>
+  `;
+}
+
+async function load() {
+  const page = document.getElementById('page');
+  try {
+    const res = await fetch('/api/event/' + encodeURIComponent(SLUG));
+    if (res.status === 404) {
+      page.innerHTML = '<div id="err">Event not found.<small>This page either doesn\'t exist or hasn\'t been published.</small></div>';
+      return;
+    }
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    const ev = data.event;
+    document.title = `${ev.speaker} · ${fmtDate(ev.event_date || ev.event_at)} — HYPERFLEX`;
+    page.innerHTML = `
+      ${renderHeader(ev)}
+      ${renderLead(ev)}
+      ${renderDivergence(ev, data.atomic || [], data.comparison || [])}
+      ${renderSoloGrid(ev)}
+      ${renderAtomic(ev, data.atomic || [])}
+      <footer>
+        <span>HYPERFLEX · receipts on what was said</span>
+        ${ev.source_url ? `<a href="${esc(ev.source_url)}" target="_blank" rel="noopener">verify ↗</a>` : ''}
+      </footer>
+    `;
+  } catch (e) {
+    console.error(e);
+    page.innerHTML = '<div id="err">Could not load this event.<small>Try refreshing in a moment.</small></div>';
+  }
+}
+
+load();
+</script>
+</body>
+</html>

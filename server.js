@@ -14646,9 +14646,94 @@ app.post('/api/clusterer/compose', async (req, res) => {
   }
 });
 
+// GET /api/event/:slug — Phase 3 mention event page payload. Public (no
+// auth, no admin gate). Returns the mention_event row plus the speaker's
+// atomic stance breakdown for words that appear in the event's
+// stance_summary, plus (when compared_to_speaker is set) the comparison
+// speaker's atomic rows on the same words for divergence rendering.
+//
+// Hides drafts: 404 when published=false. Drafts only render via direct
+// admin recompose flows, never via the public route.
+app.get('/api/event/:slug', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  const slug = String(req.params.slug || '').trim().toLowerCase();
+  if (!slug) return res.status(400).json({ error: 'slug required' });
+  try {
+    const eventRows = await dbQuery(`
+      select id, slug, speaker, event_type, event_at, event_date, source_url,
+             blurb, stance_summary, dominant_stance, dominant_confidence,
+             compared_to_speaker, comparison_yielded_no_divergence,
+             stance_disagreement, source_transcript_id, composed_at, published
+      from mention_events
+      where slug = $1 and published = true
+      limit 1
+    `, [slug]);
+    if (!eventRows.length) return res.status(404).json({ error: 'not found' });
+    const ev = eventRows[0];
+
+    // Atomic rows for the speaker on the words that appeared in this event.
+    const speakerWords = []
+      .concat(ev.stance_summary?.hawkish || [])
+      .concat(ev.stance_summary?.dovish  || [])
+      .concat(ev.stance_summary?.neutral || []);
+    let atomic = [];
+    if (speakerWords.length) {
+      atomic = await dbQuery(`
+        select word, llm_stance, llm_confidence, llm_rationale, blurb,
+               rate_ratio, transcripts_with_word
+        from speaker_word_stance
+        where speaker = $1 and word = any($2)
+          and llm_stance is not null and llm_stance != 'insufficient_signal'
+        order by case llm_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
+                 word
+      `, [ev.speaker, speakerWords]);
+    }
+
+    // Comparison rows (only when comparison anchor is set).
+    let comparison = [];
+    if (ev.compared_to_speaker && speakerWords.length) {
+      comparison = await dbQuery(`
+        select word, llm_stance, llm_confidence, blurb
+        from speaker_word_stance
+        where speaker = $1 and word = any($2)
+          and llm_stance is not null and llm_stance != 'insufficient_signal'
+      `, [ev.compared_to_speaker, speakerWords]);
+    }
+
+    res.json({
+      event: {
+        slug:                              ev.slug,
+        speaker:                           ev.speaker,
+        event_type:                        ev.event_type,
+        event_date:                        ev.event_date,
+        event_at:                          ev.event_at,
+        source_url:                        ev.source_url,
+        blurb:                             ev.blurb,
+        stance_summary:                    ev.stance_summary,
+        dominant_stance:                   ev.dominant_stance,
+        dominant_confidence:               ev.dominant_confidence,
+        compared_to_speaker:               ev.compared_to_speaker,
+        comparison_yielded_no_divergence:  ev.comparison_yielded_no_divergence,
+        composed_at:                       ev.composed_at,
+      },
+      atomic,
+      comparison,
+    });
+  } catch (err) {
+    console.error('[event-api]', err);
+    res.status(500).json({ error: 'event_api_failed', detail: err.message });
+  }
+});
+
+// GET /event/:slug — Phase 3 mention event page. Server-side serves a
+// static HTML shell; the page fetches /api/event/:slug client-side and
+// renders. Hides drafts (404) at the API layer, not here, so the shell
+// loads consistently and JS handles the not-found state.
+app.get('/event/:slug', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'event.html'));
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
-// imported profiles that don't actually qualify as whales. Ran once after
-// the tier-gate fix shipped to clean up the previously over-eager import
 // where every wallet in the top 500 was marked is_whale=true. Safe to
 // re-run at any time.
 app.post('/api/admin/rebalance-whale-flags', async (req, res) => {
