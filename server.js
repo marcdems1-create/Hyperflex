@@ -15015,14 +15015,13 @@ function _renderHeroMiniCard(m) {
   if (m.slug) href = '/market/' + m.slug;
   else if (m.eventSlug) href = 'https://polymarket.com/event/' + m.eventSlug;
   const target = href.startsWith('http') ? ' target="_blank" rel="noopener"' : '';
-  const q = m.question.length > 60 ? m.question.slice(0, 58).trim() + '…' : m.question;
   return `<a class="hero-mini" href="${_escHtml(href)}"${target}>
-    <div class="hero-mini-q">${_escHtml(q)}</div>
     <div class="hero-mini-yes-row">
       <span class="hero-mini-yes ${yesCls}">${_escHtml(yesLabel)}</span>
       <span class="hero-mini-yes-lbl">YES</span>
     </div>
-    <div class="hero-mini-foot">vol ${_escHtml(volLabel)}</div>
+    <div class="hero-mini-vol">${_escHtml(volLabel)} traded</div>
+    <div class="hero-mini-q">${_escHtml(m.question)}</div>
   </a>`;
 }
 

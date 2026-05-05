@@ -107,17 +107,19 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .countdown .lbl{font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
 .market-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:36px}
 @media(max-width:768px){.market-grid{grid-template-columns:1fr}}
-.market-card{background:var(--panel);border:1px solid var(--line);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;text-decoration:none;color:inherit}
+.market-card{background:var(--panel);border:1px solid var(--line);padding:22px 22px 18px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;text-decoration:none;color:inherit;min-height:200px}
 .market-card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
-.market-q{font-family:var(--sans);font-weight:700;font-size:14px;color:var(--ink);line-height:1.4}
-.market-yes-row{display:flex;align-items:baseline;gap:14px;margin-top:auto}
-.market-yes{font-family:var(--sans);font-weight:800;font-size:32px;letter-spacing:-0.01em;line-height:1}
+.market-yes-row{display:flex;align-items:baseline;gap:10px;line-height:1}
+.market-yes{font-family:var(--sans);font-weight:800;font-size:56px;letter-spacing:-0.02em;line-height:1}
 .market-yes.high{color:var(--cyan)}
 .market-yes.low{color:#FF6B4D}
 .market-yes.mid{color:var(--ink-2)}
-.market-yes-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
-.market-foot{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin-top:8px;padding-top:10px;border-top:1px solid var(--line)}
+.market-yes-lbl{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.market-vol{font-family:var(--mono);font-size:11px;letter-spacing:0.06em;color:var(--muted-2);margin-top:-2px}
+.market-q{font-family:var(--sans);font-weight:400;font-size:13.5px;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:auto}
+.market-foot{display:flex;justify-content:flex-end;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;margin-top:6px;padding-top:10px;border-top:1px solid var(--line)}
 .market-foot .arrow{color:var(--cyan)}
+@media(max-width:640px){.market-yes{font-size:46px}}
 .preview-empty{padding:32px 20px;background:var(--panel);border:1px dashed var(--line-strong);font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.04em;line-height:1.6;text-align:center;margin-bottom:36px}
 .anchor-card{background:var(--panel);border:1px solid var(--line);padding:18px 22px;display:grid;grid-template-columns:1fr 1fr;gap:24px;position:relative;margin-bottom:14px}
 .anchor-card::before{content:attr(data-q);position:absolute;top:-10px;left:18px;background:var(--bg-2);padding:0 10px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--cyan);max-width:calc(100% - 36px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -128,7 +130,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .anchor-blurb{font-family:var(--sans);font-size:12.5px;line-height:1.5;color:var(--ink-2)}
 .anchor-side.subject .anchor-blurb{color:var(--muted);font-style:italic}
 @media(max-width:768px){.anchor-card{grid-template-columns:1fr;gap:16px}.anchor-side.foil{padding-top:14px;border-top:1px dashed var(--line)}}
-.closing-copy{font-family:var(--serif);font-size:16px;line-height:1.65;color:var(--ink-2);max-width:720px;margin:36px 0 0;padding:18px 22px;background:rgba(0,212,255,0.025);border-left:2px solid rgba(0,212,255,0.5)}
+.closing-copy{font-family:var(--mono);font-size:12px;letter-spacing:0.06em;line-height:1.5;color:var(--ink-2);max-width:720px;margin:28px 0 0;padding:14px 18px;background:rgba(0,212,255,0.025);border-left:2px solid rgba(0,212,255,0.5)}
 
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--cyan)}
@@ -366,8 +368,6 @@ function previewMarketCard(m) {
   const yes = m.yesPrice;
   const yesCls = yes == null ? 'mid' : (yes >= 0.6 ? 'high' : (yes <= 0.4 ? 'low' : 'mid'));
   const yesLabel = yes == null ? '—' : fmtPct(yes);
-  // Prefer internal market page if we have a slug; otherwise route to
-  // polymarket.com via event/market slug.
   let href = '#';
   if (m.slug) href = '/market/' + m.slug;
   else if (m.eventSlug) href = 'https://polymarket.com/event/' + m.eventSlug;
@@ -375,13 +375,13 @@ function previewMarketCard(m) {
   const rel = target === '_blank' ? 'noopener' : '';
   return `
     <a class="market-card" href="${esc(href)}" ${target ? 'target="'+target+'"' : ''} ${rel ? 'rel="'+rel+'"' : ''}>
-      <div class="market-q">${esc(m.question)}</div>
       <div class="market-yes-row">
         <span class="market-yes ${yesCls}">${esc(yesLabel)}</span>
-        <span class="market-yes-lbl">yes</span>
+        <span class="market-yes-lbl">YES</span>
       </div>
+      <div class="market-vol">${esc(fmtUsd(m.volume || 0))} traded</div>
+      <div class="market-q">${esc(m.question)}</div>
       <div class="market-foot">
-        <span>vol ${esc(fmtUsd(m.volume || 0))}</span>
         <span class="arrow">${target === '_blank' ? 'polymarket ↗' : 'open →'}</span>
       </div>
     </a>
