@@ -142,6 +142,9 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   <div id="count-line" class="count-line" style="display:none"></div>
 
   <div id="filters" class="filters" style="display:none">
+    <div class="filter-row" id="domain-row" style="display:none">
+      <span class="filter-label">Domain</span>
+    </div>
     <div class="filter-row" id="type-row">
       <span class="filter-label">Event type</span>
     </div>
@@ -158,7 +161,17 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 </main>
 
 <script>
-const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all' };
+const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all', domainFilter: 'all' };
+
+// Friendly labels for the Domain filter chips. Falls through to the
+// raw value (capitalized) when an unknown domain shows up — gives the
+// page graceful behavior the moment a new domain row lands.
+const DOMAIN_LABELS = { fed: 'Federal Reserve' };
+function fmtDomain(d) {
+  if (!d) return 'Unknown';
+  if (DOMAIN_LABELS[d]) return DOMAIN_LABELS[d];
+  return d.charAt(0).toUpperCase() + d.slice(1);
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -263,6 +276,7 @@ function applyCollapse(events) {
 
 function applyFilters() {
   const events = STATE.events.filter(ev => {
+    if (STATE.domainFilter !== 'all' && (ev.domain || 'fed') !== STATE.domainFilter) return false;
     if (STATE.typeFilter !== 'all' && ev.event_type !== STATE.typeFilter) return false;
     if (STATE.speakerFilter !== 'all' && ev.speaker !== STATE.speakerFilter) return false;
     return true;
@@ -294,11 +308,33 @@ function applyFilters() {
 }
 
 function buildFilters() {
+  const domainRow = document.getElementById('domain-row');
   const typeRow = document.getElementById('type-row');
   const speakerRow = document.getElementById('speaker-row');
-  // Distinct event_types in the data, with friendly labels
+  // Distinct values in the data, with friendly labels
+  const distinctDomains = Array.from(new Set(STATE.events.map(e => e.domain || 'fed'))).sort();
   const types = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.event_type).filter(Boolean))).sort());
   const speakers = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.speaker).filter(Boolean))).sort());
+
+  // Domain row only renders when 2+ distinct domains exist. Phase 4
+  // foundation: with one domain (Fed), the row stays hidden so the UI
+  // doesn't surface a meaningless single-option filter.
+  if (distinctDomains.length >= 2) {
+    const domains = ['all'].concat(distinctDomains);
+    for (const d of domains) {
+      const btn = document.createElement('button');
+      btn.className = 'fchip' + (d === STATE.domainFilter ? ' active' : '');
+      btn.textContent = d === 'all' ? 'All domains' : fmtDomain(d);
+      btn.dataset.value = d;
+      btn.onclick = () => {
+        STATE.domainFilter = d;
+        domainRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === d));
+        applyFilters();
+      };
+      domainRow.appendChild(btn);
+    }
+    domainRow.style.display = 'flex';
+  }
 
   for (const t of types) {
     const btn = document.createElement('button');

@@ -14953,7 +14953,7 @@ app.get('/api/mentions', async (req, res) => {
     // featured-card injection — Warsh now lives in the hero, not the grid.
     const rows = await dbQuery(`
       select slug, speaker, event_type, event_date, event_at, blurb,
-             dominant_stance, dominant_confidence, compared_to_speaker
+             dominant_stance, dominant_confidence, compared_to_speaker, domain
       from mention_events
       where published = true and blurb is not null
       order by event_date desc nulls last, event_at desc nulls last
