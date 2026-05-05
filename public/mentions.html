@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mentions — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
+  --panel:#14102A;--panel-2:#1B1638;
+  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
+  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;
+  --cyan:#00D4FF;--cyan-glow:rgba(0,212,255,0.35);
+  --hawk:#FF6B4D;--dove:#00D4FF;--neut:#9590B0;
+  --sans:'Geist','Inter',system-ui,sans-serif;
+  --serif:'Instrument Serif',serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+a{color:inherit;text-decoration:none}
+
+#nav-root{position:relative;z-index:50}
+
+.page{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:32px 36px 80px}
+@media(max-width:768px){.page{padding:20px 16px 56px}}
+
+/* ── header ── */
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.headline{font-family:var(--sans);font-weight:800;font-size:34px;line-height:1.1;letter-spacing:-0.01em;color:var(--ink);margin-bottom:8px}
+@media(max-width:640px){.headline{font-size:26px}}
+.subhead{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:22px;max-width:680px}
+.count-line{font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:18px}
+.count-line strong{color:var(--cyan);font-weight:700}
+
+/* ── filter bar ── */
+.filters{display:flex;flex-direction:column;gap:10px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-label{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;min-width:96px}
+.fchip{padding:6px 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.06em;color:var(--ink-2);border:1px solid var(--line);background:rgba(255,255,255,0.02);cursor:pointer;transition:all .15s}
+.fchip:hover{color:var(--ink);border-color:var(--line-strong)}
+.fchip.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,0.08)}
+@media(max-width:640px){.filter-label{min-width:auto;width:100%;margin-bottom:2px}}
+
+/* ── card grid ── */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:1024px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+
+.card{background:var(--panel);border:1px solid var(--line);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;cursor:pointer;position:relative;min-height:170px}
+.card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
+.card-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card-eyebrow .sep{color:var(--muted-2)}
+.card-eyebrow .speaker{color:var(--ink-2);font-weight:700}
+.card-type{display:inline-block;padding:2px 8px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);font-family:var(--mono);font-size:9px;letter-spacing:0.16em;text-transform:uppercase}
+.card-headline{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink);line-height:1.35}
+.card-blurb{font-family:var(--sans);font-size:12.5px;color:var(--muted);line-height:1.5;flex:1}
+.card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px;padding-top:10px;border-top:1px solid var(--line)}
+.card-arrow{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase;transition:color .15s}
+.card:hover .card-arrow{color:var(--cyan)}
+.compared-chip{font-family:var(--mono);font-size:9px;color:var(--muted-2);letter-spacing:0.14em;text-transform:uppercase}
+.compared-chip strong{color:var(--cyan);font-weight:700}
+
+/* ── stance pills (same scheme as event page, slightly compact) ── */
+.pill{display:inline-flex;align-items:center;padding:4px 10px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
+.pill.s-hawkish.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-hawkish.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-dovish.c-high{background:rgba(0,212,255,0.20);border-color:rgba(0,212,255,0.85);color:#9BEBFF}
+.pill.s-dovish.c-medium{background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.32);color:rgba(127,207,232,0.65)}
+.pill.s-dovish.c-low{background:rgba(0,212,255,0.025);border-color:rgba(0,212,255,0.15);color:rgba(127,207,232,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-neutral.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-neutral.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-neutral.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+
+#loading,#empty{padding:80px 0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+#empty-msg{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2);margin-top:8px;text-transform:none;letter-spacing:0}
+
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=20"></script>
+
+<main class="page" id="page">
+  <div class="eyebrow">Stance receipts · Federal Reserve</div>
+  <h1 class="headline">Mentions</h1>
+  <p class="subhead">Roll-up of every Fed speaker, presser, and testimony in the corpus, with stance posture computed per speaker as of each event date. Click through for the divergence breakdown.</p>
+
+  <div id="count-line" class="count-line" style="display:none"></div>
+
+  <div id="filters" class="filters" style="display:none">
+    <div class="filter-row" id="type-row">
+      <span class="filter-label">Event type</span>
+    </div>
+    <div class="filter-row" id="speaker-row">
+      <span class="filter-label">Speaker</span>
+    </div>
+  </div>
+
+  <div id="grid-host">
+    <div id="loading">Loading mentions…</div>
+  </div>
+
+  <footer>HYPERFLEX · receipts on what was said</footer>
+</main>
+
+<script>
+const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all' };
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function fmtEventType(t) {
+  if (!t) return '';
+  if (t === 'fomc_presser') return 'FOMC presser';
+  if (t === 'speech') return 'Speech';
+  if (t === 'testimony') return 'Testimony';
+  if (t === 'op_ed') return 'Op-Ed';
+  return t.replace(/_/g, ' ');
+}
+
+function pill(stance, confidence) {
+  const s = (stance || 'neutral').toLowerCase();
+  const c = (confidence || 'medium').toLowerCase();
+  return `<span class="pill s-${esc(s)} c-${esc(c)}">${esc(s)}</span>`;
+}
+
+function truncate(s, n) {
+  if (!s) return '';
+  if (s.length <= n) return s;
+  // Cut on a sentence boundary if one is near the cap, else hard truncate.
+  const sentenceEnd = s.slice(0, n).lastIndexOf('. ');
+  if (sentenceEnd > n * 0.6) return s.slice(0, sentenceEnd + 1);
+  // Otherwise cut on word boundary
+  const wordEnd = s.slice(0, n).lastIndexOf(' ');
+  return s.slice(0, wordEnd > 0 ? wordEnd : n).trim() + '…';
+}
+
+function renderCard(ev) {
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const typeLabel = fmtEventType(ev.event_type);
+  const blurbShort = truncate(ev.blurb || '', 140);
+  const headline = `${esc(ev.speaker)} · ${esc(dateStr)}`;
+  const compared = ev.compared_to_speaker
+    ? `<div class="compared-chip">vs <strong>${esc(ev.compared_to_speaker)}</strong></div>`
+    : '<div class="compared-chip" style="visibility:hidden">·</div>';
+  return `
+    <a class="card" href="/event/${esc(ev.slug)}">
+      <div class="card-eyebrow">
+        <span class="speaker">${esc(ev.speaker)}</span>
+        <span class="sep">·</span>
+        <span>${esc(dateStr)}</span>
+        <span class="card-type">${esc(typeLabel)}</span>
+      </div>
+      <div class="card-headline">${esc(ev.speaker)}'s posture as of ${esc(dateStr)}</div>
+      <div class="card-blurb">${esc(blurbShort)}</div>
+      <div class="card-foot">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${pill(ev.dominant_stance, ev.dominant_confidence)}
+          ${compared}
+        </div>
+        <span class="card-arrow">read →</span>
+      </div>
+    </a>
+  `;
+}
+
+function applyFilters() {
+  const events = STATE.events.filter(ev => {
+    if (STATE.typeFilter !== 'all' && ev.event_type !== STATE.typeFilter) return false;
+    if (STATE.speakerFilter !== 'all' && ev.speaker !== STATE.speakerFilter) return false;
+    return true;
+  });
+  const host = document.getElementById('grid-host');
+  if (!events.length) {
+    host.innerHTML = '<div id="empty"><div>No matches</div><div id="empty-msg">Try a different filter combination.</div></div>';
+  } else {
+    host.innerHTML = '<div class="grid">' + events.map(renderCard).join('') + '</div>';
+  }
+  const count = document.getElementById('count-line');
+  count.innerHTML = `<strong>${events.length}</strong> ${events.length === 1 ? 'event' : 'events'}` +
+    (events.length !== STATE.events.length ? ` <span style="color:var(--muted)">of ${STATE.events.length}</span>` : '');
+}
+
+function buildFilters() {
+  const typeRow = document.getElementById('type-row');
+  const speakerRow = document.getElementById('speaker-row');
+  // Distinct event_types in the data, with friendly labels
+  const types = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.event_type).filter(Boolean))).sort());
+  const speakers = ['all'].concat(Array.from(new Set(STATE.events.map(e => e.speaker).filter(Boolean))).sort());
+
+  for (const t of types) {
+    const btn = document.createElement('button');
+    btn.className = 'fchip' + (t === STATE.typeFilter ? ' active' : '');
+    btn.textContent = t === 'all' ? 'All' : fmtEventType(t);
+    btn.dataset.value = t;
+    btn.onclick = () => {
+      STATE.typeFilter = t;
+      typeRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === t));
+      applyFilters();
+    };
+    typeRow.appendChild(btn);
+  }
+  for (const sp of speakers) {
+    const btn = document.createElement('button');
+    btn.className = 'fchip' + (sp === STATE.speakerFilter ? ' active' : '');
+    btn.textContent = sp === 'all' ? 'All speakers' : sp;
+    btn.dataset.value = sp;
+    btn.onclick = () => {
+      STATE.speakerFilter = sp;
+      speakerRow.querySelectorAll('.fchip').forEach(c => c.classList.toggle('active', c.dataset.value === sp));
+      applyFilters();
+    };
+    speakerRow.appendChild(btn);
+  }
+  document.getElementById('filters').style.display = 'flex';
+  document.getElementById('count-line').style.display = 'block';
+}
+
+async function load() {
+  try {
+    const res = await fetch('/api/mentions');
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    STATE.events = Array.isArray(data.events) ? data.events : [];
+    if (!STATE.events.length) {
+      document.getElementById('grid-host').innerHTML =
+        '<div id="empty"><div>No events</div><div id="empty-msg">No events published yet.</div></div>';
+      return;
+    }
+    buildFilters();
+    applyFilters();
+  } catch (e) {
+    console.error('[mentions]', e);
+    document.getElementById('grid-host').innerHTML =
+      '<div id="empty"><div>Could not load mentions</div><div id="empty-msg">Try refreshing in a moment.</div></div>';
+  }
+}
+
+load();
+</script>
+</body>
+</html>

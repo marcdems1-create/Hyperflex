@@ -14733,6 +14733,33 @@ app.get('/event/:slug', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'event.html'));
 });
 
+// GET /api/mentions — Phase 3 mentions index payload. Public, no auth.
+// Returns every published mention_event ordered newest first. Cards on
+// the index page derive from this single payload and filter client-side
+// (no pagination at v1; 86 events fit one page fine, revisit at 200+).
+app.get('/api/mentions', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    const rows = await dbQuery(`
+      select slug, speaker, event_type, event_date, event_at, blurb,
+             dominant_stance, dominant_confidence, compared_to_speaker
+      from mention_events
+      where published = true and blurb is not null
+      order by event_date desc nulls last, event_at desc nulls last
+    `);
+    res.json({ events: rows });
+  } catch (err) {
+    console.error('[mentions-api]', err);
+    res.status(500).json({ error: 'mentions_api_failed', detail: err.message });
+  }
+});
+
+// GET /mentions — Phase 3 mentions index. Static shell + client-side
+// fetch of /api/mentions. Same architectural pattern as /event/:slug.
+app.get('/mentions', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
 // where every wallet in the top 500 was marked is_whale=true. Safe to
 // re-run at any time.
