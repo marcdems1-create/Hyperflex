@@ -19,7 +19,7 @@ Multiple Claude instances may work this repo in parallel. Two non-negotiable rul
 
 - **TablePlus only** for DB queries. Marc's zsh chokes on backslash-prefixed pasted SQL. Always say "in TablePlus" when giving SQL. If TablePlus prefixes a paste with a stray `\`, instruct him to delete it.
 - **Sonnet model ID** is `claude-sonnet-4-6` — no date suffix, ever. Old `claude-sonnet-4-20250514` strings parroted from artifact-rendering conventions are stale.
-- **Migration filenames** still use the `supabase_migration_*.sql` prefix. **This is legacy naming, not a database hint.** Production DB is Railway Postgres only. Run migrations in TablePlus or Railway's SQL console; never Supabase. Naming stays for git history continuity.
+- **Migration filenames** use the prefix `migration_*` only. No vendor prefixes (`supabase_*`, `railway_*`, etc.) — Postgres on Railway is the sole DB and the filename shouldn't imply otherwise. Existing `supabase_migration_*.sql` files stay as-is for git history continuity; new migrations get the `migration_*` prefix. Run migrations in TablePlus or Railway's SQL console.
 
 ## ⛔ Marc hates going in circles. Read this BEFORE every response.
 
