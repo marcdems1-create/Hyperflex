@@ -14654,6 +14654,134 @@ app.post('/api/clusterer/compose', async (req, res) => {
 //
 // Hides drafts: 404 when published=false. Drafts only render via direct
 // admin recompose flows, never via the public route.
+// Phase 3.6 helpers — Warsh / Fed-event preview path. Build a payload
+// driven by live Polymarket markets when no composed mention_event row
+// exists yet for a registered preview slug. Auto-pivots to composed
+// shape the moment Phase 2g writes the row (same URL, no rebuild).
+const eventPreviews = require('./lib/clusterer/event-previews');
+const { TRACKED_WORDS } = require('./lib/word_counts');
+
+// Loose keyword-to-tracked-vocab matcher. For a Polymarket market
+// question, find which tracked words the question mentions. Returns an
+// array of canonical tracked words (lowercase, matches what
+// speaker_word_stance.word stores). The dual hit on "rate cut" → both
+// "cut" and "restrictive" is fine — we look up Powell's stance on each
+// and the page renders both anchors when they exist.
+function _matchTrackedWords(text) {
+  if (!text) return [];
+  const lower = String(text).toLowerCase();
+  const hits = new Set();
+  for (const w of TRACKED_WORDS) {
+    const wl = w.toLowerCase();
+    // Phrase / hyphenated → exact substring match (already word-bounded
+    // in practice for these specific phrases like "soft landing")
+    if (wl.includes(' ') || wl.includes('-')) {
+      if (lower.includes(wl)) hits.add(wl);
+      continue;
+    }
+    // Single word → \bword\b with mild plural / -ing / -ed tolerance
+    const re = new RegExp(`\\b${wl.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(s|es|ed|ing|ly)?\\b`, 'i');
+    if (re.test(lower)) hits.add(wl);
+  }
+  return Array.from(hits);
+}
+
+// Manual TTL cache for preview-market lookups. _polyCache is a plain
+// Map; we store { value, expiresAt } and check on read. Trivial cost,
+// keeps the page snappy while gamma queries get ~5min recency.
+const _previewCacheTtlMs = 5 * 60 * 1000;
+function _previewCacheGet(key) {
+  if (!_polyCache) return null;
+  const e = _polyCache.get(key);
+  if (!e || !e.expiresAt) return null;
+  if (Date.now() > e.expiresAt) { _polyCache.delete(key); return null; }
+  return e.value;
+}
+function _previewCacheSet(key, value) {
+  if (!_polyCache) return;
+  _polyCache.set(key, { value, expiresAt: Date.now() + _previewCacheTtlMs });
+}
+
+// Search Polymarket via gamma keyset by multiple terms, dedupe on
+// conditionId, filter to active+open, sort by volume desc, take top N.
+// Returns [] on any fetch failure — page falls back to the placeholder.
+async function _fetchPreviewMarkets(terms, n = 8) {
+  if (!Array.isArray(terms) || !terms.length) return [];
+  const cacheKey = `preview_markets:${terms.join('|')}`;
+  const cached = _previewCacheGet(cacheKey);
+  if (cached) return cached;
+  const merged = new Map();
+  for (const term of terms) {
+    try {
+      const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volume&ascending=false&search=${encodeURIComponent(term)}`;
+      const r = await _nodeFetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+      if (!r.ok) continue;
+      const body = await r.json().catch(() => null);
+      const list = _gammaUnwrap(body);
+      for (const m of list) {
+        const cid = m.conditionId || m.condition_id;
+        if (!cid || merged.has(cid)) continue;
+        if (m.closed === true || m.archived === true) continue;
+        let yesPrice = null;
+        try {
+          const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          if (Array.isArray(op) && op.length) yesPrice = parseFloat(op[0]);
+        } catch (e) { /* leave yesPrice null */ }
+        merged.set(cid, {
+          conditionId:  cid,
+          question:     m.question || m.title || '',
+          slug:         m.slug || null,
+          eventSlug:    m.eventSlug || m.event_slug || null,
+          yesPrice:     (yesPrice != null && isFinite(yesPrice)) ? yesPrice : null,
+          volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
+          volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+          endDate:      m.endDate || m.end_date || null,
+        });
+      }
+    } catch (e) {
+      console.warn('[event-preview] gamma fetch failed for term:', term, e.message);
+    }
+  }
+  const out = Array.from(merged.values())
+    .filter(m => m.question && m.question.length > 6)
+    .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+    .slice(0, n);
+  _previewCacheSet(cacheKey, out);
+  return out;
+}
+
+// For each market in the list, find Powell stance rows for tracked
+// vocabulary words mentioned in the market question. Returns a map
+// keyed on conditionId → array of Powell anchor rows. Skipped when no
+// tracked words match.
+async function _fetchPowellAnchorsForMarkets(markets) {
+  if (!markets.length) return {};
+  const wordsNeeded = new Set();
+  const marketWordMap = new Map();
+  for (const m of markets) {
+    const words = _matchTrackedWords(m.question);
+    marketWordMap.set(m.conditionId, words);
+    for (const w of words) wordsNeeded.add(w);
+  }
+  if (!wordsNeeded.size) return {};
+  const rows = await dbQuery(`
+    select word, llm_stance, llm_confidence, llm_rationale, blurb
+    from speaker_word_stance
+    where speaker = 'Powell'
+      and word = any($1)
+      and llm_stance is not null
+      and llm_stance != 'insufficient_signal'
+  `, [Array.from(wordsNeeded)]);
+  const byWord = new Map(rows.map(r => [r.word, r]));
+  const out = {};
+  for (const m of markets) {
+    const words = marketWordMap.get(m.conditionId) || [];
+    const anchors = words.map(w => byWord.get(w)).filter(Boolean);
+    if (anchors.length) out[m.conditionId] = anchors;
+  }
+  return out;
+}
+
 app.get('/api/event/:slug', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'database unavailable' });
   const slug = String(req.params.slug || '').trim().toLowerCase();
@@ -14668,7 +14796,35 @@ app.get('/api/event/:slug', async (req, res) => {
       where slug = $1 and published = true
       limit 1
     `, [slug]);
-    if (!eventRows.length) return res.status(404).json({ error: 'not found' });
+
+    // Auto-pivot: composed event takes precedence; preview registry is the
+    // fallback path until Phase 2g writes the real row.
+    if (!eventRows.length) {
+      const cfg = eventPreviews.getPreview(slug);
+      if (cfg) {
+        const markets = await _fetchPreviewMarkets(cfg.polymarket_search_terms);
+        const powellAnchorsByCid = cfg.powell_compare
+          ? await _fetchPowellAnchorsForMarkets(markets)
+          : {};
+        return res.json({
+          mode: 'preview',
+          preview: {
+            slug,
+            speaker:                 cfg.speaker,
+            event_type:              cfg.event_type,
+            event_date:              cfg.event_date,
+            headline:                cfg.headline,
+            subhead:                 cfg.subhead,
+            placeholder_pill_label:  cfg.placeholder_pill_label || 'Awaiting transcript',
+            closing_copy:            cfg.closing_copy || '',
+            markets,
+            powell_anchors:          powellAnchorsByCid,
+          },
+        });
+      }
+      return res.status(404).json({ error: 'not found' });
+    }
+
     const ev = eventRows[0];
 
     // Atomic rows for the speaker on the words that appeared in this event.
@@ -14701,6 +14857,7 @@ app.get('/api/event/:slug', async (req, res) => {
     }
 
     res.json({
+      mode: 'composed',
       event: {
         slug:                              ev.slug,
         speaker:                           ev.speaker,
@@ -14747,7 +14904,34 @@ app.get('/api/mentions', async (req, res) => {
       where published = true and blurb is not null
       order by event_date desc nulls last, event_at desc nulls last
     `);
-    res.json({ events: rows });
+
+    // Phase 3.6 — surface registered preview slugs at the top of the
+    // grid as featured cards, only when no composed mention_event row
+    // exists for that slug yet. The moment Phase 2g writes the row,
+    // the card disappears from this list (the composed row takes its
+    // spot in the natural date order). No dedup-against-real-row needed.
+    const previewSlugs = eventPreviews.previewSlugs();
+    const composedSlugs = new Set(rows.map(r => r.slug));
+    const featured = [];
+    for (const ps of previewSlugs) {
+      if (composedSlugs.has(ps)) continue;
+      const cfg = eventPreviews.getPreview(ps);
+      if (!cfg) continue;
+      featured.push({
+        slug:                 ps,
+        speaker:              cfg.speaker,
+        event_type:           cfg.event_type,
+        event_date:           cfg.event_date,
+        event_at:             cfg.event_date ? cfg.event_date + 'T17:00:00Z' : null,
+        blurb:                cfg.subhead,
+        dominant_stance:      'neutral',
+        dominant_confidence:  'low',
+        compared_to_speaker:  cfg.powell_compare ? 'Powell' : null,
+        is_preview:           true,
+      });
+    }
+
+    res.json({ events: featured.concat(rows) });
   } catch (err) {
     console.error('[mentions-api]', err);
     res.status(500).json({ error: 'mentions_api_failed', detail: err.message });

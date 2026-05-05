@@ -53,6 +53,11 @@ a{color:inherit;text-decoration:none}
 
 .card{background:var(--panel);border:1px solid var(--line);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;cursor:pointer;position:relative;min-height:170px}
 .card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
+.card.featured{border-color:rgba(0,212,255,0.45);background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(255,255,255,0.02));grid-column:1 / -1;min-height:200px}
+.card.featured:hover{border-color:var(--cyan)}
+.card.featured .card-headline{font-size:22px;line-height:1.2;font-weight:800}
+.card.featured .preview-badge{position:absolute;top:14px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase;padding:3px 8px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.4)}
+@media(max-width:640px){.card.featured{grid-column:1}.card.featured .card-headline{font-size:18px}}
 .card-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .card-eyebrow .sep{color:var(--muted-2)}
 .card-eyebrow .speaker{color:var(--ink-2);font-weight:700}
@@ -155,27 +160,33 @@ function truncate(s, n) {
 function renderCard(ev) {
   const dateStr = fmtDate(ev.event_date || ev.event_at);
   const typeLabel = fmtEventType(ev.event_type);
-  const blurbShort = truncate(ev.blurb || '', 140);
-  const headline = `${esc(ev.speaker)} · ${esc(dateStr)}`;
+  const isPreview = !!ev.is_preview;
+  const blurbShort = truncate(ev.blurb || '', isPreview ? 220 : 140);
   const compared = ev.compared_to_speaker
     ? `<div class="compared-chip">vs <strong>${esc(ev.compared_to_speaker)}</strong></div>`
     : '<div class="compared-chip" style="visibility:hidden">·</div>';
+  const headline = isPreview
+    ? `${esc(ev.speaker)}'s first FOMC · pre-event preview`
+    : `${esc(ev.speaker)}'s posture as of ${esc(dateStr)}`;
+  const arrow = isPreview ? 'open preview →' : 'read →';
+  const badge = isPreview ? '<span class="preview-badge">Live preview</span>' : '';
   return `
-    <a class="card" href="/event/${esc(ev.slug)}">
+    <a class="card${isPreview ? ' featured' : ''}" href="/event/${esc(ev.slug)}">
+      ${badge}
       <div class="card-eyebrow">
         <span class="speaker">${esc(ev.speaker)}</span>
         <span class="sep">·</span>
         <span>${esc(dateStr)}</span>
         <span class="card-type">${esc(typeLabel)}</span>
       </div>
-      <div class="card-headline">${esc(ev.speaker)}'s posture as of ${esc(dateStr)}</div>
+      <div class="card-headline">${headline}</div>
       <div class="card-blurb">${esc(blurbShort)}</div>
       <div class="card-foot">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           ${pill(ev.dominant_stance, ev.dominant_confidence)}
           ${compared}
         </div>
-        <span class="card-arrow">read →</span>
+        <span class="card-arrow">${arrow}</span>
       </div>
     </a>
   `;
