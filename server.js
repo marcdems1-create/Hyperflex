@@ -18349,6 +18349,584 @@ app.get('/api/sports-predictors/:userId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// /sports page — Phase 1: data + endpoints
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Approach (b-ii) per the build brief: live-read events + markets from
+// Polymarket Gamma /events into an in-memory cache (5-min TTL); persist
+// only the small slice of state the rotation logic needs across restarts
+// in the polymarket_event_state table (was_hero, closed_at, recap,
+// editorial_take). No new ETL pipeline, no full polymarket_events +
+// polymarket_markets snapshot tables.
+//
+// Endpoints:
+//   GET /api/sports/hero?sport=          single hero event w/ rotation
+//   GET /api/sports/sports-overview      sport tabs (volumes) + elsewhere
+//   GET /api/sports/event/:eventId       rest of card + sharps
+//
+// Phase 2 (frontend) reads these. The /sports page itself is not yet
+// served — Phase 1 ships data only.
+
+// Gamma tag → our sport enum. Keys are LOWERCASED tag labels and slugs;
+// we check both because Gamma tags use mixed conventions (label "NBA",
+// slug "nba"; label "Soccer", slug "soccer"; label "UFC", slug "ufc").
+const _SPORTS_TAG_MAP = {
+  'ufc': 'ufc', 'mma': 'ufc', 'boxing': 'ufc',
+  'nba': 'nba', 'basketball': 'nba',
+  'nfl': 'nfl', 'football': 'nfl',
+  'soccer': 'soccer', 'epl': 'soccer', 'mls': 'soccer', 'champions league': 'soccer', 'world cup': 'soccer',
+  'tennis': 'tennis', 'atp': 'tennis', 'wta': 'tennis', 'us open': 'tennis', 'wimbledon': 'tennis',
+  'f1': 'f1', 'formula 1': 'f1', 'formula one': 'f1',
+  'mlb': 'mlb', 'baseball': 'mlb',
+  'nhl': 'nhl', 'hockey': 'nhl',
+};
+
+// Sport tabs displayed on the page header (order matters — matches mockup).
+const _SPORTS_TAB_ORDER = ['ufc', 'nba', 'nfl', 'soccer', 'tennis', 'f1'];
+
+// In-memory cache of enriched sports events. 5-min TTL.
+//   { ts, byId: Map<id, EnrichedEvent>, idsBySport: Map<sport, string[]> }
+let _sportsEventsCache = null;
+const _SPORTS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Classify a Gamma event into one of our sport enum values, or null if
+// none of its tags match. Returns the FIRST match (Gamma events
+// occasionally double-tag — e.g. a Champions League final tagged both
+// "Soccer" and "Champions League" — picking the first deterministic
+// match is fine since both map to the same enum here).
+function _classifyEventSport(evt) {
+  if (!evt || !Array.isArray(evt.tags)) return null;
+  for (const t of evt.tags) {
+    const label = String(t.label || '').toLowerCase().trim();
+    const slug  = String(t.slug  || '').toLowerCase().trim();
+    if (label && _SPORTS_TAG_MAP[label]) return _SPORTS_TAG_MAP[label];
+    if (slug  && _SPORTS_TAG_MAP[slug])  return _SPORTS_TAG_MAP[slug];
+  }
+  return null;
+}
+
+// Derive event status from Gamma fields.
+//   closed: event.closed === true OR endDate in the past
+//   live:   startDate <= now <= endDate (or no endDate but startDate <= now)
+//   scheduled: startDate in the future
+function _eventStatusFromGamma(evt) {
+  const now = Date.now();
+  const start = evt.startDate ? new Date(evt.startDate).getTime() : null;
+  const end   = evt.endDate   ? new Date(evt.endDate  ).getTime() : null;
+  if (evt.closed === true || evt.archived === true) return 'closed';
+  if (end && end < now) return 'closed';
+  if (start && start <= now) return 'live';
+  return 'scheduled';
+}
+
+// Pick the headline market for an event — highest 24h-volume binary
+// market. Most Polymarket sports events have a clear winner market
+// (e.g. "Will Chimaev win UFC 328?") that dominates volume; props sit
+// underneath. Returns null if the event has no markets.
+function _pickHeadlineMarket(evt) {
+  const markets = Array.isArray(evt.markets) ? evt.markets : [];
+  if (!markets.length) return null;
+  const ranked = markets.slice().sort((a, b) => {
+    const va = parseFloat(a.volume24hr || a.volume || 0);
+    const vb = parseFloat(b.volume24hr || b.volume || 0);
+    return vb - va;
+  });
+  return ranked[0];
+}
+
+// Derive subtitle text from event description / category. Gamma's
+// event.description is freeform; we take the first ~80 chars to the
+// first sentence boundary and call it good. Falls back to category.
+function _deriveEventSubtitle(evt) {
+  const desc = String(evt.description || '').trim();
+  if (desc) {
+    const firstSentence = desc.split(/(?<=[.!?])\s+/)[0] || desc;
+    if (firstSentence.length <= 90) return firstSentence;
+    return firstSentence.slice(0, 87).trim() + '…';
+  }
+  const cat = String(evt.category || '').trim();
+  return cat || '';
+}
+
+// Auto-generated "The take" stub for events without an editorial_take.
+// Dry, factual, on-charter. Numbers locked per voice charter.
+function _autoTakeForEvent(evt, headline) {
+  const vol = parseFloat(evt.volume24hr || evt.volume || 0);
+  const volStr = vol >= 1000000 ? '$' + (vol / 1000000).toFixed(1) + 'M'
+              : vol >= 1000    ? '$' + (vol / 1000).toFixed(0)   + 'K'
+              : '$' + vol.toFixed(0);
+  const status = _eventStatusFromGamma(evt);
+  const numMarkets = Array.isArray(evt.markets) ? evt.markets.length : 0;
+  if (status === 'closed') {
+    return `Closed. ${volStr} traded across ${numMarkets} market${numMarkets === 1 ? '' : 's'}.`;
+  }
+  if (status === 'live') {
+    return `Live. ${volStr} on the book across ${numMarkets} market${numMarkets === 1 ? '' : 's'}.`;
+  }
+  // scheduled
+  if (evt.startDate) {
+    const startMs = new Date(evt.startDate).getTime();
+    const hours = Math.max(0, Math.round((startMs - Date.now()) / (1000 * 60 * 60)));
+    if (hours < 48) {
+      return `${hours}h to tip. ${volStr} on the board.`;
+    }
+    const days = Math.round(hours / 24);
+    return `${days}d out. ${volStr} on the board across ${numMarkets} market${numMarkets === 1 ? '' : 's'}.`;
+  }
+  return `${volStr} traded across ${numMarkets} market${numMarkets === 1 ? '' : 's'}.`;
+}
+
+// Fetch + classify + cache. Single Gamma /events call covers all sports
+// in one shot (Polymarket returns ~200 active events per page).
+async function _fetchSportsEvents() {
+  const now = Date.now();
+  if (_sportsEventsCache && (now - _sportsEventsCache.ts) < _SPORTS_CACHE_TTL_MS) {
+    return _sportsEventsCache;
+  }
+  const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+  // Pull a wide page: 300 events sorted by 24h volume desc gives us
+  // the entire active sports surface in one fetch.
+  const url = 'https://gamma-api.polymarket.com/events/keyset?limit=300&active=true&closed=false&order=volume24hr&ascending=false';
+  let events = [];
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(url, { headers, signal: ctrl.signal });
+    clearTimeout(tid);
+    if (r.ok) events = _gammaUnwrap(await r.json());
+  } catch (e) {
+    console.warn('[sports] gamma fetch failed:', e.message);
+    // If we have a stale cache, return it rather than failing — better to
+    // serve 6-min-old data than a 500.
+    if (_sportsEventsCache) return _sportsEventsCache;
+    events = [];
+  }
+
+  const byId = new Map();
+  const idsBySport = new Map();
+  for (const evt of events) {
+    if (!evt || !evt.id) continue;
+    const sport = _classifyEventSport(evt);
+    if (!sport) continue;  // not a sports event
+    const status = _eventStatusFromGamma(evt);
+    const headline = _pickHeadlineMarket(evt);
+    const aggregate_volume = parseFloat(evt.volume24hr || evt.volume || 0);
+    const enriched = {
+      id: String(evt.id),
+      slug: evt.slug || null,
+      title: evt.title || evt.question || 'Untitled event',
+      subtitle: _deriveEventSubtitle(evt),
+      description: evt.description || '',
+      sport,
+      start_time: evt.startDate || null,
+      end_time:   evt.endDate   || null,
+      status,
+      aggregate_volume,
+      image_url: evt.image || null,
+      hero_image_url: evt.icon || evt.image || null,
+      polymarket_url: evt.slug ? `https://polymarket.com/event/${evt.slug}` : 'https://polymarket.com',
+      headline_market: headline ? {
+        id: String(headline.id || headline.condition_id || ''),
+        condition_id: headline.conditionId || headline.condition_id || null,
+        question: headline.question || '',
+        slug: headline.slug || null,
+        volume: parseFloat(headline.volume24hr || headline.volume || 0),
+        // outcomePrices is a stringified JSON array on Gamma — parse defensively.
+        prices: (() => {
+          try {
+            const raw = headline.outcomePrices;
+            if (!raw) return null;
+            const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return Array.isArray(arr) && arr.length >= 2
+              ? { yes: parseFloat(arr[0]), no: parseFloat(arr[1]) }
+              : null;
+          } catch { return null; }
+        })(),
+        outcomes: (() => {
+          try {
+            const raw = headline.outcomes;
+            if (!raw) return null;
+            const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return Array.isArray(arr) ? arr : null;
+          } catch { return null; }
+        })(),
+      } : null,
+      // Compact list of all child markets (used by /api/sports/event/:id
+      // for the "Rest of the card" section). Sorted by volume desc.
+      markets: (Array.isArray(evt.markets) ? evt.markets : [])
+        .map(m => ({
+          id: String(m.id || m.condition_id || ''),
+          condition_id: m.conditionId || m.condition_id || null,
+          question: m.question || m.groupItemTitle || '',
+          group_item_title: m.groupItemTitle || null,
+          slug: m.slug || null,
+          volume: parseFloat(m.volume24hr || m.volume || 0),
+          end_date: m.endDateIso || m.endDate || null,
+          prices: (() => {
+            try {
+              const raw = m.outcomePrices;
+              if (!raw) return null;
+              const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              return Array.isArray(arr) && arr.length >= 2
+                ? { yes: parseFloat(arr[0]), no: parseFloat(arr[1]) }
+                : null;
+            } catch { return null; }
+          })(),
+        }))
+        .sort((a, b) => (b.volume || 0) - (a.volume || 0)),
+    };
+    byId.set(enriched.id, enriched);
+    if (!idsBySport.has(sport)) idsBySport.set(sport, []);
+    idsBySport.get(sport).push(enriched.id);
+  }
+  // Sort each sport's id list by aggregate_volume desc so consumers
+  // can take the top-N without re-sorting.
+  for (const [sport, ids] of idsBySport) {
+    ids.sort((a, b) => (byId.get(b).aggregate_volume || 0) - (byId.get(a).aggregate_volume || 0));
+  }
+  _sportsEventsCache = { ts: now, byId, idsBySport };
+  return _sportsEventsCache;
+}
+
+// Read polymarket_event_state rows for a set of event ids. Returns
+// Map<event_id, stateRow>. Best-effort: if the migration hasn't run, we
+// just return an empty map and the rotation logic falls through to
+// "this event has no state" (which is the correct behavior for a
+// fresh deploy).
+async function _loadEventStateMap(eventIds) {
+  const out = new Map();
+  if (!pool || !eventIds.length) return out;
+  try {
+    const rows = await dbQuery(
+      `SELECT event_id, polymarket_slug, editorial_take, was_hero,
+              hero_first_at, closed_at, closed_recap
+         FROM polymarket_event_state
+        WHERE event_id = ANY($1::text[])`,
+      [eventIds]
+    );
+    for (const r of rows) out.set(r.event_id, r);
+  } catch (e) {
+    if (e.code === '42P01') {
+      // Table doesn't exist yet — migration hasn't run. Soft-pass.
+      return out;
+    }
+    console.warn('[sports] event-state read failed:', e.message);
+  }
+  return out;
+}
+
+// UPSERT was_hero=true on first selection. Idempotent — repeated calls
+// with the same event_id are no-ops after the first write. Safe to call
+// from the read path; failure does NOT block the response.
+async function _markEventAsHero(eventId, slug) {
+  if (!pool || !eventId) return;
+  try {
+    await dbQuery(
+      `INSERT INTO polymarket_event_state (event_id, polymarket_slug, was_hero, hero_first_at, updated_at)
+       VALUES ($1, $2, true, NOW(), NOW())
+       ON CONFLICT (event_id) DO UPDATE
+         SET was_hero      = true,
+             hero_first_at = COALESCE(polymarket_event_state.hero_first_at, NOW()),
+             updated_at    = NOW()`,
+      [String(eventId), slug || String(eventId)]
+    );
+  } catch (e) {
+    if (e.code !== '42P01') console.warn('[sports] markEventAsHero failed:', e.message);
+  }
+}
+
+// UPSERT closed_at + recap when an event we previously stamped as hero
+// flips to closed. Recap is a small JSONB blob computed from the
+// headline market's final price + a snapshot of cached_positions for
+// trader handles. Idempotent on closed_at — once set, we don't overwrite
+// (preserves the original recap moment).
+async function _markEventAsClosed(eventId, slug, recap) {
+  if (!pool || !eventId) return;
+  try {
+    await dbQuery(
+      `INSERT INTO polymarket_event_state
+         (event_id, polymarket_slug, was_hero, closed_at, closed_recap, updated_at)
+       VALUES ($1, $2, true, NOW(), $3::jsonb, NOW())
+       ON CONFLICT (event_id) DO UPDATE
+         SET closed_at    = COALESCE(polymarket_event_state.closed_at, NOW()),
+             closed_recap = COALESCE(polymarket_event_state.closed_recap, EXCLUDED.closed_recap),
+             updated_at   = NOW()
+       WHERE polymarket_event_state.was_hero = true`,
+      [String(eventId), slug || String(eventId), JSON.stringify(recap || {})]
+    );
+  } catch (e) {
+    if (e.code !== '42P01') console.warn('[sports] markEventAsClosed failed:', e.message);
+  }
+}
+
+// Top 3 traders with positions in this event's markets, ranked by FLEX
+// Score (sports_flex_scores.score, NULL last) then by absolute position
+// size. Returns a stub array if the joins fail or data is missing —
+// page renders "Sharps loading…" cleanly off an empty array.
+async function _sharpsForEvent(evt) {
+  if (!pool || !evt) return [];
+  // Collect all condition_ids for this event's markets; cached_positions
+  // keys polymarket positions by external_id = condition_id.
+  const conditionIds = [];
+  for (const m of (evt.markets || [])) {
+    if (m.condition_id) conditionIds.push(m.condition_id);
+  }
+  if (evt.headline_market?.condition_id) conditionIds.push(evt.headline_market.condition_id);
+  const uniqIds = Array.from(new Set(conditionIds.filter(Boolean)));
+  if (!uniqIds.length) return [];
+  try {
+    // user_id on cached_positions was declared UUID in the migration but
+    // users.id is TEXT on Railway (see CLAUDE.md migration notes). Cast
+    // to text on both sides so the join always lands.
+    const rows = await dbQuery(
+      `SELECT cp.user_id::text   AS user_id,
+              cp.external_id     AS condition_id,
+              cp.market_title,
+              cp.side, cp.shares, cp.pnl, cp.probability,
+              u.display_name, u.username, u.avatar_url,
+              sfs.score          AS flex_score
+         FROM cached_positions cp
+         LEFT JOIN users u                ON u.id  = cp.user_id::text
+         LEFT JOIN sports_flex_scores sfs ON sfs.user_id = cp.user_id::text
+        WHERE cp.platform = 'polymarket'
+          AND cp.external_id = ANY($1::text[])
+          AND cp.shares IS NOT NULL
+          AND ABS(cp.shares) > 0
+        ORDER BY sfs.score DESC NULLS LAST, ABS(cp.shares * cp.probability) DESC
+        LIMIT 3`,
+      [uniqIds]
+    );
+    return rows.map(r => ({
+      user_id: r.user_id,
+      handle: r.display_name || r.username || 'Trader',
+      avatar_url: r.avatar_url || null,
+      flex_score: r.flex_score != null ? parseInt(r.flex_score, 10) : null,
+      position: {
+        condition_id: r.condition_id,
+        market_title: r.market_title,
+        side: r.side,
+        shares: parseFloat(r.shares || 0),
+        entry_price: r.probability != null ? parseFloat(r.probability) : null,
+        pnl: parseFloat(r.pnl || 0),
+      },
+    }));
+  } catch (e) {
+    if (e.code !== '42P01') console.warn('[sports] sharpsForEvent failed:', e.message);
+    return [];
+  }
+}
+
+// Hero rotation per the Phase 1 spec.
+//   1. 24h-hold for any was_hero event closed within the last 24h
+//   2. Top by aggregate_volume in {live OR start_time within 7d}
+//   3. Fallback chain: top live across all dates → sharps' picks → static
+//
+// `sport` filters all candidates to a single sport tab; null = global.
+async function _getSportsHero(sport) {
+  const cache = await _fetchSportsEvents();
+  const allIds = [...cache.byId.values()].map(e => e.id);
+  const stateMap = await _loadEventStateMap(allIds);
+
+  // Build the candidate pool, filtered by sport.
+  const events = [...cache.byId.values()]
+    .filter(e => !sport || e.sport === sport)
+    .map(e => ({ ...e, state: stateMap.get(e.id) || null }));
+
+  // Step 1 — 24h hold
+  const HOLD_MS = 24 * 60 * 60 * 1000;
+  const recentlyClosedHero = events
+    .filter(e => e.state && e.state.was_hero && e.state.closed_at &&
+                 (Date.now() - new Date(e.state.closed_at).getTime() < HOLD_MS))
+    .sort((a, b) => new Date(b.state.closed_at) - new Date(a.state.closed_at))[0];
+  if (recentlyClosedHero) {
+    return { mode: 'closed_recap', event: recentlyClosedHero, sport };
+  }
+
+  // Detect transitions: any event we previously heroed that now reads
+  // as closed in Gamma but doesn't yet have closed_at stamped. Stamp it
+  // (fire-and-forget) so the next request enters the 24h-hold path.
+  for (const e of events) {
+    if (e.state?.was_hero && !e.state.closed_at && e.status === 'closed') {
+      const recap = {
+        winner: null, // resolved by post-resolution settlement; placeholder for v1
+        total_vol_traded: e.aggregate_volume,
+        market_id: e.headline_market?.id || null,
+        captured_at: new Date().toISOString(),
+      };
+      _markEventAsClosed(e.id, e.slug, recap);
+    }
+  }
+
+  // Step 2 — top by aggregate_volume in {live OR upcoming-within-7d}
+  const NOW = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const liveOrSoon = events
+    .filter(e => {
+      if (e.status === 'live') return true;
+      if (!e.start_time) return false;
+      const t = new Date(e.start_time).getTime();
+      return t > NOW && t < NOW + SEVEN_DAYS_MS;
+    })
+    .sort((a, b) => (b.aggregate_volume || 0) - (a.aggregate_volume || 0));
+
+  if (liveOrSoon.length) {
+    const hero = liveOrSoon[0];
+    _markEventAsHero(hero.id, hero.slug);
+    return { mode: 'live_or_upcoming', event: hero, sport };
+  }
+
+  // Step 3a — top live across all dates regardless of 7-day window
+  const anyLive = events
+    .filter(e => e.status === 'live')
+    .sort((a, b) => (b.aggregate_volume || 0) - (a.aggregate_volume || 0))[0];
+  if (anyLive) {
+    _markEventAsHero(anyLive.id, anyLive.slug);
+    return { mode: 'fallback_top_live', event: anyLive, sport };
+  }
+
+  // Step 3b — sharps' picks variant. Pull the 3 highest sports_flex_scores
+  // qualifying users; if 3+ exist, return that variant. (No event picked.)
+  let sharpsTop = [];
+  if (pool) {
+    try {
+      sharpsTop = await dbQuery(
+        `SELECT sfs.user_id, sfs.score, u.display_name, u.username, u.avatar_url
+           FROM sports_flex_scores sfs
+           JOIN users u ON u.id = sfs.user_id
+          WHERE sfs.qualifies = TRUE AND sfs.score IS NOT NULL
+          ORDER BY sfs.score DESC
+          LIMIT 3`
+      );
+    } catch (e) {
+      if (e.code !== '42P01') console.warn('[sports] sharps fallback query failed:', e.message);
+    }
+  }
+  if (sharpsTop.length >= 3) {
+    return {
+      mode: 'sharps_picks',
+      sport,
+      sharps: sharpsTop.map(s => ({
+        user_id: s.user_id,
+        handle: s.display_name || s.username || 'Trader',
+        avatar_url: s.avatar_url || null,
+        flex_score: parseInt(s.score, 10),
+      })),
+    };
+  }
+
+  // Step 3c — static brand card. Last resort. Never ship empty.
+  return { mode: 'static_brand', sport };
+}
+
+// GET /api/sports/hero?sport=ufc — returns the hero payload + auto-take
+// fallback merged in. Cache header is short (60s) so sport-tab switches
+// stay snappy without thundering Gamma; the underlying _fetchSportsEvents
+// cache is already 5min, so this is just frontend-side.
+app.get('/api/sports/hero', async (req, res) => {
+  try {
+    const sport = req.query.sport ? String(req.query.sport).toLowerCase() : null;
+    if (sport && !_SPORTS_TAB_ORDER.includes(sport)) {
+      return res.status(400).json({ error: 'Unknown sport: ' + sport });
+    }
+    const hero = await _getSportsHero(sport);
+    // Merge editorial_take (or auto-take fallback) onto the event payload.
+    if (hero.event) {
+      const take = (hero.event.state && hero.event.state.editorial_take) || _autoTakeForEvent(hero.event, hero.event.headline_market);
+      hero.event.take = take;
+      // Strip the raw state row from the response — internal-only.
+      delete hero.event.state;
+    }
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(hero);
+  } catch (e) {
+    console.error('[sports/hero]', e.message);
+    res.status(500).json({ error: 'Failed to load sports hero' });
+  }
+});
+
+// GET /api/sports/sports-overview — sport tabs (volume per sport) +
+// elsewhere grid (top event per non-active sport). One round-trip
+// powers section 2 + section 8 of the page.
+app.get('/api/sports/sports-overview', async (req, res) => {
+  try {
+    const excludeSport = req.query.exclude_sport ? String(req.query.exclude_sport).toLowerCase() : null;
+    const cache = await _fetchSportsEvents();
+    const tabs = _SPORTS_TAB_ORDER.map(sport => {
+      const ids = cache.idsBySport.get(sport) || [];
+      let volume = 0;
+      for (const id of ids) {
+        const ev = cache.byId.get(id);
+        if (ev) volume += ev.aggregate_volume || 0;
+      }
+      return { sport, event_count: ids.length, aggregate_volume: volume };
+    });
+    // Elsewhere: top 1 event per sport, excluding the active sport. Up
+    // to 4 cells (2x2 grid). Skip sports with zero events.
+    const elsewhere = [];
+    for (const sport of _SPORTS_TAB_ORDER) {
+      if (excludeSport && sport === excludeSport) continue;
+      const ids = cache.idsBySport.get(sport) || [];
+      if (!ids.length) continue;
+      const top = cache.byId.get(ids[0]);
+      if (!top) continue;
+      elsewhere.push({
+        sport,
+        event: {
+          id: top.id, slug: top.slug, title: top.title, subtitle: top.subtitle,
+          start_time: top.start_time, status: top.status,
+          aggregate_volume: top.aggregate_volume,
+          image_url: top.image_url,
+          polymarket_url: top.polymarket_url,
+          headline_market: top.headline_market ? {
+            question: top.headline_market.question,
+            prices: top.headline_market.prices,
+          } : null,
+        },
+      });
+      if (elsewhere.length >= 4) break;
+    }
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ tabs, elsewhere });
+  } catch (e) {
+    console.error('[sports/overview]', e.message);
+    res.status(500).json({ error: 'Failed to load sports overview' });
+  }
+});
+
+// GET /api/sports/event/:eventId — full payload for the hero's
+// supporting sections. Returns the event detail + rest-of-card markets +
+// sharps. Page section 6 + 7 read this; the hero endpoint above already
+// includes the headline market + summary.
+app.get('/api/sports/event/:eventId', async (req, res) => {
+  try {
+    const cache = await _fetchSportsEvents();
+    const evt = cache.byId.get(String(req.params.eventId));
+    if (!evt) return res.status(404).json({ error: 'Event not found in active sports cache' });
+    const stateMap = await _loadEventStateMap([evt.id]);
+    const state = stateMap.get(evt.id) || null;
+    const sharps = await _sharpsForEvent(evt);
+    // Rest of the card = all markets except the headline, sorted by volume desc.
+    const headlineId = evt.headline_market?.id || null;
+    const restOfCard = (evt.markets || []).filter(m => m.id !== headlineId);
+    const take = (state && state.editorial_take) || _autoTakeForEvent(evt, evt.headline_market);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({
+      event: { ...evt, take },
+      rest_of_card: restOfCard,
+      sharps,
+      closed_recap: state && state.closed_at ? state.closed_recap : null,
+    });
+  } catch (e) {
+    console.error('[sports/event]', e.message);
+    res.status(500).json({ error: 'Failed to load event detail' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// /sports page — Phase 1 end
+// ═══════════════════════════════════════════════════════════════════════════
+
 // POST /api/admin/sports-flex/rebuild — run nightly on demand (admin).
 app.post('/api/admin/sports-flex/rebuild', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
