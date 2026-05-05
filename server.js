@@ -14716,11 +14716,26 @@ function _previewCacheSet(key, value) {
 async function _fetchPreviewMarkets(cfg, n = 8) {
   const terms = (cfg && Array.isArray(cfg.polymarket_search_terms)) ? cfg.polymarket_search_terms : [];
   const mustMatch = (cfg && Array.isArray(cfg.must_match_any)) ? cfg.must_match_any : [];
-  if (!terms.length) return [];
-  const cacheKey = `preview_markets:${terms.join('|')}|${mustMatch.length}`;
+  const fallbackSlugs = (cfg && Array.isArray(cfg.fallback_event_slugs)) ? cfg.fallback_event_slugs : [];
+  if (!terms.length && !fallbackSlugs.length) return [];
+  const cacheKey = `preview_markets:${terms.join('|')}|${mustMatch.length}|${fallbackSlugs.join(',')}`;
   const cached = _previewCacheGet(cacheKey);
   if (cached) return cached.slice(0, n);
   const merged = new Map();
+
+  // Helper: parse outcomePrices (string or array) → first-outcome float
+  function _parseYesPrice(raw) {
+    try {
+      const op = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(op) && op.length) {
+        const v = parseFloat(op[0]);
+        return (v != null && isFinite(v)) ? v : null;
+      }
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+
+  // Layer 1 — broad gamma keyword search (recall)
   for (const term of terms) {
     try {
       const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volume&ascending=false&search=${encodeURIComponent(term)}`;
@@ -14732,26 +14747,51 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
         const cid = m.conditionId || m.condition_id;
         if (!cid || merged.has(cid)) continue;
         if (m.closed === true || m.archived === true) continue;
-        let yesPrice = null;
-        try {
-          const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
-          if (Array.isArray(op) && op.length) yesPrice = parseFloat(op[0]);
-        } catch (e) { /* leave yesPrice null */ }
         merged.set(cid, {
           conditionId:  cid,
           question:     m.question || m.title || '',
           slug:         m.slug || null,
           eventSlug:    m.eventSlug || m.event_slug || null,
-          yesPrice:     (yesPrice != null && isFinite(yesPrice)) ? yesPrice : null,
+          yesPrice:     _parseYesPrice(m.outcomePrices),
           volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
           volume24hr:   parseFloat(m.volume24hr || 0) || 0,
           endDate:      m.endDate || m.end_date || null,
         });
       }
     } catch (e) {
-      console.warn('[event-preview] gamma fetch failed for term:', term, e.message);
+      console.warn('[event-preview] gamma keyword fetch failed for term:', term, e.message);
     }
   }
+
+  // Layer 2 — curated event-slug fallback (precision backstop)
+  // Always runs (not conditional on layer-1 emptiness): the curated
+  // set is high-signal, the keyword hits often miss it, and merging
+  // both maximizes coverage. Dedupe on conditionId guarantees no
+  // double-render.
+  for (const eventSlug of fallbackSlugs) {
+    try {
+      const result = await polymarket.getEventBySlug(eventSlug);
+      if (!result || !Array.isArray(result.eventMarkets)) continue;
+      for (const m of result.eventMarkets) {
+        const cid = m.conditionId;
+        if (!cid || merged.has(cid)) continue;
+        if (m.closed === true) continue;
+        merged.set(cid, {
+          conditionId:  cid,
+          question:     m.question || '',
+          slug:         m.slug || null,
+          eventSlug:    eventSlug,
+          yesPrice:     _parseYesPrice(m.outcomePrices),
+          volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
+          volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+          endDate:      m.endDate || m.end_date_iso || null,
+        });
+      }
+    } catch (e) {
+      console.warn('[event-preview] gamma getEventBySlug failed for slug:', eventSlug, e.message);
+    }
+  }
+
   let out = Array.from(merged.values())
     .filter(m => m.question && m.question.length > 6);
   if (mustMatch.length) {
