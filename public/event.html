@@ -76,6 +76,23 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
 .source-link a:hover{color:#9BEBFF;border-bottom-color:var(--cyan)}
 
+/* ── video player (Phase 4.4 Path A — click-to-expand, no autoplay) ── */
+.video-block{margin:0 0 28px;max-width:720px;position:relative}
+.video-card{position:relative;display:block;width:100%;aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s}
+.video-card:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.video-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.7}
+.video-overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 22px;background:linear-gradient(180deg,rgba(7,5,15,0.0) 40%,rgba(7,5,15,0.85) 100%)}
+.video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(0,212,255,0.18);border:1.5px solid var(--cyan);display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s}
+.video-card:hover .video-play{background:rgba(0,212,255,0.30);transform:translate(-50%,-50%) scale(1.05)}
+.video-play::before{content:"";display:block;border-style:solid;border-width:11px 0 11px 18px;border-color:transparent transparent transparent var(--cyan);margin-left:4px}
+.video-caption{font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:0.06em;line-height:1.4;position:relative;z-index:1}
+.video-caption .v-host{color:var(--cyan);text-transform:uppercase;letter-spacing:0.18em;font-size:10px;font-weight:700;display:block;margin-bottom:4px}
+.video-frame{width:100%;aspect-ratio:16/9;border:1px solid var(--line);background:#000}
+.video-frame iframe,.video-frame video{width:100%;height:100%;border:0;display:block}
+.video-link-fallback{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-2);text-decoration:none;transition:border-color .15s,color .15s}
+.video-link-fallback:hover{border-color:var(--cyan);color:var(--cyan)}
+.video-link-fallback .arrow{color:var(--cyan)}
+
 /* ── lead blurb ── */
 .lead{font-family:var(--serif);font-size:18px;line-height:1.55;color:var(--ink);margin-bottom:22px;max-width:720px}
 @media(max-width:640px){.lead{font-size:16px}}
@@ -227,6 +244,114 @@ function renderHeader(ev, atomic, comparison) {
 function renderLead(ev) {
   if (!ev.blurb) return '';
   return `<div class="lead">${esc(ev.blurb)}</div>`;
+}
+
+// Detect player shape from URL. Returns:
+//   { kind: 'youtube', embedUrl, thumbUrl }
+//   { kind: 'direct',  embedUrl, thumbUrl: null }   // .mp4 / .webm
+//   { kind: 'link',    embedUrl: null, hostLabel }  // anything else
+//
+// YouTube thumbnails are auto-derived from the video id; direct
+// videos use video_thumbnail_url if the row carries one.
+function _resolveVideoShape(url, thumbHint) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // YouTube: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID
+    let ytId = null;
+    if (u.hostname.endsWith('youtube.com') || u.hostname.endsWith('youtube-nocookie.com')) {
+      ytId = u.searchParams.get('v');
+      if (!ytId && u.pathname.startsWith('/shorts/')) ytId = u.pathname.split('/')[2];
+      if (!ytId && u.pathname.startsWith('/embed/')) ytId = u.pathname.split('/')[2];
+    } else if (u.hostname === 'youtu.be') {
+      ytId = u.pathname.replace(/^\/+/, '').split('/')[0];
+    }
+    if (ytId) {
+      const start = u.searchParams.get('t') || u.searchParams.get('start');
+      const startQ = start ? `&start=${encodeURIComponent(parseInt(start, 10) || 0)}` : '';
+      return {
+        kind:     'youtube',
+        embedUrl: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ytId)}?rel=0&modestbranding=1${startQ}`,
+        thumbUrl: thumbHint || `https://i.ytimg.com/vi/${encodeURIComponent(ytId)}/hqdefault.jpg`,
+        hostLabel: 'YouTube',
+      };
+    }
+    // Direct video file
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u.pathname)) {
+      return { kind: 'direct', embedUrl: url, thumbUrl: thumbHint || null, hostLabel: u.hostname };
+    }
+    // Anything else — link out, no embed
+    return { kind: 'link', embedUrl: null, thumbUrl: thumbHint || null, hostLabel: u.hostname.replace(/^www\./, '') };
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderVideo(ev) {
+  if (!ev.video_url) return '';
+  const shape = _resolveVideoShape(ev.video_url, ev.video_thumbnail_url);
+  if (!shape) return '';
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const fallbackCaption = `${ev.speaker} · ${dateStr}`;
+  const captionTxt = ev.video_caption || fallbackCaption;
+
+  // Link-only fallback: no embeddable shape (Truth Social, X, etc.) —
+  // surface a small "watch source" affordance, no thumbnail card.
+  if (shape.kind === 'link') {
+    return `
+      <div class="video-block">
+        <a class="video-link-fallback" href="${esc(ev.video_url)}" target="_blank" rel="noopener">
+          watch on ${esc(shape.hostLabel)} <span class="arrow">↗</span>
+        </a>
+      </div>
+    `;
+  }
+
+  // Embeddable shape — render thumbnail card. Click swaps in the
+  // iframe / <video>, no autoplay until clicked, no third-party
+  // tracking on first paint.
+  const thumb = shape.thumbUrl
+    ? `<img class="video-thumb" src="${esc(shape.thumbUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : '';
+  return `
+    <div class="video-block" data-video-shape="${esc(shape.kind)}" data-embed-url="${esc(shape.embedUrl)}">
+      <div class="video-card" role="button" tabindex="0" aria-label="Play video: ${esc(captionTxt)}">
+        ${thumb}
+        <div class="video-play" aria-hidden="true"></div>
+        <div class="video-overlay">
+          <div class="video-caption">
+            <span class="v-host">${esc(shape.hostLabel)}</span>
+            ${esc(captionTxt)}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _wireVideoExpansion(root) {
+  const block = (root || document).querySelector('.video-block[data-embed-url]');
+  if (!block) return;
+  const card = block.querySelector('.video-card');
+  if (!card) return;
+  const expand = () => {
+    const kind = block.dataset.videoShape;
+    const embedUrl = block.dataset.embedUrl;
+    if (!embedUrl) return;
+    let html;
+    if (kind === 'youtube') {
+      // Append autoplay=1 only on the user-initiated swap, never on first paint
+      const sep = embedUrl.includes('?') ? '&' : '?';
+      html = `<div class="video-frame"><iframe src="${embedUrl}${sep}autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    } else if (kind === 'direct') {
+      html = `<div class="video-frame"><video src="${embedUrl}" controls autoplay playsinline></video></div>`;
+    }
+    if (html) block.innerHTML = html;
+  };
+  card.addEventListener('click', expand);
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); expand(); }
+  });
 }
 
 // Reconciles the apparent contradiction between corpus-grain dominant
@@ -526,9 +651,13 @@ async function load() {
 
     const ev = data.event;
     document.title = `${ev.speaker} · ${fmtDate(ev.event_date || ev.event_at)} — HYPERFLEX`;
+    // Video sits below the lead blurb (verifying material, not the
+    // headline). Render order: header → lead → video → divergence →
+    // solo grid → atomic table.
     page.innerHTML = `
       ${renderHeader(ev, data.atomic || [], data.comparison || [])}
       ${renderLead(ev)}
+      ${renderVideo(ev)}
       ${renderDivergence(ev, data.atomic || [], data.comparison || [])}
       ${renderSoloGrid(ev)}
       ${renderAtomic(ev, data.atomic || [])}
@@ -537,6 +666,7 @@ async function load() {
         ${ev.source_url ? `<a href="${esc(ev.source_url)}" target="_blank" rel="noopener">verify ↗</a>` : ''}
       </footer>
     `;
+    _wireVideoExpansion(page);
   } catch (e) {
     console.error(e);
     page.innerHTML = '<div id="err">Could not load this event.<small>Try refreshing in a moment.</small></div>';

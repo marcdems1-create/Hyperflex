@@ -14862,7 +14862,8 @@ app.get('/api/event/:slug', async (req, res) => {
              blurb, stance_summary, dominant_stance, dominant_confidence,
              compared_to_speaker, comparison_yielded_no_divergence,
              stance_disagreement, source_transcript_id, composed_at, published,
-             domain, subject, stance_axis, stance_value
+             domain, subject, stance_axis, stance_value,
+             video_url, video_caption, video_thumbnail_url
       from mention_events
       where slug = $1 and published = true
       limit 1
@@ -14995,6 +14996,9 @@ app.get('/api/event/:slug', async (req, res) => {
         subject:                           ev.subject,
         stance_axis:                       ev.stance_axis,
         stance_value:                      ev.stance_value,
+        video_url:                         ev.video_url,
+        video_caption:                     ev.video_caption,
+        video_thumbnail_url:               ev.video_thumbnail_url,
       },
       atomic,
       comparison,
