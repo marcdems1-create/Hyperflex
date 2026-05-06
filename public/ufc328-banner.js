@@ -21,6 +21,7 @@
   // Best-known slugs to probe; first one with active markets wins.
   // Polymarket slugs vary; we fall back to a search by event keyword.
   var SLUG_CANDIDATES = [
+    'ufc-sea2-kha7-2026-05-09',
     'ufc-328-chimaev-vs-strickland',
     'ufc-chimaev-vs-strickland',
     'will-khamzat-chimaev-defeat-sean-strickland'
