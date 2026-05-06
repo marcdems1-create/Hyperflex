@@ -36398,18 +36398,97 @@ app.post('/api/quests/:questId/claim', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════
 
 // GET /api/login-streak — get/update user's daily login streak
-app.get('/api/login-streak', requireAuth, async (req, res) => {
+//
+// Auth-gated form (no query param): updates the streak for the calling user
+// and awards daily login FP. This is the existing rewards-driven path
+// consumed by creator-dashboard.html.
+//
+// Public form (?userId=X): read-only, no auth, no FP award, no DB write.
+// Returns just current_streak, best_streak, multiplier, is_stale. Used by
+// member.html to render the streak chip on someone else's profile (or your
+// own without triggering the rewards path twice on the same load).
+//
+// Staleness: a streak is considered stale if last_login_date is neither
+// today nor yesterday in UTC. The 36h grace window is implicit — server
+// only acts on date strings (`YYYY-MM-DD` UTC), so a user logging in 11pm
+// UTC then 11pm UTC the next day spans ~24h but counts as consecutive.
+function _computeStreakMultiplier(streak) {
+  return streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+}
+function _computeNextStreakTier(streak) {
+  if (streak < 3)  return { days: 3,  mult: '1.1x' };
+  if (streak < 7)  return { days: 7,  mult: '1.25x' };
+  if (streak < 14) return { days: 14, mult: '1.5x' };
+  if (streak < 30) return { days: 30, mult: '2x' };
+  return null;
+}
+function _computeIsStale(lastLoginDate, todayStr) {
+  if (!lastLoginDate) return true;
+  if (lastLoginDate === todayStr) return false;
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  return lastLoginDate !== yesterday;
+}
+
+app.get('/api/login-streak', optionalAuth, async (req, res) => {
   try {
-    const userId = req.userId;
     const today = new Date().toISOString().slice(0, 10);
+    const queriedUserId = req.query.userId ? String(req.query.userId).trim() : null;
+
+    // ── Public read-only branch ─────────────────────────────────────────
+    // Triggered by ?userId=X. No auth, no FP award, no DB write.
+    if (queriedUserId) {
+      let row = null;
+      if (pool) {
+        const rows = await dbQuery(
+          'SELECT login_streak, last_login_date, best_streak FROM users WHERE id = $1',
+          [queriedUserId]
+        ).catch(() => []);
+        row = rows[0] || null;
+      } else if (supabase) {
+        const { data } = await supabase.from('users')
+          .select('login_streak, last_login_date, best_streak')
+          .eq('id', queriedUserId).maybeSingle();
+        row = data || null;
+      }
+      if (!row) return res.json({ current_streak: 0, best_streak: 0, multiplier: 1, is_stale: true, next_tier_at: 3 });
+
+      const stored = row.login_streak || 0;
+      const stale  = _computeIsStale(row.last_login_date, today);
+      // Surface stored streak even when stale so the UI can render
+      // "STREAK BROKEN · N DAYS" — UI decides whether to show the broken
+      // copy based on `is_stale`. Don't clobber to 0 here.
+      const current = stale ? stored : stored;
+      const tier = _computeNextStreakTier(current);
+      return res.json({
+        current_streak: current,
+        best_streak: row.best_streak || 0,
+        multiplier: stale ? 1 : _computeStreakMultiplier(current),
+        is_stale: stale,
+        next_tier_at: tier ? tier.days : null,
+      });
+    }
+
+    // ── Auth'd write branch ─────────────────────────────────────────────
+    // Original behavior: increments streak, awards daily FP, returns the
+    // legacy response shape so creator-dashboard.html keeps working.
+    if (!req.userId) {
+      // Mirror requireAuth behavior — same shape, same status.
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const userId = req.userId;
 
     // Get user's streak data
     let streakData = null;
     if (pool) {
-      const rows = await dbQuery('SELECT login_streak, last_login_date, streak_multiplier FROM users WHERE id = $1', [userId]);
+      const rows = await dbQuery(
+        'SELECT login_streak, last_login_date, streak_multiplier, best_streak FROM users WHERE id = $1',
+        [userId]
+      );
       streakData = rows[0] || {};
     } else if (supabase) {
-      const { data } = await supabase.from('users').select('login_streak, last_login_date, streak_multiplier').eq('id', userId).single();
+      const { data } = await supabase.from('users')
+        .select('login_streak, last_login_date, streak_multiplier, best_streak')
+        .eq('id', userId).single();
       streakData = data || {};
     }
 
@@ -36417,7 +36496,7 @@ app.get('/api/login-streak', requireAuth, async (req, res) => {
     const lastLogin = streakData.last_login_date || '';
 
     if (lastLogin === today) {
-      // Already logged in today
+      // Already logged in today — no streak update, no FP award.
     } else {
       const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       if (lastLogin === yesterday) {
@@ -36426,14 +36505,32 @@ app.get('/api/login-streak', requireAuth, async (req, res) => {
         streak = 1; // streak broken, restart
       }
 
-      // Compute multiplier: 3d = 1.1x, 7d = 1.25x, 14d = 1.5x, 30d = 2x
-      const mult = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+      const mult = _computeStreakMultiplier(streak);
 
-      // Update
+      // Single UPDATE writes login_streak, last_login_date, streak_multiplier,
+      // and best_streak in one statement. best_streak uses GREATEST so a
+      // double-tick from a write race can never lower it.
       if (pool) {
-        await dbQuery('UPDATE users SET login_streak = $1, last_login_date = $2, streak_multiplier = $3 WHERE id = $4', [streak, today, mult, userId]);
+        await dbQuery(
+          `UPDATE users
+              SET login_streak       = $1,
+                  last_login_date    = $2,
+                  streak_multiplier  = $3,
+                  best_streak        = GREATEST(COALESCE(best_streak, 0), $1)
+            WHERE id = $4`,
+          [streak, today, mult, userId]
+        );
       } else if (supabase) {
-        await supabase.from('users').update({ login_streak: streak, last_login_date: today, streak_multiplier: mult }).eq('id', userId);
+        // Supabase fallback: read-modify-write. Postgres path is the live
+        // one — Supabase is dead per the codebase memory but kept for
+        // fallback symmetry with the rest of the file.
+        const newBest = Math.max(streakData.best_streak || 0, streak);
+        await supabase.from('users').update({
+          login_streak: streak,
+          last_login_date: today,
+          streak_multiplier: mult,
+          best_streak: newBest,
+        }).eq('id', userId);
       }
 
       // Award daily login FP bonus (small, once per day)
@@ -36450,13 +36547,20 @@ app.get('/api/login-streak', requireAuth, async (req, res) => {
       delete _flexPointsCache[userId];
     }
 
-    const multiplier = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
-    const nextMilestone = streak < 3 ? { days: 3, mult: '1.1x' } : streak < 7 ? { days: 7, mult: '1.25x' } : streak < 14 ? { days: 14, mult: '1.5x' } : streak < 30 ? { days: 30, mult: '2x' } : null;
+    const multiplier = _computeStreakMultiplier(streak);
+    const nextMilestone = _computeNextStreakTier(streak);
+    // Recompute best after update so the response is honest. GREATEST
+    // means it's the new streak iff streak > stored best, else stored.
+    const bestNow = Math.max(streakData.best_streak || 0, streak);
 
     res.json({
       streak,
+      current_streak: streak,
+      best_streak: bestNow,
       multiplier,
       last_login: lastLogin || today,
+      is_stale: false,
+      next_tier_at: nextMilestone ? nextMilestone.days : null,
       next_milestone: nextMilestone,
       milestones: [
         { days: 3, mult: '1.1x', reached: streak >= 3 },
@@ -36467,7 +36571,7 @@ app.get('/api/login-streak', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[login-streak]', err.message);
-    res.json({ streak: 0, multiplier: 1, milestones: [] });
+    res.json({ streak: 0, current_streak: 0, best_streak: 0, multiplier: 1, is_stale: true, next_tier_at: 3, milestones: [] });
   }
 });
 
@@ -51856,6 +51960,7 @@ app.listen(PORT, () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS login_streak      INTEGER DEFAULT 0;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_date   TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_multiplier NUMERIC DEFAULT 1;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS best_streak       INTEGER DEFAULT 0;
 
       -- 50% FEE REBATE PROGRAM
       -- Wallets that had NEVER traded Polymarket before they connected to
