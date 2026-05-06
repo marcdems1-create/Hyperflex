@@ -1284,6 +1284,7 @@ const clustererBlurb = require('./lib/clusterer/blurb');
 // transcript, rolls up the speaker's atomic stance calls and generates
 // one event-level mention_event row with a 60-100 word narrative blurb.
 const clustererCompose = require('./lib/clusterer/compose');
+const clustererComposeGeneric = require('./lib/clusterer/compose-generic');
 
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
@@ -1386,6 +1387,7 @@ if (pool) clustererBlurb.init({ pool, anthropic });
 
 // Phase 2f — composer module wiring.
 if (pool) clustererCompose.init({ pool, anthropic });
+if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
 // Every background cron that hits Claude (alpha-hooks, news-impact,
@@ -14632,6 +14634,22 @@ app.post('/api/clusterer/compose', async (req, res) => {
     });
   }
   try {
+    // Phase 4.1 dispatch: domain param routes to the per-domain composer.
+    // Default (omitted or fed_monetary_policy) keeps the existing Fed
+    // walks-transcripts path. Anything else hits compose-generic with
+    // the (speaker, subject, comparison_speaker) tuple.
+    const domain = String(req.query.domain || 'fed_monetary_policy').toLowerCase();
+    if (domain !== 'fed_monetary_policy') {
+      const stats = await clustererComposeGeneric.run({
+        domain,
+        speaker:            req.query.speaker,
+        subject:            req.query.subject,
+        comparison_speaker: req.query.comparison_speaker || null,
+        event_type:         req.query.event_type || 'statement',
+        dryRun:             req.query.dry_run === '1' || req.query.dry_run === 'true',
+      });
+      return res.json(stats);
+    }
     const stats = await clustererCompose.run({
       transcript_id: req.query.transcript_id || null,
       limit:         req.query.limit || 0,
@@ -14843,7 +14861,8 @@ app.get('/api/event/:slug', async (req, res) => {
       select id, slug, speaker, event_type, event_at, event_date, source_url,
              blurb, stance_summary, dominant_stance, dominant_confidence,
              compared_to_speaker, comparison_yielded_no_divergence,
-             stance_disagreement, source_transcript_id, composed_at, published
+             stance_disagreement, source_transcript_id, composed_at, published,
+             domain, subject, stance_axis, stance_value
       from mention_events
       where slug = $1 and published = true
       limit 1
@@ -14879,33 +14898,81 @@ app.get('/api/event/:slug', async (req, res) => {
 
     const ev = eventRows[0];
 
-    // Atomic rows for the speaker on the words that appeared in this event.
-    const speakerWords = []
-      .concat(ev.stance_summary?.hawkish || [])
-      .concat(ev.stance_summary?.dovish  || [])
-      .concat(ev.stance_summary?.neutral || []);
     let atomic = [];
-    if (speakerWords.length) {
-      atomic = await dbQuery(`
-        select word, llm_stance, llm_confidence, llm_rationale, blurb,
-               rate_ratio, transcripts_with_word
-        from speaker_word_stance
-        where speaker = $1 and word = any($2)
-          and llm_stance is not null and llm_stance != 'insufficient_signal'
-        order by case llm_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
-                 word
-      `, [ev.speaker, speakerWords]);
-    }
-
-    // Comparison rows (only when comparison anchor is set).
     let comparison = [];
-    if (ev.compared_to_speaker && speakerWords.length) {
-      comparison = await dbQuery(`
-        select word, llm_stance, llm_confidence, blurb
-        from speaker_word_stance
-        where speaker = $1 and word = any($2)
-          and llm_stance is not null and llm_stance != 'insufficient_signal'
-      `, [ev.compared_to_speaker, speakerWords]);
+
+    // Phase 4.1 dispatch: political events read from
+    // political_subject_stance (per-statement rows) instead of
+    // speaker_word_stance (per-word rows). Field shape is mapped onto
+    // the Fed atomic-row contract so the same page renderers work
+    // unchanged: `word` carries a date-flavored label, `llm_*` fields
+    // mirror `stance_*` / `blurb` fields one-for-one.
+    if (ev.domain === 'us_politics') {
+      const psRows = await dbQuery(`
+        select id, statement_id, statement_date, statement_source_url,
+               statement_quote, stance_value, stance_confidence, blurb, rationale
+        from political_subject_stance
+        where speaker = $1 and subject = $2
+          and stance_value != 'insufficient_signal'
+        order by case stance_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
+                 statement_date desc nulls last
+      `, [ev.speaker, ev.subject]);
+      atomic = psRows.map(r => ({
+        word:           r.statement_date ? new Date(r.statement_date).toISOString().slice(0, 10) : (r.statement_id || ''),
+        llm_stance:     r.stance_value,
+        llm_confidence: r.stance_confidence,
+        llm_rationale:  r.rationale || r.statement_quote || '',
+        blurb:          r.blurb,
+        // Pass through politics-specific fields so the page can render
+        // a quote chip and source-link per atomic row when present.
+        statement_quote:      r.statement_quote || null,
+        statement_source_url: r.statement_source_url || null,
+      }));
+
+      if (ev.compared_to_speaker) {
+        const compRows = await dbQuery(`
+          select id, statement_id, statement_date, statement_source_url,
+                 statement_quote, stance_value, stance_confidence, blurb
+          from political_subject_stance
+          where speaker = $1 and subject = $2
+            and stance_value != 'insufficient_signal'
+          order by statement_date desc nulls last
+        `, [ev.compared_to_speaker, ev.subject]);
+        comparison = compRows.map(r => ({
+          word:           r.statement_date ? new Date(r.statement_date).toISOString().slice(0, 10) : (r.statement_id || ''),
+          llm_stance:     r.stance_value,
+          llm_confidence: r.stance_confidence,
+          blurb:          r.blurb,
+          statement_quote:      r.statement_quote || null,
+          statement_source_url: r.statement_source_url || null,
+        }));
+      }
+    } else {
+      // Fed path (existing): atomic rows are per (speaker, word) on the
+      // words that appeared in this event's stance_summary.
+      const speakerWords = []
+        .concat(ev.stance_summary?.hawkish || [])
+        .concat(ev.stance_summary?.dovish  || [])
+        .concat(ev.stance_summary?.neutral || []);
+      if (speakerWords.length) {
+        atomic = await dbQuery(`
+          select word, llm_stance, llm_confidence, llm_rationale, blurb,
+                 rate_ratio, transcripts_with_word
+          from speaker_word_stance
+          where speaker = $1 and word = any($2)
+            and llm_stance is not null and llm_stance != 'insufficient_signal'
+          order by case llm_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
+                   word
+        `, [ev.speaker, speakerWords]);
+      }
+      if (ev.compared_to_speaker && speakerWords.length) {
+        comparison = await dbQuery(`
+          select word, llm_stance, llm_confidence, blurb
+          from speaker_word_stance
+          where speaker = $1 and word = any($2)
+            and llm_stance is not null and llm_stance != 'insufficient_signal'
+        `, [ev.compared_to_speaker, speakerWords]);
+      }
     }
 
     res.json({
@@ -14924,6 +14991,10 @@ app.get('/api/event/:slug', async (req, res) => {
         compared_to_speaker:               ev.compared_to_speaker,
         comparison_yielded_no_divergence:  ev.comparison_yielded_no_divergence,
         composed_at:                       ev.composed_at,
+        domain:                            ev.domain,
+        subject:                           ev.subject,
+        stance_axis:                       ev.stance_axis,
+        stance_value:                      ev.stance_value,
       },
       atomic,
       comparison,

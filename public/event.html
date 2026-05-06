@@ -57,6 +57,20 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .pill.s-neutral.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
 .pill.s-neutral.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
 .pill.s-neutral.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+/* Phase 4.1: us_politics axis (escalatory_deescalatory). Escalatory
+ * shares the warm-red palette with hawkish (both communicate
+ * aggressive/restrictive direction); deescalatory gets a distinct
+ * cool-green hue so users skim-disambiguate it from cyan-dovish;
+ * ambiguous shares the slate palette with neutral. */
+.pill.s-escalatory.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-escalatory.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-escalatory.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-deescalatory.c-high{background:rgba(0,200,150,0.20);border-color:rgba(0,200,150,0.85);color:#7AE6BF}
+.pill.s-deescalatory.c-medium{background:rgba(0,200,150,0.06);border-color:rgba(0,200,150,0.32);color:rgba(122,230,191,0.65)}
+.pill.s-deescalatory.c-low{background:rgba(0,200,150,0.025);border-color:rgba(0,200,150,0.15);color:rgba(122,230,191,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-ambiguous.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-ambiguous.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-ambiguous.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
 
 .source-link{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase}
 .source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
@@ -232,10 +246,14 @@ function renderClarifier(ev, atomic, comparison) {
       if (foil && foil.llm_stance !== subj.llm_stance) divergent.push(subj);
     }
     if (!divergent.length) return '';
-    const counts = { hawkish: 0, dovish: 0, neutral: 0 };
+    // Stance-axis aware: count whichever values appear in this event's
+    // axis. Falls through to Fed defaults for legacy / unknown axes.
+    const cols = (SOLO_COL_CONFIG[ev.stance_axis] || SOLO_COL_CONFIG.hawkish_dovish).map(c => c[0]);
+    const counts = {};
+    for (const k of cols) counts[k] = 0;
     for (const r of divergent) if (r.llm_stance in counts) counts[r.llm_stance]++;
-    let divStance = 'hawkish';
-    for (const k of ['hawkish','dovish','neutral']) if (counts[k] > counts[divStance]) divStance = k;
+    let divStance = cols[0];
+    for (const k of cols) if (counts[k] > counts[divStance]) divStance = k;
     const divLabel = `<strong>${esc(divStance)}</strong>`;
     const n = divergent.length;
     const noun = n === 1 ? 'term' : 'terms';
@@ -245,11 +263,14 @@ function renderClarifier(ev, atomic, comparison) {
   if (ev.compared_to_speaker && ev.comparison_yielded_no_divergence) {
     return `<div class="clarifier">Net posture ${domLabel}. ${esc(ev.speaker)} aligned with ${esc(ev.compared_to_speaker)} on every overlapping term.</div>`;
   }
-  // Solo
+  // Solo — count across all axis values present in stance_summary
   const sum = ev.stance_summary || {};
-  const nTotal = (sum.hawkish||[]).length + (sum.dovish||[]).length + (sum.neutral||[]).length;
+  const nTotal = Object.values(sum).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
   if (!nTotal) return '';
-  const noun = nTotal === 1 ? 'tracked term' : 'tracked terms';
+  const isPolitical = ev.stance_axis === 'escalatory_deescalatory';
+  const noun = nTotal === 1
+    ? (isPolitical ? 'statement' : 'tracked term')
+    : (isPolitical ? 'statements' : 'tracked terms');
   return `<div class="clarifier">Net posture ${domLabel}. Stance summary across ${nTotal} ${noun} below.</div>`;
 }
 
@@ -295,14 +316,32 @@ function renderDivergence(ev, atomic, comparison) {
   `;
 }
 
+// Per-axis column treatment. Color class maps each stance value onto
+// one of three buckets: warm (hawkish/escalatory), cool (dovish/
+// deescalatory), or muted (neutral/ambiguous). Adding a new axis =
+// adding entries here; falls through to muted slate for unknowns.
+const SOLO_COL_CONFIG = {
+  hawkish_dovish: [
+    ['hawkish', 'Hawkish', 'hawk'],
+    ['dovish',  'Dovish',  'dove'],
+    ['neutral', 'Neutral', 'neut'],
+  ],
+  escalatory_deescalatory: [
+    ['escalatory',   'Escalatory',   'hawk'],
+    ['deescalatory', 'Deescalatory', 'dove'],
+    ['ambiguous',    'Ambiguous',    'neut'],
+  ],
+};
+
 function renderSoloGrid(ev) {
   if (ev.compared_to_speaker) return '';
   const sum = ev.stance_summary || {};
-  const col = (label, words, cls) => {
-    const chips = (words || []).map(w => `<span class="chip">${esc(w)}</span>`).join('');
+  const cols = SOLO_COL_CONFIG[ev.stance_axis] || SOLO_COL_CONFIG.hawkish_dovish;
+  const col = (label, items, cls) => {
+    const chips = (items || []).map(w => `<span class="chip">${esc(w)}</span>`).join('');
     return `
       <div class="solo-col">
-        <div class="solo-col-h ${cls}">${esc(label)} · ${(words||[]).length}</div>
+        <div class="solo-col-h ${cls}">${esc(label)} · ${(items||[]).length}</div>
         <div class="solo-chips">${chips || '<span style="font-family:var(--mono);font-size:11px;color:var(--muted-2)">—</span>'}</div>
       </div>
     `;
@@ -310,9 +349,7 @@ function renderSoloGrid(ev) {
   return `
     <div class="section-h">Stance posture as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
     <div class="solo-grid">
-      ${col('Hawkish', sum.hawkish, 'hawk')}
-      ${col('Dovish',  sum.dovish,  'dove')}
-      ${col('Neutral', sum.neutral, 'neut')}
+      ${cols.map(([key, label, cls]) => col(label, sum[key], cls)).join('')}
     </div>
   `;
 }
