@@ -14731,17 +14731,58 @@ function _previewCacheSet(key, value) {
 // markets for queries like "fed rate june" because it tokenizes
 // liberally. Cast the candidate net wide via `terms`, then enforce
 // macro-policy semantics via `must_match_any`.
+// Phase 4.5: language vs outcome market classifier. Polymarket's
+// "Mentions" category contains events like "What will Powell say
+// during June Press Conference" — one parent event with N binary
+// sub-markets ("Will Powell say recession", "Will Powell say
+// inflation", etc.). HYPERFLEX is positioned as the canonical
+// resolver/analytics for this market category, so the preview page
+// leads with these and the existing outcome markets become secondary.
+const _LANGUAGE_EVENT_PATTERNS = [
+  /\bwhat\s+will\s+.+\s+(say|mention)\b/i,
+  /\bwhat\s+\w+\s+will\s+.+\ssay\b/i,                  // "what animals will Trump say"
+  /\bwill\s+.+\s+(say|mention|use\s+the\s+word)\b/i,    // "Will Powell say recession"
+];
+
+function _isLanguageEventTitle(title) {
+  if (!title) return false;
+  return _LANGUAGE_EVENT_PATTERNS.some(re => re.test(title));
+}
+
+// Sub-market candidate label resolution. Gamma provides
+// `groupItemTitle` for multi-outcome events ("recession" / "Iran" /
+// "Eagle"); fall back to extracting the word from "Will X say <word>"
+// if the field is absent.
+function _candidateLabel(subMarket, parentTitle) {
+  if (subMarket.groupItemTitle && subMarket.groupItemTitle.trim().length > 0) {
+    return subMarket.groupItemTitle.trim();
+  }
+  const q = String(subMarket.question || '');
+  // "Will Powell say recession during June Press Conference" → "recession"
+  const m = q.match(/\b(?:say|mention|use(?:\s+the\s+word)?)\s+([A-Za-z][\w\s'\-]{1,40}?)(?:\s+during\b|\s+at\b|\s+in\b|[?\.]|$)/i);
+  if (m && m[1]) return m[1].trim();
+  return q.length > 60 ? q.slice(0, 58).trim() + '…' : q;
+}
+
 async function _fetchPreviewMarkets(cfg, n = 8) {
   const terms = (cfg && Array.isArray(cfg.polymarket_search_terms)) ? cfg.polymarket_search_terms : [];
   const mustMatch = (cfg && Array.isArray(cfg.must_match_any)) ? cfg.must_match_any : [];
   const fallbackSlugs = (cfg && Array.isArray(cfg.fallback_event_slugs)) ? cfg.fallback_event_slugs : [];
-  if (!terms.length && !fallbackSlugs.length) return [];
-  const cacheKey = `preview_markets:${terms.join('|')}|${mustMatch.length}|${fallbackSlugs.join(',')}`;
+  if (!terms.length && !fallbackSlugs.length) {
+    return { all_markets: [], outcome_markets: [], language_market_events: [] };
+  }
+  const cacheKey = `preview_markets_v2:${terms.join('|')}|${mustMatch.length}|${fallbackSlugs.join(',')}`;
   const cached = _previewCacheGet(cacheKey);
-  if (cached) return cached.slice(0, n);
+  if (cached) {
+    return {
+      all_markets:            cached.outcome_markets.slice(0, n),
+      outcome_markets:        cached.outcome_markets.slice(0, n),
+      language_market_events: cached.language_market_events,
+    };
+  }
   const merged = new Map();
+  const languageEvents = new Map(); // eventSlug → { eventTitle, totalVolume, candidates[] }
 
-  // Helper: parse outcomePrices (string or array) → first-outcome float
   function _parseYesPrice(raw) {
     try {
       const op = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -14753,7 +14794,7 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
     return null;
   }
 
-  // Layer 1 — broad gamma keyword search (recall)
+  // Layer 1 — broad gamma keyword search (recall, outcome markets only)
   for (const term of terms) {
     try {
       const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volume&ascending=false&search=${encodeURIComponent(term)}`;
@@ -14781,43 +14822,82 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
     }
   }
 
-  // Layer 2 — curated event-slug fallback (precision backstop)
-  // Always runs (not conditional on layer-1 emptiness): the curated
-  // set is high-signal, the keyword hits often miss it, and merging
-  // both maximizes coverage. Dedupe on conditionId guarantees no
-  // double-render.
+  // Layer 2 — curated event-slug fallback (precision backstop). For
+  // each event, classify whether the PARENT title is a language-market
+  // shape ("What will X say"). If yes, group all sub-markets as
+  // candidates of that one card. If no, flatten into the outcome list
+  // (existing behavior).
   for (const eventSlug of fallbackSlugs) {
     try {
       const result = await polymarket.getEventBySlug(eventSlug);
       if (!result || !Array.isArray(result.eventMarkets)) continue;
-      for (const m of result.eventMarkets) {
-        const cid = m.conditionId;
-        if (!cid || merged.has(cid)) continue;
-        if (m.closed === true) continue;
-        merged.set(cid, {
-          conditionId:  cid,
-          question:     m.question || '',
-          slug:         m.slug || null,
-          eventSlug:    eventSlug,
-          yesPrice:     _parseYesPrice(m.outcomePrices),
-          volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
-          volume24hr:   parseFloat(m.volume24hr || 0) || 0,
-          endDate:      m.endDate || m.end_date_iso || null,
-        });
+      const parentTitle = result.event?.title || '';
+      if (_isLanguageEventTitle(parentTitle)) {
+        const candidates = result.eventMarkets
+          .filter(m => m.closed !== true)
+          .map(m => ({
+            conditionId: m.conditionId,
+            slug:        m.slug || null,
+            label:       _candidateLabel(m, parentTitle),
+            yesPrice:    _parseYesPrice(m.outcomePrices),
+            volume:      parseFloat(m.volume || m.volumeNum || 0) || 0,
+            volume24hr:  parseFloat(m.volume24hr || 0) || 0,
+          }))
+          .sort((a, b) => (b.yesPrice || 0) - (a.yesPrice || 0)); // ladder by likelihood
+        if (candidates.length) {
+          languageEvents.set(eventSlug, {
+            eventSlug,
+            eventTitle:  parentTitle,
+            totalVolume: candidates.reduce((s, c) => s + c.volume, 0),
+            candidates,
+          });
+        }
+      } else {
+        // Outcome event — flatten sub-markets
+        for (const m of result.eventMarkets) {
+          const cid = m.conditionId;
+          if (!cid || merged.has(cid)) continue;
+          if (m.closed === true) continue;
+          merged.set(cid, {
+            conditionId:  cid,
+            question:     m.question || '',
+            slug:         m.slug || null,
+            eventSlug:    eventSlug,
+            yesPrice:     _parseYesPrice(m.outcomePrices),
+            volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
+            volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+            endDate:      m.endDate || m.end_date_iso || null,
+          });
+        }
       }
     } catch (e) {
       console.warn('[event-preview] gamma getEventBySlug failed for slug:', eventSlug, e.message);
     }
   }
 
-  let out = Array.from(merged.values())
+  let outcome = Array.from(merged.values())
     .filter(m => m.question && m.question.length > 6);
   if (mustMatch.length) {
-    out = out.filter(m => mustMatch.some(re => re.test(m.question)));
+    outcome = outcome.filter(m => mustMatch.some(re => re.test(m.question)));
   }
-  out = out.sort((a, b) => (b.volume || 0) - (a.volume || 0));
-  _previewCacheSet(cacheKey, out);
-  return out.slice(0, n);
+  outcome = outcome
+    .map(m => ({ ...m, category: 'outcome' }))
+    .sort((a, b) => (b.volume || 0) - (a.volume || 0));
+
+  const language_market_events = Array.from(languageEvents.values())
+    .sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0))
+    .map(ev => ({
+      ...ev,
+      candidates: ev.candidates.slice(0, 5),  // top 5 by yesPrice ladder
+    }));
+
+  _previewCacheSet(cacheKey, { outcome_markets: outcome, language_market_events });
+
+  return {
+    all_markets:            outcome.slice(0, n),  // back-compat for hero strip
+    outcome_markets:        outcome.slice(0, n),
+    language_market_events,
+  };
 }
 
 // For each market in the list, find Powell stance rows for tracked
@@ -14874,9 +14954,11 @@ app.get('/api/event/:slug', async (req, res) => {
     if (!eventRows.length) {
       const cfg = eventPreviews.getPreview(slug);
       if (cfg) {
-        const markets = await _fetchPreviewMarkets(cfg);
+        const fetched = await _fetchPreviewMarkets(cfg);
+        const outcomeList = fetched.outcome_markets || [];
+        const languageEvents = fetched.language_market_events || [];
         const powellAnchorsByCid = cfg.powell_compare
-          ? await _fetchPowellAnchorsForMarkets(markets)
+          ? await _fetchPowellAnchorsForMarkets(outcomeList)
           : {};
         return res.json({
           mode: 'preview',
@@ -14889,7 +14971,9 @@ app.get('/api/event/:slug', async (req, res) => {
             subhead:                 cfg.subhead,
             placeholder_pill_label:  cfg.placeholder_pill_label || 'Awaiting transcript',
             closing_copy:            cfg.closing_copy || '',
-            markets,
+            markets:                 outcomeList,    // back-compat — existing renderer uses this
+            outcome_markets:         outcomeList,
+            language_market_events:  languageEvents,
             powell_anchors:          powellAnchorsByCid,
           },
         });
@@ -15124,10 +15208,14 @@ async function _renderMentionsHero() {
   }
   if (mode === 'none') return '';
 
-  // Fetch markets (top 4) — same data path as the preview-page API
+  // Fetch markets (top 4) — same data path as the preview-page API.
+  // Hero strip shows outcome markets only; multi-outcome language
+  // events are too dense for the strip's mini-card shape and live
+  // on the preview page itself.
   let markets = [];
   try {
-    markets = await _fetchPreviewMarkets(cfg, 4);
+    const fetched = await _fetchPreviewMarkets(cfg, 4);
+    markets = fetched.outcome_markets || [];
   } catch (e) { markets = []; }
 
   const cd = _fmtCountdownParts(eventIso, nowMs);
