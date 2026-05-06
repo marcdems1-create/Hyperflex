@@ -15156,14 +15156,43 @@ async function _renderMentionsHero() {
       <div class="hero-strip-row">${markets.map(_renderHeroMiniCard).join('')}</div>
     </div>` : '';
 
+  // Portrait comparison panel — Powell (current, muted) vs Warsh
+  // (incoming, full-color, cyan border). Sits to the right of the
+  // text column on desktop, stacks below countdown on mobile.
+  // Photos are loaded from /images/<speaker>.jpg locally; if a file
+  // is missing the <img> removes itself via onerror and the CSS
+  // monogram (data-monogram="P" / "W") is what shows. Panel ships
+  // clean even before photos land.
+  const portraitsBlock = `
+    <aside class="hero-portraits" aria-label="Posture comparison">
+      <div class="hero-portrait muted" data-monogram="P">
+        <img src="/images/powell.jpg" alt="Jerome Powell, current Fed Chair" onerror="this.remove()" loading="lazy">
+      </div>
+      <div class="hero-vs" aria-hidden="true">VS</div>
+      <div class="hero-portrait featured" data-monogram="W">
+        <img src="/images/warsh.jpg" alt="Kevin Warsh, incoming Fed Chair" onerror="this.remove()" loading="lazy">
+      </div>
+      <div class="hero-portraits-row">
+        <span class="hero-portraits-label">Powell · current</span>
+        <span class="hero-portraits-label featured">Warsh · incoming</span>
+      </div>
+      <div class="hero-portraits-caption">Stance comparison once the receipt drops</div>
+    </aside>
+  `;
+
   return `
 <section class="hero" data-mode="${_escHtml(mode)}">
   <div class="hero-grain"></div>
   <div class="hero-inner">
-    <div class="hero-eyebrow">${_escHtml(eyebrow)}</div>
-    <h1 class="hero-headline">${_escHtml(cfg.headline)}</h1>
-    <p class="hero-sub">Live receipt within 24h of the press conference. Powell's posture on the same terms below.</p>
-    ${countdownBlock}
+    <div class="hero-top">
+      <div class="hero-text-col">
+        <div class="hero-eyebrow">${_escHtml(eyebrow)}</div>
+        <h1 class="hero-headline">${_escHtml(cfg.headline)}</h1>
+        <p class="hero-sub">Live receipt within 24h of the press conference. Powell's posture on the same terms below.</p>
+        ${countdownBlock}
+      </div>
+      ${portraitsBlock}
+    </div>
     ${stripBlock}
     <a class="hero-cta" href="${_escHtml(ctaHref)}">${_escHtml(ctaLabel)}</a>
   </div>

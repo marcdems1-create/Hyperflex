@@ -76,6 +76,24 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
 .source-link a:hover{color:#9BEBFF;border-bottom-color:var(--cyan)}
 
+/* ── portrait comparison panel (subject vs foil at top of event page) ── */
+.event-portraits{display:flex;align-items:center;justify-content:center;gap:24px;margin:0 0 28px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.event-portrait-col{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0}
+.event-portrait{width:120px;height:120px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:52px;color:var(--muted-2);line-height:1;flex-shrink:0}
+.event-portrait::before{content:attr(data-monogram);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;letter-spacing:-0.02em}
+.event-portrait img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;z-index:1;display:block}
+.event-portrait.muted img{filter:grayscale(0.55) brightness(0.78);opacity:0.78}
+.event-portrait.featured{box-shadow:0 0 0 2px var(--cyan),0 0 22px rgba(0,212,255,0.32)}
+.event-portrait.featured::before{color:var(--cyan)}
+.event-portrait-label{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;text-align:center}
+.event-portrait-label.featured{color:var(--ink-2)}
+.event-portrait-vs{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase}
+@media(max-width:640px){
+  .event-portraits{gap:14px;padding:14px 0}
+  .event-portrait{width:80px;height:80px;font-size:36px}
+  .event-portrait-vs{font-size:11px}
+}
+
 /* ── video player (Phase 4.4 Path A — click-to-expand, no autoplay) ── */
 .video-block{margin:0 0 28px;max-width:720px;position:relative}
 .video-card{position:relative;display:block;width:100%;aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s}
@@ -244,6 +262,53 @@ function renderHeader(ev, atomic, comparison) {
 function renderLead(ev) {
   if (!ev.blurb) return '';
   return `<div class="lead">${esc(ev.blurb)}</div>`;
+}
+
+// Portrait comparison panel — only renders when a comparison anchor
+// is set. Subject (the event's speaker) gets the cyan-bordered
+// featured treatment; foil (compared_to_speaker) is the muted-gray
+// "for comparison" framing. Photos are loaded from
+// /images/<speaker-lowercase>.jpg; missing files fall through to
+// CSS-rendered monograms via onerror=this.remove(). Caption labels
+// are domain-aware via the cfg lookup so Fed reads "current/incoming"
+// vs politics reads "this stance/baseline" or similar.
+function _portraitFile(speaker) {
+  return '/images/' + String(speaker || '').toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg';
+}
+
+function _portraitLabels(ev) {
+  // Per-domain framing for the photo labels under each portrait
+  if (ev.domain === 'us_politics') {
+    return { subject: 'Current statement', foil: 'Baseline anchor' };
+  }
+  // Fed default — Powell-current vs Warsh-incoming was the pattern;
+  // for solo Fed events the comparison is usually "this date" vs
+  // "another speaker's posture", neither necessarily current.
+  return { subject: 'Subject', foil: 'Comparison anchor' };
+}
+
+function renderPortraits(ev) {
+  if (!ev.compared_to_speaker) return '';
+  const labels = _portraitLabels(ev);
+  const subjMonogram = (ev.speaker || '?').slice(0, 1).toUpperCase();
+  const foilMonogram = (ev.compared_to_speaker || '?').slice(0, 1).toUpperCase();
+  return `
+    <div class="event-portraits" aria-label="Speaker comparison">
+      <div class="event-portrait-col">
+        <div class="event-portrait muted" data-monogram="${esc(foilMonogram)}">
+          <img src="${esc(_portraitFile(ev.compared_to_speaker))}" alt="${esc(ev.compared_to_speaker)}" onerror="this.remove()" loading="lazy">
+        </div>
+        <div class="event-portrait-label">${esc(ev.compared_to_speaker)} · ${esc(labels.foil)}</div>
+      </div>
+      <div class="event-portrait-vs" aria-hidden="true">VS</div>
+      <div class="event-portrait-col">
+        <div class="event-portrait featured" data-monogram="${esc(subjMonogram)}">
+          <img src="${esc(_portraitFile(ev.speaker))}" alt="${esc(ev.speaker)}" onerror="this.remove()" loading="lazy">
+        </div>
+        <div class="event-portrait-label featured">${esc(ev.speaker)} · ${esc(labels.subject)}</div>
+      </div>
+    </div>
+  `;
 }
 
 // Detect player shape from URL. Returns:
@@ -656,6 +721,7 @@ async function load() {
     // solo grid → atomic table.
     page.innerHTML = `
       ${renderHeader(ev, data.atomic || [], data.comparison || [])}
+      ${renderPortraits(ev)}
       ${renderLead(ev)}
       ${renderVideo(ev)}
       ${renderDivergence(ev, data.atomic || [], data.comparison || [])}
