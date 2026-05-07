@@ -1334,7 +1334,6 @@ app.get('/api/debug-fetch', async (req, res) => {
   };
   await Promise.allSettled([
     testFetch('polymarket', 'https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=1'),
-    testFetch('kalshi', 'https://api.elections.kalshi.com/trade-api/v2/events?limit=1'),
     testFetch('httpbin', 'https://httpbin.org/get'),
   ]);
   res.json(results);
