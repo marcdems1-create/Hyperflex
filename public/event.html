@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mention event — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
+  --panel:#14102A;--panel-2:#1B1638;
+  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
+  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;
+  --cyan:#00D4FF;--cyan-glow:rgba(0,212,255,0.35);
+  --hawk:#FF6B4D;--hawk-glow:rgba(255,107,77,0.35);
+  --dove:#00D4FF;
+  --neut:#9590B0;
+  --display:'Anton',sans-serif;
+  --serif:'Instrument Serif',serif;
+  --sans:'Geist','Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+a{color:inherit;text-decoration:none}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 36px;position:sticky;top:0;z-index:50;background:rgba(7,5,15,0.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--line)}
+.nav-logo{font-family:var(--display);font-size:22px;letter-spacing:0.18em;color:var(--ink)}
+.nav-back{color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;padding:0 10px}
+.nav-back:hover{color:var(--ink)}
+@media(max-width:640px){nav{padding:14px 18px}.nav-logo{font-size:18px}}
+
+.page{position:relative;z-index:2;max-width:920px;margin:0 auto;padding:32px 36px 80px}
+@media(max-width:768px){.page{padding:24px 18px 64px}}
+
+/* ── HEADER ── */
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow .sep{color:var(--muted-2)}
+.event-type-chip{display:inline-block;padding:3px 10px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase}
+.headline{font-family:var(--sans);font-weight:800;font-size:30px;line-height:1.1;letter-spacing:-0.01em;color:var(--ink);margin-bottom:6px}
+@media(max-width:640px){.headline{font-size:24px}}
+.subhead{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:12px;max-width:680px}
+.clarifier{font-family:var(--mono);font-size:12px;color:var(--ink-2);line-height:1.55;letter-spacing:0.02em;margin-bottom:14px;padding:10px 14px;background:rgba(0,212,255,0.04);border-left:2px solid var(--cyan);max-width:680px}
+.clarifier strong{color:var(--cyan);font-weight:700}
+.dominant-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+
+/* ── stance pills (confidence three-state amplified) ── */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
+.pill.s-hawkish.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-hawkish.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-dovish.c-high{background:rgba(0,212,255,0.20);border-color:rgba(0,212,255,0.85);color:#9BEBFF}
+.pill.s-dovish.c-medium{background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.32);color:rgba(127,207,232,0.65)}
+.pill.s-dovish.c-low{background:rgba(0,212,255,0.025);border-color:rgba(0,212,255,0.15);color:rgba(127,207,232,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-neutral.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-neutral.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-neutral.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+/* Phase 4.1: us_politics axis (escalatory_deescalatory). Escalatory
+ * shares the warm-red palette with hawkish (both communicate
+ * aggressive/restrictive direction); deescalatory gets a distinct
+ * cool-green hue so users skim-disambiguate it from cyan-dovish;
+ * ambiguous shares the slate palette with neutral. */
+.pill.s-escalatory.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-escalatory.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-escalatory.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-deescalatory.c-high{background:rgba(0,200,150,0.20);border-color:rgba(0,200,150,0.85);color:#7AE6BF}
+.pill.s-deescalatory.c-medium{background:rgba(0,200,150,0.06);border-color:rgba(0,200,150,0.32);color:rgba(122,230,191,0.65)}
+.pill.s-deescalatory.c-low{background:rgba(0,200,150,0.025);border-color:rgba(0,200,150,0.15);color:rgba(122,230,191,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-ambiguous.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-ambiguous.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-ambiguous.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+
+.source-link{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase}
+.source-link a{color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.5)}
+.source-link a:hover{color:#9BEBFF;border-bottom-color:var(--cyan)}
+
+/* ── portrait comparison panel (subject vs foil at top of event page) ── */
+.event-portraits{display:flex;align-items:center;justify-content:center;gap:24px;margin:0 0 28px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.event-portrait-col{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0}
+.event-portrait{width:120px;height:120px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:52px;color:var(--muted-2);line-height:1;flex-shrink:0}
+.event-portrait::before{content:attr(data-monogram);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;letter-spacing:-0.02em}
+.event-portrait img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;z-index:1;display:block}
+.event-portrait.muted img{filter:grayscale(0.55) brightness(0.78);opacity:0.78}
+.event-portrait.featured{box-shadow:0 0 0 2px var(--cyan),0 0 22px rgba(0,212,255,0.32)}
+.event-portrait.featured::before{color:var(--cyan)}
+.event-portrait-label{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;text-align:center}
+.event-portrait-label.featured{color:var(--ink-2)}
+.event-portrait-vs{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase}
+@media(max-width:640px){
+  .event-portraits{gap:14px;padding:14px 0}
+  .event-portrait{width:80px;height:80px;font-size:36px}
+  .event-portrait-vs{font-size:11px}
+}
+
+/* ── video player (Phase 4.4 Path A — click-to-expand, no autoplay) ── */
+.video-block{margin:0 0 28px;max-width:720px;position:relative}
+.video-card{position:relative;display:block;width:100%;aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s}
+.video-card:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.video-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.7}
+.video-overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 22px;background:linear-gradient(180deg,rgba(7,5,15,0.0) 40%,rgba(7,5,15,0.85) 100%)}
+.video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(0,212,255,0.18);border:1.5px solid var(--cyan);display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s}
+.video-card:hover .video-play{background:rgba(0,212,255,0.30);transform:translate(-50%,-50%) scale(1.05)}
+.video-play::before{content:"";display:block;border-style:solid;border-width:11px 0 11px 18px;border-color:transparent transparent transparent var(--cyan);margin-left:4px}
+.video-caption{font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:0.06em;line-height:1.4;position:relative;z-index:1}
+.video-caption .v-host{color:var(--cyan);text-transform:uppercase;letter-spacing:0.18em;font-size:10px;font-weight:700;display:block;margin-bottom:4px}
+.video-frame{width:100%;aspect-ratio:16/9;border:1px solid var(--line);background:#000}
+.video-frame iframe,.video-frame video{width:100%;height:100%;border:0;display:block}
+.video-link-fallback{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-2);text-decoration:none;transition:border-color .15s,color .15s}
+.video-link-fallback:hover{border-color:var(--cyan);color:var(--cyan)}
+.video-link-fallback .arrow{color:var(--cyan)}
+
+/* ── lead blurb ── */
+.lead{font-family:var(--serif);font-size:18px;line-height:1.55;color:var(--ink);margin-bottom:22px;max-width:720px}
+@media(max-width:640px){.lead{font-size:16px}}
+
+/* ── section header — primary (language markets) bigger, secondary (outcomes / stance) smaller ── */
+.section-h{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.section-h.primary{font-size:13px;color:var(--cyan);letter-spacing:0.20em;border-bottom:1px solid rgba(0,212,255,0.32);margin-top:6px}
+.section-h.secondary{font-size:10px;color:var(--muted-2);letter-spacing:0.18em;margin-top:36px}
+
+/* ── Phase 4.5 language event card (primary section) ── */
+.lang-event-list{display:flex;flex-direction:column;gap:14px;margin-bottom:32px}
+.lang-event-card{background:var(--panel);border:1px solid rgba(0,212,255,0.32);padding:20px 22px;display:flex;flex-direction:column;gap:14px;transition:border-color .15s,background .15s}
+.lang-event-card:hover{border-color:var(--cyan);background:var(--panel-2)}
+.lang-event-q{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--ink);line-height:1.3}
+.lang-event-rows{display:flex;flex-direction:column}
+.lang-row{display:grid;grid-template-columns:1fr auto 80px;gap:14px;align-items:baseline;padding:9px 0;border-top:1px dashed var(--line)}
+.lang-row:first-child{border-top:none;padding-top:2px}
+.lang-row-label{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:lowercase}
+.lang-row-yes{font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-0.01em;line-height:1;text-align:right}
+.lang-row-yes.high{color:var(--cyan)}
+.lang-row-yes.low{color:#FF6B4D}
+.lang-row-yes.mid{color:var(--ink-2)}
+.lang-row-vol{font-family:var(--mono);font-size:10px;letter-spacing:0.04em;color:var(--muted-2);text-align:right}
+.lang-event-cta{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;background:var(--cyan);color:#001a23;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;text-decoration:none;border:1px solid var(--cyan);align-self:flex-start;transition:filter .15s,box-shadow .15s}
+.lang-event-cta:hover{filter:brightness(1.1);box-shadow:0 6px 20px rgba(0,212,255,0.32)}
+.lang-event-cta .arrow{font-size:13px}
+@media(max-width:640px){
+  .lang-event-q{font-size:14px}
+  .lang-row{grid-template-columns:1fr auto 60px;gap:10px}
+  .lang-row-yes{font-size:18px}
+}
+
+/* ── resolution commitment block ── */
+.resolution-commitment{margin:20px 0 36px;padding:18px 22px;background:rgba(0,212,255,0.04);border-left:2px solid var(--cyan)}
+.rc-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.22em;color:var(--cyan);text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.rc-body{font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--ink-2);margin:0;max-width:620px}
+
+/* ── Phase 4.5: stance receipt collapsed behind expander on composed events ── */
+.stance-receipt{margin:32px 0;border-top:1px solid var(--line);padding-top:20px}
+.stance-receipt > summary{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;cursor:pointer;list-style:none;padding:8px 14px;border:1px solid var(--line);background:rgba(255,255,255,0.02);transition:border-color .15s,color .15s}
+.stance-receipt > summary::-webkit-details-marker{display:none}
+.stance-receipt > summary::before{content:"+";font-family:var(--mono);color:var(--cyan);font-size:14px;font-weight:700;line-height:1}
+.stance-receipt[open] > summary::before{content:"−"}
+.stance-receipt > summary:hover{border-color:var(--cyan);color:var(--ink-2)}
+.stance-receipt-body{margin-top:24px}
+
+/* ── divergence cards ── */
+.divergence-list{display:flex;flex-direction:column;gap:14px;margin-bottom:36px}
+.dcard{background:var(--panel);border:1px solid var(--line);padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;position:relative}
+.dcard::before{content:attr(data-word);position:absolute;top:-10px;left:18px;background:var(--bg-2);padding:0 10px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:lowercase;color:var(--cyan)}
+.dside{display:flex;flex-direction:column;gap:10px}
+.dside-h{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+.dside-h.subject{color:var(--ink-2)}
+.dside-blurb{font-family:var(--sans);font-size:13px;line-height:1.5;color:var(--ink-2)}
+.dside.foil{opacity:0.78}
+.dside.foil .dside-blurb{font-size:12px;color:var(--muted)}
+@media(max-width:768px){.dcard{grid-template-columns:1fr;gap:18px}.dside.foil{padding-top:14px;border-top:1px dashed var(--line)}}
+
+/* ── solo stance summary (3-column) ── */
+.solo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:48px}
+@media(max-width:768px){.solo-grid{grid-template-columns:1fr}}
+.solo-col{background:var(--panel);border:1px solid var(--line);padding:18px 20px}
+.solo-col-h{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.solo-col-h.hawk{color:#FFB199}
+.solo-col-h.dove{color:#9BEBFF}
+.solo-col-h.neut{color:var(--ink-2)}
+.solo-chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:5px 11px;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.025);border:1px solid var(--line);color:var(--ink-2)}
+
+/* ── atomic table ── */
+.atomic-list{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.atomic-row{display:grid;grid-template-columns:140px auto 1fr;gap:16px;padding:14px 4px;border-bottom:1px solid var(--line);align-items:start}
+.atomic-word{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600}
+.atomic-rationale{font-family:var(--sans);font-size:12px;line-height:1.5;color:var(--muted)}
+@media(max-width:640px){.atomic-row{grid-template-columns:1fr;gap:6px}.atomic-rationale{padding-left:0}}
+
+/* ── preview mode (Phase 3.6 — pre-transcript event) ── */
+.preview-banner{margin-bottom:18px;padding:10px 14px;background:rgba(0,212,255,0.04);border-left:2px solid var(--cyan);font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:0.04em;line-height:1.55}
+.preview-banner strong{color:var(--cyan);font-weight:700}
+.countdown{display:inline-flex;gap:14px;align-items:baseline;font-family:var(--mono);color:var(--ink-2);font-size:13px;letter-spacing:0.06em;margin-bottom:18px}
+.countdown .num{font-family:var(--sans);font-weight:800;font-size:22px;color:var(--cyan)}
+.countdown .lbl{font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+.market-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:36px}
+@media(max-width:768px){.market-grid{grid-template-columns:1fr}}
+.market-card{background:var(--panel);border:1px solid var(--line);padding:22px 22px 18px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;text-decoration:none;color:inherit;min-height:200px}
+.market-card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
+.market-yes-row{display:flex;align-items:baseline;gap:10px;line-height:1}
+.market-yes{font-family:var(--sans);font-weight:800;font-size:56px;letter-spacing:-0.02em;line-height:1}
+.market-yes.high{color:var(--cyan)}
+.market-yes.low{color:#FF6B4D}
+.market-yes.mid{color:var(--ink-2)}
+.market-yes-lbl{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.market-vol{font-family:var(--mono);font-size:11px;letter-spacing:0.06em;color:var(--muted-2);margin-top:-2px}
+.market-q{font-family:var(--sans);font-weight:400;font-size:13.5px;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:auto}
+.market-foot{display:flex;justify-content:flex-end;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;margin-top:6px;padding-top:10px;border-top:1px solid var(--line)}
+.market-foot .arrow{color:var(--cyan)}
+@media(max-width:640px){.market-yes{font-size:46px}}
+.preview-empty{padding:32px 20px;background:var(--panel);border:1px dashed var(--line-strong);font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.04em;line-height:1.6;text-align:center;margin-bottom:36px}
+.anchor-card{background:var(--panel);border:1px solid var(--line);padding:18px 22px;display:grid;grid-template-columns:1fr 1fr;gap:24px;position:relative;margin-bottom:14px}
+.anchor-card::before{content:attr(data-q);position:absolute;top:-10px;left:18px;background:var(--bg-2);padding:0 10px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--cyan);max-width:calc(100% - 36px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.anchor-side{display:flex;flex-direction:column;gap:8px}
+.anchor-h{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+.anchor-h.subject{color:rgba(0,212,255,0.65)}
+.anchor-h.foil{color:var(--ink-2)}
+.anchor-blurb{font-family:var(--sans);font-size:12.5px;line-height:1.5;color:var(--ink-2)}
+.anchor-side.subject .anchor-blurb{color:var(--muted);font-style:italic}
+@media(max-width:768px){.anchor-card{grid-template-columns:1fr;gap:16px}.anchor-side.foil{padding-top:14px;border-top:1px dashed var(--line)}}
+.closing-copy{font-family:var(--mono);font-size:12px;letter-spacing:0.06em;line-height:1.5;color:var(--ink-2);max-width:720px;margin:28px 0 0;padding:14px 18px;background:rgba(0,212,255,0.025);border-left:2px solid rgba(0,212,255,0.5)}
+
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--cyan)}
+
+#loading{padding:80px 0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+#err{padding:80px 0;text-align:center;font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2)}
+#err small{display:block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;font-style:normal}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-logo">HYPER<span style="color:var(--cyan)">F</span>LEX</a>
+  <a href="/" class="nav-back">← back</a>
+</nav>
+
+<main class="page" id="page">
+  <div id="loading">Loading event…</div>
+</main>
+
+<script>
+const SLUG = location.pathname.replace(/^\/event\//, '').replace(/\/$/, '');
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function fmtEventType(t) {
+  if (!t) return '';
+  if (t === 'fomc_presser') return 'FOMC presser';
+  if (t === 'speech') return 'Speech';
+  if (t === 'testimony') return 'Testimony';
+  if (t === 'op_ed') return 'Op-Ed';
+  return t.replace(/_/g, ' ');
+}
+
+function pill(stance, confidence) {
+  const s = (stance || 'neutral').toLowerCase();
+  const c = (confidence || 'medium').toLowerCase();
+  return `<span class="pill s-${esc(s)} c-${esc(c)}">${esc(s)}</span>`;
+}
+
+function renderHeader(ev, atomic, comparison) {
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const typeLabel = fmtEventType(ev.event_type);
+  const headline = `${esc(ev.speaker)}'s stance posture as of ${esc(dateStr)}`;
+  const sub = ev.compared_to_speaker
+    ? `Where ${esc(ev.speaker)} diverges from ${esc(ev.compared_to_speaker)}'s posture on the same terms.`
+    : `Roll-up of ${esc(ev.speaker)}'s stance on tracked monetary-policy terms as of this point in their tenure.`;
+  const sourceLink = ev.source_url
+    ? `<div class="source-link">Source · <a href="${esc(ev.source_url)}" target="_blank" rel="noopener">verify on FRB.gov ↗</a></div>`
+    : '';
+  return `
+    <div class="eyebrow">
+      <span>${esc(ev.speaker)}</span>
+      <span class="sep">·</span>
+      <span>${esc(dateStr)}</span>
+      <span class="sep">·</span>
+      <span class="event-type-chip">${esc(typeLabel)}</span>
+    </div>
+    <h1 class="headline">${headline}</h1>
+    <p class="subhead">${sub}</p>
+    ${renderClarifier(ev, atomic, comparison)}
+    <div class="dominant-row">
+      ${pill(ev.dominant_stance, ev.dominant_confidence)}
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase">dominant posture</span>
+      ${sourceLink}
+    </div>
+  `;
+}
+
+function renderLead(ev) {
+  if (!ev.blurb) return '';
+  return `<div class="lead">${esc(ev.blurb)}</div>`;
+}
+
+// Portrait comparison panel — only renders when a comparison anchor
+// is set. Subject (the event's speaker) gets the cyan-bordered
+// featured treatment; foil (compared_to_speaker) is the muted-gray
+// "for comparison" framing. Photos are loaded from
+// /images/<speaker-lowercase>.jpg; missing files fall through to
+// CSS-rendered monograms via onerror=this.remove(). Caption labels
+// are domain-aware via the cfg lookup so Fed reads "current/incoming"
+// vs politics reads "this stance/baseline" or similar.
+function _portraitFile(speaker) {
+  return '/images/' + String(speaker || '').toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg';
+}
+
+function _portraitLabels(ev) {
+  // Per-domain framing for the photo labels under each portrait
+  if (ev.domain === 'us_politics') {
+    return { subject: 'Current statement', foil: 'Baseline anchor' };
+  }
+  // Fed default — Powell-current vs Warsh-incoming was the pattern;
+  // for solo Fed events the comparison is usually "this date" vs
+  // "another speaker's posture", neither necessarily current.
+  return { subject: 'Subject', foil: 'Comparison anchor' };
+}
+
+function renderPortraits(ev) {
+  if (!ev.compared_to_speaker) return '';
+  const labels = _portraitLabels(ev);
+  const subjMonogram = (ev.speaker || '?').slice(0, 1).toUpperCase();
+  const foilMonogram = (ev.compared_to_speaker || '?').slice(0, 1).toUpperCase();
+  return `
+    <div class="event-portraits" aria-label="Speaker comparison">
+      <div class="event-portrait-col">
+        <div class="event-portrait muted" data-monogram="${esc(foilMonogram)}">
+          <img src="${esc(_portraitFile(ev.compared_to_speaker))}" alt="${esc(ev.compared_to_speaker)}" onerror="this.remove()" loading="lazy">
+        </div>
+        <div class="event-portrait-label">${esc(ev.compared_to_speaker)} · ${esc(labels.foil)}</div>
+      </div>
+      <div class="event-portrait-vs" aria-hidden="true">VS</div>
+      <div class="event-portrait-col">
+        <div class="event-portrait featured" data-monogram="${esc(subjMonogram)}">
+          <img src="${esc(_portraitFile(ev.speaker))}" alt="${esc(ev.speaker)}" onerror="this.remove()" loading="lazy">
+        </div>
+        <div class="event-portrait-label featured">${esc(ev.speaker)} · ${esc(labels.subject)}</div>
+      </div>
+    </div>
+  `;
+}
+
+// Detect player shape from URL. Returns:
+//   { kind: 'youtube', embedUrl, thumbUrl }
+//   { kind: 'direct',  embedUrl, thumbUrl: null }   // .mp4 / .webm
+//   { kind: 'link',    embedUrl: null, hostLabel }  // anything else
+//
+// YouTube thumbnails are auto-derived from the video id; direct
+// videos use video_thumbnail_url if the row carries one.
+function _resolveVideoShape(url, thumbHint) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // YouTube: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID
+    let ytId = null;
+    if (u.hostname.endsWith('youtube.com') || u.hostname.endsWith('youtube-nocookie.com')) {
+      ytId = u.searchParams.get('v');
+      if (!ytId && u.pathname.startsWith('/shorts/')) ytId = u.pathname.split('/')[2];
+      if (!ytId && u.pathname.startsWith('/embed/')) ytId = u.pathname.split('/')[2];
+    } else if (u.hostname === 'youtu.be') {
+      ytId = u.pathname.replace(/^\/+/, '').split('/')[0];
+    }
+    if (ytId) {
+      const start = u.searchParams.get('t') || u.searchParams.get('start');
+      const startQ = start ? `&start=${encodeURIComponent(parseInt(start, 10) || 0)}` : '';
+      return {
+        kind:     'youtube',
+        embedUrl: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ytId)}?rel=0&modestbranding=1${startQ}`,
+        thumbUrl: thumbHint || `https://i.ytimg.com/vi/${encodeURIComponent(ytId)}/hqdefault.jpg`,
+        hostLabel: 'YouTube',
+      };
+    }
+    // Direct video file
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u.pathname)) {
+      return { kind: 'direct', embedUrl: url, thumbUrl: thumbHint || null, hostLabel: u.hostname };
+    }
+    // Anything else — link out, no embed
+    return { kind: 'link', embedUrl: null, thumbUrl: thumbHint || null, hostLabel: u.hostname.replace(/^www\./, '') };
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderVideo(ev) {
+  if (!ev.video_url) return '';
+  const shape = _resolveVideoShape(ev.video_url, ev.video_thumbnail_url);
+  if (!shape) return '';
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const fallbackCaption = `${ev.speaker} · ${dateStr}`;
+  const captionTxt = ev.video_caption || fallbackCaption;
+
+  // Link-only fallback: no embeddable shape (Truth Social, X, etc.) —
+  // surface a small "watch source" affordance, no thumbnail card.
+  if (shape.kind === 'link') {
+    return `
+      <div class="video-block">
+        <a class="video-link-fallback" href="${esc(ev.video_url)}" target="_blank" rel="noopener">
+          watch on ${esc(shape.hostLabel)} <span class="arrow">↗</span>
+        </a>
+      </div>
+    `;
+  }
+
+  // Embeddable shape — render thumbnail card. Click swaps in the
+  // iframe / <video>, no autoplay until clicked, no third-party
+  // tracking on first paint.
+  const thumb = shape.thumbUrl
+    ? `<img class="video-thumb" src="${esc(shape.thumbUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : '';
+  return `
+    <div class="video-block" data-video-shape="${esc(shape.kind)}" data-embed-url="${esc(shape.embedUrl)}">
+      <div class="video-card" role="button" tabindex="0" aria-label="Play video: ${esc(captionTxt)}">
+        ${thumb}
+        <div class="video-play" aria-hidden="true"></div>
+        <div class="video-overlay">
+          <div class="video-caption">
+            <span class="v-host">${esc(shape.hostLabel)}</span>
+            ${esc(captionTxt)}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _wireVideoExpansion(root) {
+  const block = (root || document).querySelector('.video-block[data-embed-url]');
+  if (!block) return;
+  const card = block.querySelector('.video-card');
+  if (!card) return;
+  const expand = () => {
+    const kind = block.dataset.videoShape;
+    const embedUrl = block.dataset.embedUrl;
+    if (!embedUrl) return;
+    let html;
+    if (kind === 'youtube') {
+      // Append autoplay=1 only on the user-initiated swap, never on first paint
+      const sep = embedUrl.includes('?') ? '&' : '?';
+      html = `<div class="video-frame"><iframe src="${embedUrl}${sep}autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    } else if (kind === 'direct') {
+      html = `<div class="video-frame"><video src="${embedUrl}" controls autoplay playsinline></video></div>`;
+    }
+    if (html) block.innerHTML = html;
+  };
+  card.addEventListener('click', expand);
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); expand(); }
+  });
+}
+
+// Reconciles the apparent contradiction between corpus-grain dominant
+// stance (e.g. neutral overall) and event-shape stance (e.g. hawkish on
+// the divergent terms). One line, plain English, anchored to the data.
+function renderClarifier(ev, atomic, comparison) {
+  const dom = (ev.dominant_stance || 'neutral').toLowerCase();
+  const domLabel = `<strong>${esc(dom)}</strong>`;
+  // Comparison + divergence: report what the speaker leans on the
+  // divergent subset specifically.
+  if (ev.compared_to_speaker && !ev.comparison_yielded_no_divergence) {
+    const subjMap = new Map(atomic.map(r => [r.word, r]));
+    const foilMap = new Map((comparison || []).map(r => [r.word, r]));
+    const divergent = [];
+    for (const [word, subj] of subjMap) {
+      const foil = foilMap.get(word);
+      if (foil && foil.llm_stance !== subj.llm_stance) divergent.push(subj);
+    }
+    if (!divergent.length) return '';
+    // Stance-axis aware: count whichever values appear in this event's
+    // axis. Falls through to Fed defaults for legacy / unknown axes.
+    const cols = (SOLO_COL_CONFIG[ev.stance_axis] || SOLO_COL_CONFIG.hawkish_dovish).map(c => c[0]);
+    const counts = {};
+    for (const k of cols) counts[k] = 0;
+    for (const r of divergent) if (r.llm_stance in counts) counts[r.llm_stance]++;
+    let divStance = cols[0];
+    for (const k of cols) if (counts[k] > counts[divStance]) divStance = k;
+    const divLabel = `<strong>${esc(divStance)}</strong>`;
+    const n = divergent.length;
+    const noun = n === 1 ? 'term' : 'terms';
+    return `<div class="clarifier">Net posture ${domLabel}. ${divLabel} on the ${n} ${noun} below where ${esc(ev.speaker)} breaks from ${esc(ev.compared_to_speaker)}.</div>`;
+  }
+  // Comparison + no divergence
+  if (ev.compared_to_speaker && ev.comparison_yielded_no_divergence) {
+    return `<div class="clarifier">Net posture ${domLabel}. ${esc(ev.speaker)} aligned with ${esc(ev.compared_to_speaker)} on every overlapping term.</div>`;
+  }
+  // Solo — count across all axis values present in stance_summary
+  const sum = ev.stance_summary || {};
+  const nTotal = Object.values(sum).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
+  if (!nTotal) return '';
+  const isPolitical = ev.stance_axis === 'escalatory_deescalatory';
+  const noun = nTotal === 1
+    ? (isPolitical ? 'statement' : 'tracked term')
+    : (isPolitical ? 'statements' : 'tracked terms');
+  return `<div class="clarifier">Net posture ${domLabel}. Stance summary across ${nTotal} ${noun} below.</div>`;
+}
+
+function renderDivergence(ev, atomic, comparison) {
+  if (!ev.compared_to_speaker) return '';
+  if (ev.comparison_yielded_no_divergence) {
+    return `
+      <div class="section-h">Comparison: ${esc(ev.compared_to_speaker)}</div>
+      <p style="font-family:var(--serif);font-style:italic;font-size:15px;color:var(--ink-2);margin-bottom:48px;max-width:680px">
+        ${esc(ev.speaker)} and ${esc(ev.compared_to_speaker)} aligned on every overlapping term.
+        No divergent rows to render.
+      </p>
+    `;
+  }
+  // Build same-word divergence map
+  const subjMap = new Map(atomic.map(r => [r.word, r]));
+  const foilMap = new Map(comparison.map(r => [r.word, r]));
+  const divergent = [];
+  for (const [word, subj] of subjMap) {
+    const foil = foilMap.get(word);
+    if (foil && foil.llm_stance !== subj.llm_stance) {
+      divergent.push({ word, subj, foil });
+    }
+  }
+  if (!divergent.length) return '';
+  const cards = divergent.map(d => `
+    <div class="dcard" data-word="${esc(d.word)}">
+      <div class="dside">
+        <div class="dside-h subject">${esc(ev.speaker)} · as of event date</div>
+        ${pill(d.subj.llm_stance, d.subj.llm_confidence)}
+        <div class="dside-blurb">${esc(d.subj.blurb || d.subj.llm_rationale || '')}</div>
+      </div>
+      <div class="dside foil">
+        <div class="dside-h">${esc(ev.compared_to_speaker)} · posture for comparison</div>
+        ${pill(d.foil.llm_stance, d.foil.llm_confidence)}
+        <div class="dside-blurb">${esc(d.foil.blurb || '')}</div>
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-h">Where ${esc(ev.speaker)} diverged from ${esc(ev.compared_to_speaker)} as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="divergence-list">${cards}</div>
+  `;
+}
+
+// Per-axis column treatment. Color class maps each stance value onto
+// one of three buckets: warm (hawkish/escalatory), cool (dovish/
+// deescalatory), or muted (neutral/ambiguous). Adding a new axis =
+// adding entries here; falls through to muted slate for unknowns.
+const SOLO_COL_CONFIG = {
+  hawkish_dovish: [
+    ['hawkish', 'Hawkish', 'hawk'],
+    ['dovish',  'Dovish',  'dove'],
+    ['neutral', 'Neutral', 'neut'],
+  ],
+  escalatory_deescalatory: [
+    ['escalatory',   'Escalatory',   'hawk'],
+    ['deescalatory', 'Deescalatory', 'dove'],
+    ['ambiguous',    'Ambiguous',    'neut'],
+  ],
+};
+
+function renderSoloGrid(ev) {
+  if (ev.compared_to_speaker) return '';
+  const sum = ev.stance_summary || {};
+  const cols = SOLO_COL_CONFIG[ev.stance_axis] || SOLO_COL_CONFIG.hawkish_dovish;
+  const col = (label, items, cls) => {
+    const chips = (items || []).map(w => `<span class="chip">${esc(w)}</span>`).join('');
+    return `
+      <div class="solo-col">
+        <div class="solo-col-h ${cls}">${esc(label)} · ${(items||[]).length}</div>
+        <div class="solo-chips">${chips || '<span style="font-family:var(--mono);font-size:11px;color:var(--muted-2)">—</span>'}</div>
+      </div>
+    `;
+  };
+  return `
+    <div class="section-h">Stance posture as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="solo-grid">
+      ${cols.map(([key, label, cls]) => col(label, sum[key], cls)).join('')}
+    </div>
+  `;
+}
+
+function renderAtomic(ev, atomic) {
+  if (!atomic.length) return '';
+  const rows = atomic.map(r => `
+    <div class="atomic-row">
+      <div class="atomic-word">${esc(r.word)}</div>
+      <div>${pill(r.llm_stance, r.llm_confidence)}</div>
+      <div class="atomic-rationale">${esc(r.llm_rationale || '')}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-h">Atomic stance breakdown · ${esc(ev.speaker)}'s posture as of ${esc(fmtDate(ev.event_date || ev.event_at))}</div>
+    <div class="atomic-list">${rows}</div>
+  `;
+}
+
+// ── Phase 3.6 preview-mode renderers ─────────────────────────────────
+function fmtUsd(n) {
+  if (n == null || !isFinite(n)) return '—';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+  return '$' + Math.round(n);
+}
+
+function fmtPct(p) {
+  if (p == null || !isFinite(p)) return '—';
+  return Math.round(p * 100) + '%';
+}
+
+function renderCountdown(eventDateIso) {
+  if (!eventDateIso) return '';
+  const target = new Date(eventDateIso + 'T17:00:00Z');
+  if (isNaN(target.getTime())) return '';
+  const diff = target.getTime() - Date.now();
+  if (diff < 0) {
+    return `<div class="countdown"><span class="num">live</span><span class="lbl">event date passed — receipt landing soon</span></div>`;
+  }
+  const days = Math.floor(diff / (24 * 3600 * 1000));
+  const hours = Math.floor((diff % (24 * 3600 * 1000)) / (3600 * 1000));
+  return `
+    <div class="countdown">
+      <span><span class="num">${days}</span> <span class="lbl">days</span></span>
+      <span><span class="num">${hours}</span> <span class="lbl">hours</span></span>
+      <span class="lbl">until live receipt</span>
+    </div>
+  `;
+}
+
+// Phase 4.5: language event card. Multi-outcome — parent question
+// + top 5 candidate sub-markets ranked by YES probability. Each
+// candidate row shows label, current YES%, volume. Card-level CTA
+// links to polymarket.com/event/<eventSlug> (Polymarket's full
+// market page; sub-markets share that URL with anchor jumps).
+function previewLanguageEventCard(ev) {
+  const candidates = (ev.candidates || []).slice(0, 5);
+  if (!candidates.length) return '';
+  const ladder = candidates.map(c => {
+    const yes = c.yesPrice;
+    const yesCls = yes == null ? 'mid' : (yes >= 0.5 ? 'high' : (yes <= 0.15 ? 'low' : 'mid'));
+    const yesLabel = yes == null ? '—' : Math.round(yes * 100) + '%';
+    const volLabel = c.volume >= 1e6 ? '$' + (c.volume / 1e6).toFixed(1) + 'M'
+      : c.volume >= 1e3 ? '$' + Math.round(c.volume / 1e3) + 'K'
+      : '$' + Math.round(c.volume || 0);
+    return `
+      <div class="lang-row">
+        <div class="lang-row-label">${esc(c.label)}</div>
+        <div class="lang-row-yes ${yesCls}">${esc(yesLabel)}</div>
+        <div class="lang-row-vol">${esc(volLabel)}</div>
+      </div>
+    `;
+  }).join('');
+  const tradeHref = ev.eventSlug
+    ? `https://polymarket.com/event/${esc(ev.eventSlug)}`
+    : 'https://polymarket.com';
+  const totalVol = ev.totalVolume >= 1e6 ? '$' + (ev.totalVolume / 1e6).toFixed(1) + 'M'
+    : ev.totalVolume >= 1e3 ? '$' + Math.round(ev.totalVolume / 1e3) + 'K'
+    : '$' + Math.round(ev.totalVolume || 0);
+  return `
+    <div class="lang-event-card">
+      <div class="lang-event-q">${esc(ev.eventTitle)}</div>
+      <div class="lang-event-rows">${ladder}</div>
+      <a class="lang-event-cta" href="${tradeHref}" target="_blank" rel="noopener">
+        BET — total volume ${esc(totalVol)} <span class="arrow">↗</span>
+      </a>
+    </div>
+  `;
+}
+
+function previewMarketCard(m) {
+  const yes = m.yesPrice;
+  const yesCls = yes == null ? 'mid' : (yes >= 0.6 ? 'high' : (yes <= 0.4 ? 'low' : 'mid'));
+  const yesLabel = yes == null ? '—' : fmtPct(yes);
+  let href = '#';
+  if (m.slug) href = '/market/' + m.slug;
+  else if (m.eventSlug) href = 'https://polymarket.com/event/' + m.eventSlug;
+  const target = href.startsWith('http') ? '_blank' : '';
+  const rel = target === '_blank' ? 'noopener' : '';
+  return `
+    <a class="market-card" href="${esc(href)}" ${target ? 'target="'+target+'"' : ''} ${rel ? 'rel="'+rel+'"' : ''}>
+      <div class="market-yes-row">
+        <span class="market-yes ${yesCls}">${esc(yesLabel)}</span>
+        <span class="market-yes-lbl">YES</span>
+      </div>
+      <div class="market-vol">${esc(fmtUsd(m.volume || 0))} traded</div>
+      <div class="market-q">${esc(m.question)}</div>
+      <div class="market-foot">
+        <span class="arrow">${target === '_blank' ? 'polymarket ↗' : 'open →'}</span>
+      </div>
+    </a>
+  `;
+}
+
+function previewAnchorCard(market, anchors, speaker) {
+  // One anchor card per market that matched ≥1 Powell stance row. Multiple
+  // matched words for a market roll into one card listing all of them.
+  const anchorRows = anchors.map(a => `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--cyan);text-transform:lowercase">${esc(a.word)}</span>
+        ${pill(a.llm_stance, a.llm_confidence)}
+      </div>
+      <div class="anchor-blurb">${esc(a.blurb || a.llm_rationale || '')}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="anchor-card" data-q="${esc(market.question)}">
+      <div class="anchor-side foil">
+        <div class="anchor-h foil">Powell · stance posture pre-handover</div>
+        ${anchorRows}
+      </div>
+      <div class="anchor-side subject">
+        <div class="anchor-h subject">${esc(speaker)} · awaiting transcript</div>
+        <div class="anchor-blurb">Pending. Receipt lands within 24h of the press conference.</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPreview(p) {
+  const dateStr = fmtDate(p.event_date);
+  const typeLabel = fmtEventType(p.event_type);
+  const pillHtml = `<span class="pill s-neutral c-low">${esc(p.placeholder_pill_label || 'Awaiting transcript')}</span>`;
+  const banner = `<div class="preview-banner"><strong>Preview mode.</strong> No transcript yet. Live receipt drops within 24h of the press conference. Powell's stance posture below is the pre-handover baseline.</div>`;
+  const headerHtml = `
+    <div class="eyebrow">
+      <span>${esc(p.speaker)}</span>
+      <span class="sep">·</span>
+      <span>${esc(dateStr)}</span>
+      <span class="sep">·</span>
+      <span class="event-type-chip">${esc(typeLabel)}</span>
+    </div>
+    <h1 class="headline">${esc(p.headline)}</h1>
+    <p class="subhead">${esc(p.subhead)}</p>
+    ${banner}
+    ${renderCountdown(p.event_date)}
+    <div class="dominant-row">
+      ${pillHtml}
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase">posture pending</span>
+      <div class="source-link">Source · <span style="color:var(--muted-2)">verify on FRB.gov when published</span></div>
+    </div>
+  `;
+
+  // Phase 4.5 — language markets are PRIMARY (the actual product:
+  // Polymarket has a Mentions category; HYPERFLEX is the canonical
+  // resolver/analytics layer). Outcome markets are SECONDARY context.
+  // Stance receipt collapsed behind an expander as audit trail.
+  const langEvents = p.language_market_events || [];
+  const outcomeMarkets = p.outcome_markets || p.markets || [];
+
+  const langSectionHtml = langEvents.length
+    ? `
+      <div class="section-h primary">Active mention markets · ${langEvents.length} listed</div>
+      <div class="lang-event-list">
+        ${langEvents.map(previewLanguageEventCard).join('')}
+      </div>`
+    : `
+      <div class="section-h primary">Active mention markets</div>
+      <div class="preview-empty">
+        Language markets pending listing — these typically launch 4–6 weeks before the event.
+      </div>`;
+
+  const resolutionCommitmentHtml = `
+    <div class="resolution-commitment">
+      <div class="rc-eyebrow">HYPERFLEX resolves these</div>
+      <p class="rc-body">
+        Within 24h of the press conference we count every word, link to the
+        FRB.gov transcript, and mark each candidate YES or NO.
+      </p>
+    </div>
+  `;
+
+  const outcomeSectionHtml = outcomeMarkets.length
+    ? `
+      <div class="section-h secondary">Outcome markets · ${outcomeMarkets.length} listed</div>
+      <div class="market-grid">${outcomeMarkets.map(previewMarketCard).join('')}</div>`
+    : '';
+
+  const anchorsByCid = p.powell_anchors || {};
+  const matchedMarkets = outcomeMarkets.filter(m => (anchorsByCid[m.conditionId] || []).length);
+  const anchorsHtml = matchedMarkets.length
+    ? `<div class="section-h secondary">Where Powell stood on the same questions</div>
+       ${matchedMarkets.map(m => previewAnchorCard(m, anchorsByCid[m.conditionId], p.speaker)).join('')}`
+    : '';
+
+  // Stance receipt content (when present in preview mode — currently
+  // not used since composer hasn't run, but the expander shape stays
+  // so the post-composed event auto-uses it).
+  const closing = p.closing_copy
+    ? `<div class="closing-copy">${esc(p.closing_copy)}</div>`
+    : '';
+
+  return `
+    ${headerHtml}
+    ${langSectionHtml}
+    ${resolutionCommitmentHtml}
+    ${outcomeSectionHtml}
+    ${anchorsHtml}
+    ${closing}
+    <footer>
+      <span>HYPERFLEX · resolver for Polymarket mentions</span>
+    </footer>
+  `;
+}
+
+async function load() {
+  const page = document.getElementById('page');
+  try {
+    const res = await fetch('/api/event/' + encodeURIComponent(SLUG));
+    if (res.status === 404) {
+      page.innerHTML = '<div id="err">Event not found.<small>This page either doesn\'t exist or hasn\'t been published.</small></div>';
+      return;
+    }
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+
+    // Auto-pivot: composed event takes precedence; preview is the
+    // pre-transcript fallback for registered slugs.
+    if (data.mode === 'preview' && data.preview) {
+      const p = data.preview;
+      document.title = `${p.headline} — HYPERFLEX`;
+      page.innerHTML = renderPreview(p);
+      return;
+    }
+
+    const ev = data.event;
+    document.title = `${ev.speaker} · ${fmtDate(ev.event_date || ev.event_at)} — HYPERFLEX`;
+    // Video sits below the lead blurb (verifying material, not the
+    // headline). Render order: header → lead → video → divergence →
+    // solo grid → atomic table.
+    // Phase 4.5 — stance receipt (divergence + solo grid + atomic
+    // table) collapsed behind an expander on composed events. The
+    // primary product is the Polymarket mention-market trading
+    // surface; the stance receipt is the audit trail backing it.
+    // Header / portraits / lead / video stay open; the receipt is
+    // available on demand.
+    page.innerHTML = `
+      ${renderHeader(ev, data.atomic || [], data.comparison || [])}
+      ${renderPortraits(ev)}
+      ${renderLead(ev)}
+      ${renderVideo(ev)}
+      <details class="stance-receipt">
+        <summary>See the full stance receipt</summary>
+        <div class="stance-receipt-body">
+          ${renderDivergence(ev, data.atomic || [], data.comparison || [])}
+          ${renderSoloGrid(ev)}
+          ${renderAtomic(ev, data.atomic || [])}
+        </div>
+      </details>
+      <footer>
+        <span>HYPERFLEX · resolver for Polymarket mentions</span>
+        ${ev.source_url ? `<a href="${esc(ev.source_url)}" target="_blank" rel="noopener">verify ↗</a>` : ''}
+      </footer>
+    `;
+    _wireVideoExpansion(page);
+  } catch (e) {
+    console.error(e);
+    page.innerHTML = '<div id="err">Could not load this event.<small>Try refreshing in a moment.</small></div>';
+  }
+}
+
+load();
+</script>
+</body>
+</html>

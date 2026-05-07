@@ -1,0 +1,46 @@
+-- Phase 4.4: hand-paste video URLs onto known events.
+-- Run in TablePlus AFTER migration #59. Each block updates one event;
+-- swap the placeholder URLs for the real ones before running.
+--
+-- Player auto-detects shape from URL:
+--   youtube.com/watch?v=ID  → embedded YouTube iframe (click-to-load)
+--   youtu.be/ID             → same
+--   ...somefile.mp4         → <video> element
+--   anything else           → "watch on <host> ↗" link, no embed
+--
+-- Truth Social posts have no public embed and will render as link-only.
+-- That's fine — the page still proves the source exists.
+--
+-- video_caption is optional ≤80-char human label. Falls back to
+-- "<Speaker> · <date>" when null.
+
+-- ── Brainard 2023-01-19 hero fixture (NABE conference speech) ──
+-- update mention_events
+--    set video_url           = 'https://www.youtube.com/watch?v=PASTE_ID',
+--        video_caption       = 'NABE conference · stance posture as of Jan 19, 2023',
+--        video_thumbnail_url = null
+--  where slug = 'brainard-2023-01-19-speech';
+
+-- ── Warsh first FOMC (placeholder until June 2026 presser ships) ──
+-- Once the actual June 17 presser airs, paste the FRB.gov media-center
+-- URL or the YouTube/C-SPAN livestream URL. The mention_event row
+-- itself will be written by Phase 2g composer; this UPDATE wires the
+-- video onto it.
+-- update mention_events
+--    set video_url     = 'https://www.federalreserve.gov/monetarypolicy/fomcpresconf20260617.htm',
+--        video_caption = 'FOMC press conference · June 17, 2026'
+--  where slug = 'warsh-2026-06-17-fomc-presser';
+
+-- ── Trump-Iran composed event (most recent statement, link-fallback) ──
+-- Truth Social doesn't expose public iframe embed. The link-fallback
+-- shape ("watch on truthsocial.com ↗") is the right shape here.
+-- update mention_events
+--    set video_url     = 'https://truthsocial.com/@realDonaldTrump/posts/PASTE_ID',
+--        video_caption = 'Truth Social · May 1, 2026'
+--  where slug = 'trump-iran-2026-05-01';
+
+-- ── Verify which events have video wired ──
+-- select speaker, event_date, video_url is not null as has_video, video_caption
+--   from mention_events
+--  where published = true
+--  order by has_video desc, event_date desc;

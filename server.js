@@ -800,6 +800,12 @@ const _nodeFetch = require('node-fetch');
 // will be migrated incrementally — start with /api/market/:slug below.
 polymarket.init({ fetch: _nodeFetch });
 
+// Mention-pages phase 2b — Federal Reserve transcript scraper. The actual
+// init() call sits below the supabase client definition (~line 1247) so
+// the scraper has a real client to write through. Required at boot here
+// purely to surface load-time syntax errors early.
+const fedTranscripts = require('./scrapers/fed_transcripts');
+
 // Direct Postgres pool — this is the reliable connection
 const pool = process.env.DATABASE_URL
   ? new Pool({
@@ -1246,6 +1252,69 @@ function createSupabaseProxy() {
 
 const supabase = createSupabaseProxy();
 
+// Mention-pages phase 2c — word counting engine. Backed by the same pg.Pool
+// that the rest of server.js uses for direct queries.
+const wordCounts = require('./lib/word_counts');
+if (pool) wordCounts.init({ pool });
+
+// Mention-pages phase 2d — clusterer. Reads transcripts +
+// transcript_word_counts, classifies each (speaker, word) by rhetorical
+// posture, writes speaker_word_stance. Runs on demand via the admin
+// endpoint below; future phases may schedule it post-ingest.
+const clusterer = require('./lib/clusterer');
+if (pool) clusterer.init({ pool });
+
+// Mention-pages phase 2d.5 — LLM judgment pass over the rule-based
+// clusterer output. Reads each speaker_word_stance row, fetches up to 5
+// representative sentences from that speaker's transcripts, asks Claude
+// Sonnet 4.6 to classify the rhetorical posture in context, and writes
+// the verdict to the row's llm_* columns. Original `stance` stays as
+// audit trail. Initialized after the global `anthropic` client is
+// created — see further down in this file.
+const clustererJudge = require('./lib/clusterer/judge');
+
+// Mention-pages phase 2e — atomic blurb generator. For each
+// speaker_word_stance row with a non-insufficient_signal llm_stance,
+// asks Claude Sonnet 4.6 to write one observational line about how the
+// speaker treats the term. Same shape as the judge module — pool +
+// anthropic client injected via init() once both exist.
+const clustererBlurb = require('./lib/clusterer/blurb');
+
+// Mention-pages phase 2f — speaker-driven event composer. For each
+// transcript, rolls up the speaker's atomic stance calls and generates
+// one event-level mention_event row with a 60-100 word narrative blurb.
+const clustererCompose = require('./lib/clusterer/compose');
+const clustererComposeGeneric = require('./lib/clusterer/compose-generic');
+
+// Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
+// and the word counter are both available. The scraper calls
+// wordCounts.computeWordCounts(transcript_id) after each successful insert.
+fedTranscripts.init({
+  fetch: _nodeFetch,
+  supabase,
+  computeWordCounts: pool
+    ? wordCounts.computeWordCounts
+    : async (id) => {
+        // Falls through only if DATABASE_URL is unset (dev env without DB).
+        // Production always has pool — this branch is just a safety net.
+        console.warn(`[fed_transcripts] no pg pool, skipping word counts for ${id}`);
+      },
+});
+
+// Mention-pages phase 2c.5 — speech / testimony scraper. Sibling to
+// fed_transcripts (which is presconf-only). Used to seed Williams /
+// Waller / Brainard transcripts as a non-Powell baseline so the
+// clusterer's rate-vs-corpus math has a second voice. Same init shape;
+// the seed CLI (scripts/seed_synthetic_speakers.js) walks KNOWN_SPEECHES.
+const fedSpeeches = require('./scrapers/fed_speeches');
+fedSpeeches.init({
+  fetch: _nodeFetch,
+  supabase,
+  computeWordCounts: pool
+    ? wordCounts.computeWordCounts
+    : async (id) => { console.warn(`[fed_speeches] no pg pool, skipping word counts for ${id}`); },
+});
+
 // Diagnostic endpoint — fast, non-blocking
 // Debug: test external API connectivity
 app.get('/api/debug-fetch', async (req, res) => {
@@ -1307,6 +1376,18 @@ app.get('/api/health', async (req, res) => {
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// Phase 2d.5 — finish wiring the clusterer-judge module now that both
+// the pg pool and the Anthropic client exist. The endpoint guards
+// against a missing API key separately, so this init is unconditional.
+if (pool) clustererJudge.init({ pool, anthropic });
+
+// Phase 2e — same wiring for the blurb module.
+if (pool) clustererBlurb.init({ pool, anthropic });
+
+// Phase 2f — composer module wiring.
+if (pool) clustererCompose.init({ pool, anthropic });
+if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
 // Every background cron that hits Claude (alpha-hooks, news-impact,
@@ -14409,9 +14490,904 @@ app.post('/api/admin/predictors-edit/:userId', async (req, res) => {
   }
 });
 
+// GET /api/clusterer/run — Phase 2d clusterer. Recomputes
+// speaker_word_stance by comparing each speaker's per-1k-words usage of
+// each tracked word against the corpus baseline. Idempotent (deletes and
+// rebuilds inside a transaction). Returns row count + duration.
+//
+// Admin-gated via x-admin-secret header (or ?secret= query for one-shot
+// curl from a workstation), matching the pattern used elsewhere in this
+// file. Read-mostly endpoint but it writes — keep behind the secret.
+app.get('/api/clusterer/run', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    const stats = await clusterer.run();
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.run]', err);
+    res.status(500).json({ error: 'clusterer_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/judge — Phase 2d.5 LLM judgment pass. For each
+// speaker_word_stance row, fetches up to 5 representative sentences from
+// the speaker's transcripts and asks Claude Sonnet 4.6 to classify the
+// rhetorical posture in context. Writes verdicts to llm_* columns.
+//
+// Query params:
+//   ?since=<iso>       skip rows already judged after this timestamp
+//   ?limit=N           cap rows processed this run
+//   ?dry_run=1         build prompts only; don't write or call API
+//   ?sample=N          in dry-run mode, also live-call the first N rows
+//                      and return their verdicts (without writing)
+//   ?concurrency=N     parallel API calls (default 4, max 8)
+//
+// Admin-gated like /api/clusterer/run. Requires ANTHROPIC_API_KEY in env;
+// the endpoint 503s with a clear message if it's missing.
+app.post('/api/clusterer/judge', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    const stats = await clustererJudge.run({
+      since:       req.query.since || null,
+      limit:       req.query.limit || 0,
+      dryRun:      req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:      req.query.sample || 0,
+      concurrency: req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.judge]', err);
+    res.status(500).json({ error: 'judge_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/blurb — Phase 2e atomic blurb generator. For each
+// speaker_word_stance row with a usable llm_stance (not null, not
+// insufficient_signal), writes a one-line observational blurb grounded
+// in the same up-to-5 sentence excerpts the judge saw, plus the
+// speaker's corpus date range for temporal framing.
+//
+// Query params (mirror /api/clusterer/judge for parity):
+//   ?since=<iso>     skip rows already blurbed after timestamp
+//   ?limit=N         cap rows processed
+//   ?dry_run=1       build prompts only; no API call, no DB write
+//   ?sample=N        in dry-run, also live-call first N rows for review
+//                    (returns blurbs without writing)
+//   ?concurrency=N   parallel API calls (default 4, capped at 8)
+//
+// Admin-gated, requires ANTHROPIC_API_KEY in env. Returns rows_written,
+// flag_counts (quote_used + temporal_framing_applied), token usage, and
+// est_cost_usd. The flag counts are the post-run self-diagnostic we use
+// to spot-check whether temporal framing actually got applied where it
+// should have (the Brainard/Waller catch from the 2d.5 retrospective).
+app.post('/api/clusterer/blurb', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    const stats = await clustererBlurb.run({
+      since:       req.query.since || null,
+      limit:       req.query.limit || 0,
+      dryRun:      req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:      req.query.sample || 0,
+      concurrency: req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.blurb]', err);
+    res.status(500).json({ error: 'blurb_failed', detail: err.message });
+  }
+});
+
+// POST /api/clusterer/compose — Phase 2f composer. For each transcript,
+// rolls up the speaker's atomic stance calls (joined via word in
+// transcript_word_counts) and asks Claude Sonnet 4.6 to write one event-
+// level blurb. One mention_event per transcript, 1:1 grain. Preserves
+// `published` flag across recompose. Below MIN_ROWS_FOR_COMPOSE (3),
+// row exists with blurb=null and published=false for FK cleanliness.
+//
+// Hard-rejects opposite-direction stance disagreement (computed dominant
+// vs model's call) with one retry. Soft-validates same-axis disagreement
+// (logs to stance_disagreement field, accepts blurb).
+//
+// Comparison-speaker fixture via env var:
+//   MENTION_COMPARISON_OVERRIDES="<transcript_uuid>:Powell,<other>:Powell"
+//
+// Query params (mirror /api/clusterer/blurb):
+//   ?transcript_id=<uuid>  one-off per-transcript recompose
+//   ?limit=N
+//   ?dry_run=1             prompts only, no API call, no DB write
+//   ?sample=N              in dry-run, also live-call first N
+//   ?concurrency=N         default 4, capped at 8
+app.post('/api/clusterer/compose', async (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({
+      error: 'anthropic_api_key_missing',
+      detail: 'Set ANTHROPIC_API_KEY in env (Railway → Variables, or local .env)',
+    });
+  }
+  try {
+    // Phase 4.1 dispatch: domain param routes to the per-domain composer.
+    // Default (omitted or fed_monetary_policy) keeps the existing Fed
+    // walks-transcripts path. Anything else hits compose-generic with
+    // the (speaker, subject, comparison_speaker) tuple.
+    const domain = String(req.query.domain || 'fed_monetary_policy').toLowerCase();
+    if (domain !== 'fed_monetary_policy') {
+      const stats = await clustererComposeGeneric.run({
+        domain,
+        speaker:            req.query.speaker,
+        subject:            req.query.subject,
+        comparison_speaker: req.query.comparison_speaker || null,
+        event_type:         req.query.event_type || 'statement',
+        dryRun:             req.query.dry_run === '1' || req.query.dry_run === 'true',
+      });
+      return res.json(stats);
+    }
+    const stats = await clustererCompose.run({
+      transcript_id: req.query.transcript_id || null,
+      limit:         req.query.limit || 0,
+      dryRun:        req.query.dry_run === '1' || req.query.dry_run === 'true',
+      sample:        req.query.sample || 0,
+      concurrency:   req.query.concurrency || undefined,
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error('[clusterer.compose]', err);
+    res.status(500).json({ error: 'compose_failed', detail: err.message });
+  }
+});
+
+// GET /api/event/:slug — Phase 3 mention event page payload. Public (no
+// auth, no admin gate). Returns the mention_event row plus the speaker's
+// atomic stance breakdown for words that appear in the event's
+// stance_summary, plus (when compared_to_speaker is set) the comparison
+// speaker's atomic rows on the same words for divergence rendering.
+//
+// Hides drafts: 404 when published=false. Drafts only render via direct
+// admin recompose flows, never via the public route.
+// Phase 3.6 helpers — Warsh / Fed-event preview path. Build a payload
+// driven by live Polymarket markets when no composed mention_event row
+// exists yet for a registered preview slug. Auto-pivots to composed
+// shape the moment Phase 2g writes the row (same URL, no rebuild).
+const eventPreviews = require('./lib/clusterer/event-previews');
+const { TRACKED_WORDS } = require('./lib/word_counts');
+
+// Loose keyword-to-tracked-vocab matcher. For a Polymarket market
+// question, find which tracked words the question mentions. Returns an
+// array of canonical tracked words (lowercase, matches what
+// speaker_word_stance.word stores). The dual hit on "rate cut" → both
+// "cut" and "restrictive" is fine — we look up Powell's stance on each
+// and the page renders both anchors when they exist.
+function _matchTrackedWords(text) {
+  if (!text) return [];
+  const lower = String(text).toLowerCase();
+  const hits = new Set();
+  for (const w of TRACKED_WORDS) {
+    const wl = w.toLowerCase();
+    // Phrase / hyphenated → exact substring match (already word-bounded
+    // in practice for these specific phrases like "soft landing")
+    if (wl.includes(' ') || wl.includes('-')) {
+      if (lower.includes(wl)) hits.add(wl);
+      continue;
+    }
+    // Single word → \bword\b with mild plural / -ing / -ed tolerance
+    const re = new RegExp(`\\b${wl.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(s|es|ed|ing|ly)?\\b`, 'i');
+    if (re.test(lower)) hits.add(wl);
+  }
+  return Array.from(hits);
+}
+
+// Manual TTL cache for preview-market lookups. _polyCache is a plain
+// Map; we store { value, expiresAt } and check on read. Trivial cost,
+// keeps the page snappy while gamma queries get ~5min recency.
+const _previewCacheTtlMs = 5 * 60 * 1000;
+function _previewCacheGet(key) {
+  if (!_polyCache) return null;
+  const e = _polyCache.get(key);
+  if (!e || !e.expiresAt) return null;
+  if (Date.now() > e.expiresAt) { _polyCache.delete(key); return null; }
+  return e.value;
+}
+function _previewCacheSet(key, value) {
+  if (!_polyCache) return;
+  _polyCache.set(key, { value, expiresAt: Date.now() + _previewCacheTtlMs });
+}
+
+// Search Polymarket via gamma keyset by multiple terms, dedupe on
+// conditionId, filter to active+open, then apply the registry's
+// must_match_any precision filter, sort by volume desc, take top N.
+// Returns [] on any fetch failure — page falls back to the placeholder.
+//
+// Takes the full preview cfg so it can read both the broad search
+// terms (recall) and the strict question-match patterns (precision).
+// Gamma's `?search=` is loose — it returns sports/crypto/sports
+// markets for queries like "fed rate june" because it tokenizes
+// liberally. Cast the candidate net wide via `terms`, then enforce
+// macro-policy semantics via `must_match_any`.
+// Phase 4.5: language vs outcome market classifier. Polymarket's
+// "Mentions" category contains events like "What will Powell say
+// during June Press Conference" — one parent event with N binary
+// sub-markets ("Will Powell say recession", "Will Powell say
+// inflation", etc.). HYPERFLEX is positioned as the canonical
+// resolver/analytics for this market category, so the preview page
+// leads with these and the existing outcome markets become secondary.
+const _LANGUAGE_EVENT_PATTERNS = [
+  /\bwhat\s+will\s+.+\s+(say|mention)\b/i,
+  /\bwhat\s+\w+\s+will\s+.+\ssay\b/i,                  // "what animals will Trump say"
+  /\bwill\s+.+\s+(say|mention|use\s+the\s+word)\b/i,    // "Will Powell say recession"
+];
+
+function _isLanguageEventTitle(title) {
+  if (!title) return false;
+  return _LANGUAGE_EVENT_PATTERNS.some(re => re.test(title));
+}
+
+// Sub-market candidate label resolution. Gamma provides
+// `groupItemTitle` for multi-outcome events ("recession" / "Iran" /
+// "Eagle"); fall back to extracting the word from "Will X say <word>"
+// if the field is absent.
+function _candidateLabel(subMarket, parentTitle) {
+  if (subMarket.groupItemTitle && subMarket.groupItemTitle.trim().length > 0) {
+    return subMarket.groupItemTitle.trim();
+  }
+  const q = String(subMarket.question || '');
+  // "Will Powell say recession during June Press Conference" → "recession"
+  const m = q.match(/\b(?:say|mention|use(?:\s+the\s+word)?)\s+([A-Za-z][\w\s'\-]{1,40}?)(?:\s+during\b|\s+at\b|\s+in\b|[?\.]|$)/i);
+  if (m && m[1]) return m[1].trim();
+  return q.length > 60 ? q.slice(0, 58).trim() + '…' : q;
+}
+
+async function _fetchPreviewMarkets(cfg, n = 8) {
+  const terms = (cfg && Array.isArray(cfg.polymarket_search_terms)) ? cfg.polymarket_search_terms : [];
+  const mustMatch = (cfg && Array.isArray(cfg.must_match_any)) ? cfg.must_match_any : [];
+  const fallbackSlugs = (cfg && Array.isArray(cfg.fallback_event_slugs)) ? cfg.fallback_event_slugs : [];
+  if (!terms.length && !fallbackSlugs.length) {
+    return { all_markets: [], outcome_markets: [], language_market_events: [] };
+  }
+  const cacheKey = `preview_markets_v2:${terms.join('|')}|${mustMatch.length}|${fallbackSlugs.join(',')}`;
+  const cached = _previewCacheGet(cacheKey);
+  if (cached) {
+    return {
+      all_markets:            cached.outcome_markets.slice(0, n),
+      outcome_markets:        cached.outcome_markets.slice(0, n),
+      language_market_events: cached.language_market_events,
+    };
+  }
+  const merged = new Map();
+  const languageEvents = new Map(); // eventSlug → { eventTitle, totalVolume, candidates[] }
+
+  function _parseYesPrice(raw) {
+    try {
+      const op = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(op) && op.length) {
+        const v = parseFloat(op[0]);
+        return (v != null && isFinite(v)) ? v : null;
+      }
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+
+  // Layer 1 — broad gamma keyword search (recall, outcome markets only)
+  for (const term of terms) {
+    try {
+      const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volume&ascending=false&search=${encodeURIComponent(term)}`;
+      const r = await _nodeFetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+      if (!r.ok) continue;
+      const body = await r.json().catch(() => null);
+      const list = _gammaUnwrap(body);
+      for (const m of list) {
+        const cid = m.conditionId || m.condition_id;
+        if (!cid || merged.has(cid)) continue;
+        if (m.closed === true || m.archived === true) continue;
+        merged.set(cid, {
+          conditionId:  cid,
+          question:     m.question || m.title || '',
+          slug:         m.slug || null,
+          eventSlug:    m.eventSlug || m.event_slug || null,
+          yesPrice:     _parseYesPrice(m.outcomePrices),
+          volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
+          volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+          endDate:      m.endDate || m.end_date || null,
+        });
+      }
+    } catch (e) {
+      console.warn('[event-preview] gamma keyword fetch failed for term:', term, e.message);
+    }
+  }
+
+  // Layer 2 — curated event-slug fallback (precision backstop). For
+  // each event, classify whether the PARENT title is a language-market
+  // shape ("What will X say"). If yes, group all sub-markets as
+  // candidates of that one card. If no, flatten into the outcome list
+  // (existing behavior).
+  for (const eventSlug of fallbackSlugs) {
+    try {
+      const result = await polymarket.getEventBySlug(eventSlug);
+      if (!result || !Array.isArray(result.eventMarkets)) continue;
+      const parentTitle = result.event?.title || '';
+      if (_isLanguageEventTitle(parentTitle)) {
+        const candidates = result.eventMarkets
+          .filter(m => m.closed !== true)
+          .map(m => ({
+            conditionId: m.conditionId,
+            slug:        m.slug || null,
+            label:       _candidateLabel(m, parentTitle),
+            yesPrice:    _parseYesPrice(m.outcomePrices),
+            volume:      parseFloat(m.volume || m.volumeNum || 0) || 0,
+            volume24hr:  parseFloat(m.volume24hr || 0) || 0,
+          }))
+          .sort((a, b) => (b.yesPrice || 0) - (a.yesPrice || 0)); // ladder by likelihood
+        if (candidates.length) {
+          languageEvents.set(eventSlug, {
+            eventSlug,
+            eventTitle:  parentTitle,
+            totalVolume: candidates.reduce((s, c) => s + c.volume, 0),
+            candidates,
+          });
+        }
+      } else {
+        // Outcome event — flatten sub-markets
+        for (const m of result.eventMarkets) {
+          const cid = m.conditionId;
+          if (!cid || merged.has(cid)) continue;
+          if (m.closed === true) continue;
+          merged.set(cid, {
+            conditionId:  cid,
+            question:     m.question || '',
+            slug:         m.slug || null,
+            eventSlug:    eventSlug,
+            yesPrice:     _parseYesPrice(m.outcomePrices),
+            volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
+            volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+            endDate:      m.endDate || m.end_date_iso || null,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[event-preview] gamma getEventBySlug failed for slug:', eventSlug, e.message);
+    }
+  }
+
+  let outcome = Array.from(merged.values())
+    .filter(m => m.question && m.question.length > 6);
+  if (mustMatch.length) {
+    outcome = outcome.filter(m => mustMatch.some(re => re.test(m.question)));
+  }
+  outcome = outcome
+    .map(m => ({ ...m, category: 'outcome' }))
+    .sort((a, b) => (b.volume || 0) - (a.volume || 0));
+
+  const language_market_events = Array.from(languageEvents.values())
+    .sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0))
+    .map(ev => ({
+      ...ev,
+      candidates: ev.candidates.slice(0, 5),  // top 5 by yesPrice ladder
+    }));
+
+  _previewCacheSet(cacheKey, { outcome_markets: outcome, language_market_events });
+
+  return {
+    all_markets:            outcome.slice(0, n),  // back-compat for hero strip
+    outcome_markets:        outcome.slice(0, n),
+    language_market_events,
+  };
+}
+
+// For each market in the list, find Powell stance rows for tracked
+// vocabulary words mentioned in the market question. Returns a map
+// keyed on conditionId → array of Powell anchor rows. Skipped when no
+// tracked words match.
+async function _fetchPowellAnchorsForMarkets(markets) {
+  if (!markets.length) return {};
+  const wordsNeeded = new Set();
+  const marketWordMap = new Map();
+  for (const m of markets) {
+    const words = _matchTrackedWords(m.question);
+    marketWordMap.set(m.conditionId, words);
+    for (const w of words) wordsNeeded.add(w);
+  }
+  if (!wordsNeeded.size) return {};
+  const rows = await dbQuery(`
+    select word, llm_stance, llm_confidence, llm_rationale, blurb
+    from speaker_word_stance
+    where speaker = 'Powell'
+      and word = any($1)
+      and llm_stance is not null
+      and llm_stance != 'insufficient_signal'
+  `, [Array.from(wordsNeeded)]);
+  const byWord = new Map(rows.map(r => [r.word, r]));
+  const out = {};
+  for (const m of markets) {
+    const words = marketWordMap.get(m.conditionId) || [];
+    const anchors = words.map(w => byWord.get(w)).filter(Boolean);
+    if (anchors.length) out[m.conditionId] = anchors;
+  }
+  return out;
+}
+
+app.get('/api/event/:slug', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  const slug = String(req.params.slug || '').trim().toLowerCase();
+  if (!slug) return res.status(400).json({ error: 'slug required' });
+  try {
+    const eventRows = await dbQuery(`
+      select id, slug, speaker, event_type, event_at, event_date, source_url,
+             blurb, stance_summary, dominant_stance, dominant_confidence,
+             compared_to_speaker, comparison_yielded_no_divergence,
+             stance_disagreement, source_transcript_id, composed_at, published,
+             domain, subject, stance_axis, stance_value,
+             video_url, video_caption, video_thumbnail_url
+      from mention_events
+      where slug = $1 and published = true
+      limit 1
+    `, [slug]);
+
+    // Auto-pivot: composed event takes precedence; preview registry is the
+    // fallback path until Phase 2g writes the real row.
+    if (!eventRows.length) {
+      const cfg = eventPreviews.getPreview(slug);
+      if (cfg) {
+        const fetched = await _fetchPreviewMarkets(cfg);
+        const outcomeList = fetched.outcome_markets || [];
+        const languageEvents = fetched.language_market_events || [];
+        const powellAnchorsByCid = cfg.powell_compare
+          ? await _fetchPowellAnchorsForMarkets(outcomeList)
+          : {};
+        return res.json({
+          mode: 'preview',
+          preview: {
+            slug,
+            speaker:                 cfg.speaker,
+            event_type:              cfg.event_type,
+            event_date:              cfg.event_date,
+            headline:                cfg.headline,
+            subhead:                 cfg.subhead,
+            placeholder_pill_label:  cfg.placeholder_pill_label || 'Awaiting transcript',
+            closing_copy:            cfg.closing_copy || '',
+            markets:                 outcomeList,    // back-compat — existing renderer uses this
+            outcome_markets:         outcomeList,
+            language_market_events:  languageEvents,
+            powell_anchors:          powellAnchorsByCid,
+          },
+        });
+      }
+      return res.status(404).json({ error: 'not found' });
+    }
+
+    const ev = eventRows[0];
+
+    let atomic = [];
+    let comparison = [];
+
+    // Phase 4.1 dispatch: political events read from
+    // political_subject_stance (per-statement rows) instead of
+    // speaker_word_stance (per-word rows). Field shape is mapped onto
+    // the Fed atomic-row contract so the same page renderers work
+    // unchanged: `word` carries a date-flavored label, `llm_*` fields
+    // mirror `stance_*` / `blurb` fields one-for-one.
+    if (ev.domain === 'us_politics') {
+      const psRows = await dbQuery(`
+        select id, statement_id, statement_date, statement_source_url,
+               statement_quote, stance_value, stance_confidence, blurb, rationale
+        from political_subject_stance
+        where speaker = $1 and subject = $2
+          and stance_value != 'insufficient_signal'
+        order by case stance_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
+                 statement_date desc nulls last
+      `, [ev.speaker, ev.subject]);
+      atomic = psRows.map(r => ({
+        word:           r.statement_date ? new Date(r.statement_date).toISOString().slice(0, 10) : (r.statement_id || ''),
+        llm_stance:     r.stance_value,
+        llm_confidence: r.stance_confidence,
+        llm_rationale:  r.rationale || r.statement_quote || '',
+        blurb:          r.blurb,
+        // Pass through politics-specific fields so the page can render
+        // a quote chip and source-link per atomic row when present.
+        statement_quote:      r.statement_quote || null,
+        statement_source_url: r.statement_source_url || null,
+      }));
+
+      if (ev.compared_to_speaker) {
+        const compRows = await dbQuery(`
+          select id, statement_id, statement_date, statement_source_url,
+                 statement_quote, stance_value, stance_confidence, blurb
+          from political_subject_stance
+          where speaker = $1 and subject = $2
+            and stance_value != 'insufficient_signal'
+          order by statement_date desc nulls last
+        `, [ev.compared_to_speaker, ev.subject]);
+        comparison = compRows.map(r => ({
+          word:           r.statement_date ? new Date(r.statement_date).toISOString().slice(0, 10) : (r.statement_id || ''),
+          llm_stance:     r.stance_value,
+          llm_confidence: r.stance_confidence,
+          blurb:          r.blurb,
+          statement_quote:      r.statement_quote || null,
+          statement_source_url: r.statement_source_url || null,
+        }));
+      }
+    } else {
+      // Fed path (existing): atomic rows are per (speaker, word) on the
+      // words that appeared in this event's stance_summary.
+      const speakerWords = []
+        .concat(ev.stance_summary?.hawkish || [])
+        .concat(ev.stance_summary?.dovish  || [])
+        .concat(ev.stance_summary?.neutral || []);
+      if (speakerWords.length) {
+        atomic = await dbQuery(`
+          select word, llm_stance, llm_confidence, llm_rationale, blurb,
+                 rate_ratio, transcripts_with_word
+          from speaker_word_stance
+          where speaker = $1 and word = any($2)
+            and llm_stance is not null and llm_stance != 'insufficient_signal'
+          order by case llm_confidence when 'high' then 1 when 'medium' then 2 when 'low' then 3 else 4 end,
+                   word
+        `, [ev.speaker, speakerWords]);
+      }
+      if (ev.compared_to_speaker && speakerWords.length) {
+        comparison = await dbQuery(`
+          select word, llm_stance, llm_confidence, blurb
+          from speaker_word_stance
+          where speaker = $1 and word = any($2)
+            and llm_stance is not null and llm_stance != 'insufficient_signal'
+        `, [ev.compared_to_speaker, speakerWords]);
+      }
+    }
+
+    res.json({
+      mode: 'composed',
+      event: {
+        slug:                              ev.slug,
+        speaker:                           ev.speaker,
+        event_type:                        ev.event_type,
+        event_date:                        ev.event_date,
+        event_at:                          ev.event_at,
+        source_url:                        ev.source_url,
+        blurb:                             ev.blurb,
+        stance_summary:                    ev.stance_summary,
+        dominant_stance:                   ev.dominant_stance,
+        dominant_confidence:               ev.dominant_confidence,
+        compared_to_speaker:               ev.compared_to_speaker,
+        comparison_yielded_no_divergence:  ev.comparison_yielded_no_divergence,
+        composed_at:                       ev.composed_at,
+        domain:                            ev.domain,
+        subject:                           ev.subject,
+        stance_axis:                       ev.stance_axis,
+        stance_value:                      ev.stance_value,
+        video_url:                         ev.video_url,
+        video_caption:                     ev.video_caption,
+        video_thumbnail_url:               ev.video_thumbnail_url,
+      },
+      atomic,
+      comparison,
+    });
+  } catch (err) {
+    console.error('[event-api]', err);
+    res.status(500).json({ error: 'event_api_failed', detail: err.message });
+  }
+});
+
+// GET /event/:slug — Phase 3 mention event page. Server-side serves a
+// static HTML shell; the page fetches /api/event/:slug client-side and
+// renders. Hides drafts (404) at the API layer, not here, so the shell
+// loads consistently and JS handles the not-found state.
+app.get('/event/:slug', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'event.html'));
+});
+
+// GET /api/mentions — Phase 3 mentions index payload. Public, no auth.
+// Returns every published mention_event ordered newest first. Cards on
+// the index page derive from this single payload and filter client-side
+// (no pagination at v1; 86 events fit one page fine, revisit at 200+).
+//
+// Phase 4 close: each event is enriched with card_type + top_market so
+// cards can lead with the live market hook (language / outcome) and
+// demote the stance pill to an accent. composed_only events keep the
+// posture-as-headline behavior. The enrichment fans out to gamma per
+// preview-registry entry, but each per-slug result is 5min-cached
+// inside _fetchPreviewMarkets and the full response is wrapped in a
+// 60s cache below — so the 86-event walk costs nothing on warm hits.
+function _fmtVolumeShort(v) {
+  if (!isFinite(v) || v <= 0) return null;
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+  return '$' + Math.round(v);
+}
+
+async function _buildCardEnrichment(slug) {
+  const empty = {
+    has_language_markets: false,
+    has_outcome_markets:  false,
+    card_type:            'composed_only',
+    top_market:           null,
+  };
+  const cfg = eventPreviews.getPreview(slug);
+  if (!cfg) return empty;
+
+  let fetched;
+  try {
+    fetched = await _fetchPreviewMarkets(cfg, 5);
+  } catch (e) {
+    return empty;
+  }
+  const langEvents = fetched.language_market_events || [];
+  const outcomeMkts = fetched.outcome_markets || [];
+
+  if (langEvents.length) {
+    const top = langEvents[0]; // already sorted by totalVolume desc
+    const leader = (top.candidates || [])[0]; // already sorted by yesPrice desc
+    return {
+      has_language_markets: true,
+      has_outcome_markets:  outcomeMkts.length > 0,
+      card_type:            'language',
+      top_market: {
+        question:               top.eventTitle || '',
+        leading_outcome_label:  leader ? leader.label : null,
+        leading_outcome_pct:    leader && leader.yesPrice != null ? Math.round(leader.yesPrice * 100) : null,
+        total_volume:           top.totalVolume || 0,
+        volume_display:         _fmtVolumeShort(top.totalVolume),
+        candidate_count:        (top.candidates || []).length,
+      },
+    };
+  }
+  if (outcomeMkts.length) {
+    const top = outcomeMkts[0]; // already sorted by volume desc
+    return {
+      has_language_markets: false,
+      has_outcome_markets:  true,
+      card_type:            'outcome',
+      top_market: {
+        question:               top.question || '',
+        leading_outcome_label:  null, // binary YES/NO; no candidate label
+        leading_outcome_pct:    top.yesPrice != null ? Math.round(top.yesPrice * 100) : null,
+        total_volume:           top.volume || 0,
+        volume_display:         _fmtVolumeShort(top.volume),
+        candidate_count:        2,
+      },
+    };
+  }
+  return empty;
+}
+
+let _mentionsApiCache = null;
+const _mentionsApiCacheTtlMs = 60 * 1000; // 60s; per-slug data cached 5min upstream
+
+app.get('/api/mentions', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    if (_mentionsApiCache && Date.now() < _mentionsApiCache.expiresAt) {
+      return res.json(_mentionsApiCache.value);
+    }
+    // Plain archive only. Phase 3.7 hero banner replaces the previous
+    // featured-card injection — Warsh now lives in the hero, not the grid.
+    const rows = await dbQuery(`
+      select slug, speaker, event_type, event_date, event_at, blurb,
+             dominant_stance, dominant_confidence, compared_to_speaker,
+             domain, subject, stance_axis, stance_value, market_relevance_score
+      from mention_events
+      where published = true and blurb is not null
+      order by event_date desc nulls last, event_at desc nulls last
+    `);
+    // Enrich serially by slug — most rows hit the composed_only fast
+    // path (no registry entry, no fetch). Registry entries hit the
+    // upstream 5min cache. Total cost on a cold response: ~2 gamma
+    // walks (one per registry entry) regardless of row count.
+    const enriched = [];
+    for (const r of rows) {
+      const ext = await _buildCardEnrichment(r.slug);
+      enriched.push(Object.assign({}, r, ext));
+    }
+    const payload = { events: enriched };
+    _mentionsApiCache = { value: payload, expiresAt: Date.now() + _mentionsApiCacheTtlMs };
+    res.json(payload);
+  } catch (err) {
+    console.error('[mentions-api]', err);
+    res.status(500).json({ error: 'mentions_api_failed', detail: err.message });
+  }
+});
+
+// GET /mentions — hero-banner SSR + static archive shell. The hero
+// is rendered server-side (mode = preview / live / none based on
+// today's date vs the registered preview event_date and whether the
+// composed mention_events row exists yet) so it survives a JS-disabled
+// browser. Archive grid below stays client-rendered via /api/mentions.
+//
+// Template is read once at startup; the hero placeholder
+// `<!--HERO_HTML-->` is replaced per request with the computed markup.
+let _mentionsTemplate = null;
+function _loadMentionsTemplate() {
+  if (!_mentionsTemplate) {
+    _mentionsTemplate = require('fs').readFileSync(path.join(__dirname, 'public', 'mentions.html'), 'utf8');
+  }
+  return _mentionsTemplate;
+}
+
+function _fmtCountdownParts(targetIso, nowMs) {
+  const target = new Date(targetIso).getTime();
+  if (!isFinite(target)) return null;
+  const diff = target - nowMs;
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, passed: true };
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = Math.floor(diff / dayMs);
+  const hours = Math.floor((diff % dayMs) / (60 * 60 * 1000));
+  const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+  return { days, hours, minutes, passed: false };
+}
+
+function _escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function _fmtDateLong(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function _renderHeroMiniCard(m) {
+  const yes = m.yesPrice;
+  const yesCls = yes == null ? 'mid' : (yes >= 0.6 ? 'high' : (yes <= 0.4 ? 'low' : 'mid'));
+  const yesLabel = yes == null ? '—' : Math.round(yes * 100) + '%';
+  const vol = m.volume || 0;
+  const volLabel = vol >= 1e6 ? '$' + (vol / 1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol / 1e3) + 'K' : '$' + Math.round(vol);
+  let href = '#';
+  if (m.slug) href = '/market/' + m.slug;
+  else if (m.eventSlug) href = 'https://polymarket.com/event/' + m.eventSlug;
+  const target = href.startsWith('http') ? ' target="_blank" rel="noopener"' : '';
+  return `<a class="hero-mini" href="${_escHtml(href)}"${target}>
+    <div class="hero-mini-yes-row">
+      <span class="hero-mini-yes ${yesCls}">${_escHtml(yesLabel)}</span>
+      <span class="hero-mini-yes-lbl">YES</span>
+    </div>
+    <div class="hero-mini-vol">${_escHtml(volLabel)} traded</div>
+    <div class="hero-mini-q">${_escHtml(m.question)}</div>
+  </a>`;
+}
+
+async function _renderMentionsHero() {
+  const cfg = eventPreviews.getPreview('warsh-2026-06-fomc-presser');
+  if (!cfg || !cfg.event_date) return '';
+  const eventIso = cfg.event_date + 'T17:00:00Z';
+  const eventMs = new Date(eventIso).getTime();
+  const nowMs = Date.now();
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+  // Mode decision
+  let mode;
+  if (nowMs < eventMs) {
+    mode = 'preview';
+  } else if (nowMs < eventMs + fourteenDaysMs) {
+    // Composed row check
+    let composed = [];
+    try {
+      composed = await dbQuery(`select 1 from mention_events where slug = $1 and published = true limit 1`, ['warsh-2026-06-fomc-presser']);
+    } catch (e) { composed = []; }
+    mode = composed.length ? 'live' : 'none';
+  } else {
+    mode = 'none';
+  }
+  if (mode === 'none') return '';
+
+  // Fetch markets (top 4) — same data path as the preview-page API.
+  // Hero strip shows outcome markets only; multi-outcome language
+  // events are too dense for the strip's mini-card shape and live
+  // on the preview page itself.
+  let markets = [];
+  try {
+    const fetched = await _fetchPreviewMarkets(cfg, 4);
+    markets = fetched.outcome_markets || [];
+  } catch (e) { markets = []; }
+
+  const cd = _fmtCountdownParts(eventIso, nowMs);
+  const eyebrow = `UPCOMING — ${_fmtDateLong(eventIso).toUpperCase()}`;
+  const ctaHref = '/event/warsh-2026-06-fomc-presser';
+
+  let countdownBlock;
+  let ctaLabel;
+  if (mode === 'live') {
+    countdownBlock = `<div class="hero-live-badge">LIVE RECEIPT — READ NOW</div>`;
+    ctaLabel = 'Read live receipt →';
+  } else {
+    const digits = cd ? `${cd.days}d ${cd.hours}h ${cd.minutes}m` : '';
+    const staticDigits = cd ? `${cd.days} days, ${cd.hours} hours` : '';
+    countdownBlock = `
+      <div class="hero-countdown">
+        <span class="hero-cd-digits" id="hero-cd-digits" data-target="${_escHtml(eventIso)}" data-static="${_escHtml(staticDigits)}">${_escHtml(digits)}</span>
+        <div class="hero-cd-label">until the press conference</div>
+      </div>`;
+    ctaLabel = 'View Warsh preview →';
+  }
+
+  const stripBlock = markets.length ? `
+    <div class="hero-strip">
+      <div class="hero-strip-h">WHAT THE MARKET IS PRICING</div>
+      <div class="hero-strip-row">${markets.map(_renderHeroMiniCard).join('')}</div>
+    </div>` : '';
+
+  // Portrait comparison panel — Powell (current, muted) vs Warsh
+  // (incoming, full-color, cyan border). Sits to the right of the
+  // text column on desktop, stacks below countdown on mobile.
+  // Photos are loaded from /images/<speaker>.jpg locally; if a file
+  // is missing the <img> removes itself via onerror and the CSS
+  // monogram (data-monogram="P" / "W") is what shows. Panel ships
+  // clean even before photos land.
+  const portraitsBlock = `
+    <aside class="hero-portraits" aria-label="Posture comparison">
+      <div class="hero-portrait muted" data-monogram="P">
+        <img src="/images/powell.jpg" alt="Jerome Powell, current Fed Chair" onerror="this.remove()" loading="lazy">
+      </div>
+      <div class="hero-vs" aria-hidden="true">VS</div>
+      <div class="hero-portrait featured" data-monogram="W">
+        <img src="/images/warsh.jpg" alt="Kevin Warsh, incoming Fed Chair" onerror="this.remove()" loading="lazy">
+      </div>
+      <div class="hero-portraits-row">
+        <span class="hero-portraits-label">Powell · current</span>
+        <span class="hero-portraits-label featured">Warsh · incoming</span>
+      </div>
+      <div class="hero-portraits-caption">Stance comparison once the receipt drops</div>
+    </aside>
+  `;
+
+  return `
+<section class="hero" data-mode="${_escHtml(mode)}">
+  <div class="hero-grain"></div>
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="hero-text-col">
+        <div class="hero-eyebrow">${_escHtml(eyebrow)}</div>
+        <h1 class="hero-headline">${_escHtml(cfg.headline)}</h1>
+        <p class="hero-sub">Live receipt within 24h of the press conference. Powell's posture on the same terms below.</p>
+        ${countdownBlock}
+      </div>
+      ${portraitsBlock}
+    </div>
+    ${stripBlock}
+    <a class="hero-cta" href="${_escHtml(ctaHref)}">${_escHtml(ctaLabel)}</a>
+  </div>
+</section>
+`;
+}
+
+app.get('/mentions', async (req, res) => {
+  try {
+    const tpl = _loadMentionsTemplate();
+    const heroHtml = await _renderMentionsHero();
+    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Content-Type', 'text/html; charset=utf-8').send(body);
+  } catch (err) {
+    console.error('[mentions-route]', err);
+    res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+  }
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
-// imported profiles that don't actually qualify as whales. Ran once after
-// the tier-gate fix shipped to clean up the previously over-eager import
 // where every wallet in the top 500 was marked is_whale=true. Safe to
 // re-run at any time.
 app.post('/api/admin/rebalance-whale-flags', async (req, res) => {

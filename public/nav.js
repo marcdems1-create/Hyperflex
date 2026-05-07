@@ -333,7 +333,8 @@
     { href: '/screener', label: 'Screener' },
     { href: '/whales', label: 'Market Intel' },
     { href: '/crystal-ball', label: 'Crystal Ball' },
-    { href: '/predictors', label: 'Predictors' }
+    { href: '/predictors', label: 'Predictors' },
+    { href: '/mentions', label: 'Mentions' }
   ];
 
   // Profile navigation helper — resolves canonical URL client-side via

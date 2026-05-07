@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mentions — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
+  --panel:#14102A;--panel-2:#1B1638;
+  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
+  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;
+  --cyan:#00D4FF;--cyan-glow:rgba(0,212,255,0.35);
+  --hawk:#FF6B4D;--dove:#00D4FF;--neut:#9590B0;
+  --sans:'Geist','Inter',system-ui,sans-serif;
+  --serif:'Instrument Serif',serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+a{color:inherit;text-decoration:none}
+
+#nav-root{position:relative;z-index:200}
+
+/* ── page intro (Phase 4.0 — generic header above the featured-event hero) ── */
+.page-intro{background:var(--bg);border-bottom:1px solid var(--line);padding:32px 36px 28px;position:relative;z-index:2}
+.page-intro-inner{max-width:1240px;margin:0 auto}
+.page-intro-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.24em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.page-intro-sub{font-family:var(--sans);font-size:15px;color:var(--ink-2);line-height:1.5;max-width:600px;margin:0}
+@media(max-width:768px){.page-intro{padding:22px 18px 20px}.page-intro-eyebrow{font-size:11px}.page-intro-sub{font-size:14px}}
+
+/* ── HERO BANNER (Phase 3.7) ── */
+.hero{position:relative;background:var(--bg-2);border-bottom:1px solid var(--line);padding:120px 36px 132px;overflow:hidden}
+.hero-grain{position:absolute;inset:0;background-image:radial-gradient(rgba(0,212,255,0.08) 1px,transparent 1px);background-size:14px 14px;mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 35%,transparent 90%);pointer-events:none;opacity:0.7}
+.hero-inner{position:relative;max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.hero-top{display:grid;grid-template-columns:1fr auto;gap:48px;align-items:end}
+@media(max-width:768px){.hero-top{grid-template-columns:1fr;gap:32px}}
+.hero-text-col{display:flex;flex-direction:column;gap:22px;min-width:0}
+.hero-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.28em;color:var(--cyan);text-transform:uppercase;padding:5px 12px;border:1px solid rgba(0,212,255,0.45);align-self:flex-start;background:rgba(0,212,255,0.06)}
+.hero-headline{font-family:var(--sans);font-weight:800;font-size:68px;line-height:1.0;letter-spacing:-0.015em;color:var(--ink);margin:0}
+.hero-sub{font-family:var(--sans);font-size:19px;color:var(--ink-2);line-height:1.55;max-width:600px;margin:0}
+.hero-countdown{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.hero-cd-digits{font-family:var(--mono);font-weight:700;font-size:48px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums}
+.hero-cd-label{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.hero-live-badge{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--cyan);background:rgba(0,212,255,0.10);font-family:var(--mono);font-size:13px;color:var(--cyan);letter-spacing:0.18em;text-transform:uppercase;font-weight:700;align-self:flex-start;margin-top:6px}
+.hero-live-badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:hero-pulse 1.6s ease-in-out infinite}
+@keyframes hero-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.hero-strip{margin-top:8px}
+.hero-strip-h{font-family:var(--mono);font-size:10px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.hero-strip-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.hero-mini{display:flex;flex-direction:column;gap:6px;padding:16px 18px;background:rgba(255,255,255,0.025);border:1px solid var(--line);transition:border-color .15s,background .15s,transform .15s;text-decoration:none;color:inherit;min-height:140px}
+.hero-mini:hover{border-color:var(--cyan);background:rgba(0,212,255,0.05);transform:translateY(-1px)}
+.hero-mini-yes-row{display:flex;align-items:baseline;gap:8px;line-height:1}
+.hero-mini-yes{font-family:var(--sans);font-weight:800;font-size:38px;line-height:1;letter-spacing:-0.02em}
+.hero-mini-yes.high{color:var(--cyan)}
+.hero-mini-yes.low{color:#FF6B4D}
+.hero-mini-yes.mid{color:var(--ink-2)}
+.hero-mini-yes-lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
+.hero-mini-vol{font-family:var(--mono);font-size:10px;letter-spacing:0.06em;color:var(--muted-2);margin-top:-2px}
+.hero-mini-q{font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:auto}
+/* ── portrait comparison panel (Powell vs Warsh on the right) ── */
+.hero-portraits{display:grid;grid-template-columns:auto auto auto;gap:14px;align-items:center;justify-items:center;padding:8px 4px 0}
+.hero-portrait{width:140px;height:140px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:60px;color:var(--muted-2);line-height:1;flex-shrink:0}
+.hero-portrait::before{content:attr(data-monogram);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;letter-spacing:-0.02em}
+.hero-portrait img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;z-index:1;display:block}
+.hero-portrait.muted img{filter:grayscale(0.55) brightness(0.78);opacity:0.78}
+.hero-portrait.featured{box-shadow:0 0 0 2px var(--cyan),0 0 24px rgba(0,212,255,0.32)}
+.hero-portrait.featured::before{color:var(--cyan)}
+.hero-vs{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase;align-self:center}
+.hero-portraits-row{grid-column:1 / -1;display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;margin-top:4px}
+.hero-portraits-row .hero-portraits-label:first-child{text-align:center}
+.hero-portraits-row .hero-portraits-label.featured{text-align:center;color:var(--ink-2)}
+.hero-portraits-row .hero-portraits-label.featured::before{content:""}
+.hero-portraits-row::before{content:""}
+.hero-portraits-caption{grid-column:1 / -1;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+@media(max-width:768px){
+  .hero-portrait{width:96px;height:96px;font-size:42px}
+  .hero-portraits{padding:0;justify-content:center;justify-items:center}
+  .hero-portraits-row{font-size:9px}
+}
+@media(max-width:480px){
+  .hero-portrait{width:80px;height:80px;font-size:34px}
+  .hero-vs{font-size:12px}
+}
+
+.hero-cta{display:inline-flex;align-items:center;gap:8px;padding:14px 22px;background:var(--cyan);color:#001a23;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid var(--cyan);text-decoration:none;align-self:flex-start;transition:transform .15s,box-shadow .15s,filter .15s;margin-top:8px}
+.hero-cta:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,0.35);filter:brightness(1.1)}
+@media(max-width:960px){.hero-strip-row{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){
+  .hero{padding:64px 18px 72px}
+  .hero-headline{font-size:40px}
+  .hero-sub{font-size:16px}
+  .hero-cd-digits{font-size:34px}
+  .hero-strip-row{grid-template-columns:1fr}
+  .hero-cta{align-self:stretch;justify-content:center;width:100%}
+}
+
+.page{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:32px 36px 80px}
+@media(max-width:768px){.page{padding:20px 16px 56px}}
+
+/* ── header ── */
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.headline{font-family:var(--sans);font-weight:800;font-size:34px;line-height:1.1;letter-spacing:-0.01em;color:var(--ink);margin-bottom:8px}
+@media(max-width:640px){.headline{font-size:26px}}
+.subhead{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:22px;max-width:680px}
+.count-line{font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:18px}
+.count-line strong{color:var(--cyan);font-weight:700}
+
+/* ── filter bar ── */
+.filters{display:flex;flex-direction:column;gap:10px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-label{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;min-width:96px}
+.fchip{padding:6px 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.06em;color:var(--ink-2);border:1px solid var(--line);background:rgba(255,255,255,0.02);cursor:pointer;transition:all .15s}
+.fchip:hover{color:var(--ink);border-color:var(--line-strong)}
+.fchip.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,0.08)}
+@media(max-width:640px){.filter-label{min-width:auto;width:100%;margin-bottom:2px}}
+
+/* ── archive divider ── */
+.archive-divider{display:flex;align-items:center;gap:14px;margin:0 0 22px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase}
+.archive-divider::before,.archive-divider::after{content:"";flex:1;height:1px;background:rgba(0,212,255,0.18)}
+
+/* ── card grid ── */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:1024px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+
+/* ── speaker collapse expander ── */
+.speaker-expand{grid-column:1 / -1;padding:14px 18px;background:rgba(0,212,255,0.04);border:1px dashed rgba(0,212,255,0.32);font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:0.04em;cursor:pointer;text-align:center;transition:background .15s,border-color .15s}
+.speaker-expand:hover{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.5);border-style:solid}
+.speaker-expand strong{font-weight:700}
+
+.card{background:var(--panel);border:1px solid var(--line);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,background .15s;cursor:pointer;position:relative;min-height:180px}
+.card:hover{border-color:var(--cyan);background:var(--panel-2);transform:translateY(-1px)}
+/* Card-type variants — language gets marquee weight, composed_only is muted. */
+.card.t-language{min-height:200px}
+.card.t-language .card-headline{font-size:17px}
+.card.t-composed{opacity:0.78}
+.card.t-composed:hover{opacity:1}
+.card-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card-eyebrow .sep{color:var(--muted-2)}
+.card-eyebrow .speaker{color:var(--ink-2);font-weight:700}
+.card-eyebrow .live-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:hero-pulse 1.6s ease-in-out infinite;flex-shrink:0}
+.card-eyebrow .live-label{color:var(--cyan);font-weight:700;letter-spacing:0.22em}
+.card-type{display:inline-block;padding:2px 8px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.02);color:var(--ink-2);font-family:var(--mono);font-size:9px;letter-spacing:0.16em;text-transform:uppercase}
+.card-headline{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink);line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card-leading{font-family:var(--sans);font-weight:700;font-size:14px;color:var(--cyan);line-height:1.3;letter-spacing:-0.005em}
+.card-leading-pct{font-family:var(--mono);font-weight:800;font-size:18px;letter-spacing:-0.01em}
+.card-volume{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:0.06em}
+.card-receipt-only{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--muted-2);line-height:1.4}
+.card-blurb{font-family:var(--sans);font-size:12.5px;color:var(--muted);line-height:1.5;flex:1}
+.card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.card-arrow{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.16em;text-transform:uppercase;transition:color .15s;font-weight:700}
+.card.t-language .card-arrow,.card.t-outcome .card-arrow{color:var(--cyan)}
+.card:hover .card-arrow{color:var(--cyan)}
+.compared-chip{font-family:var(--mono);font-size:9px;color:var(--muted-2);letter-spacing:0.14em;text-transform:uppercase}
+.compared-chip strong{color:var(--cyan);font-weight:700}
+/* Stance pill demoted to accent: smaller padding/font when sitting on the card foot. */
+.card-foot .pill{padding:3px 8px;font-size:9px;letter-spacing:0.14em}
+
+/* ── stance pills (same scheme as event page, slightly compact) ── */
+.pill{display:inline-flex;align-items:center;padding:4px 10px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
+.pill.s-hawkish.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-hawkish.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-hawkish.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-dovish.c-high{background:rgba(0,212,255,0.20);border-color:rgba(0,212,255,0.85);color:#9BEBFF}
+.pill.s-dovish.c-medium{background:rgba(0,212,255,0.06);border-color:rgba(0,212,255,0.32);color:rgba(127,207,232,0.65)}
+.pill.s-dovish.c-low{background:rgba(0,212,255,0.025);border-color:rgba(0,212,255,0.15);color:rgba(127,207,232,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-neutral.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-neutral.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-neutral.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+/* Phase 4.1: us_politics axis (escalatory_deescalatory) */
+.pill.s-escalatory.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
+.pill.s-escalatory.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
+.pill.s-escalatory.c-low{background:rgba(255,107,77,0.025);border-color:rgba(255,107,77,0.15);color:rgba(232,154,135,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-deescalatory.c-high{background:rgba(0,200,150,0.20);border-color:rgba(0,200,150,0.85);color:#7AE6BF}
+.pill.s-deescalatory.c-medium{background:rgba(0,200,150,0.06);border-color:rgba(0,200,150,0.32);color:rgba(122,230,191,0.65)}
+.pill.s-deescalatory.c-low{background:rgba(0,200,150,0.025);border-color:rgba(0,200,150,0.15);color:rgba(122,230,191,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+.pill.s-ambiguous.c-high{background:rgba(149,144,176,0.20);border-color:rgba(149,144,176,0.75);color:#C5BEDD}
+.pill.s-ambiguous.c-medium{background:rgba(149,144,176,0.06);border-color:rgba(149,144,176,0.30);color:rgba(197,190,221,0.65)}
+.pill.s-ambiguous.c-low{background:rgba(149,144,176,0.025);border-color:rgba(149,144,176,0.15);color:rgba(197,190,221,0.45);text-decoration:underline dotted;text-underline-offset:3px}
+
+#loading,#empty{padding:80px 0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
+#empty-msg{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2);margin-top:8px;text-transform:none;letter-spacing:0}
+
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=20"></script>
+
+<section class="page-intro">
+  <div class="page-intro-inner">
+    <div class="page-intro-eyebrow">Mentions · market-moving statements</div>
+    <p class="page-intro-sub">Public figures, what they said, how the market reacted.</p>
+  </div>
+</section>
+
+<!--HERO_HTML-->
+
+<main class="page" id="page">
+  <div class="archive-divider">Recent posture archive</div>
+
+  <div id="count-line" class="count-line" style="display:none"></div>
+
+  <div id="filters" class="filters" style="display:none">
+    <div class="filter-row" id="domain-row" style="display:none">
+      <span class="filter-label">Domain</span>
+    </div>
+    <div class="filter-row" id="subject-row" style="display:none">
+      <span class="filter-label">Subject</span>
+    </div>
+    <div class="filter-row" id="type-row">
+      <span class="filter-label">Event type</span>
+    </div>
+    <div class="filter-row" id="speaker-row">
+      <span class="filter-label">Speaker</span>
+    </div>
+  </div>
+
+  <div id="grid-host">
+    <div id="loading">Loading archive…</div>
+  </div>
+
+  <footer>HYPERFLEX · receipts on what was said</footer>
+</main>
+
+<script>
+const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all', domainFilter: 'all', subjectFilter: 'all' };
+
+// Friendly labels for the Domain filter chips. Falls through to the
+// raw value (formatted) when an unknown domain shows up — gives the
+// page graceful behavior the moment a new domain row lands.
+const DOMAIN_LABELS = {
+  fed_monetary_policy: 'Federal Reserve',
+  us_politics:         'US Politics',
+  geopolitics:         'Geopolitics',
+  corporate_earnings:  'Corporate',
+  tech_executives:     'Tech',
+  central_banks_intl:  'Intl Banks',
+};
+function fmtDomain(d) {
+  if (!d) return 'Unknown';
+  if (DOMAIN_LABELS[d]) return DOMAIN_LABELS[d];
+  // Snake_case → Title Case for unknown values
+  return d.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function fmtEventType(t) {
+  if (!t) return '';
+  if (t === 'fomc_presser') return 'FOMC presser';
+  if (t === 'speech') return 'Speech';
+  if (t === 'testimony') return 'Testimony';
+  if (t === 'op_ed') return 'Op-Ed';
+  return t.replace(/_/g, ' ');
+}
+
+function pill(stance, confidence) {
+  const s = (stance || 'neutral').toLowerCase();
+  const c = (confidence || 'medium').toLowerCase();
+  return `<span class="pill s-${esc(s)} c-${esc(c)}">${esc(s)}</span>`;
+}
+
+function truncate(s, n) {
+  if (!s) return '';
+  if (s.length <= n) return s;
+  // Cut on a sentence boundary if one is near the cap, else hard truncate.
+  const sentenceEnd = s.slice(0, n).lastIndexOf('. ');
+  if (sentenceEnd > n * 0.6) return s.slice(0, sentenceEnd + 1);
+  // Otherwise cut on word boundary
+  const wordEnd = s.slice(0, n).lastIndexOf(' ');
+  return s.slice(0, wordEnd > 0 ? wordEnd : n).trim() + '…';
+}
+
+// Phase 4 close: cards lead with the live market hook (when one
+// exists) and demote the stance pill to a bottom-left accent.
+// composed_only events keep the posture-as-headline behavior because
+// the pill IS the headline for them.
+//
+//   card_type='language'  → headline = market question, line 2 = top
+//                            candidate "X leads at Y%" (cyan), line 3 =
+//                            volume traded, foot = stance pill + TRADE →
+//   card_type='outcome'   → headline = market question, line 2 = "Y%
+//                            YES" (cyan), line 3 = volume, foot =
+//                            stance pill + TRADE →
+//   card_type='composed_only' → headline = posture-as-of-date, blurb,
+//                            stance pill + RECEIPT →
+function renderCard(ev) {
+  const dateStr = fmtDate(ev.event_date || ev.event_at);
+  const typeLabel = fmtEventType(ev.event_type);
+  const compared = ev.compared_to_speaker
+    ? `<div class="compared-chip">vs <strong>${esc(ev.compared_to_speaker)}</strong></div>`
+    : '<div class="compared-chip" style="visibility:hidden">·</div>';
+
+  const cardType = ev.card_type || 'composed_only';
+  const tm = ev.top_market || null;
+  const ctaLabel = (cardType === 'language' || cardType === 'outcome') ? 'Trade →' : 'Receipt →';
+
+  // Live dot fires only on language cards (the marquee shape). Outcome
+  // cards still get the cyan TRADE CTA but no live-dot pulse.
+  const liveDot = cardType === 'language'
+    ? '<span class="live-dot" aria-hidden="true"></span><span class="live-label">Live</span><span class="sep">·</span>'
+    : '';
+
+  let body;
+  if (cardType === 'language' && tm) {
+    const leaderLine = (tm.leading_outcome_label && tm.leading_outcome_pct != null)
+      ? `<div class="card-leading">${esc(tm.leading_outcome_label)} leads at <span class="card-leading-pct">${tm.leading_outcome_pct}%</span></div>`
+      : '';
+    const volLine = tm.volume_display
+      ? `<div class="card-volume">${esc(tm.volume_display)} traded · ${tm.candidate_count} candidates</div>`
+      : '';
+    body = `
+      <div class="card-headline">${esc(tm.question || ev.speaker + "'s posture")}</div>
+      ${leaderLine}
+      ${volLine}
+    `;
+  } else if (cardType === 'outcome' && tm) {
+    const pctLine = (tm.leading_outcome_pct != null)
+      ? `<div class="card-leading"><span class="card-leading-pct">${tm.leading_outcome_pct}%</span> YES</div>`
+      : '';
+    const volLine = tm.volume_display
+      ? `<div class="card-volume">${esc(tm.volume_display)} traded</div>`
+      : '';
+    body = `
+      <div class="card-headline">${esc(tm.question || ev.speaker + "'s posture")}</div>
+      ${pctLine}
+      ${volLine}
+    `;
+  } else {
+    // composed_only — posture-as-headline, with the existing blurb
+    // truncated short. Stance pill stays prominent in the foot since
+    // the pill IS the headline for these events.
+    const blurbShort = truncate(ev.blurb || '', 140);
+    body = `
+      <div class="card-headline">${esc(ev.speaker)}'s posture as of ${esc(dateStr)}</div>
+      <div class="card-blurb">${esc(blurbShort)}</div>
+    `;
+  }
+
+  return `
+    <a class="card t-${esc(cardType.replace('composed_only', 'composed'))}" href="/event/${esc(ev.slug)}">
+      <div class="card-eyebrow">
+        ${liveDot}
+        <span class="speaker">${esc(ev.speaker)}</span>
+        <span class="sep">·</span>
+        <span>${esc(dateStr)}</span>
+        <span class="card-type">${esc(typeLabel)}</span>
+      </div>
+      ${body}
+      <div class="card-foot">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${pill(ev.dominant_stance, ev.dominant_confidence)}
+          ${compared}
+        </div>
+        <span class="card-arrow">${esc(ctaLabel)}</span>
+      </div>
+    </a>
+  `;
+}
+
+// Powell-collapse — when a speaker has > THRESHOLD published events,
+// show first INLINE inline + an expander that reveals the rest. Per-
+// speaker state lives in STATE.expandedSpeakers (Set of speaker names).
+const COLLAPSE_THRESHOLD = 5;
+const COLLAPSE_INLINE = 3;
+STATE.expandedSpeakers = new Set();
+
+function applyCollapse(events) {
+  // Group by speaker, collapsing only when filter doesn't already pin
+  // a single speaker (no point hiding within a single-speaker view).
+  if (STATE.speakerFilter !== 'all') return { rendered: events, collapsed: [] };
+  const counts = new Map();
+  for (const ev of events) counts.set(ev.speaker, (counts.get(ev.speaker) || 0) + 1);
+  const seen = new Map();
+  const rendered = [];
+  const expanders = [];
+  for (const ev of events) {
+    const total = counts.get(ev.speaker) || 0;
+    const so_far = seen.get(ev.speaker) || 0;
+    if (total > COLLAPSE_THRESHOLD && so_far >= COLLAPSE_INLINE && !STATE.expandedSpeakers.has(ev.speaker)) {
+      // Skip rendering this row, but make sure exactly one expander
+      // exists per collapsed speaker.
+      if (!expanders.find(e => e.speaker === ev.speaker)) {
+        expanders.push({ speaker: ev.speaker, hidden: total - COLLAPSE_INLINE });
+      }
+      seen.set(ev.speaker, so_far + 1);
+      continue;
+    }
+    rendered.push(ev);
+    seen.set(ev.speaker, so_far + 1);
+  }
+  return { rendered, expanders };
+}
+
+function applyFilters() {
+  const events = STATE.events.filter(ev => {
+    if (STATE.domainFilter !== 'all' && (ev.domain || 'fed_monetary_policy') !== STATE.domainFilter) return false;
+    if (STATE.subjectFilter !== 'all' && (ev.subject || '') !== STATE.subjectFilter) return false;
+    if (STATE.typeFilter !== 'all' && ev.event_type !== STATE.typeFilter) return false;
+    if (STATE.speakerFilter !== 'all' && ev.speaker !== STATE.speakerFilter) return false;
+    return true;
+  });
+  const host = document.getElementById('grid-host');
+  if (!events.length) {
+    host.innerHTML = '<div id="empty"><div>No matches</div><div id="empty-msg">Try a different filter combination.</div></div>';
+  } else {
+    const { rendered, expanders } = applyCollapse(events);
+    // Render cards in original event_date order, but interleave the
+    // expander chip after a speaker's last visible card. Simpler:
+    // render all visible cards first, then a row of expanders below.
+    const cards = rendered.map(renderCard).join('');
+    const expanderHtml = (expanders || []).map(e =>
+      `<div class="speaker-expand" data-speaker="${esc(e.speaker)}">View all <strong>${e.hidden + COLLAPSE_INLINE}</strong> ${esc(e.speaker)} events →</div>`
+    ).join('');
+    host.innerHTML = '<div class="grid">' + cards + expanderHtml + '</div>';
+    // Wire expander clicks
+    host.querySelectorAll('.speaker-expand').forEach(el => {
+      el.onclick = () => {
+        STATE.expandedSpeakers.add(el.dataset.speaker);
+        applyFilters();
+      };
+    });
+  }
+  const count = document.getElementById('count-line');
+  count.innerHTML = `<strong>${events.length}</strong> ${events.length === 1 ? 'event' : 'events'}` +
+    (events.length !== STATE.events.length ? ` <span style="color:var(--muted)">of ${STATE.events.length}</span>` : '');
+}
+
+// Filter chips reshape per-domain: when the user picks a domain, the
+// subject + speaker rows rebuild to show only values present in that
+// domain. Subject row stays hidden when the active domain has no
+// non-null subjects (Fed events don't carry meaningful subjects).
+function _eventsInDomain() {
+  if (STATE.domainFilter === 'all') return STATE.events;
+  return STATE.events.filter(e => (e.domain || 'fed_monetary_policy') === STATE.domainFilter);
+}
+
+function _renderChipRow(rowEl, values, currentValue, onChoose, formatter, allLabel) {
+  rowEl.querySelectorAll('.fchip').forEach(c => c.remove());
+  const allValues = ['all'].concat(values);
+  for (const v of allValues) {
+    const btn = document.createElement('button');
+    btn.className = 'fchip' + (v === currentValue ? ' active' : '');
+    btn.textContent = v === 'all' ? allLabel : formatter(v);
+    btn.dataset.value = v;
+    btn.onclick = () => onChoose(v);
+    rowEl.appendChild(btn);
+  }
+}
+
+function rebuildSubjectAndSpeakerRows() {
+  const subjectRow = document.getElementById('subject-row');
+  const speakerRow = document.getElementById('speaker-row');
+  const inDomain = _eventsInDomain();
+  const subjects = Array.from(new Set(inDomain.map(e => e.subject).filter(Boolean))).sort();
+  const speakers = Array.from(new Set(inDomain.map(e => e.speaker).filter(Boolean))).sort();
+
+  // If the current subject filter no longer applies in the new domain,
+  // reset to 'all' so the user isn't filtered down to zero rows.
+  if (STATE.subjectFilter !== 'all' && !subjects.includes(STATE.subjectFilter)) {
+    STATE.subjectFilter = 'all';
+  }
+  if (STATE.speakerFilter !== 'all' && !speakers.includes(STATE.speakerFilter)) {
+    STATE.speakerFilter = 'all';
+  }
+
+  if (subjects.length >= 1) {
+    _renderChipRow(subjectRow, subjects, STATE.subjectFilter, v => {
+      STATE.subjectFilter = v;
+      rebuildSubjectAndSpeakerRows();
+      applyFilters();
+    }, s => s, 'All subjects');
+    subjectRow.style.display = 'flex';
+  } else {
+    subjectRow.style.display = 'none';
+  }
+
+  _renderChipRow(speakerRow, speakers, STATE.speakerFilter, v => {
+    STATE.speakerFilter = v;
+    rebuildSubjectAndSpeakerRows();
+    applyFilters();
+  }, sp => sp, 'All speakers');
+}
+
+function buildFilters() {
+  const domainRow = document.getElementById('domain-row');
+  const typeRow = document.getElementById('type-row');
+
+  const distinctDomains = Array.from(new Set(STATE.events.map(e => e.domain || 'fed_monetary_policy'))).sort();
+  const types = Array.from(new Set(STATE.events.map(e => e.event_type).filter(Boolean))).sort();
+
+  // Domain row only renders when 2+ distinct domains exist. Phase 4
+  // foundation: with one domain (Fed), the row stays hidden so the UI
+  // doesn't surface a meaningless single-option filter.
+  if (distinctDomains.length >= 2) {
+    _renderChipRow(domainRow, distinctDomains, STATE.domainFilter, v => {
+      STATE.domainFilter = v;
+      rebuildSubjectAndSpeakerRows();
+      applyFilters();
+    }, fmtDomain, 'All domains');
+    domainRow.style.display = 'flex';
+  }
+
+  _renderChipRow(typeRow, types, STATE.typeFilter, v => {
+    STATE.typeFilter = v;
+    applyFilters();
+  }, fmtEventType, 'All');
+
+  rebuildSubjectAndSpeakerRows();
+
+  document.getElementById('filters').style.display = 'flex';
+  document.getElementById('count-line').style.display = 'block';
+}
+
+// Live countdown ticker — reads the SSR'd target ISO from the hero
+// data attribute. Server already rendered a static value; this just
+// ticks it forward every minute. Skips silently if the hero is in
+// 'live' mode (no countdown digits) or absent.
+function startCountdownTicker() {
+  const el = document.getElementById('hero-cd-digits');
+  if (!el || !el.dataset.target) return;
+  const target = new Date(el.dataset.target).getTime();
+  if (!isFinite(target)) return;
+  function tick() {
+    const diff = target - Date.now();
+    if (diff <= 0) {
+      el.textContent = 'live';
+      return;
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diff / dayMs);
+    const hours = Math.floor((diff % dayMs) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    el.textContent = `${days}d ${hours}h ${minutes}m`;
+  }
+  tick();
+  setInterval(tick, 60 * 1000);
+}
+startCountdownTicker();
+
+async function load() {
+  try {
+    const res = await fetch('/api/mentions');
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    STATE.events = Array.isArray(data.events) ? data.events : [];
+    if (!STATE.events.length) {
+      document.getElementById('grid-host').innerHTML =
+        '<div id="empty"><div>No events</div><div id="empty-msg">No events published yet.</div></div>';
+      return;
+    }
+    buildFilters();
+    applyFilters();
+  } catch (e) {
+    console.error('[mentions]', e);
+    document.getElementById('grid-host').innerHTML =
+      '<div id="empty"><div>Could not load mentions</div><div id="empty-msg">Try refreshing in a moment.</div></div>';
+  }
+}
+
+load();
+</script>
+</body>
+</html>
