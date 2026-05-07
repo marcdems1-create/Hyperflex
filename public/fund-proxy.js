@@ -188,12 +188,60 @@
       setStatus('Confirm in MetaMask…', 'info');
       try {
         await transferUsdceEoaToProxy(amountAtomic, eoa, proxy);
-        setStatus('Trading wallet funded — you\'re ready to trade.', 'success');
         markOnboardingSeen();
+
+        // Phase 2 — bundle setup approvals while we have the user's
+        // attention. Dispatches an event that market.html listens for
+        // and runs the existing approve-on-Safe helpers in sequence.
+        // On pages without that listener (mentions/explore/events),
+        // the event fires into the void and the modal closes with the
+        // funded-only message — same as before this hook landed.
+        // Either way, the EOA→proxy wall is gone for good.
+        var setupRan = false;
+        function onProgress(e) {
+          var d = (e && e.detail) || {};
+          if (d.message) setStatus(d.message, d.kind || 'info');
+        }
+        function onDone() {
+          setupRan = true;
+          setStatus('Trading wallet ready — sign once per trade from now on.', 'success');
+          setTimeout(function() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            showToast('Trading wallet ready — sign once per trade from now on.');
+          }, 1500);
+        }
+        function onFail(e) {
+          var msg = (e && e.detail && e.detail.message) || 'Setup paused — you can complete it on your first trade.';
+          setStatus(msg, 'info');
+          setTimeout(function() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            showToast('Trading wallet funded. Approvals will finish on your first trade.');
+          }, 2000);
+        }
+        window.addEventListener('hfx:setup-progress', onProgress);
+        window.addEventListener('hfx:onboarding-setup-done', onDone, { once: true });
+        window.addEventListener('hfx:onboarding-setup-failed', onFail, { once: true });
+
+        setStatus('Funds received. Setting up trading approvals…', 'info');
+        window.dispatchEvent(new CustomEvent('hfx:onboarding-fund-complete', {
+          detail: { proxyAddr: proxy, eoaAddr: eoa }
+        }));
+
+        // Fallback: if no listener handled the event (page didn't
+        // bundle setup), close the modal after 4s with the
+        // funded-only message. Market pages typically respond within
+        // ~500ms by setting setup-progress; 4s is comfortable for
+        // listener attach + first popup prompt.
         setTimeout(function() {
-          if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-          showToast('Trading wallet funded — you\'re ready to trade.');
-        }, 1500);
+          if (setupRan) return;
+          if (overlay.parentNode) {
+            setStatus('Trading wallet funded — you\'re ready to trade.', 'success');
+            setTimeout(function() {
+              if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+              showToast('Trading wallet funded — you\'re ready to trade.');
+            }, 1500);
+          }
+        }, 4000);
       } catch (e) {
         setStatus(e.message || 'Transfer failed', 'error');
         setButtonsDisabled(false);

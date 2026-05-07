@@ -4240,6 +4240,89 @@ async function approveUsdceForSpender(spender) {
   return p;
 }
 
+// ── Onboarding-time setup bundle ────────────────────────────────────────
+// Runs all V2 trading approvals up-front so the user's first trade is
+// just the order EIP-712 signature, not a 3-4 popup cascade. Triggered
+// by fund-proxy.js's onboarding modal AFTER the EOA→proxy USDC.e
+// transfer confirms. Sequential — each Safe execTransaction needs its
+// own MetaMask popup, and the user is already in "setup mode" with the
+// modal explaining what's happening.
+//
+// Steps (binary market path; NegRisk Adapter approvals deferred to
+// first NegRisk-market trade since most users start on binary markets):
+//   1. USDC.e → CollateralOnramp  (so Onramp.wrap can pull USDC.e)
+//   2. pUSD   → CTF Exchange V2   (so V2 BUY can pull pUSD as taker)
+//   3. pUSD   → ConditionalTokens (split/merge flow)
+//   4. CT     → CTF Exchange V2   (setApprovalForAll, for SELL later)
+//
+// On each successful Safe tx the helpers themselves write the
+// hfx_*_ok_<owner>_<spender> localStorage cache key, so subsequent
+// in-trade approval checks short-circuit and trades become 1-popup.
+//
+// On any failure we abort the bundle and hand the user back a soft
+// fallback path — the in-trade approval flow at line 5648+ still
+// works and will fire whatever's missing on the first trade. Worst
+// case the user sees the same popup count they would have seen
+// without this bundle.
+async function setupTradingApprovalsBundle(proxyAddr, eoaAddr) {
+  function emit(message, kind) {
+    window.dispatchEvent(new CustomEvent('hfx:setup-progress', {
+      detail: { message: message, kind: kind || 'info' }
+    }));
+  }
+  function done() {
+    window.dispatchEvent(new CustomEvent('hfx:onboarding-setup-done'));
+  }
+  function failed(message) {
+    window.dispatchEvent(new CustomEvent('hfx:onboarding-setup-failed', {
+      detail: { message: message }
+    }));
+  }
+  try {
+    // Step 1: USDC.e → Onramp (cached → no popup if already approved)
+    if (!(await isUsdceApprovedForSpender(proxyAddr, COLLATERAL_ONRAMP))) {
+      emit('Approving USDC for Polymarket Onramp… (1 of 4)', 'info');
+      await approveUsdceForSpender(COLLATERAL_ONRAMP);
+    }
+    // Step 2: pUSD → CTF V2
+    if (!(await isPmctApprovedForSpender(proxyAddr, CTF_EXCHANGE_V2))) {
+      emit('Approving pUSD for the exchange… (2 of 4)', 'info');
+      await approvePmctForSpender(CTF_EXCHANGE_V2);
+    }
+    // Step 3: pUSD → CT
+    if (!(await isPmctApprovedForSpender(proxyAddr, CONDITIONAL_TOKENS))) {
+      emit('Approving pUSD for conditional tokens… (3 of 4)', 'info');
+      await approvePmctForSpender(CONDITIONAL_TOKENS);
+    }
+    // Step 4: CT → CTF V2 setApprovalForAll (for future SELL)
+    if (!(await isCtfApprovedForOperator(proxyAddr, CTF_EXCHANGE_V2))) {
+      emit('Authorizing exchange for sells… (4 of 4)', 'info');
+      await approveCtfForOperator(CTF_EXCHANGE_V2);
+    }
+    done();
+  } catch (e) {
+    var msg = (e && e.message) || 'Setup paused';
+    console.warn('[setup-bundle] aborted:', msg);
+    if (/signature rejected|action_rejected|user denied/i.test(msg)) {
+      failed('Setup paused — finish on your first trade.');
+    } else {
+      failed('Setup hit a snag (' + msg.slice(0, 60) + '). You can finish on your first trade.');
+    }
+  }
+}
+
+// Listen for the onboarding fund-complete event from fund-proxy.js.
+// Only runs when V2 is on (it's the default since Apr 22 cutover);
+// V1 path doesn't need pUSD approvals since wraps weren't a thing.
+window.addEventListener('hfx:onboarding-fund-complete', function(e) {
+  if (!isClobV2Enabled()) return;
+  var d = (e && e.detail) || {};
+  var proxyAddr = d.proxyAddr || localStorage.getItem('hf_poly_wallet');
+  var eoaAddr = d.eoaAddr || localStorage.getItem('poly_eoa_address');
+  if (!proxyAddr || !eoaAddr) return;
+  setupTradingApprovalsBundle(proxyAddr, eoaAddr);
+});
+
 // Master check: runs all 3 steps and updates the setup UI
 async function checkTradingSetup() {
   var setupPanel = document.getElementById('tradingSetup');
