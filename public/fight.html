@@ -561,62 +561,44 @@ a { color: inherit; text-decoration: none; }
     if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'k';
     return '$' + n.toFixed(0);
   }
-  function pickProb(market) {
-    if (!market) return null;
-    var p = market.outcomePrices;
-    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (_) { return null; } }
-    if (!Array.isArray(p) || p.length < 2) return null;
-    var yes = parseFloat(p[0]);
-    return isNaN(yes) ? null : yes;
-  }
-  function paintMarket(market) {
-    var prob = pickProb(market);
-    if (prob == null) return paintMarketEmpty();
 
-    // Decide which fighter is the YES side based on question text.
-    var q = (market.question || '').toLowerCase();
-    var leftKey  = meta.left.name.toLowerCase();
-    var rightKey = meta.right.name.toLowerCase();
-    var leftProb;
-    if (q.indexOf(leftKey) !== -1 && q.indexOf(rightKey) !== -1) {
-      // Heuristic: question typically reads "Will <subject> defeat <opp>?"
-      // → YES = subject. Subject is whichever name appears first.
-      leftProb = (q.indexOf(leftKey) < q.indexOf(rightKey)) ? prob : 1 - prob;
-    } else if (q.indexOf(rightKey) !== -1) {
-      leftProb = 1 - prob;
-    } else {
-      leftProb = prob;
-    }
-    var rightProb = 1 - leftProb;
+  // paintMarket consumes the response from GET /api/fight/odds?key=<slug>.
+  // The backend already does the events?slug→markets?slug→search chain, the
+  // best-market scoring, and the YES-side decision. We just render.
+  function paintMarket(d) {
+    if (!d || !d.available) return paintMarketEmpty();
 
-    document.getElementById('mktChimaev').textContent    = Math.round(leftProb  * 100) + '%';
-    document.getElementById('mktStrickland').textContent = Math.round(rightProb * 100) + '%';
-    document.getElementById('mktVol').textContent = fmtUsd(market.volume24hr || market.volume_24hr || market.volume24Hr);
-    document.getElementById('mktLiq').textContent = fmtUsd(market.liquidity || market.liquidityNum);
+    var leftPct  = Number(d.leftPct);
+    var rightPct = Number(d.rightPct);
+    var leftProb = Number(d.leftProbRaw != null ? d.leftProbRaw : leftPct / 100);
 
-    // VS bar
+    document.getElementById('mktChimaev').textContent    = leftPct  + '%';
+    document.getElementById('mktStrickland').textContent = rightPct + '%';
+    document.getElementById('mktVol').textContent = fmtUsd(d.vol24h);
+    document.getElementById('mktLiq').textContent = fmtUsd(d.liquidity);
+
     document.getElementById('vsBarFill').style.width = (leftProb * 100).toFixed(1) + '%';
-    document.getElementById('vsLeftPct').textContent  = Math.round(leftProb  * 100) + '%';
-    document.getElementById('vsRightPct').textContent = Math.round(rightProb * 100) + '%';
+    document.getElementById('vsLeftPct').textContent  = leftPct  + '%';
+    document.getElementById('vsRightPct').textContent = rightPct + '%';
 
-    // CTAs
-    var pmUrl = market.slug ? ('https://polymarket.com/event/' + (market.eventSlug || market.slug)) : 'https://polymarket.com';
+    var pmUrl = d.eventSlug
+      ? ('https://polymarket.com/event/' + d.eventSlug)
+      : (d.marketSlug ? ('https://polymarket.com/event/' + d.marketSlug) : 'https://polymarket.com');
     document.getElementById('ctaPolymarket').href = pmUrl;
-    if (market.slug) document.getElementById('ctaInsideHF').href = '/market/' + market.slug;
+    if (d.marketSlug) document.getElementById('ctaInsideHF').href = '/market/' + d.marketSlug;
 
     document.getElementById('marketEmpty').style.display = 'none';
     document.getElementById('marketRow').style.display = '';
     document.getElementById('marketBadge').textContent = 'Polymarket · live';
 
-    // Share to X
-    var sharePct = Math.round(leftProb * 100) + '% / ' + Math.round(rightProb * 100) + '%';
+    var sharePct = leftPct + '% / ' + rightPct + '%';
     var shareText = 'UFC 328 · ' + meta.left.name + ' vs ' + meta.right.name + ' — current odds ' + sharePct + '. Track it on HYPERFLEX:';
     var shareUrl = location.origin + '/fight/' + slug;
     document.getElementById('ctaShare').href = 'https://x.com/intent/tweet?text=' + encodeURIComponent(shareText) + '&url=' + encodeURIComponent(shareUrl);
 
-    resolvedMarket = market;
-    if (market.slug || market.conditionId) loadTakes(market.slug, market.conditionId);
-    if (market.conditionId) loadWhales(market.conditionId, market.question || '');
+    resolvedMarket = { slug: d.marketSlug, conditionId: d.conditionId, question: d.question };
+    if (d.marketSlug || d.conditionId) loadTakes(d.marketSlug, d.conditionId);
+    if (d.conditionId) loadWhales(d.conditionId, d.question || '');
   }
   function paintMarketEmpty() {
     document.getElementById('mktChimaev').textContent    = '—';
@@ -626,28 +608,25 @@ a { color: inherit; text-decoration: none; }
     document.getElementById('marketEmpty').style.display = '';
   }
 
+  // Single call to backend proxy. Backend handles all Polymarket fetch
+  // strategies + caching. Browser just gets a clean JSON response — no CORS,
+  // no slug-format guessing client-side.
   function loadMarket() {
-    var tries = (meta.marketSlugs || []).map(function (s) {
-      return fetch('https://gamma-api.polymarket.com/markets?slug=' + encodeURIComponent(s))
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
-    });
-    Promise.all(tries).then(function (results) {
-      for (var i = 0; i < results.length; i++) {
-        if (Array.isArray(results[i]) && results[i].length) return paintMarket(results[i][0]);
-      }
-      // Fallback search
-      if (meta.questionSearch) {
-        return fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=10&order=volume24hr&ascending=false&question_search=' + encodeURIComponent(meta.questionSearch))
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (arr) {
-            if (Array.isArray(arr) && arr.length) return paintMarket(arr[0]);
-            paintMarketEmpty();
-          })
-          .catch(paintMarketEmpty);
-      }
-      paintMarketEmpty();
-    });
+    fetch('/api/fight/odds?key=' + encodeURIComponent(slug))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.available) {
+          console.log('[fight] odds via /api/fight/odds', { marketSlug: d.marketSlug, leftPct: d.leftPct });
+          paintMarket(d);
+        } else {
+          console.warn('[fight] odds not available', d && d.reason);
+          paintMarketEmpty();
+        }
+      })
+      .catch(function (e) {
+        console.warn('[fight] /api/fight/odds threw', e.message);
+        paintMarketEmpty();
+      });
   }
   window.loadMarket = loadMarket;
 

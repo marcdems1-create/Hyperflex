@@ -198,52 +198,32 @@
     return yes; // YES probability
   }
 
+  // Single call to backend proxy. Server-side does the events?slug→markets?slug
+  // →question_search chain plus the YES-side decoding; client just renders.
+  // gamma-api.polymarket.com blocks browser fetches with CORS; that's why we
+  // can never hit it from here. The backend has no such restriction.
   function fetchOdds() {
     if (_oddsCache && (Date.now() - _oddsCache.ts < 30000)) {
       paintOdds(_oddsCache.c, _oddsCache.s);
       return;
     }
-    // Try direct market slugs first
-    var tries = SLUG_CANDIDATES.map(function (slug) {
-      return fetch('https://gamma-api.polymarket.com/markets?slug=' + encodeURIComponent(slug))
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
-    });
-    Promise.all(tries).then(function (results) {
-      var market = null;
-      for (var i = 0; i < results.length; i++) {
-        var arr = results[i];
-        if (Array.isArray(arr) && arr.length) { market = arr[0]; break; }
-      }
-      if (market) return resolveMarket(market);
-      // Fallback: search by name
-      return fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=20&order=volume24hr&ascending=false&question_search=Chimaev')
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (arr) {
-          if (Array.isArray(arr) && arr.length) return resolveMarket(arr[0]);
+    fetch('/api/fight/odds?key=ufc-328-chimaev-strickland')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.available) {
+          if (d) console.warn('[ufc328] odds not available', d.reason);
           paintOdds(null, null);
-        })
-        .catch(function () { paintOdds(null, null); });
-    });
-  }
-
-  function resolveMarket(market) {
-    var prob = pickProb(market);
-    if (prob == null) { paintOdds(null, null); return; }
-    // Map to (chimaev, strickland) — assume YES = "Chimaev wins" if question
-    // mentions Chimaev as the subject. If reversed, flip.
-    var q = (market.question || '').toLowerCase();
-    var c, s;
-    if (q.indexOf('chimaev') !== -1 && q.indexOf('strickland') !== -1) {
-      // Phrasing typically: "Will Chimaev defeat Strickland?" → YES = Chimaev
-      c = prob; s = 1 - prob;
-    } else if (q.indexOf('strickland') !== -1) {
-      c = 1 - prob; s = prob;
-    } else {
-      c = prob; s = 1 - prob;
-    }
-    _oddsCache = { ts: Date.now(), c: c, s: s };
-    paintOdds(c, s);
+          return;
+        }
+        var c = Number(d.leftProbRaw  != null ? d.leftProbRaw  : d.leftPct  / 100);
+        var s = Number(d.rightProbRaw != null ? d.rightProbRaw : d.rightPct / 100);
+        _oddsCache = { ts: Date.now(), c: c, s: s };
+        paintOdds(c, s);
+      })
+      .catch(function (e) {
+        console.warn('[ufc328] /api/fight/odds threw', e.message);
+        paintOdds(null, null);
+      });
   }
 
   if (document.readyState === 'loading') {

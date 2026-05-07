@@ -30162,9 +30162,184 @@ app.get('/api/fight/whales', async (req, res) => {
   }
 });
 
-// GET /api/incentives/stats — aggregate counts across all pools. Backs the
-// header strip on /incentives. Soft-falls to zero if the migration hasn't
-// run yet (charter: honest zeros over fake supply).
+// GET /api/fight/odds?key=<fight-key> — server-side proxy to Polymarket
+// Gamma. Required because Gamma blocks browser fetches with CORS — even
+// after PR #87 added events?slug= fallback, every browser request hit
+// "Access to fetch at gamma-api.polymarket.com... blocked by CORS policy."
+// Backend has no such restriction, so we proxy.
+//
+// Strategy chain (short-circuits on first hit):
+//   1. /events?slug=<each candidate>  — UFC fights are events, not markets
+//   2. /markets?slug=<each candidate> — fallback for standalone binary markets
+//   3. /markets?question_search=<each term> — last resort
+//
+// pickBestMarket scores: closed=false AND both fighter names in question/slug,
+// then sorts by volume24hr desc — picks winner-market over method-of-victory props.
+//
+// Returns simplified shape; caches per fight-key for 30s in memory.
+const _fightOddsCache = new Map();
+const _FIGHT_ODDS_TTL = 30 * 1000;
+
+const _FIGHT_ODDS_REGISTRY = {
+  'ufc-328-chimaev-strickland': {
+    leftName:  'Chimaev',
+    rightName: 'Strickland',
+    slugCandidates: [
+      'ufc-sea2-kha7-2026-05-09',
+      'ufc-328-chimaev-vs-strickland',
+      'ufc-chimaev-vs-strickland',
+      'will-khamzat-chimaev-defeat-sean-strickland',
+    ],
+    searchTerms: ['Chimaev', 'Strickland'],
+  },
+  // Add new fights here. Same shape — names + slug guesses + search fallbacks.
+};
+
+function _pickBestMarket(markets, leftName, rightName) {
+  if (!Array.isArray(markets) || !markets.length) return null;
+  const lk = (leftName || '').toLowerCase();
+  const rk = (rightName || '').toLowerCase();
+  const withBoth = markets.filter(m => {
+    if (m.closed === true) return false;
+    const q = ((m.question || '') + ' ' + (m.slug || '')).toLowerCase();
+    return (!lk || q.indexOf(lk) !== -1) && (!rk || q.indexOf(rk) !== -1);
+  });
+  let pool = withBoth.length ? withBoth : markets.filter(m => m.closed !== true);
+  if (!pool.length) pool = markets;
+  pool.sort((a, b) => {
+    const av = parseFloat(a.volume24hr) || parseFloat(a.volume_24hr) || parseFloat(a.volumeNum) || parseFloat(a.volume) || 0;
+    const bv = parseFloat(b.volume24hr) || parseFloat(b.volume_24hr) || parseFloat(b.volumeNum) || parseFloat(b.volume) || 0;
+    return bv - av;
+  });
+  return pool[0] || null;
+}
+
+function _pickProb(market) {
+  if (!market) return null;
+  let p = market.outcomePrices;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (_) { return null; } }
+  if (!Array.isArray(p) || p.length < 2) return null;
+  const yes = parseFloat(p[0]);
+  return isNaN(yes) ? null : yes;
+}
+
+async function _gammaFetchJson(url) {
+  if (typeof _nodeFetch !== 'function') return null;
+  try {
+    const r = await _nodeFetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    console.warn('[fight-odds] fetch failed', url, e.message);
+    return null;
+  }
+}
+
+async function _resolveFightOddsMarket(reg) {
+  const slugs = reg.slugCandidates || [];
+  // 1. events?slug= (UFC fights are events with sub-markets)
+  for (const s of slugs) {
+    const arr = await _gammaFetchJson(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(s)}`);
+    if (Array.isArray(arr) && arr.length) {
+      const ev = arr[0];
+      const picked = _pickBestMarket(ev.markets || [], reg.leftName, reg.rightName);
+      if (picked) {
+        console.log('[fight-odds] matched events?slug=' + s, picked.question || picked.slug);
+        picked._eventSlug = ev.slug || s;
+        return picked;
+      }
+    }
+  }
+  // 2. markets?slug=
+  for (const s of slugs) {
+    const arr = await _gammaFetchJson(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(s)}`);
+    if (Array.isArray(arr) && arr.length) {
+      console.log('[fight-odds] matched markets?slug=' + s, arr[0].question);
+      return arr[0];
+    }
+  }
+  // 3. question_search fallback
+  for (const term of (reg.searchTerms || [])) {
+    const arr = await _gammaFetchJson(
+      'https://gamma-api.polymarket.com/markets'
+      + '?active=true&closed=false&limit=20&order=volume24hr&ascending=false'
+      + '&question_search=' + encodeURIComponent(term)
+    );
+    const picked = _pickBestMarket(arr, reg.leftName, reg.rightName);
+    if (picked) {
+      console.log('[fight-odds] matched question_search=' + term, picked.question);
+      return picked;
+    }
+  }
+  return null;
+}
+
+app.get('/api/fight/odds', async (req, res) => {
+  try {
+    const key = String(req.query.key || '').trim();
+    const reg = _FIGHT_ODDS_REGISTRY[key];
+    if (!reg) return res.json({ available: false, reason: 'unknown_fight_key' });
+
+    const cached = _fightOddsCache.get(key);
+    if (cached && Date.now() - cached.ts < _FIGHT_ODDS_TTL) {
+      return res.json(cached.data);
+    }
+
+    const market = await _resolveFightOddsMarket(reg);
+    if (!market) {
+      const empty = { available: false, reason: 'no_market_found', key };
+      _fightOddsCache.set(key, { ts: Date.now(), data: empty });
+      return res.json(empty);
+    }
+
+    const prob = _pickProb(market);
+    if (prob == null) {
+      const empty = { available: false, reason: 'no_outcome_prices', key, marketSlug: market.slug, conditionId: market.conditionId };
+      _fightOddsCache.set(key, { ts: Date.now(), data: empty });
+      return res.json(empty);
+    }
+
+    // Decide which fighter is YES based on question text — same heuristic as
+    // the old client code: subject is whichever name appears first in the
+    // question. "Will Chimaev defeat Strickland?" → YES = Chimaev.
+    const q = (market.question || '').toLowerCase();
+    const lk = reg.leftName.toLowerCase();
+    const rk = reg.rightName.toLowerCase();
+    let leftProb;
+    if (q.indexOf(lk) !== -1 && q.indexOf(rk) !== -1) {
+      leftProb = (q.indexOf(lk) < q.indexOf(rk)) ? prob : 1 - prob;
+    } else if (q.indexOf(rk) !== -1) {
+      leftProb = 1 - prob;
+    } else {
+      leftProb = prob;
+    }
+
+    const data = {
+      available: true,
+      leftPct:  Math.round(leftProb  * 100),
+      rightPct: Math.round((1 - leftProb) * 100),
+      leftProbRaw:  +(leftProb).toFixed(4),
+      rightProbRaw: +(1 - leftProb).toFixed(4),
+      vol24h:     parseFloat(market.volume24hr) || parseFloat(market.volume_24hr) || parseFloat(market.volumeNum) || parseFloat(market.volume) || null,
+      liquidity:  parseFloat(market.liquidity) || parseFloat(market.liquidityNum) || null,
+      question:   market.question || null,
+      marketSlug: market.slug || null,
+      eventSlug:  market._eventSlug || null,
+      conditionId: market.conditionId || null,
+      computedAt: new Date().toISOString(),
+    };
+    _fightOddsCache.set(key, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error('[fight-odds]', err);
+    res.status(500).json({ available: false, reason: 'server_error', error: err.message });
+  }
+});
+
+
 app.get('/api/incentives/stats', async (req, res) => {
   if (!pool) return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
   try {
