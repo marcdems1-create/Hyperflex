@@ -6482,13 +6482,15 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     if (!isGeoBlocked(cfData) && !isSignatureError(cfData)) {
       if (cfRes.status === 401) {
+        // CLOB 401 means the API keys are bad — invalidate ONLY the
+        // keys, NOT the EOA address. Nuking poly_eoa_address forced
+        // a wallet-reconnect popup on the next trade attempt, which
+        // was a major source of the "multiple MetaMask signatures
+        // per trade" friction. The EOA is the user's wallet
+        // identity; it has nothing to do with CLOB auth state.
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
-        localStorage.removeItem('hf_clob_api_key');
-        localStorage.removeItem('hf_clob_api_secret');
-        localStorage.removeItem('hf_clob_api_passphrase');
-        localStorage.removeItem('poly_eoa_address');
         updateTradingUI();
         return { _expired: true, _errorMsg: 'CLOB 401: ' + (cfData.error || cfData.message || 'Unauthorized') };
       }
@@ -6518,13 +6520,11 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     if (railRes.ok) return railData;
 
     if (railRes.status === 401) {
+      // Same fix as the CF Worker 401 path above — invalidate keys
+      // only, never the EOA address.
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
       return { _expired: true, _errorMsg: 'CLOB 401: ' + (railData.error || railData.message || 'Unauthorized') };
     }
