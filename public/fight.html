@@ -397,8 +397,10 @@ a { color: inherit; text-decoration: none; }
           <div class="market-stat"><span class="lbl">Liquidity</span><span class="val" id="mktLiq">—</span></div>
         </div>
         <div class="market-actions">
-          <a class="btn primary" id="ctaInsideHF" href="#">Bet Inside HYPERFLEX →</a>
-          <a class="btn" id="ctaPolymarket" href="https://polymarket.com" target="_blank" rel="noopener">View on Polymarket ↗</a>
+          <!-- Primary CTA opens Polymarket event page in a new tab so users
+               can place the bet. TODO: revert to internal "/market/:slug"
+               once paired-market support ships in the HFX trade flow. -->
+          <a class="btn primary" id="ctaInsideHF" href="https://polymarket.com" target="_blank" rel="noopener">Bet on Polymarket →</a>
         </div>
         <div id="marketEmpty" class="empty" style="display:none;margin-top:14px">
           Live odds unavailable —
@@ -441,20 +443,25 @@ a { color: inherit; text-decoration: none; }
           <h2>UFC 328 Card</h2>
           <span class="badge">May 9</span>
         </div>
-        <a class="fight-card" href="/fight/ufc-328-van-vs-taira">
+        <a class="fight-card" href="/fight/ufc-328-van-taira">
           <div class="fc-meta">Co-Main · Flyweight Title</div>
           <div class="fc-name">Joshua Van vs Taira</div>
-          <span class="fc-tag">Detail page coming</span>
+          <span class="fc-tag">View live odds →</span>
         </a>
-        <a class="fight-card" href="/fight/ufc-328-volkov-vs-cortes-acosta">
-          <div class="fc-meta">Heavyweight</div>
+        <a class="fight-card" href="/fight/ufc-328-volkov-cortes-acosta">
+          <div class="fc-meta">Main Card · Heavyweight</div>
           <div class="fc-name">Volkov vs Cortes-Acosta</div>
-          <span class="fc-tag">Detail page coming</span>
+          <span class="fc-tag">View live odds →</span>
         </a>
-        <a class="fight-card" href="/fight/ufc-328-brady-vs-buckley">
-          <div class="fc-meta">Welterweight</div>
+        <a class="fight-card" href="/fight/ufc-328-brady-buckley">
+          <div class="fc-meta">Main Card · Welterweight</div>
           <div class="fc-name">Brady vs Buckley</div>
-          <span class="fc-tag">Detail page coming</span>
+          <span class="fc-tag">View live odds →</span>
+        </a>
+        <a class="fight-card" href="/fight/ufc-328-green-stephens">
+          <div class="fc-meta">Main Card · Lightweight</div>
+          <div class="fc-name">King Green vs Jeremy Stephens</div>
+          <span class="fc-tag">View live odds →</span>
         </a>
       </div>
 
@@ -485,6 +492,10 @@ a { color: inherit; text-decoration: none; }
   // ── Slug → fight metadata. Add new fights here. ───────────────────────
   // Path: /fight/:slug. Only ufc-328-chimaev-strickland is "real" today;
   // others render the 404 state until we wire them up.
+  // Note: marketSlugs/questionSearch fields are vestigial since PR #88 — the
+  // frontend now calls /api/fight/odds?key=<key> and the backend registry
+  // holds slug candidates + search terms. Kept on the main event for reference;
+  // omitted on new fights since backend is the source of truth.
   var FIGHTS = {
     'ufc-328-chimaev-strickland': {
       eyebrow: 'UFC 328 · Main Event',
@@ -495,14 +506,51 @@ a { color: inherit; text-decoration: none; }
       fightAt: Date.parse('2026-05-09T21:00:00Z'),
       left:  { name: 'Chimaev',    record: '15-0', rank: '#1 UFC Middleweight · Champion', tag: 'Undefeated' },
       right: { name: 'Strickland', record: '30-7', rank: '#3 UFC Middleweight',            tag: 'Former Champ' },
-      // Polymarket slug candidates — first one with a live market wins.
       marketSlugs: [
         'ufc-sea2-kha7-2026-05-09',
         'ufc-328-chimaev-vs-strickland',
-        'ufc-chimaev-vs-strickland',
-        'will-khamzat-chimaev-defeat-sean-strickland'
       ],
       questionSearch: 'Chimaev'
+    },
+    'ufc-328-van-taira': {
+      eyebrow: 'UFC 328 · Co-Main Event',
+      titleHtml: 'Van <em>vs</em> Taira',
+      weight: 'Flyweight Title',
+      venue:  'Prudential Center · Newark',
+      dateLabel: 'May 9 · 5:00 PM ET',
+      fightAt: Date.parse('2026-05-09T21:00:00Z'),
+      left:  { name: 'Joshua Van',     record: '13-2', rank: 'UFC Flyweight · Champion', tag: 'Champion' },
+      right: { name: 'Tatsuro Taira',  record: '16-1', rank: '#1 UFC Flyweight',         tag: 'Challenger' }
+    },
+    'ufc-328-volkov-cortes-acosta': {
+      eyebrow: 'UFC 328 · Main Card',
+      titleHtml: 'Volkov <em>vs</em> Cortes-Acosta',
+      weight: 'Heavyweight',
+      venue:  'Prudential Center · Newark',
+      dateLabel: 'May 9 · 5:00 PM ET',
+      fightAt: Date.parse('2026-05-09T21:00:00Z'),
+      left:  { name: 'Alexander Volkov',     record: '38-11', rank: '#5 UFC Heavyweight', tag: 'Veteran' },
+      right: { name: 'Waldo Cortes-Acosta',  record: '14-1',  rank: '#10 UFC Heavyweight', tag: 'Rising' }
+    },
+    'ufc-328-brady-buckley': {
+      eyebrow: 'UFC 328 · Main Card',
+      titleHtml: 'Brady <em>vs</em> Buckley',
+      weight: 'Welterweight',
+      venue:  'Prudential Center · Newark',
+      dateLabel: 'May 9 · 5:00 PM ET',
+      fightAt: Date.parse('2026-05-09T21:00:00Z'),
+      left:  { name: 'Sean Brady',       record: '17-2', rank: '#5 UFC Welterweight',  tag: 'Grappler' },
+      right: { name: 'Joaquin Buckley',  record: '22-7', rank: '#9 UFC Welterweight',  tag: 'Striker' }
+    },
+    'ufc-328-green-stephens': {
+      eyebrow: 'UFC 328 · Main Card',
+      titleHtml: 'Green <em>vs</em> Stephens',
+      weight: 'Lightweight',
+      venue:  'Prudential Center · Newark',
+      dateLabel: 'May 9 · 5:00 PM ET',
+      fightAt: Date.parse('2026-05-09T21:00:00Z'),
+      left:  { name: 'King Green',       record: '32-16', rank: 'UFC Lightweight',     tag: 'Veteran' },
+      right: { name: 'Jeremy Stephens',  record: '30-21', rank: 'UFC Lightweight',     tag: 'Veteran' }
     }
   };
 
@@ -581,11 +629,13 @@ a { color: inherit; text-decoration: none; }
     document.getElementById('vsLeftPct').textContent  = leftPct  + '%';
     document.getElementById('vsRightPct').textContent = rightPct + '%';
 
+    // Primary CTA points to the Polymarket event page where users can
+    // actually place the bet. /market/:slug doesn't render paired UFC
+    // markets correctly yet; revert when that lands.
     var pmUrl = d.eventSlug
       ? ('https://polymarket.com/event/' + d.eventSlug)
       : (d.marketSlug ? ('https://polymarket.com/event/' + d.marketSlug) : 'https://polymarket.com');
-    document.getElementById('ctaPolymarket').href = pmUrl;
-    if (d.marketSlug) document.getElementById('ctaInsideHF').href = '/market/' + d.marketSlug;
+    document.getElementById('ctaInsideHF').href = pmUrl;
 
     document.getElementById('marketEmpty').style.display = 'none';
     document.getElementById('marketRow').style.display = '';
