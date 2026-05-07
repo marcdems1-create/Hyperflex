@@ -397,10 +397,7 @@ a { color: inherit; text-decoration: none; }
           <div class="market-stat"><span class="lbl">Liquidity</span><span class="val" id="mktLiq">—</span></div>
         </div>
         <div class="market-actions">
-          <!-- Primary CTA opens Polymarket event page in a new tab so users
-               can place the bet. TODO: revert to internal "/market/:slug"
-               once paired-market support ships in the HFX trade flow. -->
-          <a class="btn primary" id="ctaInsideHF" href="https://polymarket.com" target="_blank" rel="noopener">Bet on Polymarket →</a>
+          <a class="btn primary" id="ctaInsideHF" href="#" style="display:none">Trade this market →</a>
         </div>
         <div id="marketEmpty" class="empty" style="display:none;margin-top:14px">
           Live odds unavailable —
@@ -629,13 +626,18 @@ a { color: inherit; text-decoration: none; }
     document.getElementById('vsLeftPct').textContent  = leftPct  + '%';
     document.getElementById('vsRightPct').textContent = rightPct + '%';
 
-    // Primary CTA points to the Polymarket event page where users can
-    // actually place the bet. /market/:slug doesn't render paired UFC
-    // markets correctly yet; revert when that lands.
-    var pmUrl = d.eventSlug
-      ? ('https://polymarket.com/event/' + d.eventSlug)
-      : (d.marketSlug ? ('https://polymarket.com/event/' + d.marketSlug) : 'https://polymarket.com');
-    document.getElementById('ctaInsideHF').href = pmUrl;
+    // Primary CTA routes to the on-site /market/:slug trade flow so the
+    // user never leaves HYPERFLEX. Prefer market slug, fall back to event
+    // slug; hide the CTA entirely if neither is resolvable rather than
+    // bouncing the user to polymarket.com.
+    var ctaEl = document.getElementById('ctaInsideHF');
+    var ctaSlug = d.marketSlug || d.eventSlug || null;
+    if (ctaSlug) {
+      ctaEl.href = '/market/' + ctaSlug;
+      ctaEl.style.display = '';
+    } else {
+      ctaEl.style.display = 'none';
+    }
 
     document.getElementById('marketEmpty').style.display = 'none';
     document.getElementById('marketRow').style.display = '';
