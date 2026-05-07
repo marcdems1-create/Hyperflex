@@ -15105,9 +15105,85 @@ app.get('/event/:slug', (req, res) => {
 // Returns every published mention_event ordered newest first. Cards on
 // the index page derive from this single payload and filter client-side
 // (no pagination at v1; 86 events fit one page fine, revisit at 200+).
+//
+// Phase 4 close: each event is enriched with card_type + top_market so
+// cards can lead with the live market hook (language / outcome) and
+// demote the stance pill to an accent. composed_only events keep the
+// posture-as-headline behavior. The enrichment fans out to gamma per
+// preview-registry entry, but each per-slug result is 5min-cached
+// inside _fetchPreviewMarkets and the full response is wrapped in a
+// 60s cache below — so the 86-event walk costs nothing on warm hits.
+function _fmtVolumeShort(v) {
+  if (!isFinite(v) || v <= 0) return null;
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+  return '$' + Math.round(v);
+}
+
+async function _buildCardEnrichment(slug) {
+  const empty = {
+    has_language_markets: false,
+    has_outcome_markets:  false,
+    card_type:            'composed_only',
+    top_market:           null,
+  };
+  const cfg = eventPreviews.getPreview(slug);
+  if (!cfg) return empty;
+
+  let fetched;
+  try {
+    fetched = await _fetchPreviewMarkets(cfg, 5);
+  } catch (e) {
+    return empty;
+  }
+  const langEvents = fetched.language_market_events || [];
+  const outcomeMkts = fetched.outcome_markets || [];
+
+  if (langEvents.length) {
+    const top = langEvents[0]; // already sorted by totalVolume desc
+    const leader = (top.candidates || [])[0]; // already sorted by yesPrice desc
+    return {
+      has_language_markets: true,
+      has_outcome_markets:  outcomeMkts.length > 0,
+      card_type:            'language',
+      top_market: {
+        question:               top.eventTitle || '',
+        leading_outcome_label:  leader ? leader.label : null,
+        leading_outcome_pct:    leader && leader.yesPrice != null ? Math.round(leader.yesPrice * 100) : null,
+        total_volume:           top.totalVolume || 0,
+        volume_display:         _fmtVolumeShort(top.totalVolume),
+        candidate_count:        (top.candidates || []).length,
+      },
+    };
+  }
+  if (outcomeMkts.length) {
+    const top = outcomeMkts[0]; // already sorted by volume desc
+    return {
+      has_language_markets: false,
+      has_outcome_markets:  true,
+      card_type:            'outcome',
+      top_market: {
+        question:               top.question || '',
+        leading_outcome_label:  null, // binary YES/NO; no candidate label
+        leading_outcome_pct:    top.yesPrice != null ? Math.round(top.yesPrice * 100) : null,
+        total_volume:           top.volume || 0,
+        volume_display:         _fmtVolumeShort(top.volume),
+        candidate_count:        2,
+      },
+    };
+  }
+  return empty;
+}
+
+let _mentionsApiCache = null;
+const _mentionsApiCacheTtlMs = 60 * 1000; // 60s; per-slug data cached 5min upstream
+
 app.get('/api/mentions', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'database unavailable' });
   try {
+    if (_mentionsApiCache && Date.now() < _mentionsApiCache.expiresAt) {
+      return res.json(_mentionsApiCache.value);
+    }
     // Plain archive only. Phase 3.7 hero banner replaces the previous
     // featured-card injection — Warsh now lives in the hero, not the grid.
     const rows = await dbQuery(`
@@ -15118,7 +15194,18 @@ app.get('/api/mentions', async (req, res) => {
       where published = true and blurb is not null
       order by event_date desc nulls last, event_at desc nulls last
     `);
-    res.json({ events: rows });
+    // Enrich serially by slug — most rows hit the composed_only fast
+    // path (no registry entry, no fetch). Registry entries hit the
+    // upstream 5min cache. Total cost on a cold response: ~2 gamma
+    // walks (one per registry entry) regardless of row count.
+    const enriched = [];
+    for (const r of rows) {
+      const ext = await _buildCardEnrichment(r.slug);
+      enriched.push(Object.assign({}, r, ext));
+    }
+    const payload = { events: enriched };
+    _mentionsApiCache = { value: payload, expiresAt: Date.now() + _mentionsApiCacheTtlMs };
+    res.json(payload);
   } catch (err) {
     console.error('[mentions-api]', err);
     res.status(500).json({ error: 'mentions_api_failed', detail: err.message });
