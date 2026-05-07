@@ -12363,6 +12363,222 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+// ── HYPERFLEX-NATIVE LEADERBOARD ─────────────────────────────────────────────
+// GET /api/leaderboard/users?period=week|all&sort=sharp|pnl|winrate&limit=100
+//
+// Distinct from /api/leaderboard above (which scrapes Polymarket's external
+// leaderboard). This is OUR users, ranked. Backs public/leaderboard.html.
+//
+// Three sort modes × two periods = six views. All compute over realized_trades
+// JOINed to users; the Sharp Score path also reads pre-computed flex_score
+// columns on users to avoid re-deriving what flex_compute already did.
+//
+// Win-rate tab enforces minimum 10 settled trades — kills the "1 settled, 100%
+// win rate" garbage that makes leaderboards look fake.
+//
+// Public, no auth. Cached 60s per (period, sort) combo.
+const _userLeaderboardCache = new Map();
+const _USER_LEADERBOARD_TTL = 60 * 1000;
+
+app.get('/api/leaderboard/users', optionalAuth, async (req, res) => {
+  try {
+    const period = (req.query.period || 'all').toLowerCase() === 'week' ? 'week' : 'all';
+    const sortRaw = (req.query.sort || 'sharp').toLowerCase();
+    const sort = ['sharp', 'pnl', 'winrate'].includes(sortRaw) ? sortRaw : 'sharp';
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 10), 200);
+
+    const cacheKey = `${period}|${sort}|${limit}`;
+    const cached = _userLeaderboardCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < _USER_LEADERBOARD_TTL) {
+      return res.json({ ...cached.data, viewer_rank: await _viewerRank(req.userId, period, sort) });
+    }
+
+    if (!pool) return res.json({ period, sort, computed_at: new Date().toISOString(), rows: [], viewer_rank: null });
+
+    // ── Period predicate on closed_at ────────────────────────────────────
+    const periodSql = period === 'week'
+      ? "rt.closed_at >= NOW() - INTERVAL '7 days'"
+      : "rt.closed_at IS NOT NULL";
+
+    // ── Aggregate per user ───────────────────────────────────────────────
+    // realized_pnl signed in dollars; realized_roi already a fraction.
+    // wins = realized_pnl > 0, settled = total closed rows in period.
+    // ORDER BY differs per sort. Win-rate tab applies HAVING settled >= 10.
+    let orderSql, havingSql = '';
+    if (sort === 'pnl') {
+      orderSql = 'ORDER BY realized_pnl DESC NULLS LAST';
+    } else if (sort === 'winrate') {
+      orderSql = 'ORDER BY win_rate DESC NULLS LAST, settled_trades DESC';
+      havingSql = 'HAVING COUNT(*) >= 10';
+    } else {
+      // sharp — see CTE below; needs computed sharp_score in the SELECT
+      orderSql = 'ORDER BY sharp_score DESC NULLS LAST';
+    }
+
+    // Sharp score: prefer users.flex_score_alltime (canonical, cached, hand-
+    // tuned by flex_compute). For weekly view we still rank by all-time
+    // flex_score because there's no weekly equivalent — but we filter to
+    // users who actually have weekly activity, so the resulting board is
+    // "all-time-best WHO traded this week," which is the right read.
+    //
+    // Fallback formula when flex_score is null: win_rate * sqrt(settled) *
+    // sign(pnl) * 100. Bias toward proven volume + accuracy.
+    const sql = `
+      WITH agg AS (
+        SELECT
+          rt.user_id,
+          COUNT(*)::int AS settled_trades,
+          SUM(CASE WHEN rt.realized_pnl > 0 THEN 1 ELSE 0 END)::int AS wins,
+          SUM(rt.realized_pnl)::numeric AS realized_pnl,
+          AVG(rt.realized_roi)::numeric AS avg_roi
+        FROM realized_trades rt
+        WHERE ${periodSql}
+        GROUP BY rt.user_id
+        ${havingSql}
+      ),
+      ranked AS (
+        SELECT
+          a.user_id,
+          a.settled_trades,
+          a.wins,
+          a.realized_pnl,
+          a.avg_roi,
+          CASE WHEN a.settled_trades > 0
+               THEN (a.wins::numeric / a.settled_trades)
+               ELSE 0
+          END AS win_rate,
+          COALESCE(
+            u.flex_score_alltime,
+            u.flex_score_90d,
+            CASE
+              WHEN a.settled_trades > 0 AND a.realized_pnl IS NOT NULL THEN
+                (a.wins::numeric / a.settled_trades)
+                * SQRT(GREATEST(a.settled_trades, 1))
+                * SIGN(a.realized_pnl)
+                * 100
+              ELSE NULL
+            END
+          ) AS sharp_score,
+          u.handle, u.username, u.display_name, u.banner_url,
+          u.is_whale, u.whale_rank
+        FROM agg a
+        LEFT JOIN users u ON u.id = a.user_id
+        WHERE u.id IS NOT NULL
+          AND COALESCE(u.hidden_from_rail, false) = false
+      )
+      SELECT * FROM ranked
+      ${orderSql}
+      LIMIT $1
+    `;
+
+    const rows = await dbQuery(sql, [limit]);
+    const data = {
+      period,
+      sort,
+      computed_at: new Date().toISOString(),
+      rows: rows.map((r, i) => ({
+        rank: i + 1,
+        user_id: r.user_id,
+        handle: r.handle || r.username || null,
+        display_name: r.display_name || null,
+        avatar_url: r.banner_url || null,
+        sharp_score: r.sharp_score != null ? Math.round(parseFloat(r.sharp_score) * 10) / 10 : null,
+        realized_pnl: r.realized_pnl != null ? +parseFloat(r.realized_pnl).toFixed(2) : 0,
+        win_rate: r.win_rate != null ? +parseFloat(r.win_rate).toFixed(4) : 0,
+        settled_trades: r.settled_trades || 0,
+        wins: r.wins || 0,
+        is_whale: !!r.is_whale,
+        whale_rank: r.whale_rank || null,
+      })),
+    };
+
+    _userLeaderboardCache.set(cacheKey, { ts: Date.now(), data });
+    data.viewer_rank = await _viewerRank(req.userId, period, sort);
+    res.json(data);
+  } catch (err) {
+    console.error('[leaderboard/users]', err);
+    res.status(500).json({ error: 'Failed to load leaderboard', detail: err.message });
+  }
+});
+
+// Resolves the viewer's rank in the SAME ordering as the cached page above.
+// Returns null if the viewer isn't authed, has zero qualifying trades, or
+// (on winrate) is below the 10-trade floor. Cheap — no aggregation, just
+// a count of users who beat them in the same query.
+async function _viewerRank(userId, period, sort) {
+  if (!userId || !pool) return null;
+  try {
+    const periodSql = period === 'week'
+      ? "rt.closed_at >= NOW() - INTERVAL '7 days'"
+      : "rt.closed_at IS NOT NULL";
+    // Pull viewer's own metrics first
+    const meRows = await dbQuery(`
+      SELECT
+        COUNT(*)::int AS settled,
+        SUM(CASE WHEN rt.realized_pnl > 0 THEN 1 ELSE 0 END)::int AS wins,
+        SUM(rt.realized_pnl)::numeric AS pnl
+      FROM realized_trades rt
+      WHERE rt.user_id = $1 AND ${periodSql}
+    `, [userId]);
+    const me = meRows[0] || {};
+    const settled = Number(me.settled) || 0;
+    if (settled === 0) return null;
+    if (sort === 'winrate' && settled < 10) return null;
+
+    // For sharp: read viewer's flex_score from users; for pnl: their summed pnl;
+    // for winrate: their win/settled ratio. Then count how many ranked rows beat them.
+    if (sort === 'sharp') {
+      const u = await dbQuery('SELECT COALESCE(flex_score_alltime, flex_score_90d) AS score FROM users WHERE id = $1', [userId]);
+      const myScore = u[0] && u[0].score != null ? parseFloat(u[0].score) : null;
+      if (myScore == null) return null;
+      const better = await dbQuery(`
+        SELECT COUNT(DISTINCT rt.user_id)::int AS n
+        FROM realized_trades rt
+        JOIN users u ON u.id = rt.user_id
+        WHERE ${periodSql}
+          AND COALESCE(u.flex_score_alltime, u.flex_score_90d) > $1
+          AND COALESCE(u.hidden_from_rail, false) = false
+      `, [myScore]);
+      return (Number(better[0] && better[0].n) || 0) + 1;
+    } else if (sort === 'pnl') {
+      const myPnl = parseFloat(me.pnl) || 0;
+      const better = await dbQuery(`
+        SELECT COUNT(*)::int AS n FROM (
+          SELECT SUM(rt.realized_pnl) AS pnl
+          FROM realized_trades rt
+          JOIN users u ON u.id = rt.user_id
+          WHERE ${periodSql}
+            AND COALESCE(u.hidden_from_rail, false) = false
+          GROUP BY rt.user_id
+          HAVING SUM(rt.realized_pnl) > $1
+        ) sub
+      `, [myPnl]);
+      return (Number(better[0] && better[0].n) || 0) + 1;
+    } else {
+      // winrate
+      const myWr = (Number(me.wins) || 0) / settled;
+      const better = await dbQuery(`
+        SELECT COUNT(*)::int AS n FROM (
+          SELECT
+            (SUM(CASE WHEN rt.realized_pnl > 0 THEN 1 ELSE 0 END)::numeric / COUNT(*)) AS wr,
+            COUNT(*) AS settled
+          FROM realized_trades rt
+          JOIN users u ON u.id = rt.user_id
+          WHERE ${periodSql}
+            AND COALESCE(u.hidden_from_rail, false) = false
+          GROUP BY rt.user_id
+          HAVING COUNT(*) >= 10
+            AND (SUM(CASE WHEN rt.realized_pnl > 0 THEN 1 ELSE 0 END)::numeric / COUNT(*)) > $1
+        ) sub
+      `, [myWr]);
+      return (Number(better[0] && better[0].n) || 0) + 1;
+    }
+  } catch (err) {
+    console.warn('[leaderboard/viewer-rank]', err.message);
+    return null;
+  }
+}
+
 // ── SHARP MONEY FEED ────────────────────────────────
 // GET /api/sharp-money-feed?limit=5 — recent positions from sharp traders, cached 3 min
 const _sharpMoneyFeedCache = { ts: 0, data: [] };
@@ -30184,6 +30400,11 @@ app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pic
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
 app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
 app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
+
+// Public HYPERFLEX-native leaderboard — Sharp Score / PnL / Win Rate over
+// week / all-time. Distinct from /picks/leaderboard (community picks) and
+// from /api/leaderboard which scrapes Polymarket's external leaderboard.
+app.get('/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'leaderboard.html')));
 // /t/:handle is the legacy tipster URL. Collapse to the canonical
 // /@{handle}. Tipsters are just users now (T1 rip) so there's no separate
 // tipster profile — the @username page shows everything including picks.
