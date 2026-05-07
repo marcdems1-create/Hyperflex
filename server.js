@@ -30192,6 +30192,50 @@ const _FIGHT_ODDS_REGISTRY = {
     ],
     searchTerms: ['Chimaev', 'Strickland'],
   },
+  'ufc-328-van-taira': {
+    leftName:  'Joshua Van',
+    rightName: 'Taira',
+    slugCandidates: [
+      'ufc-van1-tai1-2026-05-09',
+      'ufc-tai1-van1-2026-05-09',
+      'ufc-328-van-vs-taira',
+      'ufc-328-taira-vs-van',
+    ],
+    searchTerms: ['Taira', 'Joshua Van'],
+  },
+  'ufc-328-volkov-cortes-acosta': {
+    leftName:  'Volkov',
+    rightName: 'Cortes-Acosta',
+    slugCandidates: [
+      'ufc-vol1-cor1-2026-05-09',
+      'ufc-cor1-vol1-2026-05-09',
+      'ufc-328-volkov-vs-cortes-acosta',
+      'ufc-328-cortes-acosta-vs-volkov',
+    ],
+    searchTerms: ['Cortes-Acosta', 'Volkov'],
+  },
+  'ufc-328-brady-buckley': {
+    leftName:  'Brady',
+    rightName: 'Buckley',
+    slugCandidates: [
+      'ufc-bra1-buc1-2026-05-09',
+      'ufc-buc1-bra1-2026-05-09',
+      'ufc-328-brady-vs-buckley',
+      'ufc-328-buckley-vs-brady',
+    ],
+    searchTerms: ['Brady', 'Buckley'],
+  },
+  'ufc-328-green-stephens': {
+    leftName:  'King Green',
+    rightName: 'Stephens',
+    slugCandidates: [
+      'ufc-gre1-ste1-2026-05-09',
+      'ufc-ste1-gre1-2026-05-09',
+      'ufc-328-green-vs-stephens',
+      'ufc-328-stephens-vs-green',
+    ],
+    searchTerms: ['Stephens', 'King Green', 'Jeremy Stephens'],
+  },
   // Add new fights here. Same shape — names + slug guesses + search fallbacks.
 };
 
