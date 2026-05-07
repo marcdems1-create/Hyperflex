@@ -22244,6 +22244,138 @@ async function dashExecuteViaProxy(toAddr, calldata, valueWei, proxyAddr, eoaAdd
   }
 }
 
+// Direct ERC-20 USDC.e transfer from EOA → proxy. One MetaMask popup.
+// Mirrors transferUsdceEoaToProxy in market.html — funds users who
+// deposited to MetaMask but didn't onboard via polymarket.com (which
+// would have routed deposits to the proxy directly). Awaits 1
+// confirmation so the next step (wrap) sees the new balance.
+async function dashTransferUsdceEoaToProxy(amountAtomic, proxyAddr, eoaAddr) {
+  if (!eoaAddr) throw new Error('Wallet not connected — connect MetaMask first');
+  if (!proxyAddr) throw new Error('Proxy address missing — reconnect wallet');
+  if (!window.ethereum) throw new Error('MetaMask not available');
+  const iface = new ethers.Interface(['function transfer(address to, uint256 amount) returns (bool)']);
+  const data = iface.encodeFunctionData('transfer', [proxyAddr, String(amountAtomic)]);
+  console.log('[dash-fund-proxy] transfer ' + ethers.formatUnits(String(amountAtomic), 6) + ' USDC.e EOA→proxy');
+  let txHash;
+  try {
+    txHash = await window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [{ from: eoaAddr, to: DASH_USDC_E_ADDRESS, data: data, value: '0x0' }]
+    });
+  } catch (e) {
+    if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) {
+      throw new Error('Signature rejected in MetaMask — funding cancelled.');
+    }
+    throw new Error('Could not send transfer: ' + (e.message || String(e)));
+  }
+  console.log('[dash-fund-proxy] submitted ' + txHash + ', awaiting receipt');
+  const provider = await getDashboardPublicProvider();
+  const receipt = await provider.waitForTransaction(txHash, 1, 90000);
+  if (!receipt) throw new Error('Transfer not confirmed within 90s — see Polygonscan: https://polygonscan.com/tx/' + txHash);
+  if (receipt.status !== 1) throw new Error('Transfer reverted on-chain — see tx ' + txHash);
+  console.log('[dash-fund-proxy] confirmed in block ' + receipt.blockNumber);
+  return txHash;
+}
+
+// Render the fund-trading-wallet panel into the Quick Trade error slot.
+// Same UX as market.html's renderFundProxyPanel; uses the dashboard's
+// styling tokens and writes into #tradeModalError.
+function dashRenderFundProxyPanel(opts) {
+  const el = document.getElementById('tradeModalError');
+  if (!el) return;
+  const needHuman = ethers.formatUnits(String(opts.needAtomic), 6);
+  const eoaShort = (opts.eoaAddr || '').slice(0, 8) + '…' + (opts.eoaAddr || '').slice(-4);
+  const proxyShort = (opts.proxyAddr || '').slice(0, 8) + '…' + (opts.proxyAddr || '').slice(-4);
+  el.innerHTML =
+    '<div style="text-align:left;background:rgba(201,146,13,0.06);' +
+                'border:1px solid rgba(201,146,13,0.40);padding:14px 16px;border-radius:6px">' +
+      '<div style="font-family:var(--mono);font-weight:700;color:#c9920d;font-size:11px;' +
+                  'letter-spacing:0.16em;text-transform:uppercase;margin-bottom:8px">Fund trading wallet</div>' +
+      '<div style="color:var(--text);font-size:12px;line-height:1.5;margin-bottom:12px">' +
+        'Your trading wallet (<span style="font-family:var(--mono)">' + proxyShort + '</span>) needs ' +
+        '<strong>$' + needHuman + ' USDC</strong> to execute this trade. ' +
+        'Move it from your wallet (<span style="font-family:var(--mono)">' + eoaShort + '</span>) in one click.' +
+      '</div>' +
+      '<button id="dashFpFundBtn" style="width:100%;padding:11px 14px;font-family:var(--mono);font-size:12px;' +
+              'font-weight:700;letter-spacing:0.06em;border:1px solid #c9920d;background:#c9920d;' +
+              'color:#000;cursor:pointer;border-radius:4px">' +
+        'Move $' + needHuman + ' → trading wallet' +
+      '</button>' +
+      '<div style="text-align:center;margin-top:10px">' +
+        '<a href="https://polymarket.com/portfolio" target="_blank" rel="noopener" ' +
+           'style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:underline">' +
+          'Or fund via polymarket.com →' +
+        '</a>' +
+      '</div>' +
+      '<details style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">' +
+        '<summary style="cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--dim);' +
+                        'letter-spacing:0.12em;text-transform:uppercase">Show details</summary>' +
+        '<div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.7">' +
+          'EOA: ' + (opts.eoaAddr || '') + '<br>' +
+          'Proxy: ' + (opts.proxyAddr || '') + '<br>' +
+          'Needed: ' + ethers.formatUnits(String(opts.needAtomic), 6) + ' USDC.e<br>' +
+          'Proxy balance: ' + ethers.formatUnits(opts.proxyBal, 6) + ' USDC.e<br>' +
+          'EOA balance: ' + ethers.formatUnits(opts.eoaBal, 6) + ' USDC.e' +
+        '</div>' +
+      '</details>' +
+    '</div>';
+  el.style.display = 'block';
+  const btn = document.getElementById('dashFpFundBtn');
+  if (btn && typeof opts.onFund === 'function') btn.onclick = opts.onFund;
+}
+
+// Mirror of market.html's ensureProxyHasUsdce. Resolves when proxy
+// holds at least amountAtomic USDC.e, after surfacing the inline fund
+// panel + signing the EOA→proxy transfer if necessary. Throws on user
+// cancel or when both wallets are short (with fund-via-polymarket
+// guidance the caller surfaces as fallback).
+async function dashEnsureProxyHasUsdce(amountAtomic, proxyAddr, eoaAddr) {
+  if (!eoaAddr || !proxyAddr) throw new Error('Wallet not connected');
+  const need = BigInt(amountAtomic);
+  const provider = await getDashboardPublicProvider();
+  const usdc = new ethers.Contract(DASH_USDC_E_ADDRESS, [
+    'function balanceOf(address) view returns (uint256)'
+  ], provider);
+  const [proxyBal, eoaBal] = await Promise.all([
+    usdc.balanceOf(proxyAddr),
+    usdc.balanceOf(eoaAddr),
+  ]);
+  if (proxyBal >= need) return { funded: true, alreadyFunded: true };
+
+  const deficit = need - proxyBal;
+  if (eoaBal < deficit) {
+    throw new Error(
+      'Trading wallet short by ' + ethers.formatUnits(deficit, 6) + ' USDC. ' +
+      'Your wallet (' + eoaAddr.slice(0, 8) + '…) only has ' + ethers.formatUnits(eoaBal, 6) + ' USDC. ' +
+      'Deposit USDC via polymarket.com → Profile → Deposit Address, then retry.'
+    );
+  }
+
+  return new Promise(function(resolve, reject) {
+    dashRenderFundProxyPanel({
+      needAtomic: deficit,
+      proxyAddr:  proxyAddr,
+      eoaAddr:    eoaAddr,
+      proxyBal:   proxyBal,
+      eoaBal:     eoaBal,
+      onFund: async function() {
+        const fbtn = document.getElementById('dashFpFundBtn');
+        if (fbtn) { fbtn.disabled = true; fbtn.textContent = 'Confirm in MetaMask…'; }
+        try {
+          const txHash = await dashTransferUsdceEoaToProxy(deficit, proxyAddr, eoaAddr);
+          resolve({ funded: true, alreadyFunded: false, txHash: txHash });
+        } catch (e) {
+          if (fbtn) {
+            fbtn.disabled = false;
+            fbtn.textContent = 'Move $' + ethers.formatUnits(deficit, 6) + ' → trading wallet';
+          }
+          reject(e);
+        }
+      }
+    });
+  });
+}
+
 async function dashWrapUsdcToPmct(amountAtomic, proxyAddr, eoaAddr, signer) {
   // CollateralOnramp.wrap() does `USDC.e.transferFrom(msg.sender, self, amount)`
   // so the proxy must have USDC.e.allowance(onramp) > 0. Without it MetaMask
@@ -22929,8 +23061,17 @@ async function confirmTrade() {
         const shortfall = makerBig - pUsdBal;
         const shortHuman = ethers.formatUnits(shortfall, 6);
         console.log('[qt-trade-v2] pUSD short — wrapping ' + shortHuman);
-        btn.textContent = 'Wrapping ' + shortHuman + ' USDC → pUSD...';
         try {
+          // Pre-flight: confirm the proxy actually has the USDC.e to
+          // wrap. If the user funded their MetaMask EOA but never
+          // bridged to the proxy, dashEnsureProxyHasUsdce surfaces the
+          // inline fund panel, takes one signature, and resolves only
+          // after the EOA→proxy transfer confirms. If both wallets are
+          // short, throws a "fund via polymarket.com" message we surface
+          // as a fallback in the catch block below.
+          btn.textContent = 'Checking trading wallet…';
+          await dashEnsureProxyHasUsdce(shortfall, proxyAddress, eoaAddress);
+          btn.textContent = 'Wrapping ' + shortHuman + ' USDC → pUSD...';
           await dashWrapUsdcToPmct(shortfall, proxyAddress, eoaAddress, window._walletSigner);
           const bal2 = await dashGetPmctBalance(proxyAddress);
           if (bal2 < makerBig) {
@@ -22941,8 +23082,17 @@ async function confirmTrade() {
           }
         } catch (wrapErr) {
           const wmsg = (wrapErr && wrapErr.message) || 'Unknown wrap error';
-          console.error('[qt-trade-v2] wrap failed:', wrapErr);
-          errEl.textContent = 'Could not wrap USDC → pUSD: ' + wmsg;
+          console.error('[qt-trade-v2] wrap/fund failed:', wrapErr);
+          // dashRenderFundProxyPanel writes structured HTML into errEl;
+          // only overwrite with a plain string if the panel isn't already
+          // visible (i.e. we hit a non-funding error).
+          if (/funding cancelled|signature rejected/i.test(wmsg)) {
+            errEl.innerHTML = '<div style="padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--dim);' +
+                              'border-radius:4px;color:var(--text);font-size:12px">' +
+                              'Trade paused — fund the trading wallet to continue.</div>';
+          } else if (!/Fund trading wallet/.test(errEl.innerHTML || '')) {
+            errEl.textContent = 'Could not prepare trade: ' + wmsg;
+          }
           errEl.style.display = 'block';
           btn.disabled = false; btn.textContent = 'Place Order';
           return;

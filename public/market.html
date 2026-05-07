@@ -3890,6 +3890,147 @@ async function executeViaProxy(toAddr, calldata, valueWei) {
   }
 }
 
+// Direct ERC-20 USDC.e transfer from the user's EOA → their proxy. Used
+// when the user funded their MetaMask wallet but didn't onboard via
+// polymarket.com (which would have routed deposits straight to the
+// proxy). One MetaMask popup, one on-chain tx. Awaits 1 confirmation
+// before resolving so the next step (wrap) sees the new balance.
+async function transferUsdceEoaToProxy(amountAtomic) {
+  var eoaAddr = localStorage.getItem('poly_eoa_address');
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!eoaAddr) throw new Error('Wallet not connected — connect MetaMask first');
+  if (!proxyAddr) throw new Error('Proxy address missing — reconnect wallet');
+  if (!window.ethereum) throw new Error('MetaMask not available');
+  var iface = new ethers.Interface(['function transfer(address to, uint256 amount) returns (bool)']);
+  var data = iface.encodeFunctionData('transfer', [proxyAddr, String(amountAtomic)]);
+  console.log('[fund-proxy] transfer ' + ethers.formatUnits(String(amountAtomic), 6) + ' USDC.e EOA→proxy');
+  var txHash;
+  try {
+    txHash = await window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [{ from: eoaAddr, to: USDC_ADDRESS, data: data, value: '0x0' }]
+    });
+  } catch (e) {
+    if (e && (e.code === 4001 || e.code === 'ACTION_REJECTED')) {
+      throw new Error('Signature rejected in MetaMask — funding cancelled.');
+    }
+    throw new Error('Could not send transfer: ' + (e.message || String(e)));
+  }
+  console.log('[fund-proxy] submitted ' + txHash + ', awaiting receipt');
+  var provider = await getPublicProvider();
+  var receipt = await provider.waitForTransaction(txHash, 1, 90000);
+  if (!receipt) throw new Error('Transfer not confirmed within 90s — check Polygonscan: https://polygonscan.com/tx/' + txHash);
+  if (receipt.status !== 1) throw new Error('Transfer reverted on-chain — see tx ' + txHash);
+  console.log('[fund-proxy] confirmed in block ' + receipt.blockNumber);
+  return txHash;
+}
+
+// Render the "Fund trading wallet" inline panel into the trade status
+// area. Handles the EOA→proxy ERC-20 transfer in one click, with a
+// fallback link to polymarket.com for users who'd rather use that flow.
+// Called by ensureProxyHasUsdce when the proxy is short but the EOA
+// holds the funds.
+function renderFundProxyPanel(opts) {
+  var el = document.getElementById('tradeStatus');
+  if (!el) return;
+  var needHuman = ethers.formatUnits(String(opts.needAtomic), 6);
+  var eoaShort = (opts.eoaAddr || '').slice(0, 8) + '…' + (opts.eoaAddr || '').slice(-4);
+  var proxyShort = (opts.proxyAddr || '').slice(0, 8) + '…' + (opts.proxyAddr || '').slice(-4);
+  var html =
+    '<div style="text-align:left;background:rgba(201,146,13,0.06);' +
+                'border:1px solid rgba(201,146,13,0.40);padding:14px 16px;border-radius:6px">' +
+      '<div style="font-family:var(--mono);font-weight:700;color:var(--gold);font-size:11px;' +
+                  'letter-spacing:0.16em;text-transform:uppercase;margin-bottom:8px">Fund trading wallet</div>' +
+      '<div style="font-family:var(--body);color:var(--text);font-size:12px;line-height:1.5;margin-bottom:12px">' +
+        'Your trading wallet (<span style="font-family:var(--mono)">' + proxyShort + '</span>) needs ' +
+        '<strong>$' + needHuman + ' USDC</strong> to execute this trade. ' +
+        'Move it from your wallet (<span style="font-family:var(--mono)">' + eoaShort + '</span>) in one click.' +
+      '</div>' +
+      '<button id="fpFundBtn" style="width:100%;padding:11px 14px;font-family:var(--mono);font-size:12px;' +
+              'font-weight:700;letter-spacing:0.06em;border:1px solid var(--gold);background:var(--gold);' +
+              'color:#000;cursor:pointer;border-radius:4px;transition:filter .15s">' +
+        'Move $' + needHuman + ' → trading wallet' +
+      '</button>' +
+      '<div style="text-align:center;margin-top:10px">' +
+        '<a href="https://polymarket.com/portfolio" target="_blank" rel="noopener" ' +
+           'style="font-family:var(--mono);font-size:11px;color:var(--soft);text-decoration:underline">' +
+          'Or fund via polymarket.com →' +
+        '</a>' +
+      '</div>' +
+      '<details style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">' +
+        '<summary style="cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--soft);' +
+                        'letter-spacing:0.12em;text-transform:uppercase">Show details</summary>' +
+        '<div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--soft);line-height:1.7">' +
+          'EOA: ' + (opts.eoaAddr || '') + '<br>' +
+          'Proxy: ' + (opts.proxyAddr || '') + '<br>' +
+          'Needed: ' + ethers.formatUnits(String(opts.needAtomic), 6) + ' USDC.e<br>' +
+          'Proxy balance: ' + ethers.formatUnits(opts.proxyBal, 6) + ' USDC.e<br>' +
+          'EOA balance: ' + ethers.formatUnits(opts.eoaBal, 6) + ' USDC.e' +
+        '</div>' +
+      '</details>' +
+    '</div>';
+  el.innerHTML = html;
+  el.style.display = 'block';
+  el.style.color = '';
+  el.style.padding = '0';
+  var btn = document.getElementById('fpFundBtn');
+  if (btn && typeof opts.onFund === 'function') btn.onclick = opts.onFund;
+}
+
+// Make sure the proxy holds at least `amountAtomic` USDC.e for the
+// upcoming wrap. Three branches:
+//   1. Proxy already funded → resolve immediately
+//   2. Proxy short, EOA has the funds → render fund panel, await user
+//      click + transfer confirmation, then resolve
+//   3. Both short → throw with a fund-via-polymarket fallback message
+// Throws on user cancel or transfer failure. Caller should surface the
+// thrown message and re-enable the trade button.
+async function ensureProxyHasUsdce(amountAtomic) {
+  var eoaAddr = localStorage.getItem('poly_eoa_address');
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!eoaAddr || !proxyAddr) throw new Error('Wallet not connected');
+  var need = BigInt(amountAtomic);
+  var provider = await getPublicProvider();
+  var usdc = new ethers.Contract(USDC_ADDRESS, [
+    'function balanceOf(address) view returns (uint256)'
+  ], provider);
+  var pair = await Promise.all([usdc.balanceOf(proxyAddr), usdc.balanceOf(eoaAddr)]);
+  var proxyBal = pair[0];
+  var eoaBal   = pair[1];
+  if (proxyBal >= need) return { funded: true, alreadyFunded: true };
+
+  var deficit = need - proxyBal;
+  if (eoaBal < deficit) {
+    throw new Error(
+      'Trading wallet short by ' + ethers.formatUnits(deficit, 6) + ' USDC. ' +
+      'Your wallet (' + eoaAddr.slice(0, 8) + '…) only has ' + ethers.formatUnits(eoaBal, 6) + ' USDC. ' +
+      'Deposit USDC via polymarket.com → Profile → Deposit Address, then retry.'
+    );
+  }
+
+  return new Promise(function(resolve, reject) {
+    renderFundProxyPanel({
+      needAtomic: deficit,
+      proxyAddr:  proxyAddr,
+      eoaAddr:    eoaAddr,
+      proxyBal:   proxyBal,
+      eoaBal:     eoaBal,
+      onFund: async function() {
+        var btn = document.getElementById('fpFundBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Confirm in MetaMask…'; }
+        try {
+          var txHash = await transferUsdceEoaToProxy(deficit);
+          showTradeStatus('Funds received in trading wallet — continuing trade…', 'success');
+          resolve({ funded: true, alreadyFunded: false, txHash: txHash });
+        } catch (e) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Move $' + ethers.formatUnits(deficit, 6) + ' → trading wallet'; }
+          reject(e);
+        }
+      }
+    });
+  });
+}
+
 // Wrap USDC.e → pUSD via CollateralOnramp.wrap(asset, to, amount), dispatched
 // as a Safe execTransaction so the Onramp pulls USDC.e from the proxy
 // (where funds live), not the EOA. Amount is 6-decimal atomic units.
@@ -5624,8 +5765,16 @@ async function executeTrade() {
         var shortfallHuman = ethers.formatUnits(shortfall, 6);
         var bufHuman = ethers.formatUnits(feeBufAtomic, 6);
         console.log('[trade-v2] pUSD short — have=' + have + ' need=' + need + ' (incl ' + bufHuman + ' fee buffer) wrapping=' + shortfallHuman);
-        showTradeStatus('Wrapping ' + shortfallHuman + ' USDC → pUSD before order...', 'info');
         try {
+          // Pre-flight: make sure the proxy has the USDC.e to wrap. If
+          // the user funded their MetaMask EOA but never bridged to the
+          // proxy, ensureProxyHasUsdce surfaces the inline fund panel,
+          // takes one signature, and resolves only after the EOA→proxy
+          // transfer confirms. If both wallets are short, it throws a
+          // "fund via polymarket.com" message we surface as a fallback.
+          showTradeStatus('Checking trading wallet balance…', 'info');
+          await ensureProxyHasUsdce(shortfall);
+          showTradeStatus('Wrapping ' + shortfallHuman + ' USDC → pUSD before order…', 'info');
           await wrapUsdcToPmct(shortfall);
           // Re-check balance after wrap (sanity — should be a no-op).
           var bal2 = await getPmctBalance(makerAddr);
@@ -5634,11 +5783,15 @@ async function executeTrade() {
             cta.disabled = false; updateCtaButton();
             return;
           }
-          showTradeStatus('Wrap done — placing order...', 'info');
+          showTradeStatus('Wrap done — placing order…', 'info');
         } catch (wrapErr) {
           var wrapMsg = (wrapErr && wrapErr.message) || 'Unknown wrap error';
-          console.error('[trade-v2] wrap failed:', wrapErr);
-          showTradeStatus('Could not wrap USDC → pUSD: ' + wrapMsg, 'error');
+          console.error('[trade-v2] wrap/fund failed:', wrapErr);
+          if (/funding cancelled|signature rejected/i.test(wrapMsg)) {
+            showTradeStatus('Trade paused — fund the trading wallet to continue.', 'info');
+          } else {
+            showTradeStatus('Could not prepare trade: ' + wrapMsg, 'error');
+          }
           cta.disabled = false; updateCtaButton();
           return;
         }
