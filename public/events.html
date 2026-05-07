@@ -207,6 +207,17 @@ var _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'O
 
 function escH(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+// Convert a polymarket.com event URL into an on-site /market/:slug URL.
+// Keeps users inside HYPERFLEX so trades route through our CLOB flow and
+// earn builder fees. Mirrors window.hfxMarketUrl in nav.js for pages that
+// don't load the full nav script.
+function _hfxMkt(u) {
+  if (!u) return '#';
+  if (typeof u === 'string' && u.indexOf('/market/') === 0) return u;
+  var m = String(u).match(/polymarket\.com\/event\/([a-z0-9\-]+)/i);
+  return m ? '/market/' + m[1].toLowerCase() : u;
+}
+
 function fmtCap(v) {
   if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
   if (v >= 1000) return '$' + Math.round(v / 1000) + 'K';
@@ -267,7 +278,7 @@ function renderTimeline() {
       for (var j = 0; j < ev.related_markets.length; j++) {
         var mkt = ev.related_markets[j];
         var isTop = j === 0 && (mkt.whale_capital || 0) > 0;
-        html += '<a href="' + escH(mkt.url) + '" target="_blank" rel="noopener" class="ec-mkt' + (isTop ? ' ec-mkt-top' : '') + '">';
+        html += '<a href="' + escH(_hfxMkt(mkt.url)) + '" class="ec-mkt' + (isTop ? ' ec-mkt-top' : '') + '">';
         html += '<span class="ec-mkt-q">' + escH(mkt.question) + '</span>';
         if (mkt.yes_pct != null) {
           html += '<span class="ec-mkt-odds">' + mkt.yes_pct + '% YES</span>';
