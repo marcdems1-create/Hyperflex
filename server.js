@@ -30094,6 +30094,74 @@ app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'publ
 // Incentives storefront — trader earns + sponsor funds dual-CTA page.
 app.get('/incentives', (req, res) => res.sendFile(path.join(__dirname, 'public', 'incentives.html')));
 
+// Sports vertical landing — featured fight + coming-soon cards. The
+// fight detail pages live at /fight/:slug; this is the hub the banner
+// CTA can fall back to when a user wants to browse.
+app.get('/sports', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports.html')));
+
+// Fight detail — generic by slug. Currently only `ufc-328-chimaev-strickland`
+// is wired; other slugs render the page's built-in 404 state. Slugs are
+// validated client-side against the FIGHTS map in fight.html so adding new
+// fights is just a data update there.
+app.get('/fight/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'fight.html')));
+
+// GET /api/fight/whales — whale positions for a specific market. Looks up
+// cached_positions by condition_id (preferred) or fuzzy market_title match
+// as fallback. Returns up to 10 positions sorted by size desc.
+//
+// Backend uses pool/dbQuery only (Railway Postgres). Empty array when DB is
+// unavailable or no rows match — frontend handles the empty state.
+app.get('/api/fight/whales', async (req, res) => {
+  try {
+    const conditionId = String(req.query.condition_id || '').trim();
+    const q = String(req.query.q || '').trim();
+    if (!conditionId && !q) return res.json({ positions: [] });
+    if (typeof pool === 'undefined' || !pool) return res.json({ positions: [] });
+
+    let rows = [];
+    if (conditionId) {
+      rows = await dbQuery(`
+        SELECT cp.platform, cp.external_id, cp.market_title, cp.side,
+               cp.probability, cp.market_url,
+               u.handle, u.display_name, u.username,
+               u.is_whale, u.whale_rank
+        FROM cached_positions cp
+        LEFT JOIN users u ON u.id = cp.user_id
+        WHERE cp.external_id = $1
+        ORDER BY u.whale_rank ASC NULLS LAST
+        LIMIT 10
+      `, [conditionId]).catch(() => []);
+    }
+    if (!rows.length && q) {
+      rows = await dbQuery(`
+        SELECT cp.platform, cp.external_id, cp.market_title, cp.side,
+               cp.probability, cp.market_url,
+               u.handle, u.display_name, u.username,
+               u.is_whale, u.whale_rank
+        FROM cached_positions cp
+        LEFT JOIN users u ON u.id = cp.user_id
+        WHERE cp.market_title ILIKE $1
+        ORDER BY u.whale_rank ASC NULLS LAST
+        LIMIT 10
+      `, ['%' + q + '%']).catch(() => []);
+    }
+
+    const positions = rows.map(r => ({
+      handle:   r.handle || r.username || r.display_name || 'Whale',
+      side:     r.side || '',
+      size_usd: null,
+      probability: r.probability,
+      market_url: r.market_url,
+      copy_url: r.handle ? ('/@' + r.handle) : null,
+      whale_rank: r.whale_rank,
+    }));
+    res.json({ positions });
+  } catch (err) {
+    console.error('[fight-whales]', err);
+    res.json({ positions: [] });
+  }
+});
+
 // GET /api/incentives/stats — aggregate counts across all pools. Backs the
 // header strip on /incentives. Soft-falls to zero if the migration hasn't
 // run yet (charter: honest zeros over fake supply).

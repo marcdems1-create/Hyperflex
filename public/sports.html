@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HYPERFLEX — Sports</title>
+<meta name="description" content="Live sports markets on Polymarket — UFC, NBA, MLB. Track whale flow, take a side, post your call.">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hyperflex-mobile.css">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --card: #16161f;
+  --card-2: #1a1a24;
+  --border: #1e1e2a;
+  --border-hover: #2a2a38;
+  --text: #f1f0f5;
+  --text-soft: #a0a0b4;
+  --muted: #6b6880;
+  --gold: #c9920d;
+  --gold-bright: #f5a623;
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --radius: 14px;
+  --display: 'Anton', 'Inter', sans-serif;
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; -webkit-font-smoothing: antialiased; line-height: 1.55; }
+a { color: inherit; text-decoration: none; }
+
+.page { max-width: 1200px; margin: 0 auto; padding: 96px 32px 80px; }
+@media (max-width: 720px) { .page { padding: 80px 16px 60px; } }
+
+.hero {
+  border-radius: 18px; padding: 36px 32px 32px; margin-bottom: 28px;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(245,166,35,0.10), transparent 60%),
+    linear-gradient(180deg, #14110a, #0e0e15);
+  border: 1px solid var(--border);
+}
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold-bright);
+}
+.hero h1 {
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(40px, 7vw, 72px); line-height: 0.95;
+  text-transform: uppercase; margin: 8px 0 6px; color: #fff;
+}
+.hero h1 em {
+  font-family: var(--serif); font-style: italic; color: var(--text-soft);
+  font-size: 0.6em; margin-left: 10px;
+}
+.hero p { color: var(--text-soft); max-width: 580px; }
+
+.section-head {
+  display: flex; align-items: center; gap: 10px;
+  margin: 32px 0 14px;
+}
+.section-head h2 {
+  font-family: var(--display); font-weight: 400; font-size: 20px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--text);
+}
+.section-head .badge {
+  margin-left: auto; font-family: var(--mono); font-size: 10px;
+  font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Featured fight */
+.featured {
+  display: block; padding: 28px 28px 26px; border-radius: 16px;
+  background:
+    radial-gradient(110% 80% at 0% 50%, rgba(255,77,106,0.18), transparent 60%),
+    linear-gradient(90deg, #14070a 0%, #1a0505 100%);
+  border: 1px solid rgba(255,77,106,0.30);
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+  margin-bottom: 24px;
+}
+.featured:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,77,106,0.55);
+  box-shadow: 0 12px 36px -12px rgba(255,77,106,0.4);
+}
+.featured-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--red);
+}
+.featured-eyebrow .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
+  animation: livepulse 1.6s infinite;
+}
+@keyframes livepulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,77,106,0.7); }
+  50%     { box-shadow: 0 0 0 8px rgba(255,77,106,0); }
+}
+.featured h3 {
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(32px, 5vw, 56px); line-height: 1;
+  text-transform: uppercase; margin: 8px 0 6px; color: #fff;
+}
+.featured h3 em { font-family: var(--serif); font-style: italic; color: var(--text-soft); font-size: 0.6em; margin: 0 10px; }
+.featured-meta {
+  display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.10em;
+  color: var(--text-soft); text-transform: uppercase;
+}
+.featured-cta {
+  display: inline-flex; margin-top: 18px; padding: 11px 20px;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #0a0a0f; border-radius: 10px;
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  box-shadow: 0 4px 14px -4px rgba(245,166,35,0.5);
+}
+
+/* Coming-soon grid */
+.coming {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.coming-card {
+  padding: 24px 20px; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.coming-card .lbl {
+  font-family: var(--mono); font-size: 10px; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 6px;
+}
+.coming-card .name {
+  font-family: var(--display); font-weight: 400; font-size: 28px;
+  text-transform: uppercase; color: var(--text);
+}
+.coming-card .tag {
+  display: inline-block; margin-top: 10px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  color: var(--text-soft); text-transform: uppercase;
+}
+
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/utils.js"></script>
+<script src="/nav.js?v=20"></script>
+
+<div class="page">
+  <div class="hero">
+    <div class="eyebrow">Sports · Live Markets</div>
+    <h1>Sports <em>on Polymarket</em></h1>
+    <p>Real money on real fights. Track whale flow, take a side, post your call.</p>
+  </div>
+
+  <div class="section-head">
+    <h2>Featured</h2>
+    <span class="badge">This week</span>
+  </div>
+
+  <a class="featured" href="/fight/ufc-328-chimaev-strickland">
+    <div class="featured-eyebrow"><span class="dot"></span>UFC 328 · Main Event · May 9</div>
+    <h3>Chimaev <em>vs</em> Strickland</h3>
+    <div class="featured-meta">
+      <span>Middleweight Title</span>
+      <span>·</span>
+      <span>Prudential Center · Newark</span>
+      <span>·</span>
+      <span>5:00 PM ET</span>
+    </div>
+    <span class="featured-cta">View Fight →</span>
+  </a>
+
+  <div class="section-head">
+    <h2>More Coming This Week</h2>
+  </div>
+
+  <div class="coming">
+    <div class="coming-card">
+      <div class="lbl">NBA · Playoffs</div>
+      <div class="name">Series Pages</div>
+      <span class="tag">Coming soon</span>
+    </div>
+    <div class="coming-card">
+      <div class="lbl">MLB · Regular Season</div>
+      <div class="name">Daily Slate</div>
+      <span class="tag">Coming soon</span>
+    </div>
+    <div class="coming-card">
+      <div class="lbl">UFC · Full Card</div>
+      <div class="name">Co-Mains</div>
+      <span class="tag">Coming soon</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
