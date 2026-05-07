@@ -198,32 +198,74 @@
     return yes; // YES probability
   }
 
+  // Polymarket UFC fights are EVENTS with multiple sub-markets (winner,
+  // method-of-victory, etc.). markets?slug= returns [] for an event slug —
+  // we have to hit events?slug= and pull markets from event.markets, then
+  // pick the binary winner-market by both fighter names + 24h volume.
+  function pickBestMarket(markets) {
+    if (!Array.isArray(markets) || !markets.length) return null;
+    var withBoth = markets.filter(function (m) {
+      if (m.closed === true) return false;
+      var q = ((m.question || '') + ' ' + (m.slug || '')).toLowerCase();
+      return q.indexOf('chimaev') !== -1 && q.indexOf('strickland') !== -1;
+    });
+    var pool = withBoth.length ? withBoth : markets.filter(function (m) { return m.closed !== true; });
+    if (!pool.length) pool = markets;
+    pool.sort(function (a, b) {
+      var av = parseFloat(a.volume24hr) || parseFloat(a.volume_24hr) || parseFloat(a.volumeNum) || parseFloat(a.volume) || 0;
+      var bv = parseFloat(b.volume24hr) || parseFloat(b.volume_24hr) || parseFloat(b.volumeNum) || parseFloat(b.volume) || 0;
+      return bv - av;
+    });
+    return pool[0] || null;
+  }
+
   function fetchOdds() {
     if (_oddsCache && (Date.now() - _oddsCache.ts < 30000)) {
       paintOdds(_oddsCache.c, _oddsCache.s);
       return;
     }
-    // Try direct market slugs first
-    var tries = SLUG_CANDIDATES.map(function (slug) {
-      return fetch('https://gamma-api.polymarket.com/markets?slug=' + encodeURIComponent(slug))
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
-    });
-    Promise.all(tries).then(function (results) {
-      var market = null;
-      for (var i = 0; i < results.length; i++) {
-        var arr = results[i];
-        if (Array.isArray(arr) && arr.length) { market = arr[0]; break; }
-      }
-      if (market) return resolveMarket(market);
-      // Fallback: search by name
-      return fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=20&order=volume24hr&ascending=false&question_search=Chimaev')
+
+    function tryEvent(s) {
+      return fetch('https://gamma-api.polymarket.com/events?slug=' + encodeURIComponent(s))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (arr) {
-          if (Array.isArray(arr) && arr.length) return resolveMarket(arr[0]);
-          paintOdds(null, null);
+          if (!Array.isArray(arr) || !arr.length) return null;
+          var picked = pickBestMarket(arr[0].markets || []);
+          if (picked) console.log('[ufc328] matched via events?slug=' + s, picked.question || picked.slug);
+          return picked;
         })
-        .catch(function () { paintOdds(null, null); });
+        .catch(function (e) { console.warn('[ufc328] events?slug=' + s + ' threw', e.message); return null; });
+    }
+    function tryMarket(s) {
+      return fetch('https://gamma-api.polymarket.com/markets?slug=' + encodeURIComponent(s))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (arr) {
+          if (!Array.isArray(arr) || !arr.length) return null;
+          console.log('[ufc328] matched via markets?slug=' + s, arr[0].question);
+          return arr[0];
+        })
+        .catch(function (e) { console.warn('[ufc328] markets?slug=' + s + ' threw', e.message); return null; });
+    }
+    function trySearch(q) {
+      return fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=20&order=volume24hr&ascending=false&question_search=' + encodeURIComponent(q))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (arr) {
+          var picked = pickBestMarket(arr);
+          if (picked) console.log('[ufc328] matched via question_search=' + q, picked.question);
+          return picked;
+        })
+        .catch(function (e) { console.warn('[ufc328] question_search=' + q + ' threw', e.message); return null; });
+    }
+
+    var chain = Promise.resolve(null);
+    SLUG_CANDIDATES.forEach(function (s) { chain = chain.then(function (r) { return r || tryEvent(s); }); });
+    SLUG_CANDIDATES.forEach(function (s) { chain = chain.then(function (r) { return r || tryMarket(s); }); });
+    ['Chimaev', 'Strickland'].forEach(function (q) { chain = chain.then(function (r) { return r || trySearch(q); }); });
+
+    chain.then(function (market) {
+      if (market) return resolveMarket(market);
+      console.warn('[ufc328] all strategies exhausted, no Polymarket match');
+      paintOdds(null, null);
     });
   }
 

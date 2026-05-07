@@ -627,26 +627,102 @@ a { color: inherit; text-decoration: none; }
   }
 
   function loadMarket() {
-    var tries = (meta.marketSlugs || []).map(function (s) {
+    // ── Polymarket fetch strategy ────────────────────────────────────────
+    // UFC fights on Polymarket are typically EVENTS (one event with multiple
+    // markets — winner, method-of-victory, round, etc.). The /markets?slug=
+    // endpoint returns [] for an event slug because the slug points to the
+    // event tier, not a market. So:
+    //   1. Try /events?slug= first → pull markets from event.markets
+    //   2. Try /markets?slug= as fallback (for actual standalone markets)
+    //   3. Search /markets?question_search= as last resort
+    // At each step we score the result set and pick the best winner-market
+    // (both fighter names in question/slug, highest 24h volume).
+    //
+    // Also logs every attempt to console so DevTools shows the path taken.
+    var leftName = meta.left.name, rightName = meta.right.name;
+
+    function pickBestMarket(markets) {
+      if (!Array.isArray(markets) || !markets.length) return null;
+      var lk = leftName.toLowerCase(), rk = rightName.toLowerCase();
+      var withBoth = markets.filter(function (m) {
+        if (m.closed === true) return false;
+        var q = ((m.question || '') + ' ' + (m.slug || '')).toLowerCase();
+        return q.indexOf(lk) !== -1 && q.indexOf(rk) !== -1;
+      });
+      var pool = withBoth.length ? withBoth : markets.filter(function (m) { return m.closed !== true; });
+      if (!pool.length) pool = markets;
+      pool.sort(function (a, b) {
+        var av = parseFloat(a.volume24hr) || parseFloat(a.volume_24hr) || parseFloat(a.volumeNum) || parseFloat(a.volume) || 0;
+        var bv = parseFloat(b.volume24hr) || parseFloat(b.volume_24hr) || parseFloat(b.volumeNum) || parseFloat(b.volume) || 0;
+        return bv - av;
+      });
+      return pool[0] || null;
+    }
+
+    function tryEvent(s) {
+      return fetch('https://gamma-api.polymarket.com/events?slug=' + encodeURIComponent(s))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (arr) {
+          if (!Array.isArray(arr) || !arr.length) return null;
+          var ev = arr[0];
+          var markets = Array.isArray(ev.markets) ? ev.markets : [];
+          var picked = pickBestMarket(markets);
+          if (picked) {
+            picked.eventSlug = ev.slug || s;
+            console.log('[fight] matched via events?slug=' + s, picked.question || picked.slug);
+          }
+          return picked;
+        })
+        .catch(function (e) { console.warn('[fight] events?slug=' + s + ' threw', e.message); return null; });
+    }
+
+    function tryMarket(s) {
       return fetch('https://gamma-api.polymarket.com/markets?slug=' + encodeURIComponent(s))
         .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
+        .then(function (arr) {
+          if (!Array.isArray(arr) || !arr.length) return null;
+          console.log('[fight] matched via markets?slug=' + s, arr[0].question);
+          return arr[0];
+        })
+        .catch(function (e) { console.warn('[fight] markets?slug=' + s + ' threw', e.message); return null; });
+    }
+
+    function trySearch(q) {
+      var url = 'https://gamma-api.polymarket.com/markets'
+              + '?active=true&closed=false&limit=20&order=volume24hr&ascending=false'
+              + '&question_search=' + encodeURIComponent(q);
+      return fetch(url)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (arr) {
+          var picked = pickBestMarket(arr);
+          if (picked) console.log('[fight] matched via question_search=' + q, picked.question);
+          return picked;
+        })
+        .catch(function (e) { console.warn('[fight] question_search=' + q + ' threw', e.message); return null; });
+    }
+
+    // Sequential strategy chain — short-circuit on first hit.
+    var slugs = (meta.marketSlugs || []).slice();
+    var searches = [meta.questionSearch, meta.left.name, meta.right.name].filter(Boolean);
+
+    var chain = Promise.resolve(null);
+    slugs.forEach(function (s) {
+      chain = chain.then(function (r) { return r || tryEvent(s); });
     });
-    Promise.all(tries).then(function (results) {
-      for (var i = 0; i < results.length; i++) {
-        if (Array.isArray(results[i]) && results[i].length) return paintMarket(results[i][0]);
+    slugs.forEach(function (s) {
+      chain = chain.then(function (r) { return r || tryMarket(s); });
+    });
+    searches.forEach(function (q) {
+      chain = chain.then(function (r) { return r || trySearch(q); });
+    });
+
+    chain.then(function (market) {
+      if (market) {
+        paintMarket(market);
+      } else {
+        console.warn('[fight] all strategies exhausted, no Polymarket match for', meta.left.name, 'vs', meta.right.name);
+        paintMarketEmpty();
       }
-      // Fallback search
-      if (meta.questionSearch) {
-        return fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=10&order=volume24hr&ascending=false&question_search=' + encodeURIComponent(meta.questionSearch))
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (arr) {
-            if (Array.isArray(arr) && arr.length) return paintMarket(arr[0]);
-            paintMarketEmpty();
-          })
-          .catch(paintMarketEmpty);
-      }
-      paintMarketEmpty();
     });
   }
   window.loadMarket = loadMarket;
