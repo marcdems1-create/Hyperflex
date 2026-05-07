@@ -25,6 +25,20 @@
     document.head.appendChild(cb);
   }
 
+  // Preventive proxy-funding flow (Layer A onboarding modal +
+  // Layer B persistent banner). Only useful on pages where a wallet
+  // is connected — gated by ethers + window.ethereum + cached
+  // poly_eoa_address inside fund-proxy.js itself.
+  function loadFundProxy() {
+    if (document.querySelector('script[data-hfx-id="fund-proxy"]')) return;
+    var fp = document.createElement('script');
+    fp.src = '/fund-proxy.js?v=1';
+    fp.async = true;
+    fp.setAttribute('data-hfx-id', 'fund-proxy');
+    fp.onerror = function() { console.warn('[nav.js] fund-proxy.js failed to load'); };
+    document.head.appendChild(fp);
+  }
+
   function loadDeposit() {
     if (document.querySelector('script[data-hfx-id="deposit"]')) return;
     var d = document.createElement('script');
@@ -46,6 +60,7 @@
     loadCopyBot();
     // deposit.js already loaded above — no-op if called again
     loadDeposit();
+    loadFundProxy();
   }
 
   // Only load ethers/wallet if the browser has a wallet injected
