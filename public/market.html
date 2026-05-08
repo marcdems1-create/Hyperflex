@@ -1217,6 +1217,136 @@ function renderOutcomes(m) {
 
   html += '</tbody></table>';
   document.getElementById('mktOutcomes').innerHTML = html;
+
+  // From-fight handoff: TradeComposer's CTA on /fight/<slug> dispatches
+  // here with intent encoded in the URL hash:
+  //   #side=YES&pick=<name>&amount=100&take=...&from=fight
+  // Once outcome cards exist in the DOM, consume the hash, find the
+  // matching outcome (best-effort substring match on the visible
+  // name), call the existing buyOutcome() to auto-select + pre-fill
+  // the trade amount + scroll the widget into view. One-shot per
+  // page load — guarded so subsequent renderOutcomes() refreshes
+  // don't re-consume.
+  if (!window._hfxFromFightConsumed) {
+    window._hfxFromFightConsumed = true;
+    setTimeout(_hfxConsumeFromFightHash, 50);
+  }
+}
+
+// ── _hfxConsumeFromFightHash ──────────────────────────────────────
+// Reads window.location.hash, parses #side=&pick=&amount=&take=,
+// finds the matching outcome card by best-effort name match, and
+// invokes the existing buyOutcome() / amount-input flow to land the
+// user on the trade widget with their fight-page intent pre-filled.
+//
+// Failure modes — all silent:
+//   - empty hash → no-op (don't open an empty modal on bookmark loads)
+//   - malformed kv pairs → no-op
+//   - from!=fight → no-op (some other deep-link, not ours)
+//   - pick= matches no outcome → still pre-fill side + amount, leave
+//                                  outcome at default idx 0 + console
+//                                  .warn so we can spot prod misses
+//   - any throw in the path → caught + logged, never crashes the page
+//
+// Hash is cleared via history.replaceState after consume so a manual
+// refresh doesn't trigger the auto-buy flow twice.
+function _hfxConsumeFromFightHash() {
+  try {
+    var raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) return;
+    var params = {};
+    raw.split('&').forEach(function(kv) {
+      var i = kv.indexOf('=');
+      if (i < 0) return;
+      var k = kv.slice(0, i);
+      var v;
+      try { v = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); } catch (e) { return; }
+      params[k] = v;
+    });
+    if (params.from !== 'fight') return;
+
+    var side = (params.side || '').toLowerCase().trim();
+    if (side !== 'yes' && side !== 'no') side = 'yes';
+    var amount = parseFloat(params.amount);
+    if (!isFinite(amount) || amount <= 0) amount = 10;
+    var pick = (params.pick || '').toLowerCase().trim();
+
+    var rows = document.querySelectorAll('.outcome-row');
+    var matchedIdx = -1;
+    if (pick && rows.length > 1) {
+      // Best-effort name match: bidirectional substring check, case-
+      // insensitive. Handles "Strickland" → "Sean Strickland" and
+      // "Submission" → "Will the fight end by submission?". First hit
+      // wins; tile order on the page is leading-row first so the
+      // intended pick is usually high in the list.
+      for (var ri = 0; ri < rows.length; ri++) {
+        var idx = parseInt(rows[ri].getAttribute('data-idx'), 10);
+        if (!isFinite(idx)) continue;
+        var nameEl = rows[ri].querySelector('.outcome-card-name, .outcome-name');
+        var name = nameEl ? (nameEl.textContent || '').toLowerCase().trim() : '';
+        if (!name) continue;
+        if (name.indexOf(pick) !== -1 || pick.indexOf(name) !== -1) {
+          matchedIdx = idx;
+          break;
+        }
+      }
+    }
+
+    if (matchedIdx < 0 && pick && rows.length > 1) {
+      console.warn('[from-fight] pick "' + pick + '" did not match any outcome — opening default with side + amount only');
+    }
+    var targetIdx = matchedIdx >= 0 ? matchedIdx : 0;
+
+    // Compute priceCents from the picked side at the picked outcome.
+    // Falls back to 50¢ if anything's missing — the trade widget will
+    // recompute on the next CLOB refresh, so a stale fallback doesn't
+    // poison the trade.
+    var priceCents = 50;
+    try {
+      var pricesArr = null;
+      if (typeof _sortedEventMarkets !== 'undefined' && _sortedEventMarkets && _sortedEventMarkets[targetIdx]) {
+        var em = _sortedEventMarkets[targetIdx];
+        pricesArr = typeof em.outcomePrices === 'string' ? JSON.parse(em.outcomePrices) : em.outcomePrices;
+      }
+      if (Array.isArray(pricesArr)) {
+        var p = side === 'yes' ? pricesArr[0] : pricesArr[1];
+        if (p != null) priceCents = Math.round(parseFloat(p) * 100);
+      }
+    } catch (e) { /* fall through with priceCents=50 */ }
+
+    if (typeof buyOutcome === 'function') {
+      buyOutcome(targetIdx, side, priceCents);
+    }
+    var amtInput = document.getElementById('tradeAmount');
+    if (amtInput) {
+      amtInput.value = String(amount);
+      if (typeof _onAmountInput === 'function') _onAmountInput();
+    }
+
+    // Stash the take text so a future commit can wire it to the
+    // takes table on fill confirmation. Keyed by market slug so a
+    // user trading multiple markets in sequence doesn't overwrite.
+    if (params.take) {
+      try {
+        var slug = location.pathname.replace(/^\/market\//, '');
+        localStorage.setItem('hf_pending_take_' + slug, params.take);
+      } catch (e) {}
+    }
+
+    // Clear the hash so a refresh doesn't re-trigger the auto-buy.
+    // Use replaceState so we don't push a new history entry — the
+    // user's back button still goes to the fight page they came from.
+    if (typeof history !== 'undefined' && history.replaceState) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    }
+
+    console.log('[from-fight] consumed handoff', {
+      side: side, amount: amount, pick: pick,
+      matchedIdx: matchedIdx, targetIdx: targetIdx, priceCents: priceCents,
+    });
+  } catch (err) {
+    console.warn('[from-fight] parser threw:', err && err.message);
+  }
 }
 
 // ── bookBestPrices — extract best ask/bid from CLOB orderbook ──
