@@ -73,6 +73,26 @@ canvas{display:block;width:100%!important}
 .outcome-btn-no{background:rgba(239,68,68,.12);color:#cb3131}
 .outcome-btn-no:hover{background:rgba(239,68,68,.22)}
 
+/* Multi-outcome grid (3+ outcomes) — card treatment instead of flat
+   table. Re-uses .outcome-row + .outcome-btn classes so existing
+   click handlers (querySelectorAll('.outcome-row'), button delegate
+   in trade flow) continue to work without changes. */
+.mkt-outcomes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.outcome-row.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.outcome-row.card:hover{border-color:rgba(34,197,94,.5);background:rgba(255,255,255,.03);transform:translateY(-1px)}
+.outcome-row.card.active-outcome{border-color:var(--gold);background:rgba(201,146,13,.08)}
+.outcome-row.card.outcome-leading{border-color:rgba(34,197,94,.55);box-shadow:0 0 0 1px rgba(34,197,94,.2),0 4px 14px rgba(34,197,94,.08)}
+.outcome-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-height:44px}
+.outcome-card-name{font-family:var(--body);font-weight:700;font-size:14px;line-height:1.3;flex:1}
+.outcome-card-price{font-family:var(--body);font-weight:800;font-size:26px;line-height:1;letter-spacing:-0.02em;color:var(--text);white-space:nowrap}
+.outcome-row.card.outcome-leading .outcome-card-price{color:#3db468}
+.outcome-card-buttons{display:flex;gap:8px}
+.outcome-card-buttons .outcome-btn{flex:1;min-width:0;height:36px;font-size:12px;padding:8px 10px}
+.outcome-card-meta{font-family:var(--mono);font-size:10px;color:var(--soft);letter-spacing:.06em;display:flex;justify-content:space-between;gap:8px;padding-top:6px;border-top:1px solid var(--border)}
+.outcome-card-meta .lbl{color:var(--soft);text-transform:uppercase}
+.outcome-card-meta .val{color:var(--text-soft);font-weight:600}
+@media(max-width:640px){.mkt-outcomes-grid{grid-template-columns:1fr;gap:10px}.outcome-card-price{font-size:22px}}
+
 /* Holders section */
 .mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-holders h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
@@ -1083,12 +1103,74 @@ function renderOutcomes(m) {
   var vol = fmtCap(m.volumeNum || m.volume || 0);
   var liq = fmtCap(m.liquidityNum || m.liquidity || 0);
 
+  // Track which position assets have been claimed by an outcome row.
+  // Declared up here so both the card-grid branch (3+ outcomes) and
+  // the legacy table branch (binary YES/NO + 2-outcome) share state.
+  var _claimedPositionAssets = {};
+
+  // CARD GRID — 3+ outcomes (UFC fight card, candidate ladder,
+  // multi-strike). Leading row gets a green border + price color so
+  // the favorite jumps off the page. Each card carries its own
+  // sub-market vol/liq when available since the event-level totals
+  // are misleading on multi-outcome events.
+  if (_eventMarkets && _eventMarkets.length > 2) {
+    var gridHtml = '<div class="mkt-outcomes-grid">';
+    for (var ci = 0; ci < rows.length; ci++) {
+      var crow = rows[ci];
+      var cActive = (crow.idx === _activeOutcomeIndex) ? ' active-outcome' : '';
+      var cLead = (ci === 0) ? ' outcome-leading' : '';
+      var cYesCents = Math.round(crow.yesP * 100);
+      var cNoCents = Math.round(crow.noP * 100);
+      var cYesFmt = fmtCents(crow.yesP);
+      var cNoFmt = fmtCents(crow.noP);
+      var cEm = _sortedEventMarkets && _sortedEventMarkets[ci];
+      var cVol = cEm ? fmtCap(cEm.volumeNum || cEm.volume || 0) : vol;
+      var cLiq = cEm ? fmtCap(cEm.liquidityNum || cEm.liquidity || 0) : liq;
+
+      // Inline position-badge build (kept inline so we don't need a
+      // helper function and preserve _claimedPositionAssets state).
+      var cPosBadge = '';
+      if (Object.keys(_userPositions).length) {
+        var cMatched = findPositionForOutcome(crow.name, crow.idx, _claimedPositionAssets);
+        if (cMatched && cMatched.size > 0) {
+          if (cMatched._matchedAsset) _claimedPositionAssets[cMatched._matchedAsset] = true;
+          var cAvgC = (cMatched.avgPrice * 100).toFixed(1);
+          var cSide = (cMatched.side || 'Yes').toUpperCase();
+          var cSideColor = cSide === 'YES' ? '#00e68a' : '#ff4d6a';
+          var cBadgeClass = cSide === 'YES' ? 'position-badge-yes' : 'position-badge-no';
+          cPosBadge = '<div class="position-badge ' + cBadgeClass + '" title="Your ' + cSide + ' position">' +
+            '<span style="color:' + cSideColor + ';font-weight:700">' + cSide + '</span> ' +
+            '<span class="pos-shares">' + cMatched.size.toFixed(1) + ' shares</span>' +
+            '</div>';
+        }
+      }
+
+      gridHtml += '<div class="outcome-row card' + cActive + cLead + '" data-idx="' + crow.idx + '">' +
+        '<div class="outcome-card-head">' +
+          '<div class="outcome-card-name">' + escH(crow.name) + cPosBadge + '</div>' +
+          '<div class="outcome-card-price">' + cYesFmt + '¢</div>' +
+        '</div>' +
+        '<div class="outcome-card-buttons">' +
+          '<button class="outcome-btn outcome-btn-yes" data-idx="' + crow.idx + '" data-price="' + cYesCents + '" title="Buy YES at ' + cYesFmt + '¢">Buy YES</button>' +
+          '<button class="outcome-btn outcome-btn-no" data-idx="' + crow.idx + '" data-price="' + cNoCents + '" title="Buy NO at ' + cNoFmt + '¢">Buy NO ' + cNoFmt + '¢</button>' +
+        '</div>' +
+        '<div class="outcome-card-meta">' +
+          '<span><span class="lbl">Vol</span> <span class="val">' + cVol + '</span></span>' +
+          '<span><span class="lbl">Liq</span> <span class="val">' + cLiq + '</span></span>' +
+        '</div>' +
+      '</div>';
+    }
+    gridHtml += '</div>';
+    document.getElementById('mktOutcomes').innerHTML = gridHtml;
+    return;
+  }
+
+  // LEGACY TABLE — binary YES/NO and 2-outcome events. The card grid
+  // is heavier than warranted for two rows; the table render is the
+  // baseline that's been live for months.
   var html = '<table class="mkt-outcomes-table"><thead><tr>' +
     '<th>Outcome</th><th>Buy Yes</th><th>Buy No</th><th>Vol</th><th>Liq</th>' +
     '</tr></thead><tbody>';
-
-  // Track which position assets have been claimed by an outcome row
-  var _claimedPositionAssets = {};
 
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
