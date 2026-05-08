@@ -4572,9 +4572,6 @@ async function enableTrading() {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       localStorage.removeItem('hf_poly_wallet');
       localStorage.removeItem('poly_proxy_address');
@@ -5558,9 +5555,6 @@ async function executeTrade() {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('hf_poly_wallet');
       localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
       // Adopt the new wallet
@@ -7946,9 +7940,6 @@ async function hfxHandleWalletSwitch(detail) {
   localStorage.removeItem('poly_api_key');
   localStorage.removeItem('poly_api_secret');
   localStorage.removeItem('poly_api_passphrase');
-  localStorage.removeItem('hf_clob_api_key');
-  localStorage.removeItem('hf_clob_api_secret');
-  localStorage.removeItem('hf_clob_api_passphrase');
   localStorage.removeItem('hf_poly_wallet');
   sessionStorage.removeItem('hf_poly_wallet_session');
 

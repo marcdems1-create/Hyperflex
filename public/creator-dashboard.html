@@ -17633,9 +17633,6 @@ setTimeout(async function() {
           localStorage.removeItem('poly_api_key');
           localStorage.removeItem('poly_api_secret');
           localStorage.removeItem('poly_api_passphrase');
-          localStorage.removeItem('hf_clob_api_key');
-          localStorage.removeItem('hf_clob_api_secret');
-          localStorage.removeItem('hf_clob_api_passphrase');
           localStorage.removeItem('poly_eoa_address');
           localStorage.removeItem('hf_poly_wallet');
           sessionStorage.removeItem('hf_poly_wallet_session');
@@ -17736,9 +17733,6 @@ async function disconnectPolymarket() {
     localStorage.removeItem('poly_api_key');
     localStorage.removeItem('poly_api_secret');
     localStorage.removeItem('poly_api_passphrase');
-    localStorage.removeItem('hf_clob_api_key');
-    localStorage.removeItem('hf_clob_api_secret');
-    localStorage.removeItem('hf_clob_api_passphrase');
     sessionStorage.removeItem('hf_poly_wallet_session');
     // Tell MetaMask to fully drop its connection so the next reconnect
     // prompts the user to pick an account. Critical on mobile where
@@ -21306,9 +21300,6 @@ function disconnectBrowserWallet() {
   localStorage.removeItem('poly_api_key');
   localStorage.removeItem('poly_api_secret');
   localStorage.removeItem('poly_api_passphrase');
-  localStorage.removeItem('hf_clob_api_key');
-  localStorage.removeItem('hf_clob_api_secret');
-  localStorage.removeItem('hf_clob_api_passphrase');
   updateWalletUI();
   showToast('Wallet disconnected', 'success');
 }
@@ -21385,9 +21376,6 @@ async function hfxDashHandleWalletSwitch(detail) {
   localStorage.removeItem('poly_api_key');
   localStorage.removeItem('poly_api_secret');
   localStorage.removeItem('poly_api_passphrase');
-  localStorage.removeItem('hf_clob_api_key');
-  localStorage.removeItem('hf_clob_api_secret');
-  localStorage.removeItem('hf_clob_api_passphrase');
   localStorage.removeItem('hf_poly_wallet');
   sessionStorage.removeItem('hf_poly_wallet_session');
   localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
@@ -23559,9 +23547,6 @@ async function confirmTrade() {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
-        localStorage.removeItem('hf_clob_api_key');
-        localStorage.removeItem('hf_clob_api_secret');
-        localStorage.removeItem('hf_clob_api_passphrase');
         // Auto-derive fresh keys and retry — but only once to prevent infinite loop
         if (_confirmTradeRetryCount >= 1) {
           errEl.textContent = 'Keys keep expiring. Try refreshing the page or reconnecting MetaMask.';
@@ -23711,9 +23696,6 @@ async function confirmTrade() {
               localStorage.removeItem('poly_api_key');
               localStorage.removeItem('poly_api_secret');
               localStorage.removeItem('poly_api_passphrase');
-              localStorage.removeItem('hf_clob_api_key');
-              localStorage.removeItem('hf_clob_api_secret');
-              localStorage.removeItem('hf_clob_api_passphrase');
             } catch (_e) {}
             if (window._connectedWallet && window.ethereum && typeof derivePolymarketApiKey === 'function') {
               btn.textContent = 'Refreshing trading keys...';
