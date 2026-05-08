@@ -56,6 +56,19 @@
       '.hfx-sc-stat.accent .hfx-sc-stat-val{color:#f5c518}',
       '.hfx-sc-stat-cap{font-family:JetBrains Mono,ui-monospace,monospace;font-size:9px;letter-spacing:0.10em;text-transform:uppercase;color:#4a4570;margin-top:6px}',
       '.hfx-sc-empty{font-family:JetBrains Mono,ui-monospace,monospace;font-size:12px;color:#6e6790;text-align:center;padding:24px;letter-spacing:0.06em}',
+      '.hfx-sc-hint{font-family:JetBrains Mono,ui-monospace,monospace;font-size:10px;letter-spacing:0.10em;color:#6e6790;text-align:center;margin:6px 0 10px;text-transform:uppercase}',
+      '.hfx-sc-hint .ic{color:#f5c518;margin-right:6px;font-weight:800}',
+      '.hfx-sc-mk{cursor:pointer;transition:transform .12s}',
+      '.hfx-sc-mk-bell{cursor:default}',
+      '.hfx-sc-mk:not(.hfx-sc-mk-bell):hover .hfx-sc-mk-dot{r:7;fill:#f5c518;stroke:#f5c518}',
+      '.hfx-sc-mk:not(.hfx-sc-mk-bell):hover .hfx-sc-pct-lbl{fill:#f5c518}',
+      '.hfx-sc-mk.active .hfx-sc-mk-dot{fill:#f5c518;stroke:#f5c518}',
+      '.hfx-sc-mk.active .hfx-sc-pct-lbl{fill:#f5c518}',
+      '.hfx-sc-modal-zone{cursor:pointer;transition:fill .12s}',
+      '.hfx-sc-modal-zone:hover{fill:rgba(245,197,24,0.14)}',
+      '.hfx-sc-lean{display:inline-block;font-family:JetBrains Mono,ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid #2a2a2a;color:#a8a4be}',
+      '.hfx-sc-lean.up{color:#f5c518;border-color:rgba(245,197,24,0.35);background:rgba(245,197,24,0.06)}',
+      '.hfx-sc-lean.down{color:#7fb6ff;border-color:rgba(77,159,255,0.35);background:rgba(77,159,255,0.06)}',
       '@media(max-width:560px){.hfx-sc-stats{grid-template-columns:1fr;gap:10px}.hfx-sc-stat-val{font-size:20px}.hfx-sc{padding:18px}.hfx-sc-h{font-size:16px}}',
     ].join('');
     document.head.appendChild(s);
@@ -71,13 +84,15 @@
   // "fight lasted past 4.5 rounds" for a 5-round bout.
   function buildCurve(thresholds) {
     if (!thresholds || !thresholds.length) return [];
-    var pts = [{ x: 0, label: 'Bell', prob: 1 }];
+    var pts = [{ x: 0, label: 'Bell', prob: 1, slug: null, question: null }];
     var sorted = thresholds.slice().sort(function(a, b) { return a.round - b.round; });
     for (var i = 0; i < sorted.length; i++) {
       pts.push({
         x: sorted[i].round,
         label: 'R' + Math.ceil(sorted[i].round),
         prob: sorted[i].prob,
+        slug: sorted[i].slug || null,
+        question: sorted[i].question || null,
       });
     }
     return pts;
@@ -101,6 +116,7 @@
       round: Math.ceil(curve[modalIdx].x),
       drop: maxDrop,
       mass: maxDrop,
+      slug: curve[modalIdx].slug || null,
     };
   }
 
@@ -132,8 +148,7 @@
       var top = methods[0];
       methodClause = ', ' + top.name.toLowerCase() + ' likely (' + Math.round(top.prob * 100) + '%)';
     }
-    var modalClause = modal ? '. Modal: R' + modal.round + ' (' + Math.round(modal.mass * 100) + '%)' : '';
-    return durationRead + methodClause + modalClause + '.';
+    return durationRead + methodClause + '.';
   }
 
   // ── SVG render ──────────────────────────────────────────────────────
@@ -161,14 +176,16 @@
     var area = line + ' L' + pts[pts.length - 1].x.toFixed(1) + ',' + (MT + IH) + ' L' + pts[0].x.toFixed(1) + ',' + (MT + IH) + ' Z';
 
     // Modal-finish yellow zone: highlight the column for the steepest
-    // drop, between (modalIdx-1).x and modalIdx.x.
+    // drop, between (modalIdx-1).x and modalIdx.x. Tappable — clicking
+    // the zone is a shortcut to the most-likely-finish market.
     var modalZone = '';
     if (modal && curve.length >= 2) {
       var idx = curve.findIndex(function(c) { return Math.ceil(c.x) === modal.round && c.x > 0; });
       if (idx > 0) {
         var x0 = xFor(curve[idx - 1].x);
         var x1 = xFor(curve[idx].x);
-        modalZone = '<rect x="' + x0.toFixed(1) + '" y="' + MT + '" width="' + (x1 - x0).toFixed(1) + '" height="' + IH + '" fill="rgba(245,197,24,0.06)" />';
+        var modalSlug = curve[idx].slug || '';
+        modalZone = '<rect class="hfx-sc-modal-zone" data-slug="' + escapeHtml(modalSlug) + '" x="' + x0.toFixed(1) + '" y="' + MT + '" width="' + (x1 - x0).toFixed(1) + '" height="' + IH + '" fill="rgba(245,197,24,0.06)" />';
       }
     }
 
@@ -187,31 +204,51 @@
       return '<text x="' + p.x + '" y="' + (MT + IH + 16) + '" text-anchor="middle" class="hfx-sc-axis-lbl" fill="#6e6790">' + p.label + '</text>';
     }).join('');
 
-    // Modal annotation under the modal round's X-label
+    // Modal annotation under the modal round's X-label — plain English.
     var modalAnno = '';
     if (modal) {
       var anchorPt = pts.find(function(p) { return Math.ceil(p.raw) === modal.round && p.raw > 0; });
       if (anchorPt) {
-        modalAnno = '<text x="' + anchorPt.x + '" y="' + (MT + IH + 28) + '" text-anchor="middle" class="hfx-sc-modal-lbl">↑ MODAL · ' + Math.round(modal.mass * 100) + '%</text>';
+        modalAnno = '<text x="' + anchorPt.x + '" y="' + (MT + IH + 30) + '" text-anchor="middle" class="hfx-sc-modal-lbl">↑ Most likely to end here · ' + Math.round(modal.mass * 100) + '%</text>';
       }
     }
 
-    // Data point markers + percent labels above each
+    // Data point markers + percent labels above each. Each non-bell
+    // marker is a tappable group that maps to its threshold market —
+    // clicking R2 swaps the composer to "O/U 1.5 Rounds" YES, etc.
+    // The bell point is non-tradeable (no market for "fight has
+    // started") so it stays visual-only.
     var markers = pts.map(function(p, i) {
-      var dot = (i === 0)
-        ? '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="#d63848" />'
-        : '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="#0d0d0d" stroke="#d63848" stroke-width="2" />';
-      var lbl = '<text x="' + p.x + '" y="' + Math.max(MT + 12, p.y - 8) + '" text-anchor="middle" class="hfx-sc-pct-lbl">' + Math.round(p.prob * 100) + '%</text>';
-      return dot + lbl;
+      var pct = Math.round(p.prob * 100) + '%';
+      if (i === 0) {
+        return [
+          '<g class="hfx-sc-mk hfx-sc-mk-bell">',
+            '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="#d63848" />',
+            '<text x="' + p.x + '" y="' + Math.max(MT + 12, p.y - 10) + '" text-anchor="middle" class="hfx-sc-pct-lbl">' + pct + '</text>',
+          '</g>',
+        ].join('');
+      }
+      var slug = p.slug || '';
+      var qTitle = p.question ? escapeHtml(p.question) : 'Trade this round';
+      return [
+        '<g class="hfx-sc-mk" data-slug="' + escapeHtml(slug) + '">',
+          '<title>' + qTitle + ' · ' + pct + '</title>',
+          // Invisible hit area — bigger than the visible dot so taps
+          // land on touch devices.
+          '<circle class="hfx-sc-mk-hit" cx="' + p.x + '" cy="' + p.y + '" r="14" fill="transparent" />',
+          '<circle class="hfx-sc-mk-dot" cx="' + p.x + '" cy="' + p.y + '" r="5" fill="#0d0d0d" stroke="#d63848" stroke-width="2.5" />',
+          '<text x="' + p.x + '" y="' + Math.max(MT + 12, p.y - 10) + '" text-anchor="middle" class="hfx-sc-pct-lbl">' + pct + '</text>',
+        '</g>',
+      ].join('');
     }).join('');
 
     return [
       '<svg class="hfx-sc-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Fight survival curve">',
-        '<text x="' + (ML + 4) + '" y="' + (MT - 4) + '" class="hfx-sc-axis-lbl" fill="#4a4570">P(Fight still going)</text>',
+        '<text x="' + (ML + 4) + '" y="' + (MT - 6) + '" class="hfx-sc-axis-lbl" fill="#6e6790">Chance fight still going</text>',
         modalZone,
         grid,
-        '<path d="' + area + '" fill="rgba(214,56,72,0.13)" stroke="none" />',
-        '<path d="' + line + '" fill="none" stroke="#d63848" stroke-width="2" stroke-linejoin="round" />',
+        '<path d="' + area + '" fill="rgba(214,56,72,0.13)" stroke="none" pointer-events="none" />',
+        '<path d="' + line + '" fill="none" stroke="#d63848" stroke-width="2" stroke-linejoin="round" pointer-events="none" />',
         markers,
         xLabels,
         modalAnno,
@@ -221,50 +258,59 @@
 
   // ── Stats strip ─────────────────────────────────────────────────────
 
+  // Lean badge for HOW IT ENDS — converts (prob - leagueAvg) into a
+  // small qualitative chip so the stat doesn't read like analyst noise.
+  function leanBadge(prob, avg) {
+    if (avg == null) return '';
+    var diff = prob - avg;
+    if (diff >= 0.30)  return '<span class="hfx-sc-lean up">↑ well above avg</span>';
+    if (diff >= 0.15)  return '<span class="hfx-sc-lean up">↑ above avg</span>';
+    if (diff <= -0.15) return '<span class="hfx-sc-lean down">↓ below avg</span>';
+    return '<span class="hfx-sc-lean">≈ league avg</span>';
+  }
+
   function renderStats(modal, methods, curve, leagueAvg) {
+    // MOST LIKELY FINISH — was "MODAL FINISH". Plain English value.
     var modalCell = modal
       ? '<div class="hfx-sc-stat accent">' +
-          '<div class="hfx-sc-stat-lbl">Modal Finish</div>' +
-          '<div class="hfx-sc-stat-val">R' + modal.round + ' · ' + Math.round(modal.mass * 100) + '%</div>' +
-          '<div class="hfx-sc-stat-cap">Likeliest finish window</div>' +
+          '<div class="hfx-sc-stat-lbl">Most Likely Finish</div>' +
+          '<div class="hfx-sc-stat-val">Round ' + modal.round + '</div>' +
+          '<div class="hfx-sc-stat-cap">' + Math.round(modal.mass * 100) + '% chance fight ends here</div>' +
         '</div>'
-      : '<div class="hfx-sc-stat"><div class="hfx-sc-stat-lbl">Modal Finish</div><div class="hfx-sc-stat-val">—</div></div>';
+      : '<div class="hfx-sc-stat"><div class="hfx-sc-stat-lbl">Most Likely Finish</div><div class="hfx-sc-stat-val">—</div></div>';
 
+    // HOW IT ENDS — was "METHOD TILT". Drops the "vs UFC avg X% (+Y)"
+    // analyst caption in favor of a small qualitative lean badge.
     var methodCell;
     if (methods && methods.length) {
       var top = methods[0];
       var avg = (leagueAvg && leagueAvg[top.name] != null) ? leagueAvg[top.name] : null;
-      var capParts = [];
-      if (avg != null) {
-        var diff = Math.round((top.prob - avg) * 100);
-        var sign = diff >= 0 ? '+' : '';
-        capParts.push('vs UFC avg ' + Math.round(avg * 100) + '% (' + sign + diff + ')');
-      } else {
-        capParts.push('Top market-implied method');
-      }
+      var lean = leanBadge(top.prob, avg);
       methodCell =
         '<div class="hfx-sc-stat">' +
-          '<div class="hfx-sc-stat-lbl">Method Tilt</div>' +
+          '<div class="hfx-sc-stat-lbl">How It Ends</div>' +
           '<div class="hfx-sc-stat-val">' + escapeHtml(top.name) + ' · ' + Math.round(top.prob * 100) + '%</div>' +
-          '<div class="hfx-sc-stat-cap">' + capParts.join(' · ') + '</div>' +
+          '<div class="hfx-sc-stat-cap">' + (lean || 'Top market-implied finish') + '</div>' +
         '</div>';
     } else {
-      methodCell = '<div class="hfx-sc-stat"><div class="hfx-sc-stat-lbl">Method Tilt</div><div class="hfx-sc-stat-val">—</div><div class="hfx-sc-stat-cap">No method markets listed</div></div>';
+      methodCell = '<div class="hfx-sc-stat"><div class="hfx-sc-stat-lbl">How It Ends</div><div class="hfx-sc-stat-val">—</div><div class="hfx-sc-stat-cap">No finish markets listed</div></div>';
     }
 
+    // FIGHT LENGTH — was "DURATION SPREAD". Replaces "70 pts" with a
+    // plain-English read tied to the curve shape.
     var spread = curve.length >= 2 ? (curve[0].prob - curve[curve.length - 1].prob) * 100 : 0;
-    var spreadCap;
-    if (spread > 40)        spreadCap = 'Decisive market read';
-    else if (spread < 15)   spreadCap = 'Coinflip — market unsure';
-    else                    spreadCap = 'Open read';
-    var spreadCell =
+    var lengthVal, lengthCap;
+    if (spread > 40)      { lengthVal = 'Likely short';     lengthCap = 'Markets agree the fight ends early'; }
+    else if (spread < 15) { lengthVal = 'Could go anywhere'; lengthCap = 'Markets unsure on duration'; }
+    else                  { lengthVal = 'Open read';        lengthCap = 'Mixed signals on length'; }
+    var lengthCell =
       '<div class="hfx-sc-stat">' +
-        '<div class="hfx-sc-stat-lbl">Duration Spread</div>' +
-        '<div class="hfx-sc-stat-val">' + Math.round(spread) + ' pts</div>' +
-        '<div class="hfx-sc-stat-cap">' + spreadCap + '</div>' +
+        '<div class="hfx-sc-stat-lbl">Fight Length</div>' +
+        '<div class="hfx-sc-stat-val">' + lengthVal + '</div>' +
+        '<div class="hfx-sc-stat-cap">' + lengthCap + '</div>' +
       '</div>';
 
-    return modalCell + methodCell + spreadCell;
+    return modalCell + methodCell + lengthCell;
   }
 
   function escapeHtml(s) {
@@ -287,6 +333,8 @@
     targetEl.innerHTML = '';
     targetEl.appendChild(root);
 
+    var _activeSlug = opts.activeSlug || null;
+
     function paint(thresholds, methods) {
       var curve = buildCurve(thresholds || []);
       if (!curve.length) {
@@ -302,26 +350,58 @@
       var modal = findModalDrop(curve);
       var topline = buildTopline(curve, methods, modal);
       var leagueAvg = opts.leagueAvg || DEFAULT_LEAGUE_AVG;
+      var hasPickHandler = (typeof opts.onPickSlug === 'function');
 
       root.innerHTML = [
         '<div class="hfx-sc-head">',
           '<div class="hfx-sc-h">Fight Forecast</div>',
-          '<span class="hfx-sc-meta"><span class="live-dot"></span>Market-Implied · ' + curve.length + ' pts · Live</span>',
+          '<span class="hfx-sc-meta"><span class="live-dot"></span>Market-Implied · Live</span>',
         '</div>',
         topline ? '<div class="hfx-sc-topline"><span class="arrow">▸</span><span><strong>' + escapeHtml(topline) + '</strong></span></div>' : '',
+        hasPickHandler ? '<div class="hfx-sc-hint"><span class="ic">▸</span>Tap any point on the curve to trade that round</div>' : '',
         '<div class="hfx-sc-svg-wrap">' + renderSvg(curve, modal) + '</div>',
         '<div class="hfx-sc-stats">' + renderStats(modal, methods, curve, leagueAvg) + '</div>',
       ].join('');
+
+      // Mark the active marker (composer is currently showing this
+      // market). Read post-render so the SVG nodes exist.
+      paintActive();
     }
+
+    function paintActive() {
+      var nodes = root.querySelectorAll('.hfx-sc-mk[data-slug]');
+      for (var i = 0; i < nodes.length; i++) {
+        var slug = nodes[i].getAttribute('data-slug');
+        nodes[i].classList.toggle('active', !!_activeSlug && slug === _activeSlug);
+      }
+    }
+
+    // Click delegate — handles both marker taps and modal-zone taps.
+    function onClick(e) {
+      var hit = e.target.closest && e.target.closest('.hfx-sc-mk[data-slug], .hfx-sc-modal-zone[data-slug]');
+      if (!hit) return;
+      var slug = hit.getAttribute('data-slug');
+      if (!slug) return;
+      if (typeof opts.onPickSlug === 'function') opts.onPickSlug(slug);
+    }
+    root.addEventListener('click', onClick);
 
     paint(opts.thresholds, opts.methods);
 
     return {
       update: function(next) {
         if (!next) return;
-        paint(next.thresholds || opts.thresholds, next.methods || opts.methods);
+        if (next.activeSlug !== undefined) _activeSlug = next.activeSlug;
+        if (next.thresholds || next.methods) {
+          paint(next.thresholds || opts.thresholds, next.methods || opts.methods);
+        } else {
+          paintActive();
+        }
       },
-      destroy: function() { if (root.parentNode) root.parentNode.removeChild(root); },
+      destroy: function() {
+        root.removeEventListener('click', onClick);
+        if (root.parentNode) root.parentNode.removeChild(root);
+      },
     };
   }
 
