@@ -31421,25 +31421,49 @@ async function _resolveFightOddsMarket(reg) {
 const _fightForecastCache = new Map();
 const _FIGHT_FORECAST_TTL = 60 * 1000;
 
-function _classifyFightSubMarket(question) {
-  if (!question) return null;
-  const q = String(question).toLowerCase();
-  // Round threshold: "past N.5 rounds", "go more than N rounds",
-  // "over N.5 rounds". Match the round count as a decimal.
-  const roundMatch = q.match(/(?:past|over|more than|after|go beyond|>=?)\s*(\d+\.?\d*)\s*rounds?\b/);
+function _classifyFightSubMarket(question, groupItemTitle) {
+  if (!question && !groupItemTitle) return null;
+  const q = String(question || '').toLowerCase();
+  const g = String(groupItemTitle || '').toLowerCase();
+  // Search both fields — Polymarket parks the short ladder label
+  // ("O/U 1.5 Rounds") in groupItemTitle and the long version in
+  // question. UFC 328's round ladder lives almost entirely in
+  // groupItemTitle.
+  const text = q + ' — ' + g;
+
+  // Round threshold ladder. Polymarket phrasings seen in the wild:
+  //   "Will the fight go past N rounds?"           (long)
+  //   "Over/Under N Rounds"                         (compact)
+  //   "O/U N Rounds" / "OU N Rounds"                (UFC 328 shape)
+  //   "Over N.5 rounds"                             (sometimes)
+  // YES on each ≡ Over ≡ probability the fight lasts past N rounds.
+  // We deliberately do NOT match a bare "Under N rounds" market —
+  // YES there means the inverse, and treating it as threshold prob
+  // would invert the curve. Over/Under is fine because YES is Over
+  // by Polymarket convention.
+  // Order alternatives longest-first so "over/under" matches before
+  // "over".
+  const roundMatch = text.match(/(?:past|over\/under|more than|go beyond|after|over|o\/?u|>=?)\s*(\d+\.?\d*)\s*rounds?\b/);
   if (roundMatch) {
     const r = parseFloat(roundMatch[1]);
     if (isFinite(r) && r > 0 && r < 6) return { kind: 'threshold', round: r };
+  }
+  // "Fight to go the distance" — implicit final-round threshold.
+  // We can't map to a numeric round without fight metadata (3 vs 5
+  // round bout), so emit a soft 'distance' marker the curve consumer
+  // can interpret as the tail anchor when it knows the format.
+  if (/go the distance|goes the distance|distance\?/.test(text)) {
+    return { kind: 'distance' };
   }
   // Method markets — substring match on the canonical finish names.
   // YES on each = "fight ends by this method." Order matters because
   // "knockout" and "ko" are substrings of "tko" — check the more
   // specific terms first.
-  if (/\bdecision\b/.test(q))                         return { kind: 'method', name: 'Decision' };
-  if (/\bsubmission\b|\btap(?:out|s)?\b/.test(q))     return { kind: 'method', name: 'Submission' };
-  if (/\btko\b|technical knockout/.test(q))           return { kind: 'method', name: 'TKO' };
-  if (/\bko\b|\bknockout\b/.test(q))                  return { kind: 'method', name: 'KO' };
-  if (/\bdraw\b|\bno contest\b/.test(q))              return { kind: 'method', name: 'Draw/NC' };
+  if (/\bdecision\b/.test(text))                         return { kind: 'method', name: 'Decision' };
+  if (/\bsubmission\b|\btap(?:out|s)?\b/.test(text))     return { kind: 'method', name: 'Submission' };
+  if (/\btko\b|technical knockout/.test(text))           return { kind: 'method', name: 'TKO' };
+  if (/\bko\b|\bknockout\b/.test(text))                  return { kind: 'method', name: 'KO' };
+  if (/\bdraw\b|\bno contest\b/.test(text))              return { kind: 'method', name: 'Draw/NC' };
   return null;
 }
 
@@ -31495,7 +31519,7 @@ app.get('/api/fight/forecast', async (req, res) => {
           : (Array.isArray(m.clobTokenIds) ? m.clobTokenIds : null);
       } catch (e) { tokenIds = null; }
 
-      const cls = _classifyFightSubMarket(m.question);
+      const cls = _classifyFightSubMarket(m.question, m.groupItemTitle);
       const yes = yesProb;
 
       // Push to all_markets even when classification fails or YES is
@@ -31517,13 +31541,17 @@ app.get('/api/fight/forecast', async (req, res) => {
         // Classification surfaced so the grid can colour-code or
         // group tiles ("rounds", "method", "winner", "prop"). Null
         // for the binary winner + props the regex doesn't recognise.
-        category:     cls ? cls.kind : (
+        // Bucket distance markets with thresholds for grid rendering —
+        // they belong in "How long does it last?", not in "Other".
+        category:     cls ? (cls.kind === 'distance' ? 'threshold' : cls.kind) : (
                         /defeat|win\b|beat\b/i.test(m.question || '') ? 'winner' : 'prop'
                       ),
         // Pull the threshold/method label up so the grid doesn't have
         // to re-parse. e.g. "1.5 rounds" or "Submission".
         label:        cls
-                        ? (cls.kind === 'threshold' ? (cls.round + ' rounds') : cls.name)
+                        ? (cls.kind === 'threshold' ? (cls.round + ' rounds')
+                          : cls.kind === 'distance'  ? 'Goes the distance'
+                          : cls.name)
                         : null,
       });
 
