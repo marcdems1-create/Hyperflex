@@ -13649,7 +13649,49 @@ app.get('/api/predictors/:userId/best-call', async (req, res) => {
 // Usage:
 //   curl -H "x-admin-secret: $ADMIN_SECRET" \
 //        https://hyperflex.network/api/admin/purgatory-count
-app.get('/api/admin/purgatory-count', async (req, res) => {
+//
+// Rate-limited per IP at 5 req/min via _adminPurgatoryRateLimit
+// (defined just above this route). The secret is the primary gate;
+// the rate limit is belt-and-suspenders so a leaked-and-not-yet-
+// rotated secret can't be used to scrape user counts continuously.
+const _adminPurgatoryRateLimit = (function() {
+  // ip → array of timestamps (ms) within the active window
+  const buckets = new Map();
+  const WINDOW_MS = 60 * 1000;
+  const MAX_PER_WINDOW = 5;
+  return function(req, res, next) {
+    // Trust the first hop in X-Forwarded-For (Railway terminates TLS
+    // and forwards the client IP there). Fall back to req.ip then a
+    // fixed bucket key so a missing header doesn't drop the limit.
+    const xff = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const ip = xff || req.ip || 'unknown';
+    const now = Date.now();
+    const arr = (buckets.get(ip) || []).filter(t => now - t < WINDOW_MS);
+    if (arr.length >= MAX_PER_WINDOW) {
+      const retryMs = WINDOW_MS - (now - arr[0]);
+      res.set('Retry-After', Math.ceil(retryMs / 1000));
+      return res.status(429).json({
+        error: 'rate_limited',
+        retry_after_ms: retryMs,
+        limit: MAX_PER_WINDOW,
+        window_seconds: WINDOW_MS / 1000,
+      });
+    }
+    arr.push(now);
+    buckets.set(ip, arr);
+    // Opportunistic cleanup so the map doesn't grow unbounded over the
+    // life of the process. Cheap because we only iterate when this
+    // bucket is also being written; bounded by IP cardinality on the
+    // admin path (very low in practice).
+    if (buckets.size > 200) {
+      for (const [k, v] of buckets) {
+        if (!v.length || now - v[v.length - 1] > WINDOW_MS) buckets.delete(k);
+      }
+    }
+    return next();
+  };
+})();
+app.get('/api/admin/purgatory-count', _adminPurgatoryRateLimit, async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   if (!pool) return res.status(503).json({ error: 'Database not configured' });
   try {
