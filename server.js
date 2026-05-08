@@ -31475,10 +31475,9 @@ app.get('/api/fight/forecast', async (req, res) => {
 
     const thresholds = [];
     const methods = [];
+    const all_markets = [];
     for (const m of bundle.eventMarkets) {
       if (m.closed) continue;
-      const cls = _classifyFightSubMarket(m.question);
-      if (!cls) continue;
       const yesProb = (function() {
         try {
           const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
@@ -31486,15 +31485,55 @@ app.get('/api/fight/forecast', async (req, res) => {
         } catch (e) { /* fall through */ }
         return null;
       })();
-      if (yesProb == null || !isFinite(yesProb)) continue;
-      if (cls.kind === 'threshold') {
-        thresholds.push({ round: cls.round, prob: yesProb, question: m.question, slug: m.slug });
-      } else if (cls.kind === 'method') {
-        // De-dupe — gamma occasionally lists the same method market
-        // twice across event variants. Keep the higher-volume one.
+      // Token IDs for downstream trading. clobTokenIds is a JSON-
+      // encoded string in the gamma payload; parse defensively so a
+      // malformed entry doesn't tank the whole grid.
+      let tokenIds = null;
+      try {
+        tokenIds = typeof m.clobTokenIds === 'string'
+          ? JSON.parse(m.clobTokenIds)
+          : (Array.isArray(m.clobTokenIds) ? m.clobTokenIds : null);
+      } catch (e) { tokenIds = null; }
+
+      const cls = _classifyFightSubMarket(m.question);
+      const yes = yesProb;
+
+      // Push to all_markets even when classification fails or YES is
+      // null — the grid renders the full sub-market list, not just the
+      // ones the curve uses. Each entry carries enough metadata for the
+      // grid to render a tile + the TradeComposer to mount on click.
+      all_markets.push({
+        question:     m.question || '',
+        slug:         m.slug || null,
+        conditionId:  m.conditionId || null,
+        groupItemTitle: m.groupItemTitle || '',
+        yesPrice:     yes,
+        noPrice:      yes != null ? +(1 - yes).toFixed(4) : null,
+        volume:       parseFloat(m.volumeNum || m.volume || 0) || 0,
+        volume24hr:   parseFloat(m.volume24hr || 0) || 0,
+        liquidity:    parseFloat(m.liquidityNum || m.liquidity || 0) || 0,
+        tokenIds:     tokenIds,
+        endDate:      m.endDate || m.end_date_iso || null,
+        // Classification surfaced so the grid can colour-code or
+        // group tiles ("rounds", "method", "winner", "prop"). Null
+        // for the binary winner + props the regex doesn't recognise.
+        category:     cls ? cls.kind : (
+                        /defeat|win\b|beat\b/i.test(m.question || '') ? 'winner' : 'prop'
+                      ),
+        // Pull the threshold/method label up so the grid doesn't have
+        // to re-parse. e.g. "1.5 rounds" or "Submission".
+        label:        cls
+                        ? (cls.kind === 'threshold' ? (cls.round + ' rounds') : cls.name)
+                        : null,
+      });
+
+      if (yes == null || !isFinite(yes)) continue;
+      if (cls && cls.kind === 'threshold') {
+        thresholds.push({ round: cls.round, prob: yes, question: m.question, slug: m.slug });
+      } else if (cls && cls.kind === 'method') {
         const existing = methods.find(x => x.name === cls.name);
         if (!existing) {
-          methods.push({ name: cls.name, prob: yesProb, question: m.question, slug: m.slug });
+          methods.push({ name: cls.name, prob: yes, question: m.question, slug: m.slug });
         }
       }
     }
@@ -31507,12 +31546,27 @@ app.get('/api/fight/forecast', async (req, res) => {
     // ordering for the tilt stat.
     methods.sort((a, b) => (b.prob || 0) - (a.prob || 0));
 
+    // Sort all_markets so the grid order is stable and useful:
+    //   1. winner binary first (the marquee market)
+    //   2. method markets next (most-traded narrative)
+    //   3. round threshold ladder
+    //   4. props / unclassified at the end
+    // Within each category, sort by 24h volume desc.
+    const _catRank = { winner: 0, method: 1, threshold: 2, prop: 3 };
+    all_markets.sort(function(a, b) {
+      const ra = _catRank[a.category] != null ? _catRank[a.category] : 9;
+      const rb = _catRank[b.category] != null ? _catRank[b.category] : 9;
+      if (ra !== rb) return ra - rb;
+      return (b.volume24hr || 0) - (a.volume24hr || 0);
+    });
+
     const data = {
-      available:  thresholds.length > 0 || methods.length > 0,
+      available:  thresholds.length > 0 || methods.length > 0 || all_markets.length > 0,
       eventTitle: bundle.event && bundle.event.title || null,
       eventSlug:  bundle.event && bundle.event.slug || null,
       thresholds: thresholds,
       methods:    methods,
+      all_markets: all_markets,
       computedAt: new Date().toISOString(),
     };
     _fightForecastCache.set(key, { ts: Date.now(), data });

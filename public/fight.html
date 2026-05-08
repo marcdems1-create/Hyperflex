@@ -348,6 +348,7 @@ a { color: inherit; text-decoration: none; }
 <script src="/nav.js?v=20"></script>
 <script src="/trade-composer.js?v=1"></script>
 <script src="/survival-curve.js?v=1"></script>
+<script src="/sub-market-grid.js?v=1"></script>
 
 <div class="page" id="page">
   <div class="hero">
@@ -391,6 +392,16 @@ a { color: inherit; text-decoration: none; }
        the event has no round-threshold markets — common pre-fight
        week before O/U markets get listed). -->
   <div id="hfxScMount" style="max-width:1200px;margin:0 auto;padding:0 24px"></div>
+
+  <!-- Sub-market grid (SubMarketGrid). Mounts below the curve, lists
+       every sub-market in the event payload as a tappable tile —
+       winner binary, method markets, round/threshold markets, props.
+       Click any tile → swaps the TradeComposer below to that
+       sub-market's outcomes (binary YES/NO for non-winner markets,
+       fighter-vs-fighter for the winner). The "narrative-to-outlet"
+       loop: curve sets the read, tiles are the expressions, composer
+       is the trigger. -->
+  <div id="hfxSmgMount" style="max-width:1200px;margin:0 auto;padding:0 24px"></div>
 
   <div class="grid">
     <div class="col">
@@ -690,34 +701,59 @@ a { color: inherit; text-decoration: none; }
   }
   window.loadMarket = loadMarket;
 
-  // ── Fight forecast (SurvivalCurve) ─────────────────────────────────
+  // ── Fight forecast + sub-market grid ──────────────────────────────
+  // /api/fight/forecast returns three payloads in one round-trip:
+  //   thresholds → SurvivalCurve X-axis points
+  //   methods    → SurvivalCurve method-tilt stat
+  //   all_markets→ SubMarketGrid tile list (every sub-market, not just
+  //                the threshold/method ones the curve uses)
   // Independent fetch from /api/fight/odds so a slow forecast doesn't
-  // delay the trade composer painting. Empty response → mount stays
-  // hidden; the SurvivalCurve module renders an "awaiting markets"
-  // empty state internally if thresholds is empty but mount happens.
+  // delay the trade composer painting.
   var _sc = null;
+  var _smg = null;
   function loadFightForecast() {
     fetch('/api/fight/forecast?key=' + encodeURIComponent(slug))
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.available) {
           console.log('[fight] forecast unavailable', d && d.reason);
-          return; // leave mount empty — no panel rather than dead panel
-        }
-        if (!window.HFXSurvivalCurve) {
-          console.warn('[fight] HFXSurvivalCurve not loaded yet');
           return;
         }
-        var mountEl = document.getElementById('hfxScMount');
-        if (!mountEl) return;
-        if (_sc) {
-          _sc.update({ thresholds: d.thresholds, methods: d.methods });
-        } else {
-          _sc = window.HFXSurvivalCurve.mount(mountEl, {
-            thresholds: d.thresholds,
-            methods:    d.methods,
-            eventTitle: d.eventTitle,
-          });
+
+        // SurvivalCurve — only mount if there ARE threshold/method
+        // markets to render. all_markets without classified rounds is
+        // valid (some fights only have winner + method markets); the
+        // curve panel would be empty so leave it unmounted.
+        var hasCurveData = (d.thresholds && d.thresholds.length) || (d.methods && d.methods.length);
+        if (hasCurveData && window.HFXSurvivalCurve) {
+          var scEl = document.getElementById('hfxScMount');
+          if (scEl) {
+            if (_sc) _sc.update({ thresholds: d.thresholds, methods: d.methods });
+            else _sc = window.HFXSurvivalCurve.mount(scEl, {
+              thresholds: d.thresholds,
+              methods:    d.methods,
+              eventTitle: d.eventTitle,
+            });
+          }
+        }
+
+        // SubMarketGrid — mount whenever all_markets has rows. This is
+        // the surface that was missing on fight.html: the full list of
+        // tradeable sub-markets, each tile clickable.
+        if (Array.isArray(d.all_markets) && d.all_markets.length && window.HFXSubMarketGrid) {
+          var smgEl = document.getElementById('hfxSmgMount');
+          if (smgEl) {
+            var pickHandler = function(market) { swapComposerToMarket(market); };
+            if (_smg) {
+              _smg.update({ markets: d.all_markets, activeSlug: _activeSubSlug });
+            } else {
+              _smg = window.HFXSubMarketGrid.mount(smgEl, {
+                markets: d.all_markets,
+                activeSlug: _activeSubSlug,
+                onPick: pickHandler,
+              });
+            }
+          }
         }
       })
       .catch(function (e) {
@@ -725,6 +761,68 @@ a { color: inherit; text-decoration: none; }
       });
   }
   loadFightForecast();
+
+  // ── Compose-on-pick: tile click → repaint TradeComposer ──────────
+  // The tile the user clicked becomes the active context for the
+  // composer above it. Winner-binary tiles map to the existing
+  // fighter-vs-fighter shape; non-winner tiles (method/threshold/
+  // prop) collapse to a binary YES/NO toggle since each sub-market
+  // on Polymarket is itself a YES/NO market.
+  var _activeSubSlug = null;
+  function swapComposerToMarket(market) {
+    if (!market) return;
+    _activeSubSlug = market.slug || market.conditionId || null;
+    if (_smg) _smg.update({ activeSlug: _activeSubSlug });
+
+    var mountEl = document.getElementById('hfxTcMount');
+    if (!mountEl || !window.HFXTradeComposer) return;
+
+    var yes = (isFinite(market.yesPrice) && market.yesPrice > 0 && market.yesPrice < 1) ? market.yesPrice : null;
+    var no  = yes != null ? +(1 - yes).toFixed(4) : null;
+
+    // Winner binary keeps fighter names; everything else uses YES/NO.
+    var leftCfg, rightCfg, defaultSide;
+    if (market.category === 'winner') {
+      // Best-effort name extraction from the question text. Falls back
+      // to "YES / NO" if we can't parse cleanly. Same heuristic the
+      // server uses to assign leftProb on /api/fight/odds.
+      var lk = (meta.left.name || '').toLowerCase();
+      var rk = (meta.right.name || '').toLowerCase();
+      var q = (market.question || '').toLowerCase();
+      var leftFirst = q.indexOf(lk) !== -1 && (q.indexOf(rk) === -1 || q.indexOf(lk) < q.indexOf(rk));
+      var leftProb = leftFirst ? yes : (yes != null ? no : null);
+      var rightProb = leftProb != null ? +(1 - leftProb).toFixed(4) : null;
+      leftCfg  = { name: meta.left.name,  price: leftProb,  tag: (leftProb  >= rightProb) ? 'FAV' : 'DOG' };
+      rightCfg = { name: meta.right.name, price: rightProb, tag: (rightProb >  leftProb)  ? 'FAV' : 'DOG' };
+      defaultSide = (leftProb >= rightProb) ? 'left' : 'right';
+    } else {
+      leftCfg  = { name: 'YES', price: yes, tag: 'YES' };
+      rightCfg = { name: 'NO',  price: no,  tag: 'NO'  };
+      defaultSide = (yes != null && yes >= 0.5) ? 'left' : 'right';
+    }
+
+    // Re-mount the composer pointed at this sub-market. mount() clears
+    // the target div first so we don't stack panels.
+    if (_tc && typeof _tc.destroy === 'function') _tc.destroy();
+    _tc = window.HFXTradeComposer.mount(mountEl, {
+      left:  leftCfg,
+      right: rightCfg,
+      defaultSide: defaultSide,
+      eventSlug:  market.slug || resolvedMarket.slug || null,
+      marketSlug: market.slug || null,
+      vol24h:    market.volume24hr,
+      liquidity: market.liquidity,
+      question:  market.question,
+      headerTag: (market.category || '').toUpperCase() + ' · POLYMARKET CLOB',
+    });
+    mountEl.style.display = '';
+
+    // Smooth-scroll the composer into view so the user sees their
+    // pick land. Skip if the composer is already on screen.
+    var rect = mountEl.getBoundingClientRect();
+    var inView = rect.top >= 0 && rect.top < (window.innerHeight - 100);
+    if (!inView) mountEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   // ── Whale flow ────────────────────────────────────────────────────────
   function loadWhales(conditionId, question) {
