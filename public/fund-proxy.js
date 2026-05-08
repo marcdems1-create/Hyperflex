@@ -302,6 +302,67 @@
   }
 
   // ── Layer B: persistent per-session banner ─────────────────────────
+  // ── Proxy-derivation-failed recovery banner ───────────────────────
+  // Hit this state when the user has connected (poly_eoa_address is
+  // set) but the proxy wallet has never resolved (hf_poly_wallet is
+  // null/empty/equal-to-eoa). Caused by:
+  //   • Both Polygon RPCs returning "execution reverted, data: 0x" on
+  //     the Safe Factory computeProxyAddress() call (transient or
+  //     factory-contract change — observed across ~15 EOAs in
+  //     2026-05-08 logs).
+  //   • EOA never registered with Polymarket (typed wrong address,
+  //     pasted from a non-Polymarket wallet, etc.).
+  //   • Browser localStorage cleared / private window with stale
+  //     poly_eoa_address from another session.
+  //
+  // Without this banner, fund-proxy.js silently no-ops on these
+  // users and they sit in purgatory — second-trigger never fires
+  // because there's no proxy to check approvals on. Surface a
+  // dismissible recovery affordance instead.
+  function renderDerivationFailedBanner(eoa) {
+    if (document.getElementById('hfxProxyMissingBanner')) return;
+    if (sessionStorage.getItem('hf_proxy_missing_banner_dismissed') === '1') return;
+    var bar = document.createElement('div');
+    bar.id = 'hfxProxyMissingBanner';
+    bar.style.cssText =
+      'position:sticky;top:0;left:0;right:0;z-index:998;' +
+      'display:flex;align-items:center;justify-content:center;gap:14px;' +
+      'padding:10px 16px;background:rgba(255,107,77,0.08);' +
+      'border-bottom:1px solid rgba(255,107,77,0.40);' +
+      'font-family:\'JetBrains Mono\',ui-monospace,monospace;font-size:12px;color:#ffb39b;' +
+      'position:relative';
+    bar.innerHTML =
+      '<span>Trading wallet not detected for ' + (eoa ? eoa.slice(0, 8) + '…' : 'your wallet') +
+        '. Reconnect or set up via polymarket.com.</span>' +
+      '<button id="hfxPmRetry" style="padding:5px 12px;font-family:inherit;font-size:11px;font-weight:700;' +
+                                    'letter-spacing:0.06em;border:1px solid #ff8b66;background:transparent;' +
+                                    'color:#ffb39b;cursor:pointer;border-radius:3px">Retry</button>' +
+      '<a href="https://polymarket.com/portfolio" target="_blank" rel="noopener" ' +
+                                    'style="padding:5px 12px;font-family:inherit;font-size:11px;font-weight:700;' +
+                                    'letter-spacing:0.06em;border:1px solid #ff8b66;background:#ff8b66;' +
+                                    'color:#1a0a05;text-decoration:none;border-radius:3px">Set up at Polymarket →</a>' +
+      '<button id="hfxPmClose" aria-label="Dismiss" style="position:absolute;right:10px;top:50%;' +
+                                    'transform:translateY(-50%);padding:0 8px;font-family:inherit;' +
+                                    'font-size:14px;border:none;background:transparent;color:#6e6790;' +
+                                    'cursor:pointer;line-height:1">×</button>';
+    document.body.insertBefore(bar, document.body.firstChild);
+    document.getElementById('hfxPmRetry').onclick = function() {
+      // Force a fresh proxy resolve attempt by clearing the stale
+      // empty cache key, then reloading. The wallet-connect flow on
+      // market.html / creator-dashboard.html re-runs Safe-factory
+      // computeProxyAddress on the next load. If the underlying RPC
+      // failure is transient, the next page load resolves it; if
+      // it's a hard failure, the banner re-renders on the next
+      // runCheck cycle and the user sees the polymarket.com path.
+      try { localStorage.removeItem('hf_poly_wallet'); } catch (e) {}
+      location.reload();
+    };
+    document.getElementById('hfxPmClose').onclick = function() {
+      try { sessionStorage.setItem('hf_proxy_missing_banner_dismissed', '1'); } catch (e) {}
+      if (bar.parentNode) bar.parentNode.removeChild(bar);
+    };
+  }
+
   function renderBanner(eoa, proxy) {
     if (document.getElementById('hfxFundProxyBanner')) return;
     if (sessionStorage.getItem(BANNER_DISMISS_KEY) === '1') return;
@@ -437,8 +498,21 @@
     if (!ready()) return;
     var eoa = getEoa();
     var proxy = getProxy();
-    if (!eoa || !proxy) return;
-    if (eoa.toLowerCase() === proxy.toLowerCase()) return; // proxy not yet resolved
+    // No EOA → user hasn't connected yet, nothing to do.
+    if (!eoa) return;
+    // EOA but no proxy (or proxy === eoa) → derivation hasn't completed.
+    // Normal during the first ~5-15s of a fresh connect while market.html
+    // / creator-dashboard.html runs Safe-factory computeProxyAddress.
+    // After the polling window expires we surface a recovery banner so
+    // users whose derivation failed permanently (RPC reverts, unregistered
+    // EOA) don't sit in silent purgatory.
+    if (!proxy || eoa.toLowerCase() === proxy.toLowerCase()) {
+      // Past the polling window? Treat as derivation failure.
+      if (Date.now() > _pollStopAt && _pollStopAt !== 0) {
+        renderDerivationFailedBanner(eoa);
+      }
+      return;
+    }
     // Throttle: at most one network call per 30s
     if (Date.now() - _lastCheckTs < 30000) return;
     _checkInFlight = true;

@@ -49695,6 +49695,15 @@ if (pool) {
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS kalshi_username TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS manifold_username TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_address TEXT`).catch(() => {});
+      // Schema-drift fixes (2026-05-08). The CREATE TABLE on a fresh
+      // Postgres didn't include these columns but read paths across
+      // server.js + lib/ have referenced them for weeks, breaking
+      // /api/bet-feed list and the [settle] cron with "column does
+      // not exist" on every call. ADD COLUMN IF NOT EXISTS is
+      // idempotent — safe to leave in even after columns are added.
+      await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS avatar_url       TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS username         TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS settlement_price NUMERIC`).catch(() => {});
 
       // Dedup wallet users: keep earliest row per polymarket_address, delete rest
       await dbQuery(`
