@@ -1192,9 +1192,13 @@
             var overlayApproval = document.getElementById('hfxDepositOverlay');
             if (overlayApproval) overlayApproval.innerHTML = _frame(_state);
 
-            // Approve max uint256 so user doesn't need to re-approve for future bridges
-            var maxUint = window.ethers.MaxUint256;
-            var approveTx = await tokenContract.approve(approvalAddr, maxUint);
+            // Bounded cap (10B atomic ≈ 10K USDC) so the approval is large
+            // enough that 99% of users never re-approve, but low enough that
+            // Blockaid doesn't trip the "deceptive — known for scams" warning
+            // on bridge routers it doesn't recognize. Same APPROVAL_CAP used
+            // for every Safe-routed approval in market.html / dashboard.
+            var APPROVAL_CAP = '10000000000000000';
+            var approveTx = await tokenContract.approve(approvalAddr, APPROVAL_CAP);
             _state.bridgePollMessage = 'Waiting for approval…';
             _state.bridgeSubMessage = 'Confirming on ' + cfg.name;
             var overlayApproval2 = document.getElementById('hfxDepositOverlay');

@@ -22549,9 +22549,10 @@ async function dashApprovePmctForSpender(spender, proxyAddr, eoaAddr, signer) {
     console.log('[dash-pusd] approval already in flight for ' + key.slice(0,10) + '… — awaiting existing dispatch');
     return _dashPmctApprovalInFlight[key];
   }
-  // Bounded approval cap (10B tokens at 6 decimals). Using MAX_UINT256 on
-  // fresh V2 contracts triggers Blockaid's "Unlimited / known for scams"
-  // banner on MetaMask mobile because the spenders haven't been whitelisted
+  // Bounded approval cap (10B tokens at 6 decimals). Using an unbounded
+  // approval on fresh V2 contracts triggers Blockaid's "Unlimited / known
+  // for scams" banner on MetaMask mobile because the spenders haven't
+  // been whitelisted
   // yet. Same cap as USDC approvals in market.html.
   const APPROVAL_CAP = '10000000000000000';
   const iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);

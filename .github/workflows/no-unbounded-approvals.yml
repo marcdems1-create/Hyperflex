@@ -1,0 +1,58 @@
+name: Approval cap guard
+
+# Fails the build if any unbounded ERC-20 approval pattern lands in
+# public/ or lib/. CLAUDE.md rule #9 promoted to a hard CI gate so
+# nobody can re-introduce MaxUint256 by accident in six months when
+# this context has scrolled out of memory.
+#
+# Why this rule: MetaMask's Blockaid layer flags MaxUint256 approvals
+# to V2 contracts (CTF Exchange V2, NegRisk V2, CollateralOnramp,
+# bridge routers users haven't seen before) as "deceptive — known for
+# scams". The scam banner kills onboarding conversion harder than the
+# extra approval popup ever helped. Use APPROVAL_CAP (10B atomic ≈
+# 10K USDC) instead — high enough that 99% of users never re-approve,
+# low enough Blockaid stays quiet.
+#
+# Patterns blocked (case-sensitive; checked across .js, .html, .ts):
+#   • MaxUint256        ethers v6 helper
+#   • MAX_UINT256       common JS constant naming
+#   • 2**256, 2 ** 256  literal exponent
+#   • 0xff..ff (64 f's) raw hex literal
+#
+# To allow a comment that NEEDS to mention these patterns by name,
+# refactor the comment to use descriptive language instead ("unbounded
+# approval", "max value approval"). Keeps the guard unambiguous —
+# every hit is a real bug.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  no-unbounded-approvals:
+    name: Block unbounded ERC-20 approvals
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan public/ and lib/ for unbounded approval patterns
+        run: |
+          set -e
+          # -E enables extended regex; -n shows line numbers; --include
+          # restricts to source-relevant extensions to avoid false hits
+          # in lockfiles or generated artifacts.
+          PATTERN='MaxUint256|MAX_UINT256|2\*\*256|2 \*\* 256|0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+          if grep -rEn --include='*.js' --include='*.html' --include='*.ts' \
+                  "$PATTERN" public/ lib/; then
+            echo ""
+            echo "::error::Unbounded ERC-20 approval pattern detected in public/ or lib/."
+            echo "::error::Use APPROVAL_CAP (10B atomic) instead — see CLAUDE.md rule #9."
+            echo "::error::If a comment legitimately needs to discuss the pattern by name,"
+            echo "::error::rephrase to 'unbounded approval' / 'max-value approval' so the"
+            echo "::error::guard stays unambiguous."
+            exit 1
+          fi
+          echo "OK: no unbounded approval patterns found."

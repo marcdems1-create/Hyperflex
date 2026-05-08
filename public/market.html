@@ -3360,7 +3360,9 @@ function buildOrderForClob(params, version) {
   return { struct: v1Struct, domain: v1Domain, types: v1Types, wireExtras: {} };
 }
 
-var MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+// Unbounded approval constant deliberately removed — see APPROVAL_CAP.
+// Reintroducing an unbounded value (any form) trips MetaMask Blockaid
+// scam warnings on V2 contracts and is blocked at CI.
 // Bounded approval cap: 10B tokens at 6 decimals (USDC.e + pUSD both 6-dec).
 // Using a ceiling instead of uint256.max avoids Blockaid's "Unlimited /
 // known for scams" heuristic on low-reputation spenders (the V2 contracts
@@ -4266,9 +4268,10 @@ async function approvePmctForSpender(spender) {
   if (!spender) throw new Error('Spender address missing');
   var key = spender.toLowerCase();
   if (_pmctApprovalInFlight[key]) return _pmctApprovalInFlight[key];
-  // Bounded cap (10B atomic) — MaxUint256 trips MetaMask's Blockaid "Unlimited
-  // / known for scams" warning on V2 contracts that haven't been whitelisted.
-  // Same cap pattern as USDC approvals elsewhere in this file.
+  // Bounded cap (10B atomic) — unbounded approvals trip MetaMask's
+  // Blockaid "Unlimited / known for scams" warning on V2 contracts that
+  // haven't been whitelisted. Same cap pattern as USDC approvals
+  // elsewhere in this file. CI guard blocks any reintroduction.
   var APPROVAL_CAP = '10000000000000000';
   var iface = new ethers.Interface(['function approve(address spender, uint256 amount)']);
   var data = iface.encodeFunctionData('approve', [spender, APPROVAL_CAP]);
@@ -4286,8 +4289,8 @@ async function approvePmctForSpender(spender) {
 // Safe is the one approving.
 //
 // Cache + in-flight dedup mirrors the pUSD helper. Cap is the same 10B
-// atomic threshold (MaxUint256 → Blockaid scam banner on the unfamiliar
-// CollateralOnramp contract).
+// atomic threshold — unbounded approvals trip the Blockaid scam banner
+// on the unfamiliar CollateralOnramp contract.
 async function isUsdceApprovedForSpender(ownerAddr, spender) {
   if (!ownerAddr || !spender) return false;
   var _cacheKey = 'hfx_usdce_ok_' + ownerAddr.slice(-8).toLowerCase() + '_' + spender.slice(-8).toLowerCase();
