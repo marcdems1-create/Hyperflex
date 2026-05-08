@@ -37,7 +37,36 @@
   var POLL_INTERVAL_MS   = 3000;
   var POLL_DURATION_MS   = 30000;
 
-  // ── State ──────────────────────────────────────────────────────────
+  // ── V2 contract addresses (must match market.html) ────────────────
+  // Used to compute the same approval-cache keys market.html writes
+  // after each Safe execTransaction. If any flag is missing for a
+  // funded user, we fire the same `hfx:onboarding-fund-complete` event
+  // market.html listens to so its setupTradingApprovalsBundle runs
+  // and back-fills the missing approvals — closing the gap for users
+  // who funded their proxy via polymarket.com or any other path that
+  // bypassed our onboarding modal.
+  var CTF_EXCHANGE_V2_ADDR    = '0xE111180000d2663C0091e4f400237545B87B996B';
+  var CONDITIONAL_TOKENS_ADDR = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+  var COLLATERAL_ONRAMP_ADDR  = '0x93070a847efEf7F70739046A929D47a521F5B8ee';
+  var SETUP_FIRED_KEY         = 'hf_proxy_setup_fired';
+  function _ackKey(prefix, owner, spender) {
+    return prefix + owner.slice(-8).toLowerCase() + '_' + spender.slice(-8).toLowerCase();
+  }
+  function isApprovalSetupComplete(proxy) {
+    try {
+      return localStorage.getItem(_ackKey('hfx_usdce_ok_', proxy, COLLATERAL_ONRAMP_ADDR)) === '1'
+          && localStorage.getItem(_ackKey('hfx_pusd_ok_',  proxy, CTF_EXCHANGE_V2_ADDR))    === '1'
+          && localStorage.getItem(_ackKey('hfx_pusd_ok_',  proxy, CONDITIONAL_TOKENS_ADDR)) === '1'
+          && localStorage.getItem(_ackKey('hfx_ctf_ok_',   proxy, CTF_EXCHANGE_V2_ADDR))    === '1';
+    } catch (e) { return false; }
+  }
+  function markSetupFired() {
+    try { localStorage.setItem(SETUP_FIRED_KEY, '1'); } catch (e) {}
+  }
+  function hasFiredSetup() {
+    try { return localStorage.getItem(SETUP_FIRED_KEY) === '1'; } catch (e) { return false; }
+  }
+
   var _checkInFlight = false;
   var _lastCheckTs   = 0;
   var _pollStopAt    = 0;
@@ -337,6 +366,58 @@
     try { return localStorage.getItem(ONBOARDING_KEY) === '1'; } catch (e) { return false; }
   }
 
+  // ── Setup-status toast (already-funded users — no modal context) ──
+  // Lightweight cyan toast that follows the hfx:setup-progress events
+  // emitted by market.html's setupTradingApprovalsBundle. Used when
+  // we detect a funded-but-unapproved user and fire the bundle
+  // without opening the onboarding modal. Closes itself on done /
+  // failed. Lives at top-right; doesn't block page interaction.
+  function showSetupToast() {
+    if (document.getElementById('hfxSetupToast')) return;
+    var el = document.createElement('div');
+    el.id = 'hfxSetupToast';
+    el.style.cssText =
+      'position:fixed;top:20px;right:20px;z-index:10006;max-width:380px;' +
+      'padding:14px 16px;background:rgba(0,212,255,0.08);' +
+      'border:1px solid rgba(0,212,255,0.40);border-radius:6px;' +
+      'font-family:\'JetBrains Mono\',ui-monospace,monospace;font-size:12px;color:#9bebff;' +
+      'box-shadow:0 4px 24px rgba(0,0,0,0.4)';
+    el.innerHTML = '<div style="font-weight:700;margin-bottom:4px;letter-spacing:0.06em">Setting up trading wallet…</div>' +
+                   '<div id="hfxSetupToastMsg" style="color:#c5bedd">Sign the next prompts to finish setup. After this, every trade is one click.</div>';
+    document.body.appendChild(el);
+    function onProgress(e) {
+      var d = (e && e.detail) || {};
+      var m = document.getElementById('hfxSetupToastMsg');
+      if (m && d.message) m.textContent = d.message;
+    }
+    function onDone() {
+      cleanup();
+      if (el.parentNode) el.parentNode.removeChild(el);
+      showToast('Trading wallet ready — sign once per trade from now on.');
+    }
+    function onFailed(e) {
+      cleanup();
+      var msg = (e && e.detail && e.detail.message) || 'Setup paused — finish on your next trade.';
+      var m = document.getElementById('hfxSetupToastMsg');
+      if (m) m.textContent = msg;
+      el.style.borderColor = 'rgba(255,77,106,0.40)';
+      el.style.background = 'rgba(255,77,106,0.06)';
+      el.style.color = '#ffb3b3';
+      setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 4000);
+    }
+    function cleanup() {
+      window.removeEventListener('hfx:setup-progress', onProgress);
+      window.removeEventListener('hfx:onboarding-setup-done', onDone);
+      window.removeEventListener('hfx:onboarding-setup-failed', onFailed);
+    }
+    window.addEventListener('hfx:setup-progress', onProgress);
+    window.addEventListener('hfx:onboarding-setup-done', onDone, { once: true });
+    window.addEventListener('hfx:onboarding-setup-failed', onFailed, { once: true });
+    // Hard timeout: if no listener exists on this page, the toast
+    // would otherwise stick. Auto-clean after 60s.
+    setTimeout(function() { cleanup(); if (el.parentNode) el.parentNode.removeChild(el); }, 60000);
+  }
+
   // ── Toast (success only — errors stay in-modal) ────────────────────
   function showToast(msg) {
     var t = document.createElement('div');
@@ -364,12 +445,29 @@
     _lastCheckTs = Date.now();
     try {
       var b = await readBalances(eoa, proxy);
-      // Skip if already funded
+      // Funded path: proxy already has USDC.e. Don't surface a fund
+      // modal/banner — but still close the approval gap if the user
+      // funded their proxy via polymarket.com or any other path that
+      // bypassed our onboarding bundle. Without this, already-funded
+      // users would still hit 4 cold approval popups on their first
+      // trade.
       if (b.proxyBal >= PROXY_MIN_ATOMIC) {
-        // Once a user is funded, we don't surface the panel again.
-        // Mark onboarding seen even if they bypassed it via
-        // polymarket.com — the modal would be confusing now.
         markOnboardingSeen();
+        if (!hasFiredSetup() && !isApprovalSetupComplete(proxy)) {
+          markSetupFired();
+          // Same hook market.html's listener attaches to. On non-/market
+          // pages the event fires into the void and the user picks up
+          // the popups at trade time — same as today, no regression.
+          window.dispatchEvent(new CustomEvent('hfx:onboarding-fund-complete', {
+            detail: { proxyAddr: proxy, eoaAddr: eoa, source: 'already-funded' }
+          }));
+          // Surface a quick toast so the popups aren't a surprise.
+          // market.html's bundle emits hfx:setup-progress which we
+          // already listen for inside the modal flow; for the
+          // already-funded path we don't open the modal, so do a
+          // lightweight inline status.
+          showSetupToast();
+        }
         return;
       }
       // Skip if EOA also has nothing to move (dust < $1)
