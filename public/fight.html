@@ -346,6 +346,7 @@ a { color: inherit; text-decoration: none; }
 <div id="nav-root"></div>
 <script src="/utils.js"></script>
 <script src="/nav.js?v=20"></script>
+<script src="/trade-composer.js?v=1"></script>
 
 <div class="page" id="page">
   <div class="hero">
@@ -384,28 +385,17 @@ a { color: inherit; text-decoration: none; }
 
   <div class="grid">
     <div class="col">
-      <!-- Live market -->
-      <div class="card">
-        <div class="card-head">
-          <h2>Live Market</h2>
-          <span class="badge" id="marketBadge">Polymarket</span>
-        </div>
-        <div class="market-row" id="marketRow">
-          <div class="market-stat"><span class="lbl">Chimaev</span><span class="val" id="mktChimaev">—</span></div>
-          <div class="market-stat"><span class="lbl">Strickland</span><span class="val" id="mktStrickland">—</span></div>
-          <div class="market-stat"><span class="lbl">24h Vol</span><span class="val" id="mktVol">—</span></div>
-          <div class="market-stat"><span class="lbl">Liquidity</span><span class="val" id="mktLiq">—</span></div>
-        </div>
-        <div class="market-actions">
-          <!-- Primary CTA opens Polymarket event page in a new tab so users
-               can place the bet. TODO: revert to internal "/market/:slug"
-               once paired-market support ships in the HFX trade flow. -->
-          <a class="btn primary" id="ctaInsideHF" href="https://polymarket.com" target="_blank" rel="noopener">Bet on Polymarket →</a>
-        </div>
-        <div id="marketEmpty" class="empty" style="display:none;margin-top:14px">
-          Live odds unavailable —
-          <button class="btn" style="padding:6px 12px;font-size:10px;margin-left:6px" onclick="loadMarket()">Retry</button>
-        </div>
+      <!-- Trade composer (replaces the legacy "Live Market" panel).
+           Mounted by trade-composer.js once /api/fight/odds resolves;
+           the panel itself includes price tiles, stake input, live
+           math, attach-take, FLEX preview, and the yellow CTA that
+           hands off to /market/<eventSlug> with intent in the URL
+           hash. Hidden until paintMarket() runs so we don't flash a
+           dead panel on slow gamma. -->
+      <div id="hfxTcMount" style="display:none"></div>
+      <div id="marketEmpty" class="empty" style="display:none">
+        Live odds unavailable —
+        <button class="btn" style="padding:6px 12px;font-size:10px;margin-left:6px" onclick="loadMarket()">Retry</button>
       </div>
 
       <!-- Whale flow -->
@@ -612,34 +602,47 @@ a { color: inherit; text-decoration: none; }
 
   // paintMarket consumes the response from GET /api/fight/odds?key=<slug>.
   // The backend already does the events?slug→markets?slug→search chain, the
-  // best-market scoring, and the YES-side decision. We just render.
+  // best-market scoring, and the YES-side decision. We mount + repaint
+  // the TradeComposer panel here; this used to be the legacy
+  // "Live Market" + "Bet on Polymarket" surface.
+  var _tc = null;  // the mounted composer instance, kept across repaints
   function paintMarket(d) {
     if (!d || !d.available) return paintMarketEmpty();
 
     var leftPct  = Number(d.leftPct);
     var rightPct = Number(d.rightPct);
-    var leftProb = Number(d.leftProbRaw != null ? d.leftProbRaw : leftPct / 100);
-
-    document.getElementById('mktChimaev').textContent    = leftPct  + '%';
-    document.getElementById('mktStrickland').textContent = rightPct + '%';
-    document.getElementById('mktVol').textContent = fmtUsd(d.vol24h);
-    document.getElementById('mktLiq').textContent = fmtUsd(d.liquidity);
+    var leftProb  = Number(d.leftProbRaw  != null ? d.leftProbRaw  : leftPct  / 100);
+    var rightProb = Number(d.rightProbRaw != null ? d.rightProbRaw : rightPct / 100);
 
     document.getElementById('vsBarFill').style.width = (leftProb * 100).toFixed(1) + '%';
     document.getElementById('vsLeftPct').textContent  = leftPct  + '%';
     document.getElementById('vsRightPct').textContent = rightPct + '%';
 
-    // Primary CTA points to the Polymarket event page where users can
-    // actually place the bet. /market/:slug doesn't render paired UFC
-    // markets correctly yet; revert when that lands.
-    var pmUrl = d.eventSlug
-      ? ('https://polymarket.com/event/' + d.eventSlug)
-      : (d.marketSlug ? ('https://polymarket.com/event/' + d.marketSlug) : 'https://polymarket.com');
-    document.getElementById('ctaInsideHF').href = pmUrl;
+    var mountEl = document.getElementById('hfxTcMount');
+    mountEl.style.display = '';
+
+    if (!_tc && window.HFXTradeComposer) {
+      // First render — mount the composer with the resolved fighter
+      // metadata + live odds. The composer takes it from here:
+      // stake input, math grid, attach-take, FLEX preview, CTA.
+      _tc = window.HFXTradeComposer.mount(mountEl, {
+        left:  { name: meta.left.name,  price: leftProb,  tag: leftProb  >= rightProb ? 'FAV' : 'DOG' },
+        right: { name: meta.right.name, price: rightProb, tag: rightProb >  leftProb  ? 'FAV' : 'DOG' },
+        defaultSide: leftProb >= rightProb ? 'left' : 'right',
+        eventSlug:  d.eventSlug,
+        marketSlug: d.marketSlug,
+        vol24h:     d.vol24h,
+        liquidity:  d.liquidity,
+        question:   d.question,
+        headerTag:  'Live · Polymarket CLOB',
+      });
+    } else if (_tc) {
+      // Subsequent ticks — patch the prices, leave the user's stake +
+      // side selection intact.
+      _tc.updatePrices(leftProb, rightProb);
+    }
 
     document.getElementById('marketEmpty').style.display = 'none';
-    document.getElementById('marketRow').style.display = '';
-    document.getElementById('marketBadge').textContent = 'Polymarket · live';
 
     var sharePct = leftPct + '% / ' + rightPct + '%';
     var shareText = 'UFC 328 · ' + meta.left.name + ' vs ' + meta.right.name + ' — current odds ' + sharePct + '. Track it on HYPERFLEX:';
@@ -651,10 +654,8 @@ a { color: inherit; text-decoration: none; }
     if (d.conditionId) loadWhales(d.conditionId, d.question || '');
   }
   function paintMarketEmpty() {
-    document.getElementById('mktChimaev').textContent    = '—';
-    document.getElementById('mktStrickland').textContent = '—';
-    document.getElementById('mktVol').textContent = '—';
-    document.getElementById('mktLiq').textContent = '—';
+    var mountEl = document.getElementById('hfxTcMount');
+    if (mountEl) mountEl.style.display = 'none';
     document.getElementById('marketEmpty').style.display = '';
   }
 
