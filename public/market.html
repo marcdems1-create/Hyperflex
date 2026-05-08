@@ -9391,24 +9391,29 @@ function dismissTakePrompt() {
     }
   });
 
-  // Intercept Buy YES / Buy NO on the multi-outcome card grid. Use
-  // capture phase so we run before the existing handleOutcomeClick
-  // delegate (which would otherwise call buyOutcome directly + scroll
-  // the inline widget). Binary markets — where the grid is a flat
-  // table — fall through to the existing handler so we don't disrupt
-  // proven YES/NO market trading.
-  document.addEventListener('click', function(e) {
+  // Intercept Buy YES / Buy NO on the multi-outcome card grid. Capture
+  // phase + listen for both touchend and click so we run before the
+  // legacy handleOutcomeClick delegate on iOS (where touchend fires
+  // before click and would otherwise pre-fill the inline widget under
+  // the sheet). Mirrors legacy debounce flag pattern at line 6948.
+  // Binary markets fall through to legacy handler.
+  var _composerTouchHandled = false;
+  function _composerIntercept(e) {
     if (!isMultiOutcomeMarket()) return;
+    if (e.type === 'click' && _composerTouchHandled) { _composerTouchHandled = false; return; }
     var btn = e.target.closest && e.target.closest('.outcome-btn-yes, .outcome-btn-no');
     if (!btn) return;
     var idx = parseInt(btn.getAttribute('data-idx'), 10);
     var price = parseInt(btn.getAttribute('data-price'), 10);
     if (isNaN(idx) || isNaN(price)) return;
+    if (e.type === 'touchend') _composerTouchHandled = true;
     var side = btn.classList.contains('outcome-btn-yes') ? 'yes' : 'no';
     e.stopPropagation();
     e.preventDefault();
     openComposerSheet(idx, side, price);
-  }, true /* capture */);
+  }
+  document.addEventListener('click', _composerIntercept, true /* capture */);
+  document.addEventListener('touchend', _composerIntercept, true /* capture */);
 })();
 </script>
 </body>
