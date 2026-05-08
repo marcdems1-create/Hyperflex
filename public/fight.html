@@ -347,6 +347,7 @@ a { color: inherit; text-decoration: none; }
 <script src="/utils.js"></script>
 <script src="/nav.js?v=20"></script>
 <script src="/trade-composer.js?v=1"></script>
+<script src="/survival-curve.js?v=1"></script>
 
 <div class="page" id="page">
   <div class="hero">
@@ -382,6 +383,14 @@ a { color: inherit; text-decoration: none; }
       <div class="rank" id="rightRank">#3 UFC Middleweight</div>
     </div>
   </div>
+
+  <!-- Fight forecast (SurvivalCurve). Mounts directly under the hero
+       so the round-by-round market read is the first thing the user
+       sees, before scrolling into the trade composer + whale flow.
+       Hidden until /api/fight/forecast resolves (or stays hidden if
+       the event has no round-threshold markets — common pre-fight
+       week before O/U markets get listed). -->
+  <div id="hfxScMount" style="max-width:1200px;margin:0 auto;padding:0 24px"></div>
 
   <div class="grid">
     <div class="col">
@@ -680,6 +689,42 @@ a { color: inherit; text-decoration: none; }
       });
   }
   window.loadMarket = loadMarket;
+
+  // ── Fight forecast (SurvivalCurve) ─────────────────────────────────
+  // Independent fetch from /api/fight/odds so a slow forecast doesn't
+  // delay the trade composer painting. Empty response → mount stays
+  // hidden; the SurvivalCurve module renders an "awaiting markets"
+  // empty state internally if thresholds is empty but mount happens.
+  var _sc = null;
+  function loadFightForecast() {
+    fetch('/api/fight/forecast?key=' + encodeURIComponent(slug))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.available) {
+          console.log('[fight] forecast unavailable', d && d.reason);
+          return; // leave mount empty — no panel rather than dead panel
+        }
+        if (!window.HFXSurvivalCurve) {
+          console.warn('[fight] HFXSurvivalCurve not loaded yet');
+          return;
+        }
+        var mountEl = document.getElementById('hfxScMount');
+        if (!mountEl) return;
+        if (_sc) {
+          _sc.update({ thresholds: d.thresholds, methods: d.methods });
+        } else {
+          _sc = window.HFXSurvivalCurve.mount(mountEl, {
+            thresholds: d.thresholds,
+            methods:    d.methods,
+            eventTitle: d.eventTitle,
+          });
+        }
+      })
+      .catch(function (e) {
+        console.warn('[fight] /api/fight/forecast threw', e.message);
+      });
+  }
+  loadFightForecast();
 
   // ── Whale flow ────────────────────────────────────────────────────────
   function loadWhales(conditionId, question) {

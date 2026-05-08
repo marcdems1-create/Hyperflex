@@ -31400,6 +31400,129 @@ async function _resolveFightOddsMarket(reg) {
   return null;
 }
 
+// GET /api/fight/forecast?key=<fight-registry-key> — round-threshold +
+// method-market breakdown for the SurvivalCurve panel. Reads the same
+// registry as /api/fight/odds and the same Polymarket event payload,
+// then categorizes every sub-market into:
+//
+//   thresholds: [{ round: 1.5, prob: 0.62, question }] — markets like
+//     "Will the fight go past 1.5 rounds?" — feeds the X-axis points
+//     of the survival curve. prob is the YES probability that the
+//     fight lasts that long.
+//
+//   methods: [{ name: 'Submission', prob: 0.50, question }] — markets
+//     like "Will the fight end by submission?" — feeds the method
+//     tilt stat under the curve. UFC league average for submission
+//     is hardcoded ~22% downstream so we can show the deviation.
+//
+// Caching reuses the existing _fightOddsCache shape since the upstream
+// gamma payload is the same data. Independent TTL so a forecast tick
+// doesn't bust the odds cache and vice versa.
+const _fightForecastCache = new Map();
+const _FIGHT_FORECAST_TTL = 60 * 1000;
+
+function _classifyFightSubMarket(question) {
+  if (!question) return null;
+  const q = String(question).toLowerCase();
+  // Round threshold: "past N.5 rounds", "go more than N rounds",
+  // "over N.5 rounds". Match the round count as a decimal.
+  const roundMatch = q.match(/(?:past|over|more than|after|go beyond|>=?)\s*(\d+\.?\d*)\s*rounds?\b/);
+  if (roundMatch) {
+    const r = parseFloat(roundMatch[1]);
+    if (isFinite(r) && r > 0 && r < 6) return { kind: 'threshold', round: r };
+  }
+  // Method markets — substring match on the canonical finish names.
+  // YES on each = "fight ends by this method." Order matters because
+  // "knockout" and "ko" are substrings of "tko" — check the more
+  // specific terms first.
+  if (/\bdecision\b/.test(q))                         return { kind: 'method', name: 'Decision' };
+  if (/\bsubmission\b|\btap(?:out|s)?\b/.test(q))     return { kind: 'method', name: 'Submission' };
+  if (/\btko\b|technical knockout/.test(q))           return { kind: 'method', name: 'TKO' };
+  if (/\bko\b|\bknockout\b/.test(q))                  return { kind: 'method', name: 'KO' };
+  if (/\bdraw\b|\bno contest\b/.test(q))              return { kind: 'method', name: 'Draw/NC' };
+  return null;
+}
+
+app.get('/api/fight/forecast', async (req, res) => {
+  try {
+    const key = String(req.query.key || '').trim();
+    const reg = _FIGHT_ODDS_REGISTRY[key];
+    if (!reg) return res.json({ available: false, reason: 'unknown_fight_key' });
+
+    const cached = _fightForecastCache.get(key);
+    if (cached && Date.now() - cached.ts < _FIGHT_FORECAST_TTL) {
+      return res.json(cached.data);
+    }
+
+    // Walk the registry's slug candidates the same way /api/fight/odds
+    // does. First hit with sub-markets wins; bail to a soft-empty
+    // response if everything resolves to a winner-only market.
+    let bundle = null;
+    for (const slug of (reg.slugCandidates || [])) {
+      try {
+        const r = await polymarket.getEventBySlug(slug);
+        if (r && Array.isArray(r.eventMarkets) && r.eventMarkets.length > 1) {
+          bundle = r;
+          break;
+        }
+      } catch (e) { /* try next slug */ }
+    }
+    if (!bundle) {
+      const empty = { available: false, reason: 'no_event_markets', key };
+      _fightForecastCache.set(key, { ts: Date.now(), data: empty });
+      return res.json(empty);
+    }
+
+    const thresholds = [];
+    const methods = [];
+    for (const m of bundle.eventMarkets) {
+      if (m.closed) continue;
+      const cls = _classifyFightSubMarket(m.question);
+      if (!cls) continue;
+      const yesProb = (function() {
+        try {
+          const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          if (Array.isArray(op) && op[0] != null) return parseFloat(op[0]);
+        } catch (e) { /* fall through */ }
+        return null;
+      })();
+      if (yesProb == null || !isFinite(yesProb)) continue;
+      if (cls.kind === 'threshold') {
+        thresholds.push({ round: cls.round, prob: yesProb, question: m.question, slug: m.slug });
+      } else if (cls.kind === 'method') {
+        // De-dupe — gamma occasionally lists the same method market
+        // twice across event variants. Keep the higher-volume one.
+        const existing = methods.find(x => x.name === cls.name);
+        if (!existing) {
+          methods.push({ name: cls.name, prob: yesProb, question: m.question, slug: m.slug });
+        }
+      }
+    }
+
+    // Sort thresholds ascending so the SurvivalCurve module can walk
+    // them as a monotonically-increasing X-axis.
+    thresholds.sort((a, b) => a.round - b.round);
+    // Methods sort by probability desc — highest-implied finish path
+    // first, gives the panel a sensible "market consensus method"
+    // ordering for the tilt stat.
+    methods.sort((a, b) => (b.prob || 0) - (a.prob || 0));
+
+    const data = {
+      available:  thresholds.length > 0 || methods.length > 0,
+      eventTitle: bundle.event && bundle.event.title || null,
+      eventSlug:  bundle.event && bundle.event.slug || null,
+      thresholds: thresholds,
+      methods:    methods,
+      computedAt: new Date().toISOString(),
+    };
+    _fightForecastCache.set(key, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error('[fight-forecast]', err);
+    res.status(500).json({ available: false, reason: 'server_error', error: err.message });
+  }
+});
+
 app.get('/api/fight/odds', async (req, res) => {
   try {
     const key = String(req.query.key || '').trim();
