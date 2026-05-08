@@ -13628,6 +13628,68 @@ app.get('/api/predictors/:userId/best-call', async (req, res) => {
   }
 });
 
+// GET /api/admin/purgatory-count — estimate how many wallets are stuck
+// in the "connected but never completed a trade" state that motivated
+// fund-proxy.js's already-funded second-trigger fix (b7fd935).
+//
+// We can't introspect localStorage server-side, so this is a proxy:
+// users with a polymarket_address set who have ZERO closed
+// polymarket_trades and ZERO cached_positions. That overcounts (some
+// will just be new sign-ups who haven't traded yet by choice) but
+// gives a useful upper bound on the backfill audience for the DM.
+//
+// Returns:
+//   total_connected          — users.polymarket_address NOT NULL
+//   never_traded             — connected & no polymarket_trades row
+//   never_traded_no_positions— never-traded AND no cached_positions
+//                              (the tightest "stuck" estimate)
+//   recently_connected       — connected in last 14 days (subset, the
+//                              freshest cohort to DM)
+//
+// Usage:
+//   curl -H "x-admin-secret: $ADMIN_SECRET" \
+//        https://hyperflex.network/api/admin/purgatory-count
+app.get('/api/admin/purgatory-count', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(`
+      WITH connected AS (
+        SELECT id, LOWER(polymarket_address) AS addr, created_at
+        FROM users
+        WHERE polymarket_address IS NOT NULL AND polymarket_address <> ''
+      ),
+      with_trades AS (
+        SELECT DISTINCT LOWER(eoa_address) AS addr
+        FROM polymarket_trades
+      ),
+      with_positions AS (
+        SELECT DISTINCT user_id
+        FROM cached_positions
+        WHERE platform = 'polymarket'
+      )
+      SELECT
+        (SELECT COUNT(*) FROM connected)::int AS total_connected,
+        (SELECT COUNT(*) FROM connected c
+           WHERE c.addr NOT IN (SELECT addr FROM with_trades))::int AS never_traded,
+        (SELECT COUNT(*) FROM connected c
+           WHERE c.addr NOT IN (SELECT addr FROM with_trades)
+             AND c.id NOT IN (SELECT user_id FROM with_positions))::int AS never_traded_no_positions,
+        (SELECT COUNT(*) FROM connected c
+           WHERE c.addr NOT IN (SELECT addr FROM with_trades)
+             AND c.created_at > now() - interval '14 days')::int AS recently_connected_purgatory
+    `);
+    res.json({
+      ...rows[0],
+      explanation: 'never_traded_no_positions is the tightest "stuck in onboarding" estimate. recently_connected_purgatory is the subset connected in the last 14 days — the freshest cohort to DM.',
+      computed_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[purgatory-count]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/member-debug/:userId — raw data sources for a profile so
 // admins can diagnose "stats look wrong" without guessing the address.
 // Returns users row + cached_positions + polymarket_trades counts + a live
