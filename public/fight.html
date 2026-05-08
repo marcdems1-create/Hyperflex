@@ -127,8 +127,9 @@ a { color: inherit; text-decoration: none; }
   .versus { grid-template-columns: 1fr; }
 }
 .fighter {
+  position: relative;
   padding: 28px 24px;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 6px;
 }
 .fighter.left  { background: linear-gradient(135deg, rgba(255,77,106,0.10), transparent 70%); }
 .fighter.right { background: linear-gradient(225deg, rgba(160,160,180,0.08), transparent 70%); align-items: flex-end; text-align: right; }
@@ -136,26 +137,28 @@ a { color: inherit; text-decoration: none; }
   .fighter.right { align-items: flex-start; text-align: left; }
 }
 .fighter .tag {
-  font-family: var(--mono); font-size: 10px; font-weight: 800;
-  letter-spacing: 0.16em; text-transform: uppercase;
-  padding: 4px 10px; border-radius: 999px;
-  align-self: flex-start;
+  position: absolute; top: 14px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px;
+  opacity: 0.8;
 }
-.fighter.right .tag { align-self: flex-end; }
-@media (max-width: 720px) { .fighter.right .tag { align-self: flex-start; } }
-.fighter.left  .tag { background: rgba(255,77,106,0.14); color: var(--red); border: 1px solid rgba(255,77,106,0.3); }
-.fighter.right .tag { background: rgba(160,160,180,0.10); color: var(--text-soft); border: 1px solid var(--border-hover); }
+.fighter.left  .tag { left: 14px;  background: rgba(255,77,106,0.14); color: var(--red); border: 1px solid rgba(255,77,106,0.3); }
+.fighter.right .tag { right: 14px; background: rgba(160,160,180,0.10); color: var(--text-soft); border: 1px solid var(--border-hover); }
+@media (max-width: 720px) { .fighter.right .tag { right: auto; left: 14px; } }
 .fighter .name {
   font-family: var(--display); font-weight: 400;
   font-size: clamp(30px, 4vw, 44px); line-height: 1;
   text-transform: uppercase; color: #fff;
+  margin-top: 22px;
 }
+@media (max-width: 720px) { .fighter .name { margin-top: 26px; } }
 .fighter .record {
-  font-family: var(--mono); font-size: 14px; letter-spacing: 0.06em;
-  color: var(--text); font-weight: 700;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.10em;
+  color: var(--muted); font-weight: 600;
 }
 .fighter .rank {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--muted);
 }
 
@@ -163,30 +166,42 @@ a { color: inherit; text-decoration: none; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px 18px; background: var(--surface);
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
-  min-width: 140px; gap: 14px;
+  min-width: 200px; gap: 12px;
 }
 @media (max-width: 720px) {
-  .vs-divider { border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-direction: row; padding: 14px 18px; }
+  .vs-divider { border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-direction: column; padding: 18px; gap: 10px; min-width: 0; }
 }
 .vs-divider .vs-label {
-  font-family: var(--display); font-size: 28px; line-height: 1; color: var(--gold);
+  font-family: var(--display); font-size: 22px; line-height: 1; color: var(--muted);
+  letter-spacing: 0.04em;
 }
 .vs-bar {
-  width: 100%; height: 8px; border-radius: 4px;
+  width: 100%; height: 12px; border-radius: 6px;
   background: rgba(255,255,255,0.06); overflow: hidden; position: relative;
+  border: 1px solid rgba(255,255,255,0.04);
 }
 .vs-bar-fill {
-  height: 100%; background: linear-gradient(90deg, var(--red), rgba(255,77,106,0.4));
+  height: 100%; background: linear-gradient(90deg, var(--red), rgba(255,77,106,0.5));
   width: 50%;
   transition: width 0.6s ease-out;
 }
 .vs-pcts {
-  display: flex; justify-content: space-between; width: 100%;
-  font-family: var(--mono); font-size: 11px; font-weight: 700;
-  color: var(--text-soft); letter-spacing: 0.06em;
+  display: flex; justify-content: space-between; align-items: baseline; width: 100%;
+  font-family: var(--mono); font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.vs-pcts .l, .vs-pcts .r {
+  font-size: clamp(28px, 4.4vw, 40px); line-height: 1;
 }
 .vs-pcts .l { color: var(--red); }
-.vs-pcts .r { color: var(--text); }
+.vs-pcts .r { color: var(--text-soft); }
+.vs-pcts .lbl {
+  display: block;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.16em;
+  color: var(--muted); text-transform: uppercase;
+  margin-top: 4px;
+}
 
 /* ── Card grid ──────────────────────────────────────────────────────── */
 .grid {
@@ -346,9 +361,9 @@ a { color: inherit; text-decoration: none; }
 <div id="nav-root"></div>
 <script src="/utils.js"></script>
 <script src="/nav.js?v=20"></script>
-<script src="/trade-composer.js?v=1"></script>
-<script src="/survival-curve.js?v=1"></script>
-<script src="/sub-market-grid.js?v=1"></script>
+<script src="/trade-composer.js?v=2"></script>
+<script src="/survival-curve.js?v=2"></script>
+<script src="/sub-market-grid.js?v=2"></script>
 
 <div class="page" id="page">
   <div class="hero">
@@ -373,8 +388,8 @@ a { color: inherit; text-decoration: none; }
       <div class="vs-label">VS</div>
       <div class="vs-bar"><div class="vs-bar-fill" id="vsBarFill"></div></div>
       <div class="vs-pcts">
-        <span class="l" id="vsLeftPct">—</span>
-        <span class="r" id="vsRightPct">—</span>
+        <span><span class="l" id="vsLeftPct">—</span><span class="lbl">Implied</span></span>
+        <span style="text-align:right"><span class="r" id="vsRightPct">—</span><span class="lbl">Implied</span></span>
       </div>
     </div>
     <div class="fighter right">
