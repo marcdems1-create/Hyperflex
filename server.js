@@ -37157,7 +37157,20 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     };
     const winners = await collect(winRes);
     const losers = await collect(loseRes);
-    const allRedeemed = [...winners, ...losers];
+    // Tag each position with the URL filter that produced it. Polymarket's
+    // /positions?winning=X filters server-side but doesn't reliably echo
+    // the `winning` field on response objects, and `realizedPnl` is
+    // frequently absent on redeem-only positions. Without an explicit
+    // truth signal, the old fallback (`pos.winning === true || pos.realizedPnl > 0`)
+    // silently returned false for every undecorated payload — and every
+    // redeemed position, winners included, got classified as a loss.
+    // Whale profiles like LaBradfordSmith22 rendered 0W / 431L / -$2.6M
+    // because realized_pnl ended up as -entryCost on every redeem row.
+    // Trust the URL we just called as the source of truth.
+    const allRedeemed = [
+      ...winners.map(p => Object.assign({}, p, { _fromWinningUrl: true  })),
+      ...losers.map (p => Object.assign({}, p, { _fromWinningUrl: false })),
+    ];
     redeemedCount = allRedeemed.length;
     if (allRedeemed[0]) {
       try {
@@ -37177,7 +37190,14 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const shares = parseFloat(pos.size || pos.shares || 0);
       const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
       if (shares <= 0) continue;
-      const winning = pos.winning === true || (parseFloat(pos.realizedPnl || 0) > 0);
+      // URL filter is primary. `pos.winning` and `realizedPnl` stay as
+      // fallbacks for any future code path that pushes positions in
+      // without the _fromWinningUrl tag.
+      const winning =
+        (pos._fromWinningUrl === true)  ? true  :
+        (pos._fromWinningUrl === false) ? false :
+        (pos.winning === true)          ? true  :
+        (parseFloat(pos.realizedPnl || 0) > 0);
       const exitPrice = winning ? 1.0 : 0.0;
       const entryCost = +(shares * avgPrice).toFixed(4);
       const exitValue = winning ? +shares.toFixed(4) : 0;
@@ -37241,6 +37261,128 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} total_imported=${imported}`);
   return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount };
 }
+
+// Re-grade redeemed-position realized_trades rows for a single user by
+// re-fetching the winners/losers lists from Polymarket and updating any
+// row whose pnl/close_reason disagrees with the API's truth. Idempotent
+// — UPDATE is a no-op when the row is already correct, so this is safe
+// to re-run, run platform-wide, and trigger from the lazy /api/member
+// path if we ever want to self-heal on every profile load.
+//
+// Exists because the original redeem-backfill fallback (`pos.winning ===
+// true || pos.realizedPnl > 0`) silently classified every undecorated
+// position as a loss when Polymarket's API stopped echoing those
+// fields on response objects. The backfill writes ON CONFLICT DO
+// NOTHING, so the broken rows would never auto-correct even after the
+// classification fix lands; this regrade is the path to fix already-
+// imported bad data.
+async function regradeRedeemedTrades(userId, proxy) {
+  if (!pool || !userId || !proxy) return { regraded: 0, fetched: 0 };
+  const proxyLower = proxy.toLowerCase();
+  let regraded = 0, fetched = 0, sample = null;
+
+  for (const winFlag of [true, false]) {
+    let positions = [];
+    try {
+      const r = await fetch(
+        `https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=${winFlag}&limit=500`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (r.ok) {
+        const j = await r.json();
+        positions = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      }
+    } catch (e) { continue; }
+    fetched += positions.length;
+    if (!sample && positions[0]) { try { sample = JSON.stringify(positions[0]).slice(0, 400); } catch {} }
+
+    for (const pos of positions) {
+      const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
+      let outcome = String(pos.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = pos.outcomeIndex !== undefined ? pos.outcomeIndex : pos.outcome_index;
+        if (idx === 0) outcome = 'YES';
+        else if (idx === 1) outcome = 'NO';
+      }
+      if (!condId || !outcome) continue;
+      const shares = parseFloat(pos.size || pos.shares || 0);
+      const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
+      if (shares <= 0) continue;
+      const entryCost  = +(shares * avgPrice).toFixed(4);
+      const exitValue  = winFlag ? +shares.toFixed(4) : 0;
+      const exitPrice  = winFlag ? 1.0 : 0.0;
+      const realizedPnl = +(exitValue - entryCost).toFixed(4);
+      const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
+      const closeReason = winFlag ? 'redeemed-win' : 'redeemed-loss';
+      const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+      try {
+        const r2 = await pool.query(
+          `UPDATE realized_trades
+              SET exit_price     = $1,
+                  exit_value_usd = $2,
+                  realized_pnl   = $3,
+                  realized_roi   = $4,
+                  close_reason   = $5
+            WHERE external_sync_id = $6
+              AND user_id = $7::uuid
+              AND close_reason <> $5`,
+          [exitPrice, exitValue, realizedPnl, realizedRoi, closeReason, externalSyncId, userId]
+        );
+        if (r2 && r2.rowCount > 0) regraded++;
+      } catch (e) {
+        console.warn('[regrade]', externalSyncId, e.message);
+      }
+    }
+  }
+
+  // Refresh per-user aggregates so the profile view reflects the regrade
+  // immediately. Same UPDATE shape as backfillRealizedTrades.
+  try {
+    await dbQuery(
+      `UPDATE users SET
+         realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1::uuid),
+         realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
+                                 FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL)
+       WHERE id = $1`,
+      [userId]
+    );
+  } catch (e) { /* aggregate refresh is best-effort */ }
+
+  console.log(`[regrade] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} fetched=${fetched} regraded=${regraded} sample=${sample || '—'}`);
+  return { regraded, fetched };
+}
+
+// POST /api/admin/regrade-redeems — fix already-imported bad redeem rows.
+// Body: { user_id?: string, all_whales?: boolean }. ADMIN_SECRET-gated.
+// Use user_id for a single profile (e.g. the one in the screenshot);
+// use all_whales=true to sweep the whole top-50 leaderboard.
+app.post('/api/admin/regrade-redeems', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (!pool) return res.status(503).json({ error: 'DB not configured' });
+  const { user_id, all_whales } = req.body || {};
+  let users = [];
+  try {
+    if (user_id) {
+      users = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = $1', [user_id]);
+    } else if (all_whales) {
+      users = await dbQuery("SELECT id, polymarket_address FROM users WHERE is_whale = true AND polymarket_address IS NOT NULL");
+    } else {
+      return res.status(400).json({ error: 'pass user_id or all_whales=true' });
+    }
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+
+  const results = [];
+  for (const u of users) {
+    if (!u.polymarket_address) { results.push({ user_id: u.id.slice(0, 8), skipped: 'no proxy' }); continue; }
+    try {
+      const r = await regradeRedeemedTrades(u.id, u.polymarket_address);
+      results.push({ user_id: u.id.slice(0, 8), ...r });
+    } catch (e) {
+      results.push({ user_id: u.id.slice(0, 8), error: e.message });
+    }
+  }
+  res.json({ scanned: users.length, results });
+});
 
 // POST /api/trades/backfill — manual trigger. Lazy-fires from /api/member
 // on first profile load; this route is for admin/debug.
