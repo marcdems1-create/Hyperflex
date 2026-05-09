@@ -19268,6 +19268,67 @@ async function _fetchFlexStats(userId) {
     }
   }
 
+  // realized_trades: source of truth for whale-imported users (no wallet
+  // ever connected to HFX, so polymarket_trades is empty for them) and for
+  // any user whose Polymarket history was backfilled from /activity rather
+  // than logged through HFX-routed trades.
+  //
+  // Without this UNION, _fetchFlexStats returns 0 settled events for any
+  // user whose only trade history is in realized_trades — including the
+  // entire top-50 whale leaderboard (verified by divergence query: 0/5
+  // sampled whales had any rows in polymarket_trades). The 4:30 AM cron
+  // then writes flex_settled_events=0 → flex_qualifies=false → profile
+  // renders "Building · 25 settled to unlock" forever.
+  //
+  // realized_trades is the FIFO-collapsed rollup; polymarket_trades is
+  // the per-event log. Dedup by (condition_id, side) — polymarket_trades
+  // wins on collision since it's the granular source. Mirror the dedup
+  // logic from /api/member/:userId at server.js:14197-14223.
+  try {
+    const realizedRows = await dbQuery(`
+      SELECT condition_id, side, realized_pnl, entry_cost_usd
+        FROM realized_trades WHERE user_id = $1`, [userId]).catch(() => []);
+    if (realizedRows.length) {
+      // Build the polymarket_trades dedup key set if we have a wallet.
+      let polyKeys = new Set();
+      if (polyStats.has_trades > 0) {
+        const wallets = await dbQuery(
+          'SELECT LOWER(polymarket_address) AS addr FROM users WHERE id = $1 AND polymarket_address IS NOT NULL',
+          [userId]
+        ).catch(() => []);
+        if (wallets[0]?.addr) {
+          const ptRows = await dbQuery(
+            `SELECT condition_id, side FROM polymarket_trades WHERE LOWER(eoa_address) = $1`,
+            [wallets[0].addr]
+          ).catch(() => []);
+          for (const t of ptRows) {
+            polyKeys.add(`${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`);
+          }
+        }
+      }
+      let rtWins = 0, rtLosses = 0, rtPnl = 0, rtStaked = 0, rtCount = 0;
+      for (const r of realizedRows) {
+        const key = `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`;
+        if (polyKeys.has(key)) continue;  // already counted via polymarket_trades
+        const pnl = parseFloat(r.realized_pnl) || 0;
+        rtCount++;
+        rtPnl += pnl;
+        rtStaked += parseFloat(r.entry_cost_usd) || 0;
+        if (pnl > 0) rtWins++;
+        else if (pnl < 0) rtLosses++;
+      }
+      polyStats.wins       += rtWins;
+      polyStats.losses     += rtLosses;
+      polyStats.net_pnl    += rtPnl;
+      polyStats.staked     += rtStaked;
+      polyStats.has_trades += rtCount;
+    }
+  } catch (e) {
+    if (!/relation "realized_trades" does not exist/i.test(e.message)) {
+      console.warn('[flex] realized_trades lookup:', e.message);
+    }
+  }
+
   // Weekly consistency across picks + trades (90d trailing).
   // Uses a UNION of both sources so a bettor active on both surfaces
   // gets credit for every week one of them was profitable.
@@ -19433,6 +19494,24 @@ app.post('/api/admin/sports-flex/rebuild', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const result = await recomputeAllSportsFlexScores();
   res.json(result);
+});
+
+// POST /api/admin/flex/rebuild — manually trigger the unified flex score
+// recompute that normally runs at 04:30 UTC. Use after a data fix that
+// changes _fetchFlexStats output (e.g. the realized_trades source addition)
+// so we don't have to wait for the cron to surface the corrected scores.
+//
+// Body: { user_id?: string }. Single user when user_id is passed; full
+// platform sweep otherwise. ADMIN_SECRET-gated.
+app.post('/api/admin/flex/rebuild', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const { user_id } = req.body || {};
+  if (user_id) {
+    const result = await recomputeFlexScore(user_id);
+    return res.json({ scope: 'single', user_id, result });
+  }
+  const result = await recomputeAllFlexScores();
+  res.json({ scope: 'all', ...result });
 });
 
 // Hook for on-demand recompute when a pick settles. Other code paths that
