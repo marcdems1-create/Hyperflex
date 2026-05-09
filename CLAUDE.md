@@ -1,6 +1,8 @@
 # HYPERFLEX — Claude Session Memory
 
 > Auto-read at session start. Keep current. Full detail in HYPERFLEX_Complete_Brief.md. Code-change log in CHANGELOG.md (read before every build).
+>
+> **🔁 Cross-session handoff: also read SESSION_STATE.md at session start, and append a fresh entry at session end.** Both Claude instances (strategy-Claude and Code) coordinate through that file — active blockers, queued work order, open questions, and process lessons live across sessions there. Marc is the kicker-off and the picker-of-next-item, not the per-message relay; SESSION_STATE.md is the relay.
 
 ## 🎯 The mantra (read before every feature decision)
 
