@@ -19461,24 +19461,33 @@ app.post('/api/takes', requireAuth, async (req, res) => {
     // "Trader" / the wallet prefix instead of their chosen handle.
     let displayName = 'Anonymous', avatarUrl = null, sharpScore = null;
     if (pool) {
-      const userRows = await dbQuery(
-        `SELECT u.display_name AS u_name, u.avatar_url AS u_avatar,
-                cs.display_name AS cs_name, cs.avatar_url AS cs_avatar
-         FROM users u
-         LEFT JOIN creator_settings cs ON cs.creator_id = u.id
-         WHERE u.id = $1 LIMIT 1`,
-        [req.userId]
-      );
-      if (userRows.length) {
-        const r = userRows[0];
-        // Prefer an explicit, non-wallet-stub display name. A wallet stub
-        // looks like "0x1234...abcd" — we detect that and deprioritize.
-        const isWalletStub = function(s) { return !s || /^0x[0-9a-fA-F]{4,}\.{2,}[0-9a-fA-F]{4,}$/.test(String(s)); };
-        displayName =
-          (!isWalletStub(r.cs_name) && r.cs_name) ||
-          (!isWalletStub(r.u_name)  && r.u_name ) ||
-          r.cs_name || r.u_name || 'Anonymous';
-        avatarUrl = r.cs_avatar || r.u_avatar || null;
+      // Avatar lives on users.avatar_url. creator_settings carries logo/banner
+      // for the community page, NOT a per-creator avatar — selecting
+      // cs.avatar_url here used to throw "column cs.avatar_url does not exist"
+      // and kill every take post. Wrap the lookup so a schema mismatch on the
+      // denormalized display fields never blocks the actual insert.
+      try {
+        const userRows = await dbQuery(
+          `SELECT u.display_name AS u_name, u.avatar_url AS u_avatar,
+                  cs.display_name AS cs_name
+           FROM users u
+           LEFT JOIN creator_settings cs ON cs.creator_id = u.id
+           WHERE u.id = $1 LIMIT 1`,
+          [req.userId]
+        );
+        if (userRows.length) {
+          const r = userRows[0];
+          // Prefer an explicit, non-wallet-stub display name. A wallet stub
+          // looks like "0x1234...abcd" — we detect that and deprioritize.
+          const isWalletStub = function(s) { return !s || /^0x[0-9a-fA-F]{4,}\.{2,}[0-9a-fA-F]{4,}$/.test(String(s)); };
+          displayName =
+            (!isWalletStub(r.cs_name) && r.cs_name) ||
+            (!isWalletStub(r.u_name)  && r.u_name ) ||
+            r.cs_name || r.u_name || 'Anonymous';
+          avatarUrl = r.u_avatar || null;
+        }
+      } catch (e) {
+        console.warn('[takes] user lookup failed, falling back to defaults:', e.message);
       }
     }
 
