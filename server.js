@@ -37147,30 +37147,39 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // realized at $1 (winning) or $0 (losing) regardless of entry.
   let redeemedImported = 0, redeemedCount = 0;
   try {
-    const [winRes, loseRes] = await Promise.allSettled([
-      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=true&limit=500`, { headers: { Accept: 'application/json' } }),
-      fetch(`https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=false&limit=500`, { headers: { Accept: 'application/json' } }),
-    ]);
-    const collect = async r => {
-      if (r.status !== 'fulfilled' || !r.value.ok) return [];
-      try { const j = await r.value.json(); return Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); } catch { return []; }
-    };
-    const winners = await collect(winRes);
-    const losers = await collect(loseRes);
-    // Tag each position with the URL filter that produced it. Polymarket's
-    // /positions?winning=X filters server-side but doesn't reliably echo
-    // the `winning` field on response objects, and `realizedPnl` is
-    // frequently absent on redeem-only positions. Without an explicit
-    // truth signal, the old fallback (`pos.winning === true || pos.realizedPnl > 0`)
-    // silently returned false for every undecorated payload — and every
-    // redeemed position, winners included, got classified as a loss.
-    // Whale profiles like LaBradfordSmith22 rendered 0W / 431L / -$2.6M
-    // because realized_pnl ended up as -entryCost on every redeem row.
-    // Trust the URL we just called as the source of truth.
-    const allRedeemed = [
-      ...winners.map(p => Object.assign({}, p, { _fromWinningUrl: true  })),
-      ...losers.map (p => Object.assign({}, p, { _fromWinningUrl: false })),
-    ];
+    // Single paginated fetch — no winning=X URL filter trickery. Diagnostic
+    // confirmed Polymarket's `?winning=` query parameter doesn't filter
+    // server-side and `pos.winning` always returns null on redeemed
+    // positions. The reliably-signed truth field is `pos.cashPnl` (real
+    // realized P&L in USD), which is positive for winners, negative for
+    // losers, occasionally zero for true pushes. `pos.realizedPnl` is
+    // structurally 0 across the entire redeem set per the same diagnostic
+    // (500/500 zeros on a known whale) — do NOT key off it.
+    //
+    // Pagination: the API caps at 500 per call and serves them via offset.
+    // LaBradfordSmith22 has 1000+ redeems; 500 cap was silently dropping
+    // half his history before this fix.
+    let allRedeemed = [];
+    let offset = 0;
+    const PAGE_LIMIT = 500;
+    while (true) {
+      let page = [];
+      try {
+        const r = await fetch(
+          `https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&limit=${PAGE_LIMIT}&offset=${offset}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (r.ok) {
+          const j = await r.json();
+          page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+        }
+      } catch (e) { break; }
+      if (!page.length) break;
+      allRedeemed = allRedeemed.concat(page);
+      if (page.length < PAGE_LIMIT) break;  // last page
+      offset += PAGE_LIMIT;
+      if (offset >= 5000) break;  // safety cap — no whale legitimately has 5000+ redeems
+    }
     redeemedCount = allRedeemed.length;
     if (allRedeemed[0]) {
       try {
@@ -37190,18 +37199,22 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const shares = parseFloat(pos.size || pos.shares || 0);
       const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
       if (shares <= 0) continue;
-      // URL filter is primary. `pos.winning` and `realizedPnl` stay as
-      // fallbacks for any future code path that pushes positions in
-      // without the _fromWinningUrl tag.
-      const winning =
-        (pos._fromWinningUrl === true)  ? true  :
-        (pos._fromWinningUrl === false) ? false :
-        (pos.winning === true)          ? true  :
-        (parseFloat(pos.realizedPnl || 0) > 0);
-      const exitPrice = winning ? 1.0 : 0.0;
+      // cashPnl is the truth signal. Pulled from the API directly — no
+      // re-derivation from shares/exitPrice. The previous formula
+      // (`exitValue - entryCost` with exitValue = shares-or-zero) was
+      // structurally producing -entryCost on every row because the
+      // winning flag was always false. Carrying cashPnl through directly
+      // means the row stores what Polymarket reports.
+      const cashPnl = parseFloat(pos.cashPnl);
+      if (!isFinite(cashPnl)) continue;  // skip if API didn't return cashPnl
+      const winning = cashPnl > 0;
       const entryCost = +(shares * avgPrice).toFixed(4);
-      const exitValue = winning ? +shares.toFixed(4) : 0;
-      const realizedPnl = +(exitValue - entryCost).toFixed(4);
+      // exit_value_usd = entryCost + cashPnl. This is the actual dollar
+      // amount the position settled at. For winners: shares * 1.0 minus
+      // any rounding. For losers: small (residual) or zero.
+      const exitValue = +(entryCost + cashPnl).toFixed(4);
+      const exitPrice = entryCost > 0 ? +(exitValue / shares).toFixed(4) : (winning ? 1.0 : 0.0);
+      const realizedPnl = +cashPnl.toFixed(4);
       const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
       const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
       const tokenId = pos.asset || pos.token_id || null;
@@ -37263,75 +37276,91 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
 }
 
 // Re-grade redeemed-position realized_trades rows for a single user by
-// re-fetching the winners/losers lists from Polymarket and updating any
-// row whose pnl/close_reason disagrees with the API's truth. Idempotent
-// — UPDATE is a no-op when the row is already correct, so this is safe
-// to re-run, run platform-wide, and trigger from the lazy /api/member
-// path if we ever want to self-heal on every profile load.
+// re-fetching positions from Polymarket and rewriting each matching row
+// to the API's truth. Keys off `pos.cashPnl` (the only reliably-signed
+// field on the redeem response — verified via diagnostic curl).
 //
-// Exists because the original redeem-backfill fallback (`pos.winning ===
-// true || pos.realizedPnl > 0`) silently classified every undecorated
-// position as a loss when Polymarket's API stopped echoing those
-// fields on response objects. The backfill writes ON CONFLICT DO
-// NOTHING, so the broken rows would never auto-correct even after the
-// classification fix lands; this regrade is the path to fix already-
-// imported bad data.
+// Salvaged from the broken first version (PR #92) which assumed the
+// `?winning=true|false` query parameter filtered server-side. Diagnostic
+// proved it doesn't — both calls return the same default-sorted set, so
+// the URL-tag-as-truth approach guaranteed the second loop overwrote the
+// first. This rewrite uses a single paginated fetch and `cashPnl` as the
+// per-row truth signal. `pos.realizedPnl` is structurally 0 across the
+// entire redeem set on at least one verified whale; do NOT key off it.
+//
+// UPDATE rewrites both pnl AND close_reason on every match (not gated on
+// "close_reason disagrees" anymore — the row state may have wrong pnl
+// even when close_reason is by-luck correct). The previous version's
+// `close_reason <> $5` guard was an anti-thrash measure that's no longer
+// needed since the truth signal isn't bouncing between calls.
 async function regradeRedeemedTrades(userId, proxy) {
   if (!pool || !userId || !proxy) return { regraded: 0, fetched: 0 };
   const proxyLower = proxy.toLowerCase();
   let regraded = 0, fetched = 0, sample = null;
 
-  for (const winFlag of [true, false]) {
-    let positions = [];
+  // Paginate through the entire redeem set. Diagnostic confirmed the
+  // 500-row API limit was silently dropping half of LaBradford's history.
+  let offset = 0;
+  const PAGE_LIMIT = 500;
+  let positions = [];
+  while (true) {
+    let page = [];
     try {
       const r = await fetch(
-        `https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&winning=${winFlag}&limit=500`,
+        `https://data-api.polymarket.com/positions?user=${proxyLower}&redeemed=true&limit=${PAGE_LIMIT}&offset=${offset}`,
         { headers: { Accept: 'application/json' } }
       );
       if (r.ok) {
         const j = await r.json();
-        positions = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+        page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
       }
-    } catch (e) { continue; }
-    fetched += positions.length;
-    if (!sample && positions[0]) { try { sample = JSON.stringify(positions[0]).slice(0, 400); } catch {} }
+    } catch (e) { break; }
+    if (!page.length) break;
+    positions = positions.concat(page);
+    if (page.length < PAGE_LIMIT) break;
+    offset += PAGE_LIMIT;
+    if (offset >= 5000) break;  // safety cap
+  }
+  fetched = positions.length;
+  if (positions[0]) { try { sample = JSON.stringify(positions[0]).slice(0, 400); } catch {} }
 
-    for (const pos of positions) {
-      const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
-      let outcome = String(pos.outcome || '').toUpperCase();
-      if (!outcome) {
-        const idx = pos.outcomeIndex !== undefined ? pos.outcomeIndex : pos.outcome_index;
-        if (idx === 0) outcome = 'YES';
-        else if (idx === 1) outcome = 'NO';
-      }
-      if (!condId || !outcome) continue;
-      const shares = parseFloat(pos.size || pos.shares || 0);
-      const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
-      if (shares <= 0) continue;
-      const entryCost  = +(shares * avgPrice).toFixed(4);
-      const exitValue  = winFlag ? +shares.toFixed(4) : 0;
-      const exitPrice  = winFlag ? 1.0 : 0.0;
-      const realizedPnl = +(exitValue - entryCost).toFixed(4);
-      const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
-      const closeReason = winFlag ? 'redeemed-win' : 'redeemed-loss';
-      const externalSyncId = `pm-redeem:${condId}:${outcome}`;
-      try {
-        const r2 = await pool.query(
-          `UPDATE realized_trades
-              SET exit_price     = $1,
-                  exit_value_usd = $2,
-                  realized_pnl   = $3,
-                  realized_roi   = $4,
-                  close_reason   = $5
-            WHERE external_sync_id = $6
-              AND user_id = $7::uuid
-              AND close_reason <> $5`,
-          [exitPrice, exitValue, realizedPnl, realizedRoi, closeReason, externalSyncId, userId]
-        );
-        if (r2 && r2.rowCount > 0) regraded++;
-      } catch (e) {
-        console.warn('[regrade]', externalSyncId, e.message);
-      }
+  for (const pos of positions) {
+    const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
+    let outcome = String(pos.outcome || '').toUpperCase();
+    if (!outcome) {
+      const idx = pos.outcomeIndex !== undefined ? pos.outcomeIndex : pos.outcome_index;
+      if (idx === 0) outcome = 'YES';
+      else if (idx === 1) outcome = 'NO';
+    }
+    if (!condId || !outcome) continue;
+    const shares = parseFloat(pos.size || pos.shares || 0);
+    const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
+    if (shares <= 0) continue;
+    const cashPnl = parseFloat(pos.cashPnl);
+    if (!isFinite(cashPnl)) continue;  // skip rows where API didn't return cashPnl
+    const winning = cashPnl > 0;
+    const entryCost = +(shares * avgPrice).toFixed(4);
+    const exitValue = +(entryCost + cashPnl).toFixed(4);
+    const exitPrice = entryCost > 0 ? +(exitValue / shares).toFixed(4) : (winning ? 1.0 : 0.0);
+    const realizedPnl = +cashPnl.toFixed(4);
+    const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
+    const closeReason = winning ? 'redeemed-win' : 'redeemed-loss';
+    const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+    try {
+      const r2 = await pool.query(
+        `UPDATE realized_trades
+            SET exit_price     = $1,
+                exit_value_usd = $2,
+                realized_pnl   = $3,
+                realized_roi   = $4,
+                close_reason   = $5
+          WHERE external_sync_id = $6
+            AND user_id = $7::uuid`,
+        [exitPrice, exitValue, realizedPnl, realizedRoi, closeReason, externalSyncId, userId]
+      );
+      if (r2 && r2.rowCount > 0) regraded++;
+    } catch (e) {
+      console.warn('[regrade]', externalSyncId, e.message);
     }
   }
 
