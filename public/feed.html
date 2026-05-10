@@ -32,11 +32,17 @@
   --radius: 12px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 15px; min-height: 100vh; -webkit-font-smoothing: antialiased; line-height: 1.5; }
+/* Desktop base font 18px to give the homepage proper breathing room on
+   wide displays (5K iMacs render the prior 15px far too small). Children
+   that already declare px stay literal; rem/em-based children inherit
+   the bump. Mobile reverts to the prior 15px below 768px so handheld
+   layouts are byte-for-byte unchanged. */
+body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 18px; min-height: 100vh; -webkit-font-smoothing: antialiased; line-height: 1.5; }
+@media (max-width: 767px) { body { font-size: 15px; } }
 a { color: var(--gold); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.layout { max-width: 1440px; margin: 0 auto; padding: 80px 0 60px; display: flex; gap: 0; min-height: 100vh; }
+.layout { max-width: 1600px; margin: 0 auto; padding: 80px 0 60px; display: flex; gap: 0; min-height: 100vh; }
 .feed-col { flex: 1; max-width: 600px; border-left: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); min-width: 0; }
 .sidebar-col { width: 350px; flex-shrink: 0; padding: 16px 20px; position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; }
 .sidebar-col::-webkit-scrollbar { width: 0; }
