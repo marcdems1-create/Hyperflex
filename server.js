@@ -138,6 +138,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
+const heroBanner = require('./lib/hero-banner');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -31755,6 +31756,52 @@ app.get('/api/fight/odds', async (req, res) => {
   }
 });
 
+// ── Rolling Hero Banner ──────────────────────────────────────────────
+// Replaces the static UFC 328 banner. lib/hero-banner picks the highest-
+// scoring qualifying Polymarket event (vol_24h ≥ $50k, ≤90 days out, not
+// resolved, not blacklisted) and caches the choice for 1h. The cron below
+// busts the cache within ~1 min of the cached event resolving.
+//
+// GET /api/hero-banner — public, returns spec'd JSON or null when nothing
+// qualifies (frontend collapses the slot rather than rendering an empty
+// placeholder).
+app.get('/api/hero-banner', async (req, res) => {
+  try {
+    const banner = await heroBanner.getHeroBanner();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(banner);
+  } catch (e) {
+    console.error('[hero-banner] endpoint error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/hero-banner/refresh — admin secret-gated cache bust.
+// Forces a re-selection on the next request. Useful when the algorithmic
+// pick surfaces something off-brand and the env-var blacklist hasn't been
+// updated yet, or when verifying a config-knob change.
+app.post('/api/admin/hero-banner/refresh', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  heroBanner.bustCache();
+  try {
+    const next = await heroBanner.getHeroBanner();
+    res.json({ ok: true, next });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 1-minute cron that checks whether the currently-cached event has
+// resolved or had its end_date pass. If so, busts the cache so the next
+// /api/hero-banner request picks the next-best candidate. Cheap — one
+// gamma fetch on the cached slug, no-op when cache is cold.
+cron.schedule('* * * * *', () => {
+  heroBanner.checkCachedEventResolved().catch(e => {
+    console.warn('[hero-banner] cron error:', e.message);
+  });
+});
 
 app.get('/api/incentives/stats', async (req, res) => {
   if (!pool) return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
