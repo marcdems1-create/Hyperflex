@@ -812,7 +812,7 @@ const pool = process.env.DATABASE_URL
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
       max: 25,
-      idleTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
       statement_timeout: 15000,
       query_timeout: 15000,
