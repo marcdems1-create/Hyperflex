@@ -19220,7 +19220,15 @@ const { computeFlexScore: _computeFlex, tierForScore: _flexTier } = require('./l
 
 // Aggregate stats per user across picks + polymarket_trades. Single function
 // so the on-demand recompute and the nightly batch stay in sync.
-async function _fetchFlexStats(userId) {
+//
+// Optional `diag` argument (object) — when passed, intermediate query
+// counts, captured errors, and final state of polyStats get written into
+// it as a side-effect. The shape mirrors the rebuild-endpoint diagnostic
+// schema in /api/admin/flex/rebuild. Non-diag callers (the cron) pass
+// nothing and behavior is unchanged.
+async function _fetchFlexStats(userId, diag) {
+  if (diag && !diag.errors) diag.errors = [];
+
   // Sports picks: voids excluded so they don't drag rate down.
   const pickRows = await dbQuery(`
     SELECT
@@ -19231,16 +19239,26 @@ async function _fetchFlexStats(userId) {
       COALESCE(SUM(units)         FILTER (WHERE settlement_status IN ('win','loss','push')), 0)::numeric AS pick_staked_units,
       COUNT(DISTINCT sport)       FILTER (WHERE settlement_status IN ('win','loss','push'))::int        AS pick_sports
     FROM picks
-    WHERE user_id = $1`, [userId]).catch(() => []);
+    WHERE user_id = $1`, [userId]).catch(e => {
+      if (diag) diag.errors.push({ stage: 'picks_query', message: e.message });
+      return [];
+    });
+  if (diag) diag.pick_rows_returned = pickRows.length;
 
   // Polymarket trades: requires wallet linkage.
   let polyStats = { wins: 0, losses: 0, net_pnl: 0, staked: 0, brier: null, clv: null, has_trades: 0 };
+  let walletAddr = null;
   try {
     const wallets = await dbQuery(
       'SELECT LOWER(polymarket_address) AS addr FROM users WHERE id = $1 AND polymarket_address IS NOT NULL',
       [userId]
-    ).catch(() => []);
-    if (wallets[0]?.addr) {
+    ).catch(e => {
+      if (diag) diag.errors.push({ stage: 'wallet_lookup', message: e.message });
+      return [];
+    });
+    walletAddr = wallets[0]?.addr || null;
+    if (diag) diag.wallet_addr_present = !!walletAddr;
+    if (walletAddr) {
       const r = await dbQuery(`
         SELECT
           COUNT(*) FILTER (WHERE status IN ('win','loss','push'))::int AS tr_count,
@@ -19249,7 +19267,10 @@ async function _fetchFlexStats(userId) {
           COALESCE(SUM(pnl) FILTER (WHERE status IN ('win','loss','push')), 0)::numeric   AS tr_net_pnl,
           COALESCE(SUM(stake) FILTER (WHERE status IN ('win','loss','push')), 0)::numeric AS tr_staked,
           AVG(clv_cents) FILTER (WHERE clv_cents IS NOT NULL)::numeric AS tr_clv
-        FROM polymarket_trades WHERE LOWER(eoa_address) = $1`, [wallets[0].addr]).catch(() => []);
+        FROM polymarket_trades WHERE LOWER(eoa_address) = $1`, [walletAddr]).catch(e => {
+          if (diag) diag.errors.push({ stage: 'pt_query', message: e.message });
+          return [];
+        });
       if (r[0]) {
         polyStats = {
           wins:   parseInt(r[0].tr_wins   || 0, 10),
@@ -19263,10 +19284,12 @@ async function _fetchFlexStats(userId) {
       }
     }
   } catch (e) {
+    if (diag) diag.errors.push({ stage: 'pt_outer', message: e.message });
     if (!/relation "polymarket_trades" does not exist/i.test(e.message)) {
       console.warn('[flex] polymarket lookup:', e.message);
     }
   }
+  if (diag) diag.poly_stats_after_pt = { ...polyStats };
 
   // realized_trades: source of truth for whale-imported users (no wallet
   // ever connected to HFX, so polymarket_trades is empty for them) and for
@@ -19284,10 +19307,16 @@ async function _fetchFlexStats(userId) {
   // the per-event log. Dedup by (condition_id, side) — polymarket_trades
   // wins on collision since it's the granular source. Mirror the dedup
   // logic from /api/member/:userId at server.js:14197-14223.
+  let realizedTradeCount = 0;
   try {
     const realizedRows = await dbQuery(`
       SELECT condition_id, side, realized_pnl, entry_cost_usd
-        FROM realized_trades WHERE user_id = $1`, [userId]).catch(() => []);
+        FROM realized_trades WHERE user_id = $1`, [userId]).catch(e => {
+          if (diag) diag.errors.push({ stage: 'rt_query', message: e.message });
+          return [];
+        });
+    realizedTradeCount = realizedRows.length;
+    if (diag) diag.rt_rows_returned = realizedRows.length;
     if (realizedRows.length) {
       // Build the polymarket_trades dedup key set if we have a wallet.
       let polyKeys = new Set();
@@ -19295,21 +19324,28 @@ async function _fetchFlexStats(userId) {
         const wallets = await dbQuery(
           'SELECT LOWER(polymarket_address) AS addr FROM users WHERE id = $1 AND polymarket_address IS NOT NULL',
           [userId]
-        ).catch(() => []);
+        ).catch(e => {
+          if (diag) diag.errors.push({ stage: 'rt_wallet_lookup', message: e.message });
+          return [];
+        });
         if (wallets[0]?.addr) {
           const ptRows = await dbQuery(
             `SELECT condition_id, side FROM polymarket_trades WHERE LOWER(eoa_address) = $1`,
             [wallets[0].addr]
-          ).catch(() => []);
+          ).catch(e => {
+            if (diag) diag.errors.push({ stage: 'rt_dedup_pt_query', message: e.message });
+            return [];
+          });
           for (const t of ptRows) {
             polyKeys.add(`${(t.condition_id || '').toLowerCase()}|${(t.side || '').toUpperCase()}`);
           }
         }
       }
-      let rtWins = 0, rtLosses = 0, rtPnl = 0, rtStaked = 0, rtCount = 0;
+      if (diag) diag.rt_dedup_keyset_size = polyKeys.size;
+      let rtWins = 0, rtLosses = 0, rtPnl = 0, rtStaked = 0, rtCount = 0, rtSkippedDedup = 0;
       for (const r of realizedRows) {
         const key = `${(r.condition_id || '').toLowerCase()}|${(r.side || '').toUpperCase()}`;
-        if (polyKeys.has(key)) continue;  // already counted via polymarket_trades
+        if (polyKeys.has(key)) { rtSkippedDedup++; continue; }  // already counted via polymarket_trades
         const pnl = parseFloat(r.realized_pnl) || 0;
         rtCount++;
         rtPnl += pnl;
@@ -19322,12 +19358,16 @@ async function _fetchFlexStats(userId) {
       polyStats.net_pnl    += rtPnl;
       polyStats.staked     += rtStaked;
       polyStats.has_trades += rtCount;
+      if (diag) diag.rt_contributed = { rtWins, rtLosses, rtCount, rtPnl, rtStaked, rtSkippedDedup };
     }
   } catch (e) {
+    if (diag) diag.errors.push({ stage: 'rt_outer', message: e.message });
     if (!/relation "realized_trades" does not exist/i.test(e.message)) {
       console.warn('[flex] realized_trades lookup:', e.message);
     }
   }
+  if (diag) diag.poly_stats_after_rt = { ...polyStats };
+  if (diag) diag.realized_trade_count = realizedTradeCount;
 
   // Weekly consistency across picks + trades (90d trailing).
   // Uses a UNION of both sources so a bettor active on both surfaces
@@ -19350,7 +19390,10 @@ async function _fetchFlexStats(userId) {
            AND pt.status IN ('win','loss','push')
            AND pt.updated_at > NOW() - INTERVAL '90 days'
       ) u GROUP BY wk
-    ) w`, [userId]).catch(() => []);
+    ) w`, [userId]).catch(e => {
+      if (diag) diag.errors.push({ stage: 'weekly_query', message: e.message });
+      return [];
+    });
 
   const p = pickRows[0] || {};
   const w = weeklyRows[0] || {};
@@ -19377,13 +19420,99 @@ async function _fetchFlexStats(userId) {
   };
 }
 
-async function recomputeFlexScore(userId) {
-  if (!pool) return null;
+// Stamp flex_computed_at = now() unconditionally so callers can tell
+// "ran but produced/errored" from "never ran" (NULL). Errors captured
+// into diag, never thrown.
+async function _stampFlexComputedAt(userId, diag) {
   try {
-    const stats = await _fetchFlexStats(userId);
-    const result = _computeFlex(stats);
-    const tier = _flexTier(result.score, result.qualifies);
-    await pool.query(`
+    const r = await pool.query('UPDATE users SET flex_computed_at = now() WHERE id = $1', [userId]);
+    if (diag) diag.update = Object.assign(diag.update || {}, { stamp: { rowCount: r.rowCount } });
+  } catch (e) {
+    if (diag) diag.errors.push({ stage: 'stamp', message: e.message });
+  }
+}
+
+async function recomputeFlexScore(userId, opts) {
+  if (!pool) return null;
+  const diag = (opts && opts.diag) ? opts.diag : null;
+  if (diag) {
+    diag.userId = userId;
+    if (!diag.errors) diag.errors = [];
+  }
+
+  // Phase 1: read + compute. Failure here means no score to write — but we
+  // still stamp flex_computed_at so the user shows as "ran" downstream.
+  let stats, result, tier;
+  try {
+    stats = await _fetchFlexStats(userId, diag);
+    result = _computeFlex(stats);
+    tier = _flexTier(result.score, result.qualifies);
+    if (diag) {
+      diag.compute = {
+        score:           result.score,
+        qualifies:       result.qualifies,
+        settled_events:  result.settled_events,
+        raw_win_rate:    result.raw_win_rate,
+        tier,
+        components:      result.components,
+        wins:            stats.wins,
+        losses:          stats.losses,
+        pushes:          stats.pushes,
+        net_pnl:         stats.net_pnl,
+        total_staked:    stats.total_staked,
+        brier_score:     stats.brier_score,
+        avg_clv_cents:   stats.avg_clv_cents,
+      };
+    }
+  } catch (e) {
+    if (diag) diag.errors.push({ stage: 'compute', message: e.message });
+    console.warn('[flex] compute error:', userId, e.message);
+    await _stampFlexComputedAt(userId, diag);
+    return null;
+  }
+
+  // Phase 2: full UPDATE including aggregate-refresh columns. If the
+  // aggregate columns don't exist, fall back to the existing-schema
+  // UPDATE. If THAT fails, fall back to a minimal flex_computed_at stamp.
+  // Three tiers so we always leave a footprint of having run.
+  const realizedTradeCount = (diag && Number.isFinite(diag.realized_trade_count))
+    ? diag.realized_trade_count : 0;
+  try {
+    const upd = await pool.query(`
+      UPDATE users SET
+        flex_score           = $1,
+        flex_tier            = $2,
+        flex_qualifies       = $3,
+        flex_settled_events  = $4,
+        flex_raw_win_rate    = $5,
+        flex_c_accuracy      = $6,
+        flex_c_calibration   = $7,
+        flex_c_pnl           = $8,
+        flex_c_consistency   = $9,
+        flex_c_breadth       = $10,
+        prediction_win_rate  = $5,
+        total_predictions    = $4,
+        realized_trade_count = $11,
+        flex_computed_at     = now()
+      WHERE id = $12`,
+      [
+        result.score, tier, result.qualifies, result.settled_events, result.raw_win_rate,
+        result.components.accuracy, result.components.calibration, result.components.pnl,
+        result.components.consistency, result.components.breadth,
+        realizedTradeCount,
+        userId,
+      ]
+    );
+    if (diag) diag.update = { stage: 'full', rowCount: upd.rowCount };
+    return { ...result, tier, stats };
+  } catch (e) {
+    if (diag) diag.errors.push({ stage: 'full_update', message: e.message });
+    console.warn('[flex] full update failed, trying fallback:', userId, e.message);
+  }
+
+  // Tier 2 fallback: original-schema UPDATE without the aggregate columns
+  try {
+    const upd = await pool.query(`
       UPDATE users SET
         flex_score           = $1,
         flex_tier            = $2,
@@ -19404,13 +19533,17 @@ async function recomputeFlexScore(userId) {
         userId,
       ]
     );
+    if (diag) diag.update = { stage: 'fallback_existing', rowCount: upd.rowCount };
     return { ...result, tier, stats };
-  } catch (e) {
-    if (/column "flex_score" of relation "users" does not exist/i.test(e.message)) {
+  } catch (e2) {
+    if (diag) diag.errors.push({ stage: 'fallback_update', message: e2.message });
+    if (/column "flex_score" of relation "users" does not exist/i.test(e2.message)) {
       console.warn('[flex] schema missing — run supabase_migration_flex_score.sql');
-      return null;
+    } else {
+      console.warn('[flex] recompute error:', userId, e2.message);
     }
-    console.warn('[flex] recompute error:', userId, e.message);
+    // Tier 3: minimal stamp so the row reads as "ran" not NULL.
+    await _stampFlexComputedAt(userId, diag);
     return null;
   }
 }
@@ -19507,8 +19640,11 @@ app.post('/api/admin/flex/rebuild', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const { user_id } = req.body || {};
   if (user_id) {
-    const result = await recomputeFlexScore(user_id);
-    return res.json({ scope: 'single', user_id, result });
+    const diag = { errors: [] };
+    console.log('[flex/rebuild] start userId=' + user_id);
+    const result = await recomputeFlexScore(user_id, { diag });
+    console.log('[flex/rebuild] done userId=' + user_id + ' diag=' + JSON.stringify(diag));
+    return res.json({ scope: 'single', user_id, result, diag });
   }
   const result = await recomputeAllFlexScores();
   res.json({ scope: 'all', ...result });
