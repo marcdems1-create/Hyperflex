@@ -806,12 +806,18 @@ polymarket.init({ fetch: _nodeFetch });
 // purely to surface load-time syntax errors early.
 const fedTranscripts = require('./scrapers/fed_transcripts');
 
-// Direct Postgres pool — this is the reliable connection
+// Direct Postgres pool — this is the reliable connection.
+// max: 25 (bumped from 5) to handle production traffic load — Cloudflare
+// metrics showed ~133% traffic growth and dbQuery timeouts cascading
+// across multiple crons (closing-prices, agent-eval, picks, hedge-alerts).
+// Pool of 5 was starving the cron loop. 25 gives headroom for the
+// concurrent cron + request load without exceeding Railway Postgres's
+// connection cap (default 100 on Hobby/Pro plans).
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
-      max: 5,
+      max: 25,
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 15000,
       statement_timeout: 15000,
@@ -19273,21 +19279,27 @@ async function _fetchFlexStats(userId) {
   // any user whose Polymarket history was backfilled from /activity rather
   // than logged through HFX-routed trades.
   //
-  // Without this UNION, _fetchFlexStats returns 0 settled events for any
-  // user whose only trade history is in realized_trades — including the
-  // entire top-50 whale leaderboard (verified by divergence query: 0/5
-  // sampled whales had any rows in polymarket_trades). The 4:30 AM cron
-  // then writes flex_settled_events=0 → flex_qualifies=false → profile
-  // renders "Building · 25 settled to unlock" forever.
+  // realized_trades.user_id is UUID; userId arrives here as TEXT (request
+  // body or cron iteration). Bare comparison auto-casts in some contexts
+  // but not all — explicit ::uuid cast matches the pattern at server.js
+  // :37262, :37372 (regrade aggregate refresh) and is defensive against
+  // type-coercion failures that silently zero out settled_events for the
+  // entire whale population.
   //
-  // realized_trades is the FIFO-collapsed rollup; polymarket_trades is
-  // the per-event log. Dedup by (condition_id, side) — polymarket_trades
-  // wins on collision since it's the granular source. Mirror the dedup
-  // logic from /api/member/:userId at server.js:14197-14223.
+  // The .catch(() => []) anti-pattern is deliberately removed so any real
+  // error (cast failure, timeout, missing column) surfaces to the outer
+  // try/catch's console.warn. The "table doesn't exist" path stays via
+  // the regex check below.
+  //
+  // No close_reason filter — every row in realized_trades is settled by
+  // definition (the table only stores closed positions, FIFO-collapsed
+  // sells + redeems). Filtering on close_reason here would exclude every
+  // row.
+  let realizedRows = [];
   try {
-    const realizedRows = await dbQuery(`
+    realizedRows = await dbQuery(`
       SELECT condition_id, side, realized_pnl, entry_cost_usd
-        FROM realized_trades WHERE user_id = $1`, [userId]).catch(() => []);
+        FROM realized_trades WHERE user_id = $1::uuid`, [userId]);
     if (realizedRows.length) {
       // Build the polymarket_trades dedup key set if we have a wallet.
       let polyKeys = new Set();
@@ -19328,6 +19340,10 @@ async function _fetchFlexStats(userId) {
       console.warn('[flex] realized_trades lookup:', e.message);
     }
   }
+  // Visibility log so future "settled_events=0 for a user with N realized_trades
+  // rows" failures aren't silent. Logs at the end of the trade-stats phase so
+  // we can correlate fetched rows → final polyStats by user.
+  console.log(`[flex/_fetch] user=${String(userId).slice(0, 8)} rt_fetched=${realizedRows.length} pt_has=${polyStats.has_trades} wins=${polyStats.wins} losses=${polyStats.losses}`);
 
   // Weekly consistency across picks + trades (90d trailing).
   // Uses a UNION of both sources so a bettor active on both surfaces
@@ -19383,6 +19399,37 @@ async function recomputeFlexScore(userId) {
     const stats = await _fetchFlexStats(userId);
     const result = _computeFlex(stats);
     const tier = _flexTier(result.score, result.qualifies);
+
+    // Refresh denormalized aggregate columns on `users` from realized_trades
+    // current state, alongside the flex_* columns. Without this, columns
+    // like prediction_win_rate / total_predictions / realized_trade_count
+    // drift from realized_trades after a regrade or backfill (see the
+    // earlier session's destructive UPDATE residue: 64W/586L on the page
+    // while realized_trades held 117W/629L).
+    //
+    // Conditional preservation: only overwrite the prediction_* columns
+    // when realized_trades has rows for this user. For users whose data
+    // lives only in HFX-internal `positions` (no realized_trades), we
+    // leave their existing values alone — overwriting with zeros would
+    // destroy correct data populated by other code paths.
+    const rtAggRows = await dbQuery(`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE realized_pnl > 0)::int AS wins,
+             COALESCE(SUM(realized_pnl), 0)::numeric AS pnl
+      FROM realized_trades WHERE user_id = $1::uuid`,
+      [userId]
+    ).catch(() => [{ total: 0, wins: 0, pnl: 0 }]);
+    const rt = rtAggRows[0] || { total: 0, wins: 0, pnl: 0 };
+    const rtTotal = parseInt(rt.total, 10) || 0;
+    const rtWinRate = rtTotal > 0 ? (parseFloat(rt.wins) / rtTotal) : 0;
+    const rtPnl = parseFloat(rt.pnl) || 0;
+
+    // Single UPDATE with CASE-guarded prediction_* columns. flex_* columns
+    // always overwrite (they're definitively computed from current stats);
+    // prediction_* columns preserve existing values when rt has 0 rows.
+    // flex_computed_at always stamps so we can distinguish "ran and produced
+    // 0" from "didn't run" — previously indistinguishable when the function
+    // threw early (silent NULL stayed NULL).
     await pool.query(`
       UPDATE users SET
         flex_score           = $1,
@@ -19395,16 +19442,21 @@ async function recomputeFlexScore(userId) {
         flex_c_pnl           = $8,
         flex_c_consistency   = $9,
         flex_c_breadth       = $10,
-        flex_computed_at     = now()
+        flex_computed_at     = now(),
+        realized_trade_count = CASE WHEN $12 > 0 THEN $12 ELSE realized_trade_count END,
+        total_predictions    = CASE WHEN $12 > 0 THEN $12 ELSE total_predictions END,
+        prediction_win_rate  = CASE WHEN $12 > 0 THEN $13 ELSE prediction_win_rate END,
+        prediction_pnl       = CASE WHEN $12 > 0 THEN $14 ELSE prediction_pnl END
       WHERE id = $11`,
       [
         result.score, tier, result.qualifies, result.settled_events, result.raw_win_rate,
         result.components.accuracy, result.components.calibration, result.components.pnl,
         result.components.consistency, result.components.breadth,
         userId,
+        rtTotal, rtWinRate, rtPnl,
       ]
     );
-    return { ...result, tier, stats };
+    return { ...result, tier, stats, rt_aggregate: { total: rtTotal, win_rate: rtWinRate, pnl: rtPnl } };
   } catch (e) {
     if (/column "flex_score" of relation "users" does not exist/i.test(e.message)) {
       console.warn('[flex] schema missing — run supabase_migration_flex_score.sql');
