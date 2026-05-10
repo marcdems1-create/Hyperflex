@@ -19284,10 +19284,24 @@ async function _fetchFlexStats(userId) {
   // the per-event log. Dedup by (condition_id, side) — polymarket_trades
   // wins on collision since it's the granular source. Mirror the dedup
   // logic from /api/member/:userId at server.js:14197-14223.
+  //
+  // realized_trades.user_id is UUID; userId arrives here as TEXT (from
+  // request body or cron iteration). Bare comparison auto-casts in most
+  // contexts but not all — explicit ::uuid cast matches the pattern at
+  // server.js:37262 and 37372 (the regrade aggregate refresh) and is
+  // defensive against type-coercion failures that would silently zero
+  // out settled_events for the entire whale population.
+  //
+  // The .catch(() => []) anti-pattern from the previous version is
+  // intentionally removed so any real error (cast failure, timeout,
+  // missing column) surfaces to the outer try/catch's console.warn
+  // and makes the failure debuggable. Existing "table doesn't exist"
+  // path still goes through the outer catch's regex check.
+  let realizedRows = [];
   try {
-    const realizedRows = await dbQuery(`
+    realizedRows = await dbQuery(`
       SELECT condition_id, side, realized_pnl, entry_cost_usd
-        FROM realized_trades WHERE user_id = $1`, [userId]).catch(() => []);
+        FROM realized_trades WHERE user_id = $1::uuid`, [userId]);
     if (realizedRows.length) {
       // Build the polymarket_trades dedup key set if we have a wallet.
       let polyKeys = new Set();
@@ -19328,6 +19342,10 @@ async function _fetchFlexStats(userId) {
       console.warn('[flex] realized_trades lookup:', e.message);
     }
   }
+  // Visibility log so future "settled_events=0 for a user with N realized_trades
+  // rows" failures aren't silent. Logs at the end of the trade-stats phase so
+  // we can correlate fetched rows → final polyStats by user.
+  console.log(`[flex/_fetch] user=${String(userId).slice(0, 8)} rt_fetched=${realizedRows.length} pt_has=${polyStats.has_trades} wins=${polyStats.wins} losses=${polyStats.losses}`);
 
   // Weekly consistency across picks + trades (90d trailing).
   // Uses a UNION of both sources so a bettor active on both surfaces
