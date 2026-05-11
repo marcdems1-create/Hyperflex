@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Incentives — HYPERFLEX</title>
-<meta name="description" content="Live edge markets and sponsored pools on Polymarket. Trade where the alpha is — the edge IS the reward.">
-<meta property="og:title" content="HYPERFLEX Incentives — Trade where the edge is">
-<meta property="og:description" content="Live edge markets from the HYPERFLEX screener, plus sponsored reward pools when they exist.">
+<meta name="description" content="Markets paying liquidity rewards on Polymarket. Earn USDC for posting maker orders inside the spread.">
+<meta property="og:title" content="HYPERFLEX Incentives — Trade where the yield is">
+<meta property="og:description" content="Live Polymarket liquidity-rewards programs, refreshed every 10 minutes. Sponsored pools layer on top when they exist.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <script src="/nav.js" defer></script>
 <style>
@@ -21,33 +21,55 @@ a:hover { text-decoration:underline; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px; line-height:1.1; }
 .sub { font-size:15px; color:var(--dim); margin-bottom:24px; max-width:580px; }
-.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:28px; }
+
+/* Auto-banner — appears only when total daily pool crosses the threshold. */
+.banner { display:none; align-items:center; gap:12px; padding:14px 18px; margin-bottom:18px; border-radius:10px; background:linear-gradient(90deg, rgba(201,146,13,0.12), rgba(0,230,138,0.08)); border:1px solid rgba(201,146,13,0.35); }
+.banner.show { display:flex; }
+.banner-mark { font-size:18px; color:var(--gold); font-weight:900; line-height:1; }
+.banner-text { font-size:13px; color:var(--text); line-height:1.4; }
+.banner-text b { color:var(--gold); font-family:'JetBrains Mono',monospace; font-weight:800; }
+
+.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:24px; }
 @media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr)}}
 .stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
 .stat-label { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.1em; color:var(--faint); text-transform:uppercase; margin-bottom:4px; }
 .stat-val { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
 .stat-val.gold { color:var(--gold); } .stat-val.green { color:var(--green); }
-.section-title { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin:32px 0 12px; display:flex; align-items:center; gap:8px; }
+
+/* Short how-it-works summary, shown ABOVE the markets — answers
+   "what am I looking at?" without making the user scroll. */
+.summary { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:24px; font-size:13px; color:var(--dim); line-height:1.55; }
+.summary b { color:var(--text); font-weight:700; }
+.summary .summary-line { padding:2px 0; }
+.summary a { color:var(--gold); }
+
+.section-title { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin:28px 0 12px; display:flex; align-items:center; gap:8px; }
 .section-title .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 8px rgba(0,230,138,0.6); animation:pulse 1.4s infinite; }
-.mech { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:6px 18px; }
-.mech-line { display:flex; align-items:flex-start; gap:14px; padding:14px 0; font-size:14px; line-height:1.5; color:var(--dim); border-top:1px dashed var(--border); }
-.mech-line:first-child { border-top:0; }
-.mech-num { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; color:var(--faint); min-width:24px; padding-top:1px; }
-.mech-line b { color:var(--text); font-weight:700; }
-.split { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
-@media(max-width:600px){.split{grid-template-columns:1fr}}
-.role { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
-.role.trader { border-color:rgba(0,230,138,0.25); background:linear-gradient(180deg,rgba(0,230,138,0.04),rgba(22,22,31,0.85)); }
-.role.sponsor { border-color:rgba(168,85,247,0.25); background:linear-gradient(180deg,rgba(168,85,247,0.04),rgba(22,22,31,0.85)); }
-.role-eyebrow { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
-.role.trader .role-eyebrow { color:var(--green); } .role.sponsor .role-eyebrow { color:var(--purple); }
-.role-title { font-size:17px; font-weight:800; letter-spacing:-0.01em; margin-bottom:6px; }
-.role-body { font-size:13px; color:var(--dim); line-height:1.5; margin-bottom:14px; }
-.role-cta { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.01em; text-decoration:none; }
-.role.trader .role-cta { background:var(--green); color:#001a10; }
-.role.sponsor .role-cta { background:var(--purple); color:#fff; }
-.role-cta:hover { filter:brightness(1.1); text-decoration:none; }
-.foot { margin-top:32px; padding-top:18px; border-top:1px solid var(--border); font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
+.section-title .right-note { margin-left:auto; font-size:9px; color:var(--faint); letter-spacing:0.08em; }
+
+/* Reward-market card — daily rate is the dominant signal, not edge score. */
+.r-card { display:flex; flex-direction:column; gap:10px; padding:14px 16px; margin-bottom:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; transition:border-color .15s; text-decoration:none; color:inherit; }
+.r-card:hover { border-color:rgba(201,146,13,0.45); text-decoration:none; }
+.r-card-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.r-badge { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:3px 8px; border-radius:5px; background:rgba(201,146,13,0.16); color:var(--gold); text-transform:uppercase; white-space:nowrap; }
+.r-meta { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; margin-left:auto; }
+.r-q { font-size:14px; font-weight:600; color:var(--text); line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.r-stats { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:center; font-family:'JetBrains Mono',monospace; font-size:11px; }
+.r-stats > div { display:flex; flex-direction:column; gap:2px; }
+.r-stats .stat-k { font-size:9px; color:var(--faint); letter-spacing:0.08em; text-transform:uppercase; }
+.r-stats .stat-v { color:var(--text); font-weight:800; font-size:13px; font-variant-numeric:tabular-nums; }
+.r-stats .stat-v.yes { color:var(--green); }
+.r-stats .stat-v.no { color:#ff4d6a; }
+.r-cta { padding:7px 14px; border-radius:6px; background:var(--gold); color:#0a0a0f; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; letter-spacing:0.06em; text-decoration:none; }
+.r-cta:hover { filter:brightness(1.1); text-decoration:none; }
+
+/* Honest empty state — no fallback to edge cards, no playful copy. */
+#rewardMarketsList .empty { padding:28px 20px; text-align:center; background:var(--surface); border:1px dashed var(--border); border-radius:12px; color:var(--dim); }
+#rewardMarketsList .empty .empty-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:6px; }
+#rewardMarketsList .empty .empty-body  { font-size:12px; line-height:1.5; }
+#rewardMarketsList .empty a { color:var(--gold); }
+
+/* Pools — same shape as before, only renders when real pools exist. */
 .pool { display:block; padding:14px 16px; margin-bottom:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; text-decoration:none; color:inherit; transition:border-color .15s; }
 .pool:hover { border-color:rgba(0,230,138,0.35); text-decoration:none; }
 .pool-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
@@ -65,33 +87,37 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 .pool-bar { height:3px; background:var(--surface-2); border-radius:2px; margin-top:8px; overflow:hidden; }
 .pool-bar-fill { height:100%; background:linear-gradient(90deg,var(--green),var(--gold)); border-radius:2px; transition:width .3s; }
 
-/* POOLS | EDGE tabs above HOW IT WORKS */
+/* Expanded "How rewards work" — full detail below the markets for
+   readers who want the full mechanic. POOLS | REWARDS tabs let
+   sponsors switch to read about the future pool mechanic. */
 .mode-tabs { display:inline-flex; gap:2px; background:var(--surface-2); border-radius:8px; padding:3px; margin:0 0 10px; }
 .mode-tab { padding:7px 16px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; letter-spacing:0.08em; color:var(--dim); background:none; border:none; cursor:pointer; transition:all .15s; }
 .mode-tab.active { background:var(--surface); color:var(--text); }
 .mode-tab:hover:not(.active) { color:var(--text); }
+.mech { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:6px 18px; }
+.mech-line { display:flex; align-items:flex-start; gap:14px; padding:14px 0; font-size:14px; line-height:1.5; color:var(--dim); border-top:1px dashed var(--border); }
+.mech-line:first-child { border-top:0; }
+.mech-num { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; color:var(--faint); min-width:24px; padding-top:1px; }
+.mech-line b { color:var(--text); font-weight:700; }
 
-/* EDGE MARKETS section — top 10 by edge_score, refreshes every 60s */
-.edge-card { display:flex; flex-direction:column; gap:10px; padding:14px 16px; margin-bottom:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; transition:border-color .15s; text-decoration:none; color:inherit; }
-.edge-card:hover { border-color:rgba(201,146,13,0.45); text-decoration:none; }
-.edge-card-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.edge-badge { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:3px 8px; border-radius:5px; background:rgba(201,146,13,0.14); color:var(--gold); text-transform:uppercase; }
-.edge-badge.fresh { background:rgba(0,230,138,0.14); color:var(--green); }
-.edge-meta { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; margin-left:auto; }
-.edge-q { font-size:14px; font-weight:600; color:var(--text); line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.edge-stats { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:center; font-family:'JetBrains Mono',monospace; font-size:11px; }
-.edge-stats > div { display:flex; flex-direction:column; gap:2px; }
-.edge-stats .stat-k { font-size:9px; color:var(--faint); letter-spacing:0.08em; text-transform:uppercase; }
-.edge-stats .stat-v { color:var(--text); font-weight:800; font-size:13px; font-variant-numeric:tabular-nums; }
-.edge-stats .stat-v.yes { color:var(--green); }
-.edge-stats .stat-v.no { color:#ff4d6a; }
-.edge-cta { padding:7px 14px; border-radius:6px; background:var(--gold); color:#0a0a0f; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; letter-spacing:0.06em; text-decoration:none; }
-.edge-cta:hover { filter:brightness(1.1); text-decoration:none; }
-#edgeMarketsList .empty { padding:24px; text-align:center; color:var(--faint); font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em; }
+.split { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+@media(max-width:600px){.split{grid-template-columns:1fr}}
+.role { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+.role.trader { border-color:rgba(0,230,138,0.25); background:linear-gradient(180deg,rgba(0,230,138,0.04),rgba(22,22,31,0.85)); }
+.role.sponsor { border-color:rgba(168,85,247,0.25); background:linear-gradient(180deg,rgba(168,85,247,0.04),rgba(22,22,31,0.85)); }
+.role-eyebrow { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+.role.trader .role-eyebrow { color:var(--green); } .role.sponsor .role-eyebrow { color:var(--purple); }
+.role-title { font-size:17px; font-weight:800; letter-spacing:-0.01em; margin-bottom:6px; }
+.role-body { font-size:13px; color:var(--dim); line-height:1.5; margin-bottom:14px; }
+.role-cta { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:8px; font-family:'Inter',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.01em; text-decoration:none; }
+.role.trader .role-cta { background:var(--green); color:#001a10; }
+.role.sponsor .role-cta { background:var(--purple); color:#fff; }
+.role-cta:hover { filter:brightness(1.1); text-decoration:none; }
+.foot { margin-top:32px; padding-top:18px; border-top:1px solid var(--border); font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
 @media(max-width:600px) {
-  .edge-stats { grid-template-columns:1fr 1fr; }
-  .edge-stats .edge-cta-cell { grid-column:span 2; }
-  .edge-cta { display:block; text-align:center; }
+  .r-stats { grid-template-columns:1fr 1fr; }
+  .r-stats .r-cta-cell { grid-column:span 2; }
+  .r-cta { display:block; text-align:center; }
 }
 </style>
 </head>
@@ -99,39 +125,57 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 <div id="nav-root"></div>
 <div class="wrap">
   <div class="eyebrow"><span class="dot"></span>HYPERFLEX · Incentives</div>
-  <h1>Trade where the edge is.</h1>
-  <p class="sub">Live alpha markets surfaced by the HYPERFLEX screener — 8-signal edge score, whale consensus, depth imbalance, refreshed every 90 seconds. Sponsored reward pools layer on top when they exist. Today: edge IS the reward.</p>
+  <h1>Trade where the yield is.</h1>
+  <p class="sub">Polymarket pays USDC for posting maker orders inside the spread on selected markets. Live rewards programs surface here every 10 minutes. Sponsored HYPERFLEX pools layer on top when they exist.</p>
+
+  <!-- Auto-banner: appears only when total daily pool >= threshold. -->
+  <div class="banner" id="rewardBanner">
+    <span class="banner-mark">●</span>
+    <span class="banner-text" id="rewardBannerText"></span>
+  </div>
+
+  <!-- Stats: real Polymarket rewards numbers. -->
   <div class="stats">
-    <div class="stat"><div class="stat-label">Edges tracked</div><div class="stat-val" id="sEdges">—</div></div>
-    <div class="stat"><div class="stat-label">Best edge</div><div class="stat-val gold" id="sBestEdge">—</div></div>
-    <div class="stat"><div class="stat-label">Markets scanned</div><div class="stat-val green" id="sScanned">—</div></div>
+    <div class="stat"><div class="stat-label">Markets paying</div><div class="stat-val" id="sMarkets">—</div></div>
+    <div class="stat"><div class="stat-label">Best daily rate</div><div class="stat-val gold" id="sBestRate">—</div></div>
+    <div class="stat"><div class="stat-label">Total daily pool</div><div class="stat-val green" id="sTotalPool">—</div></div>
   </div>
 
-  <!-- MARKETS WITH AN EDGE — the live section, B3 -->
-  <div class="section-title" id="edge-markets">
+  <!-- Short summary above the markets — explains the page without scrolling. -->
+  <div class="summary">
+    <div class="summary-line"><b>How it works:</b> Polymarket reward programs pay maker fees in USDC to traders who post limit orders inside a set spread (e.g. ±2¢) on selected markets. Hold the order, earn the daily rate per share, capped by min-size.</div>
+    <div class="summary-line">Click any market below to open it on HYPERFLEX. Post limits inside the spread to earn — market orders don't qualify.</div>
+  </div>
+
+  <!-- Markets section: ALL the rewards live, sorted by daily rate. -->
+  <div class="section-title" id="reward-markets">
     <span class="live-dot"></span>
-    Markets with an edge · Live
+    Markets paying rewards · Live
+    <span class="right-note">Refreshes every 10m</span>
   </div>
-  <div id="edgeMarketsList">
-    <div class="empty">Loading live edge feed…</div>
+  <div id="rewardMarketsList">
+    <div class="empty">
+      <div class="empty-title">Loading live rewards…</div>
+      <div class="empty-body">Pulling active programs from Polymarket.</div>
+    </div>
   </div>
 
-  <!-- ACTIVE POOLS — only renders when real pools exist, charter rule -->
+  <!-- Active pools: only renders when real HYPERFLEX-side pools exist. -->
   <div id="poolsSection" style="display:none">
-    <div class="section-title">Active pools</div>
+    <div class="section-title">Sponsored pools · Live</div>
     <div id="poolsList"></div>
   </div>
 
-  <!-- HOW IT WORKS with POOLS | EDGE tabs, B5 -->
-  <div class="section-title" style="margin-bottom:8px">How it works</div>
+  <!-- Expanded mechanics, below the markets for readers who want full detail. -->
+  <div class="section-title" style="margin-bottom:8px">How it works · in detail</div>
   <div class="mode-tabs" role="tablist">
-    <button type="button" class="mode-tab active" data-mode="edge" aria-selected="true">Edge</button>
+    <button type="button" class="mode-tab active" data-mode="rewards" aria-selected="true">Rewards</button>
     <button type="button" class="mode-tab" data-mode="pools" aria-selected="false">Pools</button>
   </div>
-  <div class="mech" id="mechEdge">
-    <div class="mech-line"><span class="mech-num">01</span><span><b>Screener marks the edge.</b> An 8-signal Edge Score combines whale consensus, depth imbalance, momentum, time decay, and price divergence to flag markets trading off-parity. Live, every 90 seconds.</span></div>
-    <div class="mech-line"><span class="mech-num">02</span><span><b>Take the side before it closes.</b> Each card above routes straight to the market with the right side pre-selected. The trade widget runs through the HYPERFLEX builder route — same flow, same fees as polymarket.com.</span></div>
-    <div class="mech-line"><span class="mech-num">03</span><span><b>Score builds a track record.</b> Every settled prediction scores your FLEX Score — the trader-side rating that compounds across markets. Above 5 settled events, you're on the public leaderboard.</span></div>
+  <div class="mech" id="mechRewards">
+    <div class="mech-line"><span class="mech-num">01</span><span><b>Polymarket runs the program.</b> A subset of active markets gets a liquidity-rewards budget — typically a daily USDC pool paid to traders who post maker orders inside the program's spread (e.g. within 2¢ of mid). Markets in the list above are the ones with a budget right now.</span></div>
+    <div class="mech-line"><span class="mech-num">02</span><span><b>Post a limit, not a market order.</b> Click a market, open the trade widget, switch to Limit. Set your price inside the spread shown on the card. Min-size matters — orders below the min-size for that market don't accrue. Sitting on the book is the work; the longer the order rests, the more you earn.</span></div>
+    <div class="mech-line"><span class="mech-num">03</span><span><b>Polymarket attributes + pays.</b> Rewards accrue continuously and settle in USDC. HYPERFLEX runs the trade through its builder route so the order placement + attribution path is the same as polymarket.com. <a href="https://docs.polymarket.com/quickstart/orders-rewards/rewards">Polymarket's rewards docs ↗</a></span></div>
   </div>
   <div class="mech" id="mechPools" style="display:none">
     <div class="mech-line"><span class="mech-num">01</span><span><b>Sponsor funds a pool.</b> A market maker, prop desk, or platform deposits a reward pool against a specific Polymarket market — e.g. $5,000 to seed depth on the YES side at 30¢ before resolution.</span></div>
@@ -142,9 +186,9 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
   <div class="split">
     <div class="role trader">
       <div class="role-eyebrow">For traders</div>
-      <div class="role-title">The edge IS the reward.</div>
-      <div class="role-body">The screener surfaces markets with whale conviction, depth imbalance, or price divergence right now. Sponsored pools layer on top when they exist — until then, trade the structural edge. Every settled trade builds your FLEX Score.</div>
-      <a href="#edge-markets" class="role-cta">See edge markets →</a>
+      <div class="role-title">Post inside the spread. Earn USDC.</div>
+      <div class="role-body">Active rewards programs pay maker fees on top of any P&amp;L from the position itself. Open a market above, switch to Limit, post inside the spread. Rest the order. Repeat.</div>
+      <a href="#reward-markets" class="role-cta">See rewards markets →</a>
     </div>
     <div class="role sponsor">
       <div class="role-eyebrow">For sponsors</div>
@@ -153,85 +197,100 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
       <a href="mailto:partnerships@hyperflex.network?subject=Sponsor%20a%20pool" class="role-cta">Get in touch →</a>
     </div>
   </div>
-  <div class="foot">Edge markets refresh every 60 seconds from the live screener. Pools settle in USDC on market resolution. Eligibility requires a verified Polymarket address routed through the HYPERFLEX builder. Per-unit rewards are public and ratable. No upcoming-pool teasers, no fake supply.</div>
+
+  <div class="foot">Rewards markets refresh every 10 minutes from Polymarket's gamma API. Daily rates and max spreads are set by Polymarket per program. Pools settle in USDC on market resolution. Eligibility requires a verified Polymarket address routed through the HYPERFLEX builder. <a href="/alpha-live">Looking for structural edges instead of rewards? →</a></div>
 </div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function fmtVol(v){ v = Number(v||0); if (v >= 1e6) return '$' + (v/1e6).toFixed(1).replace(/\.0$/,'') + 'M'; if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k'; return '$' + Math.round(v); }
+function fmtUsd(v){ v = Number(v||0); if (v >= 1e6) return '$' + (v/1e6).toFixed(2).replace(/\.?0+$/,'') + 'M'; if (v >= 1e3) return '$' + (v/1e3).toFixed(1).replace(/\.0$/,'') + 'k'; if (v >= 1) return '$' + v.toFixed(0); return '$' + v.toFixed(2); }
+function fmtRate(v){ v = Number(v||0); if (v >= 1000) return '$' + Math.round(v).toLocaleString(); if (v >= 1) return '$' + v.toFixed(2); return '$' + v.toFixed(3); }
 function pctFromYes(yes){ var p = Number(yes||0); if (p > 1) p = p / 100; return Math.round(p * 100); }
 
-// STATS — pulled from /api/incentives/stats. The endpoint now returns edge
-// data (from in-memory _arbCache + _screenerCache) alongside the pool
-// fields. Old pool stats (pools_live / deployed_usd / paid_usd) still
-// exist server-side for when the incentive_pools table fills; this page
-// just doesn't display them as primary stats anymore.
+// Banner threshold: total daily reward pool >= $25k qualifies as a
+// "big rewards day" and the banner fires. Tuned conservatively — most
+// days the pool is single-thousands; a $25k+ day is the kind of event
+// that pulls returning traders to the page.
+var BANNER_THRESHOLD_USD = 25000;
+
+// STATS — /api/incentives/stats now returns markets_with_rewards,
+// best_daily_rate, total_daily_pool alongside the legacy pool fields.
 function paintStats(d) {
   if (!d) return;
-  var edges = d.edges_tracked != null ? d.edges_tracked : null;
-  var best  = d.best_edge_pct != null ? d.best_edge_pct : null;
-  var scan  = d.markets_scanned != null ? d.markets_scanned : null;
-  document.getElementById('sEdges').textContent     = edges != null ? edges : '—';
-  document.getElementById('sBestEdge').textContent  = best != null ? (Math.round(Number(best) * 10) / 10) + '%' : '—';
-  document.getElementById('sScanned').textContent   = scan != null ? scan : '—';
+  var n     = d.markets_with_rewards != null ? d.markets_with_rewards : null;
+  var best  = d.best_daily_rate      != null ? d.best_daily_rate      : null;
+  var total = d.total_daily_pool     != null ? d.total_daily_pool     : null;
+  document.getElementById('sMarkets').textContent   = n != null ? n : '—';
+  document.getElementById('sBestRate').textContent  = best != null && best > 0 ? fmtRate(best) + '/d' : '—';
+  document.getElementById('sTotalPool').textContent = total != null && total > 0 ? fmtUsd(total) + '/d' : '—';
+
+  // Auto-banner — appears only when the total daily pool crosses the
+  // threshold. No banner on a quiet day, no manual ops needed.
+  var banner = document.getElementById('rewardBanner');
+  var text   = document.getElementById('rewardBannerText');
+  if (total != null && total >= BANNER_THRESHOLD_USD) {
+    text.innerHTML = 'Big rewards day · <b>' + fmtUsd(total) + '</b> in liquidity rewards paying today across <b>' + (n || 0) + '</b> markets.';
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
 }
 function loadStats() {
   fetch('/api/incentives/stats').then(function(r){return r.ok?r.json():null;}).then(paintStats).catch(function(){});
 }
-loadStats();
 
-// EDGE MARKETS — top 10 by edge_score, polled every 60 seconds. Cards
-// link directly to /market/<slug> for the trade flow. edge_score is the
-// 8-signal alpha-pipeline composite (0-100); badge color flips green on
-// 'is_new' markets that just crossed score-60 in the last hour.
-function renderEdgeCards(list) {
-  var el = document.getElementById('edgeMarketsList');
+// REWARD MARKETS — every Polymarket market with an active liquidity-
+// rewards program, sorted by daily rate. Empty state is honest: no
+// fallback to edge cards or liquidity-only markets.
+function renderRewardCards(list) {
+  var el = document.getElementById('rewardMarketsList');
   if (!Array.isArray(list) || !list.length) {
-    el.innerHTML = '<div class="empty">No edge markets right now. Screener refreshes every 90 seconds.</div>';
+    el.innerHTML = '<div class="empty">' +
+      '<div class="empty-title">No reward programs running right now.</div>' +
+      '<div class="empty-body">Polymarket rotates liquidity-rewards programs in and out daily. Check back in a few hours, or <a href="#sponsor-cta">fund a sponsored pool</a> to seed your own market. ' +
+      'Looking for structural edges instead? <a href="/alpha-live">Browse the alpha terminal →</a></div>' +
+    '</div>';
     return;
   }
   el.innerHTML = list.map(function(m){
-    var score = Number(m.edge_score || 0);
-    var fresh = !!m.is_new;
     var yesPct = pctFromYes(m.yes_price);
     var noPct  = 100 - yesPct;
-    var vol24h = m.volume_24hr != null ? m.volume_24hr : m.volume_24h;
-    var slug = m.slug || '';
-    var href = slug ? '/market/' + encodeURIComponent(slug) : '#';
-    var ageMin = Number(m.edge_age_minutes || 0);
-    var ageLabel = ageMin > 0 ? (ageMin < 60 ? ageMin + 'm fresh' : Math.round(ageMin/60) + 'h fresh') : '';
-    return '<a class="edge-card" href="' + esc(href) + '">' +
-      '<div class="edge-card-top">' +
-        '<span class="edge-badge' + (fresh ? ' fresh' : '') + '">Edge ' + Math.round(score) + '/100</span>' +
-        (ageLabel ? '<span class="edge-meta">' + esc(ageLabel) + '</span>' : '') +
+    var rate   = Number(m.reward_rate || 0);
+    var spread = Number(m.max_spread  || 0);
+    var slug   = m.slug || '';
+    var href   = slug ? '/market/' + encodeURIComponent(slug) : (m.url || '#');
+    var spreadLabel = spread > 0 ? ('±' + (spread * 100).toFixed(spread < 0.01 ? 2 : 1) + '¢') : '';
+    return '<a class="r-card" href="' + esc(href) + '">' +
+      '<div class="r-card-top">' +
+        '<span class="r-badge">' + fmtRate(rate) + ' / day</span>' +
+        (spreadLabel ? '<span class="r-meta">spread ' + esc(spreadLabel) + '</span>' : '') +
       '</div>' +
-      '<div class="edge-q">' + esc(m.question || m.title || 'Untitled market') + '</div>' +
-      '<div class="edge-stats">' +
+      '<div class="r-q">' + esc(m.question || 'Untitled market') + '</div>' +
+      '<div class="r-stats">' +
         '<div><span class="stat-k">Yes</span><span class="stat-v yes">' + yesPct + '¢</span></div>' +
         '<div><span class="stat-k">No</span><span class="stat-v no">' + noPct + '¢</span></div>' +
-        '<div><span class="stat-k">24h vol</span><span class="stat-v">' + fmtVol(vol24h) + '</span></div>' +
-        '<div class="edge-cta-cell"><span class="edge-cta">Trade →</span></div>' +
+        '<div><span class="stat-k">24h vol</span><span class="stat-v">' + fmtVol(m.volume_24h) + '</span></div>' +
+        '<div class="r-cta-cell"><span class="r-cta">Trade →</span></div>' +
       '</div>' +
     '</a>';
   }).join('');
 }
-function loadEdgeMarkets() {
-  fetch('/api/alpha/top?n=10').then(function(r){return r.ok?r.json():null;}).then(function(d){
-    // Endpoint returns either an array directly or {markets:[...]} depending
-    // on caller — handle both shapes defensively.
-    var list = Array.isArray(d) ? d : (d && Array.isArray(d.markets) ? d.markets : []);
-    renderEdgeCards(list);
-  }).catch(function(e){
-    var el = document.getElementById('edgeMarketsList');
-    el.innerHTML = '<div class="empty">Couldn’t load edge feed. Retrying in 60s.</div>';
+function loadRewardMarkets() {
+  fetch('/api/ecosystem/rewards').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    var list = (d && Array.isArray(d.markets)) ? d.markets : [];
+    renderRewardCards(list);
+  }).catch(function(){
+    var el = document.getElementById('rewardMarketsList');
+    el.innerHTML = '<div class="empty"><div class="empty-title">Couldn’t load rewards feed.</div><div class="empty-body">Retrying in 10 minutes.</div></div>';
   });
 }
-loadEdgeMarkets();
-// Refresh on 60s interval — same cadence as the alpha-card pattern on
-// /explore. Stats refresh on the same tick so the headline best-edge
-// number tracks the live cards.
-setInterval(function(){ loadEdgeMarkets(); loadStats(); }, 60000);
+loadStats();
+loadRewardMarkets();
+// 10-min refresh — same cadence as the server-side cache, no point
+// fetching faster than the data updates.
+setInterval(function(){ loadStats(); loadRewardMarkets(); }, 10 * 60 * 1000);
 
-// POOLS | EDGE tab toggle for HOW IT WORKS section
+// REWARDS | POOLS tab toggle for the expanded mechanics section.
 document.querySelectorAll('.mode-tab').forEach(function(btn){
   btn.addEventListener('click', function(){
     document.querySelectorAll('.mode-tab').forEach(function(b){
@@ -239,12 +298,12 @@ document.querySelectorAll('.mode-tab').forEach(function(btn){
       b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
     });
     var mode = btn.getAttribute('data-mode');
-    document.getElementById('mechEdge').style.display  = mode === 'edge'  ? 'block' : 'none';
-    document.getElementById('mechPools').style.display = mode === 'pools' ? 'block' : 'none';
+    document.getElementById('mechRewards').style.display = mode === 'rewards' ? 'block' : 'none';
+    document.getElementById('mechPools').style.display   = mode === 'pools'   ? 'block' : 'none';
   });
 });
 
-// ACTIVE POOLS — only renders the section if real pools exist (charter rule).
+// SPONSORED POOLS — only renders the section when real pools exist.
 fetch('/api/incentives/active').then(function(r){return r.ok?r.json():null;}).then(function(d){
   if (!d || !d.pools || !d.pools.length) return;
   document.getElementById('poolsSection').style.display='block';

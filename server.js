@@ -32001,14 +32001,30 @@ function _liveEdgeStats() {
   };
 }
 
+// Reads the same `_ecosystemRewardsCache` populated by /api/ecosystem/rewards.
+// Aggregates already live on the cache payload so this is a pure read.
+// Returns zeros when the cache is unpopulated (cold start) — page renders
+// the honest empty state in that case.
+function _liveRewardStats() {
+  const d = _ecosystemRewardsCache && _ecosystemRewardsCache.data;
+  if (!d) return { markets_with_rewards: 0, best_daily_rate: null, total_daily_pool: null };
+  return {
+    markets_with_rewards: d.markets_with_rewards || (Array.isArray(d.markets) ? d.markets.length : 0),
+    best_daily_rate:      d.best_daily_rate  != null ? Number(d.best_daily_rate)  : null,
+    total_daily_pool:     d.total_daily_pool != null ? Number(d.total_daily_pool) : null,
+  };
+}
+
 app.get('/api/incentives/stats', async (req, res) => {
-  // Live-edge fields are always available — they read in-memory caches
-  // populated by the screener + arb crons, independent of the
-  // incentive_pools schema state. Pool fields fall back to 0 when the
-  // table is unprovisioned (same as before).
-  const liveEdge = _liveEdgeStats();
+  // Live-edge + live-rewards fields are always available — they read
+  // in-memory caches populated by the screener + arb crons and the
+  // ecosystem/rewards endpoint, independent of the incentive_pools
+  // schema state. Pool fields fall back to 0 when the table is
+  // unprovisioned (same as before).
+  const liveEdge   = _liveEdgeStats();
+  const liveReward = _liveRewardStats();
   if (!pool) {
-    return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ...liveEdge });
+    return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ...liveEdge, ...liveReward });
   }
   try {
     const rows = await dbQuery(`
@@ -32024,11 +32040,12 @@ app.get('/api/incentives/stats', async (req, res) => {
       deployed_usd: parseFloat(r.deployed_usd || 0),
       paid_usd: parseFloat(r.paid_usd || 0),
       ...liveEdge,
+      ...liveReward,
     });
   } catch (e) {
     // Schema-not-provisioned: same fallback the paper-balance pattern uses.
     if (e && (e.code === '42P01' || /incentive_pools/.test(e.message || ''))) {
-      return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ephemeral: true, ...liveEdge });
+      return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ephemeral: true, ...liveEdge, ...liveReward });
     }
     console.error('[incentives/stats]', e.message);
     res.status(500).json({ error: e.message });
@@ -39578,9 +39595,36 @@ app.get('/api/ecosystem/stats', async (req, res) => {
   }
 });
 
+// Extract Polymarket liquidity-rewards-program data from a Gamma market
+// row. Rewards live in one of two shapes depending on the endpoint:
+//   - top-level (`rewardsDailyRate`, `rewardsMaxSpread`, `rewardsMinSize`)
+//   - nested `clobRewards` array (current shape; one entry per active
+//     program against a market, e.g. distinct YES vs NO programs).
+// Returns the aggregated maxima across all programs on the row, or zeros
+// when the market has no active program.
+function _extractMarketRewards(m) {
+  let dailyRate = 0, maxSpread = 0, minSize = 0;
+  if (Array.isArray(m.clobRewards)) {
+    for (const cr of m.clobRewards) {
+      const dr = parseFloat(cr.rewardsDailyRate || cr.rewards_daily_rate || cr.dailyRate || cr.daily_rate || 0);
+      const ms = parseFloat(cr.rewardsMaxSpread || cr.rewards_max_spread || cr.maxSpread || cr.max_spread || 0);
+      const mn = parseFloat(cr.rewardsMinSize || cr.rewards_min_size || cr.minSize || cr.min_size || 0);
+      if (dr > dailyRate) dailyRate = dr;
+      if (ms > maxSpread) maxSpread = ms;
+      if (mn > minSize) minSize = mn;
+    }
+  }
+  if (!dailyRate) dailyRate = parseFloat(m.rewardsDailyRate || m.rewards_daily_rate || m.rewardsRate || m.rewards_rate || m.rewardRate || m.reward_rate || 0);
+  if (!maxSpread) maxSpread = parseFloat(m.rewardsMaxSpread || m.rewards_max_spread || m.maxSpread || m.max_spread || 0);
+  if (!minSize)   minSize   = parseFloat(m.rewardsMinSize || m.rewards_min_size || m.minSize || m.min_size || 0);
+  return { dailyRate, maxSpread, minSize };
+}
+
 app.get('/api/ecosystem/rewards', async (req, res) => {
   try {
-    // 10-min cache
+    // 10-min cache. Rewards programs don't churn second-by-second — they
+    // run for hours-to-days at fixed daily rates — so a slow refresh is
+    // fine and keeps Gamma load down.
     if (_ecosystemRewardsCache && (Date.now() - _ecosystemRewardsCache.ts < 10 * 60 * 1000)) {
       return res.json(_ecosystemRewardsCache.data);
     }
@@ -39588,44 +39632,40 @@ app.get('/api/ecosystem/rewards', async (req, res) => {
     const fetch = _nodeFetch;
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
-    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?active=true&closed=false&limit=50&order=volume24hr&ascending=false', {
+    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?active=true&closed=false&limit=100&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!r.ok) throw new Error('Gamma API ' + r.status);
-    const raw = _gammaUnwrap(await r.json());;
+    const raw = _gammaUnwrap(await r.json());
 
-    // Filter for markets with reward fields or high liquidity (proxy for LP incentives)
+    // Strict filter: market must have an ACTIVE rewards program with a
+    // positive daily rate. The old liquidity-fallback heuristic
+    // (liquidity >= $50k) polluted the list with unrewarded markets and
+    // mislabeled them as "rewards markets" on the /incentives page —
+    // removed deliberately. Empty list is the correct truthful answer
+    // when no programs are running.
     const rewardMarkets = (raw || [])
-      .filter(m => {
-        if (!m.question) return false;
-        // Check for reward-related fields from Gamma
-        if (m.rewardsRate || m.rewards_rate || m.rewardRate || m.reward_rate) return true;
-        if (m.rewardsMaxSpread || m.rewards_max_spread || m.maxSpread || m.max_spread) return true;
-        if (m.rewardsDaily || m.rewards_daily || m.rewardsDailyRate || m.rewards_daily_rate) return true;
-        // Fallback: high-liquidity active markets likely have LP rewards
-        const liq = parseFloat(m.liquidity || 0);
-        if (liq >= 50000) return true;
-        return false;
-      })
+      .filter(m => !!m.question)
       .map(m => {
+        const { dailyRate, maxSpread, minSize } = _extractMarketRewards(m);
+        if (!(dailyRate > 0)) return null;
         let yesPrice = null;
         try {
           const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
           if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
         } catch {}
         const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || m.slug || '';
-        const rewardRate = parseFloat(m.rewardsRate || m.rewards_rate || m.rewardRate || m.reward_rate || m.rewardsDailyRate || m.rewards_daily_rate || 0);
-        const maxSpread = parseFloat(m.rewardsMaxSpread || m.rewards_max_spread || m.maxSpread || m.max_spread || 0);
         return {
           question: m.question,
           yes_price: yesPrice,
           volume: parseFloat(m.volume || 0),
           volume_24h: parseFloat(m.volume24hr || m.volume_24hr || 0),
           liquidity: parseFloat(m.liquidity || 0),
-          reward_rate: rewardRate || null,
+          reward_rate: dailyRate,
           max_spread: maxSpread || null,
+          min_size:   minSize   || null,
           end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
           slug: eventSlug,
           url: eventSlug ? pRef('https://polymarket.com/event/' + eventSlug) : pRef('https://polymarket.com'),
@@ -39633,11 +39673,22 @@ app.get('/api/ecosystem/rewards', async (req, res) => {
           clob_token_ids: m.clobTokenIds || null
         };
       })
-      .sort((a, b) => (b.liquidity || 0) - (a.liquidity || 0));
+      .filter(Boolean)
+      .sort((a, b) => (b.reward_rate || 0) - (a.reward_rate || 0));
+
+    // Aggregates used by /api/incentives/stats and the page's hero
+    // banner. total_daily_pool = sum of daily $ flowing into rewards
+    // across all rewarded markets — the headline number that gates the
+    // "Big rewards day" banner.
+    const bestDailyRate  = rewardMarkets.reduce((m, r) => Math.max(m, r.reward_rate || 0), 0);
+    const totalDailyPool = rewardMarkets.reduce((s, r) => s + (r.reward_rate || 0), 0);
 
     const result = {
       markets: rewardMarkets,
       count: rewardMarkets.length,
+      markets_with_rewards: rewardMarkets.length,
+      best_daily_rate: bestDailyRate || null,
+      total_daily_pool: totalDailyPool || null,
       updated_at: new Date().toISOString()
     };
 
