@@ -39,23 +39,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Scan repo (excl. lib/polymarket-proxy.js + node_modules)
+      - name: Scan repo (excl. lib/polymarket-proxy.js + this workflow + node_modules)
         run: |
           set -e
           # lib/polymarket-proxy.js intentionally documents the historical
           # selector in its header comment block — exclude it from the
-          # scan, and exclude lockfiles + node_modules to avoid noise.
+          # scan. Also exclude this workflow file (it MUST contain the
+          # literal pattern as the grep target). Lockfiles + node_modules
+          # excluded to avoid noise.
           if grep -rEn '0x4d0c6cdb' . \
                 --exclude-dir=node_modules \
                 --exclude-dir=.git \
                 --exclude='lib/polymarket-proxy.js' \
+                --exclude='no-stale-proxy-selectors.yml' \
                 --exclude='package-lock.json' \
                 --exclude='*.lock' ; then
             echo ""
-            echo "::error::Dead Polymarket factory selector 0x4d0c6cdb detected outside lib/polymarket-proxy.js."
+            echo "::error::Dead Polymarket factory selector detected outside lib/polymarket-proxy.js."
             echo "::error::This selector doesn't match any function on the Safe factory and silently reverts on-chain."
             echo "::error::Use polymarketProxy.derivePolymarketProxy() from lib/polymarket-proxy.js instead — it derives the correct selector from the ABI at runtime."
             echo "::error::See lib/polymarket-proxy.js header for the full incident notes."
+            echo "::error::To discuss this selector by name in docs/comments, rephrase as 'the legacy 4-byte selector' or 'the broken hardcoded selector' so this guard stays unambiguous."
             exit 1
           fi
           echo "OK: no stale Polymarket factory selectors found outside the incident-doc file."
