@@ -47,10 +47,14 @@ jobs:
           # scan. Also exclude this workflow file (it MUST contain the
           # literal pattern as the grep target). Lockfiles + node_modules
           # excluded to avoid noise.
+          #
+          # GNU grep's --exclude matches BASENAME only (no path prefix),
+          # so we list the bare filenames. Both files have unique names
+          # in this repo so basename matching is unambiguous.
           if grep -rEn '0x4d0c6cdb' . \
                 --exclude-dir=node_modules \
                 --exclude-dir=.git \
-                --exclude='lib/polymarket-proxy.js' \
+                --exclude='polymarket-proxy.js' \
                 --exclude='no-stale-proxy-selectors.yml' \
                 --exclude='package-lock.json' \
                 --exclude='*.lock' ; then
