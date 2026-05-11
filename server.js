@@ -21430,13 +21430,25 @@ async function scorePredictionsForMarket(marketTitle, marketId, outcome) {
       if (pred.user_id) affectedUsers.add(pred.user_id);
     }
     for (const uid of affectedUsers) {
+      // Unified FLEX score (writes flex_score + flex_tier + flex_c_*).
       recomputeFlexScore(uid).catch(() => {});
+      // Legacy Brier columns kept for backward-compatible reads
+      // (flex_score_alltime / flex_score_90d / predictions_resolved).
+      recomputeLegacyPredictionStats(uid).catch(() => {});
     }
     if (preds.length) console.log(`[predictions] Scored ${preds.length} predictions for "${(marketTitle||'').substring(0,40)}" → ${upperOutcome}`);
   } catch (err) { console.warn('[predictions] scorePredictionsForMarket error:', err.message); }
 }
 
-async function recomputeFlexScore(userId) {
+// Legacy Brier-driven score writer for the `predictions` table. Writes
+// flex_score_alltime / flex_score_90d / predictions_resolved — distinct
+// columns from the unified FLEX score above. Renamed from the original
+// `recomputeFlexScore` because the duplicate top-level declaration was
+// shadowing the unified function via JS hoisting, silently routing every
+// caller (including the /api/admin/flex/rebuild diag endpoint) to this
+// legacy version. Symptom was `updated:0` on bulk rebuild + empty diag
+// on single-user runs because this fn ignores the `opts.diag` arg.
+async function recomputeLegacyPredictionStats(userId) {
   try {
     const since90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
     let allPreds, recentPreds;
@@ -21458,7 +21470,7 @@ async function recomputeFlexScore(userId) {
     } else {
       await supabase.from('users').update({ flex_score_alltime: scoreAll, flex_score_90d: score90, predictions_resolved: allPreds.length }).eq('id', userId);
     }
-  } catch (err) { console.warn('[predictions] recomputeFlexScore error:', err.message); }
+  } catch (err) { console.warn('[predictions] recomputeLegacyPredictionStats error:', err.message); }
 }
 
 // ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────
