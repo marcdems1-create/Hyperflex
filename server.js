@@ -21421,13 +21421,28 @@ async function recomputeFlexScore(userId) {
 // cached in memory for 24h since the proxy is deterministic — the same
 // EOA always produces the same proxy.
 const _polyProxyCache = new Map(); // eoa → { proxy, ts }
+// Polygon RPC list — paid endpoint (Alchemy) first when ALCHEMY_POLYGON_KEY
+// is set on Railway, with public RPCs as fallback. Public endpoints
+// (publicnode + 1rpc.io) were rate-limiting auto-sync and proxy derivation
+// hard enough that `[derivePolymarketProxy] all rpcs failed` was firing on
+// every wallet lookup. Alchemy as primary keeps the public hops as a
+// secondary path if the key isn't set or the paid endpoint is degraded.
+function _polygonRpcList() {
+  const list = [];
+  if (process.env.ALCHEMY_POLYGON_KEY) {
+    list.push('https://polygon-mainnet.g.alchemy.com/v2/' + process.env.ALCHEMY_POLYGON_KEY);
+  }
+  list.push('https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com');
+  return list;
+}
+
 async function derivePolymarketProxy(eoa) {
   if (!eoa || !/^0x[0-9a-fA-F]{40}$/.test(eoa)) return null;
   const eoaLower = eoa.toLowerCase();
   const cached = _polyProxyCache.get(eoaLower);
   if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) return cached.proxy;
 
-  const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
+  const rpcs = _polygonRpcList();
   for (const rpc of rpcs) {
     try {
       const r = await _nodeFetch(rpc, {
@@ -29009,49 +29024,17 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
 
 // ── CROSS-PLATFORM MARKET SEARCH ────────────────────────────────────────────
 const _mktSearchCache = new Map();
-// --- Kalshi event cache: paginate ALL events, cache for 10 min ---
-let _kalshiAllEvents = { events: [], ts: 0 };
+// --- Kalshi loader stub ---
+// Kalshi was dropped April 30 in the Polymarket-native pivot. The prior
+// paginated cache (6 pages × ~200 events, 10-min TTL) fired on every
+// screener refresh, polluting logs with [kalshi-cache] lines and
+// keeping cached_positions / search-result code paths alive on a dead
+// platform. Loader now returns an empty list so the ~6 callsites
+// (unified screener, trending feed, sports event search) gracefully
+// degrade without an upstream call. Function kept (not deleted) because
+// callers spread its result; renaming would mean touching 6 sites.
 async function getKalshiEvents() {
-  if (_kalshiAllEvents.events.length > 0 && Date.now() - _kalshiAllEvents.ts < 10 * 60 * 1000) {
-    return _kalshiAllEvents.events;
-  }
-  const allEvents = [];
-  let cursor = '';
-  const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
-  try {
-    for (let page = 0; page < 6; page++) { // max 6 pages = 1200 events
-      const url = `https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true${cursor ? '&cursor=' + cursor : ''}`;
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 12000);
-      const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(tid));
-      if (!r.ok) break;
-      // Some Kalshi pages have control chars that break strict JSON parsing
-      let data;
-      try {
-        data = await r.json();
-      } catch (jsonErr) {
-        try {
-          const text = await r.text();
-          // Strip control characters (except newline/tab) before parsing
-          data = JSON.parse(text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''));
-        } catch (e2) {
-          console.error(`[kalshi-cache] JSON parse failed on page ${page}:`, e2.message);
-          break; // Stop pagination but keep what we have
-        }
-      }
-      const events = data.events || [];
-      allEvents.push(...events);
-      if (events.length < 200 || !data.cursor) break;
-      cursor = data.cursor;
-    }
-    _kalshiAllEvents = { events: allEvents, ts: Date.now() };
-    console.log(`[kalshi-cache] Cached ${allEvents.length} Kalshi events across ${Math.ceil(allEvents.length / 200)} pages`);
-  } catch (e) {
-    console.error('[kalshi-cache] Failed to fetch:', e.message);
-    // Return stale cache if available
-    if (_kalshiAllEvents.events.length > 0) return _kalshiAllEvents.events;
-  }
-  return allEvents;
+  return [];
 }
 
 app.get('/api/markets/search', async (req, res) => {
@@ -37107,7 +37090,11 @@ app.get('/api/trades/:address', async (req, res) => {
 async function derivePolymarketProxy(eoaAddress) {
   if (!eoaAddress) return null;
   const eoa = eoaAddress.toLowerCase();
-  const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+  // Shares the _polygonRpcList() helper above so Alchemy-first ordering
+  // stays consistent across both proxy-derivation entry points (the
+  // module-cached one at L21424 and this one called from the seed/
+  // backfill path). Don't divergence-drift these two RPC lists.
+  const rpcs = _polygonRpcList();
   // Selector 0x4d0c6cdb = proxies(address) on Safe factory
   // 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b
   const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
@@ -52073,8 +52060,24 @@ app.get('/api/pyth/history/:feed', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// SOCIAL PREDICTIONS — the core content unit
+// SOCIAL PREDICTIONS — deprecated 2026-04, replaced by /api/takes
 // ════════════════════════════════════════════════════════════
+//
+// The social_predictions / social_comments / social_reactions tables
+// were dropped during the Polymarket-native pivot. Every handler below
+// still calls supabase.from('social_predictions') and floods logs with
+// `[supabase-proxy] select social_predictions error: relation does not
+// exist`. The middleware below short-circuits every /api/social/* path
+// before the supabase call fires: GET returns shape-compat empty data;
+// non-GET returns 410. Handlers below stay registered (express never
+// reaches them because this middleware runs first by registration order)
+// so a future revival can lift this guard without re-wiring routes.
+app.use('/api/social', (req, res, next) => {
+  if (req.method === 'GET') {
+    return res.json({ predictions: [], comments: [], reactions: [], next_cursor: null });
+  }
+  return res.status(410).json({ error: 'Endpoint deprecated. Use /api/takes.' });
+});
 
 // POST /api/social/predictions — create a prediction
 app.post('/api/social/predictions', requireAuth, async (req, res) => {
@@ -52584,11 +52587,13 @@ app.get('/api/user/:userId/social-profile', optionalAuth, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     const user = rows[0];
 
-    // Recent predictions
-    const preds = await dbQuery(
-      `SELECT id, market_title, side, entry_price, status, thesis, reaction_count, comment_count, created_at
-       FROM social_predictions WHERE author_id = $1 ORDER BY created_at DESC LIMIT 10`, [uid]
-    ).catch(() => []);
+    // Recent predictions — social_predictions table was dropped during
+    // the takes-system migration (2026-04). Returning empty preserves the
+    // /api/user/:userId/social-profile response shape so old client code
+    // doesn't break, without firing a Postgres "relation does not exist"
+    // error on every profile load. Replace with /api/takes/user/:uid
+    // when that endpoint is built.
+    const preds = [];
 
     // Follow status
     let is_following = false;
