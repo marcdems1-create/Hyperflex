@@ -88,6 +88,11 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .flex-num.mute{background:linear-gradient(180deg,#9590B0,#6E6790);-webkit-background-clip:text;background-clip:text;color:transparent;filter:none}
 .flex-num .denom{font-size:32px;color:var(--muted);background:none;-webkit-text-fill-color:var(--muted);filter:none;margin-left:4px}
 .flex-delta{font-family:var(--mono);font-size:12px;color:var(--electric);margin-top:8px;letter-spacing:0.1em}
+.whale-badge{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;border-radius:8px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);align-self:flex-end}
+.whale-badge-label{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.18em;color:#a855f7;text-transform:uppercase}
+.whale-badge-num{font-family:var(--mono);font-size:16px;font-weight:800;color:#e0c7fa;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.whale-badge-meta{font-family:var(--mono);font-size:9px;color:#a855f7;letter-spacing:0.06em;opacity:0.78}
+@media(max-width:720px){.whale-badge{align-self:flex-start;margin-top:10px}}
 .flex-delta.muted{color:var(--muted)}
 /* Action row in hero */
 .hero-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase}
@@ -409,6 +414,29 @@ function renderFlexScoreCard() {
     } else {
       deltaEl.classList.add('muted');
       deltaEl.textContent = settled > 0 ? `${settled} settled` : 'No trades resolved yet';
+    }
+  }
+
+  // Whale Score badge. Conditional render — only for wallets with an
+  // actual flex_score_90d value (whale-imported or actively-trading).
+  // Distinct visual treatment (purple) so it can't be confused with the
+  // gold Flex Score hero. Decision #1 Option C semantic split.
+  const whaleBadge = document.getElementById('whaleScoreBadge');
+  const whaleNum   = document.getElementById('whaleScoreNum');
+  const whaleMeta  = document.getElementById('whaleScoreMeta');
+  if (whaleBadge && whaleNum) {
+    const ws  = p.flex_score_90d != null ? Number(p.flex_score_90d) : null;
+    const wsa = p.flex_score_alltime != null ? Number(p.flex_score_alltime) : null;
+    const displayScore = ws != null && ws > 0 ? ws : (wsa != null && wsa > 0 ? wsa : null);
+    if (displayScore != null) {
+      whaleNum.textContent = Math.round(displayScore);
+      if (whaleMeta) {
+        const rankPart = (p.whale_rank != null && p.whale_rank > 0) ? `· rank #${p.whale_rank}` : '';
+        whaleMeta.textContent = rankPart || (p.is_whale ? '· top tier' : '· capital flow');
+      }
+      whaleBadge.style.display = '';
+    } else {
+      whaleBadge.style.display = 'none';
     }
   }
 
@@ -762,6 +790,12 @@ async function load() {
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const { user, stats, communities, recent_wins, take_stats, recent_takes, polymarket_stats, recent_trades } = data;
+
+    // Surface the merged user+stats payload for renderFlexScoreCard and
+    // the WHALE SCORE badge — both read window._profilePayload. Was only
+    // populated for /@handle URLs before; /m/:userId visitors silently
+    // missed the FLEX hero render and Whale badge.
+    window._profilePayload = Object.assign({}, user || {}, stats || {});
     const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
     const pTrades = recent_trades || [];
 
@@ -992,6 +1026,16 @@ async function load() {
           <div class="flex-label">Flex Score</div>
           <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
           <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? 'Building track record' : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
+          <!-- Whale Score badge — capital-flow heuristic. Decision #1
+               Option C: distinct from Flex Score, conditionally rendered.
+               Hidden by default; renderFlexScoreCard fills it for users
+               who actually have flex_score_90d (i.e. whale-imported or
+               actively-trading wallets). -->
+          <div id="whaleScoreBadge" class="whale-badge" style="display:none">
+            <span class="whale-badge-label">Whale Score</span>
+            <span class="whale-badge-num" id="whaleScoreNum">—</span>
+            <span class="whale-badge-meta" id="whaleScoreMeta"></span>
+          </div>
         </div>
       </section>
 

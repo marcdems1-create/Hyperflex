@@ -12058,6 +12058,95 @@ app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'p
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 app.get('/rewards', (req, res) => res.redirect(302, '/'));
 
+// GET /api/predictors/leaderboard?mode=flex|whale&limit=100
+//
+// Mode-aware leaderboard introduced 2026-05-12 for the WHALE SCORE label
+// split (Decision #1 Option C). Two semantically distinct scores live in
+// the users table:
+//
+//   flex_score      — trader rating. Calibration-driven, 0-100, written by
+//                     the unified recomputeFlexScore at server.js:19486.
+//                     Bounded; tier ladder: Speculator/Solid/Sharp/Oracle.
+//
+//   flex_score_90d  — capital-flow heuristic. Written by
+//                     computePolymarketFlexScore from PnL + volume + rank.
+//                     A whale-flow signal, NOT a prediction accuracy
+//                     score, despite the legacy name.
+//
+// The legacy /api/predictors endpoint (positions-based, computed
+// sharp_score) is unchanged — it powers older surfaces. This route is
+// the canonical source for the new /predictors page tabs.
+const _predictorsLbCache = { ts: { flex: 0, whale: 0 }, data: { flex: null, whale: null } };
+app.get('/api/predictors/leaderboard', async (req, res) => {
+  try {
+    const mode  = req.query.mode === 'flex' ? 'flex' : 'whale';
+    const limit = Math.min(200, parseInt(req.query.limit, 10) || 100);
+
+    // 60s cache per mode — the underlying columns refresh on cron, not
+    // on every page load.
+    const ck = mode;
+    if (_predictorsLbCache.data[ck] && Date.now() - _predictorsLbCache.ts[ck] < 60 * 1000) {
+      return res.json(_predictorsLbCache.data[ck].slice(0, limit));
+    }
+
+    if (!pool) return res.json([]);
+
+    const col   = mode === 'flex' ? 'flex_score' : 'flex_score_90d';
+    const tier  = mode === 'flex' ? 'flex_tier'  : null;
+    const order = mode === 'flex' ? 'u.flex_score DESC NULLS LAST, u.prediction_win_rate DESC NULLS LAST'
+                                  : 'u.flex_score_90d DESC NULLS LAST, COALESCE(u.whale_pnl, 0) DESC';
+
+    // Sole filter: user must have a non-null value on the active column.
+    // Drops the long tail of users who've never been scored — no whales
+    // on the FLEX tab, no flexers without whale-flow data on the WHALE
+    // tab. Predictable, clean.
+    const rows = await dbQuery(`
+      SELECT u.id, u.display_name, u.username, u.polymarket_address,
+             u.is_whale, u.whale_rank, u.whale_pnl,
+             u.flex_score, u.flex_tier, u.flex_qualifies, u.flex_settled_events,
+             u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
+             u.prediction_win_rate, u.wallet_verified
+      FROM users u
+      WHERE u.${col} IS NOT NULL
+      ORDER BY ${order}
+      LIMIT $1`, [limit]);
+
+    const result = (rows || []).map(u => {
+      const score = mode === 'flex'
+        ? (u.flex_score != null ? Number(u.flex_score) : null)
+        : (u.flex_score_90d != null ? Number(u.flex_score_90d) : null);
+      return {
+        user_id: u.id,
+        display_name: resolveDisplayName(u) || 'Trader',
+        username: u.username || null,
+        polymarket_address: u.polymarket_address || null,
+        wallet_verified: !!u.wallet_verified,
+        score,
+        score_field: col,
+        // Both scores returned for client transparency so a card can
+        // render the secondary score as muted context if it wants to.
+        flex_score: u.flex_score != null ? Number(u.flex_score) : null,
+        flex_tier: u.flex_tier || null,
+        flex_qualifies: u.flex_qualifies === true,
+        flex_settled_events: u.flex_settled_events != null ? Number(u.flex_settled_events) : null,
+        whale_score: u.flex_score_90d != null ? Number(u.flex_score_90d) : null,
+        is_whale: !!u.is_whale,
+        whale_rank: u.whale_rank != null ? Number(u.whale_rank) : null,
+        whale_pnl:  u.whale_pnl  != null ? Number(u.whale_pnl)  : null,
+        win_rate: u.prediction_win_rate != null ? Number(u.prediction_win_rate) : null,
+        predictions_resolved: u.predictions_resolved != null ? Number(u.predictions_resolved) : 0,
+      };
+    });
+
+    _predictorsLbCache.data[ck] = result;
+    _predictorsLbCache.ts[ck]   = Date.now();
+    res.json(result);
+  } catch (e) {
+    console.error('[predictors/leaderboard]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
   try {
@@ -14018,7 +14107,7 @@ app.get('/api/member/:userId', async (req, res) => {
       positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
     } else {
       const [userRes, positionsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score_90d, flex_score_alltime, predictions_resolved').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, display_name, username, bio, banner_url, avatar_url, created_at, is_whale, whale_rank, whale_pnl, polymarket_address, wallet_verified, total_predictions, prediction_win_rate, brier_score, prediction_pnl, follower_count, following_count, flex_score, flex_tier, flex_qualifies, flex_settled_events, flex_raw_win_rate, flex_c_accuracy, flex_c_calibration, flex_c_pnl, flex_c_consistency, flex_c_breadth, flex_score_90d, flex_score_alltime, predictions_resolved').eq('id', userId).maybeSingle(),
         supabase.from('positions')
           .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
           .eq('user_id', userId)
@@ -14292,11 +14381,25 @@ app.get('/api/member/:userId', async (req, res) => {
         total_bet: Math.round(totalBet / 100),
         total_won: Math.round(totalWon / 100),
         streak,
-        // Flex score (Brier-based) + denormalized prediction totals — used
-        // for the primary clout badge on the profile hero.
-        flex_score_90d:     userData.flex_score_90d != null ? parseInt(userData.flex_score_90d) : null,
-        flex_score_alltime: userData.flex_score_alltime != null ? parseInt(userData.flex_score_alltime) : null,
-        predictions_resolved: userData.predictions_resolved != null ? parseInt(userData.predictions_resolved) : 0,
+        // FLEX SCORE — unified trader rating, calibration-driven. Decision
+        // #1 Option C: distinct from WHALE SCORE (flex_score_90d below).
+        flex_score:            userData.flex_score != null ? parseInt(userData.flex_score) : null,
+        flex_tier:             userData.flex_tier || null,
+        flex_qualifies:        userData.flex_qualifies === true,
+        flex_settled_events:   userData.flex_settled_events != null ? parseInt(userData.flex_settled_events) : 0,
+        flex_raw_win_rate:     userData.flex_raw_win_rate != null ? parseFloat(userData.flex_raw_win_rate) : null,
+        flex_components: {
+          accuracy:    userData.flex_c_accuracy    != null ? parseFloat(userData.flex_c_accuracy)    : null,
+          calibration: userData.flex_c_calibration != null ? parseFloat(userData.flex_c_calibration) : null,
+          pnl:         userData.flex_c_pnl         != null ? parseFloat(userData.flex_c_pnl)         : null,
+          consistency: userData.flex_c_consistency != null ? parseFloat(userData.flex_c_consistency) : null,
+          breadth:     userData.flex_c_breadth     != null ? parseFloat(userData.flex_c_breadth)     : null,
+        },
+        // WHALE SCORE family — capital-flow heuristic (flex_score_90d is
+        // the legacy column name; semantic is "whale flow", not accuracy).
+        flex_score_90d:        userData.flex_score_90d != null ? parseInt(userData.flex_score_90d) : null,
+        flex_score_alltime:    userData.flex_score_alltime != null ? parseInt(userData.flex_score_alltime) : null,
+        predictions_resolved:  userData.predictions_resolved != null ? parseInt(userData.predictions_resolved) : 0,
         // FLEX Points balance (rep currency)
         flex_points: flexPoints,
         // Real follower graph (computed from predictor_follows)
