@@ -106,6 +106,12 @@
 
   function injectBugReporter() {
     if (document.getElementById('hfxBugBtn')) return;
+    // Skip /market/<slug> pages — the button collides with page-level CSS
+    // there and renders as a horizontal black bar mid-page instead of the
+    // 40px purple circle. Users on market pages are trading, not bug-
+    // reporting; the button still ships on /feed and /m/ profile surfaces
+    // which is where the actual bug-report flow lives.
+    if (location.pathname.indexOf('/market/') === 0) return;
     var btn = document.createElement('button');
     btn.id = 'hfxBugBtn';
     btn.title = 'Report a bug';
