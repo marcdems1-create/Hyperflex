@@ -10495,6 +10495,11 @@ function showTab(tab) {
       else flEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
     }
   }
+  // ── Same-script-tag loaders (direct call, no race) ──
+  // These six are defined in this same <script> block (#2, 8755-15786)
+  // so they're hoisted + reachable synchronously. If a future edit moves
+  // any of them into script #5, switch the call to _loadLater(fnName) —
+  // see the cross-tag block below for the timing-race context.
   if (tab === 'alpha' && !_alphaTabLoaded) loadAlphaTab();
   if (tab === 'aiportfolio' && !_aiPortfolioLoaded) loadAIPortfolio();
   if (tab === 'flexpoints') loadFlexPointsTab();
