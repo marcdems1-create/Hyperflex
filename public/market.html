@@ -3313,7 +3313,7 @@ var HFX_BUILDER_CODE_V2 = '0x7439e528420d6ed0be9ce10c9698e9a7d490f12e828f7ef8c09
 // Rolled back from Apr 21 → Apr 22. Pre-cutover V2 submission kept failing
 // against clob.polymarket.com (V1 parser builds a V1 hash and returns
 // {"error":"invalid signature"} against a V2-signed struct). The
-// clob-v2.polymarket.com dedicated host is referenced in internal docs
+// pre-cutover dedicated V2 endpoint is referenced in internal docs
 // but unverified as accepting orders pre-cutover. Safer to default V1
 // tonight and let V2 flip on its own at Polymarket's canonical cutover.
 // Users can still opt in with ?clob_v2=1 for testing the V2 path.
@@ -6296,9 +6296,9 @@ async function executeTrade() {
         timestamp: orderStruct.timestamp,
         metadata: orderStruct.metadata,
         builder: orderStruct.builder,
-        // Pre-cutover compat: clob.polymarket.com today is still V1's parser
-        // (the dedicated V2 host clob-v2.polymarket.com takes over the
-        // canonical URL only at midnight UTC). V1's parser requires
+        // Pre-cutover historical context: clob.polymarket.com WAS V1's parser
+        // (the pre-cutover dedicated V2 endpoint took over the canonical
+        // URL at midnight UTC 2026-04-28). V1's parser required
         // feeRateBps, nonce, and expiration as strings; without them CLOB
         // returns:
         //   {"error":"error parsing fee rate bps () to int64"}
@@ -6654,20 +6654,22 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   var hmacMessage = ts + 'POST' + '/order' + requestBody;
   var enc = new TextEncoder();
 
-  // V2 orders must go to clob-v2.polymarket.com — clob.polymarket.com
-  // today still routes through V1's parser, which computes the EIP-712
-  // hash over V1 fields (taker/nonce/feeRateBps/expiration) and returns
-  // {"error":"invalid signature"} against a V2-signed struct. The V1→V2
-  // switchover on the canonical URL lands at midnight UTC 2026-04-22;
-  // until then the dedicated V2 host is the only way V2 orders verify.
-  // Detect V2 by the presence of `builder` in the body (V1 has no such
-  // field) — avoids threading a clobVersion arg through the call site.
+  // Post-Apr-28-cutover (~11:00 UTC 2026-04-28), `clob.polymarket.com`
+  // IS the V2 backend. The pre-cutover dedicated V2 endpoint now
+  // 302-redirects to canonical, which (a) breaks browser preflight
+  // because Browsers refuse to follow redirects on OPTIONS, and (b)
+  // costs an extra hop for no benefit. CF Worker was updated post-
+  // cutover (cloudflare-trade-proxy/src/worker.js:25) — this client
+  // path was missed at the same time, leaving direct-browser CLOB
+  // submission permanently broken on CORS preflight while the symptom
+  // looked like a geo-block. Always target canonical now; the V2-vs-V1
+  // distinction is no longer meaningful for routing.
   var isV2Body = false;
   try {
     var _parsedBody = JSON.parse(requestBody);
     isV2Body = !!(_parsedBody && _parsedBody.order && _parsedBody.order.builder);
   } catch (_e) {}
-  var clobHost = isV2Body ? 'https://clob-v2.polymarket.com' : 'https://clob.polymarket.com';
+  var clobHost = 'https://clob.polymarket.com';
 
   // Decode API secret (base64url → raw bytes)
   var b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
@@ -6724,7 +6726,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   // Routing: CF Worker → Railway (Direct CLOB removed — see note below).
   //
-  // Pre-Apr-28-cutover, direct browser → clob-v2.polymarket.com worked
+  // Pre-Apr-28-cutover, direct browser → pre-cutover-V2-endpoint worked
   // because preflight + POST landed on the same host with no redirect.
   // Post-cutover, Polymarket's edge redirects clob-v2 → clob (canonical)
   // and the browser rejects the OPTIONS preflight with "Redirect is not

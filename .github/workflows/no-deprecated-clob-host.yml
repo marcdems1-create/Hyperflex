@@ -1,0 +1,52 @@
+name: Deprecated CLOB host guard
+
+# Fails the build if `clob-v2.polymarket.com` reappears as a POST target
+# in client-side code. The host was deprecated in Polymarket's Apr 28,
+# 2026 cutover — it now 302-redirects to canonical `clob.polymarket.com`.
+# Browsers refuse to follow redirects on CORS preflight (OPTIONS), so
+# direct-browser POSTs to the deprecated host are permanently broken.
+#
+# Allowed places to mention the deprecated host by name:
+#   - cloudflare-trade-proxy/src/worker.js  (legitimate 5xx fallback;
+#     server-to-server fetch tolerates 302 fine)
+#   - this workflow                          (contains the literal as
+#                                             the grep target)
+#   - markdown / commit messages / CHANGELOG (historical context)
+#
+# Blocked: any reference inside public/ that POSTs to or fetches from
+# the deprecated host as a primary target. Use `clob.polymarket.com`
+# directly — it's been V2-aware since the cutover.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  no-deprecated-clob-host:
+    name: Block clob-v2 host as a primary POST target in client code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Scan public/ for clob-v2 references
+        run: |
+          set -e
+          # git grep with pathspec exclusion — same shape as the
+          # no-stale-proxy-selectors guard. Scans public/ only;
+          # cloudflare-trade-proxy/ legitimately uses the host as a
+          # 5xx server-side fallback (no preflight involved).
+          if git grep -nE 'clob-v2\.polymarket\.com' -- 'public/' ; then
+            echo ""
+            echo "::error::Deprecated clob-v2.polymarket.com referenced in public/ code."
+            echo "::error::That host 302-redirects to canonical clob.polymarket.com, which breaks browser CORS preflight."
+            echo "::error::Use clob.polymarket.com directly — it has been V2-aware since the Apr-28-2026 cutover."
+            echo "::error::See public/market.html:6657 / public/creator-dashboard.html:23423 for the canonical pattern."
+            echo "::error::If a comment legitimately needs to reference the deprecated host historically, rephrase as 'the deprecated V2 host' or 'the pre-cutover dedicated V2 endpoint' so this guard stays unambiguous."
+            exit 1
+          fi
+          echo "OK: no clob-v2 host references in public/."
