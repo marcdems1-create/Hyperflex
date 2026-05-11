@@ -19310,18 +19310,42 @@ async function _fetchFlexStats(userId, diag) {
       // HFX-routed users vs. whale-imported users (whose realized_trades
       // branch below already counts every row with non-zero pnl).
       // pnl sign drives wins/losses, same convention as realized_trades.
+      //
+      // Stake column is `amount_usd` per the polymarket_trades schema
+      // at server.js:53921 — the `stake` name appears nowhere on the
+      // table. Diag against LaBradford on 2026-05-12 surfaced this as
+      // `pt_query: column "stake" does not exist`, which had been
+      // silently zeroing the pt branch for every HFX-routed user since
+      // the unified FLEX score landed.
       const r = await dbQuery(`
         SELECT
           COUNT(*) FILTER (WHERE pnl IS NOT NULL)::int AS tr_count,
           COUNT(*) FILTER (WHERE pnl > 0)::int          AS tr_wins,
           COUNT(*) FILTER (WHERE pnl < 0)::int          AS tr_losses,
-          COALESCE(SUM(pnl)   FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_net_pnl,
-          COALESCE(SUM(stake) FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_staked,
-          AVG(clv_cents) FILTER (WHERE clv_cents IS NOT NULL)::numeric    AS tr_clv
+          COALESCE(SUM(pnl)        FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_net_pnl,
+          COALESCE(SUM(amount_usd) FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_staked
         FROM polymarket_trades WHERE LOWER(eoa_address) = $1`, [walletAddr]).catch(e => {
           if (diag) diag.errors.push({ stage: 'pt_query', message: e.message });
           return [];
         });
+      // CLV is optional: clv_cents lives on a separate migration
+      // (supabase_migration_polymarket_trades_clv.sql) that may not be
+      // applied on every environment. Keep the column read in its own
+      // sub-query so a missing column doesn't zero out the core stats
+      // above — same pattern the trade-clv sweep uses at server.js:19008.
+      let avgClv = null;
+      try {
+        const c = await dbQuery(`
+          SELECT AVG(clv_cents)::numeric AS tr_clv
+          FROM polymarket_trades
+          WHERE LOWER(eoa_address) = $1 AND clv_cents IS NOT NULL`, [walletAddr]);
+        if (c[0] && c[0].tr_clv != null) avgClv = parseFloat(c[0].tr_clv);
+      } catch (e) {
+        if (!/column "clv_cents" does not exist/i.test(e.message || '')) {
+          if (diag) diag.errors.push({ stage: 'pt_clv_query', message: e.message });
+        }
+        // Missing column is the expected state pre-migration; not an error.
+      }
       if (r[0]) {
         polyStats = {
           wins:   parseInt(r[0].tr_wins   || 0, 10),
@@ -19329,7 +19353,7 @@ async function _fetchFlexStats(userId, diag) {
           net_pnl: parseFloat(r[0].tr_net_pnl || 0),
           staked:  parseFloat(r[0].tr_staked  || 0),
           brier: null,   // Brier requires entry_price + resolved outcome columns — phase 2
-          clv:   r[0].tr_clv != null ? parseFloat(r[0].tr_clv) : null,
+          clv:   avgClv,
           has_trades: parseInt(r[0].tr_count || 0, 10),
         };
       }
