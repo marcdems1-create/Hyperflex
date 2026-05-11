@@ -19302,14 +19302,22 @@ async function _fetchFlexStats(userId, diag) {
     walletAddr = wallets[0]?.addr || null;
     if (diag) diag.wallet_addr_present = !!walletAddr;
     if (walletAddr) {
+      // PR 2026-05-12: filter on `pnl IS NOT NULL` instead of
+      // `status IN ('win','loss','push')`. The old filter excluded
+      // status='closed' (positions sold early before expiry) — those
+      // positions DO have a realized PnL and DO represent the user's
+      // demonstrated trading skill; rejecting them undercounted
+      // HFX-routed users vs. whale-imported users (whose realized_trades
+      // branch below already counts every row with non-zero pnl).
+      // pnl sign drives wins/losses, same convention as realized_trades.
       const r = await dbQuery(`
         SELECT
-          COUNT(*) FILTER (WHERE status IN ('win','loss','push'))::int AS tr_count,
-          COUNT(*) FILTER (WHERE status = 'win')::int   AS tr_wins,
-          COUNT(*) FILTER (WHERE status = 'loss')::int  AS tr_losses,
-          COALESCE(SUM(pnl) FILTER (WHERE status IN ('win','loss','push')), 0)::numeric   AS tr_net_pnl,
-          COALESCE(SUM(stake) FILTER (WHERE status IN ('win','loss','push')), 0)::numeric AS tr_staked,
-          AVG(clv_cents) FILTER (WHERE clv_cents IS NOT NULL)::numeric AS tr_clv
+          COUNT(*) FILTER (WHERE pnl IS NOT NULL)::int AS tr_count,
+          COUNT(*) FILTER (WHERE pnl > 0)::int          AS tr_wins,
+          COUNT(*) FILTER (WHERE pnl < 0)::int          AS tr_losses,
+          COALESCE(SUM(pnl)   FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_net_pnl,
+          COALESCE(SUM(stake) FILTER (WHERE pnl IS NOT NULL), 0)::numeric AS tr_staked,
+          AVG(clv_cents) FILTER (WHERE clv_cents IS NOT NULL)::numeric    AS tr_clv
         FROM polymarket_trades WHERE LOWER(eoa_address) = $1`, [walletAddr]).catch(e => {
           if (diag) diag.errors.push({ stage: 'pt_query', message: e.message });
           return [];
