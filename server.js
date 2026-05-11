@@ -784,9 +784,16 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Supabase env vars — kept only for community-assets storage uploads
+// (server.js:7019/7028). All .from() table queries route through the
+// Postgres-backed proxy (createSupabaseProxy below) when the pool is
+// available, which it always is on Railway. When SUPABASE_URL is not
+// set, the SDK client is skipped entirely and the proxy still handles
+// .from()/.select()/.insert()/etc through direct SQL — storage uploads
+// degrade to no-op. Migration path: move community-assets to another
+// host (R2, S3, local /uploads) and drop the env vars from Railway.
 const _supaKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
-console.log('[boot] Supabase URL:', process.env.SUPABASE_URL?.slice(0, 30) + '...');
-console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE_KEY' : process.env.SUPABASE_KEY ? 'KEY' : process.env.SUPABASE_ANON_KEY ? 'ANON_KEY' : 'NONE');
+const _supaCanInit = !!(process.env.SUPABASE_URL && _supaKey);
 
 // ── DATABASE CONNECTION ──────────────────────────────────────────────────────
 // Primary: direct Postgres via pg Pool (bypasses Cloudflare entirely)
@@ -940,12 +947,17 @@ function requireApiTier(req, res, next) {
 // Apply API tier middleware to all /api/ routes
 app.use('/api/', requireApiTier);
 
-// Supabase JS client — used as fallback for complex queries + storage
-const _realSupabase = createClient(
-  process.env.SUPABASE_URL,
-  _supaKey,
-  { db: { schema: 'public' }, global: { fetch: _nodeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
-);
+// Supabase JS client — only used for community-assets storage uploads
+// when env vars are present. Falls back to null when SUPABASE_URL is
+// not set; the proxy below routes all .from() calls to Postgres anyway,
+// and storage callers (7019/7028) check for null before .upload().
+const _realSupabase = _supaCanInit
+  ? createClient(
+      process.env.SUPABASE_URL,
+      _supaKey,
+      { db: { schema: 'public' }, global: { fetch: _nodeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    )
+  : null;
 
 // Helper: run a query via direct Postgres
 async function dbQuery(text, params = [], timeoutMs = 15000) {
@@ -969,16 +981,28 @@ async function dbQuery(text, params = [], timeoutMs = 15000) {
 // Intercepts all supabase.from() calls and translates them to direct SQL via pool.
 // This avoids migrating 200+ individual calls while the REST API is unreachable.
 function createSupabaseProxy() {
-  if (!pool) return _realSupabase; // no pool = use real supabase
+  // When pool is missing AND there's no real Supabase client, return a
+  // minimal stub so the module still loads on dev environments without
+  // either DB. Production (Railway) always has pool, so this branch is
+  // mostly defensive.
+  if (!pool && !_realSupabase) {
+    return new Proxy({}, { get: () => () => Promise.resolve({ data: null, error: { message: 'No DB available' } }) });
+  }
+  if (!pool) return _realSupabase; // no pool = use real supabase (dev only)
 
   const handler = {
     get(target, prop) {
       if (prop === 'from') {
         return (table) => new QueryBuilder(table);
       }
-      if (prop === 'storage') return _realSupabase.storage;
-      if (prop === 'auth') return _realSupabase.auth;
-      if (prop === 'rpc') return _realSupabase.rpc?.bind(_realSupabase);
+      // .storage / .auth / .rpc fall through to the real SDK when the
+      // env vars are set; null otherwise. Storage callers at L7019/7028
+      // check for null before .upload(). .auth + .rpc currently have
+      // no callers (the one .rpc was in /api/social/comments which is
+      // gated by the app.use('/api/social', shortCircuit) middleware).
+      if (prop === 'storage') return _realSupabase ? _realSupabase.storage : null;
+      if (prop === 'auth')    return _realSupabase ? _realSupabase.auth    : null;
+      if (prop === 'rpc')     return _realSupabase ? _realSupabase.rpc?.bind(_realSupabase) : null;
       return target[prop];
     }
   };
@@ -1248,7 +1272,10 @@ function createSupabaseProxy() {
     }
   }
 
-  return new Proxy(_realSupabase, handler);
+  // Proxy target must be a non-null object. When _realSupabase is null
+  // (env vars unset), use an empty object — the handler intercepts every
+  // access we care about; only obscure prop reads would fall through.
+  return new Proxy(_realSupabase || {}, handler);
 }
 
 const supabase = createSupabaseProxy();
@@ -6995,6 +7022,13 @@ Return only valid JSON array, no markdown, no explanation.`;
 // ════════════════════════════════════════════════════════════
 app.post('/api/creator/upload-asset', requireCreator, async (req, res) => {
   try {
+    // Storage backend currently routes to Supabase community-assets
+    // bucket. When SUPABASE_URL is not set on Railway, supabase.storage
+    // is null and uploads fail. Surface this cleanly with 501 until
+    // the storage migration off Supabase ships (R2 / S3 / local).
+    if (!supabase || !supabase.storage) {
+      return res.status(501).json({ error: 'Asset upload temporarily unavailable. Logo and banner uploads will return when migrated off Supabase storage.' });
+    }
     const creatorId = req.creator.id;
     const { type, data, mime } = req.body;
 
@@ -53709,13 +53743,17 @@ app.listen(PORT, () => {
     try {
       await pool.query(predictionsSchema);
       console.log('[boot] ✓ predictions + follows schema ensured');
-      // Tell Supabase PostgREST to reload its schema cache so
-      // supabase.from('predictions') elsewhere in the codebase sees
-      // the table without waiting for its periodic cache refresh.
-      try {
-        await pool.query(`NOTIFY pgrst, 'reload schema'`);
-        console.log('[boot] ✓ PostgREST schema reload notified');
-      } catch (_) { /* NOTIFY is best-effort */ }
+      // PostgREST schema-reload NOTIFY was only relevant when Supabase
+      // (which embeds PostgREST) sat in front of this DB. With Railway
+      // Postgres as the canonical DB and the supabase proxy routing
+      // every .from() call to direct SQL, this NOTIFY is a no-op the
+      // pgrst channel listener no longer exists for. Skip when Supabase
+      // SDK isn't initialized.
+      if (_supaCanInit) {
+        try {
+          await pool.query(`NOTIFY pgrst, 'reload schema'`);
+        } catch (_) { /* NOTIFY is best-effort */ }
+      }
     } catch (err) {
       console.error('[boot] ✗ failed to ensure predictions schema:', err.message);
     }
