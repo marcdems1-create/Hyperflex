@@ -16503,6 +16503,26 @@ let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || sessionStorag
 // Address that last successfully returned positions — never overwrite this blindly
 let _polyLastGoodAddress = localStorage.getItem('hf_poly_last_good') || '';
 
+// hasPolymarketWallet() — single multi-source check matching Step 1's onboarding
+// card at L10120. Previously the empty-state component (updateAllPositionsTab)
+// and the portfolio summary (line ~19379) read only `_polyWalletAddress` (this
+// module variable), which lagged behind the other three sources during wallet
+// connection — empty state then claimed "Connect your accounts · Connect
+// Polymarket" while Step 1 above already showed "Connecting…" because Step 1
+// read the broader set. Same shape as the bug PR #106 fixed at the top of the
+// card; this helper closes the second surface. Order matters: cheapest read
+// first (module variable), then creatorData (already loaded), then window
+// connectedWallet (live MetaMask), then localStorage (persisted hint).
+function hasPolymarketWallet() {
+  return !!(
+    _polyWalletAddress ||
+    (typeof creatorData !== 'undefined' && creatorData && creatorData.creator && creatorData.creator.polymarket_address) ||
+    window._connectedWallet ||
+    localStorage.getItem('hf_poly_wallet') ||
+    localStorage.getItem('hf_wallet_address')
+  );
+}
+
 function setPolyAddress(addr, reason) {
   if (!addr || typeof addr !== 'string') return;
   addr = addr.toLowerCase().trim();
@@ -19376,7 +19396,7 @@ function updatePortfolioSummary() {
   if (!bar) return;
 
   const positions = getAllPositionsFlat();
-  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+  const hasAnyPlatform = hasPolymarketWallet() || _kalshiConnected || _manifoldUsername;
   const noRealMsg = document.getElementById('noRealPositionsMsg');
 
   if (positions.length === 0 && !hasAnyPlatform) {
@@ -20175,7 +20195,7 @@ function renderPosCalendar() {
 
 function updateAllPositionsTab() {
   const positions = getAllPositionsFlat();
-  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+  const hasAnyPlatform = hasPolymarketWallet() || _kalshiConnected || _manifoldUsername;
 
   const emptyEl = document.getElementById('allPositionsEmpty');
   const openSec = document.getElementById('openPositionsSection');
