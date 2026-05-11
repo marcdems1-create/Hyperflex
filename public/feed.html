@@ -1664,6 +1664,22 @@ a:hover { text-decoration: underline; }
     <a href="/alpha-live" class="rail-more">View All Edge ↗</a>
   </div>
 
+  <!-- DOG PLAYS section — contrarian signal feed. Surfaces Polymarket
+       markets where one side is ≤ 30¢ AND a sharp or whale has taken
+       that side. Top 5 here; full grid at /dogs. Spec:
+       docs/specs/dog-card-v1.md. Hidden when no cards qualify
+       (empty-state discipline). -->
+  <div class="rail-section" id="dogPlaysSection" style="display:none">
+    <div class="rail-head">
+      <span class="rail-head-dot" style="background:#a855f7;box-shadow:0 0 10px rgba(168,85,247,0.7)"></span>
+      <span style="color:#a855f7">Dog Plays</span>
+      <span class="rail-head-age" id="dogPlaysCount">—</span>
+    </div>
+    <div class="rail-sep"></div>
+    <div id="dogPlaysSlot"></div>
+    <a href="/dogs" class="rail-more">View all dogs ↗</a>
+  </div>
+
   <!-- RESOLVING SOON section -->
   <div class="rail-section">
     <div class="rail-head">
@@ -3381,6 +3397,7 @@ async function deleteMyPrediction(predId, btn) {
   loadFeed(false);
   initWalletAutoScan();  // auto-scan using the address saved in the creator dashboard
   loadHotAlpha();        // left rail — edge-scored markets
+  loadDogPlays();        // left rail — contrarian-signal dog cards, top 5
   loadTopPredictors();   // right rail — verified predictors, 7d
   loadWhaleMoves();      // right rail — biggest whale positions, live
   loadDailyPick();       // right rail — daily pick widget
@@ -3396,6 +3413,8 @@ async function deleteMyPrediction(predId, btn) {
   }
   // Refresh the alpha rail every 90s (same TTL as the server's _screenerCache)
   setInterval(loadHotAlpha, 90 * 1000);
+  // Refresh dog plays every 3 min (same TTL as the server-side cache)
+  setInterval(loadDogPlays, 3 * 60 * 1000);
   // Refresh predictors every 5 min (stats don't tick by the second)
   setInterval(loadTopPredictors, 5 * 60 * 1000);
   // Whale positions refresh every 60s (backend cache is 10 min but we
@@ -4328,6 +4347,53 @@ async function loadWhaleMoves() {
   } catch (err) {
     slot.innerHTML = '<div class="rail-empty">Whale feed unavailable</div>';
     console.warn('[whale-moves] load failed:', err.message);
+  }
+}
+
+// DOG PLAYS rail — top-5 contrarian-signal cards. Compact rows, dog
+// side + price prominent, sharp/whale counts as the smart-money chip.
+// Section auto-hides when /api/dog-cards returns zero — empty-state
+// discipline per voice charter §10.
+async function loadDogPlays() {
+  var section = document.getElementById('dogPlaysSection');
+  var slot    = document.getElementById('dogPlaysSlot');
+  var count   = document.getElementById('dogPlaysCount');
+  if (!slot || !section) return;
+  try {
+    var r = await fetch('/api/dog-cards?limit=5');
+    var d = r.ok ? await r.json() : null;
+    var cards = (d && Array.isArray(d.cards)) ? d.cards : [];
+    if (!cards.length) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = '';
+    if (count) count.textContent = (d.total != null ? d.total : cards.length) + ' live';
+    slot.innerHTML = cards.map(function(c){
+      var sharpN = (c.sharps || []).length;
+      var whaleN = (c.whales || []).length;
+      var slugHref = c.market_slug ? '/market/' + encodeURIComponent(c.market_slug) : '#';
+      var dogCents = Math.round(Number(c.dog_price || 0) * 100);
+      // Sharps + whales chips. Voice charter — no decorative emoji, use
+      // colored text labels. Skip a side when zero (no "0 sharps" noise).
+      var chips = [];
+      if (sharpN > 0) chips.push('<span style="color:var(--accent-green);font-family:var(--mono);font-size:10px;font-weight:700">' + sharpN + ' SHARP' + (sharpN > 1 ? 'S' : '') + '</span>');
+      if (whaleN > 0) chips.push('<span style="color:#a855f7;font-family:var(--mono);font-size:10px;font-weight:700">' + whaleN + ' WHALE' + (whaleN > 1 ? 'S' : '') + '</span>');
+      var chipsHtml = chips.join(' <span style="color:var(--text-faint)">·</span> ');
+      return '<a href="' + slugHref + '" class="dog-row" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;text-decoration:none;color:inherit;transition:background .12s">' +
+        '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:5px 8px;border-radius:6px;background:rgba(168,85,247,0.14);color:#a855f7;font-family:var(--mono);min-width:48px">' +
+          '<span style="font-size:8px;font-weight:800;letter-spacing:0.1em">' + (c.dog_side || '') + '</span>' +
+          '<span style="font-size:13px;font-weight:800;font-variant-numeric:tabular-nums">' + dogCents + '¢</span>' +
+        '</div>' +
+        '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.question || 'Untitled market') + '</div>' +
+          '<div style="font-size:10px;line-height:1">' + chipsHtml + '</div>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch (err) {
+    console.warn('[dog-plays] load failed:', err.message);
+    section.style.display = 'none';
   }
 }
 

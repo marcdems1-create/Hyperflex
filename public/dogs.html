@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dogs — HYPERFLEX</title>
+<meta name="description" content="Polymarket markets where one side is priced sub-30¢ and a sharp or whale has taken that side. The contrarian-signal feed.">
+<meta property="og:title" content="Dogs — HYPERFLEX">
+<meta property="og:description" content="The contrarian-signal feed. Polymarket markets where smart money is on the dog side.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js" defer></script>
+<style>
+:root { --bg:#0d0d10; --surface:#13131a; --surface-2:#1a1a24; --text:#f0f0f5; --dim:#8b8a9a; --faint:#4a4a5a; --border:rgba(255,255,255,0.07); --green:#00e68a; --gold:#c9920d; --purple:#a855f7; --blue:#4d9fff; --red:#ff4d6a; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+a { color:var(--gold); text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+.wrap { max-width:880px; margin:0 auto; padding:72px 24px 80px; }
+.eyebrow { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--green); text-transform:uppercase; }
+.eyebrow .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px rgba(0,230,138,0.7); animation:pulse 1.4s infinite; margin-right:6px; vertical-align:middle; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+h1 { font-size:30px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px; line-height:1.12; }
+.sub { font-size:14px; color:var(--dim); margin-bottom:24px; max-width:620px; line-height:1.55; }
+.sub b { color:var(--text); font-weight:700; }
+
+.summary { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:24px; font-size:12px; color:var(--dim); line-height:1.55; }
+.summary b { color:var(--text); font-weight:700; }
+
+.section-title { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.14em; color:var(--dim); text-transform:uppercase; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+.section-title .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 8px rgba(0,230,138,0.6); animation:pulse 1.4s infinite; }
+.section-title .right-note { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:500; color:var(--faint); letter-spacing:0.08em; }
+
+.cards { display:flex; flex-direction:column; gap:10px; }
+
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; transition:border-color .15s; }
+.card:hover { border-color:rgba(168,85,247,0.35); }
+
+.card-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:12px; }
+.card-prices { flex-shrink:0; }
+.card-side { display:flex; align-items:baseline; gap:6px; padding:5px 9px; border-radius:6px; }
+.card-side.dog { background:rgba(168,85,247,0.14); color:var(--purple); margin-bottom:4px; }
+.card-side.fav { background:rgba(255,255,255,0.03); color:var(--faint); }
+.card-side-label { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.1em; min-width:24px; }
+.card-side-price { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:800; font-variant-numeric:tabular-nums; }
+.card-side.fav .card-side-price { font-size:11px; opacity:0.7; }
+.card-body { flex:1; min-width:0; }
+.card-question { font-size:14px; font-weight:600; color:var(--text); line-height:1.35; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.card-question a { color:var(--text); }
+.card-question a:hover { color:var(--gold); text-decoration:underline; }
+.card-meta { display:flex; gap:14px; flex-wrap:wrap; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.04em; }
+.card-meta b { color:var(--dim); font-weight:700; }
+
+.lineups { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; padding-top:12px; border-top:1px dashed var(--border); }
+@media(max-width:640px) { .lineups { grid-template-columns:1fr; } }
+.lineup { background:rgba(255,255,255,0.02); border-radius:8px; padding:10px 12px; }
+.lineup-head { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.lineup.sharps .lineup-head { color:var(--green); }
+.lineup.whales .lineup-head { color:var(--purple); }
+.lineup-empty { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.04em; padding:4px 0; }
+
+.lineup-row { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:12px; }
+.lineup-row + .lineup-row { border-top:1px solid rgba(255,255,255,0.04); }
+.lineup-avatar { width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg, #2a2a3a, #1a1a24); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; color:var(--text); flex-shrink:0; overflow:hidden; }
+.lineup-avatar img { width:100%; height:100%; object-fit:cover; }
+.lineup-name { color:var(--text); font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lineup-name a { color:var(--text); }
+.lineup-name a:hover { color:var(--gold); text-decoration:underline; }
+.lineup-score { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:800; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.lineup.sharps .lineup-score { color:var(--green); }
+.lineup.whales .lineup-score { color:var(--purple); }
+.lineup-tier { font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:800; letter-spacing:0.08em; color:var(--faint); padding:1px 5px; border-radius:3px; background:rgba(255,255,255,0.03); margin-left:4px; flex-shrink:0; }
+
+.empty { padding:32px 20px; text-align:center; background:var(--surface); border:1px dashed var(--border); border-radius:12px; color:var(--dim); }
+.empty .empty-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.empty .empty-body  { font-size:12px; line-height:1.55; color:var(--dim); }
+.empty .empty-body a { color:var(--gold); }
+
+.foot { margin-top:32px; padding-top:18px; border-top:1px solid var(--border); font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; line-height:1.7; }
+.foot a { color:var(--gold); }
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<div class="wrap">
+  <div class="eyebrow"><span class="dot"></span>HYPERFLEX · Dogs</div>
+  <h1>Dogs.</h1>
+  <p class="sub">Polymarket markets where one side is priced at <b>30¢ or below</b> AND a sharp or whale has taken that side. The card only renders if smart money is on the dog. The public says no; here's who's on yes with real money.</p>
+
+  <div class="summary">
+    <b>Sharps lineup</b> reads Flex Score (verified accuracy, qualified traders only). <b>Whales lineup</b> reads Whale Score (capital-flow heuristic, no qualification gate). Two parallel signals, different questions about the same side.
+  </div>
+
+  <div class="section-title">
+    <span class="live-dot"></span>
+    Dog cards · Live
+    <span class="right-note">Refreshes every 3m</span>
+  </div>
+  <div id="dogCardsList" class="cards">
+    <div class="empty"><div class="empty-title">Loading dog cards…</div><div class="empty-body">Walking the screener and joining takes.</div></div>
+  </div>
+
+  <div class="foot">Dog threshold: sub-30¢ on either side. Cards rank by max sharp Flex Score × 1.5 + sharps × 10 + max whale × 1.0 + whales × 5 + edge bonus. Empty state means no sharp or whale is on a sub-30¢ side right now — happens on quiet days. <a href="/alpha-live">Looking for regular edge markets? →</a></div>
+</div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtUsd(v){ v = Number(v||0); if (v >= 1e6) return '$' + (v/1e6).toFixed(2).replace(/\.?0+$/,'') + 'M'; if (v >= 1e3) return '$' + (v/1e3).toFixed(1).replace(/\.0$/,'') + 'k'; return '$' + Math.round(v); }
+function initials(s){ s = String(s||'').trim(); if (!s) return '?'; return s.slice(0,2).toUpperCase(); }
+function memberHref(uid){ return uid ? '/m/' + encodeURIComponent(uid) : '#'; }
+function fmtCents(p){ return Math.round(Number(p||0) * 100) + '¢'; }
+
+function renderLineup(rows, kind) {
+  // kind: 'sharps' (Flex Score) or 'whales' (Whale Score). Empty-state
+  // copy stays neutral — voice charter, no encouragement, no "be the first".
+  var label = kind === 'sharps' ? 'Sharps on this side' : 'Whales on this side';
+  if (!Array.isArray(rows) || !rows.length) {
+    return '<div class="lineup ' + kind + '">' +
+      '<div class="lineup-head">' + label + '</div>' +
+      '<div class="lineup-empty">None on this side.</div>' +
+    '</div>';
+  }
+  var body = rows.map(function(u){
+    var av = u.avatar_url
+      ? '<img src="' + esc(u.avatar_url) + '" alt="">'
+      : '<span>' + esc(initials(u.display_name)) + '</span>';
+    var name = '<a href="' + esc(memberHref(u.user_id)) + '">' + esc(u.display_name || 'Trader') + '</a>';
+    var scoreTxt = kind === 'sharps' ? Math.round(u.flex_score || 0) : Math.round(u.whale_score || 0);
+    var tier = kind === 'sharps' && u.flex_tier ? '<span class="lineup-tier">' + esc(String(u.flex_tier).toUpperCase()) + '</span>' : '';
+    return '<div class="lineup-row">' +
+      '<div class="lineup-avatar">' + av + '</div>' +
+      '<div class="lineup-name">' + name + '</div>' +
+      tier +
+      '<div class="lineup-score">' + scoreTxt + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="lineup ' + kind + '">' +
+    '<div class="lineup-head">' + label + '</div>' +
+    body +
+  '</div>';
+}
+
+function renderDogCard(c) {
+  var slugHref = c.market_slug ? '/market/' + encodeURIComponent(c.market_slug) : '#';
+  var volTxt = c.volume_24h ? '24h ' + fmtUsd(c.volume_24h) : '';
+  var edgeTxt = c.edge_score ? 'edge ' + Math.round(c.edge_score) : '';
+  var meta = [volTxt, edgeTxt].filter(Boolean).join(' · ');
+  return '<div class="card">' +
+    '<div class="card-head">' +
+      '<div class="card-prices">' +
+        '<div class="card-side dog">' +
+          '<span class="card-side-label">' + esc(c.dog_side) + '</span>' +
+          '<span class="card-side-price">' + fmtCents(c.dog_price) + '</span>' +
+        '</div>' +
+        '<div class="card-side fav">' +
+          '<span class="card-side-label">' + esc(c.fav_side) + '</span>' +
+          '<span class="card-side-price">' + fmtCents(c.fav_price) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-body">' +
+        '<div class="card-question"><a href="' + esc(slugHref) + '">' + esc(c.question || 'Untitled market') + '</a></div>' +
+        (meta ? '<div class="card-meta">' + esc(meta) + '</div>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="lineups">' +
+      renderLineup(c.sharps, 'sharps') +
+      renderLineup(c.whales, 'whales') +
+    '</div>' +
+  '</div>';
+}
+
+function renderEmpty() {
+  document.getElementById('dogCardsList').innerHTML = '<div class="empty">' +
+    '<div class="empty-title">No dog plays right now.</div>' +
+    '<div class="empty-body">No sub-30¢ side has a sharp or whale on it as of the last screener refresh. Happens on quiet days. <a href="/alpha-live">Browse regular edge markets →</a></div>' +
+  '</div>';
+}
+
+function loadDogCards() {
+  fetch('/api/dog-cards?limit=20').then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+    var cards = (d && Array.isArray(d.cards)) ? d.cards : [];
+    if (!cards.length) { renderEmpty(); return; }
+    document.getElementById('dogCardsList').innerHTML = cards.map(renderDogCard).join('');
+  }).catch(function(){
+    document.getElementById('dogCardsList').innerHTML = '<div class="empty"><div class="empty-title">Couldn’t load dog cards.</div><div class="empty-body">Retrying in 3 minutes.</div></div>';
+  });
+}
+loadDogCards();
+setInterval(loadDogCards, 3 * 60 * 1000);
+</script>
+</body>
+</html>
