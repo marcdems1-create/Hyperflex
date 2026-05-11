@@ -1,18 +1,18 @@
 name: Stale Polymarket factory selector guard
 
-# Fails the build if the dead Polymarket Safe-factory selector 0x4d0c6cdb
-# reappears in server.js, public/, or anywhere else in the repo outside
-# of lib/polymarket-proxy.js (which documents the incident).
+# Fails the build if the dead Polymarket Safe-factory selector reappears
+# in server.js, public/, or anywhere else in the repo outside of
+# lib/polymarket-proxy.js (the incident-doc file that intentionally
+# names the dead hex in its header comment for future debuggers).
 #
-# The 0x4d0c6cdb constant was a fictional selector that didn't match any
-# real function on the Safe factory at 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b.
-# Six independent inline eth_call patterns across server.js carried that
-# constant from copy-paste, with conflicting comments claiming three
-# different function names (computeProxyAddress / proxies / proxyFor) —
-# none of which actually compute to 0x4d0c6cdb. Every server-side proxy
-# derivation reverted as a result, silently filling the 995-user
-# "polymarket_proxy = NULL" bucket while the client path (via ethers
-# ABI encoding) worked correctly.
+# Background: a fictional 4-byte selector that didn't match any real
+# function on the Safe factory at 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b
+# propagated across six independent inline eth_call patterns in server.js,
+# with conflicting comments claiming three different function names
+# (computeProxyAddress / proxies / proxyFor) — none of which actually
+# compute to that hex. Every server-side proxy derivation reverted as
+# a result, silently filling the 995-user "polymarket_proxy = NULL"
+# bucket while the client path (via ethers ABI encoding) worked correctly.
 #
 # All call sites have been migrated to lib/polymarket-proxy.js which
 # derives the selector from an ABI string at runtime via ethers — making
@@ -33,31 +33,27 @@ on:
 
 jobs:
   no-stale-proxy-selectors:
-    name: Block 0x4d0c6cdb from reappearing
+    name: Block dead Polymarket selector from reappearing
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # git grep only needs the working tree
 
-      - name: Scan repo (excl. lib/polymarket-proxy.js + this workflow + node_modules)
+      - name: Scan tree (excl. incident-doc helper + this workflow)
         run: |
           set -e
-          # lib/polymarket-proxy.js intentionally documents the historical
-          # selector in its header comment block — exclude it from the
-          # scan. Also exclude this workflow file (it MUST contain the
-          # literal pattern as the grep target). Lockfiles + node_modules
-          # excluded to avoid noise.
-          #
-          # GNU grep's --exclude matches BASENAME only (no path prefix),
-          # so we list the bare filenames. Both files have unique names
-          # in this repo so basename matching is unambiguous.
-          if grep -rEn '0x4d0c6cdb' . \
-                --exclude-dir=node_modules \
-                --exclude-dir=.git \
-                --exclude='polymarket-proxy.js' \
-                --exclude='no-stale-proxy-selectors.yml' \
-                --exclude='package-lock.json' \
-                --exclude='*.lock' ; then
+          # Use `git grep` with pathspec exclusion (`:!path`) — unlike
+          # `grep --exclude` which has subtle basename-vs-path behaviour
+          # that differs between GNU grep versions and shells, git grep
+          # treats `:!path` as a literal repo-relative path exclusion.
+          # No glob ambiguity, version-portable, and tested locally
+          # against the same tree CI will scan.
+          if git grep -nE '0x4d0c6cdb' -- \
+                ':!lib/polymarket-proxy.js' \
+                ':!.github/workflows/no-stale-proxy-selectors.yml' \
+                ':!package-lock.json' ; then
             echo ""
             echo "::error::Dead Polymarket factory selector detected outside lib/polymarket-proxy.js."
             echo "::error::This selector doesn't match any function on the Safe factory and silently reverts on-chain."
