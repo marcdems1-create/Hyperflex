@@ -140,6 +140,7 @@ const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
+const hotMarkets = require('./lib/hot-markets');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -32120,6 +32121,65 @@ app.post('/api/admin/hero-banner/refresh', async (req, res) => {
 cron.schedule('* * * * *', () => {
   heroBanner.checkCachedEventResolved().catch(e => {
     console.warn('[hero-banner] cron error:', e.message);
+  });
+});
+
+// ── HOT MARKETS CAROUSEL v1 ──────────────────────────────────────────────
+//
+// Phase 1 of the carousel rescope (supersedes the single-event rolling
+// banner above). Surfaces the top N Polymarket events by 24h volume with
+// sparkline + news citations per tile. Spec: top 7 events, 5-min cache,
+// click target /market/:slug.
+//
+// Phase 2 (next session) will land the /market/:slug enrichment with the
+// HYPERFLEX overlay (sharps from takes, whales from positions, rolling
+// news). For now tiles link to the existing /market/:slug surface which
+// is the live trading page.
+
+app.get('/api/hot-markets/carousel', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 7));
+    const tiles = await hotMarkets.getHotMarketsCarousel(
+      { limit },
+      { newsImpactCache: typeof _newsImpactCache !== 'undefined' ? _newsImpactCache : null }
+    );
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({
+      markets: Array.isArray(tiles) ? tiles : [],
+      count:   Array.isArray(tiles) ? tiles.length : 0,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('[hot-markets/carousel] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, markets: [], count: 0 });
+  }
+});
+
+// POST /api/admin/hot-markets/refresh — admin-gated cache bust.
+app.post('/api/admin/hot-markets/refresh', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  hotMarkets.bustCache();
+  try {
+    const next = await hotMarkets.getHotMarketsCarousel(
+      { limit: 7 },
+      { newsImpactCache: typeof _newsImpactCache !== 'undefined' ? _newsImpactCache : null }
+    );
+    res.json({ ok: true, count: next ? next.length : 0 });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 1-min resolution-check cron for carousel tiles — mirrors the
+// hero-banner pattern. Cheap when cache is cold (instant return); when
+// warm, one getEventBySlug per tile (gamma-cached at 5min in
+// lib/polymarket). Busts the cache if any tile's event has resolved or
+// expired — next request re-ranks.
+cron.schedule('* * * * *', () => {
+  hotMarkets.checkCachedEventsResolved().catch(e => {
+    console.warn('[hot-markets] cron error:', e.message);
   });
 });
 
