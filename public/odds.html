@@ -496,7 +496,7 @@ async function searchOdds() {
     _lastSearchData = data;
 
     if (!poly.length && !kalshi.length && !sports.length) {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No markets found for "${escHtml(q)}"</div><div class="empty-sub">Try a different keyword. We search Polymarket, Kalshi, and sportsbooks (DraftKings, FanDuel, Bet365) in real time.</div><a href="/creator/signup" class="empty-cta">Get started free →</a></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No markets found for "${escHtml(q)}"</div><div class="empty-sub">Try a different keyword. We search Polymarket and sportsbooks (DraftKings, FanDuel, Bet365) in real time.</div><a href="/creator/signup" class="empty-cta">Get started free →</a></div>`;
       return;
     }
 

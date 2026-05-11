@@ -6043,7 +6043,7 @@ window.hfxOpenDeposit = function() {
               <div class="markets-table" style="padding:20px 24px">
                 <div id="platformAnalyticsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px"></div>
                 <div id="platformAnalyticsEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
-                  Connect Polymarket, Kalshi, or Manifold in the Portfolio tab to see your cross-platform stats.
+                  Connect Polymarket in the Portfolio tab to see your stats.
                 </div>
               </div>
             </div>
@@ -7442,7 +7442,7 @@ window.hfxOpenDeposit = function() {
                 <div style="padding:16px 20px">
                   <div id="perfPlatformGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px"></div>
                   <div id="perfPlatformEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
-                    Connect Polymarket or Kalshi in the My Positions tab to see your cross-platform stats.
+                    Connect Polymarket in the My Positions tab to see your stats.
                   </div>
                 </div>
               </div>
@@ -7527,7 +7527,7 @@ window.hfxOpenDeposit = function() {
             <div id="performanceEmpty" style="display:none;text-align:center;padding:48px 20px;color:var(--dim)">
               <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📈</div>
               <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Connect your wallet to see stats</div>
-              <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Link your Polymarket, Kalshi, or Manifold account to track your personal trading performance.</div>
+              <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Link your Polymarket account to track your trading performance.</div>
               <button onclick="showTab('portfolio')" style="background:var(--gold);color:#0a0a0f;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Go to My Positions →</button>
             </div>
           </div>
@@ -10117,7 +10117,15 @@ function updateOnboardingCard() {
   var s1 = document.getElementById('onbStep1');
   var s1Btn = document.getElementById('onbStep1Btn');
   var s1Sub = document.getElementById('onbStep1Sub');
-  if (hasWallet) {
+  // Step 1 only flips to green "Connected" when BOTH the wallet is linked
+  // AND the position sync has actually completed (proven by hasPositions).
+  // Until then we hold at "Connecting…" in the same gold colour Step 2 uses
+  // for its syncing state. Previously Step 1 turned green on hasWallet alone
+  // — that produced "✓ Wallet connected · syncing your positions now" sitting
+  // directly above Step 2's "Syncing…" badge whenever the position-sync cron
+  // was dying on a downstream RPC failure (publicnode reverts, 1rpc.io rate
+  // limited). The contradiction reads as broken to non-technical users.
+  if (hasWallet && hasPositions) {
     s1.setAttribute('data-complete', 'true');
     s1.style.borderColor = 'rgba(0,230,138,0.35)';
     s1.querySelector('.onb-badge').innerHTML = '✓';
@@ -10128,7 +10136,20 @@ function updateOnboardingCard() {
     s1Btn.style.color = '#00e68a';
     s1Btn.style.cursor = 'default';
     s1Btn.onclick = null;
-    if (s1Sub) s1Sub.textContent = 'Wallet connected — syncing your positions now.';
+    if (s1Sub) s1Sub.textContent = 'Wallet connected · ' + posCount + ' position' + (posCount === 1 ? '' : 's') + ' synced.';
+  } else if (hasWallet) {
+    // Wallet linked, sync not yet proven — gold intermediate, same colour
+    // ramp as Step 2's "Syncing…" state. Badge keeps its default "1" so the
+    // green ✓ is reserved for the verified-end state.
+    s1.style.borderColor = 'rgba(201,146,13,0.35)';
+    s1.querySelector('.onb-badge').style.background = 'rgba(201,146,13,0.15)';
+    s1.querySelector('.onb-badge').style.color = 'var(--gold)';
+    s1Btn.textContent = 'Connecting…';
+    s1Btn.style.background = 'rgba(201,146,13,0.12)';
+    s1Btn.style.color = 'var(--gold)';
+    s1Btn.style.cursor = 'default';
+    s1Btn.onclick = null;
+    if (s1Sub) s1Sub.textContent = 'Wallet linked. Syncing Polymarket positions…';
   }
 
   // Step 2 unlocks once step 1 is done
@@ -13652,7 +13673,7 @@ async function loadPlatformAnalytics(force) {
         </div>
       </div>`;
     });
-  if (!cards.length) { grid.innerHTML = ''; if (empty) { empty.style.display = 'block'; empty.textContent = showHFX ? 'Connect Polymarket or Kalshi in the Portfolio tab to see your cross-platform stats.' : 'No external platform data yet. Connect Polymarket or Kalshi in Portfolio.'; } }
+  if (!cards.length) { grid.innerHTML = ''; if (empty) { empty.style.display = 'block'; empty.textContent = showHFX ? 'Connect Polymarket in the Portfolio tab to see your stats.' : 'No platform data yet. Connect Polymarket in Portfolio.'; } }
   else { grid.innerHTML = cards.join(''); if (empty) empty.style.display = 'none'; }
 }
 
@@ -20173,7 +20194,7 @@ function updateAllPositionsTab() {
       emptyEl.style.display = 'block';
       emptyEl.innerHTML = '<div style="font-size:40px;margin-bottom:16px;opacity:0.4">📭</div>' +
         '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No open positions</div>' +
-        '<div style="font-size:13px;line-height:1.6;margin-bottom:24px;color:var(--dim)">Your connected accounts have no active positions right now. Place trades on Polymarket or Kalshi and they\'ll show up here.</div>' +
+        '<div style="font-size:13px;line-height:1.6;margin-bottom:24px;color:var(--dim)">No active positions right now. Place trades on Polymarket and they\'ll show up here.</div>' +
         '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">' +
           '<a href="/signals" style="background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:8px">⚡ Find Signals</a>' +
           '<a href="/screener" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:8px">🔍 Market Screener</a>' +
@@ -20782,7 +20803,7 @@ async function loadTrendingMarkets() {
       };
     });
     if (!markets.length) {
-      el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search prediction markets</div><div style="font-size:13px">Type a keyword to find live odds on Polymarket and Kalshi.</div></div>';
+      el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search prediction markets</div><div style="font-size:13px">Type a keyword to find live odds on Polymarket.</div></div>';
       return;
     }
     renderCompactMarketCards(markets, el, true);
@@ -20858,7 +20879,7 @@ function renderMarketSearchResults(data, el) {
   const kalshi = data.kalshi || [];
   const sports = data.sportsbooks || [];
   if (!poly.length && !kalshi.length && !sports.length) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword — we search Polymarket and Kalshi.</div></div>';
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword — we search Polymarket in real time.</div></div>';
     return;
   }
   // Merge all into one flat list, Polymarket first then Kalshi
