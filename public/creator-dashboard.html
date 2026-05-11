@@ -10500,16 +10500,46 @@ function showTab(tab) {
   if (tab === 'flexpoints') loadFlexPointsTab();
   if (tab === 'settings') loadApiAccess();
   if (tab === 'account') { populateAccountTab(); }
-  if (tab === 'portfolio') loadPortfolio();
-  if (tab === 'performance') loadPerformanceTab();
-  if (tab === 'breaking') { loadBreakingTab(); }
-  if (tab === 'quicktrade') { loadQuickTrade(); }
-  if (tab === 'calendar') { loadCalendarTab(); }
-  if (tab === 'watchlist') { loadWatchlistTab(); }
-  if (tab === 'briefing') { loadBriefingTab(); }
-  if (tab === 'ta') { loadTATab(); }
+  // ── Cross-script-tag loaders ──
+  // The nine loaders dispatched via _loadLater() below live in script
+  // tag #5 (line 16435+) while this showTab dispatcher lives in script
+  // tag #2 (8755-15756). Function declarations attach to window only
+  // after their containing script executes — so when init()'s
+  // await fetch() resolves fast (cached or local Railway hop), this
+  // dispatch can run BEFORE scripts #3-#5 have parsed and these symbols
+  // don't exist yet. Wallet-only users hit it because their default tab
+  // is 'portfolio' (8803 + 15749); the ReferenceError bubbled up to
+  // init's catch, firing the "Could not load dashboard" toast and
+  // leaving FLEX Points / SCOUT / FP-tile values unrendered.
+  //
+  // _loadLater calls the loader synchronously when window[fn] exists;
+  // when it doesn't, it schedules a single-tick retry. By the next tick
+  // the browser has yielded to its parse loop and the trailing <script>
+  // tags have executed, so the global is reachable. Net effect: tab
+  // content loads exactly once, regardless of init/fetch timing.
+  //
+  // Follow-up PR can flatten the script-tag layout into one block (or
+  // move the dispatcher to script #5) to eliminate the race at its source.
+  function _loadLater(fnName) {
+    if (typeof window[fnName] === 'function') { try { window[fnName](); } catch (e) { console.warn('[showTab] ' + fnName + ' threw:', e && e.message); } return; }
+    setTimeout(function () {
+      if (typeof window[fnName] === 'function') {
+        try { window[fnName](); } catch (e) { console.warn('[showTab] late ' + fnName + ' threw:', e && e.message); }
+      } else {
+        console.warn('[showTab] ' + fnName + ' never defined — tab will render empty');
+      }
+    }, 0);
+  }
+  if (tab === 'portfolio')   _loadLater('loadPortfolio');
+  if (tab === 'performance') _loadLater('loadPerformanceTab');
+  if (tab === 'breaking')    _loadLater('loadBreakingTab');
+  if (tab === 'quicktrade')  _loadLater('loadQuickTrade');
+  if (tab === 'calendar')    _loadLater('loadCalendarTab');
+  if (tab === 'watchlist')   _loadLater('loadWatchlistTab');
+  if (tab === 'briefing')    _loadLater('loadBriefingTab');
+  if (tab === 'ta')          _loadLater('loadTATab');
   if (tab === 'challenges') { loadChallengesTab(); }
-  if (tab === 'findmarkets') { loadTrendingMarkets(); }
+  if (tab === 'findmarkets') _loadLater('loadTrendingMarkets');
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
