@@ -12054,6 +12054,9 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+// GET /dogs — contrarian-signal dog cards (dog-card-v1). See
+// docs/specs/dog-card-v1.md.
+app.get('/dogs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dogs.html')));
 app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports-predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 app.get('/rewards', (req, res) => res.redirect(302, '/'));
@@ -34351,6 +34354,175 @@ app.get('/api/alpha/top', async (req, res) => {
       return res.json({ markets: top, count: top.length, updated_at: new Date(_screenerCache.ts).toISOString(), stale: true });
     }
     res.status(502).json({ error: 'Failed to build alpha list', detail: err.message });
+  }
+});
+
+// ── DOG CARDS v1 ────────────────────────────────────────────────────────────
+//
+// Surfaces Polymarket markets where one side is ≤ 30¢ (the "dog") AND at
+// least one sharp or whale on HYPERFLEX has taken that side. Two parallel
+// lineups per card: FLEX-qualified sharps + capital-flow whales. Spec:
+// docs/specs/dog-card-v1.md. Locks Decision #2 (sharps reads flex_score
+// with flex_qualifies filter; whales reads flex_score_90d, no gate).
+//
+// Empty-state discipline: a card without ≥1 sharp OR whale doesn't render.
+// Voice charter §10: no playful surfaces on empty data.
+const DOG_PRICE_MAX     = 0.30;            // strict contrarian threshold
+const DOG_CARDS_DEFAULT = 20;              // /dogs page density
+const DOG_CARDS_MAX     = 50;              // hard cap
+const _dogCardsCache = { ts: 0, data: null };
+const DOG_CARDS_TTL_MS  = 3 * 60 * 1000;   // 3-min cache
+
+async function _buildDogCards() {
+  if (!pool) return [];
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  if (!screener.length) return [];
+
+  // Step 1: identify dog candidates from live screener. A market is a
+  // candidate if either side prices ≤ 30¢ and we have a slug to join on.
+  const candidates = [];
+  for (const m of screener) {
+    if (!m || !m.slug) continue;
+    const yes = Number(m.yes_price);
+    if (!Number.isFinite(yes) || yes <= 0 || yes >= 1) continue;
+    let dogSide = null, dogPrice = null, favSide = null, favPrice = null;
+    if (yes <= DOG_PRICE_MAX)            { dogSide = 'YES'; dogPrice = yes;       favSide = 'NO';  favPrice = 1 - yes; }
+    else if (yes >= 1 - DOG_PRICE_MAX)   { dogSide = 'NO';  dogPrice = 1 - yes;   favSide = 'YES'; favPrice = yes; }
+    else continue;
+    candidates.push({
+      slug: m.slug,
+      condition_id: m.condition_id || null,
+      question: m.question,
+      yes_price: yes,
+      no_price:  1 - yes,
+      dog_side:  dogSide,
+      dog_price: dogPrice,
+      fav_side:  favSide,
+      fav_price: favPrice,
+      volume_24h: Number(m.volume) || 0,
+      edge_score: Number(m.edge_score) || 0,
+    });
+  }
+  if (!candidates.length) return [];
+
+  // Step 2: bulk query takes on the dog side across all candidate slugs.
+  // Single query, then bucket by slug client-side. Avoids N+1.
+  const slugs = candidates.map(c => c.slug);
+  let takeRows = [];
+  try {
+    takeRows = await dbQuery(`
+      SELECT t.user_id, t.market_slug, UPPER(t.side) AS side,
+             u.display_name, u.username, u.avatar_url, u.polymarket_address,
+             u.flex_score, u.flex_tier, u.flex_qualifies,
+             u.flex_score_90d, u.whale_rank, u.whale_pnl, u.is_whale
+      FROM takes t
+      INNER JOIN users u ON u.id = t.user_id
+      WHERE t.market_slug = ANY($1)
+        AND t.user_id IS NOT NULL`, [slugs]);
+  } catch (e) {
+    console.warn('[dog-cards] takes query:', e.message);
+    return [];
+  }
+
+  // Step 3: bucket takes by (slug, side). Use the dog side per candidate
+  // to filter rows in or out. Dedup users per side (a user with multiple
+  // takes on the same side only counts once for the lineup).
+  const bySlug = new Map();
+  for (const c of candidates) bySlug.set(c.slug, c);
+  const usersBySlugSide = new Map();
+  for (const r of takeRows) {
+    const c = bySlug.get(r.market_slug);
+    if (!c) continue;
+    if (r.side !== c.dog_side) continue;
+    const key = r.market_slug + '|' + r.side;
+    if (!usersBySlugSide.has(key)) usersBySlugSide.set(key, new Map());
+    const m = usersBySlugSide.get(key);
+    if (!m.has(r.user_id)) m.set(r.user_id, r);  // first take wins; dedup
+  }
+
+  // Step 4: per candidate, build sharps + whales lineups. Sharps require
+  // flex_qualifies=true (the 5-settled gate). Whales need a non-null
+  // flex_score_90d. Top 3 each, sorted by score desc.
+  const cards = [];
+  for (const c of candidates) {
+    const key = c.slug + '|' + c.dog_side;
+    const users = Array.from((usersBySlugSide.get(key) || new Map()).values());
+    if (!users.length) continue;
+
+    const sharps = users
+      .filter(u => u.flex_qualifies === true && u.flex_score != null)
+      .sort((a, b) => Number(b.flex_score) - Number(a.flex_score))
+      .slice(0, 3)
+      .map(u => ({
+        user_id: u.user_id,
+        display_name: u.display_name || (u.username ? '@' + u.username : 'Trader'),
+        username: u.username || null,
+        avatar_url: u.avatar_url || null,
+        flex_score: Number(u.flex_score),
+        flex_tier:  u.flex_tier || null,
+      }));
+
+    const whales = users
+      .filter(u => u.flex_score_90d != null && Number(u.flex_score_90d) > 0)
+      .sort((a, b) => {
+        const ds = Number(b.flex_score_90d) - Number(a.flex_score_90d);
+        if (ds !== 0) return ds;
+        return Number(b.whale_pnl || 0) - Number(a.whale_pnl || 0);
+      })
+      .slice(0, 3)
+      .map(u => ({
+        user_id: u.user_id,
+        display_name: u.display_name || (u.username ? '@' + u.username : 'Trader'),
+        username: u.username || null,
+        avatar_url: u.avatar_url || null,
+        whale_score: Number(u.flex_score_90d),
+        whale_rank:  u.whale_rank != null ? Number(u.whale_rank) : null,
+        whale_pnl:   u.whale_pnl  != null ? Number(u.whale_pnl)  : null,
+        is_whale:    u.is_whale === true,
+      }));
+
+    // Empty-state discipline — card needs ≥1 lineup populated.
+    if (!sharps.length && !whales.length) continue;
+
+    // Composite rank: biased to high-quality sharps with multiple aligned
+    // whales. Edge score is a tie-breaker, not a primary signal.
+    const maxSharpFlex = sharps.length ? sharps[0].flex_score : 0;
+    const maxWhale     = whales.length ? whales[0].whale_score : 0;
+    const rankScore = maxSharpFlex * 1.5
+                    + sharps.length * 10
+                    + maxWhale * 1.0
+                    + whales.length * 5
+                    + (Number(c.edge_score) || 0) * 0.5;
+
+    cards.push({ ...c, sharps, whales, rank_score: Math.round(rankScore * 10) / 10 });
+  }
+
+  cards.sort((a, b) => (b.rank_score || 0) - (a.rank_score || 0));
+  return cards;
+}
+
+app.get('/api/dog-cards', async (req, res) => {
+  try {
+    const limit = Math.min(DOG_CARDS_MAX, Math.max(1, parseInt(req.query.limit, 10) || DOG_CARDS_DEFAULT));
+    const now = Date.now();
+    let cards;
+    if (_dogCardsCache.data && now - _dogCardsCache.ts < DOG_CARDS_TTL_MS) {
+      cards = _dogCardsCache.data;
+    } else {
+      cards = await _buildDogCards();
+      _dogCardsCache.data = cards;
+      _dogCardsCache.ts   = now;
+    }
+    res.json({
+      cards: cards.slice(0, limit),
+      count: Math.min(cards.length, limit),
+      total: cards.length,
+      generated_at: new Date(_dogCardsCache.ts || now).toISOString(),
+      ttl_seconds: Math.round(DOG_CARDS_TTL_MS / 1000),
+    });
+  } catch (e) {
+    console.error('[dog-cards]', e.message);
+    res.status(500).json({ cards: [], count: 0, error: e.message });
   }
 });
 
