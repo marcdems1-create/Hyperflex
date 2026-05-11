@@ -475,6 +475,12 @@ Social products compound. Every take posted is content. Every follow is a connec
 
 ---
 
+## ⚠️ Polymarket Safe-proxy derivation — DO NOT inline raw eth_call
+
+**All server-side proxy derivation goes through `lib/polymarket-proxy.derivePolymarketProxy(eoa, rpcs)`. Never inline a raw `eth_call` to the Safe factory with a hardcoded selector.** The helper uses an ABI string (`function computeProxyAddress(address user) view returns (address)`) and lets ethers derive the selector at runtime. If the contract is migrated or the function renamed, ethers throws a clear `function not found` error at the first call — instead of the silent `execution reverted` that the previous hardcoded-`0x4d0c6cdb` pattern produced for months while filling the 995-user "polymarket_proxy = NULL" bucket. Boot log emits `[boot] polymarket-proxy: factory=… selector=…`; smoke-verify with `curl /api/_smoke/polymarket-proxy?eoa=<X>&secret=$ADMIN_SECRET`. CI workflow `.github/workflows/no-stale-proxy-selectors.yml` blocks `0x4d0c6cdb` from reappearing anywhere outside the incident-doc file.
+
+---
+
 ## ⚠️ Polymarket CLOB Trading Reference — DO NOT REGRESS
 
 Canonical spec for `market.html` order flow. Every field verified against the official `@polymarket/clob-client` SDK.

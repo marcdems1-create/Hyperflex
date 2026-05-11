@@ -1,0 +1,61 @@
+name: Stale Polymarket factory selector guard
+
+# Fails the build if the dead Polymarket Safe-factory selector 0x4d0c6cdb
+# reappears in server.js, public/, or anywhere else in the repo outside
+# of lib/polymarket-proxy.js (which documents the incident).
+#
+# The 0x4d0c6cdb constant was a fictional selector that didn't match any
+# real function on the Safe factory at 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b.
+# Six independent inline eth_call patterns across server.js carried that
+# constant from copy-paste, with conflicting comments claiming three
+# different function names (computeProxyAddress / proxies / proxyFor) —
+# none of which actually compute to 0x4d0c6cdb. Every server-side proxy
+# derivation reverted as a result, silently filling the 995-user
+# "polymarket_proxy = NULL" bucket while the client path (via ethers
+# ABI encoding) worked correctly.
+#
+# All call sites have been migrated to lib/polymarket-proxy.js which
+# derives the selector from an ABI string at runtime via ethers — making
+# function-name typos break loudly (clear "function not found") instead
+# of silently reverting on-chain. This guard prevents the dead selector
+# from re-entering the codebase by accident.
+#
+# To discuss the dead selector by name in commit messages, docs, or new
+# comments outside lib/polymarket-proxy.js — rephrase as "the legacy
+# 4-byte selector" or "the broken hardcoded selector." Keeps the guard
+# unambiguous.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  no-stale-proxy-selectors:
+    name: Block 0x4d0c6cdb from reappearing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan repo (excl. lib/polymarket-proxy.js + node_modules)
+        run: |
+          set -e
+          # lib/polymarket-proxy.js intentionally documents the historical
+          # selector in its header comment block — exclude it from the
+          # scan, and exclude lockfiles + node_modules to avoid noise.
+          if grep -rEn '0x4d0c6cdb' . \
+                --exclude-dir=node_modules \
+                --exclude-dir=.git \
+                --exclude='lib/polymarket-proxy.js' \
+                --exclude='package-lock.json' \
+                --exclude='*.lock' ; then
+            echo ""
+            echo "::error::Dead Polymarket factory selector 0x4d0c6cdb detected outside lib/polymarket-proxy.js."
+            echo "::error::This selector doesn't match any function on the Safe factory and silently reverts on-chain."
+            echo "::error::Use polymarketProxy.derivePolymarketProxy() from lib/polymarket-proxy.js instead — it derives the correct selector from the ABI at runtime."
+            echo "::error::See lib/polymarket-proxy.js header for the full incident notes."
+            exit 1
+          fi
+          echo "OK: no stale Polymarket factory selectors found outside the incident-doc file."
