@@ -376,17 +376,24 @@ function renderFlexScoreCard() {
   const p = window._profilePayload;
   if (!p) return;  // legacy /m/:userId path — handle resolved without payload
 
-  const qualifies = p.flex_qualifies === true;
-  const score     = qualifies && p.flex_score != null ? p.flex_score : null;
+  // PR 2026-05-12: FLEX SCORE is the canonical signal across the site.
+  // Show the score whenever it's set (any sample size). `qualifies` only
+  // governs public-leaderboard ranking eligibility, not score visibility.
+  // Sub-5-settled users see the score + a "low sample" indicator so they
+  // can read the number AND understand the confidence level.
+  const score     = p.flex_score != null ? p.flex_score : null;
   const settled   = p.flex_settled_events || 0;
+  const qualifies = p.flex_qualifies === true;
   const comps     = p.flex_components || {};
+  const LOW_SAMPLE_THRESHOLD = 5;  // mirrors lib/flex-score.js BUILDING_MAX_SETTLED
 
-  // Update the inline FLEX score in the hero.
+  // Update the inline FLEX score in the hero. Only show "—" when there
+  // is literally no data (score=null + settled=0).
   const numEl = document.getElementById('flexScoreNum');
   if (numEl && score != null) {
     numEl.classList.remove('mute');
     numEl.innerHTML = `${score}<span class="denom">/100</span>`;
-  } else if (numEl && !qualifies) {
+  } else if (numEl) {
     numEl.classList.add('mute');
     numEl.innerHTML = `—<span class="denom">/100</span>`;
   }
@@ -394,12 +401,14 @@ function renderFlexScoreCard() {
   // Update the delta line under the FLEX number.
   const deltaEl = document.getElementById('flexScoreDelta');
   if (deltaEl) {
-    if (qualifies && p.flex_raw_win_rate != null) {
-      deltaEl.classList.remove('muted');
-      deltaEl.textContent = `${(p.flex_raw_win_rate * 100).toFixed(1)}% win rate · ${settled} settled`;
-    } else if (!qualifies) {
+    if (p.flex_raw_win_rate != null && settled > 0) {
+      const lowSample = settled < LOW_SAMPLE_THRESHOLD;
+      deltaEl.classList.toggle('muted', lowSample);
+      const baseText = `${(p.flex_raw_win_rate * 100).toFixed(1)}% win rate · ${settled} settled`;
+      deltaEl.textContent = lowSample ? `${baseText} · low sample` : baseText;
+    } else {
       deltaEl.classList.add('muted');
-      deltaEl.textContent = `Building · ${Math.max(0, 25 - settled)} settled to unlock`;
+      deltaEl.textContent = settled > 0 ? `${settled} settled` : 'No trades resolved yet';
     }
   }
 
