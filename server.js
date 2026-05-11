@@ -31947,10 +31947,14 @@ app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live
 // /casino kept as a 301 to /live so any existing links/backlinks continue
 // to land users on the same surface under its new name.
 app.get('/casino', (req, res) => res.redirect(301, '/live'));
-// Arbitrage page retired — the standalone surface wasn't valuable enough to
-// justify the UI real estate. Data API (/api/arbitrage, /api/v1/arbitrage)
-// stays live for odds.html, creator-dashboard, and the public Data API docs.
-app.get('/arbitrage', (req, res) => res.redirect(301, '/'));
+// Arbitrage page retired (2026-05-10). Cross-platform arbitrage was
+// structurally Polymarket ↔ Kalshi, and Kalshi was dropped April 30 in
+// the Polymarket-native pivot. Intra-Polymarket arb isn't on the
+// roadmap. Redirect to the Alpha Feed — that's the closest live
+// surface a user reaching for "arbitrage scanner" should land on.
+// The legacy data endpoints (/api/arbitrage, /api/v1/arbitrage) now
+// return empty result shapes so external consumers don't 404.
+app.get('/arbitrage', (req, res) => res.redirect(301, '/alpha'));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 
@@ -35137,6 +35141,11 @@ function _arbMatchScore(qA, qB) {
 function _kalshiFee(price) { return 0.07 * price * (1 - price); }
 
 app.get('/api/arbitrage', async (req, res) => {
+  // Cross-platform (Polymarket ↔ Kalshi) arbitrage retired 2026-05-10
+  // per the Polymarket-native pivot. Returns the empty result shape so
+  // external Data API consumers gracefully degrade instead of 404'ing.
+  // The remainder of this handler is unreachable; kept for git history.
+  return res.json({ opportunities: [], total_found: 0, avg_spread: 0, updated_at: new Date().toISOString() });
   try {
     // 5-min cache (use dedicated scanner cache, not the legacy cron cache)
     if (_arbScannerCache && (Date.now() - _arbScannerCache.ts < 5 * 60 * 1000)) {
@@ -35261,6 +35270,11 @@ app.get('/api/arbitrage', async (req, res) => {
 // ── V1 ARBITRAGE — live orderbook prices + true arb detection + fee-adj ROI ──
 // This is the primary endpoint. /api/arbitrage is the legacy fallback.
 app.get('/api/v1/arbitrage', async (req, res) => {
+  // Cross-platform (Polymarket ↔ Kalshi) arbitrage retired 2026-05-10
+  // per the Polymarket-native pivot. Returns the v1 empty result shape
+  // so any documented API consumers don't 404. The remainder of this
+  // handler is unreachable; kept for git history.
+  return res.json({ opportunities: [], total_found: 0, true_arb_count: 0, avg_spread: 0, updated_at: new Date().toISOString() });
   const minSpread = Math.max(0, parseFloat(req.query.min_spread || '0.01'));
   const limit = Math.min(Math.max(1, parseInt(req.query.limit || '30')), 100);
 
@@ -45511,48 +45525,12 @@ app.get('/api/signals', async (req, res) => {
       }
     } catch (e) { console.warn('[signals] whale-stream source error:', e.message); }
 
-    // Source 4: Cross-platform arbitrage — compare Polymarket vs Kalshi prices from market search cache
-    try {
-      for (const [, cached] of _mktSearchCache) {
-        if (!cached || !cached.data) continue;
-        const polyMarkets = cached.data.polymarket || [];
-        const kalshiMarkets = cached.data.kalshi || [];
-        // Simple keyword match between platforms
-        for (const pm of polyMarkets) {
-          for (const km of kalshiMarkets) {
-            const pQ = (pm.question || '').toLowerCase();
-            const kQ = (km.question || km.title || '').toLowerCase();
-            // Check for significant keyword overlap
-            const pWords = pQ.split(/\s+/).filter(w => w.length > 4);
-            const kWords = kQ.split(/\s+/).filter(w => w.length > 4);
-            const overlap = pWords.filter(w => kWords.includes(w)).length;
-            if (overlap >= 3) {
-              const pPrice = (pm.yes_price || pm.yes_pct || 50) / 100;
-              const kPrice = (km.yes_price || km.yes_pct || 50) / 100;
-              const diff = Math.abs(pPrice - kPrice);
-              if (diff > 0.03) {
-                const cheaperPlatform = pPrice < kPrice ? 'Polymarket' : 'Kalshi';
-                const cheaperPrice = Math.min(pPrice, kPrice);
-                signals.push({
-                  type: 'arbitrage',
-                  badge: 'Arbitrage',
-                  market: pm.question || km.question || 'Unknown',
-                  action: `${(diff * 100).toFixed(1)}% gap — buy YES on ${cheaperPlatform} at ${(cheaperPrice * 100).toFixed(0)}%`,
-                  side: 'YES',
-                  price: cheaperPrice,
-                  confidence: diff > 0.08 ? 'HIGH' : diff > 0.05 ? 'MEDIUM' : 'LOW',
-                  whale_count: 0,
-                  price_diff: diff,
-                  detected_at: now,
-                  url: pm.url || 'https://polymarket.com'
-                });
-              }
-            }
-          }
-        }
-        break; // Only check first cached search result
-      }
-    } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
+    // Source 4: Cross-platform arbitrage — REMOVED 2026-05-10.
+    // The signal was structurally Polymarket ↔ Kalshi price-divergence
+    // detection; Kalshi was dropped April 30 so this source has no
+    // counterparty data to compare against. Surfacing arb badges on
+    // /api/signals with only Polymarket data would produce false positives
+    // (Polymarket disagreeing with itself across cached query slices).
 
     // Source 5: Volume Surge — unusual volume, price velocity, and whale convergence
     try {
