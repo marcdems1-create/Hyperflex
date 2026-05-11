@@ -17921,7 +17921,21 @@ async function ensureWhaleProfile(walletAddress, traderName, rank, pnl, extra) {
     if (rows.length) {
       _whaleUserCache.set(addrLower, { userId: rows[0].id, displayName });
       console.log(`[whale-profile] Created profile for ${displayName} (${addrLower.slice(0, 8)}...)`);
-      return rows[0].id;
+      // Fire-and-forget realized_trades backfill for any new whale-imported
+      // user. Without this, whales sit empty until someone visits their
+      // profile (the lazy-trigger at /api/member). 6h recurring cron picks
+      // up the slack but instant trigger means a fresh whale shows real
+      // data on first profile view instead of empty state.
+      const newUserId = rows[0].id;
+      (async () => {
+        try {
+          const proxy = await ensureProxyStored(newUserId, addrLower);
+          if (proxy) await backfillRealizedTrades(newUserId, addrLower, proxy);
+        } catch (bfErr) {
+          console.warn('[whale-profile] backfill on insert failed for', addrLower.slice(0, 10), bfErr.message);
+        }
+      })();
+      return newUserId;
     }
   } catch (e) {
     // Could be duplicate key if concurrent insert — try lookup again
@@ -37959,11 +37973,29 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       `UPDATE users SET
          realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1::uuid),
          realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
-                                 FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL)
+                                 FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL),
+         last_backfill_at     = NOW()
        WHERE id = $1`,
       [userId]
     );
-  } catch (e) { console.warn('[backfillRealizedTrades] aggregate refresh', e.message); }
+  } catch (e) {
+    // last_backfill_at may be missing on environments where the migration
+    // hasn't been applied. Fall back to the existing-shape UPDATE so the
+    // aggregate refresh still lands even if the timestamp column doesn't
+    // exist. Whale-backfill cron's NULLS-FIRST ordering will degrade to
+    // "any whale" without ordering signal but still functions.
+    console.warn('[backfillRealizedTrades] full aggregate refresh failed, trying fallback:', e.message);
+    try {
+      await dbQuery(
+        `UPDATE users SET
+           realized_trade_count = (SELECT COUNT(*)::int FROM realized_trades WHERE user_id = $1::uuid),
+           realized_roi_median  = (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY realized_roi)
+                                   FROM realized_trades WHERE user_id = $1::uuid AND realized_roi IS NOT NULL)
+         WHERE id = $1`,
+        [userId]
+      );
+    } catch (e2) { console.warn('[backfillRealizedTrades] fallback aggregate refresh', e2.message); }
+  }
 
   // trades/groups/closed/imported triangulates the failure mode at a glance:
   // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
@@ -37972,6 +38004,139 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} total_imported=${imported}`);
   return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount };
 }
+
+// ── WHALE BACKFILL CRON ─────────────────────────────────────────────────────
+//
+// 6-hourly batch that runs backfillRealizedTrades on whales that haven't
+// been backfilled yet. Closes the gap left by the lazy-trigger pattern:
+// /api/member/:userId only fires backfill when someone visits the
+// profile, so most whale-imported users sit empty until the moment a
+// human happens to look at them. With ~700 whales on the platform and
+// most going unvisited for weeks, that surfaces as broken-empty whale
+// pages on the leaderboard rail and the carousel detail pages.
+//
+// Selection: is_whale=true AND last_backfill_at IS NULL, ordered by
+// whale_pnl DESC so the biggest accounts get rendered first. 100/run is
+// safe — at 500ms throttle that's ~50 seconds per cron tick, well under
+// the 6h interval. Multiple ticks needed to clear the initial backlog
+// (~7 ticks for 700 whales).
+//
+// Locks against the manual /api/admin/realized-trades/seed endpoint
+// (_seedProgress.status === 'running'): both call the same backfill fn
+// against the same data-api host; concurrent runs would double the rate
+// pressure for no benefit.
+
+const WHALE_BACKFILL_BATCH        = 100;
+const WHALE_BACKFILL_THROTTLE_MS  = 500;
+let _whaleBackfillRunning = false;
+let _whaleBackfillLastRun = null;
+
+async function runWhaleBackfillBatch() {
+  if (!pool) return { skipped: 'no_pool' };
+  if (_whaleBackfillRunning) return { skipped: 'already_running' };
+  if (_seedProgress && _seedProgress.status === 'running') return { skipped: 'admin_seed_running' };
+
+  _whaleBackfillRunning = true;
+  const startedAt = new Date().toISOString();
+  let processed = 0, withTrades = 0, failed = 0, totalImported = 0;
+
+  try {
+    const rows = await dbQuery(
+      `SELECT id, polymarket_address
+       FROM users
+       WHERE is_whale = true
+         AND polymarket_address IS NOT NULL
+         AND LENGTH(polymarket_address) >= 42
+         AND last_backfill_at IS NULL
+       ORDER BY COALESCE(whale_pnl, 0) DESC, id
+       LIMIT ${WHALE_BACKFILL_BATCH}`
+    );
+    if (!rows.length) {
+      console.log('[whale-backfill] no whales pending — backlog clear');
+      _whaleBackfillLastRun = { startedAt, finishedAt: new Date().toISOString(), processed: 0, withTrades: 0, failed: 0, totalImported: 0, backlogClear: true };
+      return _whaleBackfillLastRun;
+    }
+    console.log(`[whale-backfill] starting batch of ${rows.length} whales`);
+
+    for (const u of rows) {
+      try {
+        const proxy = await ensureProxyStored(u.id, u.polymarket_address);
+        if (!proxy) {
+          // Proxy derivation failed — Polygon RPCs degraded or address
+          // shape weird. Skip without marking last_backfill_at so the
+          // next cron tick retries this user.
+          failed++;
+          processed++;
+          continue;
+        }
+        const r = await backfillRealizedTrades(u.id, u.polymarket_address, proxy);
+        processed++;
+        totalImported += r.imported || 0;
+        if ((r.imported || 0) > 0) withTrades++;
+      } catch (e) {
+        failed++;
+        processed++;
+        console.warn('[whale-backfill] user failed', u.id.slice(0, 8), e.message);
+      }
+      if (WHALE_BACKFILL_THROTTLE_MS > 0) {
+        await new Promise(r => setTimeout(r, WHALE_BACKFILL_THROTTLE_MS));
+      }
+    }
+
+    const finishedAt = new Date().toISOString();
+    _whaleBackfillLastRun = { startedAt, finishedAt, processed, withTrades, failed, totalImported, backlogClear: false };
+    console.log(`[whale-backfill] done — processed=${processed} withTrades=${withTrades} failed=${failed} totalImported=${totalImported}`);
+    return _whaleBackfillLastRun;
+  } catch (e) {
+    console.error('[whale-backfill] batch crashed:', e.message);
+    _whaleBackfillLastRun = { startedAt, finishedAt: new Date().toISOString(), processed, withTrades, failed, totalImported, error: e.message };
+    return _whaleBackfillLastRun;
+  } finally {
+    _whaleBackfillRunning = false;
+  }
+}
+
+// Every 6 hours: 0:00, 6:00, 12:00, 18:00 UTC. 100 whales/run, 500ms
+// throttle = ~50s tick. Backlog of ~700 whales clears in ~42 hours
+// (7 ticks). Subsequent ticks only pick up new whales added by
+// ensureWhaleProfile (which also fires its own instant backfill) plus
+// any retry from the proxy-derivation failures.
+cron.schedule('0 */6 * * *', () => {
+  runWhaleBackfillBatch().catch(e => console.error('[whale-backfill] cron error:', e.message));
+});
+
+// Admin endpoint to inspect last cron run + manually trigger a batch.
+app.get('/api/admin/whale-backfill/status', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const counts = await dbQuery(
+      `SELECT
+         COUNT(*)::int AS total_whales,
+         COUNT(*) FILTER (WHERE last_backfill_at IS NOT NULL)::int AS backfilled,
+         COUNT(*) FILTER (WHERE last_backfill_at IS NULL)::int     AS pending,
+         COUNT(*) FILTER (WHERE realized_trade_count > 0)::int     AS with_trades
+       FROM users WHERE is_whale = true`
+    );
+    res.json({
+      running:   _whaleBackfillRunning,
+      last_run:  _whaleBackfillLastRun,
+      counts:    counts[0] || null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/whale-backfill/run', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  // Fire-and-forget — returns immediately; caller polls /status to track.
+  runWhaleBackfillBatch().catch(e => console.error('[whale-backfill] manual run error:', e.message));
+  res.json({ started: true, status_url: '/api/admin/whale-backfill/status' });
+});
 
 // Re-grade redeemed-position realized_trades rows for a single user by
 // re-fetching positions from Polymarket and rewriting each matching row
@@ -38166,25 +38331,47 @@ app.post('/api/admin/realized-trades/seed', async (req, res) => {
     return res.status(409).json({ error: 'Seed already running', progress: _seedProgress });
   }
 
-  const limit = Math.min(parseInt(req.query.limit) || 10000, 10000);
-  const delayMs = Math.max(parseInt(req.query.delay_ms) || 250, 50);
-  const minPnl = parseFloat(req.query.min_pnl) || null;
+  // Accept body or query params for limit/delay/min_pnl/scope. Body wins
+  // on conflict so curl callers can do either -d '{...}' or ?limit=...
+  // without ambiguity.
+  const body = (req.body && typeof req.body === 'object') ? req.body : {};
+  const limit   = Math.min(parseInt(body.limit    ?? req.query.limit    ?? 10000, 10) || 10000, 10000);
+  const delayMs = Math.max(parseInt(body.delay_ms ?? req.query.delay_ms ?? 250,  10) || 250,   50);
+  const minPnlRaw = body.min_pnl ?? req.query.min_pnl;
+  const minPnl = (minPnlRaw != null && minPnlRaw !== '') ? (parseFloat(minPnlRaw) || null) : null;
+  const scope = String(body.scope ?? req.query.scope ?? '').toLowerCase();
 
   // Pull eligible users — 42-char address guard matches the rest of the codebase.
+  //
+  // scope=whales (added 2026-05-12): only is_whale=true users that haven't
+  // been backfilled yet (last_backfill_at IS NULL). Used by the 6h
+  // whale-backfill cron and for manual catch-up runs. Bypasses min_pnl —
+  // whales by definition meet the criteria.
   let userRows;
   try {
-    const minPnlClause = minPnl != null ? 'AND COALESCE(whale_pnl, 0) >= $2' : '';
-    const params = minPnl != null ? [42, minPnl] : [42];
-    userRows = await dbQuery(
-      `SELECT id, polymarket_address, COALESCE(whale_pnl, 0) AS whale_pnl
-       FROM users
-       WHERE polymarket_address IS NOT NULL
-         AND LENGTH(polymarket_address) >= $1
-         ${minPnlClause}
-       ORDER BY whale_pnl DESC NULLS LAST, id
-       LIMIT ${limit}`,
-      params
-    );
+    let sql, params;
+    if (scope === 'whales') {
+      sql = `SELECT id, polymarket_address, COALESCE(whale_pnl, 0) AS whale_pnl
+             FROM users
+             WHERE is_whale = true
+               AND polymarket_address IS NOT NULL
+               AND LENGTH(polymarket_address) >= $1
+               AND last_backfill_at IS NULL
+             ORDER BY whale_pnl DESC NULLS LAST, id
+             LIMIT ${limit}`;
+      params = [42];
+    } else {
+      const minPnlClause = minPnl != null ? 'AND COALESCE(whale_pnl, 0) >= $2' : '';
+      sql = `SELECT id, polymarket_address, COALESCE(whale_pnl, 0) AS whale_pnl
+             FROM users
+             WHERE polymarket_address IS NOT NULL
+               AND LENGTH(polymarket_address) >= $1
+               ${minPnlClause}
+             ORDER BY whale_pnl DESC NULLS LAST, id
+             LIMIT ${limit}`;
+      params = minPnl != null ? [42, minPnl] : [42];
+    }
+    userRows = await dbQuery(sql, params);
   } catch (e) {
     return res.status(500).json({ error: 'user fetch failed: ' + e.message });
   }
@@ -38202,6 +38389,7 @@ app.post('/api/admin/realized-trades/seed', async (req, res) => {
     total_resolved: 0,
     delay_ms: delayMs,
     min_pnl: minPnl,
+    scope: scope || 'default',
     last_error: null,
   };
 
