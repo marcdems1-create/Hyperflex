@@ -31981,8 +31981,35 @@ cron.schedule('* * * * *', () => {
   });
 });
 
+// Helper: live edge-market stats from in-memory caches. _arbCache holds the
+// Polymarket-vs-sportsbook arb opportunities populated by scanHedgeAlerts
+// every 15/45 min (data: [{ market, edge_pct, ... }, ...] sorted desc).
+// _screenerCache holds the full enriched alpha list from buildAlphaList.
+// Both can be null pre-first-cron-tick; treat that as "0 / null".
+function _liveEdgeStats() {
+  const arbs = (_arbCache && Array.isArray(_arbCache.data)) ? _arbCache.data : [];
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  const bestEdgePct = arbs.length ? Number(arbs[0].edge_pct) : null;
+  // Markets with a meaningful structural edge — edge_score >= 60 mirrors
+  // the threshold the alpha-pipeline considers "tracked" in CLAUDE.md.
+  const withEdge = screener.filter(m => Number(m.edge_score || 0) >= 60).length;
+  return {
+    edges_tracked: arbs.length,
+    best_edge_pct: bestEdgePct,
+    markets_scanned: screener.length,
+    markets_with_edge: withEdge,
+  };
+}
+
 app.get('/api/incentives/stats', async (req, res) => {
-  if (!pool) return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0 });
+  // Live-edge fields are always available — they read in-memory caches
+  // populated by the screener + arb crons, independent of the
+  // incentive_pools schema state. Pool fields fall back to 0 when the
+  // table is unprovisioned (same as before).
+  const liveEdge = _liveEdgeStats();
+  if (!pool) {
+    return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ...liveEdge });
+  }
   try {
     const rows = await dbQuery(`
       SELECT
@@ -31996,11 +32023,12 @@ app.get('/api/incentives/stats', async (req, res) => {
       pools_live: r.pools_live || 0,
       deployed_usd: parseFloat(r.deployed_usd || 0),
       paid_usd: parseFloat(r.paid_usd || 0),
+      ...liveEdge,
     });
   } catch (e) {
     // Schema-not-provisioned: same fallback the paper-balance pattern uses.
     if (e && (e.code === '42P01' || /incentive_pools/.test(e.message || ''))) {
-      return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ephemeral: true });
+      return res.json({ pools_live: 0, deployed_usd: 0, paid_usd: 0, ephemeral: true, ...liveEdge });
     }
     console.error('[incentives/stats]', e.message);
     res.status(500).json({ error: e.message });
