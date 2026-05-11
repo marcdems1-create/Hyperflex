@@ -138,6 +138,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
+const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const cron = require('node-cron');
 const path = require('path');
@@ -832,6 +833,13 @@ if (pool) {
 } else {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
+
+// Polymarket Safe-proxy derivation — log the resolved factory + selector
+// at boot so a future ABI mismatch (contract migration, function rename)
+// surfaces in container logs the moment the new build starts, not weeks
+// later when someone notices the syncer hasn't filled polymarket_proxy
+// for new users. See lib/polymarket-proxy.js for the full incident notes.
+console.log('[boot] polymarket-proxy: factory=' + polymarketProxy.SAFE_FACTORY + ' fn=computeProxyAddress(address) selector=' + polymarketProxy.SELECTOR);
 
 // ── DATA ENGINE (Phase 1) — Unified market data pipeline ─────────────────
 const dataEngine = require('./lib/data-engine');
@@ -21451,10 +21459,10 @@ async function recomputeFlexScore(userId) {
 // users had their EOA stored as `polymarket_address` which meant the
 // positions API returned empty (data-api.polymarket.com keys off proxy).
 //
-// Uses the Safe factory on Polygon: calls computeProxyAddress(address)
-// via plain JSON-RPC (no ethers dep). Selector: 0x4d0c6cdb. Results are
-// cached in memory for 24h since the proxy is deterministic — the same
-// EOA always produces the same proxy.
+// Delegates to lib/polymarket-proxy.derivePolymarketProxy which uses
+// ethers + the canonical ABI string to derive the call selector at
+// runtime. Results are cached in memory for 24h since the proxy is
+// deterministic — the same EOA always produces the same proxy.
 const _polyProxyCache = new Map(); // eoa → { proxy, ts }
 // Polygon RPC list — paid endpoint (Alchemy) first when ALCHEMY_POLYGON_KEY
 // is set on Railway, with public RPCs as fallback. Public endpoints
@@ -21471,40 +21479,20 @@ function _polygonRpcList() {
   return list;
 }
 
+// Canonical proxy-derivation entry point. Thin cache wrapper around
+// lib/polymarket-proxy.derivePolymarketProxy — the helper handles the
+// actual eth_call via ethers + the correct ABI-derived selector. The
+// 24h cache stays here so we don't re-hit the chain for every page
+// load. Do NOT inline a raw eth_call here ever again — see
+// lib/polymarket-proxy.js header for why.
 async function derivePolymarketProxy(eoa) {
   if (!eoa || !/^0x[0-9a-fA-F]{40}$/.test(eoa)) return null;
   const eoaLower = eoa.toLowerCase();
   const cached = _polyProxyCache.get(eoaLower);
   if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) return cached.proxy;
-
-  const rpcs = _polygonRpcList();
-  for (const rpc of rpcs) {
-    try {
-      const r = await _nodeFetch(rpc, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_call',
-          params: [{
-            to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', // Safe factory
-            data: '0x4d0c6cdb000000000000000000000000' + eoaLower.replace('0x', '').padStart(64, '0'),
-          }, 'latest'],
-          id: 1,
-        }),
-      });
-      const data = await r.json();
-      if (data.result && data.result !== '0x' && data.result.length >= 42) {
-        const proxy = '0x' + data.result.slice(-40).toLowerCase();
-        if (proxy !== '0x0000000000000000000000000000000000000000') {
-          _polyProxyCache.set(eoaLower, { proxy, ts: Date.now() });
-          return proxy;
-        }
-      }
-    } catch (_) { /* try next RPC */ }
-  }
-  console.warn('[derive-proxy] Failed to derive for', eoaLower.slice(0, 10));
-  return null;
+  const proxy = await polymarketProxy.derivePolymarketProxy(eoaLower, _polygonRpcList());
+  if (proxy) _polyProxyCache.set(eoaLower, { proxy, ts: Date.now() });
+  return proxy;
 }
 
 // ── 50% FEE REBATE PROGRAM ────────────────────────────────────────────────
@@ -28809,6 +28797,37 @@ function _v2DiagFormatUnits(bi, decimals) {
   } catch { return null; }
 }
 
+// GET /api/_smoke/polymarket-proxy?eoa=0x...&secret=ADMIN_SECRET
+// One curl = end-to-end verification that the Safe-factory call works.
+// Returns the resolved proxy, the selector being used, the factory
+// address, the RPC list tried, and timing. If the integration breaks
+// (contract migration, function rename, ABI mismatch, RPC outage),
+// this endpoint surfaces the failure mode directly. Use after every
+// deploy that touches lib/polymarket-proxy or its callers.
+app.get('/api/_smoke/polymarket-proxy', async (req, res) => {
+  if (req.query.secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const eoa = String(req.query.eoa || '').toLowerCase();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(eoa)) return res.status(400).json({ error: 'eoa query param required (40-hex)' });
+  const rpcs = _polygonRpcList();
+  const rpcHosts = rpcs.map(u => { try { return new URL(u).host; } catch (_) { return u.slice(0, 32); } });
+  const start = Date.now();
+  try {
+    const proxy = await polymarketProxy.derivePolymarketProxy(eoa, rpcs);
+    return res.json({
+      ok: !!proxy,
+      eoa,
+      proxy,
+      ms: Date.now() - start,
+      factory: polymarketProxy.SAFE_FACTORY,
+      selector: polymarketProxy.SELECTOR,
+      fn: 'computeProxyAddress(address)',
+      rpcs: rpcHosts,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message, ms: Date.now() - start });
+  }
+});
+
 // GET /api/admin/proxy-health/:eoa
 // One round-trip = full proxy diagnostic. Computes proxy address from EOA via
 // Safe factory, checks deploy status, reads all relevant balances + allowances.
@@ -28818,12 +28837,10 @@ app.get('/api/admin/proxy-health/:eoa', async (req, res) => {
   if (!/^0x[0-9a-fA-F]{40}$/.test(eoa)) return res.status(400).json({ error: 'Invalid EOA' });
 
   try {
-    const eoaPad = _v2DiagPad32(eoa);
-
-    // Step 1: compute proxy via Safe factory proxyFor(eoa) — selector 0x4d0c6cdb
-    const proxyHex = await _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.SAFE_FACTORY, data: '0x4d0c6cdb' + eoaPad }, 'latest']);
-    if (!proxyHex || proxyHex === '0x') return res.status(502).json({ error: 'Could not compute proxy', eoa });
-    const proxyAddr = '0x' + proxyHex.slice(-40);
+    // Step 1: compute proxy via the canonical helper (ABI-driven selector,
+    // Alchemy-first RPC list, retries on transient errors).
+    const proxyAddr = await polymarketProxy.derivePolymarketProxy(eoa, _polygonRpcList());
+    if (!proxyAddr) return res.status(502).json({ error: 'Could not compute proxy', eoa });
     const proxyPad = _v2DiagPad32(proxyAddr);
 
     // Step 2: parallel fetch — deploy code, balances, allowances, CTF approvals
@@ -37177,55 +37194,15 @@ app.get('/api/trades/:address', async (req, res) => {
 // Polymarket proxy derivation + realized_trades backfill
 // ─────────────────────────────────────────────────────────────────────────
 
-// Derive a user's Polymarket proxy (Safe wallet) address from their EOA via
-// Safe factory eth_call. Public RPCs only — no MetaMask popup. Returns the
-// proxy address (lowercase 0x...) or null if both RPCs fail / EOA has no
-// proxy deployed yet. Per-RPC failures logged with reason — silent null
-// returns made the seed primer impossible to debug.
-async function derivePolymarketProxy(eoaAddress) {
-  if (!eoaAddress) return null;
-  const eoa = eoaAddress.toLowerCase();
-  // Shares the _polygonRpcList() helper above so Alchemy-first ordering
-  // stays consistent across both proxy-derivation entry points (the
-  // module-cached one at L21424 and this one called from the seed/
-  // backfill path). Don't divergence-drift these two RPC lists.
-  const rpcs = _polygonRpcList();
-  // Selector 0x4d0c6cdb = proxies(address) on Safe factory
-  // 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b
-  const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
-  const failures = [];
-  for (const rpc of rpcs) {
-    try {
-      const r = await fetch(rpc, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0', method: 'eth_call',
-          params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data }, 'latest'],
-          id: 1,
-        }),
-      });
-      if (!r.ok) {
-        failures.push(`${rpc} HTTP ${r.status}`);
-        continue;
-      }
-      const json = await r.json();
-      if (json.error) {
-        failures.push(`${rpc} jsonrpc-err: ${JSON.stringify(json.error).slice(0, 120)}`);
-        continue;
-      }
-      if (!json.result || json.result === '0x' || json.result.length < 42) {
-        failures.push(`${rpc} empty-result (eoa has no proxy yet)`);
-        continue;
-      }
-      return '0x' + json.result.slice(-40);
-    } catch (e) {
-      failures.push(`${rpc} threw: ${e.message}`);
-    }
-  }
-  console.warn('[derivePolymarketProxy] all rpcs failed for', eoa.slice(0, 10), '— ' + failures.join(' | '));
-  return null;
-}
+// Duplicate `derivePolymarketProxy` declaration removed 2026-05-11.
+// The single canonical implementation is the one above at the file's
+// proxy-cache section, which delegates to lib/polymarket-proxy via the
+// ABI-driven helper. Both definitions in this file were hoisted to module
+// scope, so the second declaration always silently overrode the first —
+// meaning the 24h cache code in the first one never ran. Consolidating
+// to one function eliminates the override AND fixes the broken hardcoded
+// selector that all callers had been hitting; see lib/polymarket-proxy.js
+// header for the full incident notes.
 
 // Cache the derived proxy on users.polymarket_proxy so we don't re-eth_call
 // on every profile load (rate-limited public RPCs). Returns the cached or
@@ -37891,19 +37868,15 @@ app.get('/api/admin/seed-debug', async (req, res) => {
       probe.whale_pnl = u.whale_pnl;
       probe.whale_rank = u.whale_rank;
       probe.realized_trade_count = u.realized_trade_count;
-      // Probe Safe factory for proxy derivation
+      // Probe Safe factory for proxy derivation — uses the canonical
+      // helper so this probe sees the same selector + RPC ordering the
+      // production proxy-derivation path uses. Single public RPC for
+      // probe speed (no point retrying across the full Alchemy list when
+      // the goal is "does the factory respond at all").
       try {
         const eoa = u.polymarket_address.toLowerCase();
-        const data = '0x4d0c6cdb000000000000000000000000' + eoa.replace('0x', '').padStart(64, '0');
-        const r = await fetch('https://polygon-bor-rpc.publicnode.com', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data }, 'latest'], id: 1 }),
-        });
-        const j = await r.json();
-        if (j.error) probe.factory_result = `revert: ${j.error.message}`;
-        else if (j.result && j.result !== '0x' && j.result.length >= 42) probe.factory_result = '0x' + j.result.slice(-40);
-        else probe.factory_result = 'empty';
+        const probeProxy = await polymarketProxy.derivePolymarketProxy(eoa, ['https://polygon-bor-rpc.publicnode.com']);
+        probe.factory_result = probeProxy || 'empty';
       } catch (e) { probe.factory_result = `err: ${e.message}`; }
       // Probe data-api with the stored address as-is (no derivation)
       try {
@@ -42878,20 +42851,12 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
   // Polymarket explicitly confirms the proxy doesn't exist.
   try {
     const eoa = address.toLowerCase();
-    // Compute proxy via Safe factory (same call as /api/proxy/deployed L35797)
+    // Compute proxy via the canonical helper. Single public RPC keeps the
+    // 3-second AbortSignal budget intact — the helper falls through to
+    // null cleanly if the call times out.
     let proxyAddr = null;
     try {
-      const calldata = '0x4d0c6cdb' + '000000000000000000000000' + eoa.replace('0x','').slice(-40);
-      const rpcRes = await fetch('https://polygon-bor-rpc.publicnode.com', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc:'2.0', method:'eth_call', params:[{ to:'0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data:calldata },'latest'], id:1 }),
-        signal: AbortSignal.timeout(3000),
-      });
-      const rpcData = await rpcRes.json().catch(() => ({}));
-      if (rpcData.result && rpcData.result.length >= 42) {
-        proxyAddr = '0x' + rpcData.result.slice(-40);
-      }
+      proxyAddr = await polymarketProxy.derivePolymarketProxy(eoa, ['https://polygon-bor-rpc.publicnode.com']);
     } catch {}
     if (proxyAddr) {
       try {
@@ -44275,25 +44240,11 @@ app.get('/api/proxy/deployed', async (req, res) => {
     const { address } = req.query;
     if (!address) return res.status(400).json({ error: 'address required' });
 
-    // Compute proxy address from EOA via Safe factory
+    // Compute proxy address from EOA via the canonical helper.
     let proxy = null;
-    const rpcs = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
-    const addr = address.toLowerCase().replace('0x', '').padStart(64, '0');
-    const calldata = '0x4d0c6cdb' + '000000000000000000000000' + addr.slice(-40);
-    for (const rpc of rpcs) {
-      try {
-        const r = await fetch(rpc, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', data: calldata }, 'latest'], id: 1 })
-        });
-        const data = await r.json();
-        if (data.result && data.result !== '0x' && data.result.length >= 42) {
-          proxy = '0x' + data.result.slice(-40);
-          break;
-        }
-      } catch (e) {}
-    }
+    try {
+      proxy = await polymarketProxy.derivePolymarketProxy(address, _polygonRpcList());
+    } catch (e) {}
 
     // Check if proxy is deployed
     const checkAddr = proxy || address;
