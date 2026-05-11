@@ -38,6 +38,20 @@ If a turn would be the third "okay now run this and paste it back" in a row, sto
 
 ---
 
+## 🚨 Active prod fires (May 10, 2026)
+
+Triage these before any feature work. Container SIGTERM'd 18:04:40 UTC May 10.
+
+1. **Kalshi cache cron still running.** Kalshi was dropped April 30 (Polymarket-native pivot). `kalshi-cache` cron is caching 1200 events per cycle. Kill it. Brand drift + wasted compute. *(Filed in PR #104 — `getKalshiEvents()` body stubbed to `return []`. Verify after merge.)*
+
+2. **`social_predictions` Supabase residue.** Repeated `relation "social_predictions" does not exist` errors. The April Supabase → Railway Postgres migration is incomplete. Find every reference; route to Railway or remove. *(Filed in PR #104 — `app.use('/api/social', shortCircuit)` registered before the 9 dead handlers + `/api/user/:userId/social-profile` dbQuery patched. Verify after merge.)*
+
+3. **Polygon RPC degradation.** `derivePolymarketProxy` failing on every wallet lookup. `publicnode` reverts; `1rpc.io` rate-limited on free tier. Add Alchemy or QuickNode as primary; demote public RPCs to fallback. *(Filed in PR #104 — `_polygonRpcList()` helper reads `ALCHEMY_POLYGON_KEY` env var. Set the var on Railway dashboard to activate; without it, behavior unchanged.)*
+
+4. **Intelligence accuracy = 0.4%.** Platform-wide grading is broken. 21,866 resolved signals at 0.4% is not low confidence — it's a grading bug. Separate workstream, but log it now so it doesn't get forgotten.
+
+---
+
 ## 🎯 NORTH STAR — RETENTION & ADDICTION (read this before every response)
 
 **Goal:** build the most addicting gambling/investing platform ever built. Every feature, every UI decision, every endpoint, every piece of copy must be evaluated through this lens:
@@ -790,6 +804,12 @@ Backlog (consolidate before Phase 3):
 - `sentence-extract.js` v2: topic-aware filtering (Cook "patient" medical-context false-positive caught in 2d.5)
 - Brainard period-bounded sourcing (2022 only) — re-source 2024+ if she returns to public speaking
 - 2e blurb prompt: add varied-opening examples (every Brainard blurb leads with the same phrase)
+
+---
+
+## Narratives & event templates
+
+See `NARRATIVES.md` for full spec. TL;DR: banner rotates 6 locked narrative tracks (`fed-watch`, `election-cycle`, `geo-track`, `ai-race`, `crypto-cycle`, `sports-calendar`). Each event renders via an industry template (Macro, Political, Geopolitical, Sports, Crypto, AI) forked from a generalized `<EventPage>` component with pluggable hero viz slot. Build queued for Phase 4.5+ — **do not divert mention-pages work**. Fallback floor: if banner rotation empties, hardcoded fallback = `fed-watch` with Warsh FOMC as hero.
 
 ---
 
