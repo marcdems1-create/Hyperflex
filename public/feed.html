@@ -1640,7 +1640,10 @@ a:hover { text-decoration: underline; }
 <body>
 <div id="nav-root"></div>
 <script src="/nav.js?v=20"></script>
-<script defer src="/hero-banner.js?v=1"></script>
+<!-- Polymarket Hot Markets Carousel (Phase 1) — replaces the single-event
+     rolling banner (/hero-banner.js). Self-injecting; collapses the slot
+     when /api/hot-markets/carousel returns zero tiles. -->
+<script defer src="/carousel.js?v=1"></script>
 
 <div class="layout">
 
