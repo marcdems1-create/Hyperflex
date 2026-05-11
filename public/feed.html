@@ -1809,14 +1809,15 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- Top Predictors — verified, this week. Hero + rank strip rhythm
-       mirrors the left rail with a purple palette to differentiate
-       "people" (verified predictors) from "markets" (edge-scored). -->
+  <!-- Top Whales — capital-flow leaders, this week. Rail surfaces
+       flex_score_90d, which is the WHALE SCORE per Decision #1
+       Option C (not accuracy — the capital-flow heuristic). Visually
+       purple to differentiate from market-edge rails. -->
   <div class="rail-section">
     <div class="rail-head">
       <span class="rail-head-dot" style="background:#a855f7;box-shadow:0 0 10px rgba(168,85,247,0.7)"></span>
-      <span style="color:#a855f7">Top Predictors</span>
-      <span class="rail-head-age">7d · verified</span>
+      <span style="color:#a855f7">Top Whales</span>
+      <span class="rail-head-age">7d · capital flow</span>
     </div>
     <div class="rail-sep"></div>
     <div id="predHeroSlot"><div class="rail-empty">Loading…</div></div>
@@ -3004,10 +3005,13 @@ function renderCard(p) {
     ? '<img src="' + esc(author.avatar_url) + '" alt="">'
     : initial;
 
-  // Flex score
+  // Whale Score chip (was mislabeled "flex" — capital-flow metric,
+  // not accuracy. flex_score_90d is the whale-flow heuristic per
+  // Decision #1 Option C; relabeling here keeps the inline rail
+  // honest about what the number means).
   var flexHtml = '';
   if (author.flex_score_90d != null && author.flex_score_90d > 0) {
-    flexHtml = '<span class="pred-flex">' + author.flex_score_90d + '%</span>';
+    flexHtml = '<span class="pred-flex" title="Whale Score — capital-flow heuristic">W ' + author.flex_score_90d + '</span>';
   }
   var resolvedHtml = author.predictions_resolved
     ? '<span class="pred-resolved-count">' + author.predictions_resolved + ' resolved</span>'

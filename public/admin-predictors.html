@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Top Predictors Admin — HYPERFLEX</title>
+<title>Whale Score Admin — HYPERFLEX</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -209,7 +209,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <!-- Auth gate — stash the secret in sessionStorage so reloads don't re-prompt -->
 <div id="authGate" class="auth-wrap" style="display:none">
-  <h2>Admin · Top Predictors</h2>
+  <h2>Admin · Whale Score</h2>
   <p>Paste your <code>ADMIN_SECRET</code> to curate the rail.</p>
   <input type="password" id="secretInput" placeholder="x-admin-secret" autofocus>
   <button class="btn primary" onclick="authenticate()" style="width:100%">Unlock</button>
@@ -218,7 +218,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="container" id="mainWrap" style="display:none">
   <div class="head">
     <div>
-      <div class="sub">Admin · Top Predictors</div>
+      <div class="sub">Admin · Whale Score override</div>
       <h1>Curate the rail</h1>
     </div>
     <div class="head-actions">
@@ -246,7 +246,7 @@ tbody tr:last-child td { border-bottom: none; }
         <th>Wallet</th>
         <th style="text-align:right">PnL</th>
         <th style="text-align:right">Rank</th>
-        <th style="text-align:center">FLEX</th>
+        <th style="text-align:center" title="Whale Score — capital-flow heuristic (flex_score_90d column)">WHALE</th>
         <th>Status</th>
         <th style="text-align:right">Actions</th>
       </tr>

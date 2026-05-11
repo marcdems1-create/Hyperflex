@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Prediction Market Leaderboard — Top Polymarket Traders Ranked | HYPERFLEX</title>
-<meta name="description" content="Ranked leaderboard of the most profitable Polymarket traders. Track the top prediction market predictors by win rate, P&L, and sharp score. Polymarket portfolio tracker."/>
+<title>Top Whales · Top Traders — HYPERFLEX Leaderboard</title>
+<meta name="description" content="Polymarket's biggest capital-flow whales (Whale Score) and most calibrated traders (Flex Score), ranked on one page. Two distinct leaderboards, one source of truth."/>
 <link rel="canonical" href="https://hyperflex.network/predictors"/>
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
@@ -21,8 +21,8 @@
 {
   "@context": "https://schema.org",
   "@type": "ItemList",
-  "name": "Top Prediction Market Traders — HYPERFLEX Leaderboard",
-  "description": "Ranked leaderboard of the most profitable Polymarket traders, scored by the HYPERFLEX Sharp Score.",
+  "name": "Top Whales · Top Traders — HYPERFLEX Leaderboard",
+  "description": "Two-mode Polymarket leaderboard: Whale Score (capital-flow) and Flex Score (verified accuracy).",
   "url": "https://hyperflex.network/predictors",
   "itemListElement": []
 }
@@ -278,11 +278,42 @@ a:hover { text-decoration: underline; }
 <section class="hero">
   <div class="hero-inner">
     <div class="hero-badge">LEADERBOARD</div>
-    <h1>Top <span>Prediction Market</span> Traders</h1>
-    <p class="hero-sub">The most profitable traders across Polymarket, ranked by verified track record and Sharp Score.</p>
-    <div class="hero-stat" id="heroStat">Loading traders...</div>
+    <h1>Top <span id="heroModeLabel">Whales</span></h1>
+    <p class="hero-sub" id="heroSub">Polymarket's biggest capital-flow accounts, ranked by Whale Score. Switch to <a href="#" onclick="event.preventDefault();setMode('flex')" style="color:var(--green);text-decoration:underline">Flex Score</a> for verified prediction accuracy.</p>
+    <div class="hero-stat" id="heroStat">Loading…</div>
   </div>
 </section>
+
+<!-- MODE TABS — WHALE SCORE vs FLEX SCORE. Decision #1 Option C split.
+     Whale Score (default) is the capital-flow heuristic (flex_score_90d).
+     Flex Score is the calibration-driven trader rating (flex_score). -->
+<div class="mode-tabs-wrap">
+  <div class="mode-tabs-inner">
+    <button type="button" class="mode-tab active" data-mode="whale" onclick="setMode('whale')">
+      <span class="mode-tab-label">WHALE SCORE</span>
+      <span class="mode-tab-sub">capital flow</span>
+    </button>
+    <button type="button" class="mode-tab" data-mode="flex" onclick="setMode('flex')">
+      <span class="mode-tab-label">FLEX SCORE</span>
+      <span class="mode-tab-sub">verified accuracy</span>
+    </button>
+  </div>
+</div>
+<style>
+  .mode-tabs-wrap { max-width:1100px; margin:0 auto 18px; padding:0 24px; }
+  .mode-tabs-inner { display:inline-flex; gap:4px; background:var(--surface-2,#181820); border:1px solid var(--border,rgba(255,255,255,0.07)); border-radius:10px; padding:4px; }
+  .mode-tab { background:transparent; border:0; padding:10px 18px; border-radius:7px; cursor:pointer; color:var(--dim,#8b8a9a); font-family:'Inter',sans-serif; transition:all .15s; display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; }
+  .mode-tab:hover:not(.active) { color:var(--text,#f0f0f5); }
+  .mode-tab.active { background:var(--surface,#22222e); color:var(--text,#f0f0f5); }
+  .mode-tab-label { font-family:'JetBrains Mono','Space Mono',monospace; font-size:12px; font-weight:800; letter-spacing:0.08em; }
+  .mode-tab-sub   { font-family:'Inter',sans-serif; font-size:10px; font-weight:500; color:var(--dim,#8b8a9a); letter-spacing:0.02em; }
+  .mode-tab.active .mode-tab-sub { color:var(--gold,#c9920d); }
+  @media(max-width:600px) {
+    .mode-tab { padding:8px 12px; }
+    .mode-tab-label { font-size:11px; }
+    .mode-tab-sub { font-size:9px; }
+  }
+</style>
 
 <!-- PODIUM — TOP 10 -->
 <section class="podium-section" id="podiumSection" style="display:none;">
@@ -334,7 +365,7 @@ a:hover { text-decoration: underline; }
         <th>ROI</th>
         <th>Streak</th>
         <th>Platform</th>
-        <th><span id="sharpScoreHeader" style="cursor:pointer;white-space:nowrap" onclick="openSharpModal()">Sharp Score <span style="color:var(--green);font-size:11px">&#9432;</span></span></th>
+        <th><span id="sharpScoreHeader" style="cursor:pointer;white-space:nowrap" onclick="openSharpModal()">Whale Score <span style="color:var(--green);font-size:11px">&#9432;</span></span></th>
         <th></th>
       </tr>
     </thead>
@@ -354,20 +385,17 @@ a:hover { text-decoration: underline; }
 <div class="ss-modal-overlay" id="ssModalOverlay" onclick="if(event.target===this)closeSharpModal()">
   <div class="ss-modal">
     <button class="ss-modal-close" onclick="closeSharpModal()">&times;</button>
-    <h3>What is Sharp Score?</h3>
-    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">A composite score (0-100) measuring prediction skill — not just luck. Higher = more reliable signal.</p>
+    <h3>Whale Score vs. Flex Score</h3>
+    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Two different questions about Polymarket traders. Both 0-100. Both updated daily. Different inputs, different uses.</p>
     <div class="ss-formula">
-      <div><span class="label">Win Rate Component</span> &nbsp;&rarr; win_rate &times; 80 pts max</div>
-      <div><span class="label">Volume Bonus</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr; up to +20 pts (more trades = more signal)</div>
-      <div><span class="label">Profitability</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr; +15 pts if net P&amp;L is positive</div>
-      <div><span class="label">Cross-Platform</span> &nbsp;&nbsp;&nbsp;&rarr; +5 pts if active on 2+ platforms</div>
+      <div><span class="label" style="color:var(--purple,#a855f7)">WHALE SCORE</span> &nbsp;&rarr; capital-flow heuristic. Reads PnL + position size + leaderboard rank. Answers <em>"how big is this account's footprint?"</em></div>
+      <div style="margin-top:10px"><span class="label" style="color:var(--green,#00e68a)">FLEX SCORE</span> &nbsp;&rarr; verified-accuracy rating. Reads win rate + ROI on a log curve + calibration + consistency. Answers <em>"how often is this trader right per dollar staked?"</em></div>
     </div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#128200;</span><span>Trade more markets. The score penalises low sample sizes — 10 trades means nothing, 100 means a lot.</span></div>
-    <!-- Cross-platform tip hidden — Polymarket-first focus -->
-    <div class="ss-tip" style="display:none"><span class="ss-tip-icon">&#128279;</span><span>Connect multiple platforms for the cross-platform bonus.</span></div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#127919;</span><span>Stay profitable. A positive P&amp;L over your trade history unlocks the profitability bonus.</span></div>
+    <div class="ss-tip"><span class="ss-tip-icon">&#128202;</span><span><b>Whale Score</b> stays high while the wallet keeps deploying capital — it tracks footprint, not accuracy. Losing big still counts as big.</span></div>
+    <div class="ss-tip"><span class="ss-tip-icon">&#127919;</span><span><b>Flex Score</b> requires &ge;5 settled events to surface. Below that, the wallet is "Building" — no public ranking until the sample is real.</span></div>
+    <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>A wallet can be a top-rank Whale and a bottom-rank Flex at the same time. Capital ≠ skill. That's the whole point of splitting them.</span></div>
     <div style="margin-top:20px;text-align:center">
-      <a href="/creator/login#signup" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;transition:all .15s;display:inline-block" onmouseover="this.style.background='rgba(0,230,138,0.1)'" onmouseout="this.style.background='transparent'">Get your Sharp Score &rarr;</a>
+      <a href="/creator/login#signup" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;transition:all .15s;display:inline-block" onmouseover="this.style.background='rgba(0,230,138,0.1)'" onmouseout="this.style.background='transparent'">Get your Flex Score &rarr;</a>
     </div>
   </div>
 </div>
@@ -395,9 +423,81 @@ a:hover { text-decoration: underline; }
 var currentPeriod='30d';
 var currentPlatform='all';
 var currentCategory='all';
+var currentMode='whale';   // 'whale' (flex_score_90d) or 'flex' (flex_score). Decision #1 Option C.
 var lbData=[];
 var allTimeData=null;
 var _mySharpData=null;
+
+// Mode tab switching. Hides legacy sections (podium/rising/hof/category
+// tabs/filter bar) since those are positions-based and unrelated to the
+// new flex_score / flex_score_90d split. Show them only on classic view.
+function setMode(mode) {
+  if (mode !== 'flex' && mode !== 'whale') mode = 'whale';
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.mode === mode); });
+  var label = mode === 'flex' ? 'Traders' : 'Whales';
+  document.getElementById('heroModeLabel').textContent = label;
+  var sub = mode === 'flex'
+    ? 'Polymarket traders ranked by verified prediction accuracy (Flex Score). Switch to <a href="#" onclick="event.preventDefault();setMode(\'whale\')" style="color:var(--green);text-decoration:underline">Whale Score</a> for capital-flow ranking.'
+    : 'Polymarket\'s biggest capital-flow accounts, ranked by Whale Score. Switch to <a href="#" onclick="event.preventDefault();setMode(\'flex\')" style="color:var(--green);text-decoration:underline">Flex Score</a> for verified prediction accuracy.';
+  document.getElementById('heroSub').innerHTML = sub;
+  var header = document.getElementById('sharpScoreHeader');
+  if (header) header.innerHTML = (mode === 'flex' ? 'Flex Score' : 'Whale Score') + ' <span style="color:var(--green);font-size:11px">&#9432;</span>';
+  // Hide the positions-based legacy sections when in mode-aware view.
+  ['podiumSection','risingSection','hofSection'].forEach(function(id){ var el = document.getElementById(id); if (el) el.style.display='none'; });
+  var controls = document.querySelector('.controls-section');
+  if (controls) controls.style.display = 'none';
+  loadModeLeaderboard();
+}
+
+// Adapter: takes the new /api/predictors/leaderboard?mode=X response and
+// shapes it into the row format the existing renderTable expects. Maps
+// `score` -> `sharp_score` so the table column (now relabeled) renders
+// the right number; fills the legacy-only columns (PnL, Volume, ROI,
+// Streak) defensively from whatever is available.
+function _adaptModeRow(r, idx) {
+  var displayPnl  = r.whale_pnl != null ? r.whale_pnl : 0;
+  var displayVol  = r.predictions_resolved || 0; // shown under "Volume" column as "settled events"
+  return {
+    user_id: r.user_id,
+    display_name: r.display_name || 'Trader',
+    wallet: null,
+    address: r.polymarket_address || null,
+    polymarket_address: r.polymarket_address || null,
+    total_pnl: displayPnl,
+    volume: displayVol,
+    win_streak: 0,
+    sharp_score: r.score != null ? Math.round(Number(r.score)) : null,
+    flex_score: r.flex_score,
+    whale_score: r.whale_score,
+    is_whale: r.is_whale,
+    whale_rank: r.whale_rank,
+    win_rate: r.win_rate,
+    platforms: r.polymarket_address ? ['POLY'] : ['HFX'],
+    rank: idx + 1,
+    _displayRank: idx + 1,
+  };
+}
+
+async function loadModeLeaderboard() {
+  var body = document.getElementById('lbBody');
+  body.innerHTML = '<tr><td colspan="9"><div class="state-msg">Loading…</div></td></tr>';
+  try {
+    var r = await fetch('/api/predictors/leaderboard?mode=' + currentMode + '&limit=100');
+    var data = r.ok ? await r.json() : [];
+    if (!Array.isArray(data) || !data.length) {
+      var noun = currentMode === 'flex' ? 'traders with a Flex Score yet' : 'whales ranked yet';
+      body.innerHTML = '<tr><td colspan="9"><div class="state-msg">No ' + noun + '. Check back after the next score rebuild.</div></td></tr>';
+      document.getElementById('heroStat').textContent = '0 ranked';
+      return;
+    }
+    lbData = data.map(_adaptModeRow);
+    document.getElementById('heroStat').textContent = data.length + (currentMode === 'flex' ? ' traders with a verified Flex Score' : ' whales ranked by capital flow');
+    renderTable(lbData);
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="9"><div class="state-msg">Could not load. Retry shortly.</div></td></tr>';
+  }
+}
 
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function formatMoney(n){var a=Math.abs(n);if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M';if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K';return'$'+a.toLocaleString()}
@@ -817,7 +917,20 @@ async function toggleFollow(userId,btn){
   }catch(e){console.warn('[follow]',e)}finally{btn.disabled=false}
 }
 
-loadLeaderboard();
+// Boot in mode-aware view (default WHALE). The legacy
+// positions-based loadLeaderboard() is reachable only by URL hash
+// (#classic) so we can ship the split without losing the old view
+// for spot-checks. Default user lands on the canonical Whale Score
+// leaderboard.
+if (location.hash === '#classic') {
+  loadLeaderboard();
+} else {
+  // Honor ?mode=flex or ?mode=whale URL param so external links can
+  // deep-link a specific tab.
+  var qsParams = new URLSearchParams(location.search);
+  var initialMode = qsParams.get('mode') === 'flex' ? 'flex' : 'whale';
+  setMode(initialMode);
+}
 loadFollowStates();
 </script>
 </body>
