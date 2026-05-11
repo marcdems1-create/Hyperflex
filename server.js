@@ -19566,8 +19566,21 @@ async function _fetchFlexStats(userId, diag) {
   if (diag) diag.realized_trade_count = realizedTradeCount;
 
   // Weekly consistency across picks + trades (90d trailing).
-  // Uses a UNION of both sources so a bettor active on both surfaces
-  // gets credit for every week one of them was profitable.
+  // Uses a UNION of three sources so a bettor active on any of them gets
+  // credit for every week one was profitable:
+  //
+  //   1. picks (sports tipster) — settled_at, settled_units
+  //   2. polymarket_trades (HFX-routed) — updated_at, pnl
+  //   3. realized_trades (whale-imported + lazy-trigger backfill) —
+  //      closed_at, realized_pnl
+  //
+  // The realized_trades arm was missing pre-2026-05-12, which meant
+  // whale-imported users (no picks, no HFX-routed trades) returned
+  // weeks_active_90d = 0 even when they had hundreds of recently-
+  // closed positions. LaBradford diagnosed it: 782 realized_trades,
+  // closed_at populated for all, but consistency component zeroed.
+  // realized_trades.user_id is UUID (per migration) — cast $1::uuid
+  // here too.
   const weeklyRows = await dbQuery(`
     SELECT
       COUNT(*)::int                                    AS weeks_active_90d,
@@ -19585,11 +19598,51 @@ async function _fetchFlexStats(userId, diag) {
          WHERE u.id = $1
            AND pt.status IN ('win','loss','push')
            AND pt.updated_at > NOW() - INTERVAL '90 days'
-      ) u GROUP BY wk
+        UNION ALL
+        SELECT DATE_TRUNC('week', rt.closed_at) AS wk, rt.realized_pnl AS net
+          FROM realized_trades rt
+         WHERE rt.user_id = $1::uuid
+           AND rt.closed_at IS NOT NULL
+           AND rt.closed_at > NOW() - INTERVAL '90 days'
+           AND rt.realized_pnl IS NOT NULL
+      ) u WHERE wk IS NOT NULL GROUP BY wk
     ) w`, [userId]).catch(e => {
       if (diag) diag.errors.push({ stage: 'weekly_query', message: e.message });
       return [];
     });
+
+  // distinct_categories: count distinct sports across all three
+  // surfaces. realized_trades has no direct category column — JOIN
+  // market_sport_tags to resolve condition_id → sport. That table is
+  // populated by sweepMarketSportTags (cron at server.js:18817) so
+  // coverage isn't guaranteed; the fallback "+1 if has Polymarket
+  // trades but no tagged sports" preserves the pre-fix behavior
+  // when tags are missing (so users don't lose breadth credit they
+  // already had).
+  //
+  // Pre-fix bug: all Polymarket activity collapsed to a single
+  // "polymarket" bucket. LaBradford with 8 visible sports (MLB, NBA,
+  // MLS, EPL, Bundesliga, La Liga, NFL, NHL) returned breadth=1.
+  let rtSports = 0;
+  try {
+    const rtSportRows = await dbQuery(`
+      SELECT COUNT(DISTINCT mst.sport)::int AS rt_sports
+        FROM realized_trades rt
+        JOIN market_sport_tags mst
+          ON mst.source = 'polymarket' AND mst.external_id = rt.condition_id
+       WHERE rt.user_id = $1::uuid
+         AND mst.sport IS NOT NULL
+         AND mst.sport <> 'other'`, [userId]);
+    rtSports = parseInt(rtSportRows[0]?.rt_sports || 0, 10);
+    if (diag) diag.rt_sport_count = rtSports;
+  } catch (e) {
+    // market_sport_tags may not exist on all environments — leave at 0
+    // and fall back to the legacy "+1 for any Polymarket activity"
+    // heuristic below.
+    if (!/relation "market_sport_tags" does not exist/i.test(e.message)) {
+      if (diag) diag.errors.push({ stage: 'rt_sports_query', message: e.message });
+    }
+  }
 
   const p = pickRows[0] || {};
   const w = weeklyRows[0] || {};
@@ -19599,8 +19652,13 @@ async function _fetchFlexStats(userId, diag) {
   const pickNetUsd    = parseFloat(p.pick_net_units    || 0) * UNIT_USD;
   const pickStakedUsd = parseFloat(p.pick_staked_units || 0) * UNIT_USD;
 
-  // distinct_categories: sports count + "polymarket" if user has any trades
-  const distinctCategories = parseInt(p.pick_sports || 0, 10) + (polyStats.has_trades > 0 ? 1 : 0);
+  // Final breadth: pick sports + tagged Polymarket sports + a single
+  // fallback bucket when the user has Polymarket activity but zero
+  // tagged-sport coverage. Prevents both the all-tagged case from
+  // double-counting and the no-tags case from collapsing to zero.
+  const pickSports = parseInt(p.pick_sports || 0, 10);
+  const polymarketFallback = (polyStats.has_trades > 0 && rtSports === 0) ? 1 : 0;
+  const distinctCategories = pickSports + rtSports + polymarketFallback;
 
   return {
     wins:                parseInt(p.pick_wins   || 0, 10) + polyStats.wins,
