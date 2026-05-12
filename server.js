@@ -14992,10 +14992,16 @@ function _previewCacheSet(key, value) {
 // inflation", etc.). HYPERFLEX is positioned as the canonical
 // resolver/analytics for this market category, so the preview page
 // leads with these and the existing outcome markets become secondary.
+// Kept in sync with lib/word-markets.js LANGUAGE_EVENT_PATTERNS.
+// PR #133 expanded this set to cover all 7 word-betting question
+// shapes from the rescope spec; both files must update together.
 const _LANGUAGE_EVENT_PATTERNS = [
-  /\bwhat\s+will\s+.+\s+(say|mention)\b/i,
-  /\bwhat\s+\w+\s+will\s+.+\ssay\b/i,                  // "what animals will Trump say"
-  /\bwill\s+.+\s+(say|mention|use\s+the\s+word)\b/i,    // "Will Powell say recession"
+  /\bwhat\s+will\s+.+?\s+(say|mention|tweet|post|do)\b/i,
+  /\bwill\s+.+?\s+(say|mention|tweet|post)\b/i,
+  /\bwill\s+.+?\s+use\s+the\s+word\b/i,
+  /\bwill\s+the\s+.+?\s+contain\b/i,
+  /\bhow\s+many\s+times\s+will\b/i,
+  /\bword\s+count\b/i,
 ];
 
 function _isLanguageEventTitle(title) {
@@ -32548,6 +32554,26 @@ app.post('/api/admin/word-markets/refresh', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/admin/word-markets/diag — admin-gated funnel diagnostic.
+// Returns per-sweep counts (fetched / after_pattern_filter /
+// after_speaker_attribution) + sample questions at each rejection
+// stage. Tells us whether count=0 means "Polymarket has no markets"
+// or "our pipeline is dropping markets at stage X". Bypasses cache;
+// runs ~20 gamma keyword sweeps so don't hammer in a loop.
+app.get('/api/admin/word-markets/diag', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const perSpeakerLimit = parseInt(req.query.per_speaker_limit, 10) || undefined;
+    const perPatternLimit = parseInt(req.query.per_pattern_limit, 10) || undefined;
+    const diag = await wordMarkets.runDiag({ perSpeakerLimit, perPatternLimit });
+    res.json(diag);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
