@@ -15665,6 +15665,25 @@ app.get('/mentions', async (req, res) => {
   }
 });
 
+// GET /mentions/archive — permanent URL for the 87-event posture
+// archive. Today serves identical content to /mentions; when PR 2 of
+// the mention-pages rescope (claude/mentions-words-rebuild-v1) ships
+// the calendar-first /mentions UI, the archive view stays here as
+// the sub-page. Adding the route ahead of PR 2 means bookmarks,
+// inbound links, and future "View full archive →" CTAs can target
+// the canonical URL today without breaking when the rebuild lands.
+app.get('/mentions/archive', async (req, res) => {
+  try {
+    const tpl = _loadMentionsTemplate();
+    const heroHtml = await _renderMentionsHero();
+    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Content-Type', 'text/html; charset=utf-8').send(body);
+  } catch (err) {
+    console.error('[mentions-archive-route]', err);
+    res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+  }
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
 // where every wallet in the top 500 was marked is_whale=true. Safe to
 // re-run at any time.
