@@ -15374,6 +15374,28 @@ function _fmtVolumeShort(v) {
   return '$' + Math.round(v);
 }
 
+// Probability-as-display formatter for /mentions hero cards. Mirrors the
+// fmtChance pattern from public/carousel.js (PR #124). The naive
+// Math.round(yesPrice * 100) zeroes any price below 0.005 — a 0.3¢
+// longshot rendered "0% YES" instead of the actual price. Below 10%
+// we switch to cent-denominated display so cheap longshots read truthfully.
+//
+//   yes_price 0.50  → "50%"
+//   yes_price 0.14  → "14%"
+//   yes_price 0.04  → "4¢"
+//   yes_price 0.003 → "0.3¢"
+//   yes_price 0     → "0¢"
+function _fmtChanceDisplay(yesPrice) {
+  if (yesPrice == null) return null;
+  const p = Number(yesPrice);
+  if (!Number.isFinite(p) || p < 0) return null;
+  const cents = p * 100;
+  if (cents >= 10) return Math.round(cents) + '%';
+  if (cents >= 1)  return Math.round(cents) + '¢';
+  if (cents > 0)   return cents.toFixed(1) + '¢';
+  return '0¢';
+}
+
 async function _buildCardEnrichment(slug) {
   const empty = {
     has_language_markets: false,
@@ -15401,12 +15423,13 @@ async function _buildCardEnrichment(slug) {
       has_outcome_markets:  outcomeMkts.length > 0,
       card_type:            'language',
       top_market: {
-        question:               top.eventTitle || '',
-        leading_outcome_label:  leader ? leader.label : null,
-        leading_outcome_pct:    leader && leader.yesPrice != null ? Math.round(leader.yesPrice * 100) : null,
-        total_volume:           top.totalVolume || 0,
-        volume_display:         _fmtVolumeShort(top.totalVolume),
-        candidate_count:        (top.candidates || []).length,
+        question:                   top.eventTitle || '',
+        leading_outcome_label:      leader ? leader.label : null,
+        leading_outcome_pct:        leader && leader.yesPrice != null ? Math.round(leader.yesPrice * 100) : null,
+        leading_outcome_pct_display:leader ? _fmtChanceDisplay(leader.yesPrice) : null,
+        total_volume:               top.totalVolume || 0,
+        volume_display:             _fmtVolumeShort(top.totalVolume),
+        candidate_count:            (top.candidates || []).length,
       },
     };
   }
@@ -15417,12 +15440,13 @@ async function _buildCardEnrichment(slug) {
       has_outcome_markets:  true,
       card_type:            'outcome',
       top_market: {
-        question:               top.question || '',
-        leading_outcome_label:  null, // binary YES/NO; no candidate label
-        leading_outcome_pct:    top.yesPrice != null ? Math.round(top.yesPrice * 100) : null,
-        total_volume:           top.volume || 0,
-        volume_display:         _fmtVolumeShort(top.volume),
-        candidate_count:        2,
+        question:                   top.question || '',
+        leading_outcome_label:      null, // binary YES/NO; no candidate label
+        leading_outcome_pct:        top.yesPrice != null ? Math.round(top.yesPrice * 100) : null,
+        leading_outcome_pct_display:_fmtChanceDisplay(top.yesPrice),
+        total_volume:               top.volume || 0,
+        volume_display:             _fmtVolumeShort(top.volume),
+        candidate_count:            2,
       },
     };
   }

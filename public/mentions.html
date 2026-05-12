@@ -320,9 +320,15 @@ function renderCard(ev) {
     : '';
 
   let body;
+  // Prefer pct_display (formatted "X%" or "X¢" string from the server)
+  // and fall back to the legacy integer-pct field for any cached response
+  // shipped pre-cents-formatter.
+  const pctDisplay = tm && tm.leading_outcome_pct_display != null
+    ? tm.leading_outcome_pct_display
+    : (tm && tm.leading_outcome_pct != null ? tm.leading_outcome_pct + '%' : null);
   if (cardType === 'language' && tm) {
-    const leaderLine = (tm.leading_outcome_label && tm.leading_outcome_pct != null)
-      ? `<div class="card-leading">${esc(tm.leading_outcome_label)} leads at <span class="card-leading-pct">${tm.leading_outcome_pct}%</span></div>`
+    const leaderLine = (tm.leading_outcome_label && pctDisplay != null)
+      ? `<div class="card-leading">${esc(tm.leading_outcome_label)} leads at <span class="card-leading-pct">${esc(pctDisplay)}</span></div>`
       : '';
     const volLine = tm.volume_display
       ? `<div class="card-volume">${esc(tm.volume_display)} traded · ${tm.candidate_count} candidates</div>`
@@ -333,8 +339,8 @@ function renderCard(ev) {
       ${volLine}
     `;
   } else if (cardType === 'outcome' && tm) {
-    const pctLine = (tm.leading_outcome_pct != null)
-      ? `<div class="card-leading"><span class="card-leading-pct">${tm.leading_outcome_pct}%</span> YES</div>`
+    const pctLine = (pctDisplay != null)
+      ? `<div class="card-leading"><span class="card-leading-pct">${esc(pctDisplay)}</span> YES</div>`
       : '';
     const volLine = tm.volume_display
       ? `<div class="card-volume">${esc(tm.volume_display)} traded</div>`
