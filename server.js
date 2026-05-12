@@ -19394,7 +19394,7 @@ const { computeFlexScore: _computeFlex, tierForScore: _flexTier } = require('./l
 // us which build is actually serving the request. Compare the value
 // in diag.flex_code_version against this constant to ground-truth
 // deploy state when components zero out unexpectedly.
-const FLEX_CODE_VERSION = '2026-05-12-rt-union+sport-join+closed-at-fallback';
+const FLEX_CODE_VERSION = '2026-05-12-calibration-from-realized-trades';
 
 async function _fetchFlexStats(userId, diag) {
   if (diag && !diag.errors) diag.errors = [];
@@ -19598,6 +19598,79 @@ async function _fetchFlexStats(userId, diag) {
     } catch (e) {
       diag.errors.push({ stage: 'rt_closed_at_probe', message: e.message });
     }
+  }
+
+  // Calibration inputs from realized_trades. Pre-this-PR, brier_score
+  // and avg_clv_cents on whale-imported users were always null because
+  // polymarket_trades is empty for that cohort and the realized_trades
+  // contribution loop only added to wins/losses/pnl/staked. Calibration
+  // (25 pts) sat at zero across the entire whale leaderboard.
+  //
+  // Brier: AVG((outcome - entry_price)^2) where outcome = 1 if the
+  // user's side won (realized_pnl > 0) else 0. Both 'Yes'-side and
+  // 'No'-side rows compute symmetrically — entry_price is the price the
+  // user paid for the outcome they bought, so brier vs that outcome's
+  // realization is the predicted-probability error regardless of side.
+  //
+  // CLV proxy: AVG((exit_price - entry_price) * 100) across SOLD rows
+  // only (close_reason 'sold-profit' or 'sold-loss'). For both sides
+  // (Yes-buys and No-buys) the user profits when exit_price > entry,
+  // so the sign convention works without a per-side flip. Redeemed
+  // positions are excluded because exit_price for a redeem is the
+  // resolution (0 or 1) — that's just the win/loss restated, not
+  // execution edge.
+  //
+  // True CLV would compare entry against the closing line just before
+  // resolution, sourced from Polymarket /prices-history. We're using
+  // the user's actual exit_price as a proxy: it captures "did the
+  // market move my way before I closed" which is the same edge signal
+  // for active managers, and it's computable from existing columns
+  // with no schema change or external API dependency.
+  let rtBrierScore = null, rtBrierSize = 0;
+  let rtAvgClvCents = null, rtClvSize = 0;
+  try {
+    const calibRows = await dbQuery(`
+      SELECT
+        AVG(POWER((CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) - entry_price, 2))::float8 AS brier,
+        COUNT(*) FILTER (WHERE entry_price IS NOT NULL AND entry_price > 0 AND entry_price < 1)::int AS brier_n
+        FROM realized_trades
+       WHERE user_id = $1::uuid
+         AND entry_price IS NOT NULL
+         AND entry_price > 0 AND entry_price < 1
+         AND realized_pnl IS NOT NULL`, [userId]);
+    const c = calibRows[0] || {};
+    rtBrierScore = (c.brier != null && Number.isFinite(c.brier)) ? +(+c.brier).toFixed(4) : null;
+    rtBrierSize  = parseInt(c.brier_n || 0, 10);
+
+    const clvRows = await dbQuery(`
+      SELECT
+        AVG((exit_price - entry_price) * 100)::float8 AS clv_cents,
+        COUNT(*)::int AS clv_n
+        FROM realized_trades
+       WHERE user_id = $1::uuid
+         AND close_reason IN ('sold-profit','sold-loss')
+         AND entry_price IS NOT NULL AND entry_price > 0 AND entry_price < 1
+         AND exit_price  IS NOT NULL AND exit_price  > 0 AND exit_price  < 1`, [userId]);
+    const v = clvRows[0] || {};
+    rtAvgClvCents = (v.clv_cents != null && Number.isFinite(v.clv_cents)) ? +(+v.clv_cents).toFixed(2) : null;
+    rtClvSize     = parseInt(v.clv_n || 0, 10);
+  } catch (e) {
+    if (diag) diag.errors.push({ stage: 'rt_calibration_query', message: e.message });
+  }
+
+  // Merge into polyStats. Polymarket_trades (HFX-routed) numbers take
+  // precedence when both sources have data because that cohort has
+  // entry+exit+resolution timestamps the realized_trades arm can only
+  // approximate. For whale-imported users (polyStats.brier/clv null —
+  // the dominant case), the realized_trades values fill in directly.
+  if (polyStats.brier == null && rtBrierScore != null) polyStats.brier = rtBrierScore;
+  if (polyStats.clv   == null && rtAvgClvCents != null) polyStats.clv  = rtAvgClvCents;
+  if (diag) {
+    diag.rt_brier_score       = rtBrierScore;
+    diag.rt_brier_sample_size = rtBrierSize;
+    diag.rt_avg_clv_cents     = rtAvgClvCents;
+    diag.rt_clv_sample_size   = rtClvSize;
+    diag.poly_stats_after_calibration = { ...polyStats };
   }
 
   // Weekly consistency across picks + trades (90d trailing).
