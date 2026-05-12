@@ -19390,8 +19390,15 @@ const { computeFlexScore: _computeFlex, tierForScore: _flexTier } = require('./l
 // it as a side-effect. The shape mirrors the rebuild-endpoint diagnostic
 // schema in /api/admin/flex/rebuild. Non-diag callers (the cron) pass
 // nothing and behavior is unchanged.
+// Bumped on every diag-shape change so a single rebuild curl tells
+// us which build is actually serving the request. Compare the value
+// in diag.flex_code_version against this constant to ground-truth
+// deploy state when components zero out unexpectedly.
+const FLEX_CODE_VERSION = '2026-05-12-rt-union+sport-join+closed-at-fallback';
+
 async function _fetchFlexStats(userId, diag) {
   if (diag && !diag.errors) diag.errors = [];
+  if (diag) diag.flex_code_version = FLEX_CODE_VERSION;
 
   // Sports picks: voids excluded so they don't drag rate down.
   const pickRows = await dbQuery(`
@@ -19565,6 +19572,34 @@ async function _fetchFlexStats(userId, diag) {
   if (diag) diag.poly_stats_after_rt = { ...polyStats };
   if (diag) diag.realized_trade_count = realizedTradeCount;
 
+  // closed_at probe — when consistency zeroes out for a whale with
+  // hundreds of rows, two scenarios both produce weeks_active_90d=0
+  // and we can't tell them apart from the final output:
+  //
+  //   (a) closed_at is NULL on all rows (backfill bug — fix the backfill)
+  //   (b) closed_at is populated but all timestamps are outside 90d
+  //       (legitimate; this user's activity is dormant by FLEX's window)
+  //
+  // Probe writes three fields so the next rebuild call distinguishes
+  // them definitively. Failures are silent; this is diagnostic only.
+  if (diag) {
+    try {
+      const probeRows = await dbQuery(`
+        SELECT
+          COUNT(*) FILTER (WHERE closed_at IS NOT NULL AND closed_at > NOW() - INTERVAL '90 days')::int AS in_90d,
+          MIN(closed_at) AS oldest,
+          MAX(closed_at) AS newest
+          FROM realized_trades
+         WHERE user_id = $1::uuid`, [userId]);
+      const r = probeRows[0] || {};
+      diag.rt_closed_at_in_90d_count = parseInt(r.in_90d || 0, 10);
+      diag.rt_oldest_closed_at = r.oldest || null;
+      diag.rt_newest_closed_at = r.newest || null;
+    } catch (e) {
+      diag.errors.push({ stage: 'rt_closed_at_probe', message: e.message });
+    }
+  }
+
   // Weekly consistency across picks + trades (90d trailing).
   // Uses a UNION of three sources so a bettor active on any of them gets
   // credit for every week one was profitable:
@@ -19634,13 +19669,22 @@ async function _fetchFlexStats(userId, diag) {
          AND mst.sport IS NOT NULL
          AND mst.sport <> 'other'`, [userId]);
     rtSports = parseInt(rtSportRows[0]?.rt_sports || 0, 10);
-    if (diag) diag.rt_sport_count = rtSports;
+    if (diag) {
+      diag.rt_sport_count = rtSports;
+      diag.market_sport_tags_status = 'present';
+    }
   } catch (e) {
     // market_sport_tags may not exist on all environments — leave at 0
     // and fall back to the legacy "+1 for any Polymarket activity"
-    // heuristic below.
-    if (!/relation "market_sport_tags" does not exist/i.test(e.message)) {
-      if (diag) diag.errors.push({ stage: 'rt_sports_query', message: e.message });
+    // heuristic below. Surface the status either way so diag readers
+    // can tell "table missing" from "table present, zero matches".
+    if (/relation "market_sport_tags" does not exist/i.test(e.message)) {
+      if (diag) diag.market_sport_tags_status = 'missing';
+    } else {
+      if (diag) {
+        diag.market_sport_tags_status = 'error';
+        diag.errors.push({ stage: 'rt_sports_query', message: e.message });
+      }
     }
   }
 
