@@ -141,6 +141,7 @@ const polymarket = require('./lib/polymarket'); // initialized below once _nodeF
 const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
+const wordMarkets = require('./lib/word-markets');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -32386,6 +32387,74 @@ app.post('/api/admin/hot-markets/refresh', async (req, res) => {
       { newsImpactCache: typeof _newsImpactCache !== 'undefined' ? _newsImpactCache : null }
     );
     res.json({ ok: true, count: next ? next.length : 0 });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── WORD MARKETS (Polymarket "Mentions" category) ───────────────────────
+// Phase 1 of the /mentions rebuild (Path B: calendar-first, words-betting).
+// See lib/word-markets.js for the sourcing pipeline. These endpoints are
+// the backbone of the new calendar UI shipped in PR 2.
+
+// GET /api/word-markets/upcoming?limit=20
+// Returns upcoming speaker-event groups with word-markets attached.
+// Response shape: { events: [...], count, fetched_at, cache_age_ms }
+app.get('/api/word-markets/upcoming', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
+    const events = await wordMarkets.getUpcomingWordMarketEvents({ limit });
+    const snap = wordMarkets.getCachedSnapshot();
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({
+      events:       Array.isArray(events) ? events : [],
+      count:        Array.isArray(events) ? events.length : 0,
+      fetched_at:   new Date().toISOString(),
+      cache_age_ms: snap ? snap.age_ms : null,
+    });
+  } catch (e) {
+    console.error('[word-markets/upcoming] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, events: [], count: 0 });
+  }
+});
+
+// GET /api/word-markets/by-event/:event_slug
+// Full sub-market listing for one Polymarket event. Used by the
+// /event/<slug> detail page (PR 3 of the rebuild).
+app.get('/api/word-markets/by-event/:event_slug', async (req, res) => {
+  try {
+    const slug = String(req.params.event_slug || '').trim();
+    if (!slug) return res.status(400).json({ error: 'event_slug required' });
+    const ev = await wordMarkets.getWordMarketsByEventSlug(slug);
+    if (!ev) return res.status(404).json({ error: 'event not found', event_slug: slug });
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(ev);
+  } catch (e) {
+    console.error('[word-markets/by-event] endpoint error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/word-markets/refresh — admin-gated cache bust + warm.
+app.post('/api/admin/word-markets/refresh', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  wordMarkets.bustCache();
+  try {
+    const events = await wordMarkets.getUpcomingWordMarketEvents({ limit: 50 });
+    res.json({
+      ok:           true,
+      count:        events.length,
+      total_volume: events.reduce((s, e) => s + (e.total_volume || 0), 0),
+      sample:       events.slice(0, 3).map(e => ({
+        event_slug:    e.event_slug,
+        event_title:   e.event_title,
+        speaker:       e.speaker,
+        market_count:  e.markets.length,
+        total_volume:  e.total_volume,
+      })),
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
