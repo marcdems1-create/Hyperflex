@@ -15549,6 +15549,32 @@ function _renderHeroMiniCard(m) {
   </a>`;
 }
 
+// Word-betting card. The strip lead surface in the Warsh hero after
+// the mention-pages rescope (Path B, per Marc's spec): the bet is on a
+// specific WORD, not on a binary outcome unrelated to the speaker.
+// Card shape:
+//   [word label]
+//   YES X¢   (cents formatter from PR #130 — sub-10% prices render
+//             as cents instead of '0%')
+//   $Xk traded
+function _renderHeroWordMiniCard(sub) {
+  const yes = sub.yes_price;
+  const yesCls = yes == null ? 'mid' : (yes >= 0.6 ? 'high' : (yes <= 0.4 ? 'low' : 'mid'));
+  const yesDisplay = _fmtChanceDisplay(yes) || '—';
+  const vol = Number(sub.volume || 0);
+  const volLabel = vol >= 1e6 ? '$' + (vol / 1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol / 1e3) + 'K' : '$' + Math.round(vol);
+  const label = sub.label || sub.question || '?';
+  const href = sub.slug ? '/market/' + sub.slug : '#';
+  return `<a class="hero-mini hero-mini-word" href="${_escHtml(href)}">
+    <div class="hero-mini-word-label">${_escHtml(label)}</div>
+    <div class="hero-mini-yes-row">
+      <span class="hero-mini-yes ${yesCls}">${_escHtml(yesDisplay)}</span>
+      <span class="hero-mini-yes-lbl">YES</span>
+    </div>
+    <div class="hero-mini-vol">${_escHtml(volLabel)} traded</div>
+  </a>`;
+}
+
 async function _renderMentionsHero() {
   const cfg = eventPreviews.getPreview('warsh-2026-06-fomc-presser');
   if (!cfg || !cfg.event_date) return '';
@@ -15573,15 +15599,31 @@ async function _renderMentionsHero() {
   }
   if (mode === 'none') return '';
 
-  // Fetch markets (top 4) — same data path as the preview-page API.
-  // Hero strip shows outcome markets only; multi-outcome language
-  // events are too dense for the strip's mini-card shape and live
-  // on the preview page itself.
-  let markets = [];
+  // Word-betting markets attached to this speaker's event (top 4).
+  // Per Marc's mention-pages rescope (Path B): the hero strip lead
+  // surface is word-betting markets, not confirmation outcome cards.
+  // Pulls from lib/word-markets.js (PR #129) — filters all upcoming
+  // language events down to this speaker's, picks the highest-volume
+  // event for the speaker, takes its top 4 sub-markets.
+  //
+  // When Polymarket has no Warsh word-markets listed yet (current
+  // state — events typically list ~2 weeks before the FOMC), the
+  // strip renders an explicit empty-state with a CTA to the archive
+  // sub-page at /mentions/archive. Confirmation outcome cards (the
+  // previous "WHAT THE MARKET IS PRICING" filler) are no longer
+  // surfaced — per the rescope, they're adjacent-to-event markets,
+  // not the actual product.
+  let wordSubMarkets = [];
   try {
-    const fetched = await _fetchPreviewMarkets(cfg, 4);
-    markets = fetched.outcome_markets || [];
-  } catch (e) { markets = []; }
+    const upcoming = await wordMarkets.getUpcomingWordMarketEvents({ limit: 50 });
+    const speakerEvents = upcoming.filter(ev =>
+      String(ev.speaker || '').toLowerCase() === String(cfg.speaker || '').toLowerCase()
+    );
+    const topEvent = speakerEvents.sort((a, b) => (b.total_volume || 0) - (a.total_volume || 0))[0];
+    if (topEvent && Array.isArray(topEvent.markets)) {
+      wordSubMarkets = topEvent.markets.slice(0, 4);
+    }
+  } catch (e) { /* leave empty → render empty-state copy */ }
 
   const cd = _fmtCountdownParts(eventIso, nowMs);
   const eyebrow = `UPCOMING — ${_fmtDateLong(eventIso).toUpperCase()}`;
@@ -15603,11 +15645,17 @@ async function _renderMentionsHero() {
     ctaLabel = 'View Warsh preview →';
   }
 
-  const stripBlock = markets.length ? `
+  const stripBlock = wordSubMarkets.length
+    ? `
     <div class="hero-strip">
-      <div class="hero-strip-h">WHAT THE MARKET IS PRICING</div>
-      <div class="hero-strip-row">${markets.map(_renderHeroMiniCard).join('')}</div>
-    </div>` : '';
+      <div class="hero-strip-h">WORD-BETTING MARKETS</div>
+      <div class="hero-strip-row">${wordSubMarkets.map(_renderHeroWordMiniCard).join('')}</div>
+    </div>`
+    : `
+    <div class="hero-strip">
+      <div class="hero-strip-h">WORD-BETTING MARKETS</div>
+      <div class="hero-strip-empty">Word-betting markets list closer to the event. <a href="/mentions/archive">Browse posture archive →</a></div>
+    </div>`;
 
   // Portrait comparison panel — Powell (current, muted) vs Warsh
   // (incoming, full-color, cyan border). Sits to the right of the
