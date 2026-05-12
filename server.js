@@ -29139,6 +29139,36 @@ app.get('/api/admin/proxy-health/:eoa', async (req, res) => {
   }
 });
 
+// GET /api/admin/user/:handle
+// Phone-friendly handle → {EOA, proxy, USDC.e balance} lookup so funding
+// flows from MetaMask mobile don't require local DB access. Matches
+// against display_name, users.id, or polymarket_address (case-insensitive).
+app.get('/api/admin/user/:handle', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const h = String(req.params.handle || '').trim().toLowerCase();
+  if (!h) return res.status(400).json({ error: 'handle required' });
+  const rows = await dbQuery(
+    `SELECT id, display_name AS handle, polymarket_address
+       FROM users
+      WHERE LOWER(display_name) = $1
+         OR LOWER(id) = $1
+         OR LOWER(polymarket_address) = $1
+      LIMIT 1`, [h]).catch(e => { console.warn('[admin/user] db:', e.message); return []; });
+  if (!rows.length) return res.status(404).json({ error: 'not found', handle: h });
+  const u = rows[0];
+  let proxy = null, usdc_balance = null;
+  if (u.polymarket_address) {
+    try {
+      proxy = await polymarketProxy.derivePolymarketProxy(u.polymarket_address.toLowerCase(), _polygonRpcList());
+      if (proxy) {
+        const bal = await _v2DiagRpcCall('eth_call', [{ to: _V2_DIAG_ADDRS.USDC_E, data: '0x70a08231' + _v2DiagPad32(proxy) }, 'latest']);
+        usdc_balance = _v2DiagFormatUnits(_v2DiagHexToBigInt(bal), 6);
+      }
+    } catch (e) { console.warn('[admin/user] proxy/balance:', e.message); }
+  }
+  res.json({ id: u.id, handle: u.handle, polymarket_address: u.polymarket_address, proxy_wallet_address: proxy, usdc_balance });
+});
+
 // GET /api/admin/tx-trace/:hash
 // Receipt + revert-reason extraction via eth_call replay. Decodes Error(string)
 // payloads. Returns whatever Polygon gives us — no opinion, just facts.
