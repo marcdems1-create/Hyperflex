@@ -116,7 +116,7 @@
     btn.id = 'hfxBugBtn';
     btn.title = 'Report a bug';
     btn.innerHTML = '🐛';
-    btn.style.cssText = 'position:fixed;bottom:20px;left:20px;width:40px;height:40px;border-radius:50%;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);color:#a855f7;font-size:18px;cursor:pointer;z-index:9998;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(8px)';
+    btn.style.cssText = 'position:fixed !important;bottom:20px !important;left:20px !important;width:40px !important;height:40px !important;border-radius:50% !important;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);color:#a855f7;font-size:18px;cursor:pointer;z-index:9998 !important;display:flex !important;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(8px);padding:0 !important;margin:0 !important';
     btn.onmouseenter = function() { btn.style.background = 'rgba(168,85,247,0.3)'; btn.style.transform = 'scale(1.1)'; };
     btn.onmouseleave = function() { btn.style.background = 'rgba(168,85,247,0.15)'; btn.style.transform = 'scale(1)'; };
     btn.onclick = openBugModal;
