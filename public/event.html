@@ -240,130 +240,110 @@ footer a{color:var(--cyan)}
 .event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 .empty-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:18px 0;line-height:1.6;margin-bottom:24px}
 
-/* ── PR #146 — word-market detail visual PUNCH.
-   Iteration on PR #144's vocabulary. Previous pass shipped structure
-   but lacked saturation — every card looked the same. This pass adds:
-     - 48px YES price (number is now the loudest thing on the card)
-     - WIN green / LOSS red border + bg tint on resolved cards
-     - Hover lift + glow with directional color
-     - ✓ WON / ✗ LOST stamps recolored
-     - Receipt header for past events
-     - "BE THE FIRST" CTA at bottom of past events
-*/
-.we-header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;margin-bottom:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
-@media(max-width:640px){.we-header{grid-template-columns:1fr;gap:14px}}
-.we-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.we-eyebrow-chip{display:inline-block;padding:3px 10px;border:1px solid var(--line-strong);background:rgba(0,212,255,0.06);color:var(--cyan);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;font-weight:700}
-.we-eyebrow-chip.resolved{background:rgba(201,146,13,0.10);border-color:rgba(201,146,13,0.40);color:#c9920d}
-.we-title{font-family:var(--sans);font-weight:800;font-size:32px;line-height:1.08;letter-spacing:-0.015em;color:var(--ink);margin-bottom:12px}
-@media(max-width:640px){.we-title{font-size:24px}}
-.we-meta{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;flex-wrap:wrap}
-.we-meta strong{color:var(--ink-2);font-weight:800}
-.we-countdown{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;min-width:160px}
+/* ── PR #147 — typography & clarity restraint pass.
+   Iteration on PR #146 ("visual punch") which overcorrected toward
+   terminal/debugger UI. This pass strips stamps, swaps monospace for
+   sans-serif system typography, reverses the number/title hierarchy
+   (word title is now the loudest, percent supports), and replaces the
+   gold-monospace receipt chips with a serif editorial summary.
+
+   THREE TYPOGRAPHY STYLES, NO MORE:
+     1. Serif (Instrument Serif italic) — editorial summary line
+     2. Sans-serif (Geist) — everything else
+     3. Mono (JetBrains) — only inside .we-card-yes / .we-cd-digits
+
+   Anything that reads "engineering-internal" was stripped. ── */
+.we-header{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:end;margin-bottom:30px;padding-bottom:26px;border-bottom:1px solid var(--line)}
+@media(max-width:640px){.we-header{grid-template-columns:1fr;gap:18px}}
+.we-eyebrow{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--cyan);margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;letter-spacing:-0.005em}
+.we-eyebrow.resolved{color:#c9920d}
+.we-eyebrow-sep{color:var(--muted-2);font-weight:400}
+.we-eyebrow-speaker{color:var(--ink-2);font-weight:600}
+.we-title{font-family:var(--sans);font-weight:800;font-size:36px;line-height:1.06;letter-spacing:-0.02em;color:var(--ink);margin-bottom:14px}
+@media(max-width:640px){.we-title{font-size:26px}}
+.we-meta{display:flex;align-items:center;gap:14px;font-family:var(--sans);font-size:14px;color:var(--muted);flex-wrap:wrap;font-weight:500}
+.we-meta strong{color:var(--ink-2);font-weight:700}
+.we-meta-sep{color:var(--muted-2)}
+.we-countdown{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right;min-width:170px}
 @media(max-width:640px){.we-countdown{align-items:flex-start;text-align:left}}
-.we-cd-digits{font-family:var(--mono);font-weight:800;font-size:34px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums;text-shadow:0 0 28px rgba(0,212,255,0.35)}
-.we-cd-digits.resolved{color:#c9920d;font-size:22px;text-shadow:0 0 18px rgba(201,146,13,0.30)}
-.we-cd-label{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase}
+.we-cd-digits{font-family:var(--mono);font-weight:700;font-size:32px;color:var(--cyan);line-height:1;letter-spacing:0.01em;font-variant-numeric:tabular-nums}
+.we-cd-digits.resolved{color:#c9920d;font-size:22px}
+.we-cd-label{font-family:var(--sans);font-size:13px;color:var(--muted);font-weight:500}
 
-/* ── PR #146 receipt header: "POWELL'S RECEIPT · MAY 14, 2026"
-     Gold-accent line, chip grid below. Past events only. ── */
-.we-receipt{background:linear-gradient(135deg,rgba(201,146,13,0.10),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.32);border-radius:8px;padding:20px 22px;margin-bottom:32px}
-.we-receipt-h{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12px;letter-spacing:0.22em;color:#c9920d;text-transform:uppercase;font-weight:800;margin-bottom:14px}
-.we-receipt-h::before{content:"";width:8px;height:8px;background:#c9920d;border-radius:50%;box-shadow:0 0 12px rgba(201,146,13,0.7)}
-.we-receipt-chips{display:flex;flex-wrap:wrap;gap:8px}
-.we-receipt-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:6px;font-family:var(--mono);font-size:13px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;border:1px solid}
-.we-receipt-chip.said{color:#00e68a;background:rgba(0,230,138,0.10);border-color:rgba(0,230,138,0.32)}
-.we-receipt-chip.said::before{content:"✓";font-weight:900}
-.we-receipt-chip.never{color:#ff7a8e;background:rgba(255,77,106,0.08);border-color:rgba(255,77,106,0.28)}
-.we-receipt-chip.never::before{content:"✗";font-weight:900;opacity:0.7}
-.we-receipt-chip.never .we-receipt-word{text-decoration:line-through;opacity:0.85}
+/* ── Editorial summary (past events). Serif italic headline that
+     reads like a news lede, then a sans body paragraph. No chips,
+     no monospace, no terminal vibe. ── */
+.we-receipt{margin:6px 0 36px;padding:0;border:0;background:none}
+.we-receipt-lede{font-family:var(--serif);font-style:italic;font-size:32px;line-height:1.15;color:var(--ink);letter-spacing:-0.01em;margin-bottom:14px}
+@media(max-width:640px){.we-receipt-lede{font-size:24px}}
+.we-receipt-body{font-family:var(--sans);font-size:17px;line-height:1.55;color:var(--ink-2);font-weight:400;letter-spacing:-0.005em;max-width:720px}
+.we-receipt-body .said-word{color:#00e68a;font-weight:700}
+.we-receipt-body .never-word{color:#ff7a8e;font-weight:700}
+.we-receipt-signal{margin-top:14px;font-family:var(--sans);font-size:14px;color:var(--muted);font-weight:500;letter-spacing:-0.005em}
+.we-receipt-signal strong{color:var(--cyan);font-weight:700}
 
-.we-section-h{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:32px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.we-section-h.primary{font-size:14px;color:var(--cyan);letter-spacing:0.2em;border-bottom-color:rgba(0,212,255,0.32);margin-top:8px;text-shadow:0 0 18px rgba(0,212,255,0.30)}
-.we-section-h.won{color:#00e68a;border-bottom-color:rgba(0,230,138,0.32)}
-.we-section-h.lost{color:#ff7a8e;border-bottom-color:rgba(255,77,106,0.28)}
-.we-section-h-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 12px currentColor}
-.we-section-h.primary .we-section-h-dot{animation:we-pulse 1.6s infinite}
-@keyframes we-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(0.85)}}
-.we-section-count{margin-left:auto;color:var(--muted-2);font-weight:600;letter-spacing:0.1em;font-size:10px}
+/* ── Section headers — conversational, sans-serif. ── */
+.we-section{margin:36px 0 18px}
+.we-section h2{font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);letter-spacing:-0.015em;margin-bottom:4px;line-height:1.2}
+.we-section h2.won{color:#00e68a}
+.we-section h2.lost{color:#ff7a8e}
+.we-section h2.live{color:var(--cyan)}
+.we-section-sub{font-family:var(--sans);font-size:14px;color:var(--muted);font-weight:500;letter-spacing:-0.005em}
 
-/* ── PR #146 cards — louder, depthier, win/loss saturated ── */
-.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:36px}
+/* ── Cards — minimal chrome, color-coded left rail, word is the lede. ── */
+.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:32px}
+.we-grid .we-card-feature{grid-column:span 2}
+@media(max-width:640px){.we-grid .we-card-feature{grid-column:auto}}
+
 .we-card{
   position:relative;
-  background:linear-gradient(180deg,rgba(28,28,48,0.85),rgba(14,14,28,0.75));
-  border:1px solid var(--line);border-radius:14px;
-  padding:18px 18px 16px;
-  display:flex;flex-direction:column;gap:11px;
+  background:rgba(255,255,255,0.025);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:18px 20px 16px 22px;
+  display:flex;flex-direction:column;gap:8px;
   text-decoration:none;color:inherit;
-  transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:border-color .15s ease,transform .15s ease,background .15s ease;
   overflow:hidden;
 }
-.we-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;transition:background .18s ease}
-.we-card:hover{transform:translateY(-3px) scale(1.005);text-decoration:none}
-.we-card:hover{border-color:rgba(0,212,255,0.45);box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 24px rgba(0,212,255,0.10)}
-
-/* Open-section rank tints (top-3 within an event's open markets) */
-.we-card.rank-1{border-color:rgba(0,230,138,0.35);background:linear-gradient(180deg,rgba(0,230,138,0.10),rgba(14,14,28,0.78))}
-.we-card.rank-1::before{background:#00e68a}
-.we-card.rank-1:hover{box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 28px rgba(0,230,138,0.20)}
-.we-card.rank-2{border-color:rgba(77,159,255,0.28)}
-.we-card.rank-2::before{background:#4d9fff}
-.we-card.rank-3{border-color:rgba(168,85,247,0.28)}
-.we-card.rank-3::before{background:#a855f7}
-
-/* WIN / LOSS treatment for resolved cards. Replaces .muted from PR #144. */
-.we-card.won{border-color:rgba(0,230,138,0.36);background:linear-gradient(180deg,rgba(0,230,138,0.08),rgba(14,14,28,0.80))}
+.we-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgba(255,255,255,0.15)}
+.we-card:hover{transform:translateY(-2px);text-decoration:none;background:rgba(255,255,255,0.04);border-color:rgba(0,212,255,0.3)}
+.we-card.won{border-color:rgba(0,230,138,0.30)}
 .we-card.won::before{background:#00e68a}
-.we-card.won:hover{box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 28px rgba(0,230,138,0.22)}
-.we-card.lost{border-color:rgba(255,77,106,0.24);background:linear-gradient(180deg,rgba(255,77,106,0.05),rgba(14,14,28,0.80));opacity:0.78}
-.we-card.lost::before{background:rgba(255,77,106,0.5)}
-.we-card.lost:hover{opacity:0.95;box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 22px rgba(255,77,106,0.15)}
-.we-card.pending{opacity:0.62}
-.we-card.pending:hover{opacity:0.85}
+.we-card.won:hover{border-color:rgba(0,230,138,0.55);background:rgba(0,230,138,0.04)}
+.we-card.lost{border-color:rgba(255,77,106,0.22);opacity:0.85}
+.we-card.lost::before{background:rgba(255,77,106,0.55)}
+.we-card.lost:hover{opacity:1;border-color:rgba(255,77,106,0.45);background:rgba(255,77,106,0.03)}
+.we-card.live{border-color:rgba(0,212,255,0.28)}
+.we-card.live::before{background:#00d4ff}
+.we-card.live:hover{border-color:rgba(0,212,255,0.55);background:rgba(0,212,255,0.04)}
+.we-card.pending{opacity:0.6}
+.we-card.pending::before{background:rgba(245,158,11,0.55)}
 
-.we-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.we-card-rank{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;padding:3px 8px;border:1px solid var(--line);background:rgba(255,255,255,0.025);border-radius:3px}
-.we-card.rank-1 .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.45);background:rgba(0,230,138,0.10)}
-.we-card.rank-2 .we-card-rank{color:#4d9fff;border-color:rgba(77,159,255,0.35);background:rgba(77,159,255,0.08)}
-.we-card.rank-3 .we-card-rank{color:#a855f7;border-color:rgba(168,85,247,0.35);background:rgba(168,85,247,0.08)}
-.we-card.won .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.40);background:rgba(0,230,138,0.10)}
-.we-card.lost .we-card-rank{color:rgba(255,154,170,0.85);border-color:rgba(255,77,106,0.30);background:rgba(255,77,106,0.06)}
+/* WORD LABEL — the loudest element. Sans-serif, big, brand-confident. */
+.we-card-label{font-family:var(--sans);font-weight:700;font-size:22px;color:var(--ink);line-height:1.15;letter-spacing:-0.015em;text-transform:capitalize;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.we-card-feature .we-card-label{font-size:30px}
+.we-card.lost .we-card-label{color:var(--ink-2)}
 
-.we-card-status{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;padding:3px 8px;border-radius:3px;display:inline-flex;align-items:center;gap:4px}
-.we-card-status.open{color:#00e68a;background:rgba(0,230,138,0.14);box-shadow:inset 0 0 0 1px rgba(0,230,138,0.30)}
-.we-card-status.pending{color:#f59e0b;background:rgba(245,158,11,0.14);box-shadow:inset 0 0 0 1px rgba(245,158,11,0.30)}
-.we-card-status.won{color:#00e68a;background:rgba(0,230,138,0.16);box-shadow:inset 0 0 0 1px rgba(0,230,138,0.45)}
-.we-card-status.lost{color:#ff9aaa;background:rgba(255,77,106,0.10);box-shadow:inset 0 0 0 1px rgba(255,77,106,0.32)}
+/* Supporting metric line — % score + volume. Smaller. Monospace only
+   on the actual digits; the labels are sans. */
+.we-card-metric{display:flex;align-items:baseline;gap:10px;margin-top:auto;padding-top:8px;flex-wrap:wrap}
+.we-card-yes{font-family:var(--mono);font-size:18px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;color:var(--cyan)}
+.we-card-feature .we-card-yes{font-size:24px}
+.we-card-yes.won{color:#00e68a}
+.we-card-yes.lost{color:#ff7a8e}
+.we-card-yes-l{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--muted)}
+.we-card-yes-l.won{color:rgba(0,230,138,0.75)}
+.we-card-yes-l.lost{color:rgba(255,154,170,0.75)}
+.we-card-vol{margin-left:auto;font-family:var(--sans);font-size:13px;color:var(--muted);font-weight:500}
+.we-card-vol strong{color:var(--ink-2);font-family:var(--mono);font-weight:600}
 
-/* TITLE smaller than number — Marc's spec: number > title. */
-.we-card-label{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--ink-2);line-height:1.3;letter-spacing:-0.005em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
-.we-card.won .we-card-label,.we-card.rank-1 .we-card-label{color:var(--ink)}
-
-/* PRICE — the loudest thing on the card. 48px, brand-saturated. */
-.we-card-price-row{display:flex;align-items:baseline;gap:10px;margin-top:auto;padding-top:6px}
-.we-card-yes{font-family:var(--mono);font-size:48px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.025em;color:var(--cyan);text-shadow:0 0 18px rgba(0,212,255,0.25)}
-.we-card-yes.high{color:#00e68a;text-shadow:0 0 22px rgba(0,230,138,0.36)}
-.we-card-yes.low{color:#FF6B4D;text-shadow:0 0 18px rgba(255,107,77,0.28)}
-.we-card-yes.mid{color:var(--ink-2);text-shadow:none}
-.we-card-yes.won{color:#00e68a;text-shadow:0 0 26px rgba(0,230,138,0.45)}
-.we-card-yes.lost{color:#ff7a8e;text-shadow:0 0 14px rgba(255,77,106,0.22);opacity:0.85}
-.we-card-yes.muted{color:var(--muted-2);text-shadow:none}
-.we-card-yes-l{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;padding-bottom:3px}
-.we-card-yes-l.won{color:#00e68a}
-.we-card-yes-l.lost{color:#ff7a8e}
-
-.we-card-foot{display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted-2);letter-spacing:0.04em}
-.we-card-vol{color:var(--ink-2)}
-.we-card-social{margin-left:auto;color:var(--muted);font-size:9px;letter-spacing:0.1em;text-transform:uppercase}
-
-/* BE THE FIRST CTA — bottom of past events, points at next upcoming. */
-.we-cta{margin:36px 0 8px;padding:28px 32px;background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(0,212,255,0.01));border:1px solid rgba(0,212,255,0.32);border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
-.we-cta-h{font-family:var(--mono);font-size:11px;letter-spacing:0.24em;color:var(--cyan);text-transform:uppercase;font-weight:800;margin-bottom:6px}
-.we-cta-body{font-family:var(--sans);font-size:17px;font-weight:700;color:var(--ink);line-height:1.3;letter-spacing:-0.005em;max-width:520px}
-.we-cta-arrow{font-family:var(--mono);font-size:14px;font-weight:800;letter-spacing:0.16em;color:var(--cyan);text-transform:uppercase;padding:14px 22px;border:1px solid var(--cyan);background:rgba(0,212,255,0.06);text-decoration:none;transition:background .15s,transform .15s;flex-shrink:0}
-.we-cta-arrow:hover{background:rgba(0,212,255,0.18);transform:translateX(2px)}
+/* ── Footer CTA. Cyan button, sans typography. ── */
+.we-cta{margin:48px 0 8px;padding:28px 32px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.32);border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.we-cta-body{font-family:var(--sans);font-size:18px;font-weight:700;color:var(--ink);line-height:1.35;letter-spacing:-0.005em;max-width:560px}
+.we-cta-body .accent{color:var(--cyan)}
+.we-cta-arrow{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--ink);background:var(--cyan);padding:14px 22px;border-radius:8px;text-decoration:none;transition:opacity .15s,transform .15s;flex-shrink:0;letter-spacing:-0.005em}
+.we-cta-arrow:hover{opacity:0.88;transform:translateX(2px);text-decoration:none}
 @media(max-width:640px){.we-cta{flex-direction:column;align-items:flex-start;padding:22px}.we-cta-arrow{width:100%;text-align:center}}
 </style>
 </head>
@@ -952,23 +932,20 @@ function renderPreview(p) {
 // big YES price, status flag, and volume — mirrors the feed-edge-card
 // vocabulary from public/feed.html so the visual rhythm matches the
 // Alpha cards trader rail.
-function renderWordEvent(ev) {
-  const title = ev.event_title || '(Polymarket event)';
+function renderWordEvent(ev, nextEvent) {
+  const title = ev.event_title || 'Polymarket event';
   const slug  = ev.event_slug || '';
   const endDate = ev.end_date ? new Date(ev.end_date) : null;
 
-  // Categorise sub-markets first — bug fix from PR #144: closed
-  // markets are kept on resolved events now, so total volume + count
-  // reflect historical activity instead of zeros.
+  // Categorise sub-markets (PR #144 closed-filter fix applies here).
   const markets = Array.isArray(ev.markets) ? ev.markets : [];
   const open     = markets.filter(m => !m.closed && m.active !== false);
   const pending  = markets.filter(m => m.closed && m.active === false);
   const resolved = markets.filter(m => m.closed && m.active !== false);
+  const wonMarkets  = resolved.filter(m => Number(m.yes_price) >= 0.5);
+  const lostMarkets = resolved.filter(m => Number(m.yes_price) <  0.5);
 
-  // Recompute total_volume from sub-markets to bypass any stale
-  // server-side rollup that was 0 before the closed-filter fix.
   const totalVol = markets.reduce((s, m) => s + (Number(m.volume) || 0), 0);
-
   const volLabel = totalVol >= 1e6 ? '$' + (totalVol / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
                  : totalVol >= 1e3 ? '$' + Math.round(totalVol / 1e3) + 'K'
                  : '$' + Math.round(totalVol);
@@ -984,16 +961,6 @@ function renderWordEvent(ev) {
     if (pct > 0)   return pct.toFixed(1) + '¢';
     return '0¢';
   }
-  function yesTier(p, isResolved) {
-    if (isResolved) return 'muted';
-    if (p == null) return 'mid';
-    let v = Number(p);
-    if (v > 1) v = v / 100;
-    if (v >= 0.6) return 'high';
-    if (v <= 0.1) return 'low';
-    if (v <= 0.4) return 'low';
-    return 'mid';
-  }
   function fmtVol(v) {
     v = Number(v || 0);
     if (!isFinite(v) || v <= 0) return '$0';
@@ -1005,6 +972,10 @@ function renderWordEvent(ev) {
     if (!d) return '';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
+  function fmtMonth(d) {
+    if (!d) return '';
+    return d.toLocaleDateString('en-US', { month: 'long' });
+  }
   function fmtCountdown(d) {
     if (!d) return null;
     const ms = d.getTime() - Date.now();
@@ -1013,70 +984,71 @@ function renderWordEvent(ev) {
     const hours = Math.floor((ms % 86400000) / 3600000);
     const minutes = Math.floor((ms % 3600000) / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
-    // Show seconds only within last 48h, day counter only >30d.
     if (days > 30) return days + 'd';
     if (ms <= 48 * 3600000) return days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's';
     return days + 'd ' + hours + 'h ' + minutes + 'm';
   }
+  function titleCase(s) {
+    return String(s || '').toLowerCase().replace(/(^|\s|['-])(\w)/g, (_, p, c) => p + c.toUpperCase());
+  }
+  function inlineList(arr, fallback) {
+    const cleaned = arr.map(s => titleCase(s)).filter(Boolean);
+    if (!cleaned.length) return fallback;
+    if (cleaned.length === 1) return cleaned[0];
+    if (cleaned.length === 2) return cleaned[0] + ' and ' + cleaned[1];
+    return cleaned.slice(0, -1).join(', ') + ', and ' + cleaned[cleaned.length - 1];
+  }
 
-  // ── Build a sub-market card in alpha-card vocabulary ──
-  // Rank stamp top-left. Big YES price center. Status flag top-right.
-  // Volume + label below. Borrows .feed-edge-card from feed.html.
-  function marketCard(m, idx, kind) {
+  // ── Card. One element does the work: a color-coded left rail
+  //    encodes state (won/lost/live/pending), the word is the
+  //    headline, the % is a supporting metric. No rank stamps, no
+  //    status pills, no "YES WON" labels — the rail and the number
+  //    say everything. ── */
+  function marketCard(m, idx, kind, isFeature) {
     const href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
-    const label = esc(m.label || m.question || '?');
+    const label = titleCase(m.label || m.question || '');
     const yes = fmtChance(m.yes_price);
+    const yesNum = Number(m.yes_price);
     const isResolved = kind === 'resolved';
     const isPending  = kind === 'pending';
-    const yesNum = Number(m.yes_price);
     const won  = isResolved && isFinite(yesNum) && yesNum >= 0.5;
     const lost = isResolved && isFinite(yesNum) && yesNum < 0.5;
     const vol = fmtVol(m.volume);
-    const rank = idx + 1;
 
-    // Card class composition: rank tints on open top-3; won/lost on
-    // resolved; pending for placeholder children.
     let cardCls = '';
-    if (kind === 'open' && rank <= 3) cardCls = ' rank-' + rank;
-    else if (won)  cardCls = ' won';
-    else if (lost) cardCls = ' lost';
+    if (won)            cardCls = ' won';
+    else if (lost)      cardCls = ' lost';
     else if (isPending) cardCls = ' pending';
+    else                cardCls = ' live';
+    if (isFeature)      cardCls += ' we-card-feature';
 
-    // Tier of the big number — won/lost override the open tier curve.
-    let tier;
-    if (won)        tier = 'won';
-    else if (lost)  tier = 'lost';
-    else if (isPending) tier = 'muted';
-    else            tier = yesTier(m.yes_price, false);
+    let yesCls = '';
+    if (won)  yesCls = ' won';
+    if (lost) yesCls = ' lost';
 
-    // Status flag + YES sub-label.
-    let statusLabel, statusCls, yesL, yesLCls = '';
-    if (won)        { statusLabel = '✓ WON';  statusCls = 'won';     yesL = 'YES WON';   yesLCls = ' won'; }
-    else if (lost)  { statusLabel = '✗ LOST'; statusCls = 'lost';    yesL = 'YES LOST';  yesLCls = ' lost'; }
-    else if (isPending) { statusLabel = 'PENDING'; statusCls = 'pending'; yesL = 'YES'; }
-    else            { statusLabel = 'LIVE';   statusCls = 'open';    yesL = 'YES'; }
+    let yesL = 'YES';
+    if (won)  yesL = 'said it';
+    if (lost) yesL = 'never said';
+    if (isPending) yesL = 'pending';
 
     return '<a class="we-card' + cardCls + '" href="' + esc(href) + '">'
-      +   '<div class="we-card-top">'
-      +     '<span class="we-card-rank">WORD · #' + rank + '</span>'
-      +     '<span class="we-card-status ' + statusCls + '">' + statusLabel + '</span>'
-      +   '</div>'
-      +   '<div class="we-card-label">' + label + '</div>'
-      +   '<div class="we-card-price-row">'
-      +     '<span class="we-card-yes ' + tier + '">' + esc(yes) + '</span>'
-      +     '<span class="we-card-yes-l' + yesLCls + '">' + yesL + '</span>'
-      +   '</div>'
-      +   '<div class="we-card-foot">'
-      +     '<span class="we-card-vol">' + esc(vol) + ' vol</span>'
-      // Social proof slot — hidden when no data backing (no whale /
-      // takes integration on word-markets yet). Hook point for when
-      // the data lands.
+      +   '<div class="we-card-label">' + esc(label || '—') + '</div>'
+      +   '<div class="we-card-metric">'
+      +     '<span class="we-card-yes' + yesCls + '">' + esc(yes) + '</span>'
+      +     '<span class="we-card-yes-l' + yesCls + '">' + esc(yesL) + '</span>'
+      +     '<span class="we-card-vol"><strong>' + esc(vol) + '</strong> vol</span>'
       +   '</div>'
       + '</a>';
   }
 
   function gridHtml(arr, kind) {
-    return '<div class="we-grid">' + arr.map((m, i) => marketCard(m, i, kind)).join('') + '</div>';
+    if (!arr.length) return '';
+    // Top card by volume in each group gets feature treatment
+    // (spans 2 grid columns on desktop) — Marc's spec: market-size
+    // hierarchy. Sorted by volume desc already (lib/word-markets).
+    return '<div class="we-grid">'
+      + arr.map((m, i) => marketCard(m, i, kind, i === 0 && arr.length >= 3)).join('')
+      + '</div>';
   }
 
   // ── Header countdown / resolved stamp ──
@@ -1090,92 +1062,126 @@ function renderWordEvent(ev) {
       + '</div>';
   } else if (isPast) {
     countdownHtml = '<div class="we-countdown">'
-      + '<span class="we-cd-digits resolved">RESOLVED</span>'
+      + '<span class="we-cd-digits resolved">Resolved</span>'
       + '<span class="we-cd-label">' + esc(fmtDate(endDate)) + '</span>'
       + '</div>';
   }
 
-  // ── Section blocks — only render the ones with content ──
+  // ── Editorial summary for past events (replaces gold-mono receipt
+  //    chips from PR #146). Serif italic lede + sans body that lists
+  //    SAID / NEVER words inline with brand-color highlight on each
+  //    word. Voice charter: factual, no editorial bravado — describe
+  //    what happened, let the reader form the opinion. ── */
+  let receiptSection = '';
+  if (isPast && resolved.length) {
+    const said  = wonMarkets.slice(0, 5).map(m => m.label || m.question || '');
+    const never = lostMarkets.slice(0, Math.max(0, 5 - said.length)).map(m => m.label || m.question || '');
+    const speakerLabel = ev.speaker ? esc(ev.speaker) : 'The speaker';
+    const monthLabel = endDate ? esc(fmtMonth(endDate)) : 'this';
+    const lede = speakerLabel + "'s " + monthLabel + " press conference.";
+
+    // Inline list with brand-color emphasis on each word.
+    const saidColored = said.length
+      ? said.map(w => '<span class="said-word">' + esc(titleCase(w)) + '</span>').join(', ')
+      : '';
+    const neverColored = never.length
+      ? never.map(w => '<span class="never-word">' + esc(titleCase(w)) + '</span>').join(', ')
+      : '';
+    let bodyParts = [];
+    if (saidColored)  bodyParts.push('He said ' + saidColored + '.');
+    if (neverColored) bodyParts.push('Never mentioned ' + neverColored + '.');
+    const bodyHtml = bodyParts.join(' ');
+
+    const signal = '<div class="we-receipt-signal"><strong>' + esc(volLabel) + '</strong> traded across <strong>' + markets.length + '</strong> word-market' + (markets.length === 1 ? '' : 's') + ' on Polymarket.</div>';
+
+    receiptSection = '<section class="we-receipt">'
+      + '<div class="we-receipt-lede">' + lede + '</div>'
+      + (bodyHtml ? '<div class="we-receipt-body">' + bodyHtml + '</div>' : '')
+      + signal
+      + '</section>';
+  }
+
+  // ── Section headers — conversational sans-serif, no monospace. ── */
   let openSection = '';
   if (open.length) {
-    openSection = '<h3 class="we-section-h primary"><span class="we-section-h-dot"></span>Open for trading<span class="we-section-count">' + open.length + ' market' + (open.length === 1 ? '' : 's') + '</span></h3>'
+    openSection = '<div class="we-section">'
+      + '<h2 class="live">Live word-markets</h2>'
+      + '<div class="we-section-sub">' + open.length + ' open · top market shown wider</div>'
+      + '</div>'
       + gridHtml(open, 'open');
   } else if (!isPast && pending.length) {
-    openSection = '<div class="empty-note">Sub-markets open closer to the event. ' + pending.length + ' pending activation.</div>';
+    openSection = '<div class="we-section">'
+      + '<h2 class="live">Live word-markets</h2>'
+      + '<div class="we-section-sub">Sub-markets open closer to the event. ' + pending.length + ' pending activation.</div>'
+      + '</div>';
   }
 
   let pendingSection = '';
   if (pending.length && open.length) {
-    pendingSection = '<h3 class="we-section-h"><span class="we-section-h-dot"></span>Pending activation<span class="we-section-count">' + pending.length + '</span></h3>'
+    pendingSection = '<div class="we-section">'
+      + '<h2>Pending activation</h2>'
+      + '<div class="we-section-sub">' + pending.length + ' markets list closer to the event.</div>'
+      + '</div>'
       + gridHtml(pending, 'pending');
   }
 
-  // Resolved markets split into Won / Lost — Marc's spec: scannable
-  // win-loss distribution at a glance. Won markets first (positive
-  // framing, gold treatment); Lost dimmer below.
-  const wonMarkets  = resolved.filter(m => Number(m.yes_price) >= 0.5);
-  const lostMarkets = resolved.filter(m => Number(m.yes_price) <  0.5);
   let resolvedSection = '';
   if (wonMarkets.length) {
-    resolvedSection += '<h3 class="we-section-h won"><span class="we-section-h-dot"></span>Said it<span class="we-section-count">' + wonMarkets.length + ' word' + (wonMarkets.length === 1 ? '' : 's') + '</span></h3>'
+    resolvedSection += '<div class="we-section">'
+      + '<h2 class="won">Said</h2>'
+      + '<div class="we-section-sub">' + wonMarkets.length + ' word' + (wonMarkets.length === 1 ? '' : 's') + ' confirmed</div>'
+      + '</div>'
       + gridHtml(wonMarkets, 'resolved');
   }
   if (lostMarkets.length) {
-    resolvedSection += '<h3 class="we-section-h lost"><span class="we-section-h-dot"></span>Never said it<span class="we-section-count">' + lostMarkets.length + ' word' + (lostMarkets.length === 1 ? '' : 's') + '</span></h3>'
+    resolvedSection += '<div class="we-section">'
+      + '<h2 class="lost">Didn\'t say</h2>'
+      + '<div class="we-section-sub">' + lostMarkets.length + ' word' + (lostMarkets.length === 1 ? '' : 's') + ' missing</div>'
+      + '</div>'
       + gridHtml(lostMarkets, 'resolved');
   }
 
-  // ── Receipt header (past events only). Marc's spec: lead with the
-  //    journalism moment — what actually happened, framed as news.
-  //    Chips show which words got said vs never said. Transcript word
-  //    counts (e.g. "INFLATION 60+") are filed for a follow-up PR
-  //    (requires speaker_word_frequency JOIN on the resolved markets).
-  let receiptSection = '';
-  if (isPast && resolved.length) {
-    const topSaid  = wonMarkets.slice(0, 6).map(m => esc((m.label || m.question || '?').toUpperCase()));
-    const topNever = lostMarkets.slice(0, Math.max(0, 6 - topSaid.length)).map(m => esc((m.label || m.question || '?').toUpperCase()));
-    const speaker = ev.speaker ? esc(ev.speaker).toUpperCase() : 'SPEAKER';
-    const dateLabel = endDate ? esc(fmtDate(endDate).toUpperCase()) : '';
-    let chipsHtml = '';
-    for (const w of topSaid)  chipsHtml += '<span class="we-receipt-chip said"><span class="we-receipt-word">' + w + '</span></span>';
-    for (const w of topNever) chipsHtml += '<span class="we-receipt-chip never">NEVER SAID <span class="we-receipt-word">' + w + '</span></span>';
-    if (chipsHtml) {
-      receiptSection = '<section class="we-receipt">'
-        + '<div class="we-receipt-h">' + speaker + "'S RECEIPT" + (dateLabel ? ' · ' + dateLabel : '') + '</div>'
-        + '<div class="we-receipt-chips">' + chipsHtml + '</div>'
-        + '</section>';
-    }
-  }
-
-  // ── "BE THE FIRST" CTA (past events only). Points readers at the
-  //    next upcoming event for this speaker so a resolved page still
-  //    funnels traffic forward. Speaker context, real winners
-  //    leaderboard, transcript-backed word-counts all filed for
-  //    follow-up.
+  // ── Footer CTA. Past events get the next-event hook; live events
+  //    skip it (countdown carries the forward energy). ──
   let ctaSection = '';
-  if (isPast) {
+  if (isPast && nextEvent && nextEvent.event_slug) {
+    const nextDate = nextEvent.end_date ? new Date(nextEvent.end_date) : null;
+    const nextCd   = nextDate ? fmtCountdown(nextDate) : null;
+    const nextMonth = nextDate ? fmtMonth(nextDate) : 'next';
+    const speakerLabel = ev.speaker ? esc(ev.speaker) : 'this speaker';
+    const bodyMsg = nextCd
+      ? 'The <span class="accent">' + esc(nextMonth) + '</span> event resolves in <span class="accent">' + esc(nextCd) + '</span>. Pick the words ' + speakerLabel + ' will say.'
+      : speakerLabel + "'s next event is live on Polymarket. Pick the words now.";
     ctaSection = '<aside class="we-cta">'
-      + '<div>'
-      +   '<div class="we-cta-h">Next event</div>'
-      +   '<div class="we-cta-body">Be the first to call ' + (ev.speaker ? esc(ev.speaker) + "'s" : 'the') + ' next press conference. Take a position on the live word-markets before resolution.</div>'
-      + '</div>'
+      + '<div class="we-cta-body">' + bodyMsg + '</div>'
+      + '<a class="we-cta-arrow" href="/event/' + encodeURIComponent(nextEvent.event_slug) + '">Pick now →</a>'
+      + '</aside>';
+  } else if (isPast) {
+    // No next event known — point at /mentions for any upcoming.
+    ctaSection = '<aside class="we-cta">'
+      + '<div class="we-cta-body">More word-markets resolve every month. Pick the next one.</div>'
       + '<a class="we-cta-arrow" href="/mentions">View upcoming →</a>'
       + '</aside>';
   }
 
+  // ── Header. Eyebrow = source + speaker, no chip. ── */
+  const eyebrow = '<div class="we-eyebrow' + (isPast ? ' resolved' : '') + '">'
+    + 'Polymarket · Mentions'
+    + (ev.speaker ? '<span class="we-eyebrow-sep">·</span><span class="we-eyebrow-speaker">' + esc(ev.speaker) + '</span>' : '')
+    + '</div>';
+  const meta = '<div class="we-meta">'
+    + '<span><strong>' + markets.length + '</strong> sub-market' + (markets.length === 1 ? '' : 's') + '</span>'
+    + '<span class="we-meta-sep">·</span>'
+    + '<span><strong>' + esc(volLabel) + '</strong> traded</span>'
+    + (isPast && endDate ? '<span class="we-meta-sep">·</span><span>Resolved ' + esc(fmtDate(endDate)) + '</span>' : '')
+    + '</div>';
+
   return `
     <header class="we-header">
       <div>
-        <div class="we-eyebrow">
-          <span class="we-eyebrow-chip${isPast ? ' resolved' : ''}">Polymarket · Mentions</span>
-          ${ev.speaker ? '<span>·</span><span>' + esc(ev.speaker) + '</span>' : ''}
-        </div>
+        ${eyebrow}
         <h1 class="we-title">${esc(title)}</h1>
-        <div class="we-meta">
-          <span><strong>${markets.length}</strong> sub-market${markets.length === 1 ? '' : 's'}</span>
-          <span><strong>${esc(volLabel)}</strong> traded</span>
-          ${isPast && endDate ? '<span>·</span><span>Resolved ' + esc(fmtDate(endDate)) + '</span>' : ''}
-        </div>
+        ${meta}
       </div>
       ${countdownHtml}
     </header>
@@ -1186,9 +1192,9 @@ function renderWordEvent(ev) {
     ${resolvedSection}
     ${ctaSection}
 
-    <footer style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">
-      <a href="/mentions" style="color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.4);padding-bottom:1px">← Back to events</a>
-      <span style="margin-left:16px">HYPERFLEX · resolver for Polymarket mentions</span>
+    <footer style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--sans);font-size:14px;color:var(--muted)">
+      <a href="/mentions" style="color:var(--cyan);font-weight:600">← Back to events</a>
+      <span style="margin-left:18px;color:var(--muted-2)">HYPERFLEX · resolver for Polymarket mentions</span>
     </footer>
   `;
 }
@@ -1252,7 +1258,7 @@ async function load() {
     // PR — keeping this one scoped to the rebuild's PR 3 minimum.
     if (data.mode === 'word_market' && data.word_event) {
       document.title = `${data.word_event.event_title} — HYPERFLEX`;
-      page.innerHTML = renderWordEvent(data.word_event);
+      page.innerHTML = renderWordEvent(data.word_event, data.next_event);
       return;
     }
 

@@ -15248,9 +15248,33 @@ app.get('/api/event/:slug', async (req, res) => {
       try {
         const wordEv = await wordMarkets.getWordMarketsByEventSlug(slug);
         if (wordEv && wordEv.is_language_event) {
+          // PR #147: attribute speaker from the event title so the
+          // detail page can label the receipt summary ("Powell
+          // delivered.") and look up the next upcoming event for
+          // the CTA. _attributeSpeaker matches the title against the
+          // whitelist; null means no tracked speaker found (rare
+          // for language events but possible).
+          const speakers = wordMarkets.DEFAULT_SPEAKERS;
+          const attributed = wordMarkets._internals._attributeSpeaker(
+            wordEv.event_title || '',
+            speakers
+          );
+          wordEv.speaker = attributed || null;
+
+          // For past events, include the speaker's next upcoming
+          // event so the CTA at the bottom can deep-link
+          // ("Pick the June event →"). Hidden when no future event
+          // exists for the speaker.
+          let nextEvent = null;
+          if (attributed) {
+            nextEvent = await wordMarkets.getNextUpcomingForSpeaker(attributed);
+            // Don't recommend the same event back to itself.
+            if (nextEvent && nextEvent.event_slug === slug) nextEvent = null;
+          }
           return res.json({
             mode: 'word_market',
             word_event: wordEv,
+            next_event: nextEvent,
           });
         }
       } catch (e) {
