@@ -133,6 +133,38 @@ a{color:inherit;text-decoration:none}
 .archive-divider{display:flex;align-items:center;gap:14px;margin:0 0 22px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase}
 .archive-divider::before,.archive-divider::after{content:"";flex:1;height:1px;background:rgba(0,212,255,0.18)}
 
+/* ── UPCOMING WORD-MARKET EVENTS (PR 2 — calendar-first rebuild) ── */
+.upcoming-events-list{display:flex;flex-direction:column;gap:8px}
+.event-row{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:16px 18px;background:rgba(255,255,255,0.025);border:1px solid var(--line);transition:border-color .15s,background .15s;cursor:pointer}
+.event-row:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04)}
+.event-row.expanded{border-color:var(--cyan)}
+.event-row-date{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px;padding:6px 10px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.25)}
+.event-row-date-month{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--cyan);text-transform:uppercase;font-weight:700}
+.event-row-date-day{font-family:var(--mono);font-size:22px;color:var(--ink);font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.event-row-date-dow{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+.event-row-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.event-row-title{font-family:var(--sans);font-size:16px;font-weight:700;color:var(--ink);line-height:1.3;letter-spacing:-0.005em}
+.event-row-meta{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.04em;display:flex;gap:14px;flex-wrap:wrap}
+.event-row-meta strong{color:var(--ink-2);font-weight:700}
+.event-row-cd{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--cyan);text-align:right;font-variant-numeric:tabular-nums;letter-spacing:0.02em;min-width:84px}
+.event-row-cd-label{font-family:var(--mono);font-size:9px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;font-weight:500;margin-top:2px}
+.event-row-children{grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:none}
+.event-row.expanded .event-row-children{display:grid}
+.event-child{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color .15s}
+.event-child:hover{border-color:var(--cyan)}
+.event-child-label{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--ink);line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.event-child-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.event-child-yes{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums}
+.event-child-yes.low{color:#FF6B4D}
+.event-child-yes.mid{color:var(--ink-2)}
+.event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
+.event-child-pending{font-family:var(--mono);font-size:9px;letter-spacing:0.12em;color:var(--muted-2);text-transform:uppercase}
+@media(max-width:600px){
+  .event-row{grid-template-columns:auto 1fr;gap:14px;padding:14px}
+  .event-row-cd{grid-column:1 / -1;text-align:left;min-width:0;margin-top:2px}
+  .event-row-meta{font-size:10px;gap:10px}
+}
+
 /* ── card grid ── */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 @media(max-width:1024px){.grid{grid-template-columns:repeat(2,1fr)}}
@@ -213,6 +245,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <!--HERO_HTML-->
 
 <main class="page" id="page">
+  <!-- Upcoming word-market events — PR 2 of mentions rescope.
+       Auto-hides when /api/word-markets/upcoming returns 0 events
+       (per voice charter: no playful empty surfaces). When
+       Polymarket has supply, this section renders calendar rows
+       above the posture archive. -->
+  <section id="upcoming-events" style="display:none;margin-bottom:36px">
+    <div class="archive-divider">Upcoming word-market events</div>
+    <div id="upcoming-events-list"></div>
+  </section>
+
   <div class="archive-divider">Recent posture archive</div>
 
   <div id="count-line" class="count-line" style="display:none"></div>
@@ -240,6 +282,171 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 </main>
 
 <script>
+// ── UPCOMING WORD-MARKET EVENTS (PR 2) ──
+// Consumes /api/word-markets/upcoming from lib/word-markets.js. Renders
+// calendar rows above the posture archive. Auto-hides section when
+// the endpoint returns 0 events (voice charter: no playful empty
+// surfaces). Self-contained — runs on its own DOM, doesn't touch the
+// existing archive state below.
+(function () {
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function fmtVolume(v) {
+    v = Number(v || 0);
+    if (!isFinite(v) || v <= 0) return '$0';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+  function fmtChance(p) {
+    if (p == null) return '—';
+    var v = Number(p);
+    if (!isFinite(v) || v < 0) return '—';
+    if (v > 1) v = v / 100;
+    var pct = v * 100;
+    if (pct >= 10) return Math.round(pct) + '%';
+    if (pct >= 1)  return Math.round(pct) + '¢';
+    if (pct > 0)   return pct.toFixed(1) + '¢';
+    return '0¢';
+  }
+  function yesCls(p) {
+    if (p == null) return 'mid';
+    var v = Number(p);
+    if (v > 1) v = v / 100;
+    if (v >= 0.6) return '';
+    if (v <= 0.4) return 'low';
+    return 'mid';
+  }
+  // Best-effort event date: gamma's `end_date` when present, otherwise
+  // parse the month name out of the event title (e.g. "June Press
+  // Conference" → mid-June assumed). FOMC pressers traditionally land
+  // on the 17th of the meeting month for our planning window; this is
+  // a heuristic that gets refined when end_date populates.
+  var MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  function eventDate(ev) {
+    if (ev.end_date) {
+      var t = Date.parse(ev.end_date);
+      if (isFinite(t)) return new Date(t);
+    }
+    var title = String(ev.event_title || '').toLowerCase();
+    var now = new Date();
+    for (var i = 0; i < MONTHS.length; i++) {
+      if (title.indexOf(MONTHS[i]) !== -1) {
+        var year = now.getFullYear();
+        // If month already passed this year, assume next year (Polymarket
+        // rarely lists more than 6mo out, but be defensive).
+        if (i < now.getMonth() - 1) year += 1;
+        return new Date(year, i, 17);  // FOMC heuristic
+      }
+    }
+    return null;
+  }
+  function fmtCountdown(d) {
+    if (!d) return null;
+    var ms = d.getTime() - Date.now();
+    if (ms <= 0) return { text: 'past', past: true };
+    var days = Math.floor(ms / 86400000);
+    var hours = Math.floor((ms % 86400000) / 3600000);
+    return { text: days + 'd ' + hours + 'h', past: false };
+  }
+  var DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  var MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+  function renderChildren(ev) {
+    var open = (ev.markets || []).filter(m => !m.closed && m.active !== false);
+    var pending = (ev.markets || []).filter(m => m.closed && m.active === false);
+    var rows = open.slice(0, 12).map(m => {
+      var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
+      var label = escHtml(m.label || m.question || '?');
+      var yes = fmtChance(m.yes_price);
+      var cls = yesCls(m.yes_price);
+      var vol = fmtVolume(m.volume);
+      return '<a class="event-child" href="' + escHtml(href) + '">'
+        +   '<div class="event-child-label">' + label + '</div>'
+        +   '<div class="event-child-row">'
+        +     '<span class="event-child-yes ' + cls + '">' + escHtml(yes) + ' YES</span>'
+        +     '<span class="event-child-vol">' + escHtml(vol) + '</span>'
+        +   '</div>'
+        + '</a>';
+    });
+    if (!open.length && pending.length) {
+      rows.push('<div class="event-child"><div class="event-child-label">Sub-markets open closer to the event.</div><div class="event-child-pending">' + pending.length + ' pending activation</div></div>');
+    }
+    return rows.join('');
+  }
+
+  function renderRow(ev) {
+    var d = eventDate(ev);
+    var cd = fmtCountdown(d);
+    // Filter out past events from the calendar — that's the archive's job.
+    if (cd && cd.past) return '';
+    var dateMonth = d ? MONTHS_SHORT[d.getMonth()] : 'TBD';
+    var dateDay   = d ? String(d.getDate()) : '—';
+    var dateDow   = d ? DOWS[d.getDay()] : '';
+    var title     = escHtml(ev.event_title || '(untitled event)');
+    var marketCount = (ev.markets || []).length;
+    var totalVol  = fmtVolume(ev.total_volume);
+    var cdText    = cd ? cd.text : '—';
+    return '<div class="event-row" data-event-slug="' + escHtml(ev.event_slug) + '">'
+      +   '<div class="event-row-date">'
+      +     '<span class="event-row-date-month">' + dateMonth + '</span>'
+      +     '<span class="event-row-date-day">' + dateDay + '</span>'
+      +     '<span class="event-row-date-dow">' + dateDow + '</span>'
+      +   '</div>'
+      +   '<div class="event-row-main">'
+      +     '<div class="event-row-title">' + title + '</div>'
+      +     '<div class="event-row-meta">'
+      +       '<span><strong>' + marketCount + '</strong> word-markets</span>'
+      +       '<span><strong>' + totalVol + '</strong> volume</span>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div>'
+      +     '<div class="event-row-cd">' + escHtml(cdText) + '</div>'
+      +     '<div class="event-row-cd-label">to event</div>'
+      +   '</div>'
+      +   '<div class="event-row-children">' + renderChildren(ev) + '</div>'
+      + '</div>';
+  }
+
+  function init() {
+    fetch('/api/word-markets/upcoming?limit=20', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        var events = (d && Array.isArray(d.events)) ? d.events : [];
+        var rows = events.map(renderRow).filter(Boolean);  // strips past-only events
+        if (!rows.length) return;  // section stays hidden
+        var section = document.getElementById('upcoming-events');
+        var list    = document.getElementById('upcoming-events-list');
+        if (!section || !list) return;
+        list.innerHTML = rows.join('');
+        section.style.display = 'block';
+        // Click-to-expand on each row. Children are anchors with their
+        // own navigation, so stop propagation when the click started
+        // inside a child link.
+        list.querySelectorAll('.event-row').forEach(row => {
+          row.addEventListener('click', function (e) {
+            var t = e.target;
+            while (t && t !== row) {
+              if (t.tagName === 'A') return;  // let the anchor handle nav
+              t = t.parentNode;
+            }
+            row.classList.toggle('expanded');
+          });
+        });
+      })
+      .catch(() => { /* fail silent, section stays hidden */ });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+
 const STATE = { events: [], typeFilter: 'all', speakerFilter: 'all', domainFilter: 'all', subjectFilter: 'all' };
 
 // Friendly labels for the Domain filter chips. Falls through to the
