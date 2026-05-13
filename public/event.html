@@ -911,10 +911,14 @@ function renderWordEvent(ev) {
       + '<div class="word-market-grid muted">' + resolved.map(marketCard).join('') + '</div>'
     : '';
 
-  // Speaker historical word-usage context (Phase 2c transcripts) ships
-  // in a follow-up PR — placeholder section preserves the layout
-  // without rendering empty playfulness per voice charter.
-  const contextHtml = '';
+  // Speaker historical word-usage context (Phase 2c transcripts).
+  // Placeholder DOM gets filled in by populateSpeakerContext() after
+  // first paint — keeps the initial render synchronous. Hidden until
+  // the fetch returns data (voice charter: no empty playful surfaces).
+  const contextHtml = (ev.speaker && open.length)
+    ? `<h3 class="section-h secondary" id="speaker-context-h" style="display:none">Speaker context · ${esc(ev.speaker)}'s transcript history</h3>
+       <div id="speaker-context-body" style="display:none"></div>`
+    : '';
 
   return `
     <div class="eyebrow">

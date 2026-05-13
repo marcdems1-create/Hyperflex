@@ -32561,6 +32561,59 @@ app.get('/api/word-markets/by-event/:event_slug', async (req, res) => {
   }
 });
 
+// GET /api/event-speaker-context/:speaker
+// Historical word-usage context for a speaker, sourced from the 51 Fed
+// transcripts (Phase 2c infrastructure). Consumed by /event/<slug>
+// detail pages to decorate live Polymarket word-betting markets with
+// "Powell said 'transitory' 0 times in his last 12 FOMC pressers" etc.
+// Returns the speaker's full word-frequency rollup keyed by word so the
+// client can match against each sub-market label without a second DB
+// round-trip per market.
+app.get('/api/event-speaker-context/:speaker', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    const speaker = String(req.params.speaker || '').trim();
+    if (!speaker) return res.status(400).json({ error: 'speaker required' });
+
+    // Total transcripts for this speaker — denominator for "N/M
+    // transcripts mentioned this word" framing.
+    const trxRow = await dbQuery(
+      'SELECT COUNT(*)::int AS total FROM transcripts WHERE speaker = $1',
+      [speaker]
+    ).catch(() => []);
+    const totalTranscripts = (trxRow[0] && trxRow[0].total) || 0;
+
+    const rows = await dbQuery(`
+      SELECT word, total_count, source_count
+        FROM speaker_word_frequency
+       WHERE speaker = $1
+       ORDER BY total_count DESC`, [speaker]).catch(() => []);
+
+    // Shape: { word → { total, sources } } so the renderer does O(1)
+    // lookup per sub-market label.
+    const words = {};
+    for (const r of rows) {
+      const w = String(r.word || '').toLowerCase();
+      if (!w) continue;
+      words[w] = {
+        total:   parseInt(r.total_count || 0, 10),
+        sources: parseInt(r.source_count || 0, 10),
+      };
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      speaker,
+      total_transcripts: totalTranscripts,
+      word_count:        Object.keys(words).length,
+      words,
+    });
+  } catch (e) {
+    console.error('[event-speaker-context]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/admin/word-markets/refresh — admin-gated cache bust + warm.
 app.post('/api/admin/word-markets/refresh', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
