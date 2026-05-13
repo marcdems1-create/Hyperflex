@@ -239,6 +239,64 @@ footer a{color:var(--cyan)}
 .event-child-yes.mid{color:var(--ink-2)}
 .event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 .empty-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:18px 0;line-height:1.6;margin-bottom:24px}
+
+/* ── PR #144 — word-market detail visual pass.
+   Inherits the alpha-card vocabulary from feed.html .feed-edge-card:
+   big-tier YES price, rank stamp, delta chip, dense tile grid. Tuned
+   to event.html's cyan/electric palette instead of feed's gold. ── */
+.we-header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;margin-bottom:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
+@media(max-width:640px){.we-header{grid-template-columns:1fr;gap:14px}}
+.we-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.we-eyebrow-chip{display:inline-block;padding:3px 10px;border:1px solid var(--line-strong);background:rgba(0,212,255,0.06);color:var(--cyan);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;font-weight:700}
+.we-eyebrow-chip.resolved{background:rgba(201,146,13,0.10);border-color:rgba(201,146,13,0.40);color:#c9920d}
+.we-title{font-family:var(--sans);font-weight:800;font-size:32px;line-height:1.08;letter-spacing:-0.015em;color:var(--ink);margin-bottom:12px}
+@media(max-width:640px){.we-title{font-size:24px}}
+.we-meta{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;flex-wrap:wrap}
+.we-meta strong{color:var(--ink-2);font-weight:800}
+.we-countdown{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;min-width:160px}
+@media(max-width:640px){.we-countdown{align-items:flex-start;text-align:left}}
+.we-cd-digits{font-family:var(--mono);font-weight:800;font-size:34px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums}
+.we-cd-digits.resolved{color:#c9920d;font-size:22px}
+.we-cd-label{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase}
+
+.we-section-h{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:32px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.we-section-h.primary{font-size:13px;color:var(--cyan);letter-spacing:0.2em;border-bottom-color:rgba(0,212,255,0.32);margin-top:8px}
+.we-section-h.resolved{color:#c9920d}
+.we-section-h-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 10px currentColor}
+.we-section-h.primary .we-section-h-dot{animation:we-pulse 1.6s infinite}
+@keyframes we-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.we-section-count{margin-left:auto;color:var(--muted-2);font-weight:600;letter-spacing:0.1em;font-size:10px}
+
+/* ── Edge cards — mirrors feed.html .feed-edge-card vocabulary ── */
+.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:32px}
+.we-card{background:rgba(22,22,40,0.65);border:1px solid var(--line);border-radius:12px;padding:14px 15px 13px;display:flex;flex-direction:column;gap:9px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s,box-shadow .15s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.we-card:hover{border-color:rgba(0,212,255,0.4);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.4);text-decoration:none}
+.we-card.rank-1{border-color:rgba(0,230,138,0.30);background:linear-gradient(180deg,rgba(0,230,138,0.06),rgba(22,22,40,0.7))}
+.we-card.rank-2{border-color:rgba(77,159,255,0.24)}
+.we-card.rank-3{border-color:rgba(168,85,247,0.24)}
+.we-card.muted{opacity:0.62}
+.we-card.muted:hover{opacity:0.8}
+.we-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.we-card-rank{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;padding:3px 7px;border:1px solid var(--line);background:rgba(255,255,255,0.025)}
+.we-card.rank-1 .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.40);background:rgba(0,230,138,0.08)}
+.we-card-status{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--muted-2);text-transform:uppercase;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.04)}
+.we-card-status.open{color:#00e68a;background:rgba(0,230,138,0.10)}
+.we-card-status.pending{color:#f59e0b;background:rgba(245,158,11,0.12)}
+.we-card-status.resolved{color:#c9920d;background:rgba(201,146,13,0.12)}
+.we-card-label{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink);line-height:1.25;letter-spacing:-0.005em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
+.we-card-price-row{display:flex;align-items:baseline;gap:8px;margin-top:auto;padding-top:6px}
+.we-card-yes{font-family:var(--mono);font-size:30px;font-weight:800;line-height:1;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+.we-card-yes.high{color:#00e68a}
+.we-card-yes.low{color:#FF6B4D}
+.we-card-yes.mid{color:var(--ink-2)}
+.we-card-yes.muted{color:var(--muted-2)}
+.we-card-yes-l{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase}
+.we-card-foot{display:flex;align-items:center;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted-2)}
+.we-card-vol{color:var(--ink-2)}
+.we-card-delta{margin-left:auto;font-weight:800;letter-spacing:0.04em}
+.we-card-delta.up{color:#00e68a}
+.we-card-delta.down{color:#FF6B4D}
+.we-card-delta.flat{color:var(--muted-2)}
 </style>
 </head>
 <body>
@@ -819,37 +877,29 @@ function renderPreview(p) {
   `;
 }
 
-// ── PR 3 (mention-pages rescope) ────────────────────────────────
+// ── PR 3 (mention-pages rescope) / PR #144 visual pass ─────────
 // Renders a Polymarket "Mentions" category event detail page.
 // Pulls from /api/word-markets/by-event/:slug via the API mode
-// branch. Sub-markets shown as a grid of cards; each links to the
-// /market/<slug> trade surface. Speaker historical word-usage
-// context (Phase 2c transcripts) is a follow-up PR.
+// branch. Sub-markets render as alpha-style cards with rank stamp,
+// big YES price, status flag, and volume — mirrors the feed-edge-card
+// vocabulary from public/feed.html so the visual rhythm matches the
+// Alpha cards trader rail.
 function renderWordEvent(ev) {
   const title = ev.event_title || '(Polymarket event)';
   const slug  = ev.event_slug || '';
   const endDate = ev.end_date ? new Date(ev.end_date) : null;
-  const totalVol = Number(ev.total_volume || 0);
 
-  // Countdown — best effort. Polymarket's end_date may be null while
-  // sub-markets are pending activation.
-  let cdText = '';
-  if (endDate && isFinite(endDate.getTime())) {
-    const ms = endDate.getTime() - Date.now();
-    if (ms > 0) {
-      const days = Math.floor(ms / 86400000);
-      const hours = Math.floor((ms % 86400000) / 3600000);
-      cdText = days + 'd ' + hours + 'h to event';
-    } else {
-      cdText = 'Event past';
-    }
-  }
-
-  // Categorise sub-markets — open, pending activation, resolved
+  // Categorise sub-markets first — bug fix from PR #144: closed
+  // markets are kept on resolved events now, so total volume + count
+  // reflect historical activity instead of zeros.
   const markets = Array.isArray(ev.markets) ? ev.markets : [];
-  const open    = markets.filter(m => !m.closed && m.active !== false);
-  const pending = markets.filter(m => m.closed && m.active === false);
+  const open     = markets.filter(m => !m.closed && m.active !== false);
+  const pending  = markets.filter(m => m.closed && m.active === false);
   const resolved = markets.filter(m => m.closed && m.active !== false);
+
+  // Recompute total_volume from sub-markets to bypass any stale
+  // server-side rollup that was 0 before the closed-filter fix.
+  const totalVol = markets.reduce((s, m) => s + (Number(m.volume) || 0), 0);
 
   const volLabel = totalVol >= 1e6 ? '$' + (totalVol / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
                  : totalVol >= 1e3 ? '$' + Math.round(totalVol / 1e3) + 'K'
@@ -866,11 +916,13 @@ function renderWordEvent(ev) {
     if (pct > 0)   return pct.toFixed(1) + '¢';
     return '0¢';
   }
-  function yesCls(p) {
+  function yesTier(p, isResolved) {
+    if (isResolved) return 'muted';
     if (p == null) return 'mid';
     let v = Number(p);
     if (v > 1) v = v / 100;
-    if (v >= 0.6) return '';
+    if (v >= 0.6) return 'high';
+    if (v <= 0.1) return 'low';
     if (v <= 0.4) return 'low';
     return 'mid';
   }
@@ -881,63 +933,159 @@ function renderWordEvent(ev) {
     if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
     return '$' + Math.round(v);
   }
+  function fmtDate(d) {
+    if (!d) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function fmtCountdown(d) {
+    if (!d) return null;
+    const ms = d.getTime() - Date.now();
+    if (ms <= 0) return null;
+    const days = Math.floor(ms / 86400000);
+    const hours = Math.floor((ms % 86400000) / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    // Show seconds only within last 48h, day counter only >30d.
+    if (days > 30) return days + 'd';
+    if (ms <= 48 * 3600000) return days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's';
+    return days + 'd ' + hours + 'h ' + minutes + 'm';
+  }
 
-  function marketCard(m) {
+  // ── Build a sub-market card in alpha-card vocabulary ──
+  // Rank stamp top-left. Big YES price center. Status flag top-right.
+  // Volume + label below. Borrows .feed-edge-card from feed.html.
+  function marketCard(m, idx, kind) {
     const href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
     const label = esc(m.label || m.question || '?');
     const yes = fmtChance(m.yes_price);
-    const cls = yesCls(m.yes_price);
+    const isResolved = kind === 'resolved';
+    const tier = yesTier(m.yes_price, isResolved);
     const vol = fmtVol(m.volume);
-    return '<a class="event-child" href="' + esc(href) + '">'
-      +   '<div class="event-child-label">' + label + '</div>'
-      +   '<div class="event-child-row">'
-      +     '<span class="event-child-yes ' + cls + '">' + esc(yes) + ' YES</span>'
-      +     '<span class="event-child-vol">' + esc(vol) + '</span>'
+    const rank = idx + 1;
+    const rankCls = rank <= 3 && kind === 'open' ? ' rank-' + rank : '';
+    const mutedCls = isResolved || kind === 'pending' ? ' muted' : '';
+    let statusLabel = 'OPEN';
+    let statusCls = 'open';
+    if (kind === 'pending') { statusLabel = 'PENDING'; statusCls = 'pending'; }
+    if (isResolved)         { statusLabel = 'RESOLVED'; statusCls = 'resolved'; }
+    const yesL = isResolved
+      ? (Number(m.yes_price) >= 0.5 ? 'YES WON' : 'YES LOST')
+      : 'YES';
+    return '<a class="we-card' + rankCls + mutedCls + '" href="' + esc(href) + '">'
+      +   '<div class="we-card-top">'
+      +     '<span class="we-card-rank">WORD · #' + rank + '</span>'
+      +     '<span class="we-card-status ' + statusCls + '">' + statusLabel + '</span>'
+      +   '</div>'
+      +   '<div class="we-card-label">' + label + '</div>'
+      +   '<div class="we-card-price-row">'
+      +     '<span class="we-card-yes ' + tier + '">' + esc(yes) + '</span>'
+      +     '<span class="we-card-yes-l">' + yesL + '</span>'
+      +   '</div>'
+      +   '<div class="we-card-foot">'
+      +     '<span class="we-card-vol">' + esc(vol) + ' vol</span>'
       +   '</div>'
       + '</a>';
   }
 
-  const openHtml = open.length
-    ? '<div class="word-market-grid">' + open.map(marketCard).join('') + '</div>'
-    : '<div class="empty-note">No sub-markets currently open for trading. ' + (pending.length ? pending.length + ' pending activation closer to the event.' : '') + '</div>';
+  function gridHtml(arr, kind) {
+    return '<div class="we-grid">' + arr.map((m, i) => marketCard(m, i, kind)).join('') + '</div>';
+  }
 
-  const pendingHtml = (pending.length && open.length)
-    ? '<h3 class="section-h secondary">Pending activation · ' + pending.length + '</h3>'
-      + '<div class="word-market-grid muted">' + pending.map(marketCard).join('') + '</div>'
-    : '';
+  // ── Header countdown / resolved stamp ──
+  const cdText = fmtCountdown(endDate);
+  const isPast = endDate && endDate.getTime() < Date.now();
+  let countdownHtml = '';
+  if (cdText) {
+    countdownHtml = '<div class="we-countdown">'
+      + '<span class="we-cd-digits" id="we-cd-digits" data-target="' + esc(endDate.toISOString()) + '">' + esc(cdText) + '</span>'
+      + '<span class="we-cd-label">until the event</span>'
+      + '</div>';
+  } else if (isPast) {
+    countdownHtml = '<div class="we-countdown">'
+      + '<span class="we-cd-digits resolved">RESOLVED</span>'
+      + '<span class="we-cd-label">' + esc(fmtDate(endDate)) + '</span>'
+      + '</div>';
+  }
 
-  const resolvedHtml = resolved.length
-    ? '<h3 class="section-h secondary">Resolved · ' + resolved.length + '</h3>'
-      + '<div class="word-market-grid muted">' + resolved.map(marketCard).join('') + '</div>'
-    : '';
+  // ── Section blocks — only render the ones with content ──
+  let openSection = '';
+  if (open.length) {
+    openSection = '<h3 class="we-section-h primary"><span class="we-section-h-dot"></span>Open for trading<span class="we-section-count">' + open.length + ' market' + (open.length === 1 ? '' : 's') + '</span></h3>'
+      + gridHtml(open, 'open');
+  } else if (!isPast && pending.length) {
+    openSection = '<div class="empty-note">Sub-markets open closer to the event. ' + pending.length + ' pending activation.</div>';
+  }
 
-  // Speaker historical word-usage context (Phase 2c transcripts) ships
-  // in a follow-up PR — placeholder section preserves the layout
-  // without rendering empty playfulness per voice charter.
-  const contextHtml = '';
+  let pendingSection = '';
+  if (pending.length && open.length) {
+    pendingSection = '<h3 class="we-section-h"><span class="we-section-h-dot"></span>Pending activation<span class="we-section-count">' + pending.length + '</span></h3>'
+      + gridHtml(pending, 'pending');
+  }
+
+  let resolvedSection = '';
+  if (resolved.length) {
+    resolvedSection = '<h3 class="we-section-h resolved"><span class="we-section-h-dot"></span>Resolved<span class="we-section-count">' + resolved.length + '</span></h3>'
+      + gridHtml(resolved, 'resolved');
+  }
 
   return `
-    <div class="eyebrow">
-      <span class="event-type-chip">Polymarket · Mentions</span>
-      ${cdText ? '<span class="sep">·</span><span>' + esc(cdText) + '</span>' : ''}
-    </div>
-    <h1 class="headline">${esc(title)}</h1>
-    <div class="subhead">
-      ${markets.length} sub-market${markets.length === 1 ? '' : 's'} · ${esc(volLabel)} traded volume
-      ${ev.speaker ? ' · ' + esc(ev.speaker) : ''}
-    </div>
+    <header class="we-header">
+      <div>
+        <div class="we-eyebrow">
+          <span class="we-eyebrow-chip${isPast ? ' resolved' : ''}">Polymarket · Mentions</span>
+          ${ev.speaker ? '<span>·</span><span>' + esc(ev.speaker) + '</span>' : ''}
+        </div>
+        <h1 class="we-title">${esc(title)}</h1>
+        <div class="we-meta">
+          <span><strong>${markets.length}</strong> sub-market${markets.length === 1 ? '' : 's'}</span>
+          <span><strong>${esc(volLabel)}</strong> traded</span>
+          ${isPast && endDate ? '<span>·</span><span>Resolved ' + esc(fmtDate(endDate)) + '</span>' : ''}
+        </div>
+      </div>
+      ${countdownHtml}
+    </header>
 
-    <h3 class="section-h primary">Open for trading · ${open.length}</h3>
-    ${openHtml}
-    ${pendingHtml}
-    ${resolvedHtml}
-    ${contextHtml}
+    ${openSection}
+    ${pendingSection}
+    ${resolvedSection}
 
-    <footer style="margin-top:48px">
-      <span>HYPERFLEX · resolver for Polymarket mentions · <a href="/mentions" style="color:var(--cyan)">← Back to events</a></span>
+    <footer style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">
+      <a href="/mentions" style="color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.4);padding-bottom:1px">← Back to events</a>
+      <span style="margin-left:16px">HYPERFLEX · resolver for Polymarket mentions</span>
     </footer>
   `;
 }
+
+// ── Countdown ticker for the word-event header ──
+// Mirrors the Warsh hero countdown on /mentions (#hero-cd-digits) —
+// updates the we-cd-digits node every second while the page is open.
+// Within 48h shows seconds; beyond 30d shows day counter only.
+function _weCountdownTick() {
+  const el = document.getElementById('we-cd-digits');
+  if (!el) return;
+  const targetIso = el.dataset.target;
+  if (!targetIso) return;
+  const target = new Date(targetIso);
+  if (!isFinite(target.getTime())) return;
+  const ms = target.getTime() - Date.now();
+  if (ms <= 0) {
+    el.textContent = 'RESOLVED';
+    el.classList.add('resolved');
+    return;
+  }
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  if (days > 30) {
+    el.textContent = days + 'd';
+  } else if (ms <= 48 * 3600000) {
+    el.textContent = days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's';
+  } else {
+    el.textContent = days + 'd ' + hours + 'h ' + minutes + 'm';
+  }
+}
+setInterval(_weCountdownTick, 1000);
 
 async function load() {
   const page = document.getElementById('page');
