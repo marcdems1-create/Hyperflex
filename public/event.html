@@ -240,10 +240,16 @@ footer a{color:var(--cyan)}
 .event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 .empty-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:18px 0;line-height:1.6;margin-bottom:24px}
 
-/* ── PR #144 — word-market detail visual pass.
-   Inherits the alpha-card vocabulary from feed.html .feed-edge-card:
-   big-tier YES price, rank stamp, delta chip, dense tile grid. Tuned
-   to event.html's cyan/electric palette instead of feed's gold. ── */
+/* ── PR #146 — word-market detail visual PUNCH.
+   Iteration on PR #144's vocabulary. Previous pass shipped structure
+   but lacked saturation — every card looked the same. This pass adds:
+     - 48px YES price (number is now the loudest thing on the card)
+     - WIN green / LOSS red border + bg tint on resolved cards
+     - Hover lift + glow with directional color
+     - ✓ WON / ✗ LOST stamps recolored
+     - Receipt header for past events
+     - "BE THE FIRST" CTA at bottom of past events
+*/
 .we-header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;margin-bottom:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
 @media(max-width:640px){.we-header{grid-template-columns:1fr;gap:14px}}
 .we-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -255,48 +261,110 @@ footer a{color:var(--cyan)}
 .we-meta strong{color:var(--ink-2);font-weight:800}
 .we-countdown{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;min-width:160px}
 @media(max-width:640px){.we-countdown{align-items:flex-start;text-align:left}}
-.we-cd-digits{font-family:var(--mono);font-weight:800;font-size:34px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums}
-.we-cd-digits.resolved{color:#c9920d;font-size:22px}
+.we-cd-digits{font-family:var(--mono);font-weight:800;font-size:34px;color:var(--cyan);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums;text-shadow:0 0 28px rgba(0,212,255,0.35)}
+.we-cd-digits.resolved{color:#c9920d;font-size:22px;text-shadow:0 0 18px rgba(201,146,13,0.30)}
 .we-cd-label{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase}
 
-.we-section-h{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:32px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
-.we-section-h.primary{font-size:13px;color:var(--cyan);letter-spacing:0.2em;border-bottom-color:rgba(0,212,255,0.32);margin-top:8px}
-.we-section-h.resolved{color:#c9920d}
-.we-section-h-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 10px currentColor}
+/* ── PR #146 receipt header: "POWELL'S RECEIPT · MAY 14, 2026"
+     Gold-accent line, chip grid below. Past events only. ── */
+.we-receipt{background:linear-gradient(135deg,rgba(201,146,13,0.10),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.32);border-radius:8px;padding:20px 22px;margin-bottom:32px}
+.we-receipt-h{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12px;letter-spacing:0.22em;color:#c9920d;text-transform:uppercase;font-weight:800;margin-bottom:14px}
+.we-receipt-h::before{content:"";width:8px;height:8px;background:#c9920d;border-radius:50%;box-shadow:0 0 12px rgba(201,146,13,0.7)}
+.we-receipt-chips{display:flex;flex-wrap:wrap;gap:8px}
+.we-receipt-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:6px;font-family:var(--mono);font-size:13px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;border:1px solid}
+.we-receipt-chip.said{color:#00e68a;background:rgba(0,230,138,0.10);border-color:rgba(0,230,138,0.32)}
+.we-receipt-chip.said::before{content:"✓";font-weight:900}
+.we-receipt-chip.never{color:#ff7a8e;background:rgba(255,77,106,0.08);border-color:rgba(255,77,106,0.28)}
+.we-receipt-chip.never::before{content:"✗";font-weight:900;opacity:0.7}
+.we-receipt-chip.never .we-receipt-word{text-decoration:line-through;opacity:0.85}
+
+.we-section-h{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin:32px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.we-section-h.primary{font-size:14px;color:var(--cyan);letter-spacing:0.2em;border-bottom-color:rgba(0,212,255,0.32);margin-top:8px;text-shadow:0 0 18px rgba(0,212,255,0.30)}
+.we-section-h.won{color:#00e68a;border-bottom-color:rgba(0,230,138,0.32)}
+.we-section-h.lost{color:#ff7a8e;border-bottom-color:rgba(255,77,106,0.28)}
+.we-section-h-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 12px currentColor}
 .we-section-h.primary .we-section-h-dot{animation:we-pulse 1.6s infinite}
-@keyframes we-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes we-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(0.85)}}
 .we-section-count{margin-left:auto;color:var(--muted-2);font-weight:600;letter-spacing:0.1em;font-size:10px}
 
-/* ── Edge cards — mirrors feed.html .feed-edge-card vocabulary ── */
-.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:32px}
-.we-card{background:rgba(22,22,40,0.65);border:1px solid var(--line);border-radius:12px;padding:14px 15px 13px;display:flex;flex-direction:column;gap:9px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s,box-shadow .15s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-.we-card:hover{border-color:rgba(0,212,255,0.4);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.4);text-decoration:none}
-.we-card.rank-1{border-color:rgba(0,230,138,0.30);background:linear-gradient(180deg,rgba(0,230,138,0.06),rgba(22,22,40,0.7))}
-.we-card.rank-2{border-color:rgba(77,159,255,0.24)}
-.we-card.rank-3{border-color:rgba(168,85,247,0.24)}
-.we-card.muted{opacity:0.62}
-.we-card.muted:hover{opacity:0.8}
+/* ── PR #146 cards — louder, depthier, win/loss saturated ── */
+.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:36px}
+.we-card{
+  position:relative;
+  background:linear-gradient(180deg,rgba(28,28,48,0.85),rgba(14,14,28,0.75));
+  border:1px solid var(--line);border-radius:14px;
+  padding:18px 18px 16px;
+  display:flex;flex-direction:column;gap:11px;
+  text-decoration:none;color:inherit;
+  transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  overflow:hidden;
+}
+.we-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;transition:background .18s ease}
+.we-card:hover{transform:translateY(-3px) scale(1.005);text-decoration:none}
+.we-card:hover{border-color:rgba(0,212,255,0.45);box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 24px rgba(0,212,255,0.10)}
+
+/* Open-section rank tints (top-3 within an event's open markets) */
+.we-card.rank-1{border-color:rgba(0,230,138,0.35);background:linear-gradient(180deg,rgba(0,230,138,0.10),rgba(14,14,28,0.78))}
+.we-card.rank-1::before{background:#00e68a}
+.we-card.rank-1:hover{box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 28px rgba(0,230,138,0.20)}
+.we-card.rank-2{border-color:rgba(77,159,255,0.28)}
+.we-card.rank-2::before{background:#4d9fff}
+.we-card.rank-3{border-color:rgba(168,85,247,0.28)}
+.we-card.rank-3::before{background:#a855f7}
+
+/* WIN / LOSS treatment for resolved cards. Replaces .muted from PR #144. */
+.we-card.won{border-color:rgba(0,230,138,0.36);background:linear-gradient(180deg,rgba(0,230,138,0.08),rgba(14,14,28,0.80))}
+.we-card.won::before{background:#00e68a}
+.we-card.won:hover{box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 28px rgba(0,230,138,0.22)}
+.we-card.lost{border-color:rgba(255,77,106,0.24);background:linear-gradient(180deg,rgba(255,77,106,0.05),rgba(14,14,28,0.80));opacity:0.78}
+.we-card.lost::before{background:rgba(255,77,106,0.5)}
+.we-card.lost:hover{opacity:0.95;box-shadow:0 14px 36px rgba(0,0,0,0.55),0 0 22px rgba(255,77,106,0.15)}
+.we-card.pending{opacity:0.62}
+.we-card.pending:hover{opacity:0.85}
+
 .we-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.we-card-rank{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;padding:3px 7px;border:1px solid var(--line);background:rgba(255,255,255,0.025)}
-.we-card.rank-1 .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.40);background:rgba(0,230,138,0.08)}
-.we-card-status{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--muted-2);text-transform:uppercase;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.04)}
-.we-card-status.open{color:#00e68a;background:rgba(0,230,138,0.10)}
-.we-card-status.pending{color:#f59e0b;background:rgba(245,158,11,0.12)}
-.we-card-status.resolved{color:#c9920d;background:rgba(201,146,13,0.12)}
-.we-card-label{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink);line-height:1.25;letter-spacing:-0.005em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
-.we-card-price-row{display:flex;align-items:baseline;gap:8px;margin-top:auto;padding-top:6px}
-.we-card-yes{font-family:var(--mono);font-size:30px;font-weight:800;line-height:1;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
-.we-card-yes.high{color:#00e68a}
-.we-card-yes.low{color:#FF6B4D}
-.we-card-yes.mid{color:var(--ink-2)}
-.we-card-yes.muted{color:var(--muted-2)}
-.we-card-yes-l{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase}
-.we-card-foot{display:flex;align-items:center;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted-2)}
+.we-card-rank{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;padding:3px 8px;border:1px solid var(--line);background:rgba(255,255,255,0.025);border-radius:3px}
+.we-card.rank-1 .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.45);background:rgba(0,230,138,0.10)}
+.we-card.rank-2 .we-card-rank{color:#4d9fff;border-color:rgba(77,159,255,0.35);background:rgba(77,159,255,0.08)}
+.we-card.rank-3 .we-card-rank{color:#a855f7;border-color:rgba(168,85,247,0.35);background:rgba(168,85,247,0.08)}
+.we-card.won .we-card-rank{color:#00e68a;border-color:rgba(0,230,138,0.40);background:rgba(0,230,138,0.10)}
+.we-card.lost .we-card-rank{color:rgba(255,154,170,0.85);border-color:rgba(255,77,106,0.30);background:rgba(255,77,106,0.06)}
+
+.we-card-status{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;padding:3px 8px;border-radius:3px;display:inline-flex;align-items:center;gap:4px}
+.we-card-status.open{color:#00e68a;background:rgba(0,230,138,0.14);box-shadow:inset 0 0 0 1px rgba(0,230,138,0.30)}
+.we-card-status.pending{color:#f59e0b;background:rgba(245,158,11,0.14);box-shadow:inset 0 0 0 1px rgba(245,158,11,0.30)}
+.we-card-status.won{color:#00e68a;background:rgba(0,230,138,0.16);box-shadow:inset 0 0 0 1px rgba(0,230,138,0.45)}
+.we-card-status.lost{color:#ff9aaa;background:rgba(255,77,106,0.10);box-shadow:inset 0 0 0 1px rgba(255,77,106,0.32)}
+
+/* TITLE smaller than number — Marc's spec: number > title. */
+.we-card-label{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--ink-2);line-height:1.3;letter-spacing:-0.005em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.we-card.won .we-card-label,.we-card.rank-1 .we-card-label{color:var(--ink)}
+
+/* PRICE — the loudest thing on the card. 48px, brand-saturated. */
+.we-card-price-row{display:flex;align-items:baseline;gap:10px;margin-top:auto;padding-top:6px}
+.we-card-yes{font-family:var(--mono);font-size:48px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.025em;color:var(--cyan);text-shadow:0 0 18px rgba(0,212,255,0.25)}
+.we-card-yes.high{color:#00e68a;text-shadow:0 0 22px rgba(0,230,138,0.36)}
+.we-card-yes.low{color:#FF6B4D;text-shadow:0 0 18px rgba(255,107,77,0.28)}
+.we-card-yes.mid{color:var(--ink-2);text-shadow:none}
+.we-card-yes.won{color:#00e68a;text-shadow:0 0 26px rgba(0,230,138,0.45)}
+.we-card-yes.lost{color:#ff7a8e;text-shadow:0 0 14px rgba(255,77,106,0.22);opacity:0.85}
+.we-card-yes.muted{color:var(--muted-2);text-shadow:none}
+.we-card-yes-l{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;padding-bottom:3px}
+.we-card-yes-l.won{color:#00e68a}
+.we-card-yes-l.lost{color:#ff7a8e}
+
+.we-card-foot{display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted-2);letter-spacing:0.04em}
 .we-card-vol{color:var(--ink-2)}
-.we-card-delta{margin-left:auto;font-weight:800;letter-spacing:0.04em}
-.we-card-delta.up{color:#00e68a}
-.we-card-delta.down{color:#FF6B4D}
-.we-card-delta.flat{color:var(--muted-2)}
+.we-card-social{margin-left:auto;color:var(--muted);font-size:9px;letter-spacing:0.1em;text-transform:uppercase}
+
+/* BE THE FIRST CTA — bottom of past events, points at next upcoming. */
+.we-cta{margin:36px 0 8px;padding:28px 32px;background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(0,212,255,0.01));border:1px solid rgba(0,212,255,0.32);border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.we-cta-h{font-family:var(--mono);font-size:11px;letter-spacing:0.24em;color:var(--cyan);text-transform:uppercase;font-weight:800;margin-bottom:6px}
+.we-cta-body{font-family:var(--sans);font-size:17px;font-weight:700;color:var(--ink);line-height:1.3;letter-spacing:-0.005em;max-width:520px}
+.we-cta-arrow{font-family:var(--mono);font-size:14px;font-weight:800;letter-spacing:0.16em;color:var(--cyan);text-transform:uppercase;padding:14px 22px;border:1px solid var(--cyan);background:rgba(0,212,255,0.06);text-decoration:none;transition:background .15s,transform .15s;flex-shrink:0}
+.we-cta-arrow:hover{background:rgba(0,212,255,0.18);transform:translateX(2px)}
+@media(max-width:640px){.we-cta{flex-direction:column;align-items:flex-start;padding:22px}.we-cta-arrow{width:100%;text-align:center}}
 </style>
 </head>
 <body>
@@ -959,19 +1027,36 @@ function renderWordEvent(ev) {
     const label = esc(m.label || m.question || '?');
     const yes = fmtChance(m.yes_price);
     const isResolved = kind === 'resolved';
-    const tier = yesTier(m.yes_price, isResolved);
+    const isPending  = kind === 'pending';
+    const yesNum = Number(m.yes_price);
+    const won  = isResolved && isFinite(yesNum) && yesNum >= 0.5;
+    const lost = isResolved && isFinite(yesNum) && yesNum < 0.5;
     const vol = fmtVol(m.volume);
     const rank = idx + 1;
-    const rankCls = rank <= 3 && kind === 'open' ? ' rank-' + rank : '';
-    const mutedCls = isResolved || kind === 'pending' ? ' muted' : '';
-    let statusLabel = 'OPEN';
-    let statusCls = 'open';
-    if (kind === 'pending') { statusLabel = 'PENDING'; statusCls = 'pending'; }
-    if (isResolved)         { statusLabel = 'RESOLVED'; statusCls = 'resolved'; }
-    const yesL = isResolved
-      ? (Number(m.yes_price) >= 0.5 ? 'YES WON' : 'YES LOST')
-      : 'YES';
-    return '<a class="we-card' + rankCls + mutedCls + '" href="' + esc(href) + '">'
+
+    // Card class composition: rank tints on open top-3; won/lost on
+    // resolved; pending for placeholder children.
+    let cardCls = '';
+    if (kind === 'open' && rank <= 3) cardCls = ' rank-' + rank;
+    else if (won)  cardCls = ' won';
+    else if (lost) cardCls = ' lost';
+    else if (isPending) cardCls = ' pending';
+
+    // Tier of the big number — won/lost override the open tier curve.
+    let tier;
+    if (won)        tier = 'won';
+    else if (lost)  tier = 'lost';
+    else if (isPending) tier = 'muted';
+    else            tier = yesTier(m.yes_price, false);
+
+    // Status flag + YES sub-label.
+    let statusLabel, statusCls, yesL, yesLCls = '';
+    if (won)        { statusLabel = '✓ WON';  statusCls = 'won';     yesL = 'YES WON';   yesLCls = ' won'; }
+    else if (lost)  { statusLabel = '✗ LOST'; statusCls = 'lost';    yesL = 'YES LOST';  yesLCls = ' lost'; }
+    else if (isPending) { statusLabel = 'PENDING'; statusCls = 'pending'; yesL = 'YES'; }
+    else            { statusLabel = 'LIVE';   statusCls = 'open';    yesL = 'YES'; }
+
+    return '<a class="we-card' + cardCls + '" href="' + esc(href) + '">'
       +   '<div class="we-card-top">'
       +     '<span class="we-card-rank">WORD · #' + rank + '</span>'
       +     '<span class="we-card-status ' + statusCls + '">' + statusLabel + '</span>'
@@ -979,10 +1064,13 @@ function renderWordEvent(ev) {
       +   '<div class="we-card-label">' + label + '</div>'
       +   '<div class="we-card-price-row">'
       +     '<span class="we-card-yes ' + tier + '">' + esc(yes) + '</span>'
-      +     '<span class="we-card-yes-l">' + yesL + '</span>'
+      +     '<span class="we-card-yes-l' + yesLCls + '">' + yesL + '</span>'
       +   '</div>'
       +   '<div class="we-card-foot">'
       +     '<span class="we-card-vol">' + esc(vol) + ' vol</span>'
+      // Social proof slot — hidden when no data backing (no whale /
+      // takes integration on word-markets yet). Hook point for when
+      // the data lands.
       +   '</div>'
       + '</a>';
   }
@@ -1022,10 +1110,57 @@ function renderWordEvent(ev) {
       + gridHtml(pending, 'pending');
   }
 
+  // Resolved markets split into Won / Lost — Marc's spec: scannable
+  // win-loss distribution at a glance. Won markets first (positive
+  // framing, gold treatment); Lost dimmer below.
+  const wonMarkets  = resolved.filter(m => Number(m.yes_price) >= 0.5);
+  const lostMarkets = resolved.filter(m => Number(m.yes_price) <  0.5);
   let resolvedSection = '';
-  if (resolved.length) {
-    resolvedSection = '<h3 class="we-section-h resolved"><span class="we-section-h-dot"></span>Resolved<span class="we-section-count">' + resolved.length + '</span></h3>'
-      + gridHtml(resolved, 'resolved');
+  if (wonMarkets.length) {
+    resolvedSection += '<h3 class="we-section-h won"><span class="we-section-h-dot"></span>Said it<span class="we-section-count">' + wonMarkets.length + ' word' + (wonMarkets.length === 1 ? '' : 's') + '</span></h3>'
+      + gridHtml(wonMarkets, 'resolved');
+  }
+  if (lostMarkets.length) {
+    resolvedSection += '<h3 class="we-section-h lost"><span class="we-section-h-dot"></span>Never said it<span class="we-section-count">' + lostMarkets.length + ' word' + (lostMarkets.length === 1 ? '' : 's') + '</span></h3>'
+      + gridHtml(lostMarkets, 'resolved');
+  }
+
+  // ── Receipt header (past events only). Marc's spec: lead with the
+  //    journalism moment — what actually happened, framed as news.
+  //    Chips show which words got said vs never said. Transcript word
+  //    counts (e.g. "INFLATION 60+") are filed for a follow-up PR
+  //    (requires speaker_word_frequency JOIN on the resolved markets).
+  let receiptSection = '';
+  if (isPast && resolved.length) {
+    const topSaid  = wonMarkets.slice(0, 6).map(m => esc((m.label || m.question || '?').toUpperCase()));
+    const topNever = lostMarkets.slice(0, Math.max(0, 6 - topSaid.length)).map(m => esc((m.label || m.question || '?').toUpperCase()));
+    const speaker = ev.speaker ? esc(ev.speaker).toUpperCase() : 'SPEAKER';
+    const dateLabel = endDate ? esc(fmtDate(endDate).toUpperCase()) : '';
+    let chipsHtml = '';
+    for (const w of topSaid)  chipsHtml += '<span class="we-receipt-chip said"><span class="we-receipt-word">' + w + '</span></span>';
+    for (const w of topNever) chipsHtml += '<span class="we-receipt-chip never">NEVER SAID <span class="we-receipt-word">' + w + '</span></span>';
+    if (chipsHtml) {
+      receiptSection = '<section class="we-receipt">'
+        + '<div class="we-receipt-h">' + speaker + "'S RECEIPT" + (dateLabel ? ' · ' + dateLabel : '') + '</div>'
+        + '<div class="we-receipt-chips">' + chipsHtml + '</div>'
+        + '</section>';
+    }
+  }
+
+  // ── "BE THE FIRST" CTA (past events only). Points readers at the
+  //    next upcoming event for this speaker so a resolved page still
+  //    funnels traffic forward. Speaker context, real winners
+  //    leaderboard, transcript-backed word-counts all filed for
+  //    follow-up.
+  let ctaSection = '';
+  if (isPast) {
+    ctaSection = '<aside class="we-cta">'
+      + '<div>'
+      +   '<div class="we-cta-h">Next event</div>'
+      +   '<div class="we-cta-body">Be the first to call ' + (ev.speaker ? esc(ev.speaker) + "'s" : 'the') + ' next press conference. Take a position on the live word-markets before resolution.</div>'
+      + '</div>'
+      + '<a class="we-cta-arrow" href="/mentions">View upcoming →</a>'
+      + '</aside>';
   }
 
   return `
@@ -1045,9 +1180,11 @@ function renderWordEvent(ev) {
       ${countdownHtml}
     </header>
 
+    ${receiptSection}
     ${openSection}
     ${pendingSection}
     ${resolvedSection}
+    ${ctaSection}
 
     <footer style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">
       <a href="/mentions" style="color:var(--cyan);border-bottom:1px dotted rgba(0,212,255,0.4);padding-bottom:1px">← Back to events</a>
