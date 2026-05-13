@@ -38259,15 +38259,21 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // Pull full trade history. /activity returns BUY/SELL events with
   // conditionId, outcome (YES/NO), side, size (shares), price, timestamp.
   let trades = [];
+  let fetchHttpStatus = null;
+  let fetchError = null;
+  console.log(`[backfill] fetching activity for proxy=${proxyLower} (user=${userId.slice(0,8)})`);
   try {
     const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxyLower}&limit=500&type=TRADE`, { headers: { Accept: 'application/json' } });
+    fetchHttpStatus = r.status;
     if (r.ok) {
       const j = await r.json();
       trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
     }
   } catch (e) {
+    fetchError = e.message;
     console.warn('[backfillRealizedTrades] /activity fetch failed:', e.message);
   }
+  console.log(`[backfill] got trades=${trades.length} status=${fetchHttpStatus} error=${fetchError || 'none'} for proxy=${proxyLower}`);
   if (!trades.length) {
     console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} no_activity`);
     return { imported: 0, scanned: 0 };
@@ -38631,7 +38637,11 @@ async function runWhaleBackfillBatch() {
 // (7 ticks). Subsequent ticks only pick up new whales added by
 // ensureWhaleProfile (which also fires its own instant backfill) plus
 // any retry from the proxy-derivation failures.
+// Per Marc's directive: every cron logs its fire time. Visibility before
+// the function runs so we see the tick happened even when the function
+// short-circuits on `already_running` or `admin_seed_running` locks.
 cron.schedule('0 */6 * * *', () => {
+  console.log(`[whale-backfill] cron fired at ${new Date().toISOString()}`);
   runWhaleBackfillBatch().catch(e => console.error('[whale-backfill] cron error:', e.message));
 });
 
@@ -38937,6 +38947,12 @@ app.post('/api/admin/realized-trades/seed', async (req, res) => {
           _seedProgress.last_error = `proxy_derivation_failed for ${u.id.slice(0, 8)} (eoa=${u.polymarket_address.slice(0, 10)})`;
           console.warn('[seed]', u.id.slice(0, 8), 'proxy derivation returned null — see [derivePolymarketProxy] log above for RPC failure detail');
           continue;
+        }
+        if (scope === 'whales') {
+          // Per-iter diag for whale-scope runs. Triangulates EOA vs derived
+          // proxy and proves the loop body is reaching the backfill call.
+          // Quiet on default scope to avoid log floods on large seed runs.
+          console.log(`[seed-whales] iter user=${u.id.slice(0, 8)} addr=${u.polymarket_address} derived_proxy=${proxy}`);
         }
         const r = await backfillRealizedTrades(u.id, u.polymarket_address, proxy);
         _seedProgress.users_processed++;
