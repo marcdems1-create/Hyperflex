@@ -226,6 +226,19 @@ footer a{color:var(--cyan)}
 #loading{padding:80px 0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.18em;text-transform:uppercase}
 #err{padding:80px 0;text-align:center;font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2)}
 #err small{display:block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;font-style:normal}
+
+/* ── PR 3 (mention-pages rescope) word-market detail surface ── */
+.word-market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:28px}
+.word-market-grid.muted{opacity:0.72}
+.event-child{display:flex;flex-direction:column;gap:6px;padding:12px 14px;background:rgba(255,255,255,0.025);border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color .15s,background .15s}
+.event-child:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04)}
+.event-child-label{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--ink);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.event-child-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:auto}
+.event-child-yes{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums}
+.event-child-yes.low{color:#FF6B4D}
+.event-child-yes.mid{color:var(--ink-2)}
+.event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
+.empty-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:18px 0;line-height:1.6;margin-bottom:24px}
 </style>
 </head>
 <body>
@@ -806,6 +819,126 @@ function renderPreview(p) {
   `;
 }
 
+// ── PR 3 (mention-pages rescope) ────────────────────────────────
+// Renders a Polymarket "Mentions" category event detail page.
+// Pulls from /api/word-markets/by-event/:slug via the API mode
+// branch. Sub-markets shown as a grid of cards; each links to the
+// /market/<slug> trade surface. Speaker historical word-usage
+// context (Phase 2c transcripts) is a follow-up PR.
+function renderWordEvent(ev) {
+  const title = ev.event_title || '(Polymarket event)';
+  const slug  = ev.event_slug || '';
+  const endDate = ev.end_date ? new Date(ev.end_date) : null;
+  const totalVol = Number(ev.total_volume || 0);
+
+  // Countdown — best effort. Polymarket's end_date may be null while
+  // sub-markets are pending activation.
+  let cdText = '';
+  if (endDate && isFinite(endDate.getTime())) {
+    const ms = endDate.getTime() - Date.now();
+    if (ms > 0) {
+      const days = Math.floor(ms / 86400000);
+      const hours = Math.floor((ms % 86400000) / 3600000);
+      cdText = days + 'd ' + hours + 'h to event';
+    } else {
+      cdText = 'Event past';
+    }
+  }
+
+  // Categorise sub-markets — open, pending activation, resolved
+  const markets = Array.isArray(ev.markets) ? ev.markets : [];
+  const open    = markets.filter(m => !m.closed && m.active !== false);
+  const pending = markets.filter(m => m.closed && m.active === false);
+  const resolved = markets.filter(m => m.closed && m.active !== false);
+
+  const volLabel = totalVol >= 1e6 ? '$' + (totalVol / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
+                 : totalVol >= 1e3 ? '$' + Math.round(totalVol / 1e3) + 'K'
+                 : '$' + Math.round(totalVol);
+
+  function fmtChance(p) {
+    if (p == null) return '—';
+    let v = Number(p);
+    if (!isFinite(v) || v < 0) return '—';
+    if (v > 1) v = v / 100;
+    const pct = v * 100;
+    if (pct >= 10) return Math.round(pct) + '%';
+    if (pct >= 1)  return Math.round(pct) + '¢';
+    if (pct > 0)   return pct.toFixed(1) + '¢';
+    return '0¢';
+  }
+  function yesCls(p) {
+    if (p == null) return 'mid';
+    let v = Number(p);
+    if (v > 1) v = v / 100;
+    if (v >= 0.6) return '';
+    if (v <= 0.4) return 'low';
+    return 'mid';
+  }
+  function fmtVol(v) {
+    v = Number(v || 0);
+    if (!isFinite(v) || v <= 0) return '$0';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+
+  function marketCard(m) {
+    const href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
+    const label = esc(m.label || m.question || '?');
+    const yes = fmtChance(m.yes_price);
+    const cls = yesCls(m.yes_price);
+    const vol = fmtVol(m.volume);
+    return '<a class="event-child" href="' + esc(href) + '">'
+      +   '<div class="event-child-label">' + label + '</div>'
+      +   '<div class="event-child-row">'
+      +     '<span class="event-child-yes ' + cls + '">' + esc(yes) + ' YES</span>'
+      +     '<span class="event-child-vol">' + esc(vol) + '</span>'
+      +   '</div>'
+      + '</a>';
+  }
+
+  const openHtml = open.length
+    ? '<div class="word-market-grid">' + open.map(marketCard).join('') + '</div>'
+    : '<div class="empty-note">No sub-markets currently open for trading. ' + (pending.length ? pending.length + ' pending activation closer to the event.' : '') + '</div>';
+
+  const pendingHtml = (pending.length && open.length)
+    ? '<h3 class="section-h secondary">Pending activation · ' + pending.length + '</h3>'
+      + '<div class="word-market-grid muted">' + pending.map(marketCard).join('') + '</div>'
+    : '';
+
+  const resolvedHtml = resolved.length
+    ? '<h3 class="section-h secondary">Resolved · ' + resolved.length + '</h3>'
+      + '<div class="word-market-grid muted">' + resolved.map(marketCard).join('') + '</div>'
+    : '';
+
+  // Speaker historical word-usage context (Phase 2c transcripts) ships
+  // in a follow-up PR — placeholder section preserves the layout
+  // without rendering empty playfulness per voice charter.
+  const contextHtml = '';
+
+  return `
+    <div class="eyebrow">
+      <span class="event-type-chip">Polymarket · Mentions</span>
+      ${cdText ? '<span class="sep">·</span><span>' + esc(cdText) + '</span>' : ''}
+    </div>
+    <h1 class="headline">${esc(title)}</h1>
+    <div class="subhead">
+      ${markets.length} sub-market${markets.length === 1 ? '' : 's'} · ${esc(volLabel)} traded volume
+      ${ev.speaker ? ' · ' + esc(ev.speaker) : ''}
+    </div>
+
+    <h3 class="section-h primary">Open for trading · ${open.length}</h3>
+    ${openHtml}
+    ${pendingHtml}
+    ${resolvedHtml}
+    ${contextHtml}
+
+    <footer style="margin-top:48px">
+      <span>HYPERFLEX · resolver for Polymarket mentions · <a href="/mentions" style="color:var(--cyan)">← Back to events</a></span>
+    </footer>
+  `;
+}
+
 async function load() {
   const page = document.getElementById('page');
   try {
@@ -823,6 +956,18 @@ async function load() {
       const p = data.preview;
       document.title = `${p.headline} — HYPERFLEX`;
       page.innerHTML = renderPreview(p);
+      return;
+    }
+
+    // PR 3 — Polymarket word-market event. Slug resolved through
+    // wordMarkets pipeline (e.g. what-will-powell-say-during-june-
+    // press-conference). Render the trade-surface view: title +
+    // countdown + sub-market grid. Speaker-historical word-usage
+    // context (from the 51 Fed transcripts) lands in a follow-up
+    // PR — keeping this one scoped to the rebuild's PR 3 minimum.
+    if (data.mode === 'word_market' && data.word_event) {
+      document.title = `${data.word_event.event_title} — HYPERFLEX`;
+      page.innerHTML = renderWordEvent(data.word_event);
       return;
     }
 

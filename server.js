@@ -15238,6 +15238,24 @@ app.get('/api/event/:slug', async (req, res) => {
           },
         });
       }
+      // Final fallback: try Polymarket word-market events (PR 3 of
+      // the mention-pages rescope). Slugs like
+      // `what-will-powell-say-during-june-press-conference` land here
+      // — they're not in mention_events (no transcript yet) and not
+      // in the preview registry (not hand-curated), but they ARE in
+      // Polymarket's "Mentions" category. Render via /api/word-markets
+      // pipeline (PR #129).
+      try {
+        const wordEv = await wordMarkets.getWordMarketsByEventSlug(slug);
+        if (wordEv && wordEv.is_language_event) {
+          return res.json({
+            mode: 'word_market',
+            word_event: wordEv,
+          });
+        }
+      } catch (e) {
+        console.warn('[event-api] word-market fallback failed', slug, '—', e.message);
+      }
       return res.status(404).json({ error: 'not found' });
     }
 
