@@ -15730,6 +15730,11 @@ app.get('/mentions', async (req, res) => {
     const tpl = _loadMentionsTemplate();
     const heroHtml = await _renderMentionsHero();
     const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    // PR #142: prevent edge/browser HTML cache from pinning the
+    // pre-rebuild template. The page assembles a hero strip + a
+    // calendar section on each load — neither benefits from
+    // caching, since both reflect live Polymarket state.
+    res.set('Cache-Control', 'no-store');
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-route]', err);
@@ -32520,7 +32525,12 @@ app.get('/api/word-markets/upcoming', async (req, res) => {
     const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
     const events = await wordMarkets.getUpcomingWordMarketEvents({ limit });
     const snap = wordMarkets.getCachedSnapshot();
-    res.set('Cache-Control', 'public, max-age=300');
+    // PR #142: no-store so Cloudflare doesn't pin an empty
+    // {events: []} response from before the slug-probe fix
+    // (PR #139) for 5 minutes. The lib/word-markets module
+    // has a 1hr cache at the origin layer; edge caching just
+    // delays propagation of slug-probe discoveries.
+    res.set('Cache-Control', 'no-store');
     res.json({
       events:       Array.isArray(events) ? events : [],
       count:        Array.isArray(events) ? events.length : 0,
@@ -32542,7 +32552,8 @@ app.get('/api/word-markets/by-event/:event_slug', async (req, res) => {
     if (!slug) return res.status(400).json({ error: 'event_slug required' });
     const ev = await wordMarkets.getWordMarketsByEventSlug(slug);
     if (!ev) return res.status(404).json({ error: 'event not found', event_slug: slug });
-    res.set('Cache-Control', 'public, max-age=300');
+    // PR #142 — see /api/word-markets/upcoming for rationale.
+    res.set('Cache-Control', 'no-store');
     res.json(ev);
   } catch (e) {
     console.error('[word-markets/by-event] endpoint error:', e.message);
