@@ -21,12 +21,9 @@
   if (window.__HFX_CAROUSEL_LOADED__) return;
   window.__HFX_CAROUSEL_LOADED__ = true;
 
-  // Don't render if user dismissed the previous banner — same key as
-  // hero-banner.js so opt-out carries over during the rollout.
-  try { if (localStorage.getItem('hero_banner_dismissed') === '1') return; } catch (_) {}
-
   var AUTO_ROTATE_MS  = 5000;
   var RESUME_AFTER_MS = 10000;
+  var DEFAULT_SOURCE  = '/api/hot-markets/carousel?limit=7';
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -361,16 +358,39 @@
     }
   }
 
-  function setupCarousel(tiles) {
+  // Resolve the mount target. Accepts:
+  //   - an HTMLElement → mount inside it
+  //   - a string starting with "#" or a plain id → mount inside that element
+  //   - null/undefined → auto-mount after #nav-root (the dismissible banner
+  //     behavior shipped for /feed + /explore)
+  function resolveMountTarget(target) {
+    if (!target) return null;
+    if (typeof target === 'string') {
+      var id = target.charAt(0) === '#' ? target.slice(1) : target;
+      return document.getElementById(id);
+    }
+    if (target && target.nodeType === 1) return target;
+    return null;
+  }
+
+  function setupCarousel(tiles, opts) {
+    opts = opts || {};
     injectStyles();
 
     var wrapper = document.createElement('div');
     wrapper.id = 'hfx-carousel';
     wrapper.setAttribute('role', 'region');
-    wrapper.setAttribute('aria-label', 'Top Polymarket markets');
+    wrapper.setAttribute('aria-label', opts.ariaLabel || 'Top Polymarket markets');
+    // Mounted inside a page container (e.g. /event) is not dismissible —
+    // it's primary content, not an injected banner.
+    var dismissible = opts.dismissible !== false && !opts.mountTarget;
+
+    var closeBtn = dismissible
+      ? '<button class="hfx-c-close" type="button" aria-label="Dismiss carousel">×</button>'
+      : '';
 
     wrapper.innerHTML = ''
-      + '<button class="hfx-c-close" type="button" aria-label="Dismiss carousel">×</button>'
+      + closeBtn
       + '<div class="hfx-c-frame">'
       +   '<button class="hfx-c-nav hfx-c-nav-prev" type="button" aria-label="Previous">‹</button>'
       +   '<button class="hfx-c-nav hfx-c-nav-next" type="button" aria-label="Next">›</button>'
@@ -378,7 +398,13 @@
       + '</div>'
       + '<div class="hfx-c-dots">' + renderDots(tiles.length, 0) + '</div>';
 
-    mountAfterNav(wrapper);
+    var mountTargetEl = resolveMountTarget(opts.mountTarget);
+    if (mountTargetEl) {
+      mountTargetEl.innerHTML = '';
+      mountTargetEl.appendChild(wrapper);
+    } else {
+      mountAfterNav(wrapper);
+    }
 
     var track = wrapper.querySelector('.hfx-c-track');
     var dots  = wrapper.querySelectorAll('.hfx-c-dot');
@@ -488,30 +514,76 @@
       if (document.hidden) stopRotation(); else startRotation();
     });
 
-    wrapper.querySelector('.hfx-c-close').addEventListener('click', function () {
-      try { localStorage.setItem('hero_banner_dismissed', '1'); } catch (_) {}
-      stopRotation();
-      wrapper.remove();
-    });
+    var closeEl = wrapper.querySelector('.hfx-c-close');
+    if (closeEl) {
+      closeEl.addEventListener('click', function () {
+        try { localStorage.setItem('hero_banner_dismissed', '1'); } catch (_) {}
+        stopRotation();
+        wrapper.remove();
+      });
+    }
 
     paint();
     startRotation();
   }
 
-  function load() {
-    fetch('/api/hot-markets/carousel?limit=7', { credentials: 'same-origin' })
+  // Fetch a source URL + render the carousel into a target. Used both by
+  // the auto-mount path (after #nav-root, default source) and by callers
+  // that need a parameterized carousel — e.g. /event/<slug> renders sub-
+  // markets via /api/event/<slug>/sub-markets into #event-carousel-root.
+  function loadAndMount(opts) {
+    opts = opts || {};
+    var url = opts.source || DEFAULT_SOURCE;
+    return fetch(url, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         var markets = (d && Array.isArray(d.markets)) ? d.markets : [];
-        if (!markets.length) return;
-        setupCarousel(markets);
+        if (!markets.length) return false;
+        setupCarousel(markets, opts);
+        return true;
       })
-      .catch(function () { /* fail silently — slot collapses */ });
+      .catch(function () { return false; /* fail silently — slot collapses */ });
+  }
+
+  // Public API. Lets pages that build their carousel mount target via JS
+  // (e.g. event.html injecting #event-carousel-root after fetching event
+  // metadata) trigger a custom-source mount imperatively.
+  window.HFXCarousel = {
+    mountInto: function (target, opts) {
+      opts = opts || {};
+      opts.mountTarget = target;
+      return loadAndMount(opts);
+    },
+    DEFAULT_SOURCE: DEFAULT_SOURCE,
+  };
+
+  // Auto-mount — the dismissible banner shipped for /feed + /explore.
+  // Two ways to configure: (1) a server-rendered marker element with
+  // data-carousel-source overrides the default URL and the mount slot,
+  // (2) presence of #nav-root opts the page into default auto-mount
+  // (hot-markets after the nav). Pages with neither — like /event,
+  // which mounts the carousel imperatively via HFXCarousel.mountInto
+  // after fetching event metadata — skip auto-mount entirely. The
+  // dismissal localStorage key applies ONLY to the auto-mount path.
+  function autoMount() {
+    var marker = document.querySelector('[data-carousel-source]');
+    if (marker) {
+      var limitAttr = parseInt(marker.getAttribute('data-carousel-limit'), 10);
+      var src = marker.getAttribute('data-carousel-source');
+      if (limitAttr && /[?&]limit=/.test(src) === false) {
+        src += (src.indexOf('?') >= 0 ? '&' : '?') + 'limit=' + limitAttr;
+      }
+      loadAndMount({ source: src, mountTarget: marker });
+      return;
+    }
+    if (!document.getElementById('nav-root')) return;
+    try { if (localStorage.getItem('hero_banner_dismissed') === '1') return; } catch (_) {}
+    loadAndMount({});
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', load, { once: true });
+    document.addEventListener('DOMContentLoaded', autoMount, { once: true });
   } else {
-    load();
+    autoMount();
   }
 })();
