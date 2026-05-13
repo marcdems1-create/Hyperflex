@@ -32573,6 +32573,86 @@ app.get('/api/word-markets/upcoming', async (req, res) => {
   }
 });
 
+// GET /api/event/:slug/sub-markets — sub-markets for one Polymarket
+// event, shaped to match the hot-markets carousel response so
+// public/carousel.js renders them with the same .hfx-c-* tiles used
+// on /feed and /explore. Path-a refactor: the carousel script is
+// parameterized via [data-carousel-source]; this endpoint feeds it.
+// Optional ?limit caps the returned tile count (carousel default
+// hardcoded at 7 for hot-markets, /event uses 18 to surface every
+// word in the typical mention event).
+app.get('/api/event/:slug/sub-markets', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    if (!slug) return res.status(400).json({ error: 'slug required' });
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 18));
+    const ev = await wordMarkets.getWordMarketsByEventSlug(slug);
+    if (!ev) return res.status(404).json({ error: 'event not found', slug });
+
+    const attributed = wordMarkets._internals._attributeSpeaker(
+      ev.event_title || '',
+      wordMarkets.DEFAULT_SPEAKERS
+    );
+    const portrait = attributed
+      ? '/images/' + String(attributed).toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg'
+      : null;
+
+    const titleCase = (s) =>
+      String(s || '').toLowerCase().replace(/(^|\s|['-])(\w)/g, (_, p, c) => p + c.toUpperCase());
+
+    function fmtVol(v) {
+      v = Number(v || 0);
+      if (!isFinite(v) || v <= 0) return '$0';
+      if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+      return '$' + Math.round(v);
+    }
+
+    // Only surface live/tradeable sub-markets — past events redirect to
+    // /mentions/archive so the carousel never renders on resolved events.
+    const open = (Array.isArray(ev.markets) ? ev.markets : [])
+      .filter(m => !m.closed && m.active !== false)
+      .slice(0, limit)
+      .map(m => {
+        const yes = Number(m.yes_price);
+        const yesPrice = isFinite(yes) ? yes : null;
+        const noPrice  = yesPrice != null ? Math.max(0, 1 - yesPrice) : null;
+        return {
+          event_title:      titleCase(m.label || m.question || '?'),
+          event_slug:       m.slug || '',
+          yes_price:        yesPrice,
+          no_price:         noPrice,
+          volume_24h_usd:   Number(m.volume) || 0,
+          volume_24h_label: fmtVol(m.volume),
+          end_date:         m.end_date || ev.end_date || null,
+          event_image_url:  portrait,
+        };
+      });
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      markets:    open,
+      count:      open.length,
+      event_slug: ev.event_slug,
+      speaker:    attributed || null,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('[event/sub-markets] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, markets: [], count: 0 });
+  }
+});
+
+// GET /api/event/:slug/winners — Zone 5 leaderboard data. Empty list
+// for now; the FLEX-gain backfill cron post-event will populate this
+// once whale-resolution settles. Endpoint exists so the client-side
+// fetch + hide-when-empty path is wired and a future PR only changes
+// this handler.
+app.get('/api/event/:slug/winners', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ winners: [], count: 0 });
+});
+
 // GET /api/word-markets/by-event/:event_slug
 // Full sub-market listing for one Polymarket event. Used by the
 // /event/<slug> detail page (PR 3 of the rebuild).

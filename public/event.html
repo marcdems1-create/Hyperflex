@@ -240,27 +240,39 @@ footer a{color:var(--cyan)}
 .event-child-vol{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 .empty-note{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:18px 0;line-height:1.6;margin-bottom:24px}
 
-/* ── PR #148 — multi-zone architecture rebuild.
+/* ── PR #149 — architecture rebuild v3.1 (Marc's locked decisions).
 
-   STRICTLY REUSES existing components from /mentions and /feed:
+   Inheritance ledger:
 
-   ZONE 1 (Hero):     all .hero* classes copied verbatim from
-                      public/mentions.html lines 37-110. DOM structure
-                      mirrors _renderMentionsHero() at server.js:15632.
-   ZONE 2 (Carousel): all .hfx-c-* classes copied from public/carousel.js
-                      lines 285-340 (the shell mechanics — frame, track,
-                      tile, nav arrows, dots). Sub-market tile content
-                      simplified for the word-betting domain (no
-                      sparkline/news-citations; those don't apply per
-                      sub-market).
-   ZONE 3 (CTA):      .we-cta-banner — new banner shape; /feed has no
-                      banner-level CTA component, only .feed-edge-strip
-                      inside cards. Asked Marc, no response, building
-                      with cyan-on-cyan treatment matching other CTAs.
-   ZONE 4 (Receipt):  .we-receipt-* retained from PR #147.
-   ZONE 5:            skipped — no winners-leaderboard data source.
-   ZONE 6 (Detail):   native <details> wrapping the v3 grid. Cards
-                      retained from PR #147 for reference.
+   ZONE 1 (Hero):      .hero* classes — copied verbatim from
+                       public/mentions.html lines 37-110. DOM structure
+                       mirrors _renderMentionsHero() at server.js:15632.
+   ZONE 2 (Carousel):  shared public/carousel.js. Marker div
+                       [data-carousel-source] fetches sub-markets and
+                       carousel.js renders the standard .hfx-c-* tile
+                       set (frame/track/tile/nav/dots). One carousel
+                       implementation for /feed, /explore, /event.
+                       Refactored from inline duplication. [path-a]
+   ZONE 3 (CTA):       .event-forward-cta — NEW primitive. Closest
+                       existing cyan-button vocab is .hero-cta at
+                       mentions.html:100; banner-scale shape with
+                       serif italic H2 + sans subtitle + large
+                       cyan button right.
+   Section headers:    .card-head / .card-title — inherited from
+                       member.html:152-153 (Anton display font, 22px,
+                       0.1em letter-spacing, ink color). Used by Zone
+                       2 carousel header + Zone 5 winners header.
+   ZONE 4 (Receipt):   .event-receipt-* — refactored from PR #147's
+                       .we-receipt-* (italic-serif lede → upright serif
+                       at larger size, magazine pull-quote vibe over
+                       caption styling).
+   ZONE 5 (Winners):   .event-winners — shipped with [hidden] default.
+                       JS fetch removes hidden when /api/event/<slug>/
+                       winners returns rows. Future PR populates
+                       endpoint from FLEX-gain backfill cron.
+   ZONE 6:             REMOVED. Resolved word-markets redirect to
+                       /mentions/archive — per Marc's locked decision,
+                       /event/<slug> only renders for upcoming events.
 
    .we-shell exists so the hero can be FULL-BLEED outside the .page
    container (which has max-width 920px). When .we-mode is set on
@@ -316,103 +328,63 @@ footer a{color:var(--cyan)}
 .we-container{max-width:1240px;margin:0 auto;padding:48px 36px}
 @media(max-width:768px){.we-container{padding:32px 18px}}
 
-/* ── ZONE 2 carousel — shell vocabulary copied from
-       public/carousel.js renderTile + setupCarousel CSS injection
-       (lines 285-340). Tile content simplified for sub-markets. ── */
-.we-carousel{position:relative;max-width:1240px;margin:0 auto 0;padding:40px 36px 24px}
-.we-carousel-h{font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);letter-spacing:-0.015em;margin-bottom:4px}
-.we-carousel-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-bottom:18px}
-.we-c-frame{position:relative;background:#13131a;border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden}
-.we-c-track{display:flex;transition:transform .4s cubic-bezier(.4,0,.2,1);will-change:transform}
-.we-c-tile{flex:0 0 100%;display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center;padding:36px 40px;box-sizing:border-box;text-decoration:none;color:inherit;cursor:pointer;border-right:1px solid rgba(255,255,255,0.03);transition:background .15s}
-.we-c-tile:hover{background:rgba(255,255,255,0.02)}
-.we-c-tile-yes{font-family:var(--mono);font-weight:800;font-size:72px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.025em;color:var(--cyan);min-width:140px;text-align:center}
-.we-c-tile-yes.high{color:#00e68a}
-.we-c-tile-yes.low{color:#ff7a8e}
-.we-c-tile-yes.mid{color:var(--ink-2)}
-@media(max-width:640px){.we-c-tile-yes{font-size:52px;min-width:96px}}
-.we-c-tile-mid{display:flex;flex-direction:column;gap:6px;min-width:0}
-.we-c-tile-label{font-family:var(--sans);font-weight:700;font-size:24px;color:var(--ink);line-height:1.15;letter-spacing:-0.015em;text-transform:capitalize}
-.we-c-tile-question{font-family:var(--sans);font-size:14px;color:var(--ink-2);line-height:1.4;font-weight:500}
-.we-c-tile-side{display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right;font-family:var(--sans);font-size:12px;color:var(--muted)}
-.we-c-tile-side strong{color:var(--ink-2);font-family:var(--mono);font-weight:600;font-size:14px}
-@media(max-width:768px){.we-c-tile{grid-template-columns:auto 1fr;gap:18px;padding:24px 22px}.we-c-tile-side{display:none}.we-c-tile-label{font-size:20px}}
+/* ── ZONE 2 carousel — shared with /feed and /explore via public/
+       carousel.js. The marker div #event-carousel-root with
+       data-carousel-source param tells carousel.js to fetch from
+       our endpoint and mount in-place. Per-tile styling
+       (.hfx-c-frame/.hfx-c-track/.hfx-c-tile/.hfx-c-nav/.hfx-c-dots)
+       is injected by carousel.js itself — same look as /feed. We
+       only own the section-header chrome here. ── */
+.we-carousel{position:relative;max-width:1240px;margin:0 auto 0;padding:24px 36px 8px}
+@media(max-width:768px){.we-carousel{padding:18px 18px 4px}}
+.we-carousel #event-carousel-root{min-height:1px}
 
-.we-c-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(13,13,16,0.78);border:1px solid rgba(255,255,255,0.12);color:#f0f0f5;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;transition:background .15s;padding:0;line-height:1}
-.we-c-nav:hover{background:rgba(13,13,16,0.95)}
-.we-c-nav-prev{left:8px}
-.we-c-nav-next{right:8px}
-.we-c-dots{display:flex;justify-content:center;gap:6px;margin-top:14px}
-.we-c-dot{width:6px;height:6px;padding:0;border-radius:50%;background:rgba(255,255,255,0.14);border:0;cursor:pointer;transition:background .15s,width .15s}
-.we-c-dot.active{background:var(--cyan);width:22px;border-radius:3px}
-.we-c-dot:hover:not(.active){background:rgba(255,255,255,0.28)}
-@media(max-width:600px){.we-c-nav{display:none}}
+/* ── ZONE 3 forward-CTA banner. New primitive — no /feed shape
+       matched it. Reuses the cyan-on-cyan vocabulary from
+       mentions.html:100 (.hero-cta) but at banner scale. ── */
+.event-forward-cta{margin:48px auto 0;max-width:1240px;padding:44px 56px;background:linear-gradient(135deg,rgba(0,212,255,0.10),rgba(0,212,255,0.02));border:1px solid rgba(0,212,255,0.32);border-radius:16px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center}
+@media(max-width:768px){.event-forward-cta{grid-template-columns:1fr;padding:28px 22px;gap:20px;margin:32px 18px 0}}
+.event-forward-cta-h{font-family:var(--serif);font-style:italic;font-size:36px;line-height:1.12;color:var(--ink);letter-spacing:-0.01em;margin-bottom:8px}
+@media(max-width:768px){.event-forward-cta-h{font-size:26px}}
+.event-forward-cta-sub{font-family:var(--sans);font-size:16px;color:var(--ink-2);line-height:1.5;font-weight:500;max-width:560px}
+.event-forward-cta-btn{display:inline-flex;align-items:center;gap:8px;padding:18px 28px;background:var(--cyan);color:#001a23;font-family:var(--sans);font-weight:800;font-size:14px;letter-spacing:0.04em;text-decoration:none;transition:transform .15s,box-shadow .15s,filter .15s;border-radius:8px;white-space:nowrap}
+.event-forward-cta-btn:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,0.35);filter:brightness(1.1);text-decoration:none}
+@media(max-width:768px){.event-forward-cta-btn{width:100%;justify-content:center}}
 
-/* ── ZONE 3 CTA banner — full-width cyan, serif type. New shape
-       (no 1:1 inheritance from /feed alpha cards; closest existing
-       cyan-button vocab is .hero-cta at mentions.html:100). ── */
-.we-cta-banner{margin:48px auto 0;max-width:1240px;padding:48px 56px;background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(0,212,255,0.02));border:1px solid rgba(0,212,255,0.32);border-radius:18px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center}
-@media(max-width:768px){.we-cta-banner{grid-template-columns:1fr;padding:32px 22px;gap:20px;margin:32px 18px 0}}
-.we-cta-banner-h{font-family:var(--serif);font-style:italic;font-size:38px;line-height:1.1;color:var(--ink);letter-spacing:-0.015em;margin-bottom:6px}
-@media(max-width:768px){.we-cta-banner-h{font-size:26px}}
-.we-cta-banner-sub{font-family:var(--sans);font-size:16px;color:var(--ink-2);line-height:1.5;font-weight:500;max-width:560px}
-.we-cta-banner-arrow{display:inline-flex;align-items:center;gap:8px;padding:18px 28px;background:var(--cyan);color:#001a23;font-family:var(--sans);font-weight:800;font-size:14px;letter-spacing:0.04em;text-decoration:none;transition:transform .15s,box-shadow .15s,filter .15s;border-radius:8px;white-space:nowrap}
-.we-cta-banner-arrow:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,0.35);filter:brightness(1.1);text-decoration:none}
-@media(max-width:768px){.we-cta-banner-arrow{width:100%;justify-content:center}}
+/* ── Section headers — inherited from member.html:152-153.
+       Anton display font, 22px, 0.1em letter-spacing, ink color.
+       Used to delimit Zone 5 (winners) and any future zones. ── */
+.card-head{display:flex;align-items:center;justify-content:space-between;margin:36px 0 18px;flex-wrap:wrap;gap:8px}
+.card-title{font-family:var(--display);font-size:22px;letter-spacing:0.1em;color:var(--ink)}
+.card-tally{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase}
 
-/* Multi-event fallback (no next event for this speaker — surface 3
-   nearest upcoming events from other speakers as inline cards inside
-   the banner, per Marc's spec). */
-.we-cta-banner-fallback{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
-@media(max-width:768px){.we-cta-banner-fallback{grid-template-columns:1fr}}
-.we-cta-fb-card{background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:10px;padding:14px 16px;text-decoration:none;color:inherit;transition:border-color .15s}
-.we-cta-fb-card:hover{border-color:var(--cyan);text-decoration:none}
-.we-cta-fb-speaker{font-family:var(--sans);font-size:11px;color:var(--cyan);font-weight:700;letter-spacing:0.06em;margin-bottom:4px;text-transform:uppercase}
-.we-cta-fb-title{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--ink);line-height:1.3}
-.we-cta-fb-cd{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+/* ── ZONE 4 receipt — Bloomberg-headline lede + sans body.
+       Refactored from PR #147's serif-italic to upright serif at
+       larger size (reads as a magazine pull-quote, not an italic
+       caption). Still no banner, no amber stamp, no CLI chrome. ── */
+.event-receipt{margin:0;padding:0;border:0;background:none}
+.event-receipt-lede{font-family:var(--serif);font-weight:400;font-size:36px;line-height:1.15;color:var(--ink);letter-spacing:-0.01em;margin-bottom:14px}
+@media(max-width:640px){.event-receipt-lede{font-size:26px}}
+.event-receipt-body{font-family:var(--sans);font-size:17px;line-height:1.55;color:var(--ink-2);font-weight:400;letter-spacing:-0.005em;max-width:720px}
+.event-receipt-body .said-word{color:#00e68a;font-weight:700}
+.event-receipt-body .never-word{color:#ff7a8e;font-weight:700}
+.event-receipt-signal{margin-top:14px;font-family:var(--sans);font-size:14px;color:var(--muted);font-weight:500;letter-spacing:-0.005em}
+.event-receipt-signal strong{color:var(--cyan);font-weight:700}
 
-/* ── ZONE 4 receipt — serif lede + sans body. Retained from PR #147. ── */
-.we-receipt{margin:0;padding:0;border:0;background:none}
-.we-receipt-lede{font-family:var(--serif);font-style:italic;font-size:32px;line-height:1.15;color:var(--ink);letter-spacing:-0.01em;margin-bottom:14px}
-@media(max-width:640px){.we-receipt-lede{font-size:24px}}
-.we-receipt-body{font-family:var(--sans);font-size:17px;line-height:1.55;color:var(--ink-2);font-weight:400;letter-spacing:-0.005em;max-width:720px}
-.we-receipt-body .said-word{color:#00e68a;font-weight:700}
-.we-receipt-body .never-word{color:#ff7a8e;font-weight:700}
-.we-receipt-signal{margin-top:14px;font-family:var(--sans);font-size:14px;color:var(--muted);font-weight:500;letter-spacing:-0.005em}
-.we-receipt-signal strong{color:var(--cyan);font-weight:700}
-
-/* ── ZONE 6 collapsed detail — native <details> wrapping the v3
-       card grid for resolved events. Reference material, not
-       primary content. ── */
-.we-details{margin-top:48px;border-top:1px solid var(--line);padding-top:28px}
-.we-details summary{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--cyan);cursor:pointer;list-style:none;padding:4px 0;letter-spacing:-0.005em;outline:none;user-select:none}
-.we-details summary::-webkit-details-marker{display:none}
-.we-details summary::after{content:"  →";display:inline-block;transition:transform .15s}
-.we-details[open] summary::after{transform:rotate(90deg)}
-.we-details summary:hover{color:#9BEBFF}
-.we-details-body{margin-top:20px}
-
-/* Retained v3 cards — used inside the Zone 6 collapsed detail. */
-.we-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:0}
-.we-card{position:relative;background:rgba(255,255,255,0.025);border:1px solid var(--line);border-radius:12px;padding:18px 20px 16px 22px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;transition:border-color .15s ease,background .15s ease;overflow:hidden}
-.we-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgba(255,255,255,0.15)}
-.we-card.won{border-color:rgba(0,230,138,0.30)}.we-card.won::before{background:#00e68a}
-.we-card.lost{border-color:rgba(255,77,106,0.22);opacity:0.85}.we-card.lost::before{background:rgba(255,77,106,0.55)}
-.we-card-label{font-family:var(--sans);font-weight:700;font-size:18px;color:var(--ink);line-height:1.15;letter-spacing:-0.015em;text-transform:capitalize;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.we-card-metric{display:flex;align-items:baseline;gap:10px;margin-top:auto;padding-top:8px;flex-wrap:wrap}
-.we-card-yes{font-family:var(--mono);font-size:16px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--cyan)}
-.we-card-yes.won{color:#00e68a}.we-card-yes.lost{color:#ff7a8e}
-.we-card-yes-l{font-family:var(--sans);font-size:11px;font-weight:500;color:var(--muted)}
-.we-card-vol{margin-left:auto;font-family:var(--sans);font-size:12px;color:var(--muted);font-weight:500}
-.we-card-vol strong{color:var(--ink-2);font-family:var(--mono);font-weight:600}
-
-/* ── Section headers — conversational sans-serif (.we-section h2). ── */
-.we-section{margin:48px 0 18px}
-.we-section h2{font-family:var(--sans);font-weight:800;font-size:24px;color:var(--ink);letter-spacing:-0.015em;margin-bottom:4px;line-height:1.2}
-.we-section h2.won{color:#00e68a}
-.we-section h2.lost{color:#ff7a8e}
-.we-section h2.live{color:var(--cyan)}
-.we-section-sub{font-family:var(--sans);font-size:14px;color:var(--muted);font-weight:500}
+/* ── ZONE 5 winners leaderboard. Hide-when-empty: section element
+       carries [hidden] until JS populates it. Component shipped
+       so the FLEX-gain backfill cron can auto-render rows when
+       post-event resolution lands. No empty-state placeholder. ── */
+.event-winners{margin:48px auto 0;max-width:1240px;padding:0 36px}
+@media(max-width:768px){.event-winners{padding:0 18px}}
+.event-winners-list{display:flex;flex-direction:column;gap:10px}
+.event-winner-row{display:grid;grid-template-columns:32px 1fr auto auto;gap:14px;align-items:center;padding:14px 18px;background:rgba(255,255,255,0.025);border:1px solid var(--line);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s,background .15s}
+.event-winner-row:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04);text-decoration:none}
+.event-winner-rank{font-family:var(--display);font-size:24px;color:var(--muted-2);text-align:center;letter-spacing:0.04em}
+.event-winner-row.top .event-winner-rank{color:var(--cyan)}
+.event-winner-handle{font-family:var(--sans);font-size:15px;font-weight:700;color:var(--ink);letter-spacing:-0.005em}
+.event-winner-gain{font-family:var(--mono);font-size:14px;font-weight:700;color:#00e68a;font-variant-numeric:tabular-nums}
+.event-winner-tier{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -424,6 +396,13 @@ footer a{color:var(--cyan)}
 <main class="page" id="page">
   <div id="loading">Loading event…</div>
 </main>
+
+<!-- Shared carousel — same script that powers /feed and /explore.
+     Auto-mount only fires when [data-carousel-source] is present in
+     DOM at load; on /event the marker is injected via JS after the
+     /api/event fetch resolves, so we drive the mount imperatively
+     via window.HFXCarousel.mountInto(). -->
+<script defer src="/carousel.js?v=2"></script>
 
 <script>
 const SLUG = location.pathname.replace(/^\/event\//, '').replace(/\/$/, '');
@@ -1137,85 +1116,50 @@ function renderWordEvent(ev, nextEvent) {
     + '</section>';
 
   // ── ZONE 2: Live sub-markets carousel (upcoming events only).
-  //    Shell mechanics (.we-c-frame/track/tile/nav/dots) mirror the
-  //    .hfx-c-* class vocabulary from public/carousel.js. Tile
-  //    content simplified for the word-betting domain: big YES %
-  //    left, word label + question middle, NO % + volume right.
-  //    Open sub-markets sorted by volume desc (already pre-sorted
-  //    upstream in lib/word-markets.js getWordMarketsByEventSlug). ──
+  //    Marker div [data-carousel-source] tells public/carousel.js to
+  //    mount inside it using our /api/event/<slug>/sub-markets
+  //    endpoint. Same .hfx-c-* tile rendering as /feed and /explore
+  //    — Path-a refactor (PR #149): one carousel implementation,
+  //    parameterized via data-attribute. Mount is triggered
+  //    imperatively from load() once the marker is in the DOM. ──
   let carouselZone = '';
   if (!isPast && open.length) {
-    const tiles = open.slice(0, 12);
-    const tilesHtml = tiles.map(m => {
-      const href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
-      const label = titleCase(m.label || m.question || '?');
-      const yes = fmtChance(m.yes_price);
-      const noPrice = isFinite(Number(m.yes_price)) ? 1 - Number(m.yes_price) : null;
-      const noStr = noPrice != null ? fmtChance(noPrice) : '—';
-      const vol = fmtVol(m.volume);
-      const tier = yesTier(m.yes_price);
-      return '<a class="we-c-tile" href="' + esc(href) + '">'
-        +   '<div class="we-c-tile-yes ' + tier + '">' + esc(yes) + '</div>'
-        +   '<div class="we-c-tile-mid">'
-        +     '<div class="we-c-tile-label">' + esc(label) + '</div>'
-        +     '<div class="we-c-tile-question">' + esc(m.question || '') + '</div>'
-        +   '</div>'
-        +   '<div class="we-c-tile-side">'
-        +     '<span><strong>' + esc(noStr) + '</strong> NO</span>'
-        +     '<span><strong>' + esc(vol) + '</strong> vol</span>'
-        +   '</div>'
-        + '</a>';
-    }).join('');
-    const dotsHtml = tiles.map((_, i) =>
-      '<button class="we-c-dot' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>'
-    ).join('');
+    const subMarketsSrc = '/api/event/' + encodeURIComponent(slug) + '/sub-markets?limit=18';
     carouselZone = '<section class="we-carousel" id="we-carousel">'
-      + '<h2 class="we-carousel-h">Live word-markets</h2>'
-      + '<div class="we-carousel-sub">' + open.length + ' open · auto-rotating · click any tile to trade</div>'
-      + '<div class="we-c-frame">'
-      +   '<button class="we-c-nav we-c-nav-prev" type="button" aria-label="Previous">‹</button>'
-      +   '<button class="we-c-nav we-c-nav-next" type="button" aria-label="Next">›</button>'
-      +   '<div class="we-c-track" id="we-c-track">' + tilesHtml + '</div>'
+      + '<div class="card-head">'
+      +   '<div class="card-title">LIVE WORD-MARKETS</div>'
+      +   '<div class="card-tally">' + open.length + ' open · click to trade</div>'
       + '</div>'
-      + '<div class="we-c-dots" id="we-c-dots">' + dotsHtml + '</div>'
+      + '<div id="event-carousel-root" data-carousel-source="' + esc(subMarketsSrc) + '" data-carousel-limit="18"></div>'
       + '</section>';
   }
 
-  // ── ZONE 3: Forward-CTA banner (resolved events only). Brand
-  //    cyan, serif italic headline, button on right. Deep-links to
-  //    speaker's next upcoming event when known. ──
+  // ── ZONE 3: Forward-CTA banner. Visible when the speaker has a
+  //    next-upcoming event (only fires on upcoming detail pages
+  //    now — resolved events redirect to /mentions/archive). ──
   let ctaZone = '';
-  if (isPast && nextEvent && nextEvent.event_slug) {
+  if (!isPast && nextEvent && nextEvent.event_slug && nextEvent.event_slug !== slug) {
     const nextDate = nextEvent.end_date ? new Date(nextEvent.end_date) : null;
     const nextCd = nextDate ? fmtCountdown(nextDate) : null;
     const speakerLabel = ev.speaker ? esc(ev.speaker) : 'The speaker';
     const headline = nextCd
       ? speakerLabel + ' speaks again in ' + esc(nextCd) + '.'
       : speakerLabel + ' speaks again soon.';
-    const subline = 'Pick the words ' + speakerLabel + ' will say. ' + nextEvent.event_title;
-    ctaZone = '<section class="we-cta-banner">'
+    const subline = 'Next event: ' + esc(nextEvent.event_title || '');
+    ctaZone = '<section class="event-forward-cta">'
       + '<div>'
-      +   '<div class="we-cta-banner-h">' + headline + '</div>'
-      +   '<div class="we-cta-banner-sub">' + esc(subline) + '</div>'
+      +   '<div class="event-forward-cta-h">' + headline + '</div>'
+      +   '<div class="event-forward-cta-sub">' + subline + '</div>'
       + '</div>'
-      + '<a class="we-cta-banner-arrow" href="/event/' + encodeURIComponent(nextEvent.event_slug) + '">Pick the next event →</a>'
-      + '</section>';
-  } else if (isPast) {
-    // No next event for this speaker. Per Marc's spec: surface
-    // calendar fallback. (3-nearest-upcoming-from-other-speakers
-    // inline cards would need a second fetch — not in this PR's
-    // scope; pointing at /mentions calendar.)
-    ctaZone = '<section class="we-cta-banner">'
-      + '<div>'
-      +   '<div class="we-cta-banner-h">Pick the next word-market.</div>'
-      +   '<div class="we-cta-banner-sub">More word-markets resolve every month. The calendar lists what\'s upcoming.</div>'
-      + '</div>'
-      + '<a class="we-cta-banner-arrow" href="/mentions">View calendar →</a>'
+      + '<a class="event-forward-cta-btn" href="/event/' + encodeURIComponent(nextEvent.event_slug) + '">Pick the next event →</a>'
       + '</section>';
   }
 
-  // ── ZONE 4: Receipt reveal (resolved only). Serif lede + sans
-  //    body. No card grid. ──
+  // ── ZONE 4: Receipt reveal. Currently only fires when this branch
+  //    is reached with resolved data (post-cutover migration not
+  //    yet wired; resolved events redirect to /mentions/archive
+  //    before this renderer runs). Kept structurally so any future
+  //    "resolved + show-on-page" mode auto-uses it. ──
   let receiptZone = '';
   if (isPast && resolved.length) {
     const said  = wonMarkets.slice(0, 5).map(m => m.label || m.question || '');
@@ -1231,74 +1175,37 @@ function renderWordEvent(ev, nextEvent) {
     if (saidColored)  bodyParts.push('He said ' + saidColored + '.');
     if (neverColored) bodyParts.push('Never mentioned ' + neverColored + '.');
     const bodyHtml = bodyParts.join(' ');
-    const signal = '<div class="we-receipt-signal"><strong>' + esc(volLabel) + '</strong> traded across <strong>' + markets.length + '</strong> word-market' + (markets.length === 1 ? '' : 's') + ' on Polymarket.</div>';
-    receiptZone = '<section class="we-receipt">'
-      + '<div class="we-receipt-lede">' + speakerLabel + ' delivered.</div>'
-      + (bodyHtml ? '<div class="we-receipt-body">' + bodyHtml + '</div>' : '')
+    const signal = '<div class="event-receipt-signal"><strong>' + esc(volLabel) + '</strong> traded across <strong>' + markets.length + '</strong> word-market' + (markets.length === 1 ? '' : 's') + ' on Polymarket.</div>';
+    receiptZone = '<section class="event-receipt">'
+      + '<div class="event-receipt-lede">' + speakerLabel + ' delivered.</div>'
+      + (bodyHtml ? '<div class="event-receipt-body">' + bodyHtml + '</div>' : '')
       + signal
       + '</section>';
   }
 
-  // ── ZONE 5: Winners leaderboard — skipped. No data source for
-  //    real winners on Polymarket sub-markets yet. Marc's spec
-  //    explicitly: "if no real winners data yet: skip entire zone
-  //    (don't render empty)." ──
+  // ── ZONE 5: Winners leaderboard. Component shipped with [hidden]
+  //    default; the JS post-render fetches /api/event/<slug>/winners
+  //    and removes [hidden] only when rows arrive. Future PR
+  //    populates the endpoint from the FLEX-gain backfill cron.
+  //    Per Marc's spec: don't render an empty-state placeholder. ──
+  const winnersZone = '<section class="event-winners" id="event-winners" hidden>'
+    + '<div class="card-head">'
+    +   '<div class="card-title">TOP WINNERS</div>'
+    +   '<div class="card-tally" id="event-winners-tally"></div>'
+    + '</div>'
+    + '<div class="event-winners-list" id="event-winners-list"></div>'
+    + '</section>';
 
-  // ── ZONE 6: Collapsed sub-market detail (resolved only). Native
-  //    <details> wrapping the v3 won/lost card grid as reference
-  //    material. ──
-  function marketCard(m, kind) {
-    const href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
-    const label = titleCase(m.label || m.question || '');
-    const yes = fmtChance(m.yes_price);
-    const yesNum = Number(m.yes_price);
-    const won  = kind === 'resolved' && isFinite(yesNum) && yesNum >= 0.5;
-    const lost = kind === 'resolved' && isFinite(yesNum) && yesNum < 0.5;
-    const vol = fmtVol(m.volume);
-    const cardCls = won ? ' won' : lost ? ' lost' : '';
-    const yesCls = won ? ' won' : lost ? ' lost' : '';
-    const yesL = won ? 'said it' : lost ? 'never said' : 'YES';
-    return '<a class="we-card' + cardCls + '" href="' + esc(href) + '">'
-      +   '<div class="we-card-label">' + esc(label || '—') + '</div>'
-      +   '<div class="we-card-metric">'
-      +     '<span class="we-card-yes' + yesCls + '">' + esc(yes) + '</span>'
-      +     '<span class="we-card-yes-l' + yesCls + '">' + esc(yesL) + '</span>'
-      +     '<span class="we-card-vol"><strong>' + esc(vol) + '</strong> vol</span>'
-      +   '</div>'
-      + '</a>';
-  }
-  let detailsZone = '';
-  if (isPast && resolved.length) {
-    let sectionsHtml = '';
-    if (wonMarkets.length) {
-      sectionsHtml += '<div class="we-section">'
-        + '<h2 class="won">Said</h2>'
-        + '<div class="we-section-sub">' + wonMarkets.length + ' word' + (wonMarkets.length === 1 ? '' : 's') + ' confirmed</div>'
-        + '</div>'
-        + '<div class="we-grid">' + wonMarkets.map(m => marketCard(m, 'resolved')).join('') + '</div>';
-    }
-    if (lostMarkets.length) {
-      sectionsHtml += '<div class="we-section">'
-        + '<h2 class="lost">Didn\'t say</h2>'
-        + '<div class="we-section-sub">' + lostMarkets.length + ' word' + (lostMarkets.length === 1 ? '' : 's') + ' missing</div>'
-        + '</div>'
-        + '<div class="we-grid">' + lostMarkets.map(m => marketCard(m, 'resolved')).join('') + '</div>';
-    }
-    detailsZone = '<details class="we-details">'
-      + '<summary>View all ' + resolved.length + ' sub-markets</summary>'
-      + '<div class="we-details-body">' + sectionsHtml + '</div>'
-      + '</details>';
-  }
+  // ── ZONE 6: REMOVED. Resolved events redirect to /mentions/archive
+  //    before reaching this renderer. The expand-the-resolved-grid
+  //    pattern now lives on the archive listing entries. ──
 
-  // ── Assemble. Hero is full-bleed (outside .we-container). All
-  //    other zones constrained to 1240px max-width inside the
-  //    container. ──
   return heroZone
     + carouselZone
     + '<div class="we-container">'
     +   ctaZone
     +   receiptZone
-    +   detailsZone
+    +   winnersZone
     + '</div>'
     + '<footer style="max-width:1240px;margin:0 auto;padding:32px 36px 64px;font-family:var(--sans);font-size:14px;color:var(--muted);border-top:1px solid var(--line)">'
     +   '<a href="/mentions" style="color:var(--cyan);font-weight:600">← Back to events</a>'
@@ -1334,42 +1241,64 @@ function _weCountdownTick() {
   }
 }
 
-// ── Zone 2 carousel rotation. Mirrors the auto-rotate + dots +
-//    prev/next mechanics from public/carousel.js setupCarousel()
-//    (lines 354-490), pared down to the visible behaviors. No
-//    swipe/keyboard for v3.1; if needed in follow-up, copy them
-//    over verbatim. ──
-function _weMountCarousel() {
-  var track = document.getElementById('we-c-track');
-  var dots  = document.getElementById('we-c-dots');
-  if (!track || !dots) return;
-  var tiles = track.children;
-  if (!tiles.length) return;
-  var dotEls = dots.children;
-  var idx = 0;
-  var pauseUntil = 0;
-  function paint() {
-    track.style.transform = 'translateX(-' + (idx * 100) + '%)';
-    for (var i = 0; i < dotEls.length; i++) {
-      dotEls[i].classList.toggle('active', i === idx);
+// ── Zone 2 carousel — mounted via shared public/carousel.js. After
+//    renderWordEvent injects #event-carousel-root, this helper fires
+//    HFXCarousel.mountInto with the per-event sub-markets endpoint.
+//    Idempotent: if carousel.js hasn't loaded yet (race against the
+//    async event fetch), we poll briefly for the global. ──
+function _weMountSubMarketCarousel() {
+  var root = document.getElementById('event-carousel-root');
+  if (!root) return;
+  var src = root.getAttribute('data-carousel-source');
+  var lim = parseInt(root.getAttribute('data-carousel-limit'), 10) || 18;
+  if (!src) return;
+  var tries = 0;
+  function attempt() {
+    if (window.HFXCarousel && typeof window.HFXCarousel.mountInto === 'function') {
+      window.HFXCarousel.mountInto(root, { source: src, limit: lim, dismissible: false });
+      return;
     }
+    if (++tries < 40) setTimeout(attempt, 50);
   }
-  function go(next) {
-    idx = ((next % tiles.length) + tiles.length) % tiles.length;
-    paint();
-  }
-  function userInteract() { pauseUntil = Date.now() + 10000; }
-  function tick() { if (Date.now() >= pauseUntil) go(idx + 1); }
-  setInterval(tick, 5000);
-  for (var i = 0; i < dotEls.length; i++) {
-    (function (j) { dotEls[j].addEventListener('click', function () { userInteract(); go(j); }); })(i);
-  }
-  var prev = document.querySelector('.we-c-nav-prev');
-  var next = document.querySelector('.we-c-nav-next');
-  if (prev) prev.addEventListener('click', function () { userInteract(); go(idx - 1); });
-  if (next) next.addEventListener('click', function () { userInteract(); go(idx + 1); });
+  attempt();
 }
-setInterval(_weCountdownTick, 1000);
+
+// ── Zone 5 winners — endpoint exists, currently returns []. Hide
+//    section when empty. No empty-state copy, no header rendered.
+//    When the FLEX-gain backfill cron starts populating winners,
+//    this auto-reveals without an HTML/JS change. ──
+function _weMountWinners(slug) {
+  var sec = document.getElementById('event-winners');
+  if (!sec) return;
+  fetch('/api/event/' + encodeURIComponent(slug) + '/winners', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var rows = (d && Array.isArray(d.winners)) ? d.winners : [];
+      if (!rows.length) return;
+      var listEl = document.getElementById('event-winners-list');
+      var tallyEl = document.getElementById('event-winners-tally');
+      if (tallyEl) tallyEl.textContent = rows.length + ' graded';
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var w = rows[i];
+        var top = i < 3 ? ' top' : '';
+        var handle = String(w.handle || w.username || '?');
+        var href = w.profile_url || (w.user_id ? '/m/' + encodeURIComponent(w.user_id) : '#');
+        var gain = (w.flex_gain != null) ? ('+' + Math.round(w.flex_gain)) : '';
+        var tier = w.tier || '';
+        html += '<a class="event-winner-row' + top + '" href="' + esc(href) + '">'
+          +   '<span class="event-winner-rank">' + (i + 1) + '</span>'
+          +   '<span class="event-winner-handle">@' + esc(handle) + '</span>'
+          +   '<span class="event-winner-gain">' + esc(gain) + ' FLEX</span>'
+          +   '<span class="event-winner-tier">' + esc(tier) + '</span>'
+          + '</a>';
+      }
+      listEl.innerHTML = html;
+      sec.hidden = false;
+    })
+    .catch(function () { /* leave hidden */ });
+}
+setInterval(_weCountdownTick, 60000);
 
 async function load() {
   const page = document.getElementById('page');
@@ -1398,6 +1327,17 @@ async function load() {
     // context (from the 51 Fed transcripts) lands in a follow-up
     // PR — keeping this one scoped to the rebuild's PR 3 minimum.
     if (data.mode === 'word_market' && data.word_event) {
+      // Resolved word-markets redirect to /mentions/archive — per
+      // Marc's locked decision, /event/<slug> only renders for
+      // upcoming events. Archive listings carry the expand-the-
+      // resolved-grid pattern that used to live here as Zone 6.
+      const endIso = data.word_event.end_date;
+      const endMs = endIso ? Date.parse(endIso) : NaN;
+      if (Number.isFinite(endMs) && endMs < Date.now()) {
+        location.replace('/mentions/archive');
+        return;
+      }
+
       document.title = `${data.word_event.event_title} — HYPERFLEX`;
       // we-mode hides .page (max-width:920px) and lets the hero
       // render full-bleed. Shell injected after the nav.
@@ -1411,8 +1351,8 @@ async function load() {
         else document.body.insertBefore(shell, document.body.firstChild);
       }
       shell.innerHTML = renderWordEvent(data.word_event, data.next_event);
-      // Mount the Zone 2 carousel rotation if it rendered.
-      _weMountCarousel();
+      _weMountSubMarketCarousel();
+      _weMountWinners(SLUG);
       return;
     }
 
