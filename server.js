@@ -15376,6 +15376,12 @@ app.get('/api/event/:slug', async (req, res) => {
 // renders. Hides drafts (404) at the API layer, not here, so the shell
 // loads consistently and JS handles the not-found state.
 app.get('/event/:slug', (req, res) => {
+  // PR #145: no-store so visual-pass / template updates land
+  // immediately. event.html is a thin shell that fetches
+  // /api/event/:slug client-side — there's no benefit to caching
+  // the shell, and Cloudflare's default policy was pinning the
+  // pre-PR-#144 version for users who'd visited before the deploy.
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'event.html'));
 });
 
