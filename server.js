@@ -29369,7 +29369,16 @@ app.get('/api/_smoke/polymarket-proxy', async (req, res) => {
 // `after.polymarket_proxy === before.polymarket_address`. The
 // last_backfill_at field should null-out so cron picks the user up.
 app.get('/api/admin/proxy-reconcile-test', async (req, res) => {
-  if (req.query.secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  // Accept both auth patterns: x-admin-secret header (matches the
+  // /seed + /whale-backfill admin endpoints Marc curls with) AND
+  // ?secret= query param (matches /api/_smoke/polymarket-proxy). Belt
+  // and suspenders -- no 401 footgun depending on which pattern the
+  // caller is using.
+  const headerSecret = req.headers['x-admin-secret'];
+  const querySecret  = req.query.secret;
+  if (headerSecret !== process.env.ADMIN_SECRET && querySecret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const userId = String(req.query.user_id || '').trim();
   if (!userId) return res.status(400).json({ error: 'user_id query param required' });
   if (!pool) return res.status(503).json({ error: 'Database not configured' });
