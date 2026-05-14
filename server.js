@@ -15746,7 +15746,7 @@ async function _renderMentionsHero() {
       <div class="hero-text-col">
         <div class="hero-eyebrow">${_escHtml(eyebrow)}</div>
         <h1 class="hero-headline">${_escHtml(cfg.headline)}</h1>
-        <p class="hero-sub">Live receipt within 24h of the press conference. Powell's posture on the same terms below.</p>
+        <p class="hero-sub">Chair Warsh's first FOMC press conference. Live receipt within 24h. Powell's posture on the same terms below.</p>
         ${countdownBlock}
       </div>
       ${portraitsBlock}
