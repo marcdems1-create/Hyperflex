@@ -578,8 +578,13 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     const priceText = fmtCents(yesPrice);
     const priceClass = (yesPrice != null && yesPrice < 0.5) ? 'hm-price no-leaning' : 'hm-price';
 
-    const vol = market.volume_24h || market.volume_total || 0;
-    const volText = fmtVolume(vol);
+    // Volume label: show lifetime ("$ in play") as primary; the prior
+    // "vol_24h || vol_total" fallback mislabelled lifetime as "24h"
+    // (Marc, 2026-05-14). 24h is suffixed only when meaningful (>= $100).
+    const volTotal = Number(market.volume_total) || 0;
+    const vol24h   = Number(market.volume_24h) || 0;
+    const volText  = fmtVolume(volTotal);
+    const vol24hChip = (vol24h >= 100) ? ' · ' + fmtVolume(vol24h) + ' 24h' : '';
 
     const portraitImg = speakerSlug
       ? '<img src="/speakers/' + escHtml(speakerSlug) + '.jpg" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
@@ -594,7 +599,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       +   '<div class="hm-q">' + q + '</div>'
       +   '<div class="hm-tile-bottom">'
       +     '<div class="' + priceClass + '">' + priceText + ' YES</div>'
-      +     '<div class="hm-vol">' + escHtml(volText) + ' 24h</div>'
+      +     '<div class="hm-vol">' + escHtml(volText + vol24hChip) + '</div>'
       +   '</div>'
       + '</a>';
   }
@@ -665,8 +670,9 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return;
-        const total = Number(d.total_markets) || 0;
-        const vol24h = Number(d.total_volume_24h) || 0;
+        const total    = Number(d.total_markets) || 0;
+        const volTotal = Number(d.total_volume) || 0;
+        const vol24h   = Number(d.total_volume_24h) || 0;
         if (!total) {
           // Empty heat-map -> auto-flip to calendar so the user lands on
           // a populated surface; no skeleton, no empty grid.
@@ -678,9 +684,15 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         }
         grid.innerHTML = renderGrid(d);
         if (sub) {
-          sub.textContent = total + ' market' + (total === 1 ? '' : 's') + ' · ' +
-            (vol24h > 0 ? fmtVolume(vol24h) + ' 24h volume · ' : '') +
-            'ranked by volume';
+          // "$ in play" framing -- lifetime volume primary, 24h secondary
+          // chip only when meaningful (>= $1k) so the header doesn't lead
+          // with a stale "$3K 24h" when most supply is closed-but-historic.
+          const totalChip = volTotal > 0 ? fmtVolume(volTotal) + ' in play' : '';
+          const day24Chip = vol24h >= 1000 ? ' · ' + fmtVolume(vol24h) + ' 24h' : '';
+          sub.textContent = total + ' market' + (total === 1 ? '' : 's') +
+            (totalChip ? ' · ' + totalChip : '') +
+            day24Chip +
+            ' · ranked by volume';
         }
         sec.style.display = 'block';
         wireToggle();
