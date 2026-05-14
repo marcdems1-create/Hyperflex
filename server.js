@@ -29356,6 +29356,68 @@ app.get('/api/_smoke/polymarket-proxy', async (req, res) => {
   }
 });
 
+// GET /api/admin/proxy-reconcile-test?user_id=<uuid>&secret=ADMIN_SECRET
+//
+// Smoke test for the ensureProxyStored ordering fix (PR #164). Reads the
+// user's current state, calls ensureProxyStored, returns before/after so
+// the reconciliation can be verified per-user without DB writes outside
+// the function under test. Useful for spot-checking a known whale that
+// got the wrong proxy via the e952df9 ordering bug.
+//
+// For a whale row where polymarket_proxy != polymarket_address, expect
+// `before.polymarket_proxy != before.polymarket_address` and
+// `after.polymarket_proxy === before.polymarket_address`. The
+// last_backfill_at field should null-out so cron picks the user up.
+app.get('/api/admin/proxy-reconcile-test', async (req, res) => {
+  if (req.query.secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const userId = String(req.query.user_id || '').trim();
+  if (!userId) return res.status(400).json({ error: 'user_id query param required' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const beforeRows = await dbQuery(
+      'SELECT id, polymarket_address, polymarket_proxy, is_whale, whale_rank, last_backfill_at FROM users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
+    if (!beforeRows.length) return res.status(404).json({ error: 'user not found' });
+    const before = beforeRows[0];
+    const eoa = before.polymarket_address;
+    if (!eoa) return res.status(400).json({ error: 'user has no polymarket_address', before });
+
+    const returned = await ensureProxyStored(userId, eoa);
+
+    const afterRows = await dbQuery(
+      'SELECT polymarket_address, polymarket_proxy, last_backfill_at FROM users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
+    const after = afterRows[0] || {};
+
+    res.json({
+      ok: true,
+      user_id: userId,
+      is_whale: before.is_whale,
+      whale_rank: before.whale_rank,
+      before: {
+        polymarket_address: before.polymarket_address,
+        polymarket_proxy:   before.polymarket_proxy,
+        last_backfill_at:   before.last_backfill_at,
+      },
+      ensure_returned: returned,
+      after: {
+        polymarket_address: after.polymarket_address,
+        polymarket_proxy:   after.polymarket_proxy,
+        last_backfill_at:   after.last_backfill_at,
+      },
+      reconciled: (
+        before.is_whale === true &&
+        String(before.polymarket_proxy || '').toLowerCase() !== String(before.polymarket_address || '').toLowerCase() &&
+        String(after.polymarket_proxy  || '').toLowerCase() === String(after.polymarket_address  || '').toLowerCase()
+      ),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/admin/proxy-health/:eoa
 // One round-trip = full proxy diagnostic. Computes proxy address from EOA via
 // Safe factory, checks deploy status, reads all relevant balances + allowances.
@@ -38246,18 +38308,49 @@ app.get('/api/trades/:address', async (req, res) => {
 async function ensureProxyStored(userId, eoa) {
   if (!pool || !userId || !eoa) return null;
   try {
-    const u = await dbQuery('SELECT polymarket_proxy, is_whale FROM users WHERE id = $1 LIMIT 1', [userId]);
-    if (u[0]?.polymarket_proxy) return u[0].polymarket_proxy;
-    // Whale wallets are ingested from the Polymarket leaderboard, which
-    // exposes the proxy address (that's where positions live). The stored
-    // polymarket_address IS the proxy — calling Safe factory proxies(proxy)
-    // reverts because the proxy isn't an EOA in the factory mapping. Skip
-    // derivation for whales and store the address as the proxy directly.
-    if (u[0]?.is_whale) {
-      const lower = eoa.toLowerCase();
-      await dbQuery('UPDATE users SET polymarket_proxy = $1 WHERE id = $2', [lower, userId]);
-      return lower;
+    const u = await dbQuery(
+      'SELECT polymarket_address, polymarket_proxy, is_whale FROM users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
+
+    // RECONCILE for whales BEFORE the cached-proxy early-exit.
+    //
+    // Whale ingestion contract (e952df9): polymarket_address from the
+    // Polymarket leaderboard scrape IS the proxy — that's where positions
+    // live. Calling Safe factory derivation on it reverts (proxy isn't an
+    // EOA in the factory mapping) OR worse, returns a phantom proxy of a
+    // proxy that has no Polymarket activity.
+    //
+    // e952df9 had the right semantic but checked is_whale AFTER the
+    // cached-proxy early-exit. Users whose is_whale flag flipped to true
+    // AFTER derivation had already run kept their phantom proxy forever —
+    // 1037 users surfaced this way (Marc, 2026-05-14). Two SQL UPDATEs
+    // tonight patched the existing rows; this code change prevents the
+    // ordering bug from recurring.
+    //
+    // Pattern: if is_whale is true and the stored proxy disagrees with
+    // the address, overwrite + null last_backfill_at so the cron picks
+    // the user up next tick. Idempotent on re-call. Lowercase both sides
+    // before comparing so case drift doesn't cause spurious reconciles.
+    if (u[0]?.is_whale && u[0].polymarket_address) {
+      const addr   = String(u[0].polymarket_address).toLowerCase();
+      const stored = u[0].polymarket_proxy ? String(u[0].polymarket_proxy).toLowerCase() : null;
+      if (stored !== addr) {
+        await dbQuery(
+          'UPDATE users SET polymarket_proxy = $1, last_backfill_at = NULL WHERE id = $2',
+          [addr, userId]
+        );
+        console.log(
+          `[ensureProxyStored] user=${userId.slice(0, 8)} whale-reconcile: ` +
+          `proxy ${stored ? stored.slice(0, 10) : 'null'} -> ${addr.slice(0, 10)} ` +
+          `(is_whale flipped after derive)`
+        );
+      }
+      return addr;
     }
+
+    // Non-whale early-exit on cached proxy (existing behavior).
+    if (u[0]?.polymarket_proxy) return u[0].polymarket_proxy;
     // Try Safe factory derivation first — works for browser-wallet (MetaMask)
     // users who deployed via Polymarket's standard factory.
     const proxy = await derivePolymarketProxy(eoa);
