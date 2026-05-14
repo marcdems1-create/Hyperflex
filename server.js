@@ -142,6 +142,7 @@ const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
 const wordMarkets = require('./lib/word-markets');
+const mentionSync = require('./lib/mention-sync');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -24994,6 +24995,39 @@ app.get('/api/admin/signup-audit', requireAdmin, async (req, res) => {
 // Tells you exactly which users have a polymarket_address but no cached
 // positions, and whether their proxy has been derived. Built after 14
 // users showed 0 positions despite having wallet addresses — root cause
+// MP-2d mention-sync health -- service-role gated. Surfaces lag from
+// the last successful rule pass + LLM pass and the most recent failure
+// so we can alarm before the cron drifts silently.
+app.get('/api/admin/mention-sync-health', requireAdmin, async (req, res) => {
+  try {
+    const health = await mentionSync.getHealth(dbQuery);
+    res.json(health);
+  } catch (e) {
+    res.status(500).json({ error: 'health_check_failed', message: e.message });
+  }
+});
+
+// Admin-triggered manual rule pass. Useful for forcing a sync after a
+// mention_event metadata edit; cron runs every 15 min otherwise.
+app.post('/api/admin/mention-sync/run-rule', requireAdmin, async (req, res) => {
+  try {
+    const result = await mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Admin-triggered manual LLM pass on remaining ambiguities.
+app.post('/api/admin/mention-sync/run-llm', requireAdmin, async (req, res) => {
+  try {
+    const result = await mentionSync.llmPass(dbQuery, { log: (...a) => console.log(...a) });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // was we stored the EOA but Polymarket positions live on the Safe proxy.
 app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
   // Build the query in two fallbacks: preferred query uses polymarket_proxy
@@ -51888,6 +51922,13 @@ app.get('/api/intelligence', async (req, res) => {
 setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
 setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
 setInterval(safeCron('updatePlatformMetrics', updatePlatformMetrics), 60 * 60 * 1000);
+
+// MP-2d mention-sync. Rule pass every 15 min (cheap; reuses word-markets
+// discovery cache). LLM pass every hour, capped at LLM_MAX_PER_RUN
+// ambiguities so daily Sonnet 4.6 spend stays bounded (~$3/day at cap).
+setInterval(safeCron('mentionSyncRule', () => mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) })), 15 * 60 * 1000);
+setInterval(safeCron('mentionSyncLlm',  () => mentionSync.llmPass(dbQuery,  { log: (...a) => console.log(...a) })), 60 * 60 * 1000);
+
 setTimeout(() => {
   resolveSignalOutcomes().catch(e => _logError('boot/resolveSignalOutcomes', e));
   refreshSourceWeights().catch(e => _logError('boot/refreshSourceWeights', e));
@@ -51896,6 +51937,9 @@ setTimeout(() => {
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS whale_count INTEGER DEFAULT 0').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS edge_cents INTEGER').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
+  // Boot-time first rule pass so we don't wait 15min for the first run.
+  // LLM pass deferred to its hourly schedule — no need to burn budget on boot.
+  mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) }).catch(e => _logError('boot/mentionSyncRule', e));
 }, 60000);
 
 // ══════════════════════════════════════════════════════════════════════
