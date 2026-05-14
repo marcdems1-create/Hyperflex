@@ -51633,6 +51633,69 @@ if (pool) {
       )`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_alpha_freshness_updated ON alpha_freshness(updated_at)`).catch(() => {});
 
+      // MP-2d mention_markets + classification_runs. Migration #61 file
+      // (supabase_migration_61_mention_markets_create.sql) is the canonical
+      // record, but the manual-apply path was missed across deploys
+      // 96f40366 + 373ecab1. Auto-migrate here so the next boot has the
+      // table present. Schema matches migration #61 (the post-#60 shape).
+      //
+      // classification_runs must come first -- it's the FK target for
+      // mention_markets.classification_run_id.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS classification_runs (
+        id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        started_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at          TIMESTAMPTZ,
+        candidates_examined  INT NOT NULL DEFAULT 0,
+        rule_matched         INT NOT NULL DEFAULT 0,
+        llm_matched          INT NOT NULL DEFAULT 0,
+        llm_calls            INT NOT NULL DEFAULT 0,
+        no_match             INT NOT NULL DEFAULT 0,
+        duration_ms          INT,
+        status               TEXT NOT NULL DEFAULT 'running'
+          CHECK (status IN ('running','success','partial','failed')),
+        error                TEXT,
+        notes                TEXT
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_classification_runs_started ON classification_runs(started_at DESC)`).catch(() => {});
+      await dbQuery(`ALTER TABLE classification_runs ENABLE ROW LEVEL SECURITY`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS mention_markets (
+        id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_id                  uuid NOT NULL REFERENCES mention_events(id) ON DELETE CASCADE,
+        condition_id              TEXT NOT NULL,
+        market_question           TEXT,
+        market_type               TEXT
+          CHECK (market_type IS NULL OR market_type IN (
+            'word_count','phrase_appearance','sentiment','outcome',
+            'binary','multi_outcome','scalar'
+          )),
+        tracked_word              TEXT,
+        tracked_phrase            TEXT,
+        threshold_count           INT,
+        yes_price                 NUMERIC(5,4),
+        no_price                  NUMERIC(5,4),
+        volume_24h                NUMERIC,
+        edge_score                INT,
+        whale_count               INT,
+        whale_volume              NUMERIC,
+        last_synced_at            TIMESTAMPTZ,
+        display_order             INT NOT NULL DEFAULT 0,
+        classification_method     TEXT
+          CHECK (classification_method IS NULL OR classification_method IN
+            ('rule','llm','manual','none')),
+        classification_confidence NUMERIC(3,2),
+        last_classified_at        TIMESTAMPTZ,
+        classification_run_id     uuid REFERENCES classification_runs(id) ON DELETE SET NULL,
+        created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (event_id, condition_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_mention_markets_event ON mention_markets(event_id, display_order)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_mention_markets_synced ON mention_markets(last_synced_at)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_mention_markets_last_classified ON mention_markets(last_classified_at)`).catch(() => {});
+      await dbQuery(`ALTER TABLE mention_markets ENABLE ROW LEVEL SECURITY`).catch(() => {});
+      await dbQuery(`DROP POLICY IF EXISTS "mention markets are public read" ON mention_markets`).catch(() => {});
+      await dbQuery(`CREATE POLICY "mention markets are public read" ON mention_markets FOR SELECT USING (true)`).catch(() => {});
+
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
   })();
