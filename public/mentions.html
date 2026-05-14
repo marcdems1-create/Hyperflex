@@ -135,6 +135,68 @@ a{color:inherit;text-decoration:none}
 
 /* ── UPCOMING WORD-MARKET EVENTS (PR 2 — calendar-first rebuild) ── */
 .upcoming-events-list{display:flex;flex-direction:column;gap:8px}
+
+/* ── HEAT-MAP (PR 2 UI of rescope — claude/mentions-heatmap-ui-v1) ──
+   Tier-bucketed grid of live mention markets. Inherits the gradient-bg
+   tile vocab from /feed .mobile-alpha-card but renamed .hm-tile so
+   future changes to /feed don't ripple. 12-column grid auto-flow dense
+   so tier order packs tightly without gap rows. Tier sizing carries the
+   "heat" hierarchy: jumbo 2-up, large 3-up, medium 4-up, small 6-up.
+   Typography scales per tier; brand cyan for YES-leaning (>=50¢),
+   --hawk (red) for NO-leaning. */
+.hm-section{margin:8px 0 36px;position:relative;z-index:2}
+.hm-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:18px;flex-wrap:wrap}
+.hm-title{font-family:var(--sans);font-size:22px;font-weight:800;letter-spacing:-0.015em;color:var(--ink);margin:0}
+.hm-sub{font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin:4px 0 0}
+.hm-toggle{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px;flex-shrink:0}
+.hm-tab{appearance:none;background:transparent;border:0;font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;padding:8px 14px;border-radius:6px;cursor:pointer;transition:background 0.15s, color 0.15s}
+.hm-tab:hover{color:var(--ink-2)}
+.hm-tab.active{background:rgba(0,212,255,0.10);color:var(--cyan)}
+
+.hm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;grid-auto-flow:dense}
+.hm-tile{display:flex;flex-direction:column;gap:10px;padding:16px 16px 14px;border-radius:12px;background:linear-gradient(180deg,rgba(140,120,255,0.05),rgba(140,120,255,0.01));border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color 0.15s, transform 0.15s, background 0.15s;min-height:120px}
+.hm-tile:hover{border-color:var(--cyan-glow);transform:translateY(-1px);background:linear-gradient(180deg,rgba(0,212,255,0.06),rgba(0,212,255,0.01))}
+.hm-tile.jumbo{grid-column:span 6;min-height:200px;padding:24px 24px 20px;gap:16px;background:linear-gradient(180deg,rgba(0,212,255,0.06),rgba(0,212,255,0.01));border-color:rgba(0,212,255,0.20)}
+.hm-tile.large{grid-column:span 4;min-height:152px;padding:18px 18px 16px;gap:12px}
+.hm-tile.medium{grid-column:span 3;min-height:120px}
+.hm-tile.small{grid-column:span 2;min-height:96px;padding:12px 12px 10px;gap:6px}
+
+.hm-tile-top{display:flex;align-items:center;gap:10px}
+.hm-portrait{width:32px;height:32px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--muted-2);flex-shrink:0}
+.hm-portrait::before{content:attr(data-monogram);position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.hm-portrait img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;z-index:1;display:block}
+.hm-tile.jumbo .hm-portrait{width:48px;height:48px;font-size:19px}
+.hm-tile.small .hm-portrait{width:24px;height:24px;font-size:10px}
+.hm-speaker{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted-2);text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-tile.jumbo .hm-speaker{font-size:12px}
+
+.hm-q{font-family:var(--sans);font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hm-tile.jumbo .hm-q{font-size:20px;-webkit-line-clamp:3;line-height:1.25;font-weight:700}
+.hm-tile.large .hm-q{font-size:15px}
+.hm-tile.medium .hm-q{font-size:13px}
+.hm-tile.small .hm-q{font-size:12px;-webkit-line-clamp:2;color:var(--ink-2)}
+
+.hm-tile-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:auto}
+.hm-price{font-family:var(--mono);font-weight:800;color:var(--cyan);line-height:1;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.hm-price.no-leaning{color:var(--hawk)}
+.hm-tile.jumbo .hm-price{font-size:36px}
+.hm-tile.large .hm-price{font-size:26px}
+.hm-tile.medium .hm-price{font-size:20px}
+.hm-tile.small .hm-price{font-size:16px}
+.hm-vol{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;flex-shrink:0}
+.hm-tile.jumbo .hm-vol{font-size:13px;color:var(--ink-2)}
+.hm-tile.small .hm-vol{font-size:10px}
+
+.hm-empty{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:24px 0;line-height:1.6;text-align:center}
+
+@media(max-width:768px){
+  .hm-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .hm-tile.jumbo,.hm-tile.large,.hm-tile.medium,.hm-tile.small{grid-column:span 2;min-height:auto}
+  .hm-tile.jumbo .hm-q{font-size:17px}
+  .hm-tile.jumbo .hm-price{font-size:28px}
+  .hm-tile.large .hm-price{font-size:22px}
+  .hm-header{align-items:flex-start;flex-direction:column;gap:12px}
+}
 .event-row{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:16px 18px;background:rgba(255,255,255,0.025);border:1px solid var(--line);transition:border-color .15s,background .15s;cursor:pointer}
 .event-row:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04)}
 .event-row.expanded{border-color:var(--cyan)}
@@ -247,6 +309,26 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <!--HERO_HTML-->
 
 <main class="page" id="page">
+  <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
+       Tier-bucketed grid sourced from /api/mentions-heatmap (slug-probe
+       primary, 4-tier percentile bucketing). Default surface on /mentions;
+       view toggle flips to the calendar view (#upcoming-events) below.
+       Empty state graceful: if heat-map returns zero tiles, auto-shows
+       calendar instead of skeleton. -->
+  <section id="mention-supply" class="hm-section" style="display:none">
+    <div class="hm-header">
+      <div>
+        <h2 class="hm-title">Live mention markets</h2>
+        <p class="hm-sub" id="hm-sub">Loading…</p>
+      </div>
+      <div class="hm-toggle" role="tablist" id="hm-toggle">
+        <button class="hm-tab active" data-mode="heatmap" type="button" role="tab">Heat map</button>
+        <button class="hm-tab" data-mode="calendar" type="button" role="tab">By event</button>
+      </div>
+    </div>
+    <div id="hm-grid" class="hm-grid"></div>
+  </section>
+
   <!-- Upcoming word-market events — PR 2 of mentions rescope.
        Auto-hides when /api/word-markets/upcoming returns 0 events
        (per voice charter: no playful empty surfaces). When
@@ -441,6 +523,173 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         });
       })
       .catch(() => { /* fail silent, section stays hidden */ });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+
+// ────────────────────────────────────────────────────────────────────
+// LIVE MENTION MARKETS heat-map (PR 2 UI of mentions rescope).
+// Fetches /api/mentions-heatmap, renders tier-bucketed grid, wires
+// the Heat-map | By event toggle with localStorage persistence.
+// Graceful empty-state: if heat-map returns zero tiles, auto-flip to
+// calendar view (the existing #upcoming-events section).
+// ────────────────────────────────────────────────────────────────────
+(function () {
+  const LS_KEY = 'hf_mentions_view_mode';
+  const TIER_ORDER = ['jumbo', 'large', 'medium', 'small'];
+
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function fmtVolume(n) {
+    if (!n || !isFinite(n)) return '$0';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'k';
+    return '$' + Math.round(n);
+  }
+
+  function fmtCents(price) {
+    if (price == null || !isFinite(price)) return '—';
+    return Math.round(price * 100) + '¢';
+  }
+
+  function speakerMonogram(speaker) {
+    return speaker ? String(speaker).charAt(0).toUpperCase() : '?';
+  }
+
+  function renderTile(market, tier) {
+    const cid = escHtml(market.condition_id || '');
+    const q = escHtml(market.question || '');
+    const speaker = market.speaker || '';
+    const speakerSlug = market.speaker_slug || (speaker ? speaker.toLowerCase().replace(/[^a-z0-9-]+/g, '') : '');
+    const monogram = escHtml(speakerMonogram(speaker));
+    const slug = market.polymarket_slug || '';
+    const href = slug ? '/market/' + escHtml(slug) : '#';
+
+    const yesPrice = market.yes_price;
+    const priceText = fmtCents(yesPrice);
+    const priceClass = (yesPrice != null && yesPrice < 0.5) ? 'hm-price no-leaning' : 'hm-price';
+
+    const vol = market.volume_24h || market.volume_total || 0;
+    const volText = fmtVolume(vol);
+
+    const portraitImg = speakerSlug
+      ? '<img src="/speakers/' + escHtml(speakerSlug) + '.jpg" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
+      : '';
+
+    return ''
+      + '<a class="hm-tile ' + tier + '" href="' + href + '" data-cid="' + cid + '">'
+      +   '<div class="hm-tile-top">'
+      +     '<div class="hm-portrait" data-monogram="' + monogram + '">' + portraitImg + '</div>'
+      +     '<div class="hm-speaker">' + escHtml(speaker) + '</div>'
+      +   '</div>'
+      +   '<div class="hm-q">' + q + '</div>'
+      +   '<div class="hm-tile-bottom">'
+      +     '<div class="' + priceClass + '">' + priceText + ' YES</div>'
+      +     '<div class="hm-vol">' + escHtml(volText) + ' 24h</div>'
+      +   '</div>'
+      + '</a>';
+  }
+
+  function renderGrid(payload) {
+    const tiers = (payload && payload.tiers) || {};
+    const parts = [];
+    for (const tier of TIER_ORDER) {
+      const arr = Array.isArray(tiers[tier]) ? tiers[tier] : [];
+      for (const m of arr) parts.push(renderTile(m, tier));
+    }
+    return parts.join('');
+  }
+
+  function applyMode(mode) {
+    const heatSec = document.getElementById('mention-supply');
+    const grid    = document.getElementById('hm-grid');
+    const calSec  = document.getElementById('upcoming-events');
+    if (!heatSec) return;
+    if (mode === 'calendar') {
+      if (grid) grid.style.display = 'none';
+      if (calSec) calSec.dataset.hmToggled = '1';  // mark forced-visible
+      if (calSec) calSec.style.display = 'block';
+    } else {
+      if (grid) grid.style.display = '';
+      if (calSec && calSec.dataset.hmToggled === '1') {
+        calSec.style.display = 'none';
+        delete calSec.dataset.hmToggled;
+      }
+      // When mode==heatmap, the upcoming-events section follows its own
+      // auto-show logic from the prior IIFE (only shown when supply exists).
+    }
+    const toggle = document.getElementById('hm-toggle');
+    if (toggle) {
+      toggle.querySelectorAll('.hm-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+    }
+  }
+
+  function wireToggle() {
+    const toggle = document.getElementById('hm-toggle');
+    if (!toggle) return;
+    toggle.addEventListener('click', function (e) {
+      const btn = e.target.closest('.hm-tab');
+      if (!btn) return;
+      const mode = btn.dataset.mode;
+      if (mode !== 'heatmap' && mode !== 'calendar') return;
+      try { localStorage.setItem(LS_KEY, mode); } catch (_) {}
+      applyMode(mode);
+    });
+  }
+
+  function readMode() {
+    try {
+      const v = localStorage.getItem(LS_KEY);
+      return (v === 'calendar') ? 'calendar' : 'heatmap';
+    } catch (_) { return 'heatmap'; }
+  }
+
+  function init() {
+    const sec = document.getElementById('mention-supply');
+    const grid = document.getElementById('hm-grid');
+    const sub = document.getElementById('hm-sub');
+    if (!sec || !grid) return;
+
+    fetch('/api/mentions-heatmap', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const total = Number(d.total_markets) || 0;
+        const vol24h = Number(d.total_volume_24h) || 0;
+        if (!total) {
+          // Empty heat-map -> auto-flip to calendar so the user lands on
+          // a populated surface; no skeleton, no empty grid.
+          if (sub) sub.textContent = 'No live markets right now · showing event calendar';
+          sec.style.display = 'block';
+          applyMode('calendar');
+          wireToggle();
+          return;
+        }
+        grid.innerHTML = renderGrid(d);
+        if (sub) {
+          sub.textContent = total + ' market' + (total === 1 ? '' : 's') + ' · ' +
+            (vol24h > 0 ? fmtVolume(vol24h) + ' 24h volume · ' : '') +
+            'ranked by volume';
+        }
+        sec.style.display = 'block';
+        wireToggle();
+        applyMode(readMode());
+      })
+      .catch(() => {
+        // Fetch failed -> keep section hidden; calendar IIFE handles
+        // its own visibility from its own fetch.
+      });
   }
 
   if (document.readyState === 'loading') {
