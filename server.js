@@ -15715,18 +15715,19 @@ async function _renderMentionsHero() {
   // Portrait comparison panel — Powell (current, muted) vs Warsh
   // (incoming, full-color, cyan border). Sits to the right of the
   // text column on desktop, stacks below countdown on mobile.
-  // Photos are loaded from /images/<speaker>.jpg locally; if a file
+  // Photos are loaded from /speakers/<slug>.jpg locally; if a file
   // is missing the <img> removes itself via onerror and the CSS
   // monogram (data-monogram="P" / "W") is what shows. Panel ships
-  // clean even before photos land.
+  // clean even before photos land. Slug = lowercased speaker name
+  // matching mention_events.speaker. See ATTRIBUTION.md for sources.
   const portraitsBlock = `
     <aside class="hero-portraits" aria-label="Posture comparison">
       <div class="hero-portrait muted" data-monogram="P">
-        <img src="/images/powell.jpg" alt="Jerome Powell, current Fed Chair" onerror="this.remove()" loading="lazy">
+        <img src="/speakers/powell.jpg" alt="Jerome Powell, current Fed Chair" onerror="this.remove()" loading="lazy">
       </div>
       <div class="hero-vs" aria-hidden="true">VS</div>
       <div class="hero-portrait featured" data-monogram="W">
-        <img src="/images/warsh.jpg" alt="Kevin Warsh, incoming Fed Chair" onerror="this.remove()" loading="lazy">
+        <img src="/speakers/warsh.jpg" alt="Kevin Warsh, incoming Fed Chair" onerror="this.remove()" loading="lazy">
       </div>
       <div class="hero-portraits-row">
         <span class="hero-portraits-label">Powell · current</span>
@@ -32628,7 +32629,7 @@ app.get('/api/event/:slug/sub-markets', async (req, res) => {
       wordMarkets.DEFAULT_SPEAKERS
     );
     const portrait = attributed
-      ? '/images/' + String(attributed).toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg'
+      ? '/speakers/' + String(attributed).toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg'
       : null;
 
     const titleCase = (s) =>

@@ -473,12 +473,13 @@ function renderLead(ev) {
 // is set. Subject (the event's speaker) gets the cyan-bordered
 // featured treatment; foil (compared_to_speaker) is the muted-gray
 // "for comparison" framing. Photos are loaded from
-// /images/<speaker-lowercase>.jpg; missing files fall through to
-// CSS-rendered monograms via onerror=this.remove(). Caption labels
-// are domain-aware via the cfg lookup so Fed reads "current/incoming"
-// vs politics reads "this stance/baseline" or similar.
+// /speakers/<slug>.jpg (slug = lowercased speaker name matching
+// mention_events.speaker); missing files fall through to CSS-rendered
+// monograms via onerror=this.remove(). Caption labels are domain-aware
+// via the cfg lookup so Fed reads "current/incoming" vs politics reads
+// "this stance/baseline" or similar. See ATTRIBUTION.md for sources.
 function _portraitFile(speaker) {
-  return '/images/' + String(speaker || '').toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg';
+  return '/speakers/' + String(speaker || '').toLowerCase().replace(/[^a-z0-9-]+/g, '') + '.jpg';
 }
 
 function _portraitLabels(ev) {
@@ -1085,15 +1086,16 @@ function renderWordEvent(ev, nextEvent) {
     + '<div class="hero-stat' + (stat3Dim ? ' dim' : '') + '"><span class="hero-stat-n">' + esc(String(stat3Value)) + '</span><span class="hero-stat-l">' + stat3Label + '</span></div>'
     + '</div>';
 
-  // Speaker portrait. Image at /images/<lowercased>.jpg loaded
-  // lazily; falls back to monogram if image 404s (onerror removes
-  // the img). Same pattern as _renderMentionsHero's portrait block.
+  // Speaker portrait. Image at /speakers/<slug>.jpg loaded lazily;
+  // falls back to monogram if image 404s (onerror removes the img).
+  // Same pattern as _renderMentionsHero's portrait block. Slug shape
+  // matches mention_events.speaker lowercased. See ATTRIBUTION.md.
   const speakerSlug = ev.speaker ? String(ev.speaker).toLowerCase() : '';
   const speakerMono = ev.speaker ? esc(ev.speaker.charAt(0)) : '?';
   const portraitBlock = ev.speaker
     ? '<aside class="hero-portraits" aria-label="' + esc(ev.speaker) + '">'
       +   '<div class="hero-portrait" data-monogram="' + speakerMono + '">'
-      +     '<img src="/images/' + esc(speakerSlug) + '.jpg" alt="' + esc(ev.speaker) + '" onerror="this.remove()" loading="lazy">'
+      +     '<img src="/speakers/' + esc(speakerSlug) + '.jpg" alt="' + esc(ev.speaker) + '" onerror="this.remove()" loading="lazy">'
       +   '</div>'
       +   '<div class="hero-portraits-caption">' + esc(ev.speaker) + '</div>'
       + '</aside>'
