@@ -15701,17 +15701,18 @@ async function _renderMentionsHero() {
     ctaLabel = 'View Warsh preview →';
   }
 
+  // In-hero WORD-BETTING MARKETS strip renders ONLY when this speaker's
+  // own sub-markets exist (small preview, 4 mini-cards). When empty, the
+  // hero stays clean -- the full /api/mentions-heatmap tile grid below
+  // (#mention-supply section) is the global live-mentions surface and
+  // replaces the prior "browse archive" empty-state.
   const stripBlock = wordSubMarkets.length
     ? `
     <div class="hero-strip">
       <div class="hero-strip-h">WORD-BETTING MARKETS</div>
       <div class="hero-strip-row">${wordSubMarkets.map(_renderHeroWordMiniCard).join('')}</div>
     </div>`
-    : `
-    <div class="hero-strip">
-      <div class="hero-strip-h">WORD-BETTING MARKETS</div>
-      <div class="hero-strip-empty">Word-betting markets list closer to the event. <a href="/mentions/archive">Browse posture archive →</a></div>
-    </div>`;
+    : '';
 
   // Portrait comparison panel — Powell (current, muted) vs Warsh
   // (incoming, full-color, cyan border). Sits to the right of the
