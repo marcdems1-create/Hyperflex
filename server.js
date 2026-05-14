@@ -143,6 +143,7 @@ const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
 const wordMarkets = require('./lib/word-markets');
 const mentionSync = require('./lib/mention-sync');
+const mentionsHeatmap = require('./lib/mentions-heatmap');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -32581,6 +32582,37 @@ app.post('/api/admin/hot-markets/refresh', async (req, res) => {
 // Phase 1 of the /mentions rebuild (Path B: calendar-first, words-betting).
 // See lib/word-markets.js for the sourcing pipeline. These endpoints are
 // the backbone of the new calendar UI shipped in PR 2.
+
+// GET /api/mentions-heatmap
+// PR 1 of /mentions heat-map (claude/mentions-heatmap-sourcing-v1).
+// Returns the tier-bucketed market list for the heat-map tile grid.
+// 5-min cache; 4 keyword query patterns (tag-based deferred to v1.1
+// pending gamma /tags endpoint verification).
+//
+// Response shape: see lib/mentions-heatmap.js:_composeResponse
+//   { total_markets, total_volume_24h, tiers:{jumbo,large,medium,small},
+//     cached_at, next_refresh_at, sourcing:{patterns_shipped,
+//     patterns_deferred, funnel, tier_counts, ...} }
+//
+// no-store on the response so Cloudflare doesn't pin an empty payload
+// from before the sourcing pipeline lands -- same rationale as
+// /api/word-markets/upcoming. Origin already caches 5 min.
+app.get('/api/mentions-heatmap', async (req, res) => {
+  try {
+    const bypass = String(req.query.bypass_cache || '') === '1';
+    const response = await mentionsHeatmap.buildHeatmapResponse({ bypass_cache: bypass });
+    res.set('Cache-Control', 'no-store');
+    res.json(response);
+  } catch (e) {
+    console.error('[mentions-heatmap] endpoint error:', e.message);
+    res.status(500).json({
+      error: e.message,
+      total_markets: 0,
+      total_volume_24h: 0,
+      tiers: { jumbo: [], large: [], medium: [], small: [] },
+    });
+  }
+});
 
 // GET /api/word-markets/upcoming?limit=20
 // Returns upcoming speaker-event groups with word-markets attached.
