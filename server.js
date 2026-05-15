@@ -37953,6 +37953,63 @@ async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trad
   return totalPoints;
 }
 
+// GET /api/dashboard/performance — auth'd performance card data for the
+// account dashboard. 90-day window matches FLEX scoring. Hardcoded
+// 20-trade qualification threshold mirrors the rest of the app. Returns
+// nulls for avg_win / avg_loss / risk_reward when a side has zero
+// samples; UI renders "—", never "Infinity" or "$0" placeholders.
+const DASH_PERF_CODE_VERSION = '2026-05-15-dashboard-performance-card-v1';
+const DASH_PERF_QUALIFY_MIN = 20;
+app.get('/api/dashboard/performance', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+
+    const rows = await dbQuery(
+      `SELECT
+         COUNT(*) FILTER (WHERE realized_pnl > 0)                       AS wins,
+         COUNT(*) FILTER (WHERE realized_pnl < 0)                       AS losses,
+         AVG(realized_pnl) FILTER (WHERE realized_pnl > 0)              AS avg_win,
+         ABS(AVG(realized_pnl) FILTER (WHERE realized_pnl < 0))         AS avg_loss,
+         COUNT(*)                                                        AS settled_count_90d
+       FROM realized_trades
+       WHERE user_id = $1
+         AND closed_at >= NOW() - INTERVAL '90 days'`,
+      [userId]
+    );
+
+    const r = (rows && rows[0]) || {};
+    const wins   = Number(r.wins   || 0);
+    const losses = Number(r.losses || 0);
+    const settledCount = Number(r.settled_count_90d || 0);
+    const settledEvents = wins + losses;  // pushes excluded — math card semantics
+
+    const avgWin  = r.avg_win  != null ? Number(r.avg_win)  : null;
+    const avgLoss = r.avg_loss != null ? Number(r.avg_loss) : null;
+    const winRate = settledEvents > 0 ? (wins / settledEvents) : null;
+    const riskReward = (avgWin != null && avgLoss != null && avgLoss > 0)
+      ? (avgWin / avgLoss)
+      : null;
+    const qualifies = settledCount >= DASH_PERF_QUALIFY_MIN;
+
+    return res.json({
+      win_rate:           winRate,
+      wins,
+      losses,
+      settled_events:     settledEvents,
+      avg_win:            avgWin,
+      avg_loss:           avgLoss,
+      risk_reward:        riskReward,
+      qualifies,
+      settled_count_90d:  settledCount,
+      code_version:       DASH_PERF_CODE_VERSION,
+    });
+  } catch (e) {
+    console.error('[dashboard-performance]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // Get FLEX points balance
 app.get('/api/flex-points', requireAuth, async (req, res) => {
   try {
