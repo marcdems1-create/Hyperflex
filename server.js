@@ -11425,6 +11425,16 @@ app.get('/passport/:userId', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
 
+// PR #173 prediction-thesis v1: composer + placeholder permalink page.
+// /thesis-compose is the create form. /thesis/:id is a stub for v1 —
+// PR #175 ships the real share-able permalink + render.
+app.get('/thesis-compose', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'thesis-compose.html'));
+});
+app.get('/thesis/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'thesis-placeholder.html'));
+});
+
 // GET /@:handle/passport — handle-based passport route (canonical).
 app.get('/@:handle/passport', (req, res) => {
   if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
@@ -18324,6 +18334,312 @@ app.get('/api/picks/:id/verify', async (req, res) => {
   } catch (err) {
     console.error('[picks] verify error:', err.message);
     res.status(500).json({ error: 'Verify failed' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// PREDICTION THESIS v1 (PR #173, 2026-05-15)
+// Narrative parlay — user-authored bundle of 2-10 active Polymarket
+// positions, tracked leg-by-leg. Resolution cron lands in PR #174;
+// leaderboard + permalink page in PR #175. This PR ships schema +
+// create/read API + composer UI + profile tab. Strict mode only —
+// original entry prices are load-bearing for resolution, immutability
+// is the product.
+// ═══════════════════════════════════════════════════════════════════════
+const PREDICTION_THESIS_CODE_VERSION = '2026-05-15-prediction-thesis-v1';
+
+function signThesisLockHash({ user_id, title, legs, created_at }) {
+  if (!HFX_PICK_SECRET) throw new Error('HYPERFLEX_PICK_SECRET unset');
+  const msg = JSON.stringify({
+    user_id,
+    title,
+    legs: legs.map(l => ({
+      condition_id: l.condition_id,
+      direction:    l.direction,
+      entry_price:  l.entry_price,
+    })),
+    created_at,
+  });
+  return crypto.createHmac('sha256', HFX_PICK_SECRET).update(msg).digest('hex');
+}
+
+// Resolve auth — admin-secret header bypass + Bearer JWT fall-through.
+// Mirrors /api/dashboard/performance dual-mode pattern. Returns
+// { userId } on success or { error, status } on failure.
+function _resolveThesisAuth(req, opts = {}) {
+  const adminSecret = req.header('x-admin-secret');
+  if (adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET) {
+    const userId = req.query.user_id || (req.body && req.body.user_id);
+    if (!userId && opts.requireUserId !== false) {
+      return { error: 'user_id required with admin auth', status: 400 };
+    }
+    return { userId, admin: true };
+  }
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return { error: 'Auth required', status: 401 };
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return { userId: payload.id };
+  } catch (_) {
+    return { error: 'Invalid token', status: 401 };
+  }
+}
+
+// POST /api/theses — create a thesis with 2-10 legs.
+app.post('/api/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'HYPERFLEX_PICK_SECRET unset' });
+
+    const authR = _resolveThesisAuth(req);
+    if (authR.error) return res.status(authR.status).json({ error: authR.error });
+    const userId = authR.userId;
+
+    const { title, rationale, legs } = req.body || {};
+    if (typeof title !== 'string' || !title.trim()) return res.status(400).json({ error: 'title required' });
+    if (title.length > 80) return res.status(400).json({ error: 'title must be ≤80 chars' });
+    if (rationale != null && typeof rationale !== 'string') return res.status(400).json({ error: 'rationale must be string' });
+    if (rationale && rationale.length > 500) return res.status(400).json({ error: 'rationale must be ≤500 chars' });
+    if (!Array.isArray(legs) || legs.length < 2 || legs.length > 10) {
+      return res.status(400).json({ error: 'legs.length must be between 2 and 10' });
+    }
+
+    // Per-leg shape + price range
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      if (!l || typeof l !== 'object') return res.status(400).json({ error: `leg ${i+1} invalid` });
+      if (typeof l.condition_id !== 'string' || !l.condition_id) return res.status(400).json({ error: `leg ${i+1} condition_id required` });
+      if (typeof l.market_question !== 'string' || !l.market_question) return res.status(400).json({ error: `leg ${i+1} market_question required` });
+      if (l.direction !== 'yes' && l.direction !== 'no') return res.status(400).json({ error: `leg ${i+1} direction must be 'yes' or 'no'` });
+      const ep = Number(l.entry_price);
+      if (!(ep > 0 && ep < 1)) return res.status(400).json({ error: `leg ${i+1} entry_price must be between 0 and 1 exclusive` });
+      const stake = Number(l.stake_usd);
+      if (!(stake > 0)) return res.status(400).json({ error: `leg ${i+1} stake_usd must be positive` });
+    }
+    // No duplicate condition_ids inside a single thesis
+    const seen = new Set();
+    for (const l of legs) {
+      if (seen.has(l.condition_id)) return res.status(400).json({ error: 'duplicate condition_id in legs' });
+      seen.add(l.condition_id);
+    }
+
+    // Validate each condition_id exists on Polymarket AND is currently live (closed:false)
+    for (let i = 0; i < legs.length; i++) {
+      let m;
+      try { m = await polymarket.fetchMarketByConditionId(legs[i].condition_id); }
+      catch (e) { return res.status(502).json({ error: `gamma unavailable validating leg ${i+1}: ${e.message}` }); }
+      if (!m) return res.status(400).json({ error: `leg ${i+1} condition_id not found on Polymarket` });
+      if (m.closed === true) return res.status(400).json({ error: `leg ${i+1} market is already closed` });
+    }
+
+    const createdAt = new Date().toISOString();
+    const lockedHash = signThesisLockHash({
+      user_id: userId,
+      title:   title.trim(),
+      legs,
+      created_at: createdAt,
+    });
+    const totalStake = legs.reduce((s, l) => s + Number(l.stake_usd), 0);
+
+    // Transaction: thesis + legs together so we never leave a half-built
+    // row behind. pg pool's client.query path is used directly because the
+    // dbQuery helper doesn't expose transaction control.
+    const client = await pool.connect();
+    let thesisId;
+    try {
+      await client.query('BEGIN');
+      const ins = await client.query(
+        `INSERT INTO prediction_thesis
+           (user_id, title, rationale, created_at, locked_hash,
+            resolution_state, legs_total, total_stake_usd, code_version)
+         VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8)
+         RETURNING id, created_at`,
+        [userId, title.trim(), rationale || null, createdAt, lockedHash,
+         legs.length, totalStake.toFixed(2), PREDICTION_THESIS_CODE_VERSION]
+      );
+      thesisId = ins.rows[0].id;
+      for (let i = 0; i < legs.length; i++) {
+        const l = legs[i];
+        await client.query(
+          `INSERT INTO prediction_thesis_leg
+             (thesis_id, leg_order, condition_id, token_id, market_question,
+              direction, entry_price, stake_usd)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [thesisId, i + 1, l.condition_id, l.token_id || null, l.market_question,
+           l.direction, Number(l.entry_price).toFixed(4), Number(l.stake_usd).toFixed(2)]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return res.status(201).json({
+      id:           thesisId,
+      locked_hash:  lockedHash,
+      legs_total:   legs.length,
+      created_at:   createdAt,
+      code_version: PREDICTION_THESIS_CODE_VERSION,
+    });
+  } catch (e) {
+    console.error('[thesis create]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/theses/:id — public read, full thesis + legs ordered.
+app.get('/api/theses/:id', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid id' });
+
+    const tRows = await dbQuery(`SELECT * FROM prediction_thesis WHERE id = $1 LIMIT 1`, [id]);
+    if (!tRows.length) return res.status(404).json({ error: 'thesis not found' });
+    const thesis = tRows[0];
+
+    const lRows = await dbQuery(
+      `SELECT * FROM prediction_thesis_leg WHERE thesis_id = $1 ORDER BY leg_order ASC`,
+      [id]
+    );
+    return res.json({ thesis, legs: lRows });
+  } catch (e) {
+    console.error('[thesis read]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/theses?user_id=<uuid>&state=<state>&limit=20 — public list.
+app.get('/api/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { user_id, state } = req.query;
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+
+    const where = [];
+    const params = [];
+    if (user_id) { params.push(user_id); where.push(`user_id = $${params.length}`); }
+    if (state && ['open','hit','partial','miss'].includes(state)) {
+      params.push(state); where.push(`resolution_state = $${params.length}`);
+    }
+    params.push(limit);
+    const sql = `SELECT id, user_id, title, rationale, created_at, resolution_state,
+                        legs_total, legs_won, legs_lost, legs_pushed,
+                        total_stake_usd, total_pnl_usd, resolved_at, code_version
+                   FROM prediction_thesis
+                   ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                  ORDER BY created_at DESC
+                  LIMIT $${params.length}`;
+    const rows = await dbQuery(sql, params);
+    return res.json({ theses: rows });
+  } catch (e) {
+    console.error('[thesis list]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/users/:userId/theses — pre-bucketed for profile UI.
+app.get('/api/users/:userId/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { userId } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({ error: 'invalid userId' });
+
+    const rows = await dbQuery(
+      `SELECT id, user_id, title, rationale, created_at, resolution_state,
+              legs_total, legs_won, legs_lost, legs_pushed,
+              total_stake_usd, total_pnl_usd, resolved_at, code_version
+         FROM prediction_thesis
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      [userId]
+    );
+    const open     = rows.filter(r => r.resolution_state === 'open');
+    const resolved = rows.filter(r => r.resolution_state !== 'open');
+    return res.json({ open, resolved, code_version: PREDICTION_THESIS_CODE_VERSION });
+  } catch (e) {
+    console.error('[thesis user list]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/theses/:id/resolve-manual — admin-only manual resolution
+// to seed test data for PR #175 UI validation before the cron exists.
+app.post('/api/admin/theses/:id/resolve-manual', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const adminSecret = req.header('x-admin-secret');
+    if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: 'admin only' });
+    }
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid id' });
+    const { legs } = req.body || {};
+    if (!Array.isArray(legs) || !legs.length) return res.status(400).json({ error: 'legs[] required' });
+
+    const tRows = await dbQuery(`SELECT * FROM prediction_thesis WHERE id=$1 LIMIT 1`, [id]);
+    if (!tRows.length) return res.status(404).json({ error: 'thesis not found' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let won = 0, lost = 0, pushed = 0, pnl = 0;
+      for (const entry of legs) {
+        if (!entry || typeof entry.leg_order !== 'number') continue;
+        const r = (entry.resolution || '').toLowerCase();
+        if (!['won','lost','pushed'].includes(r)) continue;
+        const legRows = await client.query(
+          `SELECT stake_usd, entry_price FROM prediction_thesis_leg WHERE thesis_id=$1 AND leg_order=$2 LIMIT 1`,
+          [id, entry.leg_order]
+        );
+        if (!legRows.rows.length) continue;
+        const stake = Number(legRows.rows[0].stake_usd);
+        const ep    = Number(legRows.rows[0].entry_price);
+        let realized = 0;
+        if      (r === 'won')  { realized = stake * ((1 - ep) / ep);  won++; }
+        else if (r === 'lost') { realized = -stake;                   lost++; }
+        else                   { realized = 0;                        pushed++; }
+        pnl += realized;
+        await client.query(
+          `UPDATE prediction_thesis_leg
+              SET resolution=$1, resolved_at=NOW(), realized_pnl=$2
+            WHERE thesis_id=$3 AND leg_order=$4`,
+          [r, realized.toFixed(2), id, entry.leg_order]
+        );
+      }
+      const total = won + lost + pushed;
+      let state = 'open';
+      if (total >= tRows[0].legs_total) {
+        if      (won === tRows[0].legs_total) state = 'hit';
+        else if (won === 0)                   state = 'miss';
+        else                                  state = 'partial';
+      }
+      await client.query(
+        `UPDATE prediction_thesis
+            SET legs_won=$1, legs_lost=$2, legs_pushed=$3,
+                total_pnl_usd=$4,
+                resolution_state=$5,
+                resolved_at=CASE WHEN $5='open' THEN NULL ELSE NOW() END
+          WHERE id=$6`,
+        [won, lost, pushed, pnl.toFixed(2), state, id]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return res.json({ ok: true, id });
+  } catch (e) {
+    console.error('[thesis admin resolve]', e.message);
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -51798,6 +52114,48 @@ if (pool) {
       await dbQuery(`ALTER TABLE mention_markets ENABLE ROW LEVEL SECURITY`).catch(() => {});
       await dbQuery(`DROP POLICY IF EXISTS "mention markets are public read" ON mention_markets`).catch(() => {});
       await dbQuery(`CREATE POLICY "mention markets are public read" ON mention_markets FOR SELECT USING (true)`).catch(() => {});
+
+      // Migration #62 — Prediction Thesis v1 (PR #173, 2026-05-15).
+      // Mirrors supabase_migration_62_prediction_thesis.sql. Two-table
+      // narrative-parlay product: thesis + leg. Resolution cron lands
+      // in PR #174; for now all theses sit at resolution_state='open'.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_thesis (
+        id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title             text NOT NULL CHECK (char_length(title) <= 80),
+        rationale         text CHECK (char_length(rationale) <= 500),
+        created_at        timestamptz NOT NULL DEFAULT NOW(),
+        locked_hash       text NOT NULL,
+        resolved_at       timestamptz,
+        resolution_state  text NOT NULL DEFAULT 'open'
+                          CHECK (resolution_state IN ('open', 'hit', 'partial', 'miss')),
+        legs_total        int NOT NULL DEFAULT 0,
+        legs_won          int NOT NULL DEFAULT 0,
+        legs_lost         int NOT NULL DEFAULT 0,
+        legs_pushed       int NOT NULL DEFAULT 0,
+        total_stake_usd   numeric(20,2),
+        total_pnl_usd     numeric(20,2),
+        code_version      text
+      )`).catch(e => console.warn('[boot] prediction_thesis create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_user ON prediction_thesis(user_id, created_at DESC)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_state ON prediction_thesis(resolution_state) WHERE resolution_state = 'open'`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_thesis_leg (
+        id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        thesis_id         uuid NOT NULL REFERENCES prediction_thesis(id) ON DELETE CASCADE,
+        leg_order         int NOT NULL CHECK (leg_order BETWEEN 1 AND 10),
+        condition_id      text NOT NULL,
+        token_id          text,
+        market_question   text NOT NULL,
+        direction         text NOT NULL CHECK (direction IN ('yes', 'no')),
+        entry_price       numeric(6,4) NOT NULL CHECK (entry_price > 0 AND entry_price < 1),
+        stake_usd         numeric(20,2) NOT NULL CHECK (stake_usd > 0),
+        resolution        text CHECK (resolution IN ('won', 'lost', 'pushed')),
+        resolved_at       timestamptz,
+        realized_pnl      numeric(20,2),
+        UNIQUE(thesis_id, leg_order)
+      )`).catch(e => console.warn('[boot] prediction_thesis_leg create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_thesis ON prediction_thesis_leg(thesis_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_condition ON prediction_thesis_leg(condition_id) WHERE resolution IS NULL`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
