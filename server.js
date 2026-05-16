@@ -37958,12 +37958,32 @@ async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trad
 // 20-trade qualification threshold mirrors the rest of the app. Returns
 // nulls for avg_win / avg_loss / risk_reward when a side has zero
 // samples; UI renders "—", never "Infinity" or "$0" placeholders.
+//
+// Auth modes (mirrors /api/admin/flex/rebuild):
+//   1. x-admin-secret header + ?user_id=<uuid> → CLI smoke path
+//   2. Authorization: Bearer <jwt>             → normal session path
 const DASH_PERF_CODE_VERSION = '2026-05-15-dashboard-performance-card-v1';
 const DASH_PERF_QUALIFY_MIN = 20;
-app.get('/api/dashboard/performance', requireAuth, async (req, res) => {
+app.get('/api/dashboard/performance', async (req, res) => {
   try {
-    const userId = req.userId;
     if (!pool) return res.status(503).json({ error: 'db unavailable' });
+
+    let userId;
+    const adminSecret = req.header('x-admin-secret');
+    if (adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET) {
+      userId = req.query.user_id;
+      if (!userId) return res.status(400).json({ error: 'user_id query param required with admin auth' });
+    } else {
+      const auth = req.headers.authorization;
+      const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+      if (!token) return res.status(401).json({ error: 'Auth required' });
+      try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        userId = payload.id;
+      } catch (_) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
 
     const rows = await dbQuery(
       `SELECT
