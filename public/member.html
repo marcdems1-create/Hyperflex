@@ -536,6 +536,75 @@ function switchProfileTab(tabId, btn) {
   if (btn) btn.classList.add('active');
   if (tabId === 'record') { setTimeout(() => loadAnalytics(window._profileUserId), 60); }
   if (tabId === 'sports') { setTimeout(() => loadSportsFlexScore(window._profileUserId), 60); }
+  if (tabId === 'theses') { setTimeout(() => loadThesesTab(window._profileUserId), 60); }
+}
+
+// PR #173 prediction-thesis v1: lazy-load THESES tab. Renders the user's
+// open + resolved theses bucketed by /api/users/:userId/theses. Each row
+// is clickable and goes to /thesis/:id (placeholder until PR #175).
+let _thesesTabLoaded = false;
+async function loadThesesTab(userId) {
+  if (_thesesTabLoaded) return;
+  _thesesTabLoaded = true;
+  const pane = document.getElementById('tab-theses');
+  if (!pane) return;
+  pane.innerHTML = '<div class="empty"><div class="empty-glyph">—</div><div class="empty-title">Loading…</div></div>';
+  try {
+    const r = await fetch('/api/users/' + userId + '/theses');
+    if (!r.ok) throw new Error('http ' + r.status);
+    const data = await r.json();
+    const open     = data.open     || [];
+    const resolved = data.resolved || [];
+    if (!open.length && !resolved.length) {
+      const ownerLink = (window._isOwner === true)
+        ? '<a href="/thesis-compose" class="btn btn-gold" style="margin-top:14px">Compose your first thesis →</a>'
+        : '';
+      pane.innerHTML =
+        '<div class="empty">' +
+          '<div class="empty-glyph">—</div>' +
+          '<div class="empty-title">No theses yet</div>' +
+          '<div class="empty-sub">Author a multi-leg view. Resolves leg-by-leg. Receipts compound.</div>' +
+          ownerLink +
+        '</div>';
+      return;
+    }
+    const renderRow = t => {
+      const stateMap = {
+        open:    { cls: 'rgba(77,159,255,0.12);color:var(--blue)',   txt: 'OPEN' },
+        hit:     { cls: 'rgba(0,230,138,0.12);color:var(--green)',   txt: 'HIT' },
+        partial: { cls: 'rgba(201,146,13,0.12);color:var(--gold-2)', txt: 'PARTIAL' },
+        miss:    { cls: 'rgba(255,77,106,0.12);color:var(--danger)', txt: 'MISS' },
+      };
+      const s = stateMap[t.resolution_state] || stateMap.open;
+      const stake = Math.round(Number(t.total_stake_usd || 0)).toLocaleString();
+      const dt = t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
+      const subline = (t.resolution_state === 'open')
+        ? (t.legs_total + ' legs · $' + stake + ' staked · ' + dt)
+        : ((t.legs_won || 0) + '/' + t.legs_total + ' legs hit · $' + stake + ' staked · ' + dt);
+      return '<a href="/thesis/' + t.id + '" class="card" style="display:block;text-decoration:none;color:inherit">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
+          '<div class="card-q" style="flex:1">' + (t.title || '').replace(/</g, '&lt;') + '</div>' +
+          '<span class="badge" style="background:' + s.cls + ';border-color:transparent;padding:2px 8px;letter-spacing:.08em">' + s.txt + '</span>' +
+        '</div>' +
+        '<div class="card-meta">' + subline + '</div>' +
+      '</a>';
+    };
+    let html = '';
+    if (open.length) {
+      html += '<div style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px">Open · ' + open.length + '</div>';
+      html += open.map(renderRow).join('');
+    }
+    if (resolved.length) {
+      html += '<div style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Resolved · ' + resolved.length + '</div>';
+      html += resolved.map(renderRow).join('');
+    }
+    if (window._isOwner === true) {
+      html += '<div style="margin-top:18px"><a href="/thesis-compose" class="btn btn-gold">+ Compose new thesis</a></div>';
+    }
+    pane.innerHTML = html;
+  } catch (e) {
+    pane.innerHTML = '<div class="empty"><div class="empty-glyph">!</div><div class="empty-title">Could not load theses</div><div class="empty-sub">' + (e.message || '') + '</div></div>';
+  }
 }
 
 // Lazy-load the Sports tab content. Reads /api/sports-predictors/:userId
@@ -859,6 +928,8 @@ async function load() {
         if (selfId && String(selfId) === String(userId)) isOwner = true;
       }
     } catch {}
+    // Expose for lazy tab loaders (PR #173: THESES tab needs this to gate compose CTA).
+    window._isOwner = isOwner;
 
     const winPct = stats.settled_predictions > 0 ? Math.round((stats.wins / stats.settled_predictions) * 100) : 0;
     const avgColor = winPct >= 70 ? '#c9920d' : winPct >= 55 ? '#22c55e' : winPct >= 40 ? '#60a5fa' : '#ef4444';
@@ -1262,6 +1333,7 @@ async function load() {
       <div class="tabs" role="tablist">
         <button class="tab-btn active" onclick="switchProfileTab('takes',this)">TAKES${take_stats && take_stats.total > 0 ? ` <span class="tab-count">${take_stats.total}</span>` : ''}</button>
         <button class="tab-btn" onclick="switchProfileTab('trades',this)">TRADES${pStats.total_trades > 0 ? ` <span class="tab-count">${pStats.total_trades}</span>` : ''}</button>
+        <button class="tab-btn" onclick="switchProfileTab('theses',this)">THESES</button>
         <button class="tab-btn" onclick="switchProfileTab('record',this)">TRACK RECORD</button>
         <button class="tab-btn" onclick="switchProfileTab('sports',this)">SPORTS</button>
       </div>
@@ -1338,6 +1410,11 @@ async function load() {
             </div>`;
           }).join('')}
         ` : `<div class="empty" id="tradesEmpty"><div class="empty-glyph">—</div><div class="empty-title">${user.polymarket_address ? 'Loading live trades' : 'No Polymarket trades yet'}</div><div class="empty-sub">${isWhale ? 'Trades will appear here as they are synced from on-chain activity.' : user.polymarket_address ? 'Fetching from Polymarket directly.' : isOwner ? 'Connect your Polymarket wallet in the dashboard to track trades here.' : 'This predictor has not traded on Polymarket yet.'}</div>${isOwner && !user.polymarket_address ? '<a href="/creator/dashboard" class="btn btn-gold">Connect Polymarket →</a>' : ''}</div>`}</div>
+      </div>
+
+      <!-- THESES (PR #173 prediction-thesis v1) -->
+      <div id="tab-theses" class="tab-pane">
+        <div class="empty"><div class="empty-glyph">—</div><div class="empty-title">Loading…</div></div>
       </div>
 
       <!-- TRACK RECORD -->
