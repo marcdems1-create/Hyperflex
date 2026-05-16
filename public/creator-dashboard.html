@@ -4311,6 +4311,10 @@ body.nav-open .sidebar-backdrop {
   line-height: 1.45;
   color: var(--text);
   font-weight: 500;
+  /* Avoid awkward mid-sentence wraps like "Time to read / the tape, not place it."
+     `balance` evens line lengths across the short narration paragraph; `pretty`
+     handles widow/orphan control. Older browsers ignore both gracefully. */
+  text-wrap: balance;
 }
 @media (max-width: 720px) {
   .perf-card-grid { grid-template-columns: 1fr; gap: 12px; }
