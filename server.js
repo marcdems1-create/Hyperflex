@@ -15762,16 +15762,28 @@ async function _renderMentionsHero() {
 app.get('/mentions', async (req, res) => {
   try {
     const tpl = _loadMentionsTemplate();
-    const heroHtml = await _renderMentionsHero();
-    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
-    // PR #142: prevent edge/browser HTML cache from pinning the
-    // pre-rebuild template. The page assembles a hero strip + a
-    // calendar section on each load — neither benefits from
-    // caching, since both reflect live Polymarket state.
+    // Hero banner removed from /mentions — newsboy strip + heatmap is now
+    // the primary surface. Hero content lives at /warsh.
+    const body = tpl.replace('<!--HERO_HTML-->', '');
     res.set('Cache-Control', 'no-store');
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-route]', err);
+    res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+  }
+});
+
+// GET /warsh — dedicated Warsh FOMC hero page (previously embedded in
+// /mentions). Canonical home for the Warsh vs Powell comparison surface.
+app.get('/warsh', async (req, res) => {
+  try {
+    const tpl = _loadMentionsTemplate();
+    const heroHtml = await _renderMentionsHero();
+    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Type', 'text/html; charset=utf-8').send(body);
+  } catch (err) {
+    console.error('[warsh-route]', err);
     res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
   }
 });
