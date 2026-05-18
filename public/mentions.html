@@ -144,6 +144,28 @@ a{color:inherit;text-decoration:none}
    "heat" hierarchy: jumbo 2-up, large 3-up, medium 4-up, small 6-up.
    Typography scales per tier; brand cyan for YES-leaning (>=50¢),
    --hawk (red) for NO-leaning. */
+/* ── NEWSROOM TICKER — Townsquare "read all about it" strip ── */
+.newsroom{padding:28px 36px 24px;border-bottom:1px solid var(--line);position:relative;z-index:2;background:var(--bg)}
+.newsroom-inner{max-width:1240px;margin:0 auto}
+.newsroom-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.28em;color:var(--muted);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.newsroom-eyebrow::after{content:'';flex:1;height:1px;background:var(--line)}
+.newsroom-cards{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding-bottom:2px}
+.newsroom-cards::-webkit-scrollbar{display:none}
+.newsroom-card{flex:0 0 196px;background:var(--panel);border:1px solid var(--line);padding:18px 18px 16px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden}
+.newsroom-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--line);transition:background .15s}
+.newsroom-card:hover{border-color:rgba(0,212,255,0.40);transform:translateY(-2px)}
+.newsroom-card:hover::before{background:var(--cyan)}
+.newsroom-card-speaker{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.newsroom-card-word{font-family:'Anton',Impact,sans-serif;font-size:42px;line-height:.95;letter-spacing:.01em;color:var(--ink);margin-bottom:12px;word-break:break-word;overflow-wrap:break-word}
+.newsroom-card-word.hawk{color:#FF6B4D}
+.newsroom-card-count{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--cyan);margin-bottom:2px;text-transform:uppercase}
+.newsroom-card-price{font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:.02em;line-height:1;margin-bottom:4px}
+.newsroom-card-price.yes{color:var(--cyan)}
+.newsroom-card-price.no{color:#FF6B4D}
+.newsroom-card-vol{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.newsroom-empty{display:none}
+@media(max-width:768px){.newsroom{padding:20px 18px 18px}.newsroom-card{flex:0 0 160px}.newsroom-card-word{font-size:34px}}
+
 .hm-section{margin:8px 0 36px;position:relative;z-index:2}
 .hm-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:18px;flex-wrap:wrap}
 .hm-title{font-family:var(--sans);font-size:22px;font-weight:800;letter-spacing:-0.015em;color:var(--ink);margin:0}
@@ -320,6 +342,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <!--HERO_HTML-->
 
 <main class="page" id="page">
+  <!-- NEWSROOM TICKER — "read all about it" strip. Auto-populates from
+       /api/mentions-heatmap tiles; each card = one tracked word + live
+       market price. Section hidden until at least 2 cards render. -->
+  <section id="newsroom" class="newsroom" style="display:none">
+    <div class="newsroom-inner">
+      <div class="newsroom-eyebrow">In play now</div>
+      <div class="newsroom-cards" id="newsroom-cards"></div>
+    </div>
+  </section>
+
   <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
        Tier-bucketed grid sourced from /api/mentions-heatmap (slug-probe
        primary, 4-tier percentile bucketing). Default surface on /mentions;
@@ -534,6 +566,103 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         });
       })
       .catch(() => { /* fail silent, section stays hidden */ });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+
+// ────────────────────────────────────────────────────────────────────
+// NEWSROOM TICKER — "read all about it" card strip.
+// Pulls from /api/mentions-heatmap (same data as the grid below).
+// Shows the most liquid tiles as newspaper-headline cards.
+// ────────────────────────────────────────────────────────────────────
+(function () {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function extractWord(question) {
+    if (!question) return null;
+    var m = question.match(/[''‘’""]([a-zA-Z\s\-]{2,24})[''"‘’“”]/);
+    if (m) return m[1].trim();
+    var say = question.match(/\bsay(?:s|ing)?\s+["']?([a-z]{3,24})/i);
+    if (say) return say[1];
+    return null;
+  }
+
+  function extractCount(question) {
+    if (!question) return null;
+    var m = question.match(/(\d+)\s*\+\s*times/i)
+         || question.match(/at least\s+(\d+)\s+times/i)
+         || question.match(/more than\s+(\d+)\s+times/i)
+         || question.match(/(\d+)\s+or more times/i);
+    return m ? m[1] : null;
+  }
+
+  function fmtVol(n) {
+    n = Number(n || 0);
+    if (!n || !isFinite(n)) return null;
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  function renderCard(market) {
+    var word = extractWord(market.question);
+    if (!word) return '';
+    var count = extractCount(market.question);
+    var priceFrac = Number(market.yes_price);
+    if (!isFinite(priceFrac)) return '';
+    var pct = Math.round(priceFrac * 100);
+    var priceClass = priceFrac >= 0.5 ? 'yes' : 'no';
+    var wordClass = priceFrac < 0.35 ? 'hawk' : '';
+    var countHtml = count
+      ? '<div class="newsroom-card-count">' + esc(count) + '+ times threshold</div>'
+      : '';
+    var volHtml = market.volume_total
+      ? '<div class="newsroom-card-vol">' + esc(fmtVol(market.volume_total) || '') + ' in play</div>'
+      : '';
+    var speaker = (market.speaker || '').toUpperCase();
+    var slug = market.polymarket_slug;
+    var href = slug ? '/market/' + encodeURIComponent(slug) : '#';
+    return '<a class="newsroom-card" href="' + esc(href) + '">'
+      + '<div class="newsroom-card-speaker">' + esc(speaker) + '</div>'
+      + '<div class="newsroom-card-word ' + wordClass + '">"' + esc(word.toUpperCase()) + '"</div>'
+      + countHtml
+      + '<div class="newsroom-card-price ' + priceClass + '">' + pct + '% YES</div>'
+      + volHtml
+      + '</a>';
+  }
+
+  function init() {
+    fetch('/api/mentions-heatmap', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d) return;
+        var tiers = d.tiers || {};
+        var all = [].concat(
+          Array.isArray(tiers.jumbo)  ? tiers.jumbo  : [],
+          Array.isArray(tiers.large)  ? tiers.large  : [],
+          Array.isArray(tiers.medium) ? tiers.medium : [],
+          Array.isArray(tiers.small)  ? tiers.small  : []
+        );
+        // Sort by lifetime volume desc, take top 8
+        all.sort(function(a, b) { return (Number(b.volume_total) || 0) - (Number(a.volume_total) || 0); });
+        var cards = all.slice(0, 8).map(renderCard).filter(Boolean);
+        if (cards.length < 2) return;
+        var sec = document.getElementById('newsroom');
+        var container = document.getElementById('newsroom-cards');
+        if (!sec || !container) return;
+        container.innerHTML = cards.join('');
+        sec.style.display = 'block';
+      })
+      .catch(function() {});
   }
 
   if (document.readyState === 'loading') {
