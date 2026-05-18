@@ -15759,109 +15759,159 @@ async function _renderMentionsHero() {
 `;
 }
 
-// _renderDynamicHero — always shows the highest-24h-volume market from
-// _screenerCache. No hardcoded content. Updates every screener cycle (90s TTL).
-// Falls back to '' when the cache is cold or empty so the page degrades
-// gracefully rather than showing a broken banner.
+// ── TOWN HALL BROADCAST STRIP ─────────────────────────────────────────────
+// Shared helpers used by _renderDynamicHero() and /api/mentions-hero.
+// No hardcoded content — everything derives from _screenerCache.
+
+const _TH_SKIP = new Set('Will Would Could Should The A An Is Are Was Were To Of By At In On For From With That This Has Have Had Did Do Does Been Be It Its If Or And But Not No Yet'.split(' '));
+const _TH_DEMONYM = {
+  Iranian:'Iran', Russian:'Russia', Chinese:'China', Israeli:'Israel',
+  Ukrainian:'Ukraine', Korean:'Korea', American:'US', European:'EU',
+  Brazilian:'Brazil', Mexican:'Mexico', Indian:'India', Pakistani:'Pakistan',
+};
+
+function _thCapTokens(q) {
+  return (q || '').split(/[\s,?.!();:"']+/).filter(t =>
+    t.length >= 2 && /^[A-Z]/.test(t) && !/^\d/.test(t) && !_TH_SKIP.has(t)
+  ).map(t => _TH_DEMONYM[t] || t);
+}
+
+function _thExtractHeadline(q) {
+  // 1. Quoted word: "X" — "SUBJECT SAYS X?"
+  const quoted = (q || '').match(/"([^"]{2,30})"/);
+  if (quoted) {
+    const subj = _thCapTokens(q)[0] || 'MARKET';
+    return `${subj.toUpperCase()} SAYS ${quoted[1].toUpperCase()}?`;
+  }
+  // 2. "say/mention/use X" pattern
+  const sayMatch = (q || '').match(/\b(?:say|says|said|mention|use|uses|used)\s+([A-Z][a-zA-Z]{1,20})/);
+  if (sayMatch) {
+    const subj = _thCapTokens(q)[0] || 'MARKET';
+    return `${subj.toUpperCase()} SAYS ${sayMatch[1].toUpperCase()}?`;
+  }
+  // 3. Fallback: first two cap tokens as SUBJECT KEYWORD
+  const tokens = _thCapTokens(q);
+  if (tokens.length >= 2) return `${tokens[0].toUpperCase()} ${tokens[1].toUpperCase()}?`;
+  if (tokens.length === 1) return `${tokens[0].toUpperCase()}?`;
+  // 4. Last resort: first 4 words uppercased
+  return (q || '').split(/\s+/).slice(0, 4).join(' ').toUpperCase() + '?';
+}
+
+function _thShortQ(q, maxWords = 12) {
+  const words = (q || '').split(/\s+/);
+  if (words.length <= maxWords) return q;
+  return words.slice(0, maxWords).join(' ') + '…';
+}
+
+function _thVolLabel(v) {
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M IN PLAY TODAY';
+  if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K IN PLAY TODAY';
+  return '$' + Math.round(v) + ' IN PLAY TODAY';
+}
+
+function _thCountdown(endDate) {
+  if (!endDate) return '';
+  const ms = new Date(endDate).getTime() - Date.now();
+  if (ms <= 0) return 'RESOLVES SOON';
+  const h = Math.floor(ms / 3.6e6);
+  const d = Math.floor(h / 24);
+  if (d >= 2) return `CLOSES IN ${d}D`;
+  if (h >= 1) return `CLOSES IN ${h}H`;
+  return 'CLOSES SOON';
+}
+
+function _thTop5(markets) {
+  return [...markets]
+    .sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))
+    .slice(0, 5)
+    .map(m => {
+      const vol = parseFloat(m.volume) || 0;
+      const yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      return {
+        question:  m.question || '',
+        headline:  _thExtractHeadline(m.question),
+        shortQ:    _thShortQ(m.question),
+        yesPct,
+        yesCents:  yesPct != null ? yesPct + '¢' : '—',
+        yesClass:  yesPct != null ? (yesPct >= 65 ? 'high' : yesPct <= 35 ? 'low' : 'mid') : 'mid',
+        volLabel:  _thVolLabel(vol),
+        volRaw:    vol,
+        countdown: _thCountdown(m.end_date),
+        slug:      m.slug || '',
+        imgUrl:    m.slug ? `https://polymarket-upload.s3.us-east-2.amazonaws.com/${m.slug}.jpg` : '',
+        href:      m.slug ? `/market/${encodeURIComponent(m.slug)}` : (m.url || 'https://polymarket.com'),
+      };
+    });
+}
+
+// Server-side render of a single broadcast card (used for SSR slot 0).
+function _renderTHCard(c) {
+  const yesHtml = c.yesPct != null
+    ? `<div class="th-price-block">
+        <div class="th-yes ${c.yesClass}">${c.yesCents}</div>
+        <div class="th-yes-lbl">YES</div>
+       </div>`
+    : '';
+  return `
+  <div class="th-card" data-href="${_escHtml(c.href)}">
+    <div class="th-bg" style="background-image:url('${_escHtml(c.imgUrl)}')"></div>
+    <div class="th-overlay"></div>
+    <div class="th-content">
+      <div class="th-top-bar">
+        <span class="th-broadcast-badge"><span class="th-blink-dot"></span>BROADCAST</span>
+        <span class="th-slide-counter" id="th-slide-counter">1 / 5</span>
+      </div>
+      <div class="th-left">
+        ${yesHtml}
+        <div class="th-vol">${_escHtml(c.volLabel)}</div>
+        ${c.countdown ? `<div class="th-countdown">${_escHtml(c.countdown)}</div>` : ''}
+      </div>
+      <div class="th-right">
+        <h1 class="th-headline">${_escHtml(c.headline)}</h1>
+        <p class="th-subline">${_escHtml(c.shortQ)}</p>
+        <a class="th-trade-btn" href="${_escHtml(c.href)}" target="_blank" rel="noopener">Trade ↗</a>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Full section HTML: SSR card 0 + embedded JSON for client rotation + ticker tape.
 function _renderDynamicHero() {
   const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
   if (!markets.length) return '';
+  const top5 = _thTop5(markets);
+  if (!top5.length) return '';
 
-  // Pick single highest-volume market (volume field = 24h on screener items)
-  const top = markets.reduce((best, m) => {
-    const v = parseFloat(m.volume) || 0;
-    return (!best || v > (parseFloat(best.volume) || 0)) ? m : best;
-  }, null);
-  if (!top) return '';
+  // Ticker tape items: top 10 by volume
+  const tickerItems = [...markets]
+    .sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))
+    .slice(0, 10)
+    .map(m => {
+      const yp = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      const kw = _thCapTokens(m.question)[0] || 'MARKET';
+      const vol = parseFloat(m.volume) || 0;
+      const vs = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
+      return `<a class="tt-item" href="${_escHtml(m.slug ? '/market/' + encodeURIComponent(m.slug) : '#')}">${_escHtml(kw.toUpperCase())} / ${yp != null ? yp + '¢ YES' : '—'} / ${_escHtml(vs)}</a><span class="tt-sep">·</span>`;
+    }).join('');
 
-  const yesPct   = top.yes_price != null ? Math.round(top.yes_price * 100) : null;
-  const noPct    = yesPct != null ? 100 - yesPct : null;
-  const vol24h   = parseFloat(top.volume) || 0;
-  const volLabel = vol24h >= 1e6
-    ? '$' + (vol24h / 1e6).toFixed(1) + 'M'
-    : vol24h >= 1e3
-      ? '$' + Math.round(vol24h / 1e3) + 'K'
-      : '$' + Math.round(vol24h);
-
-  const yesCls = yesPct != null
-    ? (yesPct >= 65 ? 'high' : yesPct <= 35 ? 'low' : 'mid')
-    : 'mid';
-
-  const tradeHref = top.slug
-    ? `/market/${encodeURIComponent(top.slug)}`
-    : (top.url || 'https://polymarket.com');
-
-  // Sparkline SVG from _volumeTracker samples (90s-cadence price snapshots).
-  // Renders as an inline 120×36px polyline; invisible when no samples yet.
-  let sparkSvg = '';
-  const mid = top.market_id || top.conditionId || '';
-  const tracker = mid && _volumeTracker && _volumeTracker[mid];
-  const samples = tracker ? tracker.samples.filter(s => s.yes_price != null) : [];
-  if (samples.length >= 3) {
-    const W = 120, H = 36;
-    const prices = samples.map(s => parseFloat(s.yes_price));
-    const mn = Math.min(...prices);
-    const mx = Math.max(...prices);
-    const range = mx - mn || 0.01;
-    const pts = prices.map((p, i) => {
-      const x = ((i / (prices.length - 1)) * W).toFixed(1);
-      const y = (H - ((p - mn) / range) * H).toFixed(1);
-      return `${x},${y}`;
-    }).join(' ');
-    const lastPrice  = prices[prices.length - 1];
-    const firstPrice = prices[0];
-    const trendColor = lastPrice >= firstPrice ? '#00e68a' : '#ff4d6a';
-    sparkSvg = `
-    <svg class="dh-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
-      <polyline points="${_escHtml(pts)}" fill="none" stroke="${trendColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    </svg>`;
-  }
-
-  const edgeScore = top.edge_score != null ? top.edge_score : null;
-  const edgeBadge = edgeScore != null
-    ? `<span class="dh-badge dh-edge">EDGE ${edgeScore}</span>`
-    : '';
-  const whaleBadge = top.whale_count
-    ? `<span class="dh-badge dh-whale">${top.whale_count} whales</span>`
-    : '';
-  const expBadge = top.days_until_expiry != null
-    ? `<span class="dh-badge dh-exp">expires ${top.days_until_expiry}d</span>`
-    : '';
-
-  const imgSlug = top.slug || '';
-  const imgHtml = imgSlug
-    ? `<div class="dh-img-wrap">
-        <img class="dh-img" src="https://polymarket-upload.s3.us-east-2.amazonaws.com/${_escHtml(imgSlug)}.jpg"
-             alt="" loading="lazy" onerror="this.parentNode.style.display='none'">
-       </div>`
-    : '';
+  const card0 = _renderTHCard(top5[0]);
+  const jsonData = _escHtml(JSON.stringify(top5));
 
   return `
-<section class="dh-hero">
-  <div class="dh-inner">
-    ${imgHtml}
-    <div class="dh-body">
-      <div class="dh-eyebrow">
-        <span class="dh-live-dot"></span>
-        Highest volume right now
-      </div>
-      <h1 class="dh-question">${_escHtml(top.question || '')}</h1>
-      <div class="dh-price-row">
-        ${yesPct != null ? `<span class="dh-yes ${yesCls}">${yesPct}%</span><span class="dh-yes-lbl">YES</span>` : ''}
-        ${noPct != null ? `<span class="dh-no">${noPct}%</span><span class="dh-no-lbl">NO</span>` : ''}
-        ${sparkSvg}
-      </div>
-      <div class="dh-meta-row">
-        <span class="dh-vol">${volLabel} 24h vol</span>
-        ${edgeBadge}${whaleBadge}${expBadge}
-      </div>
-      <div class="dh-cta-row">
-        <a class="dh-trade-btn" href="${_escHtml(tradeHref)}" target="_blank" rel="noopener">Trade on Polymarket ↗</a>
-        <a class="dh-detail-btn" href="${_escHtml(tradeHref)}">View market →</a>
-      </div>
-    </div>
+<section class="th-hero" id="th-hero" data-markets="${jsonData}">
+  <div class="th-stage" id="th-stage">
+    ${card0}
+  </div>
+  <div class="th-dots" id="th-dots">
+    ${top5.map((_, i) => `<button class="th-dot${i === 0 ? ' active' : ''}" data-idx="${i}" aria-label="Slide ${i+1}"></button>`).join('')}
   </div>
 </section>
+<div class="th-ticker-wrap" aria-hidden="true">
+  <div class="th-ticker-label">ON THE WIRE</div>
+  <div class="th-ticker-track">
+    <div class="th-ticker-inner" id="th-ticker-inner">${tickerItems}${tickerItems}</div>
+  </div>
+</div>
 `;
 }
 
@@ -15880,34 +15930,20 @@ app.get('/mentions', async (req, res) => {
   }
 });
 
-// GET /api/mentions-hero — JSON payload for the dynamic hero.
-// Lets the client poll and swap the hero HTML without a full page reload.
-// Returns the rendered HTML fragment + raw data for client-side updates.
+// GET /api/mentions-hero — top 5 markets for the Town Hall broadcast strip.
+// Client uses this to refresh rotation data every 90s.
 app.get('/api/mentions-hero', (req, res) => {
   try {
     const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
-    const top = markets.reduce((best, m) => {
-      const v = parseFloat(m.volume) || 0;
-      return (!best || v > (parseFloat(best.volume) || 0)) ? m : best;
-    }, null);
-    if (!top) return res.json({ html: '', market: null });
+    const top5 = _thTop5(markets);
     res.json({
-      html: _renderDynamicHero(),
-      market: {
-        question:          top.question,
-        yes_price:         top.yes_price,
-        volume_24h:        parseFloat(top.volume) || 0,
-        edge_score:        top.edge_score,
-        whale_count:       top.whale_count,
-        days_until_expiry: top.days_until_expiry,
-        slug:              top.slug,
-        url:               top.url,
-        updated_at:        _screenerCache ? new Date(_screenerCache.ts).toISOString() : null,
-      },
+      markets:    top5,
+      html:       _renderDynamicHero(),
+      updated_at: _screenerCache ? new Date(_screenerCache.ts).toISOString() : null,
     });
   } catch (err) {
     console.error('[api/mentions-hero]', err.message);
-    res.json({ html: '', market: null });
+    res.json({ markets: [], html: '', updated_at: null });
   }
 });
 

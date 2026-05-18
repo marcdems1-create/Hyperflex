@@ -144,44 +144,51 @@ a{color:inherit;text-decoration:none}
    "heat" hierarchy: jumbo 2-up, large 3-up, medium 4-up, small 6-up.
    Typography scales per tier; brand cyan for YES-leaning (>=50¢),
    --hawk (red) for NO-leaning. */
-/* ── DYNAMIC HERO — highest-volume live market from screener cache ── */
-.dh-hero{background:var(--bg-2);border-bottom:1px solid var(--line);padding:0;position:relative;z-index:2;overflow:hidden}
-.dh-hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:40px 40px;mask-image:radial-gradient(ellipse 80% 80% at 50% 0%,#000 20%,transparent 70%);-webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 0%,#000 20%,transparent 70%);opacity:.4;pointer-events:none}
-.dh-inner{position:relative;max-width:1240px;margin:0 auto;display:grid;grid-template-columns:280px 1fr;gap:0;min-height:320px}
-.dh-img-wrap{position:relative;overflow:hidden;background:var(--panel)}
-.dh-img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85}
-.dh-body{padding:40px 48px 44px;display:flex;flex-direction:column;gap:18px;justify-content:center}
-.dh-eyebrow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:.26em;color:var(--muted);text-transform:uppercase}
-.dh-live-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:dh-pulse 1.8s ease-in-out infinite;flex-shrink:0}
-@keyframes dh-pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.dh-question{font-family:var(--sans);font-weight:800;font-size:clamp(22px,2.6vw,38px);line-height:1.12;letter-spacing:-.02em;color:var(--ink);margin:0;max-width:700px}
-.dh-price-row{display:flex;align-items:baseline;gap:10px}
-.dh-yes{font-family:var(--mono);font-weight:900;font-size:56px;line-height:1;letter-spacing:-.02em}
-.dh-yes.high{color:var(--cyan)}
-.dh-yes.mid{color:var(--ink-2)}
-.dh-yes.low{color:#ff6b4d}
-.dh-yes-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-right:16px}
-.dh-no{font-family:var(--mono);font-weight:700;font-size:28px;line-height:1;color:var(--muted-2)}
-.dh-no-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-right:16px}
-.dh-spark{display:block;margin-left:8px;align-self:center;opacity:.85}
-.dh-meta-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.dh-vol{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em}
-.dh-badge{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:3px 8px;border:1px solid}
-.dh-edge{border-color:rgba(0,212,255,.35);color:var(--cyan);background:rgba(0,212,255,.06)}
-.dh-whale{border-color:rgba(168,85,247,.35);color:#a855f7;background:rgba(168,85,247,.06)}
-.dh-exp{border-color:var(--line);color:var(--muted)}
-.dh-cta-row{display:flex;align-items:center;gap:12px;margin-top:4px}
-.dh-trade-btn{display:inline-flex;align-items:center;padding:12px 24px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;transition:opacity .12s}
-.dh-trade-btn:hover{opacity:.85}
-.dh-detail-btn{font-family:var(--mono);font-size:11px;color:var(--muted);text-decoration:none;letter-spacing:.12em;border-bottom:1px solid var(--line);padding-bottom:2px;transition:color .12s,border-color .12s}
-.dh-detail-btn:hover{color:var(--ink);border-color:var(--muted)}
-@media(max-width:900px){
-  .dh-inner{grid-template-columns:1fr}
-  .dh-img-wrap{display:none}
-  .dh-body{padding:28px 22px 32px}
-  .dh-question{font-size:clamp(18px,4.5vw,26px)}
-  .dh-yes{font-size:42px}
+/* ── TOWN HALL BROADCAST STRIP — live rotating market hero ── */
+.th-hero{position:relative;z-index:2;background:#000;overflow:hidden;border-bottom:1px solid var(--line)}
+.th-stage{position:relative}
+.th-card{position:relative;min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;overflow:hidden}
+.th-bg{position:absolute;inset:0;background-size:cover;background-position:center;transition:opacity .6s;opacity:.5}
+.th-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.92) 0%,rgba(0,0,0,.75) 45%,rgba(0,0,0,.45) 100%)}
+.th-content{position:relative;z-index:2;display:grid;grid-template-columns:200px 1fr;gap:0;align-items:center;max-width:1240px;margin:0 auto;padding:32px 36px 40px;width:100%}
+.th-top-bar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 36px;max-width:1240px;margin:0 auto}
+.th-broadcast-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.28em;color:#ff4d6a;text-transform:uppercase;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.35);padding:4px 10px}
+.th-blink-dot{width:6px;height:6px;border-radius:50%;background:#ff4d6a;animation:th-blink .9s step-end infinite;flex-shrink:0}
+@keyframes th-blink{0%,100%{opacity:1}50%{opacity:0}}
+.th-slide-counter{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:rgba(255,255,255,.4)}
+.th-left{display:flex;flex-direction:column;gap:6px;padding-right:24px;border-right:1px solid rgba(255,255,255,.1)}
+.th-price-block{display:flex;flex-direction:column;gap:2px}
+.th-yes{font-family:var(--mono);font-weight:900;font-size:clamp(48px,5vw,72px);line-height:1;letter-spacing:-.03em;transition:color .3s}
+.th-yes.high{color:var(--cyan)}
+.th-yes.mid{color:#c5bedd}
+.th-yes.low{color:#ff6b4d}
+.th-yes-lbl{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.3em;color:rgba(255,255,255,.45);text-transform:uppercase}
+.th-vol{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-top:8px;line-height:1.6}
+.th-countdown{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;color:#f59e0b;text-transform:uppercase}
+.th-right{padding-left:28px;display:flex;flex-direction:column;gap:12px}
+.th-headline{font-family:'Anton',sans-serif;font-size:clamp(32px,4.5vw,62px);line-height:1.0;letter-spacing:.01em;color:#fff;margin:0;text-shadow:0 2px 20px rgba(0,0,0,.5)}
+.th-subline{font-family:var(--sans);font-size:14px;color:rgba(255,255,255,.6);line-height:1.5;margin:0;max-width:560px}
+.th-trade-btn{align-self:flex-start;display:inline-flex;align-items:center;padding:10px 22px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.22em;text-transform:uppercase;text-decoration:none;transition:opacity .12s;margin-top:4px}
+.th-trade-btn:hover{opacity:.85}
+.th-dots{display:flex;gap:6px;justify-content:center;padding:12px 0 8px;background:#000}
+.th-dot{width:24px;height:3px;border:0;background:rgba(255,255,255,.2);cursor:pointer;padding:0;transition:background .2s,width .2s}
+.th-dot.active{background:var(--cyan);width:36px}
+@media(max-width:768px){
+  .th-content{grid-template-columns:1fr;padding:56px 18px 28px}
+  .th-left{flex-direction:row;align-items:center;gap:16px;border-right:0;border-bottom:1px solid rgba(255,255,255,.1);padding:0 0 12px;margin-bottom:4px}
+  .th-yes{font-size:42px}
+  .th-headline{font-size:clamp(24px,7vw,38px)}
+  .th-top-bar{padding:10px 18px}
 }
+/* ── ON THE WIRE ticker tape ── */
+.th-ticker-wrap{display:flex;align-items:center;background:#0a0812;border-bottom:1px solid var(--line);overflow:hidden;height:32px;position:relative;z-index:2}
+.th-ticker-label{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.28em;color:#ff4d6a;text-transform:uppercase;white-space:nowrap;padding:0 14px 0 18px;border-right:1px solid rgba(255,77,106,.3);flex-shrink:0;line-height:32px}
+.th-ticker-track{flex:1;overflow:hidden;height:32px}
+.th-ticker-inner{display:flex;align-items:center;gap:0;white-space:nowrap;animation:th-scroll 40s linear infinite}
+@keyframes th-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tt-item{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:rgba(255,255,255,.65);text-decoration:none;text-transform:uppercase;padding:0 2px;transition:color .1s;white-space:nowrap}
+.tt-item:hover{color:var(--cyan)}
+.tt-sep{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.2);padding:0 14px}
 /* ── NEWSROOM TICKER — Townsquare "read all about it" strip ── */
 .newsroom{padding:28px 36px 24px;border-bottom:1px solid var(--line);position:relative;z-index:2;background:var(--bg)}
 .newsroom-inner{max-width:1240px;margin:0 auto}
@@ -1441,25 +1448,130 @@ load();
   }
 })();
 
-// ── Dynamic hero auto-refresh (90s cadence, matches screener TTL) ─────────
+// ── TOWN HALL: rotation + ticker + 90s data refresh ──────────────────────
 (function() {
-  function refresh() {
+  var _markets = [];
+  var _idx = 0;
+  var _rotTimer = null;
+
+  // Parse embedded SSR data once
+  try {
+    var hero = document.getElementById('th-hero');
+    if (hero) _markets = JSON.parse(hero.getAttribute('data-markets') || '[]');
+  } catch(_) {}
+
+  function esc(s) {
+    var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+  }
+
+  function renderCard(c, idx) {
+    var total = _markets.length;
+    var yesHtml = c.yesPct != null
+      ? '<div class="th-price-block">' +
+          '<div class="th-yes ' + (c.yesClass||'mid') + '">' + esc(c.yesCents||'—') + '</div>' +
+          '<div class="th-yes-lbl">YES</div>' +
+        '</div>'
+      : '';
+    return '<div class="th-card" data-href="' + esc(c.href||'#') + '">' +
+      '<div class="th-bg" style="background-image:url(\'' + esc(c.imgUrl||'') + '\')"></div>' +
+      '<div class="th-overlay"></div>' +
+      '<div class="th-content">' +
+        '<div class="th-top-bar">' +
+          '<span class="th-broadcast-badge"><span class="th-blink-dot"></span>BROADCAST</span>' +
+          '<span class="th-slide-counter">' + (idx+1) + ' / ' + total + '</span>' +
+        '</div>' +
+        '<div class="th-left">' +
+          yesHtml +
+          '<div class="th-vol">' + esc(c.volLabel||'') + '</div>' +
+          (c.countdown ? '<div class="th-countdown">' + esc(c.countdown) + '</div>' : '') +
+        '</div>' +
+        '<div class="th-right">' +
+          '<h1 class="th-headline">' + esc(c.headline||'') + '</h1>' +
+          '<p class="th-subline">' + esc(c.shortQ||'') + '</p>' +
+          '<a class="th-trade-btn" href="' + esc(c.href||'#') + '" target="_blank" rel="noopener">Trade ↗</a>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function goTo(idx) {
+    if (!_markets.length) return;
+    _idx = ((idx % _markets.length) + _markets.length) % _markets.length;
+    var stage = document.getElementById('th-stage');
+    if (!stage) return;
+    var card = _markets[_idx];
+    // Fade transition
+    stage.style.opacity = '0';
+    stage.style.transition = 'opacity .35s';
+    setTimeout(function() {
+      stage.innerHTML = renderCard(card, _idx);
+      // Wire card click to market link
+      var el = stage.querySelector('.th-card');
+      if (el) el.addEventListener('click', function(e) {
+        if (e.target.tagName !== 'A') window.open(card.href, '_blank', 'noopener');
+      });
+      stage.style.opacity = '1';
+    }, 180);
+    // Update dots
+    document.querySelectorAll('.th-dot').forEach(function(d, i) {
+      d.classList.toggle('active', i === _idx);
+    });
+  }
+
+  function startRotation() {
+    clearInterval(_rotTimer);
+    if (_markets.length < 2) return;
+    _rotTimer = setInterval(function() { goTo(_idx + 1); }, 30 * 1000);
+  }
+
+  // Wire dot clicks
+  document.querySelectorAll('.th-dot').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var i = parseInt(btn.getAttribute('data-idx')) || 0;
+      goTo(i);
+      // Reset rotation timer so a manual click gets a full 30s before auto-advance
+      startRotation();
+    });
+  });
+
+  // Wire initial card click
+  (function() {
+    var stage = document.getElementById('th-stage');
+    if (!stage || !_markets.length) return;
+    var el = stage.querySelector('.th-card');
+    if (el) el.addEventListener('click', function(e) {
+      if (e.target.tagName !== 'A') window.open(_markets[0].href, '_blank', 'noopener');
+    });
+  })();
+
+  startRotation();
+
+  // 90s data refresh — reload markets from server, rebuild rotation
+  function refreshData() {
     fetch('/api/mentions-hero', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) {
-        if (!d || !d.html) return;
-        var existing = document.querySelector('.dh-hero');
-        if (!existing) return;
-        var tmp = document.createElement('div');
-        tmp.innerHTML = d.html;
-        var fresh = tmp.querySelector('.dh-hero');
-        if (fresh) existing.replaceWith(fresh);
+        if (!d || !Array.isArray(d.markets) || !d.markets.length) return;
+        _markets = d.markets;
+        // Update dots count if changed
+        var dots = document.getElementById('th-dots');
+        if (dots) {
+          dots.innerHTML = _markets.map(function(_, i) {
+            return '<button class="th-dot' + (i === _idx ? ' active' : '') + '" data-idx="' + i + '" aria-label="Slide ' + (i+1) + '"></button>';
+          }).join('');
+          dots.querySelectorAll('.th-dot').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              var i = parseInt(btn.getAttribute('data-idx')) || 0;
+              goTo(i); startRotation();
+            });
+          });
+        }
+        goTo(_idx); // re-render current slot with fresh data
       })
       .catch(function() {});
   }
-  // First refresh after 90s — the SSR render is already current on load
   setTimeout(function loop() {
-    refresh();
+    refreshData();
     setTimeout(loop, 90 * 1000);
   }, 90 * 1000);
 })();
