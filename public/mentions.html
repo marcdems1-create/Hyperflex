@@ -6,32 +6,37 @@
 <title>Mentions — HYPERFLEX</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#07050F;--bg-2:#0D0A1F;--paper:#07050F;--paper-2:#0D0A1F;
-  --panel:#14102A;--panel-2:#1B1638;
-  --line:rgba(140,120,255,0.10);--line-strong:rgba(140,120,255,0.22);
-  --ink:#F5F0E8;--ink-2:#C5BEDD;--muted:#6E6790;--muted-2:#4A4570;
+  /* Base palette — dark navy Bloomberg terminal */
+  --bg:#060d1a;--bg-2:#091224;--paper:#060d1a;--paper-2:#091224;
+  --panel:#0d1c30;--panel-2:#112135;
+  --line:rgba(0,212,255,0.07);--line-strong:rgba(0,212,255,0.18);
+  --ink:#F0EEF8;--ink-2:#B8C8D8;--muted:#4A6278;--muted-2:#2E4256;
   --cyan:#00D4FF;--cyan-glow:rgba(0,212,255,0.35);
+  --amber:#f59e0b;--red:#ff4d6a;
   --hawk:#FF6B4D;--dove:#00D4FF;--neut:#9590B0;
-  --sans:'Geist','Inter',system-ui,sans-serif;
+  /* Typography */
+  --display:'Bebas Neue','Anton',sans-serif;
+  --sans:'Inter',system-ui,sans-serif;
   --serif:'Instrument Serif',serif;
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
 }
 html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
-body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%);pointer-events:none;z-index:0}
+/* Graph paper grid at 3% — trading terminal feel */
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 a{color:inherit;text-decoration:none}
 
 #nav-root{position:relative;z-index:200}
 
-/* ── page intro (Phase 4.0 — generic header above the featured-event hero) ── */
-.page-intro{background:var(--bg);border-bottom:1px solid var(--line);padding:32px 36px 28px;position:relative;z-index:2}
-.page-intro-inner{max-width:1240px;margin:0 auto}
-.page-intro-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.24em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
-.page-intro-sub{font-family:var(--sans);font-size:15px;color:var(--ink-2);line-height:1.5;max-width:600px;margin:0}
-@media(max-width:768px){.page-intro{padding:22px 18px 20px}.page-intro-eyebrow{font-size:11px}.page-intro-sub{font-size:14px}}
+/* ── page intro ── */
+.page-intro{background:var(--bg);border-bottom:1px solid var(--line);padding:20px 36px 18px;position:relative;z-index:2}
+.page-intro-inner{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.page-intro-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.26em;color:rgba(0,212,255,0.6);text-transform:uppercase;flex-shrink:0}
+.page-intro-sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin:0}
+@media(max-width:768px){.page-intro{padding:14px 18px 12px}.page-intro-inner{gap:8px}.page-intro-sub{display:none}}
 
 /* ── HERO BANNER (Phase 3.7) ── */
 .hero{position:relative;background:var(--bg-2);border-bottom:1px solid var(--line);padding:120px 36px 132px;overflow:hidden}
@@ -144,41 +149,50 @@ a{color:inherit;text-decoration:none}
    "heat" hierarchy: jumbo 2-up, large 3-up, medium 4-up, small 6-up.
    Typography scales per tier; brand cyan for YES-leaning (>=50¢),
    --hawk (red) for NO-leaning. */
-/* ── TOWN HALL BROADCAST STRIP — live rotating market hero ── */
-.th-hero{position:relative;z-index:2;background:#000;overflow:hidden;border-bottom:1px solid var(--line)}
+/* ── TOWN HALL BROADCAST STRIP — Bloomberg terminal hero ── */
+.th-hero{position:relative;z-index:2;background:#000;overflow:hidden;border-bottom:1px solid rgba(0,212,255,0.15)}
 .th-stage{position:relative}
-.th-card{position:relative;min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;overflow:hidden}
-.th-bg{position:absolute;inset:0;background-size:cover;background-position:center;transition:opacity .6s;opacity:.5}
-.th-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.92) 0%,rgba(0,0,0,.75) 45%,rgba(0,0,0,.45) 100%)}
-.th-content{position:relative;z-index:2;display:grid;grid-template-columns:200px 1fr;gap:0;align-items:center;max-width:1240px;margin:0 auto;padding:32px 36px 40px;width:100%}
-.th-top-bar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 36px;max-width:1240px;margin:0 auto}
-.th-broadcast-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.28em;color:#ff4d6a;text-transform:uppercase;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.35);padding:4px 10px}
+/* Full-width card: left panel 60% dark content + right panel 40% image */
+.th-card{display:flex;min-height:320px;cursor:pointer;overflow:hidden;position:relative}
+.th-left-panel{flex:0 0 60%;background:linear-gradient(to right,#060d1a 0%,rgba(6,13,26,.96) 100%);padding:44px 40px 36px;display:flex;flex-direction:column;justify-content:flex-end;gap:0;position:relative;z-index:2}
+.th-right-panel{flex:0 0 40%;background-size:cover;background-position:center;position:relative}
+.th-right-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(6,13,26,.85) 0%,rgba(6,13,26,.2) 60%,transparent 100%)}
+/* Scanline effect on hero only */
+.th-left-panel::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:1}
+.th-left-inner{position:relative;z-index:2;display:flex;flex-direction:column;gap:0}
+.th-broadcast-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.32em;color:#ff4d6a;text-transform:uppercase;margin-bottom:16px;align-self:flex-start}
 .th-blink-dot{width:6px;height:6px;border-radius:50%;background:#ff4d6a;animation:th-blink .9s step-end infinite;flex-shrink:0}
 @keyframes th-blink{0%,100%{opacity:1}50%{opacity:0}}
-.th-slide-counter{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:rgba(255,255,255,.4)}
-.th-left{display:flex;flex-direction:column;gap:6px;padding-right:24px;border-right:1px solid rgba(255,255,255,.1)}
-.th-price-block{display:flex;flex-direction:column;gap:2px}
-.th-yes{font-family:var(--mono);font-weight:900;font-size:clamp(48px,5vw,72px);line-height:1;letter-spacing:-.03em;transition:color .3s}
-.th-yes.high{color:var(--cyan)}
+.th-slide-counter{position:absolute;top:16px;right:20px;font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:rgba(255,255,255,.3);z-index:3}
+/* Headline: big Bebas Neue */
+.th-headline{font-family:var(--display);font-size:clamp(40px,5.5vw,72px);line-height:.96;letter-spacing:.02em;color:#fff;margin:0 0 12px}
+/* Price: massive Bebas Neue with glow */
+.th-price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.th-yes{font-family:var(--display);font-size:clamp(64px,9vw,96px);line-height:1;letter-spacing:-.01em;transition:color .3s}
+.th-yes.high{color:var(--cyan);text-shadow:0 0 24px rgba(0,212,255,.45)}
 .th-yes.mid{color:#c5bedd}
-.th-yes.low{color:#ff6b4d}
-.th-yes-lbl{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.3em;color:rgba(255,255,255,.45);text-transform:uppercase}
-.th-vol{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-top:8px;line-height:1.6}
-.th-countdown{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;color:#f59e0b;text-transform:uppercase}
-.th-right{padding-left:28px;display:flex;flex-direction:column;gap:12px}
-.th-headline{font-family:'Anton',sans-serif;font-size:clamp(32px,4.5vw,62px);line-height:1.0;letter-spacing:.01em;color:#fff;margin:0;text-shadow:0 2px 20px rgba(0,0,0,.5)}
-.th-subline{font-family:var(--sans);font-size:14px;color:rgba(255,255,255,.6);line-height:1.5;margin:0;max-width:560px}
-.th-trade-btn{align-self:flex-start;display:inline-flex;align-items:center;padding:10px 22px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.22em;text-transform:uppercase;text-decoration:none;transition:opacity .12s;margin-top:4px}
-.th-trade-btn:hover{opacity:.85}
-.th-dots{display:flex;gap:6px;justify-content:center;padding:12px 0 8px;background:#000}
-.th-dot{width:24px;height:3px;border:0;background:rgba(255,255,255,.2);cursor:pointer;padding:0;transition:background .2s,width .2s}
-.th-dot.active{background:var(--cyan);width:36px}
+.th-yes.low{color:#ff6b4d;text-shadow:0 0 20px rgba(255,107,77,.35)}
+.th-yes-lbl{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.3em;color:rgba(255,255,255,.5);text-transform:uppercase;padding-bottom:8px}
+.th-subline{font-family:var(--sans);font-size:13px;color:rgba(255,255,255,.55);line-height:1.5;margin:0 0 18px;max-width:480px}
+.th-meta{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.th-vol{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;color:rgba(255,255,255,.4);text-transform:uppercase}
+.th-countdown{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;color:#f59e0b;text-transform:uppercase}
+.th-trade-btn{align-self:flex-start;display:inline-flex;align-items:center;padding:9px 22px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.26em;text-transform:uppercase;text-decoration:none;transition:opacity .12s,transform .12s}
+.th-trade-btn:hover{opacity:.88;transform:translateY(-1px)}
+/* Progress bar across bottom of hero */
+.th-progress{position:absolute;bottom:0;left:0;height:2px;background:var(--cyan);opacity:.7;transition:none}
+@keyframes th-progress-tick{from{width:0}to{width:100%}}
+/* Navigation dots */
+.th-dots{display:flex;gap:6px;justify-content:center;padding:10px 0 8px;background:#000;position:relative}
+.th-dot{width:24px;height:2px;border:0;background:rgba(255,255,255,.15);cursor:pointer;padding:0;transition:background .2s,width .2s}
+.th-dot.active{background:var(--cyan);width:40px}
 @media(max-width:768px){
-  .th-content{grid-template-columns:1fr;padding:56px 18px 28px}
-  .th-left{flex-direction:row;align-items:center;gap:16px;border-right:0;border-bottom:1px solid rgba(255,255,255,.1);padding:0 0 12px;margin-bottom:4px}
-  .th-yes{font-size:42px}
-  .th-headline{font-size:clamp(24px,7vw,38px)}
-  .th-top-bar{padding:10px 18px}
+  .th-card{flex-direction:column;min-height:auto}
+  .th-left-panel{flex:none;padding:44px 18px 28px}
+  .th-right-panel{flex:none;height:180px}
+  .th-right-overlay{background:linear-gradient(to bottom,rgba(6,13,26,.9) 0%,rgba(6,13,26,.1) 100%)}
+  .th-yes{font-size:clamp(56px,18vw,72px)}
+  .th-headline{font-size:clamp(32px,9vw,52px)}
 }
 /* ── ON THE WIRE ticker tape ── */
 .th-ticker-wrap{display:flex;align-items:center;background:#0a0812;border-bottom:1px solid var(--line);overflow:hidden;height:32px;position:relative;z-index:2}
@@ -189,24 +203,22 @@ a{color:inherit;text-decoration:none}
 .tt-item{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:rgba(255,255,255,.65);text-decoration:none;text-transform:uppercase;padding:0 2px;transition:color .1s;white-space:nowrap}
 .tt-item:hover{color:var(--cyan)}
 .tt-sep{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.2);padding:0 14px}
-/* ── NEWSROOM TICKER — Townsquare "read all about it" strip ── */
-.newsroom{padding:28px 36px 24px;border-bottom:1px solid var(--line);position:relative;z-index:2;background:var(--bg)}
+/* ── NEWSROOM TICKER — "read all about it" card strip ── */
+.newsroom{padding:24px 36px 20px;border-bottom:1px solid var(--line);position:relative;z-index:2;background:var(--bg)}
 .newsroom-inner{max-width:1240px;margin:0 auto}
-.newsroom-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.28em;color:var(--muted);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.newsroom-eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.32em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px}
 .newsroom-eyebrow::after{content:'';flex:1;height:1px;background:var(--line)}
-.newsroom-cards{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding-bottom:2px}
+.newsroom-cards{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding-bottom:2px}
 .newsroom-cards::-webkit-scrollbar{display:none}
-.nr-card{flex:0 0 180px;background:var(--panel);border:1px solid var(--line);padding:16px 16px 14px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden}
-.nr-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--line);transition:background .15s}
-.nr-card:hover{border-color:rgba(0,212,255,0.40);transform:translateY(-2px)}
-.nr-card:hover::before{background:var(--cyan)}
-.nr-ticker{font-family:var(--mono);font-size:10px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nr-keyword{font-family:'Anton',Impact,sans-serif;font-size:38px;line-height:.92;letter-spacing:.01em;color:var(--ink);margin-bottom:10px;word-break:break-word}
-.nr-threshold{font-family:'Anton',Impact,sans-serif;font-size:22px;line-height:1;color:#f59e0b;margin-bottom:10px;letter-spacing:.01em}
-.nr-prob{font-family:var(--mono);font-size:18px;font-weight:700;letter-spacing:.02em;line-height:1;margin-bottom:3px}
+.nr-card{flex:0 0 172px;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--line);padding:14px 14px 12px;text-decoration:none;color:inherit;transition:border-color .12s,border-top-color .12s,transform .12s;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden}
+.nr-card:hover{border-color:rgba(0,212,255,0.25);border-top-color:var(--cyan);transform:translateY(-3px)}
+.nr-ticker{font-family:var(--mono);font-size:9px;letter-spacing:.28em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nr-keyword{font-family:var(--display);font-size:40px;line-height:.9;letter-spacing:.01em;color:var(--ink);margin-bottom:8px;word-break:break-word}
+.nr-threshold{font-family:var(--display);font-size:24px;line-height:1;color:#f59e0b;margin-bottom:8px;letter-spacing:.01em}
+.nr-prob{font-family:var(--mono);font-size:16px;font-weight:700;letter-spacing:.02em;line-height:1;margin-bottom:4px}
 .nr-prob.yes{color:var(--cyan)}
 .nr-prob.no{color:#FF6B4D}
-.nr-vol{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.nr-vol{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
 /* When a Polymarket image loads, it covers the card as bg — content stays
    readable via gradient overlay set by JS after image probe succeeds. */
 .nr-card{background-size:cover;background-position:center top;background-repeat:no-repeat}
@@ -224,43 +236,51 @@ a{color:inherit;text-decoration:none}
 .hm-tab:hover{color:var(--ink-2)}
 .hm-tab.active{background:rgba(0,212,255,0.10);color:var(--cyan)}
 
-.hm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;grid-auto-flow:dense}
-.hm-tile{display:flex;flex-direction:column;gap:10px;padding:16px 16px 14px;border-radius:12px;background:linear-gradient(180deg,rgba(140,120,255,0.05),rgba(140,120,255,0.01));border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color 0.15s, transform 0.15s, background 0.15s;min-height:120px}
-.hm-tile:hover{border-color:var(--cyan-glow);transform:translateY(-1px);background:linear-gradient(180deg,rgba(0,212,255,0.06),rgba(0,212,255,0.01))}
-.hm-tile.jumbo{grid-column:span 6;min-height:200px;padding:24px 24px 20px;gap:16px;background:linear-gradient(180deg,rgba(0,212,255,0.06),rgba(0,212,255,0.01));border-color:rgba(0,212,255,0.20)}
-.hm-tile.large{grid-column:span 4;min-height:152px;padding:18px 18px 16px;gap:12px}
-.hm-tile.medium{grid-column:span 3;min-height:120px}
-.hm-tile.small{grid-column:span 3;min-height:110px;padding:14px 14px 12px;gap:8px}
+.hm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;grid-auto-flow:dense}
+/* Each tile: dark panel base + optional image overlay via --tile-img */
+.hm-tile{display:flex;flex-direction:column;gap:8px;padding:16px 16px 0;border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color 0.15s, transform 0.15s;min-height:160px;background:var(--panel);position:relative;overflow:hidden}
+/* Image overlay: when JS sets --tile-img the gradient covers content */
+.hm-tile::before{content:"";position:absolute;inset:0;background:var(--tile-img-grad,none),var(--tile-img,none);background-size:cover;background-position:center top;pointer-events:none;z-index:0}
+.hm-tile:hover{border-color:rgba(0,212,255,0.35);transform:translateY(-2px)}
+.hm-tile.jumbo{grid-column:span 6;min-height:220px;padding:22px 22px 0;border-color:rgba(0,212,255,0.18)}
+.hm-tile.large{grid-column:span 4;min-height:180px;padding:18px 18px 0}
+.hm-tile.medium{grid-column:span 3;min-height:160px}
+.hm-tile.small{grid-column:span 3;min-height:140px;padding:12px 12px 0;gap:6px}
 
-.hm-tile-top{display:flex;align-items:center;gap:10px}
-.hm-portrait{width:32px;height:32px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--muted-2);flex-shrink:0}
+.hm-tile-top{display:flex;align-items:center;gap:8px;position:relative;z-index:1}
+.hm-portrait{width:28px;height:28px;background:var(--panel-2);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .hm-portrait::before{content:attr(data-monogram);position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-.hm-portrait img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:relative;z-index:1;display:block}
-.hm-tile.jumbo .hm-portrait{width:48px;height:48px;font-size:19px}
-.hm-tile.small .hm-portrait{width:24px;height:24px;font-size:10px}
-.hm-speaker{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted-2);text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hm-tile.jumbo .hm-speaker{font-size:12px}
+.hm-portrait img{width:100%;height:100%;object-fit:cover;position:relative;z-index:1;display:block}
+.hm-tile.jumbo .hm-portrait{width:36px;height:36px;font-size:14px}
+.hm-tile.small .hm-portrait{width:22px;height:22px;font-size:9px}
+.hm-speaker{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-tile.jumbo .hm-speaker{font-size:10px}
 
-.hm-q{font-family:var(--sans);font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.hm-tile.jumbo .hm-q{font-size:20px;-webkit-line-clamp:2;line-height:1.25;font-weight:700}
-.hm-tile.large .hm-q{font-size:15px;-webkit-line-clamp:2}
-.hm-tile.medium .hm-q{font-size:13px;-webkit-line-clamp:2}
-.hm-tile.small .hm-q{font-size:12px;-webkit-line-clamp:2;color:var(--ink-2)}
+.hm-q{font-family:var(--sans);font-weight:500;color:var(--ink-2);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:12px;position:relative;z-index:1}
+.hm-tile.jumbo .hm-q{font-size:15px;-webkit-line-clamp:2;line-height:1.3;font-weight:600;color:var(--ink)}
+.hm-tile.large .hm-q{font-size:13px;-webkit-line-clamp:2}
+.hm-tile.medium .hm-q{font-size:12px}
+.hm-tile.small .hm-q{font-size:11px;-webkit-line-clamp:2}
 
-.hm-tile-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:auto}
-.hm-price{font-family:var(--mono);font-weight:900;color:var(--cyan);line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+/* Price: Bebas Neue for that trading terminal look */
+.hm-tile-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:auto;padding-bottom:10px;position:relative;z-index:1}
+.hm-price{font-family:var(--display);color:var(--cyan);line-height:1;letter-spacing:.01em}
 .hm-price.no-leaning{color:var(--hawk)}
-.hm-tile.jumbo .hm-price{font-size:44px}
-.hm-tile.large .hm-price{font-size:32px}
-.hm-tile.medium .hm-price{font-size:26px}
-.hm-tile.small .hm-price{font-size:20px}
-/* low-conviction markets (YES < 10¢) recede visually */
-.hm-tile.low-conviction{opacity:0.5}
-/* markets with strong 24h flow get a cyan left accent */
-.hm-tile.hot-vol{border-left:2px solid rgba(0,212,255,0.55)}
-.hm-vol{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;flex-shrink:0}
-.hm-tile.jumbo .hm-vol{font-size:13px;color:var(--ink-2)}
-.hm-tile.small .hm-vol{font-size:10px}
+.hm-tile.jumbo .hm-price{font-size:56px}
+.hm-tile.large .hm-price{font-size:42px}
+.hm-tile.medium .hm-price{font-size:34px}
+.hm-tile.small .hm-price{font-size:26px}
+/* Volume bar — fills from left, colored by 24h vol intensity */
+.hm-vol-bar-wrap{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.04)}
+.hm-vol-bar{height:100%;background:rgba(0,212,255,0.45);transition:width .3s}
+.hm-tile.hot-vol .hm-vol-bar{background:rgba(0,212,255,0.75)}
+/* low-conviction markets recede visually */
+.hm-tile.low-conviction{opacity:0.45}
+/* hot volume: cyan left accent */
+.hm-tile.hot-vol{border-left:2px solid rgba(0,212,255,0.6)}
+.hm-vol{font-family:var(--mono);font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;flex-shrink:0}
+.hm-tile.jumbo .hm-vol{font-size:12px;color:var(--ink-2)}
+.hm-tile.small .hm-vol{font-size:9px}
 
 /* PENDING/RESOLVED state chip — rides top-right of .hm-tile-top opposite
    the speaker portrait. Inherits the .hero-eyebrow vocab (mono, uppercase,
@@ -275,12 +295,18 @@ a{color:inherit;text-decoration:none}
 
 .hm-empty{font-family:var(--mono);font-size:12px;color:var(--muted-2);padding:24px 0;line-height:1.6;text-align:center}
 
+/* Price tick flash animations */
+@keyframes hm-tick-up{0%,100%{color:var(--cyan)}25%{color:#00ff99;text-shadow:0 0 12px rgba(0,255,153,.6)}}
+@keyframes hm-tick-dn{0%,100%{color:var(--cyan)}25%{color:#ff4d6a;text-shadow:0 0 12px rgba(255,77,106,.6)}}
+.hm-price.tick-up{animation:hm-tick-up .8s ease-out}
+.hm-price.tick-dn{animation:hm-tick-dn .8s ease-out}
+
 @media(max-width:768px){
-  .hm-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .hm-grid{grid-template-columns:repeat(2,1fr);gap:8px}
   .hm-tile.jumbo,.hm-tile.large,.hm-tile.medium,.hm-tile.small{grid-column:span 2;min-height:auto}
-  .hm-tile.jumbo .hm-q{font-size:17px}
-  .hm-tile.jumbo .hm-price{font-size:28px}
-  .hm-tile.large .hm-price{font-size:22px}
+  .hm-tile{min-height:120px;padding:12px 12px 0}
+  .hm-tile.jumbo .hm-price{font-size:42px}
+  .hm-tile.large .hm-price{font-size:32px}
   .hm-header{align-items:flex-start;flex-direction:column;gap:12px}
 }
 .event-row{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:16px 18px;background:rgba(255,255,255,0.025);border:1px solid var(--line);transition:border-color .15s,background .15s;cursor:pointer}
@@ -400,8 +426,9 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 
 <section class="page-intro">
   <div class="page-intro-inner">
-    <div class="page-intro-eyebrow">Mentions · market-moving statements</div>
-    <p class="page-intro-sub">Public figures, what they said, how the market reacted.</p>
+    <div class="page-intro-eyebrow">MENTIONS</div>
+    <span style="color:rgba(0,212,255,0.25);font-family:var(--mono);font-size:10px">·</span>
+    <p class="page-intro-sub">Public figures · market-moving statements · live probabilities</p>
   </div>
 </section>
 
@@ -839,6 +866,8 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     return speaker ? String(speaker).charAt(0).toUpperCase() : '?';
   }
 
+  let _maxVol24h = 1;  // updated after grid load to compute vol bar widths
+
   function renderTile(market, tier) {
     const cid = escHtml(market.condition_id || '');
     const q = escHtml(market.question || '');
@@ -852,16 +881,12 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     const priceText = fmtCents(yesPrice);
     const priceClass = (yesPrice != null && yesPrice < 0.5) ? 'hm-price no-leaning' : 'hm-price';
 
-    // Volume label: show lifetime ("$ in play") as primary; the prior
-    // "vol_24h || vol_total" fallback mislabelled lifetime as "24h"
-    // (Marc, 2026-05-14). 24h is suffixed only when meaningful (>= $100).
     const volTotal = Number(market.volume_total) || 0;
     const vol24h   = Number(market.volume_24h) || 0;
     const volText  = fmtVolume(volTotal);
     const vol24hChip = (vol24h >= 100) ? ' · ' + fmtVolume(vol24h) + ' 24h' : '';
 
-    // Image priority: Polymarket CDN → our speaker portrait → initials monogram.
-    // Two-step onerror chain: CDN 404 → try speaker file → remove entirely.
+    // Image: Polymarket CDN full-bleed with gradient overlay on tile
     const imgUrl = market.image_url ? escHtml(market.image_url) : '';
     const speakerFallback = speakerSlug ? '/speakers/' + escHtml(speakerSlug) + '.jpg' : '';
     const portraitImg = imgUrl
@@ -871,8 +896,6 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
           ? '<img src="' + speakerFallback + '" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
           : '');
 
-    // PENDING/RESOLVED state badge -- server-side derived in
-    // lib/mentions-heatmap.js:_deriveState. Live tiles render no badge.
     const state = market.state || 'live';
     const badgeHtml = (state === 'pending' || state === 'resolved')
       ? '<div class="hm-badge ' + state + '">' + state + '</div>'
@@ -884,8 +907,11 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       (vol24h > 50000) ? 'hot-vol' : '',
     ].filter(Boolean).join(' ');
 
+    // Volume bar width as % of max 24h vol in this view (set after render)
+    const volBarPct = _maxVol24h > 0 ? Math.min(100, Math.round((vol24h / _maxVol24h) * 100)) : 0;
+
     return ''
-      + '<a class="hm-tile ' + tier + (extraCls ? ' ' + extraCls : '') + '" href="' + href + '" data-cid="' + cid + '">'
+      + '<a class="hm-tile ' + tier + (extraCls ? ' ' + extraCls : '') + '" href="' + href + '" data-cid="' + cid + '" data-vol24h="' + vol24h + '" data-imgurl="' + imgUrl + '">'
       +   '<div class="hm-tile-top">'
       +     '<div class="hm-portrait" data-monogram="' + monogram + '">' + portraitImg + '</div>'
       +     '<div class="hm-speaker">' + escHtml(speaker) + '</div>'
@@ -893,14 +919,32 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       +   '</div>'
       +   '<div class="hm-q">' + q + '</div>'
       +   '<div class="hm-tile-bottom">'
-      +     '<div class="' + priceClass + '">' + priceText + ' YES</div>'
+      +     '<div class="' + priceClass + '" data-price="' + (yesNum || 0) + '">' + priceText + ' YES</div>'
       +     '<div class="hm-vol">' + escHtml(volText + vol24hChip) + '</div>'
       +   '</div>'
+      +   '<div class="hm-vol-bar-wrap"><div class="hm-vol-bar" style="width:' + volBarPct + '%"></div></div>'
       + '</a>';
+  }
+
+  function applyTileImages(grid) {
+    // Set CSS custom property --tile-img on tiles that have a valid CDN image
+    grid.querySelectorAll('.hm-tile[data-imgurl]').forEach(el => {
+      const url = el.getAttribute('data-imgurl');
+      if (!url) return;
+      const probe = new window.Image();
+      probe.onload = () => {
+        el.style.setProperty('--tile-img-grad', 'linear-gradient(to top,rgba(6,13,26,.95) 0%,rgba(6,13,26,.7) 50%,rgba(6,13,26,.45) 100%)');
+        el.style.setProperty('--tile-img', 'url(' + url + ')');
+      };
+      probe.src = url;
+    });
   }
 
   function renderGrid(payload) {
     const tiers = (payload && payload.tiers) || {};
+    // Compute max 24h vol across all tiles for proportional volume bars
+    const allMarkets = TIER_ORDER.flatMap(t => Array.isArray(tiers[t]) ? tiers[t] : []);
+    _maxVol24h = allMarkets.reduce((mx, m) => Math.max(mx, Number(m.volume_24h) || 0), 1);
     const parts = [];
     for (const tier of TIER_ORDER) {
       const arr = Array.isArray(tiers[tier]) ? tiers[tier] : [];
@@ -978,6 +1022,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
           return;
         }
         grid.innerHTML = renderGrid(d);
+        applyTileImages(grid);
         if (sub) {
           // "$ in play" framing -- lifetime volume primary, 24h secondary
           // chip only when meaningful (>= $1k) so the header doesn't lead
@@ -1466,31 +1511,33 @@ load();
 
   function renderCard(c, idx) {
     var total = _markets.length;
-    var yesHtml = c.yesPct != null
-      ? '<div class="th-price-block">' +
+    var priceRow = c.yesPct != null
+      ? '<div class="th-price-row">' +
           '<div class="th-yes ' + (c.yesClass||'mid') + '">' + esc(c.yesCents||'—') + '</div>' +
           '<div class="th-yes-lbl">YES</div>' +
         '</div>'
       : '';
+    var imgStyle = c.imgUrl
+      ? 'background-image:url(\'' + esc(c.imgUrl) + '\')'
+      : 'background:#091224';
     return '<div class="th-card" data-href="' + esc(c.href||'#') + '">' +
-      '<div class="th-bg" style="background-image:url(\'' + esc(c.imgUrl||'') + '\')"></div>' +
-      '<div class="th-overlay"></div>' +
-      '<div class="th-content">' +
-        '<div class="th-top-bar">' +
-          '<span class="th-broadcast-badge"><span class="th-blink-dot"></span>BROADCAST</span>' +
-          '<span class="th-slide-counter">' + (idx+1) + ' / ' + total + '</span>' +
-        '</div>' +
-        '<div class="th-left">' +
-          yesHtml +
-          '<div class="th-vol">' + esc(c.volLabel||'') + '</div>' +
-          (c.countdown ? '<div class="th-countdown">' + esc(c.countdown) + '</div>' : '') +
-        '</div>' +
-        '<div class="th-right">' +
+      '<div class="th-left-panel">' +
+        '<div class="th-left-inner">' +
+          '<span class="th-broadcast-badge"><span class="th-blink-dot"></span>● LIVE</span>' +
           '<h1 class="th-headline">' + esc(c.headline||'') + '</h1>' +
+          priceRow +
           '<p class="th-subline">' + esc(c.shortQ||'') + '</p>' +
-          '<a class="th-trade-btn" href="' + esc(c.href||'#') + '" target="_blank" rel="noopener">Trade ↗</a>' +
+          '<div class="th-meta">' +
+            '<span class="th-vol">' + esc(c.volLabel||'') + '</span>' +
+            (c.countdown ? '<span class="th-countdown">' + esc(c.countdown) + '</span>' : '') +
+          '</div>' +
+          '<a class="th-trade-btn" href="' + esc(c.href||'#') + '" target="_blank" rel="noopener">TRADE ↗</a>' +
         '</div>' +
       '</div>' +
+      '<div class="th-right-panel" style="' + imgStyle + '">' +
+        '<div class="th-right-overlay"></div>' +
+      '</div>' +
+      '<span class="th-slide-counter" id="th-slide-counter">' + (idx+1) + ' / ' + total + '</span>' +
     '</div>';
   }
 
@@ -1502,9 +1549,10 @@ load();
     var card = _markets[_idx];
     // Fade transition
     stage.style.opacity = '0';
-    stage.style.transition = 'opacity .35s';
+    stage.style.transition = 'opacity .3s';
     setTimeout(function() {
       stage.innerHTML = renderCard(card, _idx);
+      animateProgress();
       // Wire card click to market link
       var el = stage.querySelector('.th-card');
       if (el) el.addEventListener('click', function(e) {
@@ -1518,8 +1566,28 @@ load();
     });
   }
 
+  function animateProgress() {
+    var stage = document.getElementById('th-stage');
+    if (!stage) return;
+    var bar = stage.querySelector('.th-progress');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'th-progress';
+      stage.appendChild(bar);
+    }
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        bar.style.transition = 'width 30s linear';
+        bar.style.width = '100%';
+      });
+    });
+  }
+
   function startRotation() {
     clearInterval(_rotTimer);
+    animateProgress();
     if (_markets.length < 2) return;
     _rotTimer = setInterval(function() { goTo(_idx + 1); }, 30 * 1000);
   }

@@ -15845,33 +15845,33 @@ function _thTop5(markets) {
 }
 
 // Server-side render of a single broadcast card (used for SSR slot 0).
-function _renderTHCard(c) {
-  const yesHtml = c.yesPct != null
-    ? `<div class="th-price-block">
+function _renderTHCard(c, idx, total) {
+  const priceRow = c.yesPct != null
+    ? `<div class="th-price-row">
         <div class="th-yes ${c.yesClass}">${c.yesCents}</div>
         <div class="th-yes-lbl">YES</div>
        </div>`
     : '';
+  const counter = `<span class="th-slide-counter" id="th-slide-counter">${(idx||0)+1} / ${total||5}</span>`;
   return `
   <div class="th-card" data-href="${_escHtml(c.href)}">
-    <div class="th-bg" style="background-image:url('${_escHtml(c.imgUrl)}')"></div>
-    <div class="th-overlay"></div>
-    <div class="th-content">
-      <div class="th-top-bar">
-        <span class="th-broadcast-badge"><span class="th-blink-dot"></span>BROADCAST</span>
-        <span class="th-slide-counter" id="th-slide-counter">1 / 5</span>
-      </div>
-      <div class="th-left">
-        ${yesHtml}
-        <div class="th-vol">${_escHtml(c.volLabel)}</div>
-        ${c.countdown ? `<div class="th-countdown">${_escHtml(c.countdown)}</div>` : ''}
-      </div>
-      <div class="th-right">
+    <div class="th-left-panel">
+      <div class="th-left-inner">
+        <span class="th-broadcast-badge"><span class="th-blink-dot"></span>● LIVE</span>
         <h1 class="th-headline">${_escHtml(c.headline)}</h1>
+        ${priceRow}
         <p class="th-subline">${_escHtml(c.shortQ)}</p>
-        <a class="th-trade-btn" href="${_escHtml(c.href)}" target="_blank" rel="noopener">Trade ↗</a>
+        <div class="th-meta">
+          <span class="th-vol">${_escHtml(c.volLabel)}</span>
+          ${c.countdown ? `<span class="th-countdown">${_escHtml(c.countdown)}</span>` : ''}
+        </div>
+        <a class="th-trade-btn" href="${_escHtml(c.href)}" target="_blank" rel="noopener">TRADE ↗</a>
       </div>
     </div>
+    <div class="th-right-panel" style="${c.imgUrl ? `background-image:url('${_escHtml(c.imgUrl)}')` : 'background:#091224'}">
+      <div class="th-right-overlay"></div>
+    </div>
+    ${counter}
   </div>`;
 }
 
@@ -15894,7 +15894,7 @@ function _renderDynamicHero() {
       return `<a class="tt-item" href="${_escHtml(m.slug ? '/market/' + encodeURIComponent(m.slug) : '#')}">${_escHtml(kw.toUpperCase())} / ${yp != null ? yp + '¢ YES' : '—'} / ${_escHtml(vs)}</a><span class="tt-sep">·</span>`;
     }).join('');
 
-  const card0 = _renderTHCard(top5[0]);
+  const card0 = _renderTHCard(top5[0], 0, top5.length);
   const jsonData = _escHtml(JSON.stringify(top5));
 
   return `
