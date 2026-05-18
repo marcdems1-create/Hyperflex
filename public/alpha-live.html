@@ -168,6 +168,25 @@
   .footnote{padding:20px 0 60px;font-size:11px;color:var(--soft);border-top:1px solid var(--border);margin-top:20px;text-align:center}
   .footnote em{color:var(--green);font-style:normal}
 
+  /* Mentions Monitor */
+  .mf-label{display:block;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+  .mf-input{width:100%;background:#0e0e15;border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--ink);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .15s}
+  .mf-input:focus{border-color:rgba(77,159,255,0.4)}
+  .mf-input::placeholder{color:#3a3a52}
+  .monitor-chip{display:flex;align-items:center;gap:10px;background:#16161f;border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;transition:border-color .15s}
+  .monitor-chip:hover{border-color:rgba(77,159,255,0.3)}
+  .monitor-chip-icon{font-size:16px;flex-shrink:0}
+  .monitor-chip-body{flex:1;min-width:0}
+  .monitor-chip-title{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ink);margin-bottom:2px}
+  .monitor-chip-meta{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap}
+  .monitor-chip-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:4px 8px;transition:color .15s;flex-shrink:0;min-height:36px;display:flex;align-items:center}
+  .monitor-chip-del:hover{color:var(--red)}
+  .preview-match{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+  .preview-match:last-child{border-bottom:none}
+  .preview-match-score{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--amber);flex-shrink:0;width:28px;text-align:right}
+  .preview-match-q{font-size:12px;color:var(--ink);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .preview-match-meta{font-family:var(--mono);font-size:10px;color:var(--dim);flex-shrink:0}
+
   @media(max-width:600px){
     .hero h1{font-size:32px}
     .edge-grid{grid-template-columns:1fr}
@@ -214,6 +233,57 @@
 
   <div class="edge-grid" id="grid">
     <div class="loading">Loading live alpha…</div>
+  </div>
+
+  <!-- MENTIONS MONITOR -->
+  <div id="mentions-section" style="margin:40px 0 8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">📡 Mentions Monitor</h2>
+        <div style="font-size:12px;color:var(--dim);margin-top:3px">Get notified when keywords, tickers, or conditions appear in new markets</div>
+      </div>
+      <button id="add-monitor-btn" onclick="toggleAddMonitor()" class="ctrl" style="background:rgba(77,159,255,0.08);border-color:rgba(77,159,255,0.3);color:#4d9fff;font-size:12px">+ Add Monitor</button>
+    </div>
+
+    <!-- Add monitor form (hidden by default) -->
+    <div id="add-monitor-form" style="display:none;background:#12121c;border:1px solid rgba(77,159,255,0.25);border-radius:12px;padding:18px 20px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.1em;font-family:var(--mono);margin-bottom:14px">New Monitor</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label class="mf-label">Ticker <span style="color:var(--dim)">optional</span></label>
+          <input id="mf-ticker" class="mf-input" placeholder="BTC  TRUMP  NVIDIA…">
+        </div>
+        <div>
+          <label class="mf-label">Keyword <span style="color:var(--dim)">optional</span></label>
+          <input id="mf-keyword" class="mf-input" placeholder="bitcoin  election  rate cut…">
+        </div>
+        <div>
+          <label class="mf-label">Min edge score <span style="color:var(--dim)">0–100</span></label>
+          <input id="mf-threshold" class="mf-input" type="number" min="0" max="100" placeholder="40">
+        </div>
+        <div>
+          <label class="mf-label">Min YES price <span style="color:var(--dim)">0.01–0.99</span></label>
+          <input id="mf-prob" class="mf-input" type="number" min="0.01" max="0.99" step="0.01" placeholder="0.20">
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="mf-label">Min volume (24h USD)</label>
+          <input id="mf-vol" class="mf-input" type="number" min="0" placeholder="50000">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button onclick="previewMonitor()" class="ctrl" style="font-size:12px">Preview matches</button>
+        <button id="save-monitor-btn" onclick="saveMonitor()" class="ctrl" style="background:rgba(77,159,255,0.12);border-color:rgba(77,159,255,0.4);color:#4d9fff;font-size:12px">Save Monitor</button>
+        <button onclick="toggleAddMonitor()" class="ctrl" style="font-size:12px;color:var(--dim)">Cancel</button>
+      </div>
+      <div id="monitor-preview" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px" id="preview-label"></div>
+        <div id="preview-list"></div>
+      </div>
+      <div id="monitor-msg" style="display:none;font-family:var(--mono);font-size:12px;margin-top:10px"></div>
+    </div>
+
+    <!-- Active monitors list -->
+    <div id="monitors-list"><div style="font-size:13px;color:var(--dim);padding:8px 0" id="monitors-loading">Sign in to see your monitors</div></div>
   </div>
 
   <!-- CTA STRIP -->
@@ -480,6 +550,146 @@ function truncate(s,n){return s&&s.length>n?s.slice(0,n)+'…':s||'';}
 
 loadAnomalies();
 setInterval(loadAnomalies,90000);
+
+// ── MENTIONS MONITOR ──────────────────────────────────────────────────────────
+var _monitorFormOpen = false;
+
+function getToken(){
+  return localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || null;
+}
+
+function toggleAddMonitor(){
+  _monitorFormOpen = !_monitorFormOpen;
+  document.getElementById('add-monitor-form').style.display = _monitorFormOpen ? 'block' : 'none';
+  document.getElementById('monitor-preview').style.display = 'none';
+  document.getElementById('monitor-msg').style.display = 'none';
+}
+
+function getMonitorFormValues(){
+  return {
+    ticker:    document.getElementById('mf-ticker').value.trim() || null,
+    keyword:   document.getElementById('mf-keyword').value.trim() || null,
+    threshold: parseFloat(document.getElementById('mf-threshold').value) || 0,
+    prob:      parseFloat(document.getElementById('mf-prob').value) || null,
+    vol:       parseFloat(document.getElementById('mf-vol').value) || 0,
+  };
+}
+
+function fmtMonitorMeta(a){
+  var parts = [];
+  if (a.threshold > 0) parts.push('Edge ≥ ' + a.threshold);
+  if (a.prob) parts.push('YES ≥ ' + Math.round(a.prob * 100) + '¢');
+  if (a.vol > 0) parts.push('Vol ≥ $' + (a.vol >= 1e6 ? (a.vol/1e6).toFixed(1)+'M' : a.vol >= 1e3 ? Math.round(a.vol/1e3)+'K' : a.vol));
+  return parts.length ? parts.join(' · ') : 'No filters';
+}
+
+async function previewMonitor(){
+  var v = getMonitorFormValues();
+  if (!v.ticker && !v.keyword){ alert('Enter a ticker or keyword first'); return; }
+  var btn = document.querySelector('[onclick="previewMonitor()"]');
+  btn.textContent = 'Loading…'; btn.disabled = true;
+  try {
+    var r = await fetch('/api/mentions-alerts/preview', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(v)
+    });
+    var d = await r.json();
+    var prev = document.getElementById('monitor-preview');
+    var label = document.getElementById('preview-label');
+    var list = document.getElementById('preview-list');
+    prev.style.display = 'block';
+    label.textContent = d.count + ' current match' + (d.count !== 1 ? 'es' : '') + ' in live screener';
+    if (!d.matches || !d.matches.length){
+      list.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:6px 0">No current matches — alert will fire on future markets.</div>';
+    } else {
+      list.innerHTML = d.matches.map(function(m){
+        var vol = m.volume_24h >= 1e6 ? '$'+(m.volume_24h/1e6).toFixed(1)+'M' : m.volume_24h >= 1e3 ? '$'+Math.round(m.volume_24h/1e3)+'k' : '';
+        return '<div class="preview-match">' +
+          '<span class="preview-match-score">' + (m.edge_score||0) + '</span>' +
+          '<a href="/market/' + esc(m.slug) + '" class="preview-match-q" title="' + esc(m.question) + '" target="_blank">' + esc(truncate(m.question, 72)) + '</a>' +
+          '<span class="preview-match-meta">' + (m.yes_price ? Math.round((m.yes_price||0)*100)+'¢' : '') + (vol ? ' · '+vol : '') + '</span>' +
+        '</div>';
+      }).join('');
+    }
+  } catch(e){ alert('Preview failed: '+e.message); }
+  finally { btn.textContent = 'Preview matches'; btn.disabled = false; }
+}
+
+async function saveMonitor(){
+  var v = getMonitorFormValues();
+  if (!v.ticker && !v.keyword){ alert('Enter a ticker or keyword'); return; }
+  var token = getToken();
+  if (!token){ alert('Sign in to save a monitor'); return; }
+  var btn = document.getElementById('save-monitor-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  try {
+    var r = await fetch('/api/mentions-alerts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+token},
+      body: JSON.stringify(v)
+    });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    // Reset form
+    ['mf-ticker','mf-keyword','mf-threshold','mf-prob','mf-vol'].forEach(function(id){ document.getElementById(id).value=''; });
+    document.getElementById('monitor-preview').style.display = 'none';
+    toggleAddMonitor();
+    loadMonitors();
+  } catch(e){
+    var msg = document.getElementById('monitor-msg');
+    msg.style.display = 'block';
+    msg.style.color = 'var(--red)';
+    msg.textContent = e.message;
+  } finally { btn.textContent = 'Save Monitor'; btn.disabled = false; }
+}
+
+async function deleteMonitor(id){
+  var token = getToken();
+  if (!token) return;
+  try {
+    await fetch('/api/mentions-alerts/'+id, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer '+token }
+    });
+    loadMonitors();
+  } catch(e){ console.warn('delete monitor', e); }
+}
+
+async function loadMonitors(){
+  var list = document.getElementById('monitors-list');
+  var token = getToken();
+  if (!token){
+    list.innerHTML = '<div style="font-size:13px;color:var(--dim);padding:8px 0">Sign in to manage your monitors</div>';
+    return;
+  }
+  try {
+    var r = await fetch('/api/mentions-alerts', { headers: { 'Authorization': 'Bearer '+token } });
+    if (!r.ok) throw new Error('Failed');
+    var d = await r.json();
+    var alerts = d.alerts || [];
+    if (!alerts.length){
+      list.innerHTML = '<div style="font-size:13px;color:var(--dim);padding:8px 0">No monitors yet. Add one to get notified when matching markets appear.</div>';
+      return;
+    }
+    list.innerHTML = alerts.map(function(a){
+      var label = [a.ticker ? '🎯 '+a.ticker.toUpperCase() : null, a.keyword ? '"'+a.keyword+'"' : null].filter(Boolean).join(' + ');
+      var fired = a.last_fired_at ? 'Last fired ' + timeAgo(a.last_fired_at) : 'Not yet fired';
+      return '<div class="monitor-chip">' +
+        '<span class="monitor-chip-icon">📡</span>' +
+        '<div class="monitor-chip-body">' +
+          '<div class="monitor-chip-title">' + esc(label) + '</div>' +
+          '<div class="monitor-chip-meta"><span>' + fmtMonitorMeta(a) + '</span><span style="color:#3a3a52">'+fired+'</span></div>' +
+        '</div>' +
+        '<button class="monitor-chip-del" onclick="deleteMonitor(\''+a.id+'\')" title="Delete monitor">×</button>' +
+      '</div>';
+    }).join('');
+  } catch(e){
+    list.innerHTML = '<div style="font-size:12px;color:var(--dim)">Failed to load monitors</div>';
+  }
+}
+
+loadMonitors();
 </script>
 </body>
 </html>

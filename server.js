@@ -26620,7 +26620,76 @@ async function _buildAlphaListInner(opts = {}) {
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
+
+    // Fire mentions alerts async — do not await (non-blocking)
+    checkMentionsAlerts(markets).catch(e => console.warn('[mentions] check error:', e.message));
+
     return markets;
+}
+
+// ── MENTIONS ALERTS — keyword/ticker/prob/vol market watches ─────────────────
+let _mentionsAlertsCache = null;
+let _mentionsAlertsCacheTs = 0;
+
+async function getMentionsAlerts() {
+  if (_mentionsAlertsCache && Date.now() - _mentionsAlertsCacheTs < 5 * 60 * 1000) return _mentionsAlertsCache;
+  if (!pool) return [];
+  try {
+    const rows = await dbQuery('SELECT * FROM mentions_alerts', []);
+    _mentionsAlertsCache = rows;
+    _mentionsAlertsCacheTs = Date.now();
+    return rows;
+  } catch { return []; }
+}
+
+function mentionMatches(market, alert) {
+  const q = (market.question || '').toLowerCase();
+  const tickerMatch = !alert.ticker || q.includes(alert.ticker.toLowerCase());
+  const kwMatch = !alert.keyword || q.includes(alert.keyword.toLowerCase());
+  // Both must match when both are set; at least one must match otherwise
+  if (alert.ticker && alert.keyword) { if (!tickerMatch || !kwMatch) return false; }
+  else if (!tickerMatch && !kwMatch) return false;
+  // Numeric filters (falsy = no filter)
+  if (alert.threshold && (market.edge_score || 0) < Number(alert.threshold)) return false;
+  if (alert.prob && (market.best_ask || market.yes_ask || 0) < Number(alert.prob)) return false;
+  if (alert.vol && (market.volume_24h || 0) < Number(alert.vol)) return false;
+  return true;
+}
+
+const _mentionsFiredThisCycle = new Set(); // dedup per screener cycle
+
+async function checkMentionsAlerts(markets) {
+  if (!pool) return;
+  const alerts = await getMentionsAlerts();
+  if (!alerts.length) return;
+  const newMarkets = markets.filter(m => m.is_new); // only newly-seen markets
+  if (!newMarkets.length) return;
+
+  for (const alert of alerts) {
+    for (const market of newMarkets) {
+      const key = `${alert.id}:${market.condition_id || market.slug}`;
+      if (_mentionsFiredThisCycle.has(key)) continue;
+      if (!mentionMatches(market, alert)) continue;
+      // Respect 30-minute cool-down per alert
+      if (alert.last_fired_at && Date.now() - new Date(alert.last_fired_at).getTime() < 30 * 60 * 1000) continue;
+      _mentionsFiredThisCycle.add(key);
+      // Push in-app notification
+      pushNotification(alert.user_id, {
+        type: 'mention_alert',
+        title: `📡 Mention: ${alert.ticker || alert.keyword}`,
+        body: market.question,
+        url: `/market/${market.slug}`,
+        meta: { edge_score: market.edge_score, vol: market.volume_24h }
+      }).catch(() => {});
+      // Update last_fired_at
+      await dbQuery('UPDATE mentions_alerts SET last_fired_at=NOW() WHERE id=$1', [alert.id]).catch(() => {});
+      // Invalidate cache so next getMentionsAlerts() reads fresh last_fired_at
+      _mentionsAlertsCache = null;
+      console.log(`[mentions] alert fired user=${alert.user_id} key=${alert.ticker||alert.keyword} market=${market.slug}`);
+    }
+  }
+  // Clear cycle dedup every screener refresh
+  setTimeout(() => _mentionsFiredThisCycle.clear(), 91 * 1000);
 }
 
 app.get('/api/screener', async (req, res) => {
@@ -31503,6 +31572,81 @@ app.get('/api/price-alerts/market/:conditionId', requireAuth, async (req, res) =
     }
     res.json({ alerts: rows });
   } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// ── MENTIONS ALERTS CRUD ─────────────────────────────────────────────────────
+
+// Create a mentions alert
+app.post('/api/mentions-alerts', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { ticker, keyword, threshold = 0, prob, vol = 0 } = req.body || {};
+    if (!ticker && !keyword) return res.status(400).json({ error: 'ticker or keyword required' });
+
+    if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+    const rows = await dbQuery('SELECT COUNT(*)::int AS c FROM mentions_alerts WHERE user_id=$1', [userId]);
+    if ((rows[0]?.c || 0) >= 20) return res.status(400).json({ error: 'Max 20 monitors' });
+
+    const inserted = await dbQuery(
+      `INSERT INTO mentions_alerts (user_id, ticker, keyword, threshold, prob, vol)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [userId, ticker?.trim() || null, keyword?.trim() || null,
+       threshold ? Number(threshold) : 0,
+       prob ? Number(prob) : null,
+       vol ? Number(vol) : 0]
+    );
+    _mentionsAlertsCache = null;
+    res.json({ alert: inserted[0] });
+  } catch (err) {
+    console.error('[mentions-alerts] create:', err.message);
+    res.status(500).json({ error: 'Failed to create monitor' });
+  }
+});
+
+// List user's mentions alerts
+app.get('/api/mentions-alerts', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.json({ alerts: [] });
+    const rows = await dbQuery(
+      'SELECT * FROM mentions_alerts WHERE user_id=$1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json({ alerts: rows });
+  } catch (err) {
+    console.error('[mentions-alerts] list:', err.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// Delete a mentions alert
+app.delete('/api/mentions-alerts/:id', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+    await dbQuery('DELETE FROM mentions_alerts WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    _mentionsAlertsCache = null;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[mentions-alerts] delete:', err.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// Preview — run a mentions alert config against the live screener without saving
+app.post('/api/mentions-alerts/preview', optionalAuth, async (req, res) => {
+  try {
+    const { ticker, keyword, threshold = 0, prob, vol = 0 } = req.body || {};
+    if (!ticker && !keyword) return res.status(400).json({ error: 'ticker or keyword required' });
+    const markets = _screenerCache?.data || [];
+    const alert = { ticker: ticker?.trim() || null, keyword: keyword?.trim() || null, threshold, prob, vol };
+    const matches = markets.filter(m => mentionMatches(m, alert))
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, 8)
+      .map(m => ({ slug: m.slug, question: m.question, edge_score: m.edge_score, yes_price: m.best_ask, volume_24h: m.volume_24h }));
+    res.json({ count: matches.length, matches });
+  } catch (err) {
+    console.error('[mentions-alerts] preview:', err.message);
     res.status(500).json({ error: 'Failed' });
   }
 });
@@ -41176,6 +41320,20 @@ if (pool) {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_alpha_freshness_updated ON alpha_freshness(updated_at)`).catch(() => {});
+
+      // Mentions Alerts — keyword/ticker/prob/vol market watches
+      await dbQuery(`CREATE TABLE IF NOT EXISTS mentions_alerts (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT NOT NULL,
+        ticker TEXT,
+        keyword TEXT,
+        threshold NUMERIC DEFAULT 0,
+        prob NUMERIC(5,4),
+        vol NUMERIC DEFAULT 0,
+        last_fired_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_mentions_alerts_user ON mentions_alerts(user_id)`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
