@@ -309,6 +309,19 @@ a{color:inherit;text-decoration:none}
 .card-foot .pill{padding:3px 8px;font-size:9px;letter-spacing:0.14em}
 
 /* ── stance pills (same scheme as event page, slightly compact) ── */
+/* ── TRENDING PILL BAR ── */
+.trending-bar{background:var(--bg);border-bottom:1px solid var(--line);padding:10px 36px;position:sticky;top:0;z-index:100}
+.trending-bar-inner{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:8px;overflow-x:auto;scrollbar-width:none}
+.trending-bar-inner::-webkit-scrollbar{display:none}
+.trending-bar-label{font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;white-space:nowrap;flex-shrink:0}
+.trend-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap;transition:border-color .12s,color .12s,background .12s;flex-shrink:0}
+.trend-pill:hover,.trend-pill.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.07)}
+.trend-pill .trend-vol{font-weight:400;opacity:.6}
+.trend-pill.hot-topic{border-color:rgba(245,158,11,0.4);color:#f59e0b}
+.trend-pill.hot-topic:hover,.trend-pill.hot-topic.active{border-color:#f59e0b;background:rgba(245,158,11,0.07)}
+#trending-pills{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+@media(max-width:768px){.trending-bar{padding:8px 16px}}
+
 .pill{display:inline-flex;align-items:center;padding:4px 10px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid;border-radius:0}
 .pill.s-hawkish.c-high{background:rgba(255,107,77,0.20);border-color:rgba(255,107,77,0.85);color:#FFB199}
 .pill.s-hawkish.c-medium{background:rgba(255,107,77,0.06);border-color:rgba(255,107,77,0.32);color:rgba(232,154,135,0.65)}
@@ -348,6 +361,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 </section>
 
 <!--HERO_HTML-->
+
+<!-- TRENDING BAR — sticky pill strip of top entities by 24h volume.
+     Populated from /api/trending-topics; clicking a pill filters hm-grid
+     to markets whose question matches that entity. Hidden until data loads. -->
+<div id="trending-bar" class="trending-bar" style="display:none">
+  <div class="trending-bar-inner">
+    <span class="trending-bar-label">Trending</span>
+    <div id="trending-pills"></div>
+  </div>
+</div>
 
 <main class="page" id="page">
   <!-- NEWSROOM TICKER — "read all about it" strip. Auto-populates from
@@ -1291,6 +1314,94 @@ async function load() {
 }
 
 load();
+
+// ── TRENDING BAR — entity pills that filter the heatmap grid ──────────────
+(function() {
+  var _activeEntity = null;
+
+  function fmtPillVol(v) {
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+
+  function filterGrid(pattern) {
+    var grid = document.getElementById('hm-grid');
+    if (!grid) return;
+    var tiles = grid.querySelectorAll('.hm-tile');
+    tiles.forEach(function(tile) {
+      var q = (tile.querySelector('.hm-q') || {}).textContent || '';
+      var speaker = (tile.querySelector('.hm-speaker') || {}).textContent || '';
+      var text = q + ' ' + speaker;
+      tile.style.display = (!pattern || pattern.test(text)) ? '' : 'none';
+    });
+  }
+
+  function renderPill(topic) {
+    var btn = document.createElement('button');
+    btn.className = 'trend-pill' + (topic.hot ? ' hot-topic' : '');
+    btn.setAttribute('data-label', topic.label);
+    btn.setAttribute('data-pattern', topic.pattern_str || topic.label);
+    btn.innerHTML = topic.label + ' <span class="trend-vol">' + fmtPillVol(topic.volume_24h) + '</span>';
+    return btn;
+  }
+
+  function init() {
+    fetch('/api/trending-topics', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d || !Array.isArray(d.topics) || !d.topics.length) return;
+        var bar = document.getElementById('trending-bar');
+        var pillsEl = document.getElementById('trending-pills');
+        if (!bar || !pillsEl) return;
+
+        // Add "All" pill first
+        var allBtn = document.createElement('button');
+        allBtn.className = 'trend-pill active';
+        allBtn.setAttribute('data-label', '__all__');
+        allBtn.textContent = 'All';
+        pillsEl.appendChild(allBtn);
+
+        d.topics.forEach(function(topic) {
+          pillsEl.appendChild(renderPill(topic));
+        });
+
+        pillsEl.addEventListener('click', function(e) {
+          var btn = e.target.closest('.trend-pill');
+          if (!btn) return;
+          var label = btn.getAttribute('data-label');
+          // Toggle off if already active
+          if (_activeEntity === label) {
+            _activeEntity = null;
+            pillsEl.querySelectorAll('.trend-pill').forEach(function(b) {
+              b.classList.toggle('active', b.getAttribute('data-label') === '__all__');
+            });
+            filterGrid(null);
+            return;
+          }
+          _activeEntity = label;
+          pillsEl.querySelectorAll('.trend-pill').forEach(function(b) {
+            b.classList.toggle('active', b === btn);
+          });
+          if (label === '__all__') {
+            filterGrid(null);
+          } else {
+            var patStr = btn.getAttribute('data-pattern');
+            try { filterGrid(new RegExp(patStr, 'i')); } catch (_) { filterGrid(null); }
+          }
+        });
+
+        bar.style.display = '';
+      })
+      .catch(function() {});
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
 </script>
 </body>
 </html>

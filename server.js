@@ -46701,6 +46701,77 @@ app.get('/api/admin/builder-fees', requireAdmin, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 // ALPHA SIGNALS — aggregated trading signals from all data sources
 // ════════════════════════════════════════════════════════════
+// GET /api/trending-topics — top 8 entities by 24h volume from
+// _screenerCache. Scans question text against a fixed entity
+// list; each market can match one entity (first hit wins).
+// Response: [{ topic, slug, volume_24h, volume_display, hot }]
+// ════════════════════════════════════════════════════════════
+const _TOPIC_ENTITIES = [
+  { label: 'Trump',    pattern: /\btrump\b/i },
+  { label: 'Iran',     pattern: /\biran(ian)?\b/i },
+  { label: 'Fed',      pattern: /\b(fed|fomc|powell|warsh|interest rate|federal reserve)\b/i },
+  { label: 'China',    pattern: /\bchina|chinese|beijing|xi jinping\b/i },
+  { label: 'Bitcoin',  pattern: /\b(bitcoin|btc)\b/i },
+  { label: 'NBA',      pattern: /\bnba\b/i },
+  { label: 'NFL',      pattern: /\bnfl\b/i },
+  { label: 'Ukraine',  pattern: /\b(ukraine|ukrainian|zelensky)\b/i },
+  { label: 'Israel',   pattern: /\b(israel|israeli|netanyahu|gaza)\b/i },
+  { label: 'Russia',   pattern: /\b(russia|russian|putin)\b/i },
+  { label: 'AI',       pattern: /\b(openai|chatgpt|gemini|llm|artificial intelligence)\b/i },
+  { label: 'Crypto',   pattern: /\b(ethereum|eth|solana|sol|crypto|defi|token)\b/i },
+  { label: 'Tariffs',  pattern: /\btariff|tariffs|trade war\b/i },
+  { label: 'Election', pattern: /\b(election|ballot|vote|primary|senate|congress)\b/i },
+  { label: 'MLB',      pattern: /\bmlb|baseball\b/i },
+  { label: 'UFC',      pattern: /\bufc|mma\b/i },
+];
+
+let _trendingTopicsCache = null;
+const _TRENDING_TTL_MS = 90 * 1000;
+
+app.get('/api/trending-topics', (req, res) => {
+  try {
+    if (_trendingTopicsCache && Date.now() - _trendingTopicsCache.ts < _TRENDING_TTL_MS) {
+      return res.json(_trendingTopicsCache.data);
+    }
+    const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const totals = {};
+    for (const m of markets) {
+      const q = m.question || '';
+      const v = parseFloat(m.volume) || 0;
+      for (const entity of _TOPIC_ENTITIES) {
+        if (entity.pattern.test(q)) {
+          if (!totals[entity.label]) totals[entity.label] = { topic: entity.label, volume_24h: 0, count: 0 };
+          totals[entity.label].volume_24h += v;
+          totals[entity.label].count++;
+          break; // first-match only
+        }
+      }
+    }
+    // Build label → pattern_str lookup for the client
+    const entityPatternMap = {};
+    for (const e of _TOPIC_ENTITIES) entityPatternMap[e.label] = e.pattern.source;
+
+    const sorted = Object.values(totals)
+      .filter(t => t.volume_24h > 0)
+      .sort((a, b) => b.volume_24h - a.volume_24h)
+      .slice(0, 8)
+      .map(t => ({
+        label:       t.topic,
+        volume_24h:  Math.round(t.volume_24h),
+        hot:         t.volume_24h >= 1e6,
+        count:       t.count,
+        pattern_str: entityPatternMap[t.topic] || t.topic,
+      }));
+    const out = { topics: sorted };
+    _trendingTopicsCache = { ts: Date.now(), data: out };
+    res.json(out);
+  } catch (err) {
+    console.error('[trending-topics]', err.message);
+    res.json([]);
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 let _signalsCache = null;
 
 app.get('/api/signals', async (req, res) => {

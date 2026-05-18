@@ -98,8 +98,13 @@
   .badge-depth{background:rgba(245,158,11,0.1);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
   .badge-cat{background:var(--paper-3);color:var(--soft);border:1px solid var(--border)}
 
+  /* Market image avatar */
+  .ec-img{width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--paper);display:none}
+  .ec-img.loaded{display:block}
+  .card-q-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+
   /* Question */
-  .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:12px;min-height:40px}
+  .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;min-height:40px;flex:1;margin-bottom:0}
 
   /* Whale consensus row (replaces fake model probability) */
   .consensus-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);border-radius:8px;margin-bottom:10px;font-size:12px;border:1px solid var(--border)}
@@ -378,6 +383,8 @@ function render(data){
       if(t.recommended_size_usd) _params.push('size='+t.recommended_size_usd);
       _href='/market/'+m.slug+'?'+_params.join('&');
     }
+    var imgUrl = m.slug ? 'https://polymarket-upload.s3.us-east-2.amazonaws.com/' + m.slug + '.jpg' : '';
+    var imgHtml = imgUrl ? '<img class="ec-img" data-src="'+imgUrl+'" alt="" onerror="this.remove()" />' : '';
     return '<a class="edge-card '+rankClass+'" href="'+_href+'">'+
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
@@ -392,7 +399,10 @@ function render(data){
           bs.map(b=>'<span class="badge badge-'+b[0]+'">'+b[1]+'</span>').join('')+
         '</div>'+
       '</div>'+
-      '<div class="card-q">'+esc(m.question)+'</div>'+
+      '<div class="card-q-row">'+
+        imgHtml+
+        '<div class="card-q">'+esc(m.question)+'</div>'+
+      '</div>'+
       consensusHtml+
       tradeStrip+
       '<div class="breakdown">'+
@@ -419,6 +429,15 @@ function render(data){
       '</div>'+
     '</a>';
   }).join('');
+
+  // Probe images after render; show on load, silently skip 404s
+  g.querySelectorAll('.ec-img[data-src]').forEach(function(img){
+    var src=img.getAttribute('data-src');
+    if(!src) return;
+    var probe=new window.Image();
+    probe.onload=function(){ img.src=src; img.classList.add('loaded'); };
+    probe.src=src;
+  });
 }
 
 function switchN(n){
