@@ -180,7 +180,7 @@ a{color:inherit;text-decoration:none}
 .hm-tile.jumbo{grid-column:span 6;min-height:200px;padding:24px 24px 20px;gap:16px;background:linear-gradient(180deg,rgba(0,212,255,0.06),rgba(0,212,255,0.01));border-color:rgba(0,212,255,0.20)}
 .hm-tile.large{grid-column:span 4;min-height:152px;padding:18px 18px 16px;gap:12px}
 .hm-tile.medium{grid-column:span 3;min-height:120px}
-.hm-tile.small{grid-column:span 2;min-height:96px;padding:12px 12px 10px;gap:6px}
+.hm-tile.small{grid-column:span 3;min-height:110px;padding:14px 14px 12px;gap:8px}
 
 .hm-tile-top{display:flex;align-items:center;gap:10px}
 .hm-portrait{width:32px;height:32px;border-radius:50%;background:var(--panel);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--muted-2);flex-shrink:0}
@@ -192,18 +192,22 @@ a{color:inherit;text-decoration:none}
 .hm-tile.jumbo .hm-speaker{font-size:12px}
 
 .hm-q{font-family:var(--sans);font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.hm-tile.jumbo .hm-q{font-size:20px;-webkit-line-clamp:3;line-height:1.25;font-weight:700}
-.hm-tile.large .hm-q{font-size:15px}
-.hm-tile.medium .hm-q{font-size:13px}
+.hm-tile.jumbo .hm-q{font-size:20px;-webkit-line-clamp:2;line-height:1.25;font-weight:700}
+.hm-tile.large .hm-q{font-size:15px;-webkit-line-clamp:2}
+.hm-tile.medium .hm-q{font-size:13px;-webkit-line-clamp:2}
 .hm-tile.small .hm-q{font-size:12px;-webkit-line-clamp:2;color:var(--ink-2)}
 
 .hm-tile-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:auto}
-.hm-price{font-family:var(--mono);font-weight:800;color:var(--cyan);line-height:1;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.hm-price{font-family:var(--mono);font-weight:900;color:var(--cyan);line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
 .hm-price.no-leaning{color:var(--hawk)}
-.hm-tile.jumbo .hm-price{font-size:36px}
-.hm-tile.large .hm-price{font-size:26px}
-.hm-tile.medium .hm-price{font-size:20px}
-.hm-tile.small .hm-price{font-size:16px}
+.hm-tile.jumbo .hm-price{font-size:44px}
+.hm-tile.large .hm-price{font-size:32px}
+.hm-tile.medium .hm-price{font-size:26px}
+.hm-tile.small .hm-price{font-size:20px}
+/* low-conviction markets (YES < 10¢) recede visually */
+.hm-tile.low-conviction{opacity:0.5}
+/* markets with strong 24h flow get a cyan left accent */
+.hm-tile.hot-vol{border-left:2px solid rgba(0,212,255,0.55)}
 .hm-vol{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;flex-shrink:0}
 .hm-tile.jumbo .hm-vol{font-size:13px;color:var(--ink-2)}
 .hm-tile.small .hm-vol{font-size:10px}
@@ -586,13 +590,49 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     });
   }
 
-  function extractWord(question) {
+  // Tokens to skip when extracting ticker/keyword from question text.
+  // Months, days, and sentence-starter words that aren’t meaningful signals.
+  var _SKIP = ‘Will Would Could Should The A An Is Are Was Were To Of By At In On For From With That This These Those Do Does Did Have Has Had Be Been Being Not Or And But If When Where How Why Which Who What Than More Most Less Any All Each Both Very Just Also Then There Their They He She It We You My His Its Our Your New First Last Next May June July August September October November December January February March April Sunday Monday Tuesday Wednesday Thursday Friday Saturday US UK EU UN GOP Agree Say Says Said More Than Over Under After Before During Into Through About’.split(‘ ‘);
+  var _SKIP_SET = {};
+  for (var _i = 0; _i < _SKIP.length; _i++) _SKIP_SET[_SKIP[_i]] = true;
+
+  // Adjective-to-noun normalization for demonyms in question text.
+  var _DEMONYM = {Iranian:’Iran’,Russian:’Russia’,Chinese:’China’,Israeli:’Israel’,
+    Ukrainian:’Ukraine’,Korean:’Korea’,European:’Europe’,American:’America’,
+    British:’Britain’,French:’France’,German:’Germany’,Japanese:’Japan’,
+    Indian:’India’,Brazilian:’Brazil’,Mexican:’Mexico’,Canadian:’Canada’,
+    Turkish:’Turkey’,Pakistani:’Pakistan’,Afghan:’Afghanistan’,Syrian:’Syria’};
+
+  function _capTokens(question) {
+    return (question || ‘’).split(/[\s,?.!();:]+/).filter(function(t) {
+      return t.length >= 2 && /^[A-Z]/.test(t) && !/^\d/.test(t) && !_SKIP_SET[t];
+    }).map(function(t) { return _DEMONYM[t] || t; });
+  }
+
+  function extractKeyword(question) {
     if (!question) return null;
-    var m = question.match(/[''‘’""]([a-zA-Z\s\-]{2,24})[''"‘’“”]/);
+    // 1. Explicit quotes
+    var m = question.match(/[‘’’’””]([a-zA-Z\s\-]{2,24})[‘’”’’””]/);
     if (m) return m[1].trim();
-    var say = question.match(/\bsay(?:s|ing)?\s+["']?([a-z]{3,24})/i);
+    // 2. “say/says X” pattern
+    var say = question.match(/\bsay(?:s|ing)?\s+[“’]?([a-z]{3,24})/i);
     if (say) return say[1];
-    return null;
+    // 3. Capitalized proper nouns — skip first token (that’s the ticker subject)
+    var tokens = _capTokens(question);
+    for (var i = 1; i < tokens.length; i++) {
+      if (tokens[i].length >= 4) return tokens[i];
+    }
+    return tokens.length > 1 ? tokens[1] : (tokens[0] || null);
+  }
+
+  function extractTicker(question, speaker) {
+    if (speaker) {
+      var parts = speaker.trim().split(/\s+/);
+      return parts[parts.length - 1].toUpperCase().slice(0, 7);
+    }
+    // Derive from first proper noun in question (“Will Trump agree…” → TRUMP)
+    var tokens = _capTokens(question);
+    return tokens.length ? tokens[0].toUpperCase().slice(0, 7) : ‘—‘;
   }
 
   function extractCount(question) {
@@ -607,27 +647,20 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   function fmtVol(n) {
     n = Number(n || 0);
     if (!n || !isFinite(n)) return null;
-    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
-    return '$' + Math.round(n);
-  }
-
-  function toTicker(speaker) {
-    if (!speaker) return '—';
-    // Last name, all caps, max 7 chars
-    var parts = speaker.trim().split(/\s+/);
-    return parts[parts.length - 1].toUpperCase().slice(0, 7);
+    if (n >= 1e6) return ‘$’ + (n / 1e6).toFixed(1) + ‘M’;
+    if (n >= 1e3) return ‘$’ + Math.round(n / 1e3) + ‘K’;
+    return ‘$’ + Math.round(n);
   }
 
   function renderCard(market) {
     // { ticker, keyword, threshold, prob, vol }
-    var keyword = extractWord(market.question);
-    if (!keyword) return '';
-    var threshold = extractCount(market.question); // e.g. "4" → renders "4×"
+    var keyword = extractKeyword(market.question);
+    if (!keyword) return ‘’;
+    var threshold = extractCount(market.question);
     var priceFrac = Number(market.yes_price);
-    if (!isFinite(priceFrac)) return '';
+    if (!isFinite(priceFrac)) return ‘’;
 
-    var ticker  = toTicker(market.speaker);
+    var ticker  = extractTicker(market.question, market.speaker);
     var prob    = Math.round(priceFrac * 100);
     var probCls = priceFrac >= 0.5 ? 'yes' : 'no';
     var vol     = fmtVol(market.volume_total);
@@ -747,8 +780,14 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       ? '<div class="hm-badge ' + state + '">' + state + '</div>'
       : '';
 
+    const yesNum = Number(market.yes_price);
+    const extraCls = [
+      (isFinite(yesNum) && yesNum < 0.10) ? 'low-conviction' : '',
+      (vol24h > 50000) ? 'hot-vol' : '',
+    ].filter(Boolean).join(' ');
+
     return ''
-      + '<a class="hm-tile ' + tier + '" href="' + href + '" data-cid="' + cid + '">'
+      + '<a class="hm-tile ' + tier + (extraCls ? ' ' + extraCls : '') + '" href="' + href + '" data-cid="' + cid + '">'
       +   '<div class="hm-tile-top">'
       +     '<div class="hm-portrait" data-monogram="' + monogram + '">' + portraitImg + '</div>'
       +     '<div class="hm-speaker">' + escHtml(speaker) + '</div>'
