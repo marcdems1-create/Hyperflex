@@ -15759,17 +15759,155 @@ async function _renderMentionsHero() {
 `;
 }
 
+// _renderDynamicHero — always shows the highest-24h-volume market from
+// _screenerCache. No hardcoded content. Updates every screener cycle (90s TTL).
+// Falls back to '' when the cache is cold or empty so the page degrades
+// gracefully rather than showing a broken banner.
+function _renderDynamicHero() {
+  const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  if (!markets.length) return '';
+
+  // Pick single highest-volume market (volume field = 24h on screener items)
+  const top = markets.reduce((best, m) => {
+    const v = parseFloat(m.volume) || 0;
+    return (!best || v > (parseFloat(best.volume) || 0)) ? m : best;
+  }, null);
+  if (!top) return '';
+
+  const yesPct   = top.yes_price != null ? Math.round(top.yes_price * 100) : null;
+  const noPct    = yesPct != null ? 100 - yesPct : null;
+  const vol24h   = parseFloat(top.volume) || 0;
+  const volLabel = vol24h >= 1e6
+    ? '$' + (vol24h / 1e6).toFixed(1) + 'M'
+    : vol24h >= 1e3
+      ? '$' + Math.round(vol24h / 1e3) + 'K'
+      : '$' + Math.round(vol24h);
+
+  const yesCls = yesPct != null
+    ? (yesPct >= 65 ? 'high' : yesPct <= 35 ? 'low' : 'mid')
+    : 'mid';
+
+  const tradeHref = top.slug
+    ? `/market/${encodeURIComponent(top.slug)}`
+    : (top.url || 'https://polymarket.com');
+
+  // Sparkline SVG from _volumeTracker samples (90s-cadence price snapshots).
+  // Renders as an inline 120×36px polyline; invisible when no samples yet.
+  let sparkSvg = '';
+  const mid = top.market_id || top.conditionId || '';
+  const tracker = mid && _volumeTracker && _volumeTracker[mid];
+  const samples = tracker ? tracker.samples.filter(s => s.yes_price != null) : [];
+  if (samples.length >= 3) {
+    const W = 120, H = 36;
+    const prices = samples.map(s => parseFloat(s.yes_price));
+    const mn = Math.min(...prices);
+    const mx = Math.max(...prices);
+    const range = mx - mn || 0.01;
+    const pts = prices.map((p, i) => {
+      const x = ((i / (prices.length - 1)) * W).toFixed(1);
+      const y = (H - ((p - mn) / range) * H).toFixed(1);
+      return `${x},${y}`;
+    }).join(' ');
+    const lastPrice  = prices[prices.length - 1];
+    const firstPrice = prices[0];
+    const trendColor = lastPrice >= firstPrice ? '#00e68a' : '#ff4d6a';
+    sparkSvg = `
+    <svg class="dh-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
+      <polyline points="${_escHtml(pts)}" fill="none" stroke="${trendColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  const edgeScore = top.edge_score != null ? top.edge_score : null;
+  const edgeBadge = edgeScore != null
+    ? `<span class="dh-badge dh-edge">EDGE ${edgeScore}</span>`
+    : '';
+  const whaleBadge = top.whale_count
+    ? `<span class="dh-badge dh-whale">${top.whale_count} whales</span>`
+    : '';
+  const expBadge = top.days_until_expiry != null
+    ? `<span class="dh-badge dh-exp">expires ${top.days_until_expiry}d</span>`
+    : '';
+
+  const imgSlug = top.slug || '';
+  const imgHtml = imgSlug
+    ? `<div class="dh-img-wrap">
+        <img class="dh-img" src="https://polymarket-upload.s3.us-east-2.amazonaws.com/${_escHtml(imgSlug)}.jpg"
+             alt="" loading="lazy" onerror="this.parentNode.style.display='none'">
+       </div>`
+    : '';
+
+  return `
+<section class="dh-hero">
+  <div class="dh-inner">
+    ${imgHtml}
+    <div class="dh-body">
+      <div class="dh-eyebrow">
+        <span class="dh-live-dot"></span>
+        Highest volume right now
+      </div>
+      <h1 class="dh-question">${_escHtml(top.question || '')}</h1>
+      <div class="dh-price-row">
+        ${yesPct != null ? `<span class="dh-yes ${yesCls}">${yesPct}%</span><span class="dh-yes-lbl">YES</span>` : ''}
+        ${noPct != null ? `<span class="dh-no">${noPct}%</span><span class="dh-no-lbl">NO</span>` : ''}
+        ${sparkSvg}
+      </div>
+      <div class="dh-meta-row">
+        <span class="dh-vol">${volLabel} 24h vol</span>
+        ${edgeBadge}${whaleBadge}${expBadge}
+      </div>
+      <div class="dh-cta-row">
+        <a class="dh-trade-btn" href="${_escHtml(tradeHref)}" target="_blank" rel="noopener">Trade on Polymarket ↗</a>
+        <a class="dh-detail-btn" href="${_escHtml(tradeHref)}">View market →</a>
+      </div>
+    </div>
+  </div>
+</section>
+`;
+}
+
 app.get('/mentions', async (req, res) => {
   try {
     const tpl = _loadMentionsTemplate();
-    // Hero banner removed from /mentions — newsboy strip + heatmap is now
-    // the primary surface. Hero content lives at /warsh.
-    const body = tpl.replace('<!--HERO_HTML-->', '');
+    // Dynamic hero — highest-volume market from live screener cache.
+    // No hardcoded content; updates every screener refresh cycle (90s TTL).
+    const heroHtml = _renderDynamicHero();
+    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
     res.set('Cache-Control', 'no-store');
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-route]', err);
     res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
+  }
+});
+
+// GET /api/mentions-hero — JSON payload for the dynamic hero.
+// Lets the client poll and swap the hero HTML without a full page reload.
+// Returns the rendered HTML fragment + raw data for client-side updates.
+app.get('/api/mentions-hero', (req, res) => {
+  try {
+    const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const top = markets.reduce((best, m) => {
+      const v = parseFloat(m.volume) || 0;
+      return (!best || v > (parseFloat(best.volume) || 0)) ? m : best;
+    }, null);
+    if (!top) return res.json({ html: '', market: null });
+    res.json({
+      html: _renderDynamicHero(),
+      market: {
+        question:          top.question,
+        yes_price:         top.yes_price,
+        volume_24h:        parseFloat(top.volume) || 0,
+        edge_score:        top.edge_score,
+        whale_count:       top.whale_count,
+        days_until_expiry: top.days_until_expiry,
+        slug:              top.slug,
+        url:               top.url,
+        updated_at:        _screenerCache ? new Date(_screenerCache.ts).toISOString() : null,
+      },
+    });
+  } catch (err) {
+    console.error('[api/mentions-hero]', err.message);
+    res.json({ html: '', market: null });
   }
 });
 
