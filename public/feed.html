@@ -855,6 +855,22 @@ a:hover { text-decoration: underline; }
 .feed-edge-strip .arrow { color: var(--text-faint); }
 .feed-edge-strip .roi   { color: #f59e0b; font-weight: 800; margin-left: auto; }
 
+.feed-trend-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(255,255,255,0.08);background:transparent;color:#6e6790;cursor:pointer;margin-right:5px;transition:border-color .1s,color .1s,background .1s;vertical-align:middle}
+.feed-trend-pill:hover,.feed-trend-pill.active{border-color:#00d4ff;color:#00d4ff;background:rgba(0,212,255,0.07)}
+.feed-trend-pill.hot{border-color:rgba(245,158,11,0.35);color:#f59e0b}
+.feed-trend-pill.hot:hover,.feed-trend-pill.hot.active{border-color:#f59e0b;background:rgba(245,158,11,0.07)}
+.feed-trend-pill .trend-v{font-weight:400;opacity:.55}
+.pred-mkt-img-wrap{margin-bottom:10px}
+.pred-mkt-img{width:100%;height:140px;object-fit:cover;border-radius:8px;display:block}
+.wm-card{flex:0 0 220px;background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.22);border-radius:10px;padding:12px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .12s,background .12s}
+.wm-card:hover{border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.13)}
+.wm-card-size{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:18px;color:#a855f7;line-height:1}
+.wm-card-side{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.15em;margin-left:6px}
+.wm-card-side.yes{color:#00e68a}
+.wm-card-side.no{color:#ff4d6a}
+.wm-card-q{font-size:12px;color:#c5bedd;line-height:1.4;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.wm-card-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:#6e6790;margin-top:6px}
+
 /* Show on desktop — hide on the same widths where mobile-alpha-strip takes over */
 @media (min-width: 1200px) {
   .feed-alpha-row { display: block; }
@@ -1750,6 +1766,13 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
+  <!-- TRENDING BAR — entity pill strip. Fetches /api/trending-topics,
+       renders clickable pills that filter the feed. Hidden until data. -->
+  <div id="feedTrendingBar" style="display:none;border-bottom:1px solid rgba(255,255,255,0.06);padding:8px 16px;overflow-x:auto;scrollbar-width:none;white-space:nowrap">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em;color:#6e6790;text-transform:uppercase;margin-right:8px;vertical-align:middle">Trending</span>
+    <span id="feedTrendingPills"></span>
+  </div>
+
   <div class="feed-header">
     <div class="feed-title"><a href="/feed" style="color:inherit;text-decoration:none">FLEX Feed</a></div>
     <div class="tabs">
@@ -1803,6 +1826,16 @@ a:hover { text-decoration: underline; }
     <div class="post-bar-avatar" id="postAvatar">?</div>
     <div class="post-bar-prompt">Post a prediction on any market...</div>
     <button class="post-bar-btn">Predict</button>
+  </div>
+
+  <!-- Whale Moments strip — cards for $50k+ whale moves in last 4h.
+       Hidden when empty. Polls /api/whale-moments every 5 min. -->
+  <div id="whaleMomentsStrip" style="display:none;margin-bottom:8px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em;color:#6e6790;text-transform:uppercase;padding:0 16px 6px;display:flex;align-items:center;gap:8px">
+      <span style="width:6px;height:6px;border-radius:50%;background:#a855f7;box-shadow:0 0 8px rgba(168,85,247,0.8);display:inline-block;flex-shrink:0"></span>
+      Whale Moments
+    </div>
+    <div id="whaleMomentCards" style="overflow-x:auto;display:flex;gap:10px;padding:0 16px 12px;scrollbar-width:none"></div>
   </div>
 
   <!-- Feed -->
@@ -1870,16 +1903,16 @@ a:hover { text-decoration: underline; }
 
   <!-- Trending Markets -->
   <div class="sb-card">
-    <div class="sb-card-title">Trending Markets</div>
+    <div class="sb-card-title">Hot Topics</div>
     <div id="sbTrending">
       <div class="sb-item"><span style="color:var(--text-faint);font-size:12px">Loading...</span></div>
     </div>
     <a href="/screener" class="sb-showmore">Show more</a>
   </div>
 
-  <!-- Who to Follow -->
+  <!-- Sharp Predictors -->
   <div class="sb-card">
-    <div class="sb-card-title">Who to follow</div>
+    <div class="sb-card-title">Sharp Predictors</div>
     <div id="sbWhoToFollow">
       <div class="sb-item"><span style="color:var(--text-faint);font-size:12px">Loading...</span></div>
     </div>
@@ -3174,6 +3207,7 @@ function renderCard(p) {
         '<span class="pred-time">' + timeAgo(p.posted_at) + externalLinkHtml + '</span>' +
       '</div>' +
     '</div>' +
+    (p._market_slug ? '<div class="pred-mkt-img-wrap" style="display:none" data-mkt-slug="' + esc(p._market_slug) + '"><img class="pred-mkt-img" src="https://polymarket-upload.s3.us-east-2.amazonaws.com/' + esc(p._market_slug) + '.jpg" alt="" onerror="this.parentNode.remove()" onload="this.parentNode.style.display=\'block\'" /></div>' : '') +
     '<div class="pred-badges">' +
       influencerBadge +
       '<span class="badge ' + sideClass + '">' + esc(p.direction) + '</span>' +
@@ -3258,48 +3292,50 @@ function debounceSidebarSearch(q) {
 }
 
 async function loadSidebar() {
-  // Trending markets from screener
+  // Hot Topics — entity-level volume from /api/trending-topics
   try {
-    var r = await fetch(API + '/api/alpha/top?n=5');
-    var d = await r.json();
-    var markets = d.markets || d || [];
-    var el = document.getElementById('sbTrending');
-    if (markets.length) {
-      el.innerHTML = markets.map(function(m) {
-        var yesPct = m.yes_price ? Math.round(m.yes_price * 100) : m.edge_score || 0;
-        var vol = m.volume24hr || m.volume || 0;
-        var volStr = vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + Math.round(vol/1000) + 'K' : '$' + Math.round(vol);
-        return '<a class="sb-item" href="/market/' + (m.slug || '') + '">' +
-          '<div class="sb-item-label">Prediction Markets · ' + volStr + ' vol</div>' +
-          '<div class="sb-item-title">' + (m.question || '').slice(0, 70) + '</div>' +
-          '<div class="sb-item-meta">' +
-            '<span class="sb-item-badge" style="background:rgba(0,230,138,0.1);color:#00e68a">YES ' + yesPct + '%</span>' +
-            (m.edge_score ? '<span style="color:var(--gold);font-size:11px;font-weight:700">Edge ' + m.edge_score + '</span>' : '') +
+    var rTT = await fetch('/api/trending-topics');
+    var dTT = await rTT.json();
+    var topics = (dTT.topics || dTT || []).slice(0, 6);
+    var elTT = document.getElementById('sbTrending');
+    if (elTT && topics.length) {
+      elTT.innerHTML = topics.map(function(t, i) {
+        var vol = t.volume_24h || 0;
+        var volStr = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '$' + Math.round(vol);
+        var fire = vol >= 1e6 ? ' 🔥' : '';
+        var rankColor = i === 0 ? '#c9920d' : i === 1 ? '#6e6790' : i === 2 ? '#a855f7' : 'var(--text-faint)';
+        return '<div class="sb-item" style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="feedFilterTopic(\'' + (t.label||t.topic||'') + '\',\'' + (t.pattern_str||t.label||t.topic||'') + '\')">' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:13px;color:' + rankColor + ';min-width:20px">#' + (i+1) + '</span>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:13px;font-weight:700;color:var(--text)">' + (t.label||t.topic||'') + fire + '</div>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--text-faint)">' + volStr + ' 24h vol</div>' +
           '</div>' +
-        '</a>';
+        '</div>';
       }).join('');
     }
-  } catch (e) {}
+  } catch(e) {}
 
-  // Who to follow — top predictors
+  // Sharp Predictors — top 5 by FLEX score
   try {
-    var r2 = await fetch(API + '/api/whale-profiles?limit=5');
+    var r2 = await fetch('/api/leaderboard/accuracy?limit=5');
     var d2 = await r2.json();
-    var whales = d2.whales || [];
+    var sharps = d2.leaders || [];
     var el2 = document.getElementById('sbWhoToFollow');
-    if (whales.length) {
-      el2.innerHTML = whales.map(function(w) {
-        var initials = (w.display_name || '?').split(' ').map(function(s){return s[0]}).join('').toUpperCase().slice(0,2);
-        var rawPnl = w.whale_pnl != null ? parseFloat(w.whale_pnl) : null;
-        var pnlColor = rawPnl != null ? (rawPnl >= 0 ? '#00e68a' : '#ff4d6a') : 'var(--text-faint)';
-        var pnlStr = rawPnl != null ? (rawPnl >= 0 ? '+' : '') + '$' + (Math.abs(rawPnl) >= 1000000 ? (Math.abs(rawPnl)/1000000).toFixed(1) + 'M' : Math.abs(rawPnl) >= 1000 ? Math.round(Math.abs(rawPnl)/1000) + 'K' : Math.round(Math.abs(rawPnl))) : '';
+    if (el2 && sharps.length) {
+      el2.innerHTML = sharps.map(function(u, i) {
+        var initials = (u.display_name || '?').split(' ').map(function(s){return (s||'')[0]||''}).join('').toUpperCase().slice(0,2) || '?';
+        var scoreColor = u.flex_score >= 70 ? '#00e68a' : u.flex_score >= 50 ? '#4d9fff' : '#a855f7';
+        var streakHtml = u.streak_days >= 3
+          ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:#f59e0b;margin-left:4px">🔥' + u.streak_days + '</span>'
+          : '';
+        var rankColor = i === 0 ? '#c9920d' : i === 1 ? '#6e6790' : i === 2 ? '#a855f7' : 'var(--text-faint)';
         return '<div class="sb-follow-item">' +
-          '<a href="/m/' + w.id + '" class="sb-follow-avatar">' + initials + '</a>' +
+          '<div class="sb-follow-avatar" style="background:rgba(0,212,255,0.1);color:#00d4ff;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;border:1px solid rgba(0,212,255,0.2)">' + initials + '</div>' +
           '<div class="sb-follow-info">' +
-            '<a href="/m/' + w.id + '" class="sb-follow-name" style="text-decoration:none;color:var(--text)">' + (w.display_name || 'Whale #' + (w.whale_rank||'')) + '</a>' +
-            '<div class="sb-follow-handle" style="color:' + pnlColor + '">' + (pnlStr ? pnlStr + ' PnL' : 'Rank #' + (w.whale_rank||'—')) + '</div>' +
+            '<a href="/m/' + (u.user_id||'') + '" style="font-size:13px;font-weight:700;color:var(--text);text-decoration:none">' + (u.display_name||'Predictor') + streakHtml + '</a>' +
+            '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:' + scoreColor + '">FLEX ' + (u.flex_score||0) + ' · ' + (u.settled||0) + ' settled</div>' +
           '</div>' +
-          '<button class="sb-follow-btn" onclick="event.stopPropagation();sidebarFollow(\'' + w.id + '\',this)">Follow</button>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:14px;color:' + rankColor + '">#' + (i+1) + '</span>' +
         '</div>';
       }).join('');
     }
@@ -3320,6 +3356,24 @@ async function sidebarFollow(userId, btn) {
   } catch (e) {}
 }
 loadSidebar();
+
+// Filter feed cards by entity topic — called by trending pills + Hot Topics rail
+function feedFilterTopic(label, patternStr) {
+  var container = document.getElementById('feedContainer');
+  if (!container) return;
+  var cards = container.querySelectorAll('.pred-card, .inf-card');
+  var re = null;
+  try { re = patternStr ? new RegExp(patternStr, 'i') : null; } catch(_) {}
+  cards.forEach(function(c) {
+    if (!re) { c.style.display = ''; return; }
+    var text = c.textContent || '';
+    c.style.display = re.test(text) ? '' : 'none';
+  });
+  // Toggle active state on all trending pills
+  document.querySelectorAll('.feed-trend-pill').forEach(function(p) {
+    p.classList.toggle('active', p.getAttribute('data-label') === label);
+  });
+}
 
 // ── Helpers ──
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -4335,11 +4389,16 @@ async function loadWhaleMoves() {
       var traderName = String(w.trader || 'Whale');
       var href = w.market_url || (w.slug ? '/market/' + encodeURIComponent(w.slug) : '/whales');
       var question = esc(w.market || w.position || 'Market');
+      var rank = parseInt(w.whale_rank || w.rank || 999);
+      var proofBadge = rank <= 50
+        ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:#f59e0b;letter-spacing:.1em;background:rgba(245,158,11,0.12);padding:1px 5px;margin-left:4px">★ TOP 50</span>'
+        : '';
       return '<a class="whale-row" href="' + href + '">' +
         '<span class="whale-row-avatar">' + esc(_whaleInitials(traderName)) + '</span>' +
         '<div class="whale-row-info">' +
           '<div class="whale-row-top">' +
             '<span>' + esc(traderName).slice(0, 18) + '</span>' +
+            proofBadge +
             (sideCls ? '<span class="whale-row-side ' + sideCls + '">' + side + '</span>' : '') +
           '</div>' +
           '<div class="whale-row-q">' + question + '</div>' +
@@ -4473,6 +4532,74 @@ async function loadTopPredictors() {
     console.warn('[top-predictors] load failed:', err.message);
   }
 }
+
+// ── Whale Moments strip ──────────────────────────────────────────────────
+(function() {
+  function fmtWhaleMoney(v) {
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+  function renderMoment(m) {
+    var side = String(m.side || '').toUpperCase();
+    var sideCls = side === 'YES' ? 'yes' : side === 'NO' ? 'no' : '';
+    var sideHtml = sideCls ? '<span class="wm-card-side ' + sideCls + '">' + side + '</span>' : '';
+    var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : '/whales';
+    var trader = m.trader_name || 'Whale';
+    var ago = m.minutes_ago != null ? (m.minutes_ago < 60 ? m.minutes_ago + 'm ago' : Math.round(m.minutes_ago/60) + 'h ago') : '';
+    return '<a class="wm-card" href="' + href + '">' +
+      '<div style="display:flex;align-items:baseline">' +
+        '<span class="wm-card-size">' + fmtWhaleMoney(m.amount_usd) + '</span>' +
+        sideHtml +
+      '</div>' +
+      '<div class="wm-card-q">' + esc(m.question || m.market || '') + '</div>' +
+      '<div class="wm-card-meta">' + esc(trader) + (ago ? ' · ' + ago : '') + '</div>' +
+    '</a>';
+  }
+  function loadMoments() {
+    fetch('/api/whale-moments')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d || !d.moments || !d.moments.length) return;
+        var strip = document.getElementById('whaleMomentsStrip');
+        var cards = document.getElementById('whaleMomentCards');
+        if (!strip || !cards) return;
+        cards.innerHTML = d.moments.slice(0, 8).map(renderMoment).join('');
+        strip.style.display = 'block';
+      })
+      .catch(function() {});
+  }
+  loadMoments();
+  setInterval(loadMoments, 5 * 60 * 1000);
+})();
+
+// ── Feed Trending Bar ─────────────────────────────────────────────────────
+(function() {
+  function fmtTV(v) {
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+  fetch('/api/trending-topics')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (!d) return;
+      var topics = (d.topics || []).slice(0, 8);
+      if (!topics.length) return;
+      var bar = document.getElementById('feedTrendingBar');
+      var pills = document.getElementById('feedTrendingPills');
+      if (!bar || !pills) return;
+      pills.innerHTML = topics.map(function(t) {
+        var cls = 'feed-trend-pill' + (t.hot ? ' hot' : '');
+        return '<button class="' + cls + '" data-label="' + (t.label||'') + '" data-pattern="' + (t.pattern_str||t.label||'') + '" onclick="feedFilterTopic(\'' + (t.label||'') + '\',\'' + (t.pattern_str||t.label||'') + '\')">' +
+          (t.label||t.topic||'') +
+          ' <span class="trend-v">' + fmtTV(t.volume_24h||0) + '</span>' +
+        '</button>';
+      }).join('');
+      bar.style.display = '';
+    })
+    .catch(function() {});
+})();
 </script>
 </body>
 </html>

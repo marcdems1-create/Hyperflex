@@ -20274,6 +20274,18 @@ app.post('/api/takes', requireAuth, async (req, res) => {
       );
     }
 
+    // Streak update \u2014 fire-and-forget, never blocks the response
+    dbQuery(`
+      UPDATE users SET
+        prediction_streak = CASE
+          WHEN last_prediction_date = CURRENT_DATE THEN prediction_streak
+          WHEN last_prediction_date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE(prediction_streak, 0) + 1
+          ELSE 1
+        END,
+        last_prediction_date = CURRENT_DATE
+      WHERE id = $1
+    `, [req.userId]).catch(() => {});
+
     res.json({ ok: true, take: rows[0] });
   } catch (err) {
     // Surface the real DB / validation error to the client instead of the
@@ -31904,6 +31916,38 @@ app.get('/api/whale-watch', async (req, res) => {
   }
 });
 
+// GET /api/whale-moments — large whale trades (>$50k) in last 4 hours.
+// Powers the "Whale Moments" strip on /feed.
+app.get('/api/whale-moments', async (req, res) => {
+  try {
+    if (!pool) return res.json({ moments: [] });
+    const rows = await dbQuery(`
+      SELECT trader_name, action, question, side, size, new_size, price, market_url, created_at,
+             EXTRACT(EPOCH FROM (NOW() - created_at))/60 AS minutes_ago
+        FROM whale_trade_history
+       WHERE created_at >= NOW() - INTERVAL '4 hours'
+         AND (COALESCE(new_size, size) >= 50000)
+         AND action IN ('new_position','increase_position','entered','buy','bought')
+       ORDER BY created_at DESC
+       LIMIT 20
+    `).catch(() => []);
+    const moments = rows.map(r => ({
+      trader_name: r.trader_name,
+      side:        (r.side || '').toUpperCase(),
+      amount_usd:  Math.round(parseFloat(r.new_size || r.size) || 0),
+      question:    r.question,
+      slug:        r.market_url
+        ? r.market_url.replace(/^.*\/event\//, '').replace(/^.*\/market\//, '').replace(/\?.*$/, '')
+        : null,
+      minutes_ago: Math.round(parseFloat(r.minutes_ago) || 0),
+    })).filter(m => m.amount_usd >= 50000);
+    res.json({ moments });
+  } catch (err) {
+    console.error('[whale-moments]', err.message);
+    res.json({ moments: [] });
+  }
+});
+
 // GET /api/whale-profile/:name — whale position history + current positions + stats
 app.get('/api/whale-profile/:name', async (req, res) => {
   try {
@@ -39889,6 +39933,32 @@ app.get('/api/leaderboard/weekly', async (req, res) => {
   } catch (err) {
     console.error('[weekly-leaderboard]', err.message);
     res.json({ leaderboard: [], pool_amount: 0, week_start: getWeekStart() });
+  }
+});
+
+// GET /api/leaderboard/accuracy — top predictors by FLEX score.
+// Powers "Sharp Predictors" sidebar on /feed.
+app.get('/api/leaderboard/accuracy', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+    if (!pool) return res.json({ leaders: [] });
+    const rows = await dbQuery(`
+      SELECT u.id AS user_id,
+             COALESCE(u.display_name, u.username, 'Predictor') AS display_name,
+             COALESCE(u.flex_score, 0)::int AS flex_score,
+             COALESCE(u.flex_settled_events, 0)::int AS settled,
+             COALESCE(u.prediction_streak, 0)::int AS streak_days
+        FROM users u
+       WHERE u.flex_qualifies = true
+         AND u.flex_score IS NOT NULL
+         AND u.flex_score > 0
+       ORDER BY u.flex_score DESC
+       LIMIT $1
+    `, [limit]).catch(() => []);
+    res.json({ leaders: rows });
+  } catch (err) {
+    console.error('[leaderboard/accuracy]', err.message);
+    res.json({ leaders: [] });
   }
 });
 
