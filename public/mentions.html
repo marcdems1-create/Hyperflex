@@ -162,6 +162,11 @@ a{color:inherit;text-decoration:none}
 .nr-prob.yes{color:var(--cyan)}
 .nr-prob.no{color:#FF6B4D}
 .nr-vol{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+/* When a Polymarket image loads, it covers the card as bg — content stays
+   readable via gradient overlay set by JS after image probe succeeds. */
+.nr-card{background-size:cover;background-position:center top;background-repeat:no-repeat}
+.nr-card .nr-ticker,.nr-card .nr-keyword,.nr-card .nr-threshold,
+.nr-card .nr-prob,.nr-card .nr-vol{position:relative;z-index:1}
 .newsroom-empty{display:none}
 @media(max-width:768px){.newsroom{padding:20px 18px 18px}.nr-card{flex:0 0 156px}.nr-keyword{font-size:32px}.nr-threshold{font-size:19px}}
 
@@ -674,13 +679,30 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       ? '<div class="nr-vol">' + esc(vol) + ' in play</div>'
       : '';
 
-    return '<a class="nr-card" href="' + esc(href) + '">'
+    var imgUrl = market.image_url || '';
+    var imgAttr = imgUrl ? ' data-img="' + esc(imgUrl) + '"' : '';
+
+    return '<a class="nr-card" href="' + esc(href) + '"' + imgAttr + '>'
       + '<div class="nr-ticker">' + esc(ticker) + '</div>'
       + '<div class="nr-keyword">"' + esc(keyword.toUpperCase()) + '"</div>'
       + thresholdHtml
       + '<div class="nr-prob ' + probCls + '">' + prob + '% YES</div>'
       + volHtml
       + '</a>';
+  }
+
+  function applyCardImages(container) {
+    var cards = container.querySelectorAll('.nr-card[data-img]');
+    cards.forEach(function(el) {
+      var url = el.getAttribute('data-img');
+      if (!url) return;
+      var img = new window.Image();
+      img.onload = function() {
+        el.style.backgroundImage =
+          'linear-gradient(to bottom, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.85) 100%), url(' + url + ')';
+      };
+      img.src = url;
+    });
   }
 
   function init() {
@@ -703,6 +725,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         var container = document.getElementById('newsroom-cards');
         if (!sec || !container) return;
         container.innerHTML = cards.join('');
+        applyCardImages(container);
         sec.style.display = 'block';
       })
       .catch(function() {});
@@ -769,9 +792,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     const volText  = fmtVolume(volTotal);
     const vol24hChip = (vol24h >= 100) ? ' · ' + fmtVolume(vol24h) + ' 24h' : '';
 
-    const portraitImg = speakerSlug
-      ? '<img src="/speakers/' + escHtml(speakerSlug) + '.jpg" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
-      : '';
+    // Image priority: Polymarket CDN → our speaker portrait → initials monogram.
+    // Two-step onerror chain: CDN 404 → try speaker file → remove entirely.
+    const imgUrl = market.image_url ? escHtml(market.image_url) : '';
+    const speakerFallback = speakerSlug ? '/speakers/' + escHtml(speakerSlug) + '.jpg' : '';
+    const portraitImg = imgUrl
+      ? '<img src="' + imgUrl + '" alt="' + escHtml(speaker) + '" loading="lazy"'
+        + ' onerror="' + (speakerFallback ? 'if(this.src!==\'' + speakerFallback + '\'){this.src=\'' + speakerFallback + '\'}else{this.remove()}' : 'this.remove()') + '">'
+      : (speakerFallback
+          ? '<img src="' + speakerFallback + '" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
+          : '');
 
     // PENDING/RESOLVED state badge -- server-side derived in
     // lib/mentions-heatmap.js:_deriveState. Live tiles render no badge.
