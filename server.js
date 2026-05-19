@@ -14815,6 +14815,8 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
           volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
           volume24hr:   parseFloat(m.volume24hr || 0) || 0,
           endDate:      m.endDate || m.end_date || null,
+          image:        m.image || m.icon || null,
+          image:        m.image || m.icon || null,
         });
       }
     } catch (e) {
@@ -14849,6 +14851,7 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
             eventSlug,
             eventTitle:  parentTitle,
             totalVolume: candidates.reduce((s, c) => s + c.volume, 0),
+            image:       result.event?.image || result.event?.icon || null,
             candidates,
           });
         }
@@ -14867,6 +14870,7 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
             volume:       parseFloat(m.volume || m.volumeNum || 0) || 0,
             volume24hr:   parseFloat(m.volume24hr || 0) || 0,
             endDate:      m.endDate || m.end_date_iso || null,
+            image:        m.image || m.icon || null,
           });
         }
       }
