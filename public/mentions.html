@@ -109,6 +109,43 @@ a{color:inherit;text-decoration:none}
   .hero-cta{align-self:stretch;justify-content:center;width:100%}
 }
 
+/* ── THE STAGE — auto-selected event hero (PR 1, client-rendered) ── */
+#stage-root{position:relative;z-index:2}
+.stage{background:var(--bg-2);border-bottom:1px solid var(--line);padding:0;overflow:hidden;position:relative}
+.stage-inner{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1fr 380px;gap:0;align-items:stretch}
+@media(max-width:960px){.stage-inner{grid-template-columns:1fr}}
+.stage-body{padding:56px 40px 56px;display:flex;flex-direction:column;gap:20px;min-width:0}
+@media(max-width:768px){.stage-body{padding:36px 18px 36px}}
+.stage-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.28em;color:var(--cyan);text-transform:uppercase;padding:4px 10px;border:1px solid rgba(0,212,255,0.4);align-self:flex-start;background:rgba(0,212,255,0.05)}
+.stage-title{font-family:var(--sans);font-weight:800;font-size:44px;line-height:1.05;letter-spacing:-0.02em;color:var(--ink);margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:768px){.stage-title{font-size:28px}}
+.stage-price-row{display:flex;align-items:baseline;gap:12px}
+.stage-price{font-family:var(--mono);font-weight:700;font-size:64px;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.stage-price.yes-high{color:#22c55e}
+.stage-price.yes-mid{color:var(--ink-2)}
+.stage-price.yes-low{color:#ef4444}
+.stage-price-label{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;align-self:flex-end;padding-bottom:10px}
+.stage-cd{display:flex;flex-direction:column;gap:3px}
+.stage-cd-digits{font-family:var(--mono);font-weight:700;font-size:32px;color:var(--ink-2);line-height:1;letter-spacing:0.02em;font-variant-numeric:tabular-nums}
+.stage-cd-label{font-family:var(--mono);font-size:10px;letter-spacing:0.2em;color:var(--muted);text-transform:uppercase}
+.stage-whales{display:flex;flex-direction:column;gap:6px}
+.stage-whales-h{font-family:var(--mono);font-size:10px;letter-spacing:0.2em;color:var(--muted);text-transform:uppercase;margin-bottom:2px}
+.stage-whale-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,0.025);border:1px solid var(--line)}
+.stage-whale-rank{font-family:var(--mono);font-size:10px;color:var(--muted-2);min-width:28px}
+.stage-whale-name{font-family:var(--mono);font-size:12px;color:var(--ink-2);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stage-whale-side{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 7px;letter-spacing:0.08em}
+.stage-whale-side.yes{background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.stage-whale-side.no{background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+.stage-whale-cap{font-family:var(--mono);font-size:10px;color:var(--muted);min-width:56px;text-align:right}
+.stage-cta{display:inline-flex;align-items:center;gap:8px;padding:13px 20px;background:var(--cyan);color:#001a23;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;border:1px solid var(--cyan);text-decoration:none;align-self:flex-start;transition:transform .15s,box-shadow .15s}
+.stage-cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(0,212,255,0.3)}
+.stage-image-col{position:relative;overflow:hidden;min-height:300px;background:var(--panel)}
+@media(max-width:960px){.stage-image-col{display:none}}
+.stage-image-col img{width:100%;height:100%;object-fit:cover;display:block;opacity:0.72}
+.stage-image-col::after{content:"";position:absolute;inset:0;background:linear-gradient(to right,var(--bg-2) 0%,transparent 35%)}
+.stage-vol{font-family:var(--mono);font-size:11px;color:var(--muted-2);letter-spacing:0.06em}
+.stage-question{font-family:var(--sans);font-size:13px;color:var(--muted);line-height:1.5;max-width:520px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
 .page{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:32px 36px 80px}
 @media(max-width:768px){.page{padding:20px 16px 56px}}
 
@@ -317,7 +354,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   </div>
 </section>
 
-<!--HERO_HTML-->
+<div id="stage-root"></div>
 
 <main class="page" id="page">
   <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
@@ -375,6 +412,140 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 
   <footer>HYPERFLEX · receipts on what was said</footer>
 </main>
+
+<script>
+// ── THE STAGE — PR 1: auto-selected event hero, client-rendered ──
+(function () {
+  var _cdTimer = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function fmtVol(v) {
+    v = Number(v || 0);
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+
+  function fmtCap(v) {
+    v = Number(v || 0);
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+    return '$' + Math.round(v);
+  }
+
+  function fmtYes(p) {
+    if (p == null || !isFinite(p)) return { label: '—', cls: 'yes-mid' };
+    if (p > 1) p = p / 100;
+    var pct = Math.round(p * 100);
+    var cls = p >= 0.55 ? 'yes-high' : (p <= 0.45 ? 'yes-low' : 'yes-mid');
+    return { label: pct + '%', cls: cls };
+  }
+
+  function fmtCd(targetIso) {
+    var diff = new Date(targetIso).getTime() - Date.now();
+    if (!isFinite(diff) || diff <= 0) return null;
+    var days  = Math.floor(diff / 86400000);
+    var hours = Math.floor((diff % 86400000) / 3600000);
+    var mins  = Math.floor((diff % 3600000) / 60000);
+    if (days > 0) return days + 'd ' + hours + 'h ' + mins + 'm';
+    if (hours > 0) return hours + 'h ' + mins + 'm';
+    return mins + 'm';
+  }
+
+  function renderWhales(whales) {
+    if (!whales || !whales.length) return '';
+    var rows = whales.map(function(w) {
+      var sideLbl = (w.side || '').toUpperCase() === 'YES' ? 'YES' : (w.side ? 'NO' : '—');
+      var sideCls = sideLbl === 'YES' ? 'yes' : (sideLbl === 'NO' ? 'no' : '');
+      var rank = w.rank ? '#' + w.rank : '';
+      return '<div class="stage-whale-row">' +
+        '<span class="stage-whale-rank">' + esc(rank) + '</span>' +
+        '<span class="stage-whale-name">' + esc(w.trader || 'Whale') + '</span>' +
+        (sideLbl !== '—' ? '<span class="stage-whale-side ' + sideCls + '">' + sideLbl + '</span>' : '') +
+        '<span class="stage-whale-cap">' + fmtCap(w.capital) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="stage-whales"><div class="stage-whales-h">Whale positions</div>' + rows + '</div>';
+  }
+
+  function renderStage(ev) {
+    var pm   = ev.primary_market || {};
+    var yes  = fmtYes(pm.yes_price);
+    var vol  = fmtVol(ev.volume);
+    var q    = pm.question || ev.title || '';
+    var img  = ev.image || '';
+    var href = ev.polymarket_url || ('#');
+    var imgCol = img
+      ? '<div class="stage-image-col"><img src="' + esc(img) + '" alt="" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></div>'
+      : '';
+
+    var cdHtml = '';
+    if (ev.end_date) {
+      var cd = fmtCd(ev.end_date);
+      if (cd) {
+        cdHtml = '<div class="stage-cd">' +
+          '<span class="stage-cd-digits" id="stage-cd-digits" data-target="' + esc(ev.end_date) + '">' + esc(cd) + '</span>' +
+          '<div class="stage-cd-label">until close</div>' +
+        '</div>';
+      }
+    }
+
+    var priceHtml = pm.yes_price != null
+      ? '<div class="stage-price-row">' +
+          '<span class="stage-price ' + yes.cls + '">' + yes.label + '</span>' +
+          '<span class="stage-price-label">YES</span>' +
+        '</div>'
+      : '';
+
+    var whaleHtml = renderWhales(ev.top_whales);
+
+    var html = '<section class="stage">' +
+      '<div class="stage-inner">' +
+        '<div class="stage-body">' +
+          '<span class="stage-eyebrow">The Stage · Next to close</span>' +
+          '<h2 class="stage-title">' + esc(ev.title || 'Upcoming event') + '</h2>' +
+          (q && q !== ev.title ? '<p class="stage-question">' + esc(q) + '</p>' : '') +
+          priceHtml +
+          cdHtml +
+          (vol !== '$0' ? '<div class="stage-vol">' + vol + ' total volume</div>' : '') +
+          whaleHtml +
+          '<a class="stage-cta" href="' + esc(href) + '" target="_blank" rel="noopener">Trade on Polymarket →</a>' +
+        '</div>' +
+        imgCol +
+      '</div>' +
+    '</section>';
+    return html;
+  }
+
+  function startCdTick() {
+    if (_cdTimer) clearInterval(_cdTimer);
+    _cdTimer = setInterval(function() {
+      var el = document.getElementById('stage-cd-digits');
+      if (!el) { clearInterval(_cdTimer); return; }
+      var target = el.getAttribute('data-target');
+      var cd = fmtCd(target);
+      if (cd) el.textContent = cd;
+    }, 15000);
+  }
+
+  fetch('/api/mentions-stage', { credentials: 'same-origin' })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      var root = document.getElementById('stage-root');
+      if (!root) return;
+      if (!data || !data.event) return; // no event → section stays absent
+      root.innerHTML = renderStage(data.event);
+      startCdTick();
+    })
+    .catch(function() { /* silent — absence is clean */ });
+})();
+</script>
 
 <script>
 // ── UPCOMING WORD-MARKET EVENTS (PR 2) ──

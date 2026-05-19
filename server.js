@@ -15795,6 +15795,124 @@ app.get('/mentions/archive', async (req, res) => {
   }
 });
 
+// GET /api/mentions-stage — auto-selects next upcoming high-volume Polymarket
+// event (soonest end_date among top-10 by volume), enriches with whale
+// positions, and returns the Stage payload for client-side rendering.
+// 2-min cache; bypass with ?bypass_cache=1.
+const _mentionsStageCache = { data: null, ts: 0 };
+app.get('/api/mentions-stage', async (req, res) => {
+  try {
+    const CACHE_TTL = 2 * 60 * 1000;
+    if (!req.query.bypass_cache && _mentionsStageCache.data && Date.now() - _mentionsStageCache.ts < CACHE_TTL) {
+      return res.json(_mentionsStageCache.data);
+    }
+
+    const nowMs = Date.now();
+
+    // Pull active future events ordered by volume (gamma snake_case params).
+    const events = await polymarket.fetchPolymarketEvents({
+      active:       true,
+      closed:       false,
+      end_date_min: new Date(nowMs).toISOString(),
+      order:        'volume',
+      ascending:    false,
+      limit:        50,
+    });
+
+    if (!Array.isArray(events) || !events.length) {
+      return res.json({ event: null });
+    }
+
+    // Soonest end_date among the top-10 by volume. This surfaces the
+    // highest-urgency event rather than the largest-ever by total volume.
+    const top10 = events.slice(0, 10).slice().sort((a, b) => {
+      const aT = a.end_date ? Date.parse(a.end_date) : Infinity;
+      const bT = b.end_date ? Date.parse(b.end_date) : Infinity;
+      return aT - bT;
+    });
+    const ev = top10.find(e => {
+      const t = e.end_date ? Date.parse(e.end_date) : 0;
+      return t > nowMs;
+    }) || top10[0];
+
+    if (!ev) return res.json({ event: null });
+
+    // Primary market = highest-volume sub-market.
+    const subMarkets = (Array.isArray(ev.markets) ? ev.markets : [])
+      .filter(m => !m.closed && m.active !== false)
+      .slice()
+      .sort((a, b) => parseFloat(b.volume || 0) - parseFloat(a.volume || 0));
+    const primaryMkt = subMarkets[0] || null;
+
+    // YES price from outcomePrices JSON string (e.g. '["0.72","0.28"]').
+    let yesPrice = null;
+    if (primaryMkt) {
+      try {
+        const prices = JSON.parse(primaryMkt.outcomePrices || '[]');
+        yesPrice = Array.isArray(prices) && prices.length ? parseFloat(prices[0]) : null;
+      } catch (_) {}
+      if (yesPrice == null && primaryMkt.yes_price != null) yesPrice = parseFloat(primaryMkt.yes_price);
+    }
+
+    // Whale positions matched to this event's sub-markets by conditionId.
+    const cidSet = new Set(
+      subMarkets.map(m => (m.conditionId || m.condition_id || '').toLowerCase()).filter(Boolean)
+    );
+    const allWhalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+
+    const traderMap = {};
+    for (const wp of allWhalePositions) {
+      const cid = (wp.conditionId || '').toLowerCase();
+      if (!cid || !cidSet.has(cid)) continue;
+      const key = wp.proxyWallet || wp.trader || 'unknown';
+      if (!traderMap[key]) {
+        traderMap[key] = {
+          trader:      wp.trader || key.slice(0, 10),
+          proxyWallet: wp.proxyWallet || null,
+          rank:        wp.trader_rank || null,
+          pnl:         wp.trader_pnl || 0,
+          capital:     0,
+          side:        null,
+        };
+      }
+      traderMap[key].capital += Math.abs(parseFloat(wp.current_value || wp.size || 0));
+      if (!traderMap[key].side) traderMap[key].side = (wp.side || '').toUpperCase() || null;
+    }
+    const topWhales = Object.values(traderMap)
+      .sort((a, b) => b.capital - a.capital)
+      .slice(0, 3)
+      .map(w => ({ trader: w.trader, proxyWallet: w.proxyWallet, rank: w.rank, capital: w.capital, side: w.side }));
+
+    const result = {
+      event: {
+        title:           ev.title,
+        slug:            ev.slug,
+        image:           ev.image || null,
+        end_date:        ev.end_date || null,
+        volume:          ev.volume || 0,
+        polymarket_url:  ev.slug ? `https://polymarket.com/event/${ev.slug}` : null,
+        primary_market: primaryMkt ? {
+          condition_id: primaryMkt.conditionId || primaryMkt.condition_id || null,
+          question:     primaryMkt.question || ev.title || '',
+          yes_price:    yesPrice,
+          volume:       parseFloat(primaryMkt.volume || 0),
+          slug:         primaryMkt.slug || null,
+        } : null,
+        top_whales:      topWhales,
+      },
+      built_at: new Date(nowMs).toISOString(),
+    };
+
+    _mentionsStageCache.data = result;
+    _mentionsStageCache.ts = nowMs;
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  } catch (err) {
+    console.error('[mentions-stage]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/rebalance-whale-flags — retroactively ungate is_whale on
 // where every wallet in the top 500 was marked is_whale=true. Safe to
 // re-run at any time.
