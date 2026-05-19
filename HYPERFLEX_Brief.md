@@ -13,7 +13,7 @@
 
 ## 2. What This Product Is (The Pivot)
 
-HYPERFLEX has pivoted from a **consumer prediction market** (competing with Polymarket) to a **B2B SaaS tool for creators**. Creators sign up, get a branded community page at `/their-slug`, and their audience predicts on markets the creator builds (often via YouTube AI scanner). No real money — play-money Flex Points only. Monetized via Free/Pro ($29/mo)/Platinum ($99/mo) tiers.
+HYPERFLEX is a social network for prediction market traders — a platform where users build verified public identities around their forecasting track record, post predictions attached to real money positions with written theses, follow the traders they trust, and trade directly across Polymarket and Kalshi from a single interface. The core thesis is that the social graph of prediction market participants — who follows whom, whose calls others act on, whose reasoning moves markets — doesn't exist anywhere yet, and HYPERFLEX is the only platform positioned to own it. Built on Node.js/Express with a Supabase backend and hosted on Railway, the platform already has Polymarket CLOB trading live, a cross-platform portfolio aggregator, alpha signal engine, Stripe subscriptions, and creator tooling; what's being built now is the social layer — prediction posts, accuracy scoring, and the follow graph — which transforms HYPERFLEX from a trading utility into a network effect business whose data becomes the defensible B2B asset: verified forecaster accuracy by domain, thesis-linked position data, and influence cascade analytics that no exchange, data vendor, or signal bot can replicate.
 
 ---
 
