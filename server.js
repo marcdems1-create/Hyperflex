@@ -32686,6 +32686,144 @@ app.get('/api/mentions-heatmap', async (req, res) => {
   }
 });
 
+// GET /api/mentions-stage
+// THE STAGE — auto-selects the next upcoming high-volume Polymarket event
+// and returns the hero data: event name + image, countdown, YES price on
+// the primary (largest-volume) sub-market, top-3 whale positions, and
+// mention_events stance arcs if available.
+//
+// Selection: soonest end_date among the top-10 events by volume from
+// gamma (active=true, closed=false, end_date_min=now).
+// 2-min in-memory cache (fast enough for countdown accuracy).
+const _mentionsStageCache = { data: null, ts: 0 };
+const _STAGE_TTL = 2 * 60 * 1000;
+
+app.get('/api/mentions-stage', async (req, res) => {
+  try {
+    const bypass = String(req.query.bypass_cache || '') === '1';
+    const now = Date.now();
+    if (!bypass && _mentionsStageCache.data && now - _mentionsStageCache.ts < _STAGE_TTL) {
+      return res.set('Cache-Control', 'no-store').json(_mentionsStageCache.data);
+    }
+
+    // 1. Fetch top-50 future events by volume
+    const events = await polymarket.fetchPolymarketEvents({
+      active:       true,
+      closed:       false,
+      end_date_min: new Date(now).toISOString(),
+      order:        'volume',
+      ascending:    false,
+      limit:        50,
+    });
+
+    // 2. Filter to genuinely future (end_date > now + 1h) and pick
+    //    soonest end_date among the top-10 by volume
+    const future = events
+      .filter(ev => {
+        const ts = ev.end_date ? Date.parse(ev.end_date) : 0;
+        return ts > now + 60 * 60 * 1000; // at least 1h out
+      })
+      .slice(0, 10); // top-10 by volume (already sorted desc)
+
+    if (!future.length) {
+      const payload = { event: null, reason: 'no_future_events' };
+      _mentionsStageCache.data = payload;
+      _mentionsStageCache.ts = now;
+      return res.set('Cache-Control', 'no-store').json(payload);
+    }
+
+    // soonest end_date wins
+    future.sort((a, b) => Date.parse(a.end_date) - Date.parse(b.end_date));
+    const ev = future[0];
+
+    // 3. Primary market = largest-volume sub-market
+    const markets = Array.isArray(ev.markets) ? ev.markets : [];
+    const primaryMarket = markets
+      .filter(m => !m.closed && m.active !== false)
+      .sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0] || null;
+
+    // 4. YES price from primary market
+    let yesPrice = null;
+    if (primaryMarket) {
+      yesPrice = primaryMarket.yes_price != null
+        ? Math.round(Number(primaryMarket.yes_price) * 100)
+        : null;
+    }
+
+    // 5. Whale positions — match by conditionId from _whaleWatchCache
+    const whaleData = _whaleWatchCache && _whaleWatchCache.data;
+    const allWhalePos = whaleData ? (whaleData.whales || []) : [];
+    const eventConditionIds = new Set(markets.map(m => m.condition_id).filter(Boolean));
+    const matchedWhales = allWhalePos
+      .filter(w => w.conditionId && eventConditionIds.has(w.conditionId))
+      .sort((a, b) => (b.size || 0) - (a.size || 0))
+      .slice(0, 3)
+      .map(w => ({
+        trader:      w.trader || 'Whale',
+        side:        (w.side || '').toUpperCase(),
+        size_usd:    Math.round(w.size || 0),
+        whale_rank:  w.trader_rank || null,
+      }));
+
+    // 6. Stance arc from mention_events (best-effort — skip on DB error)
+    let stanceArc = [];
+    if (pool) {
+      try {
+        const slugQ = (ev.slug || '').toLowerCase();
+        const titleQ = (ev.title || '').toLowerCase();
+        const rows = await dbQuery(`
+          SELECT me.title, me.speaker, me.stance_value, me.stance_axis,
+                 me.event_date, me.domain
+          FROM mention_events me
+          WHERE LOWER(me.title) ILIKE $1
+             OR LOWER(me.subject) ILIKE $2
+          ORDER BY me.event_date DESC
+          LIMIT 5
+        `, ['%' + titleQ.slice(0, 30) + '%', '%' + slugQ.replace(/-/g, ' ').slice(0, 30) + '%'])
+        .catch(() => []);
+        stanceArc = rows.map(r => ({
+          speaker:     r.speaker,
+          stance:      r.stance_value,
+          axis:        r.stance_axis,
+          date:        r.event_date,
+          domain:      r.domain,
+        }));
+      } catch (_) {}
+    }
+
+    const endDateMs = ev.end_date ? Date.parse(ev.end_date) : null;
+    const payload = {
+      event: {
+        title:       ev.title,
+        slug:        ev.slug,
+        image:       ev.image,
+        end_date:    ev.end_date,
+        end_date_ms: endDateMs,
+        volume:      ev.volume,
+        category:    ev.category,
+        polymarket_url: ev.slug ? `https://polymarket.com/event/${ev.slug}` : null,
+      },
+      primary_market: primaryMarket ? {
+        condition_id:  primaryMarket.condition_id,
+        question:      primaryMarket.question,
+        yes_price_pct: yesPrice,
+        volume:        primaryMarket.volume,
+        slug:          primaryMarket.slug,
+      } : null,
+      whales:     matchedWhales,
+      stance_arc: stanceArc,
+      fetched_at: new Date(now).toISOString(),
+    };
+
+    _mentionsStageCache.data = payload;
+    _mentionsStageCache.ts = now;
+    res.set('Cache-Control', 'no-store').json(payload);
+  } catch (e) {
+    console.error('[mentions-stage]', e.message);
+    res.status(500).json({ event: null, error: e.message });
+  }
+});
+
 // GET /api/word-markets/upcoming?limit=20
 // Returns upcoming speaker-event groups with word-markets attached.
 // Response shape: { events: [...], count, fetched_at, cache_age_ms }

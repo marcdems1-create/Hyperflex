@@ -304,6 +304,37 @@ a{color:inherit;text-decoration:none}
 #empty-msg{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2);margin-top:8px;text-transform:none;letter-spacing:0}
 
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+
+/* ── THE STAGE ── */
+.stage{position:relative;background:var(--bg-2);border-bottom:1px solid var(--line);overflow:hidden;min-height:280px}
+.stage-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:brightness(0.18) saturate(0.6);pointer-events:none;transition:opacity .4s}
+.stage-overlay{position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,5,15,0.97) 45%,rgba(7,5,15,0.6) 100%);pointer-events:none}
+.stage-inner{position:relative;max-width:1240px;margin:0 auto;padding:40px 36px 44px;display:grid;grid-template-columns:1fr auto;gap:48px;align-items:center}
+@media(max-width:900px){.stage-inner{grid-template-columns:1fr;gap:28px;padding:28px 18px 32px}}
+.stage-left{display:flex;flex-direction:column;gap:16px;min-width:0}
+.stage-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.30em;color:var(--cyan);text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.stage-eyebrow-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);flex-shrink:0;animation:stage-pulse 1.8s ease-in-out infinite}
+@keyframes stage-pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+.stage-title{font-family:var(--sans);font-weight:800;font-size:clamp(22px,3vw,40px);line-height:1.1;color:var(--ink);letter-spacing:-0.01em;margin:0}
+.stage-meta{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.stage-price{font-family:var(--mono);font-weight:700;font-size:28px;line-height:1;color:#22c55e;letter-spacing:-0.01em}
+.stage-price.low{color:#ef4444}
+.stage-price-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.22em;color:var(--muted);text-transform:uppercase;margin-left:2px}
+.stage-vol{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.08em}
+.stage-whales{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.stage-whale{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line-strong);background:rgba(255,255,255,0.04);font-family:var(--mono);font-size:10px;letter-spacing:0.08em;color:var(--ink-2)}
+.stage-whale-side{font-weight:700}
+.stage-whale-side.yes{color:#22c55e}
+.stage-whale-side.no{color:#ef4444}
+.stage-trade-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--cyan);color:#07050F;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;text-decoration:none;border:none;cursor:pointer;transition:opacity .15s;flex-shrink:0}
+.stage-trade-btn:hover{opacity:0.85}
+.stage-right{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.stage-cd{display:flex;gap:16px}
+.stage-cd-unit{display:flex;flex-direction:column;align-items:center;gap:2px}
+.stage-cd-num{font-family:var(--mono);font-weight:700;font-size:42px;line-height:1;color:var(--cyan);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+.stage-cd-lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--muted)}
+.stage-cd-sep{font-family:var(--mono);font-size:38px;color:var(--muted);line-height:1;align-self:flex-start;margin-top:4px}
+.stage-skeleton{padding:40px 36px;display:flex;align-items:center;gap:12px;color:var(--muted);font-family:var(--mono);font-size:12px;letter-spacing:0.12em}
 </style>
 </head>
 <body>
@@ -317,7 +348,138 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   </div>
 </section>
 
-<!--HERO_HTML-->
+<!-- THE STAGE — JS-rendered from /api/mentions-stage -->
+<section class="stage" id="mentions-stage">
+  <div class="stage-bg" id="stage-bg"></div>
+  <div class="stage-overlay"></div>
+  <div class="stage-inner" id="stage-inner">
+    <div class="stage-skeleton" id="stage-skeleton">Loading next event…</div>
+  </div>
+</section>
+<script>
+(function() {
+  function _fmtVol(v) {
+    if (!v) return '';
+    const n = parseFloat(v);
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M vol';
+    if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K vol';
+    return '$' + Math.round(n) + ' vol';
+  }
+
+  function _countdown(endMs) {
+    const diff = Math.max(0, endMs - Date.now());
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return { d, h, m, s };
+  }
+
+  function _renderCountdown(endMs) {
+    const { d, h, m, s } = _countdown(endMs);
+    const pad = n => String(n).padStart(2, '0');
+    if (d > 0) {
+      return '<div class="stage-cd">'
+        + '<div class="stage-cd-unit"><span class="stage-cd-num">' + d + '</span><span class="stage-cd-lbl">days</span></div>'
+        + '<div class="stage-cd-sep">:</div>'
+        + '<div class="stage-cd-unit"><span class="stage-cd-num">' + pad(h) + '</span><span class="stage-cd-lbl">hrs</span></div>'
+        + '<div class="stage-cd-sep">:</div>'
+        + '<div class="stage-cd-unit"><span class="stage-cd-num">' + pad(m) + '</span><span class="stage-cd-lbl">min</span></div>'
+        + '</div>';
+    }
+    return '<div class="stage-cd">'
+      + '<div class="stage-cd-unit"><span class="stage-cd-num">' + pad(h) + '</span><span class="stage-cd-lbl">hrs</span></div>'
+      + '<div class="stage-cd-sep">:</div>'
+      + '<div class="stage-cd-unit"><span class="stage-cd-num">' + pad(m) + '</span><span class="stage-cd-lbl">min</span></div>'
+      + '<div class="stage-cd-sep">:</div>'
+      + '<div class="stage-cd-unit"><span class="stage-cd-num">' + pad(s) + '</span><span class="stage-cd-lbl">sec</span></div>'
+      + '</div>';
+  }
+
+  var _stageData = null;
+  var _cdTimer = null;
+
+  function _renderStage(data) {
+    const inner = document.getElementById('stage-inner');
+    if (!inner) return;
+    if (!data || !data.event) {
+      inner.innerHTML = '';
+      return;
+    }
+    const ev = data.event;
+    const pm = data.primary_market;
+    const whales = data.whales || [];
+
+    // background image
+    const bg = document.getElementById('stage-bg');
+    if (bg && ev.image) {
+      bg.style.backgroundImage = 'url(' + JSON.stringify(ev.image) + ')';
+      bg.style.opacity = '1';
+    }
+
+    const yp = pm && pm.yes_price_pct != null ? pm.yes_price_pct : null;
+    const priceClass = yp == null ? '' : (yp >= 60 ? 'high' : yp <= 40 ? 'low' : 'mid');
+    const priceColor = yp == null ? '' : (yp >= 60 ? '' : yp <= 40 ? ' low' : '');
+
+    const whaleBadges = whales.length ? '<div class="stage-whales">'
+      + whales.map(w => '<span class="stage-whale">'
+        + '<span class="stage-whale-side ' + (w.side === 'YES' ? 'yes' : 'no') + '">' + (w.side || '?') + '</span>'
+        + '<span>' + (w.trader || 'Whale') + '</span>'
+        + (w.size_usd ? '<span style="color:var(--muted)">$' + (w.size_usd >= 1000 ? Math.round(w.size_usd/1000) + 'K' : w.size_usd) + '</span>' : '')
+        + '</span>'
+      ).join('')
+      + '</div>' : '';
+
+    const tradeUrl = ev.polymarket_url || '#';
+    const endMs = ev.end_date_ms;
+
+    inner.innerHTML = '<div class="stage-left">'
+      + '<div class="stage-eyebrow"><span class="stage-eyebrow-dot"></span>Featured event</div>'
+      + '<h2 class="stage-title">' + (ev.title || '').replace(/</g, '&lt;') + '</h2>'
+      + '<div class="stage-meta">'
+      + (yp != null ? '<span class="stage-price' + priceColor + '">' + yp + '¢</span><span class="stage-price-lbl">YES</span>' : '')
+      + (pm && pm.volume ? '<span class="stage-vol">' + _fmtVol(pm.volume) + '</span>' : '')
+      + '</div>'
+      + whaleBadges
+      + '<a href="' + tradeUrl + '" target="_blank" rel="noopener" class="stage-trade-btn" style="margin-top:8px;width:fit-content">Trade on Polymarket ↗</a>'
+      + '</div>'
+      + (endMs ? '<div class="stage-right" id="stage-cd-root">' + _renderCountdown(endMs) + '</div>' : '');
+
+    // live countdown tick
+    if (_cdTimer) clearInterval(_cdTimer);
+    if (endMs) {
+      _cdTimer = setInterval(function() {
+        const root = document.getElementById('stage-cd-root');
+        if (root) root.innerHTML = _renderCountdown(endMs);
+      }, 1000);
+    }
+  }
+
+  function _loadStage() {
+    fetch('/api/mentions-stage')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data) {
+          _stageData = data;
+          _renderStage(data);
+        } else {
+          var sk = document.getElementById('stage-skeleton');
+          if (sk) sk.textContent = '';
+        }
+      })
+      .catch(function() {
+        var sk = document.getElementById('stage-skeleton');
+        if (sk) sk.textContent = '';
+      });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _loadStage);
+  } else {
+    _loadStage();
+  }
+})();
+</script>
 
 <main class="page" id="page">
   <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
