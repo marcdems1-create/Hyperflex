@@ -1107,8 +1107,6 @@ nav {
 <script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
 <script src="/utils.js"></script>
 <script src="/nav.js?v=21"></script>
-<!-- Polymarket Hot Markets Carousel (Phase 1) — replaces single-event rolling banner. -->
-<script defer src="/carousel.js?v=1"></script>
 
 <!-- Member Auth Modal -->
 <div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
@@ -1401,30 +1399,225 @@ nav {
   </div>
 </div>
 
+<!-- ═══ HOT MARKETS GRID ═══ -->
+<div id="hot-markets-section" style="max-width:1200px;margin:0 auto 24px;padding:0 40px">
+  <!-- Section label -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#1D9E75;animation:pulse-dot 1.8s infinite;flex-shrink:0"></span>
+    <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.2px">Hot markets right now</span>
+    <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:#1D9E75;text-decoration:none;margin-left:auto">View all &rarr;</a>
+  </div>
+  <!-- 4-column grid — first card is featured (2 cols × 2 rows) -->
+  <div id="hmGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+    <div style="grid-column:span 2;grid-row:span 2;background:#141720;border:0.5px solid #1e2330;border-radius:12px;min-height:280px;display:flex;align-items:center;justify-content:center"><span style="font-family:var(--mono);font-size:11px;color:#4b5563">Loading markets...</span></div>
+  </div>
+  <!-- Bottom 3-column strip -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px" id="hmStripRow">
+    <div style="background:#141720;border:0.5px solid #1e2330;border-radius:12px;padding:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;color:#4b5563;letter-spacing:0.8px;font-weight:700">Whale Moves</span>
+        <a href="/whales" style="font-size:10px;color:#1D9E75;text-decoration:none;font-family:var(--mono)">See all</a>
+      </div>
+      <div id="hmWhalesList"><div style="font-size:11px;color:#6b7280;padding:6px 0">Loading...</div></div>
+    </div>
+    <div style="background:#141720;border:0.5px solid #1e2330;border-radius:12px;padding:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;color:#4b5563;letter-spacing:0.8px;font-weight:700">Leaderboard</span>
+        <a href="/predictors" style="font-size:10px;color:#1D9E75;text-decoration:none;font-family:var(--mono)">See all</a>
+      </div>
+      <div id="hmLeaderboardList"><div style="font-size:11px;color:#6b7280;padding:6px 0">Loading...</div></div>
+    </div>
+    <div style="background:#141720;border:0.5px solid #1e2330;border-radius:12px;padding:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;color:#4b5563;letter-spacing:0.8px;font-weight:700">FLEX Feed</span>
+        <a href="/feed" style="font-size:10px;color:#1D9E75;text-decoration:none;font-family:var(--mono)">See all</a>
+      </div>
+      <div id="hmFeedList"><div style="font-size:11px;color:#6b7280;padding:6px 0">Loading...</div></div>
+    </div>
+  </div>
+</div>
+<style>
+@media (max-width:960px) {
+  #hot-markets-section { padding:0 16px; }
+  #hmGrid { grid-template-columns:1fr 1fr !important; }
+  #hmGrid>*:first-child { grid-column:span 2; grid-row:span 1; }
+  #hmStripRow { grid-template-columns:1fr 1fr !important; }
+}
+@media (max-width:600px) {
+  #hmGrid { grid-template-columns:1fr !important; }
+  #hmGrid>*:first-child { grid-column:span 1; }
+  #hmStripRow { grid-template-columns:1fr !important; }
+}
+</style>
+<script>
+(function() {
+  function _hmEmoji(q) {
+    var s = (q || '').toLowerCase();
+    if (s.indexOf('bitcoin') !== -1 || s.indexOf(' btc') !== -1) return '₿';
+    if (s.indexOf('ethereum') !== -1 || s.indexOf(' eth') !== -1) return 'Ξ';
+    if (s.indexOf('fed') !== -1 || s.indexOf('fomc') !== -1 || s.indexOf('interest rate') !== -1) return '🏦';
+    if (s.indexOf('election') !== -1 || s.indexOf('president') !== -1 || s.indexOf('trump') !== -1) return '🗳️';
+    if (s.indexOf('nba') !== -1 || s.indexOf('nfl') !== -1 || s.indexOf('mlb') !== -1 || s.indexOf('soccer') !== -1) return '🏟️';
+    if (s.indexOf('openai') !== -1 || s.indexOf('gpt') !== -1 || s.indexOf('gemini') !== -1) return '🤖';
+    if (s.indexOf('russia') !== -1 || s.indexOf('ukraine') !== -1 || s.indexOf('war') !== -1) return '🌍';
+    if (s.indexOf('solana') !== -1 || s.indexOf('crypto') !== -1 || s.indexOf('defi') !== -1) return '⚡';
+    return '📊';
+  }
+  function _hmFmtVol(v) {
+    if (!v || v <= 0) return '';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+    return '$' + v.toFixed(0);
+  }
+  function _hmCard(m, featured) {
+    var q = (m.question || '').substring(0, featured ? 85 : 55);
+    var prob = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
+    var score = m.edge_score || 0;
+    var whales = m.whale_count || 0;
+    var vol = m.volume_24h || m.volume || 0;
+    var imgH = featured ? '140px' : '70px';
+    var emoji = _hmEmoji(m.question);
+    var slug = m.slug || '';
+    var link = slug ? '/market/' + slug : '/alpha';
+    var volStr = _hmFmtVol(vol);
+    var whaleBit = whales ? whales + ' whale' + (whales !== 1 ? 's' : '') + ' watching' : '';
+    var volPill = [volStr ? volStr + ' vol' : '', whaleBit].filter(Boolean).join(' · ');
+    var barColor = prob >= 50 ? '#1D9E75' : '#D85A30';
+    var barWidth = prob >= 50 ? prob : 100 - prob;
+    var closeDate = '';
+    var cd = m.end_date_iso || m.end_date || m.close_time;
+    if (cd) { var days = Math.floor((new Date(cd) - Date.now()) / 86400000); if (days > 0) closeDate = 'Closes in ' + days + 'd'; else if (days === 0) closeDate = 'Closes today'; }
+    var gridStyle = featured ? 'grid-column:span 2;grid-row:span 2;' : '';
+    var emojiSize = featured ? '52px' : '28px';
+    var qLines = featured ? '3' : '2';
+    var qSize = featured ? '12px' : '11px';
+    return '<a href="' + link + '" style="display:block;text-decoration:none;background:#141720;border:0.5px solid #1e2330;border-radius:12px;overflow:hidden;transition:border-color .15s;' + gridStyle + '" onmouseenter="this.style.borderColor=\'#2e3550\'" onmouseleave="this.style.borderColor=\'#1e2330\'">'
+      + '<div style="background:#1e2330;height:' + imgH + ';display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0">'
+        + '<span style="font-size:' + emojiSize + ';opacity:0.6;line-height:1;user-select:none">' + emoji + '</span>'
+        + (volPill ? '<div style="position:absolute;bottom:7px;left:8px;right:8px;font-family:var(--mono);font-size:9px;font-weight:600;color:#e5e7eb;background:rgba(13,15,18,0.8);padding:3px 8px;border-radius:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + volPill + '</div>' : '')
+      + '</div>'
+      + '<div style="padding:10px">'
+        + '<div style="font-size:' + qSize + ';font-weight:600;color:#e5e7eb;line-height:1.4;margin-bottom:7px;display:-webkit-box;-webkit-line-clamp:' + qLines + ';-webkit-box-orient:vertical;overflow:hidden">' + q + '</div>'
+        + '<div style="margin-bottom:7px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
+            + '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + barColor + '">' + (prob >= 50 ? 'YES ' + prob : 'NO ' + (100 - prob)) + '%</span>'
+            + '<span style="font-family:var(--mono);font-size:8px;background:#26215C;color:#AFA9EC;padding:2px 6px;border-radius:4px;font-weight:700">' + score + ' edge</span>'
+          + '</div>'
+          + '<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:2px"></div></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:5px;margin-bottom:6px">'
+          + '<button onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=YES\'" style="flex:1;padding:5px 0;background:#085041;color:#5DCAA5;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">YES</button>'
+          + '<button onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=NO\'" style="flex:1;padding:5px 0;background:#4A1B0C;color:#F0997B;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">NO</button>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:9px;color:#6b7280">'
+          + (whales ? '<span>🐋 ' + whales + '</span>' : '<span></span>')
+          + (closeDate ? '<span>' + closeDate + '</span>' : '<span></span>')
+        + '</div>'
+      + '</div>'
+    + '</a>';
+  }
+  function _hmRenderWhales(whales) {
+    var list = (whales || []).slice(0, 4);
+    if (!list.length) return '<div style="font-size:11px;color:#6b7280;padding:6px 0">No recent moves</div>';
+    return list.map(function(w) {
+      var addr = String(w.trader || w.wallet || w.address || '');
+      var short = addr.length > 10 ? addr.slice(0,6) + '...' + addr.slice(-4) : addr || 'Whale';
+      var mkt = (w.market || w.question || '').substring(0, 32);
+      var side = (w.side || 'YES').toUpperCase();
+      var sideColor = side === 'YES' ? '#5DCAA5' : '#F0997B';
+      var sideBg = side === 'YES' ? '#085041' : '#4A1B0C';
+      var sz = parseFloat(w.size || w.amount || 0);
+      var szStr = sz >= 1e6 ? '$'+(sz/1e6).toFixed(1)+'M' : sz >= 1e3 ? '$'+(sz/1e3).toFixed(0)+'K' : sz > 0 ? '$'+sz.toFixed(0) : '';
+      return '<div style="display:flex;align-items:flex-start;gap:7px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)">'
+        + '<span style="font-family:var(--mono);font-size:9px;color:#6b7280;flex-shrink:0;margin-top:1px">' + short + '</span>'
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:10px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35">' + mkt + '</div>'
+          + '<div style="display:flex;gap:5px;align-items:center;margin-top:2px">'
+            + '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + sideColor + ';background:' + sideBg + ';padding:1px 5px;border-radius:3px">' + side + '</span>'
+            + (szStr ? '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:#e5e7eb">' + szStr + '</span>' : '')
+          + '</div>'
+        + '</div>'
+      + '</div>';
+    }).join('');
+  }
+  function _hmRenderLeaderboard(traders) {
+    var list = (traders || []).slice(0, 5);
+    if (!list.length) return '<div style="font-size:11px;color:#6b7280;padding:6px 0">Loading...</div>';
+    return list.map(function(r, i) {
+      var name = r.display_name || r.userName || r.name || '';
+      if (!name || /^0x[0-9a-f]{6,}/i.test(name)) {
+        var addr = r.wallet || r.address || String(r.user_id || '').replace('hl_', '');
+        name = addr.length > 10 ? addr.slice(0,6)+'...'+addr.slice(-4) : addr || 'Trader';
+      }
+      var initials = (name || 'T').slice(0,2).toUpperCase();
+      var pnl = r.total_pnl || r.pnl_all_time || r.pnl || 0;
+      var pa = Math.abs(pnl);
+      var pnlStr = (pnl >= 0 ? '+' : '−') + (pa >= 1e6 ? '$'+(pa/1e6).toFixed(1)+'M' : pa >= 1e3 ? '$'+(pa/1e3).toFixed(0)+'K' : '$'+pa.toFixed(0));
+      var pnlColor = pnl >= 0 ? '#1D9E75' : '#D85A30';
+      var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#'+(i+1);
+      return '<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)">'
+        + '<span style="font-family:var(--mono);font-size:10px;color:#6b7280;flex-shrink:0;width:18px;text-align:center">' + medal + '</span>'
+        + '<div style="width:22px;height:22px;border-radius:50%;background:rgba(29,158,117,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);font-size:8px;font-weight:700;color:#1D9E75">' + initials + '</div>'
+        + '<div style="flex:1;min-width:0;font-family:var(--mono);font-size:10px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</div>'
+        + '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + pnlColor + ';flex-shrink:0">' + pnlStr + '</span>'
+      + '</div>';
+    }).join('');
+  }
+  function _hmRenderFeed(takes) {
+    var list = (takes || []).slice(0, 4);
+    if (!list.length) return '<div style="font-size:11px;color:#6b7280;padding:6px 0">No takes yet. <a href="/feed" style="color:#1D9E75;text-decoration:none">Post one →</a></div>';
+    return list.map(function(t) {
+      var name = t.display_name || t.username || t.handle || 'Anon';
+      var initials = (name || 'A').slice(0,2).toUpperCase();
+      var text = (t.thesis || t.text || '').substring(0, 60);
+      var mkt = (t.question || t.market_question || '').substring(0, 26);
+      var side = (t.side || '').toUpperCase();
+      return '<div style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+          + '<div style="width:18px;height:18px;border-radius:50%;background:rgba(201,146,13,0.2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:7px;font-weight:700;color:var(--gold);flex-shrink:0">' + initials + '</div>'
+          + '<span style="font-family:var(--mono);font-size:10px;font-weight:600;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</span>'
+        + '</div>'
+        + (text ? '<div style="font-size:10px;color:#6b7280;line-height:1.4;margin-bottom:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">' + text + '</div>' : '')
+        + (mkt ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:#1D9E75;background:rgba(29,158,117,0.1);padding:2px 7px;border-radius:10px;display:inline-block">' + (side ? side+': ' : '') + mkt + '</span>' : '')
+      + '</div>';
+    }).join('');
+  }
+  async function _loadHotMarkets() {
+    try {
+      var r = await fetch('/api/alpha/top?n=6');
+      if (r.ok) {
+        var d = await r.json();
+        var mkts = (d.markets || []).slice(0, 6);
+        var grid = document.getElementById('hmGrid');
+        if (grid && mkts.length) grid.innerHTML = mkts.map(function(m, i) { return _hmCard(m, i === 0); }).join('');
+      }
+    } catch(e) {}
+    try {
+      var wr = await fetch('/api/whale-watch');
+      var wd = await wr.json();
+      var wEl = document.getElementById('hmWhalesList');
+      if (wEl) wEl.innerHTML = _hmRenderWhales(wd.whales || []);
+    } catch(e) {}
+    try {
+      var lr = await fetch('/api/leaderboard?period=1m');
+      var ld = await lr.json();
+      var lEl = document.getElementById('hmLeaderboardList');
+      if (lEl) lEl.innerHTML = _hmRenderLeaderboard(Array.isArray(ld) ? ld : []);
+    } catch(e) {}
+    try {
+      var fr = await fetch('/api/takes/feed?mode=foryou&limit=4');
+      var fd = await fr.json();
+      var takes = fd.takes || (Array.isArray(fd) ? fd : []);
+      var fEl = document.getElementById('hmFeedList');
+      if (fEl) fEl.innerHTML = _hmRenderFeed(takes);
+    } catch(e) {}
+  }
+  _loadHotMarkets();
+})();
+</script>
+
 <div class="explore-layout">
   <div class="main-col">
-
-    <!-- TOP EDGES — live alpha feed -->
-    <div id="explore-top-edges" class="sidebar-card" style="margin-bottom:16px;border-top:2px solid var(--gold)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-green);display:inline-block;flex-shrink:0"></span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase">HOT ALPHA</span>
-        </div>
-        <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;letter-spacing:.04em">VIEW ALL &rarr;</a>
-      </div>
-      <div id="exploreEdgeList">
-        <div style="font-size:12px;color:var(--muted);padding:8px 0">Loading edges...</div>
-      </div>
-    </div>
-
-    <!-- Quick nav links -->
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
-      <a href="/terminal" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
-      <a href="/whales" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(168,85,247,0.4)';this.style.color='#a855f7'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Whales</a>
-      <a href="/predictors" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Leaderboard</a>
-    </div>
 
     <!-- DAILY BRIEFING -->
     <div id="daily-briefing" class="briefing-card" style="display:none">
