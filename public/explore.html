@@ -288,6 +288,54 @@ nav {
   .tabs::-webkit-scrollbar { display: none; }
   .tab { white-space: nowrap; padding: 10px 14px; font-size: 12px; flex-shrink: 0; }
 }
+@media (max-width: 640px) {
+  /* Stats ticker: horizontal scroll, no wrap */
+  .stats-ticker {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 4px;
+  }
+  .stats-ticker::-webkit-scrollbar { display: none; }
+  /* Nav: override 768px hide — show as horizontal pill scroll row */
+  .nav-links {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    gap: 4px;
+    padding: 4px 8px !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    align-items: center;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a {
+    white-space: nowrap !important;
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,0.05) !important;
+    min-height: auto !important;
+    flex-shrink: 0;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+  .nav-links a.active {
+    background: rgba(255,255,255,0.1) !important;
+  }
+  /* Show nav-auth (wallet button), hide CTA + hamburger */
+  .nav-auth { display: flex !important; align-items: center; }
+  .nav-cta { display: none !important; }
+  .nav-hamburger { display: none !important; }
+  /* Wallet: icon only, no label text */
+  #navWalletLabel { display: none !important; }
+  /* No horizontal scroll on page body */
+  html, body { overflow-x: hidden; }
+}
 @media (max-width: 480px) {
   .hero h1 { font-size: 24px; }
   .stat-divider { display: none; }
@@ -1443,10 +1491,21 @@ nav {
   #hmGrid>*:first-child { grid-column:span 2; grid-row:span 1; }
   #hmStripRow { grid-template-columns:1fr 1fr !important; }
 }
-@media (max-width:600px) {
-  #hmGrid { grid-template-columns:1fr !important; }
-  #hmGrid>*:first-child { grid-column:span 1; }
+@media (max-width:640px) {
+  #hot-markets-section { padding:0 12px !important; }
+  /* 2-col grid, featured spans 2 cols but only 1 row on mobile */
+  #hmGrid { grid-template-columns:1fr 1fr !important; }
+  #hmGrid>*:first-child { grid-column:span 2 !important; grid-row:span 1 !important; }
+  /* Stack bottom strip to single column */
   #hmStripRow { grid-template-columns:1fr !important; }
+  /* Hide whale count + close date on standard (non-featured) cards */
+  #hmGrid > a:not(:first-child) .hm-footer { display:none !important; }
+  /* YES/NO buttons: full-width with proper touch target height */
+  .hm-btn { min-height:40px !important; }
+  /* Market name font size on mobile */
+  .hm-q { font-size:12px !important; }
+  /* Probability percentage on mobile */
+  .hm-prob { font-size:14px !important; }
 }
 </style>
 <script>
@@ -1497,19 +1556,19 @@ nav {
         + (volPill ? '<div style="position:absolute;bottom:7px;left:8px;right:8px;font-family:var(--mono);font-size:9px;font-weight:600;color:#e5e7eb;background:rgba(13,15,18,0.8);padding:3px 8px;border-radius:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + volPill + '</div>' : '')
       + '</div>'
       + '<div style="padding:10px">'
-        + '<div style="font-size:' + qSize + ';font-weight:600;color:#e5e7eb;line-height:1.4;margin-bottom:7px;display:-webkit-box;-webkit-line-clamp:' + qLines + ';-webkit-box-orient:vertical;overflow:hidden">' + q + '</div>'
+        + '<div class="hm-q" style="font-size:' + qSize + ';font-weight:600;color:#e5e7eb;line-height:1.4;margin-bottom:7px;display:-webkit-box;-webkit-line-clamp:' + qLines + ';-webkit-box-orient:vertical;overflow:hidden">' + q + '</div>'
         + '<div style="margin-bottom:7px">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
-            + '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + barColor + '">' + (prob >= 50 ? 'YES ' + prob : 'NO ' + (100 - prob)) + '%</span>'
+            + '<span class="hm-prob" style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + barColor + '">' + (prob >= 50 ? 'YES ' + prob : 'NO ' + (100 - prob)) + '%</span>'
             + '<span style="font-family:var(--mono);font-size:8px;background:#26215C;color:#AFA9EC;padding:2px 6px;border-radius:4px;font-weight:700">' + score + ' edge</span>'
           + '</div>'
           + '<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:2px"></div></div>'
         + '</div>'
         + '<div style="display:flex;gap:5px;margin-bottom:6px">'
-          + '<button onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=YES\'" style="flex:1;padding:5px 0;background:#085041;color:#5DCAA5;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">YES</button>'
-          + '<button onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=NO\'" style="flex:1;padding:5px 0;background:#4A1B0C;color:#F0997B;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">NO</button>'
+          + '<button class="hm-btn" onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=YES\'" style="flex:1;padding:5px 0;background:#085041;color:#5DCAA5;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">YES</button>'
+          + '<button class="hm-btn" onclick="event.preventDefault();event.stopPropagation();window.location.href=\'' + link + '?side=NO\'" style="flex:1;padding:5px 0;background:#4A1B0C;color:#F0997B;border:none;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">NO</button>'
         + '</div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:9px;color:#6b7280">'
+        + '<div class="hm-footer" style="display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:9px;color:#6b7280">'
           + (whales ? '<span>🐋 ' + whales + '</span>' : '<span></span>')
           + (closeDate ? '<span>' + closeDate + '</span>' : '<span></span>')
         + '</div>'
