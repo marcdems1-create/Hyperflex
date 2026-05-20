@@ -15762,7 +15762,7 @@ async function _renderMentionsHero() {
 app.get('/mentions', async (req, res) => {
   try {
     const tpl = _loadMentionsTemplate();
-    const heroHtml = await _renderMentionsHero();
+    const heroHtml = '';
     const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
     // PR #142: prevent edge/browser HTML cache from pinning the
     // pre-rebuild template. The page assembles a hero strip + a
@@ -15786,7 +15786,7 @@ app.get('/mentions', async (req, res) => {
 app.get('/mentions/archive', async (req, res) => {
   try {
     const tpl = _loadMentionsTemplate();
-    const heroHtml = await _renderMentionsHero();
+    const heroHtml = '';
     const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
