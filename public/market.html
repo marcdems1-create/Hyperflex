@@ -7627,7 +7627,7 @@ async function runCrystalBall() {
     }
     content.innerHTML = '<div style="font-size:12px;color:var(--soft);line-height:1.7">' + html + '</div>' +
       '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
-        '<a href="/crystal-ball" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none">Full Crystal Ball &rarr;</a>' +
+        '<a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none">Alpha Terminal &rarr;</a>' +
         '<button onclick="runCrystalBall()" style="font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Refresh</button>' +
       '</div>';
     btn.textContent = 'Done';
@@ -7635,7 +7635,7 @@ async function runCrystalBall() {
     btn.style.color = '#00e68a';
     btn.style.background = 'rgba(0,230,138,0.08)';
   } catch (e) {
-    content.innerHTML = '<div style="color:var(--red);font-size:11px">Analysis unavailable. <a href="/crystal-ball" style="color:var(--blue)">Try Crystal Ball directly &rarr;</a></div>';
+    content.innerHTML = '<div style="color:var(--red);font-size:11px">Analysis unavailable. <a href="/alpha" style="color:var(--blue)">Alpha Terminal &rarr;</a></div>';
     btn.textContent = 'Retry';
   }
   btn.disabled = false;

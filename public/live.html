@@ -143,7 +143,7 @@ a { color:var(--ink); text-decoration:none; }
 
   <div class="foot-cta">
     <div class="foot-cta-text"><b>Want your bets here?</b> Place trades through HYPERFLEX and they'll land in the live feed.</div>
-    <a href="/screener" class="foot-cta-btn">Browse markets →</a>
+    <a href="/alpha" class="foot-cta-btn">Browse markets →</a>
   </div>
 </div>
 
@@ -225,7 +225,7 @@ function rowHtml(b){
 function render(){
   var list = document.getElementById('cFeedList');
   if (!_rows.length){
-    list.innerHTML = '<div class="empty"><b>Quiet on the wire.</b>No HFX-routed trades in the last cycle.<br>Be the first — <a href="/screener">browse markets</a>.</div>';
+    list.innerHTML = '<div class="empty"><b>Quiet on the wire.</b>No HFX-routed trades in the last cycle.<br>Be the first — <a href="/alpha">browse markets</a>.</div>';
     return;
   }
   list.innerHTML = _rows.slice(0,40).map(rowHtml).join('');

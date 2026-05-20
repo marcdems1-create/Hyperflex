@@ -1214,14 +1214,14 @@ nav {
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale capital, sentiment, movers, Fear &amp; Greed</div>
       <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="dataCardPreview">Loading stats...</div>
     </a>
-    <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">🔮</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Crystal Ball</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Market analysis with trade context and potential ROI</div>
+    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:22px;margin-bottom:8px">⚡</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Top edges ranked by score — whale signals, volume, momentum</div>
     </a>
   </div>
   <div class="intel-grid-bottom" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">📡</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Signals</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale moves, momentum, edge scores — live feed</div>
@@ -1249,7 +1249,7 @@ nav {
       </span>
       <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(168,85,247,0.12);color:#a855f7;font-weight:700">CORRELATED PAIRS</span>
     </div>
-    <a href="/signals" style="font-family:var(--mono);font-size:11px;color:#a855f7;text-decoration:none">See all →</a>
+    <a href="/alpha" style="font-family:var(--mono);font-size:11px;color:#a855f7;text-decoration:none">See all →</a>
   </div>
   <div id="exploreHedgeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
     <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px">Scanning for correlated markets…</div>
@@ -1422,10 +1422,7 @@ nav {
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
       <a href="/terminal" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
-      <a href="/crystal-ball" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Crystal Ball</a>
       <a href="/whales" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(168,85,247,0.4)';this.style.color='#a855f7'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Whales</a>
-      <a href="/signals" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.color='#00e68a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Signals</a>
-      <a href="/screener" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Screener</a>
       <a href="/predictors" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Leaderboard</a>
     </div>
 
