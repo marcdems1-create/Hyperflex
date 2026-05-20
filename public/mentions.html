@@ -462,6 +462,18 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         if (data) {
           _stageData = data;
           _renderStage(data);
+          // Boot THE CROWD using heatmap condition_ids for the featured event
+          if (window._crowdInit && data.event) {
+            fetch('/api/mentions-heatmap')
+              .then(function(r) { return r.ok ? r.json() : null; })
+              .then(function(hm) {
+                if (!hm) return;
+                var ids = [].concat(hm.tiers.jumbo || [], hm.tiers.large || [])
+                  .map(function(t) { return t.condition_id; })
+                  .filter(Boolean).slice(0, 20);
+                window._crowdInit(ids);
+              }).catch(function() {});
+          }
         } else {
           var sk = document.getElementById('stage-skeleton');
           if (sk) sk.textContent = '';
@@ -478,6 +490,127 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   } else {
     _loadStage();
   }
+})();
+</script>
+
+<!-- ── THE CROWD ───────────────────────────────────────────────────── -->
+<section id="crowd-section" style="padding:40px 36px;max-width:1240px;margin:0 auto;display:none">
+  <h2 style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--cyan);text-transform:uppercase;margin-bottom:24px;">The Crowd</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;" id="crowd-grid">
+
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Takes</div>
+      <div id="crowd-takes"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Whale Positions</div>
+      <div id="crowd-leaderboard"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Receipts</div>
+      <div id="crowd-receipts"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+(function() {
+  function _sideColor(side) {
+    if (!side) return 'var(--muted)';
+    return /yes|long/i.test(side) ? '#22c55e' : '#ef4444';
+  }
+
+  function _dollars(n) {
+    if (!n) return '$0';
+    if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000)    return '$' + (n / 1000).toFixed(1) + 'K';
+    return '$' + Number(n).toFixed(0);
+  }
+
+  function _esc(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderTakes(takes) {
+    var el = document.getElementById('crowd-takes');
+    if (!takes || !takes.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No takes yet.</div>';
+      return;
+    }
+    el.innerHTML = takes.slice(0, 8).map(function(t) {
+      var name = t.display_name || (t.handle ? '@' + t.handle : null) || 'Anon';
+      var priceStr = t.entry_price ? ' @ ' + Math.round(t.entry_price * 100) + '¢' : '';
+      return '<div style="border:1px solid var(--line);padding:12px;margin-bottom:8px;background:rgba(255,255,255,.02);">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        + (t.avatar_url ? '<img src="' + _esc(t.avatar_url) + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">' : '<div style="width:20px;height:20px;border-radius:50%;background:var(--panel);flex-shrink:0;"></div>')
+        + '<span style="font-size:12px;font-weight:700;color:var(--ink);">' + _esc(name) + '</span>'
+        + (t.sharp_score ? '<span style="font-size:10px;color:var(--cyan);margin-left:auto;font-family:var(--mono);">' + Number(t.sharp_score).toFixed(0) + '</span>' : '')
+        + '</div>'
+        + (t.thesis ? '<div style="font-size:12px;color:var(--ink-2);line-height:1.5;margin-bottom:6px;">' + _esc(t.thesis) + '</div>' : '')
+        + '<div style="display:flex;gap:8px;align-items:center;font-family:var(--mono);">'
+        + '<span style="font-size:11px;font-weight:700;color:' + _sideColor(t.side) + ';text-transform:uppercase;">' + _esc(t.side || '—') + priceStr + '</span>'
+        + '<span style="font-size:10px;color:var(--muted);margin-left:auto;">' + (t.agree_count || 0) + ' agree</span>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function renderLeaderboard(rows) {
+    var el = document.getElementById('crowd-leaderboard');
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No whale positions found.</div>';
+      return;
+    }
+    el.innerHTML = rows.slice(0, 10).map(function(w, i) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);">'
+        + '<span style="font-size:10px;color:var(--muted);width:16px;font-family:var(--mono);">' + (i + 1) + '</span>'
+        + '<span style="font-size:12px;font-family:var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + _esc(w.display) + '</span>'
+        + '<span style="font-size:11px;font-weight:700;color:' + _sideColor(w.side) + ';text-transform:uppercase;font-family:var(--mono);">' + _esc(w.side || '—') + '</span>'
+        + '<span style="font-size:12px;font-weight:700;color:var(--ink);font-family:var(--mono);">' + _dollars(w.size) + '</span>'
+        + '</div>';
+    }).join('');
+  }
+
+  function renderReceipts(receipts) {
+    var el = document.getElementById('crowd-receipts');
+    if (!receipts || !receipts.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No receipts yet.</div>';
+      return;
+    }
+    el.innerHTML = receipts.map(function(r) {
+      var isYes = /yes|long/i.test(r.side || '');
+      return '<div style="border:1px solid var(--line);padding:12px;margin-bottom:8px;background:rgba(255,255,255,.02);">'
+        + '<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-family:var(--mono);">' + _esc(r.display) + '</div>'
+        + '<div style="font-size:12px;color:var(--ink-2);margin-bottom:8px;line-height:1.4;">' + _esc(r.question || '—') + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span style="font-size:11px;font-weight:700;padding:2px 8px;background:' + (isYes ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)') + ';color:' + _sideColor(r.side) + ';text-transform:uppercase;font-family:var(--mono);">' + _esc(r.side || '—') + '</span>'
+        + '<span style="font-size:12px;font-weight:700;color:var(--ink);margin-left:auto;font-family:var(--mono);">' + _dollars(r.size) + '</span>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function loadCrowd(conditionIds) {
+    if (!conditionIds || !conditionIds.length) return;
+    var ids = conditionIds.join(',');
+    fetch('/api/mentions-crowd?condition_ids=' + encodeURIComponent(ids))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d) return;
+        var sec = document.getElementById('crowd-section');
+        if (sec) sec.style.display = '';
+        renderTakes(d.takes);
+        renderLeaderboard(d.leaderboard);
+        renderReceipts(d.receipts);
+      })
+      .catch(function(e) { console.error('[crowd]', e); });
+  }
+
+  window._crowdInit = function(conditionIds) {
+    loadCrowd(conditionIds);
+    setInterval(function() { loadCrowd(conditionIds); }, 2 * 60 * 1000);
+  };
 })();
 </script>
 

@@ -32838,6 +32838,78 @@ app.get('/api/mentions-stage', async (req, res) => {
   }
 });
 
+// GET /api/mentions-crowd?condition_ids=<csv>
+// THE CROWD panel: takes posted on these markets + whale leaderboard + receipts.
+// condition_ids: comma-separated list (up to 20). 2-min cache keyed by sorted ids.
+{
+  let _crowdCache = null;
+  let _crowdCacheAt = 0;
+  const CROWD_TTL = 2 * 60 * 1000;
+
+  app.get('/api/mentions-crowd', async (req, res) => {
+    try {
+      const { condition_ids } = req.query;
+      if (!condition_ids) return res.status(400).json({ error: 'condition_ids required' });
+      const ids = condition_ids.split(',').map(s => s.trim()).filter(Boolean).slice(0, 20);
+      if (!ids.length) return res.status(400).json({ error: 'no valid condition_ids' });
+
+      const cacheKey = ids.slice().sort().join(',');
+      if (_crowdCache && _crowdCache._key === cacheKey && Date.now() - _crowdCacheAt < CROWD_TTL) {
+        return res.set('Cache-Control', 'no-store').json(_crowdCache);
+      }
+
+      // ── TAKES: join users for display metadata ─────────────────────
+      const takesRows = pool ? await dbQuery(
+        `SELECT t.id, t.user_id, t.condition_id, t.question, t.side,
+                t.entry_price, t.amount, t.thesis, t.sharp_score,
+                t.agree_count, t.disagree_count, t.is_correct, t.created_at,
+                u.display_name, u.handle, u.avatar_url
+         FROM takes t
+         LEFT JOIN users u ON u.id = t.user_id
+         WHERE t.condition_id = ANY($1)
+         ORDER BY t.created_at DESC
+         LIMIT 20`,
+        [ids]
+      ).catch(() => []) : [];
+
+      // ── LEADERBOARD: whale positions from in-memory cache ──────────
+      const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+      const allWhalePos = whaleData ? (whaleData.whales || []) : [];
+      const idSet = new Set(ids);
+      const matched = allWhalePos
+        .filter(w => w.conditionId && idSet.has(w.conditionId))
+        .sort((a, b) => (parseFloat(b.size) || 0) - (parseFloat(a.size) || 0));
+
+      const leaderboard = matched.slice(0, 10).map(w => ({
+        wallet:       w.proxyWallet || '',
+        display:      w.trader || ((w.proxyWallet || '').slice(0, 6) + '…' + (w.proxyWallet || '').slice(-4)),
+        side:         w.side || null,
+        size:         parseFloat(w.size) || 0,
+        question:     w.market || w.position || null,
+        condition_id: w.conditionId,
+      }));
+
+      // ── RECEIPTS: top 6 by size ────────────────────────────────────
+      const receipts = matched.slice(0, 6).map(w => ({
+        wallet:       w.proxyWallet || '',
+        display:      w.trader || ((w.proxyWallet || '').slice(0, 6) + '…' + (w.proxyWallet || '').slice(-4)),
+        side:         w.side || null,
+        size:         parseFloat(w.size) || 0,
+        question:     w.market || w.position || null,
+        condition_id: w.conditionId,
+      }));
+
+      const result = { _key: cacheKey, takes: takesRows, leaderboard, receipts };
+      _crowdCache   = result;
+      _crowdCacheAt = Date.now();
+      res.set('Cache-Control', 'no-store').json(result);
+    } catch (e) {
+      console.error('[mentions-crowd]', e.message);
+      res.status(500).json({ error: 'Crowd unavailable' });
+    }
+  });
+}
+
 // GET /api/word-markets/upcoming?limit=20
 // Returns upcoming speaker-event groups with word-markets attached.
 // Response shape: { events: [...], count, fetched_at, cache_age_ms }
