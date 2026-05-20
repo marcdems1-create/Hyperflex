@@ -654,9 +654,6 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/', priority: '1.0', freq: 'daily' },
       { loc: '/predictors', priority: '0.9', freq: 'daily' },
       { loc: '/odds', priority: '0.9', freq: 'hourly' },
-      { loc: '/signals', priority: '0.8', freq: 'hourly' },
-      { loc: '/screener', priority: '0.8', freq: 'hourly' },
-      { loc: '/crystal-ball', priority: '0.8', freq: 'daily' },
       { loc: '/whales', priority: '0.8', freq: 'daily' },
       { loc: '/whale-index', priority: '0.7', freq: 'daily' },
       /* /explore redirects to / — removed from sitemap */
@@ -32046,8 +32043,6 @@ app.get('/compare', (req, res) => res.sendFile(path.join(__dirname, 'public', 'c
 // GET /whale-index — whale index portfolio page
 app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whale-index.html')));
 
-// GET /screener — market screener page
-app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
 app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ecosystem.html')));
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
@@ -44020,8 +44015,6 @@ app.get('/api/crystal-ball', async (req, res) => {
   }
 });
 
-// GET /crystal-ball — Crystal Ball prediction page
-app.get('/crystal-ball', (req, res) => res.sendFile(path.join(__dirname, 'public', 'crystal-ball.html')));
 app.get('/brief', (req, res) => res.sendFile(path.join(__dirname, 'public', 'brief.html')));
 app.get('/fear-greed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'fear-greed.html')));
 
@@ -47232,9 +47225,6 @@ app.get('/api/signals', async (req, res) => {
     res.status(500).json({ error: 'Failed to compute signals', detail: err.message });
   }
 });
-
-// GET /signals — alpha signals page
-app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 
 // ── ARBITRAGE DETECTION (legacy — used by detectArbitrageOpportunities) ──
 // _arbCache declared earlier in /api/arbitrage section

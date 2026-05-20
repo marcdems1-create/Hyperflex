@@ -350,10 +350,7 @@
     { href: '/explore', label: 'Explore' },
     { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
-    { href: '/signals', label: 'Signals' },
-    { href: '/screener', label: 'Screener' },
     { href: '/whales', label: 'Market Intel' },
-    { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/mentions', label: 'Mentions' }
   ];
@@ -691,9 +688,6 @@
   (function() {
     // Page definitions for static search
     var pages = [
-      { name: 'Signals', desc: 'Live trading signals', href: '/signals', icon: '📡' },
-      { name: 'Crystal Ball', desc: 'Market analysis & scoring', href: '/crystal-ball', icon: '🔮' },
-      { name: 'Screener', desc: 'Market screener & filters', href: '/screener', icon: '📊' },
       { name: 'Whale Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
       { name: 'Market Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
       { name: 'Predictors', desc: 'Top predictor leaderboard', href: '/predictors', icon: '🏆' },
@@ -746,9 +740,7 @@
         '<div class="hfx-search-browse-label">Browse</div>' +
         '<div class="hfx-search-browse-pills">' +
           '<a class="hfx-search-pill" href="/alpha"><svg viewBox="0 0 24 24" fill="none" stroke="#00e68a" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg> Top Edges</a>' +
-          '<a class="hfx-search-pill" href="/signals"><svg viewBox="0 0 24 24" fill="none" stroke="#4d9fff" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke-linejoin="round" stroke-linecap="round"/></svg> Signals</a>' +
           '<a class="hfx-search-pill" href="/whales"><svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 008 0" stroke-linecap="round"/></svg> Whale Intel</a>' +
-          '<a class="hfx-search-pill" href="/screener"><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Screener</a>' +
           '<a class="hfx-search-pill" href="/predictors"><svg viewBox="0 0 24 24" fill="none" stroke="#c9920d" stroke-width="2"><path d="M12 2L15 8.5 22 9.5 17 14.5 18 21.5 12 18 6 21.5 7 14.5 2 9.5 9 8.5z" stroke-linejoin="round"/></svg> Predictors</a>' +
         '</div>' +
       '</div>';
