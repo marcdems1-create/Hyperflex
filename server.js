@@ -21252,8 +21252,12 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       userTakes = await dbQuery(
         `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
                 t.question, t.side, t.entry_price, t.thesis, t.source,
-                t.agree_count, t.disagree_count, t.is_correct, t.created_at
-         FROM takes t ${tWhere}
+                t.agree_count, t.disagree_count, t.is_correct, t.created_at,
+                u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
+                u.whale_rank, u.is_whale, u.display_name AS u_display_name, u.avatar_url AS u_avatar_url
+         FROM takes t
+         LEFT JOIN users u ON u.id::text = t.user_id::text
+         ${tWhere}
          ORDER BY t.created_at DESC LIMIT $${tParams.length}`,
         tParams
       ).catch(() => []);
@@ -21273,8 +21277,19 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       posted_at: t.created_at,
       author: {
         id: t.user_id,
-        display_name: (t.display_name && !t.display_name.startsWith('0x')) ? t.display_name : 'Anonymous',
-        avatar_url: t.avatar_url,
+        // Prefer live users.display_name over denormalized takes.display_name
+        // (takes.display_name can lag behind user renames or be a wallet addr).
+        display_name: (() => {
+          const live = t.u_display_name && !t.u_display_name.startsWith('0x') ? t.u_display_name : null;
+          const stale = t.display_name && !t.display_name.startsWith('0x') ? t.display_name : null;
+          return live || stale || (t.is_whale ? 'Whale #' + (t.whale_rank || '') : 'Anonymous');
+        })(),
+        avatar_url: t.u_avatar_url || t.avatar_url || null,
+        flex_score_90d: t.flex_score_90d != null ? Number(t.flex_score_90d) : null,
+        flex_score_alltime: t.flex_score_alltime != null ? Number(t.flex_score_alltime) : null,
+        predictions_resolved: t.predictions_resolved != null ? Number(t.predictions_resolved) : null,
+        whale_rank: t.whale_rank != null ? Number(t.whale_rank) : null,
+        is_whale: t.is_whale === true,
       },
       agree_count: t.agree_count || 0,
       disagree_count: t.disagree_count || 0,

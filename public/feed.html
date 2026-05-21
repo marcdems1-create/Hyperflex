@@ -3342,9 +3342,13 @@ function renderCard(p) {
   var marketHref = (p.market_live && p.market_live.url) ||
     (p.market_id ? ('/market/' + encodeURIComponent(p.market_id)) : '#');
 
-  // Influencer source badge — lets the user know this is from X not a user post
+  // Source badge — whale, consensus, or X influencer origin
   var influencerBadge = p._source === 'influencer'
     ? '<span class="badge" style="background:rgba(29,161,242,0.15);color:#1da1f2;border:1px solid rgba(29,161,242,0.3)">𝕏 Influencer</span>'
+    : p._source === 'whale'
+    ? '<span class="badge" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);font-family:var(--mono)">🐋 Whale</span>'
+    : p._source === 'consensus'
+    ? '<span class="badge" style="background:rgba(77,159,255,0.12);color:#4d9fff;border:1px solid rgba(77,159,255,0.25);font-family:var(--mono)">⚡ Consensus</span>'
     : '';
 
   // External link (tweet URL) if present
