@@ -597,9 +597,12 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     const volText  = fmtVolume(volTotal);
     const vol24hChip = (vol24h >= 100) ? ' · ' + fmtVolume(vol24h) + ' 24h' : '';
 
-    const portraitImg = speakerSlug
-      ? '<img src="/speakers/' + escHtml(speakerSlug) + '.jpg" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
-      : '';
+    const marketImg = market.image || '';
+    const portraitImg = marketImg
+      ? '<img src="' + escHtml(marketImg) + '" alt="" onerror="this.remove()" loading="lazy">'
+      : speakerSlug
+        ? '<img src="/speakers/' + escHtml(speakerSlug) + '.jpg" alt="' + escHtml(speaker) + '" onerror="this.remove()" loading="lazy">'
+        : '';
 
     // PENDING/RESOLVED state badge -- server-side derived in
     // lib/mentions-heatmap.js:_deriveState. Live tiles render no badge.
