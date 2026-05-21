@@ -51838,6 +51838,22 @@ if (pool) {
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_proxy TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tipster_handle TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_computed_at TIMESTAMPTZ`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_score NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_tier TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_qualifies BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_settled_events INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_raw_win_rate NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_accuracy NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_calibration NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_pnl NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_consistency NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_breadth NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance NUMERIC DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_slug TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_creator BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`).catch(() => {});
       // Handle uniqueness — case-insensitive unique index
       await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle_ci ON users (LOWER(handle)) WHERE handle IS NOT NULL`).catch(() => {});
 
