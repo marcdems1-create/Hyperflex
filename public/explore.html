@@ -1678,7 +1678,10 @@ nav {
   }
   async function _loadHotMarkets() {
     try {
-      var r = await fetch('/api/alpha/top?n=6');
+      // Prefer engaging endpoint (blends social takes + trading signals).
+      // Falls back to pure edge-score ranking if unavailable.
+      var r = await fetch('/api/markets/engaging?n=6');
+      if (!r.ok) r = await fetch('/api/alpha/top?n=6');
       if (r.ok) {
         var d = await r.json();
         var mkts = (d.markets || []).slice(0, 6);

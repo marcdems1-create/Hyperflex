@@ -35095,6 +35095,110 @@ app.get('/api/alpha/top', async (req, res) => {
   }
 });
 
+// GET /api/markets/engaging?n=6
+// Markets ranked by blended social + trading engagement.
+// Social layer: takes + reactions + whale posts in the last 24h from our DB.
+// Trading layer: edge_score from the screener (whale positions, volume, depth).
+// Blend: edge * 0.6 + social_signal (capped 60pts) = engaging_score used for ranking.
+// Falls back gracefully — markets with no social activity still appear via edge_score.
+app.get('/api/markets/engaging', async (req, res) => {
+  const n = Math.min(20, Math.max(1, parseInt(req.query.n) || 6));
+  try {
+    // 1. Screener data — in-memory, zero latency
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+
+    // 2. Takes engagement in the last 24h — direct DB read
+    let takesAgg = [];
+    if (pool) {
+      takesAgg = await dbQuery(`
+        SELECT
+          market_slug,
+          condition_id,
+          COUNT(*)::int                                                AS take_count,
+          COALESCE(SUM(agree_count + disagree_count), 0)::int          AS reaction_total,
+          COUNT(*) FILTER (WHERE source = 'whale')::int                AS whale_takes,
+          COUNT(*) FILTER (WHERE source = 'user')::int                 AS user_takes
+        FROM takes
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+          AND market_slug IS NOT NULL AND market_slug != ''
+        GROUP BY market_slug, condition_id
+        LIMIT 100
+      `).catch(() => []);
+    }
+
+    // 3. Influencer posts in last 24h per market (directional buzz signal)
+    let infAgg = [];
+    if (pool) {
+      infAgg = await dbQuery(`
+        SELECT market_slug, COUNT(*)::int AS post_count
+        FROM influencer_posts
+        WHERE published_at > NOW() - INTERVAL '24 hours'
+          AND market_slug IS NOT NULL AND market_slug != ''
+        GROUP BY market_slug
+        LIMIT 100
+      `).catch(() => []);
+    }
+
+    // 4. Build lookup maps
+    const socialMap  = new Map(); // slug → { take_count, reaction_total, whale_takes, user_takes }
+    const infMap     = new Map(); // slug → post_count
+    for (const t of takesAgg) {
+      if (t.market_slug) socialMap.set(t.market_slug, t);
+      if (t.condition_id && !socialMap.has(t.condition_id)) socialMap.set(t.condition_id, t);
+    }
+    for (const p of infAgg) {
+      if (p.market_slug) infMap.set(p.market_slug, parseInt(p.post_count) || 0);
+    }
+
+    // 5. Enrich screener markets + compute engaging_score
+    const enriched = screenerData.map(m => {
+      const social   = socialMap.get(m.slug) || socialMap.get(m.condition_id) || {};
+      const userTakes   = parseInt(social.user_takes)    || 0;
+      const reactions   = parseInt(social.reaction_total) || 0;
+      const whaleTakes  = parseInt(social.whale_takes)   || 0;
+      const infPosts    = infMap.get(m.slug)              || 0;
+
+      // Social signal: community intent (user posts) + controversy (reactions) +
+      // conviction (whale posts) + off-platform coverage (influencer)
+      const socialSignal = Math.min(60,
+        userTakes  * 6  +   // community posting = direct engagement
+        reactions  * 2  +   // agree/disagree = controversy signal
+        whaleTakes * 12 +   // whale social = high-conviction activity
+        infPosts   * 4      // influencer mention = external buzz
+      );
+
+      return {
+        ...m,
+        take_count_24h:     parseInt(social.take_count)   || 0,
+        reaction_total_24h: reactions,
+        whale_takes_24h:    whaleTakes,
+        inf_posts_24h:      infPosts,
+        engaging_score:     Math.min(99, Math.round((m.edge_score || 0) * 0.6 + socialSignal)),
+      };
+    });
+
+    // 6. Sort by engaging_score, top N
+    enriched.sort((a, b) => (b.engaging_score || 0) - (a.engaging_score || 0));
+    const top = enriched.slice(0, n);
+
+    res.json({
+      markets: top,
+      count: top.length,
+      updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString(),
+    });
+  } catch (err) {
+    console.error('[markets/engaging]', err.message);
+    // Fallback: pure edge_score ranking from cache
+    if (_screenerCache && Array.isArray(_screenerCache.data)) {
+      const top = [..._screenerCache.data]
+        .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+        .slice(0, n);
+      return res.json({ markets: top, count: top.length, stale: true });
+    }
+    res.status(502).json({ error: 'Failed to load engaging markets' });
+  }
+});
+
 // ── DOG CARDS v1 ────────────────────────────────────────────────────────────
 //
 // Surfaces Polymarket markets where one side is ≤ 30¢ (the "dog") AND at
