@@ -52201,6 +52201,74 @@ if (pool) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`).catch(() => {});
 
+      // realized_trades — FIFO-collapsed Polymarket trade history (backfilled per-user on profile load)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS realized_trades (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID NOT NULL,
+        polymarket_address TEXT,
+        condition_id TEXT,
+        token_id TEXT,
+        market_question TEXT,
+        side TEXT,
+        shares NUMERIC(16,4),
+        entry_price NUMERIC(8,6),
+        exit_price NUMERIC(8,6),
+        entry_cost_usd NUMERIC(14,4),
+        exit_value_usd NUMERIC(14,4),
+        realized_pnl NUMERIC(14,4),
+        realized_roi NUMERIC(10,4),
+        opened_at TIMESTAMPTZ,
+        closed_at TIMESTAMPTZ,
+        close_reason TEXT,
+        external_sync_id TEXT UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_user ON realized_trades(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_condition ON realized_trades(condition_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_closed_at ON realized_trades(closed_at DESC)`).catch(() => {});
+      // users columns needed by backfill aggregate refresh
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_backfill_at TIMESTAMPTZ`).catch(() => {});
+
+      // market_sport_tags — market-to-sport mapping for flex score filtering
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_sport_tags (
+        condition_id TEXT PRIMARY KEY,
+        market_question TEXT,
+        sport TEXT,
+        league TEXT,
+        tagged_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // market_closing_prices — CLV calculation base
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_closing_prices (
+        condition_id TEXT PRIMARY KEY,
+        closing_price_yes NUMERIC(6,4),
+        closing_price_no NUMERIC(6,4),
+        resolved_at TIMESTAMPTZ,
+        recorded_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // sports_flex_scores — per-sport flex score breakdowns
+      await dbQuery(`CREATE TABLE IF NOT EXISTS sports_flex_scores (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        sport TEXT NOT NULL,
+        flex_score NUMERIC,
+        sample_size INTEGER DEFAULT 0,
+        win_rate NUMERIC,
+        roi NUMERIC,
+        computed_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(user_id, sport)
+      )`).catch(() => {});
+
+      // reserved_handles — handle-claim blocklist
+      await dbQuery(`CREATE TABLE IF NOT EXISTS reserved_handles (
+        handle TEXT PRIMARY KEY,
+        reason TEXT,
+        added_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
   })();
