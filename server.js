@@ -20653,8 +20653,11 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
     user_id TEXT NOT NULL,
     display_name TEXT,
     body TEXT NOT NULL,
+    reaction TEXT CHECK (reaction IN ('agree','disagree')),
     created_at TIMESTAMPTZ DEFAULT now()
   )`).catch(() => {});
+  await dbQuery('ALTER TABLE take_comments ADD COLUMN IF NOT EXISTS reaction TEXT CHECK (reaction IN (\'agree\',\'disagree\'))').catch(() => {});
+  await dbQuery('ALTER TABLE takes ADD COLUMN IF NOT EXISTS comment_count INTEGER NOT NULL DEFAULT 0').catch(() => {});
   await dbQuery('CREATE INDEX IF NOT EXISTS idx_take_comments_take ON take_comments(take_id, created_at DESC)').catch(() => {});
 })();
 
