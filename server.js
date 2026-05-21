@@ -51824,6 +51824,22 @@ if (pool) {
       await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS avatar_url       TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS username         TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS settlement_price NUMERIC`).catch(() => {});
+      // Additional users columns not in CREATE TABLE (added via individual migrations)
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_verified BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_predictions INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS prediction_win_rate NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS brier_score NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS prediction_pnl NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS follower_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS following_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_proxy TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tipster_handle TEXT`).catch(() => {});
+      // Handle uniqueness — case-insensitive unique index
+      await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle_ci ON users (LOWER(handle)) WHERE handle IS NOT NULL`).catch(() => {});
 
       // Dedup wallet users: keep earliest row per polymarket_address, delete rest
       await dbQuery(`
