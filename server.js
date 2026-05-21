@@ -51942,6 +51942,24 @@ if (pool) {
       await dbQuery(`DROP POLICY IF EXISTS "mention markets are public read" ON mention_markets`).catch(() => {});
       await dbQuery(`CREATE POLICY "mention markets are public read" ON mention_markets FOR SELECT USING (true)`).catch(() => {});
 
+      // Migration #59 — video embed columns on mention_events (Phase 4.4).
+      // Manual-apply was missed. Safe to re-run (IF NOT EXISTS).
+      await dbQuery(`ALTER TABLE mention_events ADD COLUMN IF NOT EXISTS video_url TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE mention_events ADD COLUMN IF NOT EXISTS video_caption TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE mention_events ADD COLUMN IF NOT EXISTS video_thumbnail_url TEXT`).catch(() => {});
+
+      // mention_events_dominant_stance_check — original constraint only allowed
+      // hawkish/dovish/neutral. The geopolitical domain (compose-generic) writes
+      // escalatory/deescalatory into the same column. Drop + re-add with the full
+      // multi-domain vocab so the constraint doesn't reject non-Fed stance values.
+      await dbQuery(`ALTER TABLE mention_events DROP CONSTRAINT IF EXISTS mention_events_dominant_stance_check`).catch(() => {});
+      await dbQuery(`ALTER TABLE mention_events ADD CONSTRAINT mention_events_dominant_stance_check CHECK (
+        dominant_stance IS NULL OR dominant_stance IN (
+          'hawkish','dovish','neutral',
+          'escalatory','deescalatory','ambiguous','insufficient_signal'
+        )
+      )`).catch(() => {});
+
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
   })();
