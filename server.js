@@ -47709,15 +47709,15 @@ app.get('/api/agent/log', requireAuth, async (req, res) => {
   try {
     let logs;
     if (pool) {
-      logs = await dbQuery('SELECT * FROM agent_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
+      logs = await dbQuery('SELECT * FROM agent_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]).catch(() => []);
     } else {
       const { data } = await supabase.from('agent_log').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(50);
       logs = data || [];
     }
-    res.json({ log: logs });
+    res.json({ log: logs || [] });
   } catch (e) {
     console.error('[agent-log]', e.message);
-    res.status(500).json({ error: 'Failed to load agent log' });
+    res.json({ log: [] });
   }
 });
 
@@ -51824,6 +51824,38 @@ if (pool) {
       await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS avatar_url       TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users   ADD COLUMN IF NOT EXISTS username         TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS settlement_price NUMERIC`).catch(() => {});
+      // Additional users columns not in CREATE TABLE (added via individual migrations)
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_verified BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_predictions INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS prediction_win_rate NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS brier_score NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS prediction_pnl NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS follower_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS following_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_proxy TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tipster_handle TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_computed_at TIMESTAMPTZ`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_score NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_tier TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_qualifies BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_settled_events INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_raw_win_rate NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_accuracy NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_calibration NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_pnl NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_consistency NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS flex_c_breadth NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance NUMERIC DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_slug TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_creator BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`).catch(() => {});
+      // Handle uniqueness — case-insensitive unique index
+      await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle_ci ON users (LOWER(handle)) WHERE handle IS NOT NULL`).catch(() => {});
 
       // Dedup wallet users: keep earliest row per polymarket_address, delete rest
       await dbQuery(`
@@ -51976,6 +52008,389 @@ if (pool) {
           'hawkish','dovish','neutral',
           'escalatory','deescalatory','ambiguous','insufficient_signal'
         )
+      )`).catch(() => {});
+
+      // Migration #48 — polymarket_v2_trades (V2 trade observability)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS polymarket_v2_trades (
+        id             BIGSERIAL PRIMARY KEY,
+        user_id        UUID,
+        eoa_address    TEXT NOT NULL,
+        proxy_address  TEXT NOT NULL,
+        token_id       TEXT,
+        side           SMALLINT,
+        maker_amount   TEXT,
+        taker_amount   TEXT,
+        salt           TEXT,
+        builder_code   TEXT,
+        clob_status         TEXT NOT NULL DEFAULT 'attempted',
+        clob_order_id       TEXT,
+        clob_response_code  SMALLINT,
+        clob_error          TEXT,
+        fill_tx_hash   TEXT,
+        fill_price     NUMERIC,
+        filled_at      TIMESTAMPTZ,
+        client_ip      TEXT,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_status_created ON polymarket_v2_trades(clob_status, created_at DESC)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_eoa ON polymarket_v2_trades(eoa_address)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_created ON polymarket_v2_trades(created_at DESC)`).catch(() => {});
+
+      // Influencer feed tables (migration #45 + #46)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS external_influencers (
+        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name           TEXT NOT NULL,
+        platform       TEXT NOT NULL CHECK (platform IN ('x','youtube','reddit','substack')),
+        handle         TEXT NOT NULL,
+        platform_id    TEXT,
+        avatar_url     TEXT,
+        bio            TEXT,
+        follower_count INTEGER DEFAULT 0,
+        known_accuracy NUMERIC(4,1),
+        total_calls    INTEGER DEFAULT 0,
+        correct_calls  INTEGER DEFAULT 0,
+        is_active      BOOLEAN DEFAULT true,
+        last_fetched   TIMESTAMPTZ,
+        added_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(platform, handle)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS influencer_posts (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        influencer_id    UUID REFERENCES external_influencers(id) ON DELETE CASCADE,
+        platform         TEXT NOT NULL,
+        external_id      TEXT NOT NULL,
+        content_url      TEXT,
+        content_text     TEXT,
+        published_at     TIMESTAMPTZ,
+        market_slug      TEXT,
+        market_question  TEXT,
+        predicted_side   TEXT CHECK (predicted_side IN ('YES','NO',NULL)),
+        match_confidence INTEGER,
+        take_id          UUID,
+        resolved_at      TIMESTAMPTZ,
+        was_correct      BOOLEAN,
+        agree_count      INTEGER DEFAULT 0,
+        disagree_count   INTEGER DEFAULT 0,
+        comment_count    INTEGER DEFAULT 0,
+        fire_count       INTEGER DEFAULT 0,
+        fetched_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(platform, external_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS influencer_posts_published_idx ON influencer_posts(published_at DESC)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS influencer_posts_market_idx ON influencer_posts(market_slug)`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS influencer_post_reactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES influencer_posts(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        reaction TEXT NOT NULL CHECK (reaction IN ('agree','disagree','fire')),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(post_id, user_id)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS influencer_post_comments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES influencer_posts(id) ON DELETE CASCADE,
+        author_id TEXT NOT NULL,
+        parent_id UUID REFERENCES influencer_post_comments(id),
+        body TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_inf_comments_post ON influencer_post_comments(post_id)`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS influencer_follows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        influencer_id UUID NOT NULL REFERENCES external_influencers(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, influencer_id)
+      )`).catch(() => {});
+
+      // Push subscriptions (web push notifications)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        min_size INTEGER NOT NULL DEFAULT 10000,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+
+      // Paper trading (virtual $1k per user)
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS paper_balance NUMERIC(12,2) DEFAULT 1000.00`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS paper_trades_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS paper_pnl NUMERIC(12,2) DEFAULT 0.00`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS paper_positions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        market_slug TEXT NOT NULL,
+        condition_id TEXT,
+        question TEXT NOT NULL,
+        side TEXT NOT NULL CHECK (side IN ('YES','NO')),
+        entry_price NUMERIC(6,4) NOT NULL,
+        shares NUMERIC(12,4) NOT NULL,
+        amount NUMERIC(12,2) NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','sold')),
+        outcome TEXT,
+        is_correct BOOLEAN,
+        payout NUMERIC(12,2),
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS paper_positions_user_id ON paper_positions(user_id)`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS daily_picks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        pick_date DATE NOT NULL UNIQUE,
+        market_slug TEXT NOT NULL,
+        condition_id TEXT,
+        question TEXT NOT NULL,
+        yes_price NUMERIC(6,4),
+        no_price NUMERIC(6,4),
+        category TEXT,
+        yes_votes INTEGER DEFAULT 0,
+        no_votes INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS user_daily_picks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        pick_date DATE NOT NULL,
+        side TEXT NOT NULL CHECK (side IN ('YES','NO')),
+        was_correct BOOLEAN,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(user_id, pick_date)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_alerts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        market_slug TEXT NOT NULL,
+        question TEXT NOT NULL,
+        threshold_pct INTEGER NOT NULL DEFAULT 10,
+        baseline_price NUMERIC(6,4),
+        triggered BOOLEAN DEFAULT false,
+        triggered_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS market_alerts_slug ON market_alerts(market_slug, triggered)`).catch(() => {});
+
+      // Watchlist + price alerts
+      await dbQuery(`CREATE TABLE IF NOT EXISTS watchlist (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        user_id UUID NOT NULL,
+        market_slug TEXT NOT NULL DEFAULT '',
+        market_question TEXT NOT NULL DEFAULT '',
+        alert_above DECIMAL,
+        alert_below DECIMAL,
+        last_alerted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist(user_id)`).catch(() => {});
+
+      // Telegram whale alert subscribers
+      await dbQuery(`CREATE TABLE IF NOT EXISTS telegram_whale_subs (
+        id SERIAL PRIMARY KEY,
+        chat_id TEXT NOT NULL UNIQUE,
+        first_name TEXT,
+        active BOOLEAN DEFAULT true,
+        subscribed_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // Trade intentions (Kelly calculator)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS trade_intentions (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT,
+        market TEXT NOT NULL,
+        side TEXT NOT NULL DEFAULT 'YES',
+        market_pct NUMERIC DEFAULT 0,
+        whale_pct NUMERIC DEFAULT 0,
+        bankroll NUMERIC DEFAULT 0,
+        kelly_fraction NUMERIC DEFAULT 0.5,
+        url TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+
+      // realized_trades — FIFO-collapsed Polymarket trade history (backfilled per-user on profile load)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS realized_trades (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID NOT NULL,
+        polymarket_address TEXT,
+        condition_id TEXT,
+        token_id TEXT,
+        market_question TEXT,
+        side TEXT,
+        shares NUMERIC(16,4),
+        entry_price NUMERIC(8,6),
+        exit_price NUMERIC(8,6),
+        entry_cost_usd NUMERIC(14,4),
+        exit_value_usd NUMERIC(14,4),
+        realized_pnl NUMERIC(14,4),
+        realized_roi NUMERIC(10,4),
+        opened_at TIMESTAMPTZ,
+        closed_at TIMESTAMPTZ,
+        close_reason TEXT,
+        external_sync_id TEXT UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_user ON realized_trades(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_condition ON realized_trades(condition_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_closed_at ON realized_trades(closed_at DESC)`).catch(() => {});
+      // users columns needed by backfill aggregate refresh
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_backfill_at TIMESTAMPTZ`).catch(() => {});
+
+      // market_sport_tags — market-to-sport mapping for flex score filtering
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_sport_tags (
+        condition_id TEXT PRIMARY KEY,
+        market_question TEXT,
+        sport TEXT,
+        league TEXT,
+        tagged_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // market_closing_prices — CLV calculation base
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_closing_prices (
+        condition_id TEXT PRIMARY KEY,
+        closing_price_yes NUMERIC(6,4),
+        closing_price_no NUMERIC(6,4),
+        resolved_at TIMESTAMPTZ,
+        recorded_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // sports_flex_scores — per-sport flex score breakdowns
+      await dbQuery(`CREATE TABLE IF NOT EXISTS sports_flex_scores (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        sport TEXT NOT NULL,
+        flex_score NUMERIC,
+        sample_size INTEGER DEFAULT 0,
+        win_rate NUMERIC,
+        roi NUMERIC,
+        computed_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(user_id, sport)
+      )`).catch(() => {});
+
+      // reserved_handles — handle-claim blocklist
+      await dbQuery(`CREATE TABLE IF NOT EXISTS reserved_handles (
+        handle TEXT PRIMARY KEY,
+        reason TEXT,
+        added_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // agent_log — trade-agent decision log
+      await dbQuery(`CREATE TABLE IF NOT EXISTS agent_log (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        signal_type TEXT,
+        market TEXT,
+        side TEXT,
+        whale_count INTEGER DEFAULT 0,
+        confidence TEXT,
+        recommended_size NUMERIC DEFAULT 0,
+        kelly_edge NUMERIC DEFAULT 0,
+        action TEXT NOT NULL DEFAULT 'alert',
+        url TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS agent_log_user_idx ON agent_log(user_id, created_at DESC)`).catch(() => {});
+
+      // copy_trade_subscriptions — whale copy-trade subscriptions
+      await dbQuery(`CREATE TABLE IF NOT EXISTS copy_trade_subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        whale_id TEXT NOT NULL,
+        max_per_trade NUMERIC(12,2) DEFAULT 500,
+        min_whale_size NUMERIC(12,2) DEFAULT 10000,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, whale_id)
+      )`).catch(() => {});
+
+      // creator_announcements — per-community announcements
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        creator_id TEXT,
+        tenant_slug TEXT,
+        title TEXT,
+        body TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // community_members — gated community membership
+      await dbQuery(`CREATE TABLE IF NOT EXISTS community_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        tenant_slug TEXT NOT NULL,
+        role TEXT DEFAULT 'member',
+        joined_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, tenant_slug)
+      )`).catch(() => {});
+
+      // follows — social follow graph (bidirectional)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS follows (
+        follower_id TEXT NOT NULL,
+        following_id TEXT NOT NULL,
+        followed_at TIMESTAMPTZ DEFAULT now(),
+        follow_reason TEXT,
+        PRIMARY KEY (follower_id, following_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)`).catch(() => {});
+
+      // platform_referrals — referral tracking
+      await dbQuery(`CREATE TABLE IF NOT EXISTS platform_referrals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        referrer_id TEXT NOT NULL,
+        referred_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(referred_id)
+      )`).catch(() => {});
+
+      // referral_history — referral event log
+      await dbQuery(`CREATE TABLE IF NOT EXISTS referral_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        referrer_id TEXT,
+        referred_id TEXT,
+        event TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // refill_history — pUSD refill events
+      await dbQuery(`CREATE TABLE IF NOT EXISTS refill_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        amount NUMERIC,
+        tx_hash TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // whale_alerts — whale-activity email alerts
+      await dbQuery(`CREATE TABLE IF NOT EXISTS whale_alerts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        whale_address TEXT,
+        market_slug TEXT,
+        alert_type TEXT,
+        threshold NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // social_reactions — legacy (short-circuited, kept for graceful degrade)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS social_reactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        target_id TEXT,
+        target_type TEXT,
+        user_id TEXT,
+        reaction TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
