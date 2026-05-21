@@ -50369,57 +50369,106 @@ async function gradeExpiredPredictions() {
     if (unresolved.length === 0) return;
     console.log(`[accuracy/grade] Grading ${unresolved.length} expired predictions`);
 
+    // Build a price lookup from Polymarket Gamma API (closed + active) so we can grade
+    // predictions whose markets have already resolved and left the active screener cache.
+    const _gradePriceLookup = new Map(); // conditionId_lower → price
+    const _gradeQLookup    = new Map(); // question_lower    → price
+
+    // Active markets from screener cache
+    const _screenerData = _screenerCache && Array.isArray(_screenerCache.data) ? _screenerCache.data : [];
+    for (const m of _screenerData) {
+      if (m.condition_id && m.yes_price != null) _gradePriceLookup.set(m.condition_id.toLowerCase(), parseFloat(m.yes_price));
+      if (m.question && m.yes_price != null) _gradeQLookup.set(m.question.toLowerCase().trim(), parseFloat(m.yes_price));
+    }
+
+    // Recently-closed markets from Polymarket (binary outcomes — this is the missing source)
+    try {
+      const _gFetch = (url) => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 12000);
+        return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+      };
+      const [rc1, rc2] = await Promise.all([
+        _gFetch('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=end_date&ascending=false').catch(() => null),
+        _gFetch('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volume&ascending=false').catch(() => null),
+      ]);
+      for (const r of [rc1, rc2]) {
+        if (!r || !r.ok) continue;
+        const mkts = await r.json().catch(() => []);
+        for (const m of (Array.isArray(mkts) ? mkts : [])) {
+          if (!m.outcomePrices) continue;
+          try {
+            const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+            const yesPrice = parseFloat(prices[0]);
+            if (isNaN(yesPrice)) continue;
+            if (m.conditionId) _gradePriceLookup.set(m.conditionId.toLowerCase(), yesPrice);
+            if (m.question) _gradeQLookup.set(m.question.toLowerCase().trim(), yesPrice);
+          } catch {}
+        }
+      }
+    } catch (e) { console.warn('[accuracy/grade] closed-market lookup error:', e.message); }
+
+    let graded = 0, skipped = 0;
+
     for (const pred of unresolved) {
-      // Try to get current market price from our caches
       let currentPrice = null;
 
-      // Check market movers cache
-      if (_marketMoversCache && _marketMoversCache.data && _marketMoversCache.data.movers) {
+      // 1. Condition ID lookup (most precise — prediction_log stores market_id = conditionId)
+      if (pred.market_id) currentPrice = _gradePriceLookup.get(pred.market_id.toLowerCase()) ?? null;
+
+      // 2. Question text lookup
+      if (currentPrice === null && pred.market_question) {
+        const qk = pred.market_question.toLowerCase().trim();
+        currentPrice = _gradeQLookup.get(qk) ?? null;
+        if (currentPrice === null) {
+          // Prefix match (question may be truncated at 200 chars on insert)
+          const prefix = qk.substring(0, 50);
+          for (const [k, v] of _gradeQLookup) {
+            if (k.startsWith(prefix)) { currentPrice = v; break; }
+          }
+        }
+      }
+
+      // 3. Legacy cache fallbacks
+      if (currentPrice === null && _marketMoversCache && _marketMoversCache.data && _marketMoversCache.data.movers) {
         const match = _marketMoversCache.data.movers.find(m =>
-          (m.condition_id && m.condition_id === pred.market_id) ||
+          (m.condition_id && pred.market_id && m.condition_id.toLowerCase() === pred.market_id.toLowerCase()) ||
           (m.question && pred.market_question && m.question.toLowerCase().includes(pred.market_question.toLowerCase().substring(0, 30)))
         );
         if (match) currentPrice = (match.current_price || 50) / 100;
       }
 
-      // Check whale index cache
-      if (!currentPrice && _whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
-        const match = _whaleIndexCache.data.picks.find(p =>
-          (p.condition_id && p.condition_id === pred.market_id) ||
-          (p.market && pred.market_question && p.market.toLowerCase().includes(pred.market_question.toLowerCase().substring(0, 30)))
-        );
-        if (match) currentPrice = match.current_price || null;
-      }
-
-      // If no current price found, skip grading — don't use random data
-      if (currentPrice === null) {
-        continue;
-      }
+      if (currentPrice === null) { skipped++; continue; }
 
       let outcome = 'expired';
       const entryPrice = parseFloat(pred.market_price_at_prediction) || 0.5;
+      const marketClosed = currentPrice > 0.95 || currentPrice < 0.05;
 
-      if (pred.predicted_side === 'YES') {
+      if (marketClosed) {
+        // Binary resolution — definitive grade
+        if (pred.predicted_side === 'YES') outcome = currentPrice > 0.5 ? 'correct' : 'incorrect';
+        else outcome = currentPrice < 0.5 ? 'correct' : 'incorrect';
+      } else if (pred.predicted_side === 'YES') {
         if (currentPrice >= 0.65) outcome = 'correct';
         else if (currentPrice <= 0.35) outcome = 'incorrect';
         else if (currentPrice - entryPrice >= 0.10) outcome = 'correct';
         else outcome = 'expired';
       } else {
-        // predicted NO
         if (currentPrice <= 0.35) outcome = 'correct';
         else if (currentPrice >= 0.65) outcome = 'incorrect';
         else if (entryPrice - currentPrice >= 0.10) outcome = 'correct';
         else outcome = 'expired';
       }
 
-      // Calculate P&L
+      // P&L — for binary resolution use actual payout math, otherwise movement-based
       let pnl = 0;
       if (outcome === 'correct') {
-        pnl = Math.round(100 * Math.abs(currentPrice - entryPrice) / entryPrice);
+        pnl = marketClosed
+          ? Math.round(100 * (1 - entryPrice) / Math.max(entryPrice, 0.01))
+          : Math.round(100 * Math.abs(currentPrice - entryPrice) / Math.max(entryPrice, 0.01));
       } else if (outcome === 'incorrect') {
         pnl = -Math.round(100 * entryPrice);
       }
-      // expired = $0 P&L
 
       try {
         if (pool) {
@@ -50433,16 +50482,15 @@ async function gradeExpiredPredictions() {
             resolved_at: new Date().toISOString(), pnl_if_followed: pnl
           }).eq('id', pred.id);
         }
-        // Tweet win recap
         if (outcome === 'correct') tweetWinRecap(pred, outcome).catch(() => {});
+        graded++;
       } catch (e) {
         console.warn('[accuracy/grade] Failed to update prediction:', pred.id, e.message);
       }
     }
 
-    // Invalidate cache
     _accuracyStatsCache = null;
-    console.log(`[accuracy/grade] Done grading ${unresolved.length} predictions`);
+    console.log(`[accuracy/grade] Done: ${graded} graded, ${skipped} skipped (no price data)`);
   } catch (err) {
     console.error('[accuracy/grade]', err.message);
   }
@@ -51859,6 +51907,37 @@ async function resolveSignalOutcomes() {
       }
     }
 
+    // Source 3: Recently-closed Polymarket markets with binary outcomes (price = 0 or 1).
+    // Sources 1 + 2 only contain active/open markets (closed=false filter). Every resolved
+    // market disappears from those caches once it closes — which is exactly when we need to
+    // grade it. Fetching closed markets fixes the root cause of the 0.3% accuracy figure:
+    // signals aged out as 'expired' because we could never find their final price.
+    try {
+      const _fetchClosed = (url) => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 12000);
+        return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+      };
+      const [r1, r2] = await Promise.all([
+        _fetchClosed('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=end_date&ascending=false').catch(() => null),
+        _fetchClosed('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volume&ascending=false').catch(() => null),
+      ]);
+      for (const r of [r1, r2]) {
+        if (!r || !r.ok) continue;
+        const mkts = await r.json().catch(() => []);
+        for (const m of (Array.isArray(mkts) ? mkts : [])) {
+          if (!m.question || !m.outcomePrices) continue;
+          try {
+            const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+            const yesPrice = parseFloat(prices[0]);
+            if (!isNaN(yesPrice)) {
+              priceLookup.set(m.question.toLowerCase().trim(), { price: yesPrice, end_date: m.endDate || m.end_date, closed: true });
+            }
+          } catch {}
+        }
+      }
+    } catch (e) { console.warn('[intelligence] closed-market lookup error:', e.message); }
+
     let resolved = 0;
     let expired = 0;
 
@@ -51876,9 +51955,10 @@ async function resolveSignalOutcomes() {
       }
 
       if (!match) {
-        // Check if signal is too old (>45 days) — expire it
+        // Only expire signals older than 60 days (matches the query window) — don't
+        // discard signals that are simply waiting on a closed-market data gap.
         const sigAge = Date.now() - new Date(sig.predicted_at || 0).getTime();
-        if (sigAge > 45 * 86400000) {
+        if (sigAge > 60 * 86400000) {
           await dbQuery("UPDATE signal_outcomes SET outcome = 'expired', resolved_at = NOW() WHERE id = $1", [sig.id]);
           expired++;
         }
