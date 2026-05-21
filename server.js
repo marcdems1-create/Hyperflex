@@ -47709,15 +47709,15 @@ app.get('/api/agent/log', requireAuth, async (req, res) => {
   try {
     let logs;
     if (pool) {
-      logs = await dbQuery('SELECT * FROM agent_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
+      logs = await dbQuery('SELECT * FROM agent_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]).catch(() => []);
     } else {
       const { data } = await supabase.from('agent_log').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(50);
       logs = data || [];
     }
-    res.json({ log: logs });
+    res.json({ log: logs || [] });
   } catch (e) {
     console.error('[agent-log]', e.message);
-    res.status(500).json({ error: 'Failed to load agent log' });
+    res.json({ log: [] });
   }
 });
 
@@ -52283,6 +52283,114 @@ if (pool) {
         handle TEXT PRIMARY KEY,
         reason TEXT,
         added_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
+
+      // agent_log — trade-agent decision log
+      await dbQuery(`CREATE TABLE IF NOT EXISTS agent_log (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        signal_type TEXT,
+        market TEXT,
+        side TEXT,
+        whale_count INTEGER DEFAULT 0,
+        confidence TEXT,
+        recommended_size NUMERIC DEFAULT 0,
+        kelly_edge NUMERIC DEFAULT 0,
+        action TEXT NOT NULL DEFAULT 'alert',
+        url TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS agent_log_user_idx ON agent_log(user_id, created_at DESC)`).catch(() => {});
+
+      // copy_trade_subscriptions — whale copy-trade subscriptions
+      await dbQuery(`CREATE TABLE IF NOT EXISTS copy_trade_subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        whale_id TEXT NOT NULL,
+        max_per_trade NUMERIC(12,2) DEFAULT 500,
+        min_whale_size NUMERIC(12,2) DEFAULT 10000,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, whale_id)
+      )`).catch(() => {});
+
+      // creator_announcements — per-community announcements
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        creator_id TEXT,
+        tenant_slug TEXT,
+        title TEXT,
+        body TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // community_members — gated community membership
+      await dbQuery(`CREATE TABLE IF NOT EXISTS community_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        tenant_slug TEXT NOT NULL,
+        role TEXT DEFAULT 'member',
+        joined_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, tenant_slug)
+      )`).catch(() => {});
+
+      // follows — social follow graph (bidirectional)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS follows (
+        follower_id TEXT NOT NULL,
+        following_id TEXT NOT NULL,
+        followed_at TIMESTAMPTZ DEFAULT now(),
+        follow_reason TEXT,
+        PRIMARY KEY (follower_id, following_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)`).catch(() => {});
+
+      // platform_referrals — referral tracking
+      await dbQuery(`CREATE TABLE IF NOT EXISTS platform_referrals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        referrer_id TEXT NOT NULL,
+        referred_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(referred_id)
+      )`).catch(() => {});
+
+      // referral_history — referral event log
+      await dbQuery(`CREATE TABLE IF NOT EXISTS referral_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        referrer_id TEXT,
+        referred_id TEXT,
+        event TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // refill_history — pUSD refill events
+      await dbQuery(`CREATE TABLE IF NOT EXISTS refill_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        amount NUMERIC,
+        tx_hash TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // whale_alerts — whale-activity email alerts
+      await dbQuery(`CREATE TABLE IF NOT EXISTS whale_alerts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        whale_address TEXT,
+        market_slug TEXT,
+        alert_type TEXT,
+        threshold NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // social_reactions — legacy (short-circuited, kept for graceful degrade)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS social_reactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        target_id TEXT,
+        target_type TEXT,
+        user_id TEXT,
+        reaction TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
