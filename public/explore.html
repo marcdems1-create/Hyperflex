@@ -1544,15 +1544,50 @@ nav {
     var barColor = prob >= 50 ? '#1D9E75' : '#D85A30';
     var barWidth = prob >= 50 ? prob : 100 - prob;
     var closeDate = '';
+    var daysToClose = null;
     var cd = m.end_date_iso || m.end_date || m.close_time;
-    if (cd) { var days = Math.floor((new Date(cd) - Date.now()) / 86400000); if (days > 0) closeDate = 'Closes in ' + days + 'd'; else if (days === 0) closeDate = 'Closes today'; }
+    if (cd) {
+      daysToClose = Math.floor((new Date(cd) - Date.now()) / 86400000);
+      if (daysToClose > 0) closeDate = 'Closes in ' + daysToClose + 'd';
+      else if (daysToClose === 0) closeDate = 'Closes today';
+    }
     var gridStyle = featured ? 'grid-column:span 2;grid-row:span 2;' : '';
     var emojiSize = featured ? '52px' : '28px';
     var qLines = featured ? '3' : '2';
     var qSize = featured ? '12px' : '11px';
-    return '<a href="' + link + '" style="display:block;text-decoration:none;background:#141720;border:0.5px solid #1e2330;border-radius:12px;overflow:hidden;transition:border-color .15s;' + gridStyle + '" onmouseenter="this.style.borderColor=\'#2e3550\'" onmouseleave="this.style.borderColor=\'#1e2330\'">'
+    var ec = m.edge_components || {};
+
+    // Signal badges — priority-ordered, capped at 2 on featured, 1 on standard
+    var badges = [];
+    if (m.is_new) badges.push({ label: 'NEW', bg: '#c9920d', color: '#000' });
+    if (daysToClose !== null && daysToClose === 0) badges.push({ label: 'CLOSES TODAY', bg: '#ff4d6a', color: '#fff' });
+    else if (daysToClose !== null && daysToClose <= 2) badges.push({ label: 'CLOSING SOON', bg: '#ff4d6a', color: '#fff' });
+    if ((ec.volume_spike || 0) >= 8) badges.push({ label: 'VOL SURGE', bg: '#f59e0b', color: '#000' });
+    if ((ec.momentum || 0) >= 8) badges.push({ label: 'SHARP MOVE', bg: '#a855f7', color: '#fff' });
+    if (whales >= 5) badges.push({ label: whales + ' WHALES', bg: '#4d9fff', color: '#000' });
+    if ((m.depth_ratio || 0) >= 3 && m.depth_side) badges.push({ label: m.depth_side.toUpperCase() + ' HEAVY', bg: m.depth_side === 'bid' ? '#1D9E75' : '#D85A30', color: '#fff' });
+    badges = badges.slice(0, featured ? 2 : 1);
+
+    var badgeHtml = badges.length
+      ? '<div style="position:absolute;top:7px;left:8px;display:flex;gap:4px;flex-wrap:nowrap;z-index:1">'
+          + badges.map(function(b) {
+              return '<span style="font-family:var(--mono);font-size:8px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:0.4px;background:' + b.bg + ';color:' + b.color + ';white-space:nowrap;line-height:1.5">' + b.label + '</span>';
+            }).join('')
+          + '</div>'
+      : '';
+
+    // Edge score badge: color-coded by score tier
+    var edgeBadgeBg = score >= 70 ? '#3d2a00' : score >= 50 ? '#26215C' : '#1a1a2a';
+    var edgeBadgeColor = score >= 70 ? '#c9920d' : score >= 50 ? '#AFA9EC' : '#6b7280';
+
+    // Featured card: gold border glow when score is strong
+    var cardBorder = (featured && score >= 60) ? '#c9920d44' : '#1e2330';
+    var cardGlow = (featured && score >= 60) ? 'box-shadow:0 0 0 1px #c9920d1a,0 4px 32px rgba(201,146,13,0.08);' : '';
+
+    return '<a href="' + link + '" style="display:block;text-decoration:none;background:#141720;border:0.5px solid ' + cardBorder + ';border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s;' + gridStyle + cardGlow + '" onmouseenter="this.style.borderColor=\'#2e3550\'" onmouseleave="this.style.borderColor=\'' + cardBorder + '\'">'
       + '<div style="background:#1e2330;height:' + imgH + ';display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0">'
         + '<span style="font-size:' + emojiSize + ';opacity:0.6;line-height:1;user-select:none">' + emoji + '</span>'
+        + badgeHtml
         + (volPill ? '<div style="position:absolute;bottom:7px;left:8px;right:8px;font-family:var(--mono);font-size:9px;font-weight:600;color:#e5e7eb;background:rgba(13,15,18,0.8);padding:3px 8px;border-radius:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + volPill + '</div>' : '')
       + '</div>'
       + '<div style="padding:10px">'
@@ -1560,7 +1595,7 @@ nav {
         + '<div style="margin-bottom:7px">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
             + '<span class="hm-prob" style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + barColor + '">' + (prob >= 50 ? 'YES ' + prob : 'NO ' + (100 - prob)) + '%</span>'
-            + '<span style="font-family:var(--mono);font-size:8px;background:#26215C;color:#AFA9EC;padding:2px 6px;border-radius:4px;font-weight:700">' + score + ' edge</span>'
+            + '<span style="font-family:var(--mono);font-size:8px;background:' + edgeBadgeBg + ';color:' + edgeBadgeColor + ';padding:2px 6px;border-radius:4px;font-weight:700">' + score + ' edge</span>'
           + '</div>'
           + '<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:2px"></div></div>'
         + '</div>'
