@@ -723,7 +723,7 @@ ${urls.join('\n')}
 // Homepage → FLEX Feed
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(require('path').join(__dirname, 'public', 'landing.html'));
+  res.sendFile(require('path').join(__dirname, 'public', 'home.html'));
 });
 
 app.use(require("express").static("public", {
