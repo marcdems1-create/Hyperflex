@@ -474,7 +474,7 @@ function renderFlexScoreCard() {
   host.innerHTML = `
     <div class="card-head">
       <div class="card-title">FLEX SCORE BREAKDOWN</div>
-      <div class="card-tabs"><div class="tab active">${qualifies ? 'LIVE' : 'BUILDING'}</div></div>
+      <div class="card-tabs"><div class="tab active" style="${qualifies ? '' : 'background:rgba(0,255,209,.12);color:#00ffd1;border:1px solid rgba(0,255,209,.3)'}">${qualifies ? 'LIVE' : 'BUILDING'}</div></div>
     </div>
     <div class="flex-components">${compHtml}</div>
     ${buildingNote}
@@ -1025,7 +1025,7 @@ async function load() {
         <div class="flex-score">
           <div class="flex-label">Flex Score</div>
           <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
-          <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? 'Building track record' : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
+          <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? ((stats.settled_predictions || 0) + ' settled · ' + Math.max(0, 25 - (stats.settled_predictions || 0)) + ' to score') : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
           <!-- Whale Score badge — capital-flow heuristic. Decision #1
                Option C: distinct from Flex Score, conditionally rendered.
                Hidden by default; renderFlexScoreCard fills it for users
@@ -1054,7 +1054,7 @@ async function load() {
         <div class="stat green" id="statVolumeCard">
           <div class="stat-label"><span>Volume</span><span class="ticker" id="statVolumeTicker">${pStats.total_trades > 0 ? 'TRADES' : '—'}</span></div>
           <div class="stat-num" id="statVolume">${pStats.total_trades > 0 ? volFmt : '—'}</div>
-          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades > 0 ? `${pStats.total_trades} positions` : 'No trades yet'}</div>
+          <div class="stat-sub" id="statVolumeSub">${pStats.total_trades > 0 ? `${pStats.closed_wins + pStats.closed_losses} settled · ${pStats.total_trades} total` : 'No trades yet'}</div>
         </div>
         <div class="stat ${stats.streak >= 3 ? 'fire' : ''}" id="statStreakCard" style="${(stats.streak > 0 || (take_stats && take_stats.total > 0)) ? '' : 'display:none'}">
           <div class="stat-label"><span>Streak</span><span class="ticker">${stats.streak >= 1 ? 'ACTIVE' : '—'}</span></div>
@@ -1201,7 +1201,7 @@ async function load() {
                 </div>
               </a>
               <div class="card-meta">
-                <span>$${Math.round(t.amount_usd || 0).toLocaleString()}</span>
+                <span>${t.amount_usd > 0 ? '$' + Math.round(t.amount_usd).toLocaleString() : '—'}</span>
                 ${t.entry_price ? `<span>@${Math.round(t.entry_price * 100)}¢</span>` : ''}
                 <span>${timeAgo(t.created_at)}</span>
                 ${isOpen ? `<span class="badge" style="background:rgba(77,159,255,0.1);color:var(--blue);border-color:transparent;padding:1px 6px">OPEN</span>` : pnl != null ? `<span class="badge" style="background:${pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,77,106,0.12)'};color:${pnl >= 0 ? 'var(--green)' : 'var(--red)'};border-color:transparent;padding:1px 6px">${pnl >= 0 ? '+' : ''}$${Math.round(pnl).toLocaleString()}</span>` : ''}
