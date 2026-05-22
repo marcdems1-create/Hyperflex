@@ -1961,6 +1961,118 @@ a:hover { text-decoration: underline; }
 
 <div class="feed-col">
 
+  <!-- ── LIVE TRADE TICKER ──────────────────────────────────────────── -->
+  <div id="liveTickerSection" style="margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:8px;padding:0 0 8px;border-bottom:1px solid var(--border,#1e1e2a);">
+      <span id="liveTickerDot" style="width:7px;height:7px;border-radius:50%;background:#00e68a;box-shadow:0 0 8px rgba(0,230,138,.7);flex-shrink:0;animation:ticker-pulse 1.4s infinite;"></span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--text-faint,#888);font-family:var(--mono,'JetBrains Mono',monospace);">LIVE TRADES</span>
+      <span id="liveTickerCount" style="font-size:10px;color:var(--text-faint,#888);font-family:var(--mono,'JetBrains Mono',monospace);margin-left:auto;"></span>
+    </div>
+    <div id="liveTickerList" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;"></div>
+  </div>
+  <style>
+  @keyframes ticker-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes ticker-slide-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+  .ticker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255,255,255,.018);
+    border: 1px solid var(--border,#1e1e2a);
+    border-radius: 3px;
+    text-decoration: none;
+    font-family: var(--mono,'JetBrains Mono',monospace);
+    font-size: 11px;
+    transition: background .15s;
+    animation: ticker-slide-in .2s ease both;
+  }
+  .ticker-row:hover { background: rgba(255,255,255,.04); }
+  .ticker-slug {
+    color: var(--text-faint,#888);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+  }
+  .ticker-side-buy  { color: #00e68a; font-weight: 700; min-width: 32px; }
+  .ticker-side-sell { color: #ff4d6a; font-weight: 700; min-width: 32px; }
+  .ticker-size { color: var(--gold,#c9920d); font-weight: 700; text-align: right; min-width: 52px; }
+  .ticker-price { color: var(--text-faint,#888); min-width: 34px; text-align: right; }
+  #liveTickerList::-webkit-scrollbar { width: 3px; }
+  #liveTickerList::-webkit-scrollbar-thumb { background: var(--border,#1e1e2a); border-radius: 2px; }
+  </style>
+  <script>
+  (function() {
+    var MAX_ROWS = 50;
+    var trades = [];
+    var listEl = document.getElementById('liveTickerList');
+    var countEl = document.getElementById('liveTickerCount');
+
+    function _fmtSize(v) {
+      if (!v || v <= 0) return '$—';
+      if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+      if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+      return '$' + v.toFixed(0);
+    }
+
+    function _fmtSlug(slug) {
+      if (!slug) return '—';
+      return slug.replace(/-/g, ' ').slice(0, 40);
+    }
+
+    function _addTrade(tick) {
+      trades.unshift(tick);
+      if (trades.length > MAX_ROWS) trades.length = MAX_ROWS;
+
+      var isBuy = (tick.side || '').toUpperCase() === 'BUY';
+      var pricePct = tick.price != null ? Math.round(tick.price * 100) + '¢' : '—';
+      var row = document.createElement('a');
+      row.className = 'ticker-row';
+      row.href = '/market/' + (tick.slug || '');
+      row.innerHTML =
+        '<span class="' + (isBuy ? 'ticker-side-buy' : 'ticker-side-sell') + '">' + (isBuy ? 'BUY' : 'SELL') + '</span>' +
+        '<span class="ticker-slug">' + _fmtSlug(tick.slug) + '</span>' +
+        '<span class="ticker-price">' + pricePct + '</span>' +
+        '<span class="ticker-size">' + _fmtSize(tick.size) + '</span>';
+
+      listEl.insertBefore(row, listEl.firstChild);
+
+      // Trim DOM to MAX_ROWS
+      while (listEl.children.length > MAX_ROWS) {
+        listEl.removeChild(listEl.lastChild);
+      }
+
+      // Keep newest visible if user is at the top
+      if (listEl.scrollTop < 60) listEl.scrollTop = 0;
+
+      if (countEl) countEl.textContent = trades.length + ' trades';
+    }
+
+    function _connect() {
+      if (typeof EventSource === 'undefined') return;
+      var es = new EventSource('/api/terminal/stream');
+
+      es.addEventListener('tick', function(e) {
+        try { _addTrade(JSON.parse(e.data)); } catch (_) {}
+      });
+
+      es.addEventListener('snapshot', function(e) {
+        // snapshot carries prices map, not individual trades — skip rendering
+      });
+
+      es.onerror = function() {
+        es.close();
+        setTimeout(_connect, 5000); // reconnect backoff
+      };
+    }
+
+    _connect();
+  })();
+  </script>
+
   <!-- Desktop Hot Alpha row — horizontal-scroll edge cards using the
        /alpha-live card vocabulary. Same data source as the left rail
        (loadHotAlpha → _alphaAllItems), different rhythm: the rail is a
