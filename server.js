@@ -32717,7 +32717,9 @@ app.get('/api/mentions-stage', async (req, res) => {
     const hero = events[0];
     const markets = Array.isArray(hero.markets) ? hero.markets : [];
     const primary = markets.find(m => !m.closed) || markets[0] || null;
-    const yesPricePct = primary ? Math.round(parseFloat((primary.outcomePrices || ['0.5'])[0]) * 100) : null;
+    const prices = primary && primary.outcomePrices;
+    const topPrice = Array.isArray(prices) ? Math.max(...prices.map(p => parseFloat(p)||0)) : null;
+    const yesPricePct = topPrice != null ? Math.round(topPrice * 100) : null;
     const result = {
       event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
       primary_market: { yes_price_pct: yesPricePct },
