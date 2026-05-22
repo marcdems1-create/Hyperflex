@@ -32711,9 +32711,23 @@ app.get('/api/mentions-stage', async (req, res) => {
       return res.json(_stageCache);
     }
     const url = 'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=10';
-    const resp = await _nodeFetch(url);
+    const ctrl = new AbortController();
+    const fetchTimeout = setTimeout(() => ctrl.abort(), 8000);
+    let resp;
+    try {
+      resp = await _nodeFetch(url, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
+    if (!resp.ok) {
+      console.error('[mentions-stage] Gamma HTTP', resp.status);
+      return res.status(503).json({ error: 'Gamma unavailable', status: resp.status });
+    }
     const events = await resp.json();
-    if (!Array.isArray(events) || !events.length) return res.status(503).json({ error: 'No events' });
+    if (!Array.isArray(events) || !events.length) {
+      console.error('[mentions-stage] Gamma returned empty events array');
+      return res.status(503).json({ error: 'No events' });
+    }
     const hero = events[0];
     const markets = Array.isArray(hero.markets) ? hero.markets : [];
     const primary = markets.find(m => !m.closed) || markets[0] || null;
@@ -32725,9 +32739,13 @@ app.get('/api/mentions-stage', async (req, res) => {
       primary_market: { yes_price_pct: yesPricePct },
       whales: [], stances: [],
     };
+    console.log('[mentions-stage] hero:', hero.slug, '| title:', (hero.title||'').slice(0,50), '| image:', !!(hero.image||hero.icon), '| price:', yesPricePct);
     _stageCache = result; _stageCacheAt = Date.now();
     res.json(result);
-  } catch (e) { console.error('[mentions-stage]', e.message); res.status(500).json({ error: 'Stage unavailable' }); }
+  } catch (e) {
+    console.error('[mentions-stage]', e.message);
+    res.status(500).json({ error: 'Stage unavailable', detail: e.message });
+  }
 });
 
 // GET /api/mentions-crowd?condition_ids=<csv>

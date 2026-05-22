@@ -369,7 +369,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 
   function renderStage(d) {
     var sec = document.getElementById('stage-section');
-    if (!d || !d.event) return;
+    if (!d || !d.event) { console.warn('[stage] renderStage: missing event', d); return; }
 
     if (d.event.image) {
       document.getElementById('stage-bg').style.backgroundImage = "url('" + d.event.image + "')";
@@ -419,10 +419,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   }
 
   function loadStage() {
-    fetch('/api/mentions-stage', {credentials:'same-origin'})
-      .then(function(r){return r.ok?r.json():null;})
-      .then(function(d){if(d)renderStage(d);})
-      .catch(function(){});
+    fetch('/api/mentions-stage')
+      .then(function(r){
+        if(!r.ok){ console.warn('[stage] HTTP',r.status); return null; }
+        return r.json();
+      })
+      .then(function(d){
+        if(d){ renderStage(d); }
+        else { console.warn('[stage] no data returned'); }
+      })
+      .catch(function(e){ console.error('[stage] fetch failed',e); });
   }
 
   if (document.readyState==='loading') {
