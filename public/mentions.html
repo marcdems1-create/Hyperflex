@@ -411,9 +411,12 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       fetch('/api/mentions-heatmap', {credentials:'same-origin'})
         .then(function(r){return r.json();})
         .then(function(hm){
-          var ids = [].concat(hm.tiers&&hm.tiers.jumbo||[],hm.tiers&&hm.tiers.large||[])
-            .map(function(t){return t.condition_id;}).filter(Boolean).slice(0,20);
-          window._crowdInit(ids);
+          var tiles = [].concat(hm.tiers&&hm.tiers.jumbo||[],hm.tiers&&hm.tiers.large||[],hm.tiers&&hm.tiers.medium||[],hm.tiers&&hm.tiers.small||[]);
+          var ids = tiles.map(function(t){return t.condition_id;}).filter(Boolean).slice(0,20);
+          // Build condition_id → image map for card thumbnails
+          var imgMap = {};
+          tiles.forEach(function(t){ if(t.condition_id && t.image) imgMap[t.condition_id] = t.image; });
+          window._crowdInit(ids, imgMap);
         }).catch(function(){});
     }
   }
@@ -472,7 +475,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function renderTakes(takes) {
+  function renderTakes(takes, imgMap) {
     var el = document.getElementById('crowd-takes');
     if (!takes || !takes.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No takes yet.</div>';
@@ -481,7 +484,10 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     el.innerHTML = takes.slice(0, 8).map(function(t) {
       var name = t.display_name || (t.handle ? '@' + t.handle : null) || 'Anon';
       var priceStr = t.entry_price ? ' @ ' + Math.round(t.entry_price * 100) + '¢' : '';
-      return '<div style="border:1px solid var(--line);padding:12px;margin-bottom:8px;background:rgba(255,255,255,.02);">'
+      var mktImg = imgMap && t.condition_id && imgMap[t.condition_id];
+      return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
+        + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
+        + '<div style="padding:10px 12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
         + (t.avatar_url ? '<img src="' + _esc(t.avatar_url) + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">' : '<div style="width:20px;height:20px;border-radius:50%;background:var(--panel);flex-shrink:0;"></div>')
         + '<span style="font-size:12px;font-weight:700;color:var(--ink);">' + _esc(name) + '</span>'
@@ -491,7 +497,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         + '<div style="display:flex;gap:8px;align-items:center;font-family:var(--mono);">'
         + '<span style="font-size:11px;font-weight:700;color:' + _sideColor(t.side) + ';text-transform:uppercase;">' + _esc(t.side || '—') + priceStr + '</span>'
         + '<span style="font-size:10px;color:var(--muted);margin-left:auto;">' + (t.agree_count || 0) + ' agree</span>'
-        + '</div></div>';
+        + '</div></div></div>';
     }).join('');
   }
 
@@ -511,7 +517,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     }).join('');
   }
 
-  function renderReceipts(receipts) {
+  function renderReceipts(receipts, imgMap) {
     var el = document.getElementById('crowd-receipts');
     if (!receipts || !receipts.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No receipts yet.</div>';
@@ -519,17 +525,20 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     }
     el.innerHTML = receipts.map(function(r) {
       var isYes = /yes|long/i.test(r.side || '');
-      return '<div style="border:1px solid var(--line);padding:12px;margin-bottom:8px;background:rgba(255,255,255,.02);">'
+      var mktImg = imgMap && r.condition_id && imgMap[r.condition_id];
+      return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
+        + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
+        + '<div style="padding:10px 12px;">'
         + '<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-family:var(--mono);">' + _esc(r.display) + '</div>'
         + '<div style="font-size:12px;color:var(--ink-2);margin-bottom:8px;line-height:1.4;">' + _esc(r.question || '—') + '</div>'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<span style="font-size:11px;font-weight:700;padding:2px 8px;background:' + (isYes ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)') + ';color:' + _sideColor(r.side) + ';text-transform:uppercase;font-family:var(--mono);">' + _esc(r.side || '—') + '</span>'
         + '<span style="font-size:12px;font-weight:700;color:var(--ink);margin-left:auto;font-family:var(--mono);">' + _dollars(r.size) + '</span>'
-        + '</div></div>';
+        + '</div></div></div>';
     }).join('');
   }
 
-  function loadCrowd(conditionIds) {
+  function loadCrowd(conditionIds, imgMap) {
     if (!conditionIds || !conditionIds.length) return;
     var ids = conditionIds.join(',');
     fetch('/api/mentions-crowd?condition_ids=' + encodeURIComponent(ids))
@@ -538,16 +547,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         if (!d) return;
         var sec = document.getElementById('crowd-section');
         if (sec) sec.style.display = '';
-        renderTakes(d.takes);
+        renderTakes(d.takes, imgMap);
         renderLeaderboard(d.leaderboard);
-        renderReceipts(d.receipts);
+        renderReceipts(d.receipts, imgMap);
       })
       .catch(function(e) { console.error('[crowd]', e); });
   }
 
-  window._crowdInit = function(conditionIds) {
-    loadCrowd(conditionIds);
-    setInterval(function() { loadCrowd(conditionIds); }, 2 * 60 * 1000);
+  window._crowdInit = function(conditionIds, imgMap) {
+    loadCrowd(conditionIds, imgMap);
+    setInterval(function() { loadCrowd(conditionIds, imgMap); }, 2 * 60 * 1000);
   };
 })();
 </script>
