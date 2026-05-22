@@ -32730,9 +32730,17 @@ app.get('/api/mentions-stage', async (req, res) => {
     }
     const hero = events[0];
     const markets = Array.isArray(hero.markets) ? hero.markets : [];
-    const primary = markets.find(m => !m.closed) || markets[0] || null;
-    const prices = primary && primary.outcomePrices;
-    const topPrice = Array.isArray(prices) ? Math.max(...prices.map(p => parseFloat(p)||0)) : null;
+    // Scan every active market's outcomePrices (may be JSON string or array)
+    // and find the single highest outcome probability across the whole event.
+    let topPrice = null;
+    for (const m of markets) {
+      if (m.closed) continue;
+      let prices = m.outcomePrices;
+      if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) { continue; } }
+      if (!Array.isArray(prices)) continue;
+      const hi = Math.max(...prices.map(p => parseFloat(p) || 0));
+      if (topPrice === null || hi > topPrice) topPrice = hi;
+    }
     const yesPricePct = topPrice != null ? Math.round(topPrice * 100) : null;
     const result = {
       event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },

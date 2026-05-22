@@ -322,7 +322,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <!-- ── THE STAGE ─────────────────────────────────────────── -->
 <section id="stage-section" style="display:none;position:relative;width:100%;min-height:520px;overflow:hidden;margin-bottom:0;">
   <!-- Full-bleed background image -->
-  <div id="stage-bg" style="position:absolute;inset:0;background-size:cover;background-position:center;transition:background-image .4s ease;filter:brightness(.45) saturate(1.2);"></div>
+  <div id="stage-bg" style="position:absolute;inset:0;background-size:cover;background-position:center;transition:background-image .4s ease;filter:brightness(.35) saturate(1.4);"></div>
   <!-- Dark gradient overlay -->
   <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0) 0%,rgba(0,0,0,0.15) 40%,rgba(10,10,8,0.97) 100%);pointer-events:none;"></div>
   <!-- Cyan grid grain -->
@@ -331,7 +331,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   <div style="position:relative;z-index:2;max-width:1200px;margin:0 auto;padding:200px 32px 56px;">
     <div id="stage-eyebrow" style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.22em;color:rgba(0,212,255,0.7);text-transform:uppercase;margin-bottom:16px;">● BIGGEST MARKET RIGHT NOW</div>
 
-    <h1 id="stage-title" style="font-family:'Syne',sans-serif;font-size:clamp(32px,5vw,64px);font-weight:800;color:#fff;line-height:1.05;letter-spacing:-.02em;margin:0 0 24px;max-width:760px;text-shadow:0 2px 40px rgba(0,0,0,0.6);"></h1>
+    <h1 id="stage-title" style="font-family:'Syne',sans-serif;font-size:clamp(40px,6vw,80px);font-weight:800;color:#fff;line-height:1.05;letter-spacing:-.02em;margin:0 0 24px;max-width:760px;text-shadow:0 2px 40px rgba(0,0,0,0.6);"></h1>
 
     <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:32px;">
       <div id="stage-price" style="font-family:'Space Mono',monospace;font-size:48px;font-weight:700;line-height:1;"></div>
@@ -381,7 +381,10 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     var pct = d.primary_market && d.primary_market.yes_price_pct;
     if (pct != null) {
       priceEl.textContent = pct + '¢';
-      priceEl.style.color = pct >= 60 ? '#22c55e' : pct <= 40 ? '#ef4444' : '#fff';
+      // Color by probability: green when leading outcome is high-confidence,
+      // red when market is wide-open (near 50), white in between.
+      priceEl.style.color = pct >= 70 ? '#22c55e' : pct <= 35 ? '#ef4444' : '#fff';
+      priceEl.style.textShadow = '0 0 40px rgba(255,255,255,0.15)';
     }
 
     var vol = d.event.volume;
@@ -406,16 +409,6 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     cta.href = slug ? '/market/' + slug : '#';
 
     sec.style.display = 'block';
-
-    if (window._crowdInit) {
-      fetch('/api/mentions-heatmap', {credentials:'same-origin'})
-        .then(function(r){return r.json();})
-        .then(function(hm){
-          var tiles = [].concat(hm.tiers&&hm.tiers.jumbo||[],hm.tiers&&hm.tiers.large||[],hm.tiers&&hm.tiers.medium||[],hm.tiers&&hm.tiers.small||[]);
-          var ids = tiles.map(function(t){return t.condition_id;}).filter(Boolean).slice(0,20);
-          window._crowdInit(ids);
-        }).catch(function(){});
-    }
   }
 
   function loadStage() {
@@ -437,132 +430,6 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 })();
 </script>
 
-<!-- ── THE CROWD ───────────────────────────────────────────────────── -->
-<section id="crowd-section" style="padding:40px 36px;max-width:1240px;margin:0 auto;display:none">
-  <h2 style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--cyan);text-transform:uppercase;margin-bottom:24px;">The Crowd</h2>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;" id="crowd-grid">
-
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Takes</div>
-      <div id="crowd-takes"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
-    </div>
-
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Whale Positions</div>
-      <div id="crowd-leaderboard"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
-    </div>
-
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">Receipts</div>
-      <div id="crowd-receipts"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
-    </div>
-
-  </div>
-</section>
-
-<script>
-(function() {
-  function _sideColor(side) {
-    if (!side) return 'var(--muted)';
-    return /yes|long/i.test(side) ? '#22c55e' : '#ef4444';
-  }
-
-  function _dollars(n) {
-    if (!n) return '$0';
-    if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000)    return '$' + (n / 1000).toFixed(1) + 'K';
-    return '$' + Number(n).toFixed(0);
-  }
-
-  function _esc(s) {
-    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  function renderTakes(takes) {
-    var el = document.getElementById('crowd-takes');
-    if (!takes || !takes.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No takes yet.</div>';
-      return;
-    }
-    el.innerHTML = takes.slice(0, 8).map(function(t) {
-      var name = t.display_name || (t.handle ? '@' + t.handle : null) || 'Anon';
-      var priceStr = t.entry_price ? ' @ ' + Math.round(t.entry_price * 100) + '¢' : '';
-      var mktImg = t.image || null;
-      return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
-        + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
-        + '<div style="padding:10px 12px;">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
-        + (t.avatar_url ? '<img src="' + _esc(t.avatar_url) + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">' : '<div style="width:20px;height:20px;border-radius:50%;background:var(--panel);flex-shrink:0;"></div>')
-        + '<span style="font-size:12px;font-weight:700;color:var(--ink);">' + _esc(name) + '</span>'
-        + (t.sharp_score ? '<span style="font-size:10px;color:var(--cyan);margin-left:auto;font-family:var(--mono);">' + Number(t.sharp_score).toFixed(0) + '</span>' : '')
-        + '</div>'
-        + (t.thesis ? '<div style="font-size:12px;color:var(--ink-2);line-height:1.5;margin-bottom:6px;">' + _esc(t.thesis) + '</div>' : '')
-        + '<div style="display:flex;gap:8px;align-items:center;font-family:var(--mono);">'
-        + '<span style="font-size:11px;font-weight:700;color:' + _sideColor(t.side) + ';text-transform:uppercase;">' + _esc(t.side || '—') + priceStr + '</span>'
-        + '<span style="font-size:10px;color:var(--muted);margin-left:auto;">' + (t.agree_count || 0) + ' agree</span>'
-        + '</div></div></div>';
-    }).join('');
-  }
-
-  function renderLeaderboard(rows) {
-    var el = document.getElementById('crowd-leaderboard');
-    if (!rows || !rows.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No whale positions found.</div>';
-      return;
-    }
-    el.innerHTML = rows.slice(0, 10).map(function(w, i) {
-      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);">'
-        + '<span style="font-size:10px;color:var(--muted);width:16px;font-family:var(--mono);">' + (i + 1) + '</span>'
-        + '<span style="font-size:12px;font-family:var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + _esc(w.display) + '</span>'
-        + '<span style="font-size:11px;font-weight:700;color:' + _sideColor(w.side) + ';text-transform:uppercase;font-family:var(--mono);">' + _esc(w.side || '—') + '</span>'
-        + '<span style="font-size:12px;font-weight:700;color:var(--ink);font-family:var(--mono);">' + _dollars(w.size) + '</span>'
-        + '</div>';
-    }).join('');
-  }
-
-  function renderReceipts(receipts) {
-    var el = document.getElementById('crowd-receipts');
-    if (!receipts || !receipts.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No receipts yet.</div>';
-      return;
-    }
-    el.innerHTML = receipts.map(function(r) {
-      var isYes = /yes|long/i.test(r.side || '');
-      var mktImg = r.image || null;
-      return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
-        + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
-        + '<div style="padding:10px 12px;">'
-        + '<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-family:var(--mono);">' + _esc(r.display) + '</div>'
-        + '<div style="font-size:12px;color:var(--ink-2);margin-bottom:8px;line-height:1.4;">' + _esc(r.question || '—') + '</div>'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<span style="font-size:11px;font-weight:700;padding:2px 8px;background:' + (isYes ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)') + ';color:' + _sideColor(r.side) + ';text-transform:uppercase;font-family:var(--mono);">' + _esc(r.side || '—') + '</span>'
-        + '<span style="font-size:12px;font-weight:700;color:var(--ink);margin-left:auto;font-family:var(--mono);">' + _dollars(r.size) + '</span>'
-        + '</div></div></div>';
-    }).join('');
-  }
-
-  function loadCrowd(conditionIds) {
-    if (!conditionIds || !conditionIds.length) return;
-    var ids = conditionIds.join(',');
-    fetch('/api/mentions-crowd?condition_ids=' + encodeURIComponent(ids))
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(d) {
-        if (!d) return;
-        var sec = document.getElementById('crowd-section');
-        if (sec) sec.style.display = '';
-        renderTakes(d.takes);
-        renderLeaderboard(d.leaderboard);
-        renderReceipts(d.receipts);
-      })
-      .catch(function(e) { console.error('[crowd]', e); });
-  }
-
-  window._crowdInit = function(conditionIds) {
-    loadCrowd(conditionIds);
-    setInterval(function() { loadCrowd(conditionIds); }, 2 * 60 * 1000);
-  };
-})();
-</script>
 
 <main class="page" id="page">
   <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
