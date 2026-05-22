@@ -32791,6 +32791,55 @@ app.get('/api/mentions-heatmap', async (req, res) => {
   try {
     const bypass = String(req.query.bypass_cache || '') === '1';
     const response = await mentionsHeatmap.buildHeatmapResponse({ bypass_cache: bypass });
+
+    // Enrich every tile with whale position data from _whaleWatchCache.
+    // Keyed by conditionId (lowercased). Capital = sum of abs(current_value)
+    // across all positions on that market from the top-100 whale cohort.
+    const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+    const whaleByCid = {};
+    for (const wp of whalePositions) {
+      const cid = (wp.conditionId || '').toLowerCase();
+      if (!cid) continue;
+      if (!whaleByCid[cid]) whaleByCid[cid] = { count: 0, capital: 0 };
+      whaleByCid[cid].count++;
+      whaleByCid[cid].capital += Math.abs(parseFloat(wp.current_value || wp.size || 0));
+    }
+
+    const tiers = response.tiers || {};
+    const allTiles = [];
+    for (const tier of ['jumbo', 'large', 'medium', 'small']) {
+      if (!Array.isArray(tiers[tier])) continue;
+      for (const tile of tiers[tier]) {
+        const cid = (tile.condition_id || '').toLowerCase();
+        const wd = whaleByCid[cid] || { count: 0, capital: 0 };
+        tile.whale_count   = wd.count;
+        tile.whale_capital = Math.round(wd.capital);
+        allTiles.push(tile);
+      }
+    }
+
+    // Pulse summary: top price-movers by 24h volume + aggregate whale stats.
+    const movers = allTiles
+      .filter(t => (t.volume_24h || 0) >= 100)
+      .sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0))
+      .slice(0, 5)
+      .map(t => ({
+        condition_id:    t.condition_id,
+        question:        t.question,
+        yes_price:       t.yes_price,
+        volume_24h:      t.volume_24h,
+        polymarket_slug: t.polymarket_slug,
+        whale_count:     t.whale_count,
+        whale_capital:   t.whale_capital,
+        tier:            t.tier,
+      }));
+
+    response.pulse = {
+      movers,
+      active_whale_markets: allTiles.filter(t => t.whale_count > 0).length,
+      total_whale_capital:  allTiles.reduce((s, t) => s + (t.whale_capital || 0), 0),
+    };
+
     res.set('Cache-Control', 'no-store');
     res.json(response);
   } catch (e) {
