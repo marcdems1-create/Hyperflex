@@ -32700,120 +32700,32 @@ app.get('/api/mentions-heatmap', async (req, res) => {
   }
 });
 
-// GET /api/mentions-stage
-// THE STAGE — auto-selects the next upcoming high-volume Polymarket event
-// and returns the hero data: event name + image, countdown, YES price on
-// the primary (largest-volume) sub-market, top-3 whale positions, and
-// mention_events stance arcs if available.
-//
-// Selection: soonest end_date among the top-10 events by volume from
-// gamma (active=true, closed=false, end_date_min=now).
-// 2-min in-memory cache (fast enough for countdown accuracy).
-const _mentionsStageCache = { data: null, ts: 0 };
-const _STAGE_TTL = 2 * 60 * 1000;
+// GET /api/mentions-stage — top event by volume from Gamma, 2-min cache.
+let _stageCache = null;
+let _stageCacheAt = 0;
+const STAGE_TTL = 2 * 60 * 1000;
 
 app.get('/api/mentions-stage', async (req, res) => {
   try {
-    const bypass = String(req.query.bypass_cache || '') === '1';
-    const now = Date.now();
-    if (!bypass && _mentionsStageCache.data && now - _mentionsStageCache.ts < _STAGE_TTL) {
-      return res.set('Cache-Control', 'no-store').json(_mentionsStageCache.data);
+    if (_stageCache && Date.now() - _stageCacheAt < STAGE_TTL) {
+      return res.json(_stageCache);
     }
-
-    // Source from word-market events (Powell/Warsh/FOMC language markets)
-    const wordMarketsLib = require('./lib/word-markets');
-    const rawEvents = await wordMarketsLib.getUpcomingWordMarketEvents({ limit: 10 });
-    // getUpcomingWordMarketEvents returns a raw array of group objects
-    const groups = Array.isArray(rawEvents) ? rawEvents : (rawEvents && Array.isArray(rawEvents.events) ? rawEvents.events : []);
-
-    if (!groups.length) {
-      const payload = { event: null, reason: 'no_word_market_events' };
-      _mentionsStageCache.data = payload;
-      _mentionsStageCache.ts = now;
-      return res.set('Cache-Control', 'no-store').json(payload);
-    }
-
-    // Pick highest total_volume event
-    const hero = groups.reduce((best, ev) =>
-      (Number(ev.total_volume) || 0) > (Number(best.total_volume) || 0) ? ev : best
-    , groups[0]);
-
+    const url = 'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=10';
+    const resp = await _nodeFetch(url);
+    const events = await resp.json();
+    if (!Array.isArray(events) || !events.length) return res.status(503).json({ error: 'No events' });
+    const hero = events[0];
     const markets = Array.isArray(hero.markets) ? hero.markets : [];
-    const open = markets.filter(m => !m.closed && m.active !== false);
-
-    // Image: _selectFresh groups don't carry event-level images. Try to
-    // find a matching tile in the heatmap cache (which does have images
-    // via _runFutureEventDiscovery) by event_slug match.
-    let heroImage = hero.image || null;
-    if (!heroImage) {
-      try {
-        const hmSnap = mentionsHeatmap.getCachedSnapshot ? mentionsHeatmap.getCachedSnapshot() : null;
-        if (hmSnap) {
-          const allTiles = [
-            ...(hmSnap.tiers && hmSnap.tiers.jumbo  || []),
-            ...(hmSnap.tiers && hmSnap.tiers.large  || []),
-            ...(hmSnap.tiers && hmSnap.tiers.medium || []),
-            ...(hmSnap.tiers && hmSnap.tiers.small  || []),
-          ];
-          const match = allTiles.find(t => t.eventSlug === hero.event_slug && t.image);
-          if (match) heroImage = match.image;
-        }
-      } catch (_) {}
-    }
-    // Primary = highest-volume open sub-market
-    const primary = open.sort((a, b) => (b.volume || 0) - (a.volume || 0))[0] || markets[0] || null;
-    const yesPrice = primary && primary.yes_price != null
-      ? Math.round(Number(primary.yes_price) * 100)
-      : null;
-
-    // Whale positions — flat array match by conditionId
-    const whaleData = _whaleWatchCache && _whaleWatchCache.data;
-    const allWhalePos = whaleData ? (whaleData.whales || []) : [];
-    const heroCondIds = new Set(markets.map(m => m.condition_id).filter(Boolean));
-    const matchedWhales = allWhalePos
-      .filter(w => w.conditionId && heroCondIds.has(w.conditionId))
-      .sort((a, b) => (parseFloat(b.size) || 0) - (parseFloat(a.size) || 0))
-      .slice(0, 3)
-      .map(w => ({
-        trader:     w.trader || 'Whale',
-        side:       (w.side || '').toUpperCase(),
-        size_usd:   Math.round(parseFloat(w.size) || 0),
-        whale_rank: w.trader_rank || null,
-      }));
-
-    const endDateMs = hero.end_date ? Date.parse(hero.end_date) : null;
-    const payload = {
-      event: {
-        title:          hero.event_title,
-        slug:           hero.event_slug,
-        image:          heroImage,
-        end_date:       hero.end_date || null,
-        end_date_ms:    endDateMs,
-        volume:         hero.total_volume,
-        speaker:        hero.speaker || null,
-        polymarket_url: hero.event_slug ? `https://polymarket.com/event/${hero.event_slug}` : null,
-      },
-      primary_market: primary ? {
-        condition_id:  primary.condition_id,
-        question:      primary.question,
-        yes_price_pct: yesPrice,
-        volume:        primary.volume,
-        slug:          primary.slug,
-      } : null,
-      whales:      matchedWhales,
-      stance_arc:  [],
-      market_count: markets.length,
-      open_count:   open.length,
-      fetched_at:  new Date(now).toISOString(),
+    const primary = markets.find(m => !m.closed) || markets[0] || null;
+    const yesPricePct = primary ? Math.round(parseFloat((primary.outcomePrices || ['0.5'])[0]) * 100) : null;
+    const result = {
+      event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
+      primary_market: { yes_price_pct: yesPricePct },
+      whales: [], stances: [],
     };
-
-    _mentionsStageCache.data = payload;
-    _mentionsStageCache.ts = now;
-    res.set('Cache-Control', 'no-store').json(payload);
-  } catch (e) {
-    console.error('[mentions-stage]', e.message);
-    res.status(500).json({ event: null, error: e.message });
-  }
+    _stageCache = result; _stageCacheAt = Date.now();
+    res.json(result);
+  } catch (e) { console.error('[mentions-stage]', e.message); res.status(500).json({ error: 'Stage unavailable' }); }
 });
 
 // GET /api/mentions-crowd?condition_ids=<csv>
