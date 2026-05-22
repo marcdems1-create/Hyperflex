@@ -430,18 +430,17 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       ).join('')
       + '</div>' : '';
 
-    const tradeUrl = ev.polymarket_url || '#';
     const endMs = ev.end_date_ms;
 
     inner.innerHTML = '<div class="stage-left">'
-      + '<div class="stage-eyebrow"><span class="stage-eyebrow-dot"></span>Featured event</div>'
+      + '<div class="stage-eyebrow"><span class="stage-eyebrow-dot"></span>' + (ev.speaker ? ev.speaker + ' · ' : '') + 'Next word market</div>'
       + '<h2 class="stage-title">' + (ev.title || '').replace(/</g, '&lt;') + '</h2>'
       + '<div class="stage-meta">'
       + (yp != null ? '<span class="stage-price' + priceColor + '">' + yp + '¢</span><span class="stage-price-lbl">YES</span>' : '')
       + (pm && pm.volume ? '<span class="stage-vol">' + _fmtVol(pm.volume) + '</span>' : '')
       + '</div>'
       + whaleBadges
-      + '<a href="' + tradeUrl + '" target="_blank" rel="noopener" class="stage-trade-btn" style="margin-top:8px;width:fit-content">Trade on Polymarket ↗</a>'
+      + (ev.polymarket_url ? '<a href="' + ev.polymarket_url + '" target="_blank" rel="noopener" class="stage-trade-btn" style="margin-top:8px;width:fit-content">View on Polymarket ↗</a>' : '')
       + '</div>'
       + (endMs ? '<div class="stage-right" id="stage-cd-root">' + _renderCountdown(endMs) + '</div>' : '');
 
