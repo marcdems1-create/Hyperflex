@@ -15883,6 +15883,60 @@ app.get('/api/mentions-stage', async (req, res) => {
       .slice(0, 3)
       .map(w => ({ trader: w.trader, proxyWallet: w.proxyWallet, rank: w.rank, capital: w.capital, side: w.side }));
 
+    // Top takes + caller leaderboard for The Crowd section.
+    // Keyed by primary market slug when available; fallback to condition_id.
+    let topTakes = [], callerBoard = [];
+    if (pool && primaryMkt) {
+      const mktSlug = primaryMkt.slug || null;
+      const condId  = primaryMkt.conditionId || primaryMkt.condition_id || null;
+      try {
+        const whereClause = mktSlug
+          ? `market_slug = $1`
+          : `condition_id = $1`;
+        const whereVal = mktSlug || condId;
+        if (whereVal) {
+          const takeRows = await dbQuery(
+            `SELECT id, display_name, side, thesis, agree_count, disagree_count,
+                    is_correct, entry_price, source, created_at, market_slug
+             FROM takes
+             WHERE ${whereClause}
+             ORDER BY (agree_count + disagree_count) DESC, created_at DESC
+             LIMIT 20`,
+            [whereVal]
+          );
+          topTakes = takeRows.slice(0, 5).map(t => ({
+            id:            t.id,
+            display_name:  t.display_name || 'Trader',
+            side:          (t.side || '').toUpperCase(),
+            thesis:        t.thesis || null,
+            agree_count:   t.agree_count || 0,
+            disagree_count: t.disagree_count || 0,
+            is_correct:    t.is_correct,
+            entry_price:   t.entry_price != null ? parseFloat(t.entry_price) : null,
+            source:        t.source || 'user',
+            created_at:    t.created_at,
+          }));
+          // Leaderboard: dedupe by display_name, rank by total reactions.
+          const seen = new Set();
+          for (const t of takeRows) {
+            const name = t.display_name || 'Trader';
+            if (seen.has(name)) continue;
+            seen.add(name);
+            callerBoard.push({
+              display_name:   name,
+              side:           (t.side || '').toUpperCase(),
+              agree_count:    t.agree_count || 0,
+              is_correct:     t.is_correct,
+              entry_price:    t.entry_price != null ? parseFloat(t.entry_price) : null,
+            });
+            if (callerBoard.length >= 5) break;
+          }
+        }
+      } catch (e) {
+        console.warn('[mentions-stage] takes query failed:', e.message);
+      }
+    }
+
     const result = {
       event: {
         title:           ev.title,
@@ -15898,7 +15952,9 @@ app.get('/api/mentions-stage', async (req, res) => {
           volume:       parseFloat(primaryMkt.volume || 0),
           slug:         primaryMkt.slug || null,
         } : null,
-        top_whales:      topWhales,
+        top_whales:   topWhales,
+        top_takes:    topTakes,
+        caller_board: callerBoard,
       },
       built_at: new Date(nowMs).toISOString(),
     };
