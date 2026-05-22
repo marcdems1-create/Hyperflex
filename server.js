@@ -32764,6 +32764,23 @@ app.get('/api/mentions-stage', async (req, res) => {
         [ids]
       ).catch(() => []) : [];
 
+      // ── MARKET IMAGES: batch-fetch from Gamma by condition_id ──────
+      // normalizeMarket strips image; raw Gamma markets carry image/icon
+      // at the sub-market level. One request covers all takes + receipts.
+      const imageMap = {};
+      try {
+        const uniqIds = [...new Set(ids)].slice(0, 20);
+        const gammaUrl = `https://gamma-api.polymarket.com/markets?condition_ids=${uniqIds.map(encodeURIComponent).join(',')}`;
+        const gammaRes = await _nodeFetch(gammaUrl, { headers: { 'User-Agent': 'Hyperflex/1.0' } });
+        if (gammaRes.ok) {
+          const raw = await gammaRes.json();
+          (Array.isArray(raw) ? raw : []).forEach(m => {
+            const cid = m.conditionId || m.condition_id;
+            if (cid && !imageMap[cid]) imageMap[cid] = m.image || m.icon || null;
+          });
+        }
+      } catch (_) {}
+
       // ── LEADERBOARD: whale positions from in-memory cache ──────────
       const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
       const allWhalePos = whaleData ? (whaleData.whales || []) : [];
@@ -32791,7 +32808,11 @@ app.get('/api/mentions-stage', async (req, res) => {
         condition_id: w.conditionId,
       }));
 
-      const result = { _key: cacheKey, takes: takesRows, leaderboard, receipts };
+      const takes = takesRows.map(t => ({ ...t, image: imageMap[t.condition_id] || null }));
+      leaderboard.forEach(w => { w.image = imageMap[w.condition_id] || null; });
+      receipts.forEach(w => { w.image = imageMap[w.condition_id] || null; });
+
+      const result = { _key: cacheKey, takes, leaderboard, receipts };
       _crowdCache   = result;
       _crowdCacheAt = Date.now();
       res.set('Cache-Control', 'no-store').json(result);

@@ -413,10 +413,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         .then(function(hm){
           var tiles = [].concat(hm.tiers&&hm.tiers.jumbo||[],hm.tiers&&hm.tiers.large||[],hm.tiers&&hm.tiers.medium||[],hm.tiers&&hm.tiers.small||[]);
           var ids = tiles.map(function(t){return t.condition_id;}).filter(Boolean).slice(0,20);
-          // Build condition_id → image map for card thumbnails
-          var imgMap = {};
-          tiles.forEach(function(t){ if(t.condition_id && t.image) imgMap[t.condition_id] = t.image; });
-          window._crowdInit(ids, imgMap);
+          window._crowdInit(ids);
         }).catch(function(){});
     }
   }
@@ -475,7 +472,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function renderTakes(takes, imgMap) {
+  function renderTakes(takes) {
     var el = document.getElementById('crowd-takes');
     if (!takes || !takes.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No takes yet.</div>';
@@ -484,7 +481,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     el.innerHTML = takes.slice(0, 8).map(function(t) {
       var name = t.display_name || (t.handle ? '@' + t.handle : null) || 'Anon';
       var priceStr = t.entry_price ? ' @ ' + Math.round(t.entry_price * 100) + '¢' : '';
-      var mktImg = imgMap && t.condition_id && imgMap[t.condition_id];
+      var mktImg = t.image || null;
       return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
         + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
         + '<div style="padding:10px 12px;">'
@@ -517,7 +514,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     }).join('');
   }
 
-  function renderReceipts(receipts, imgMap) {
+  function renderReceipts(receipts) {
     var el = document.getElementById('crowd-receipts');
     if (!receipts || !receipts.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No receipts yet.</div>';
@@ -525,7 +522,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     }
     el.innerHTML = receipts.map(function(r) {
       var isYes = /yes|long/i.test(r.side || '');
-      var mktImg = imgMap && r.condition_id && imgMap[r.condition_id];
+      var mktImg = r.image || null;
       return '<div style="border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02);overflow:hidden;">'
         + (mktImg ? '<div style="height:72px;background-image:url('+JSON.stringify(mktImg)+');background-size:cover;background-position:center;filter:brightness(.6) saturate(.8);"></div>' : '')
         + '<div style="padding:10px 12px;">'
@@ -538,7 +535,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     }).join('');
   }
 
-  function loadCrowd(conditionIds, imgMap) {
+  function loadCrowd(conditionIds) {
     if (!conditionIds || !conditionIds.length) return;
     var ids = conditionIds.join(',');
     fetch('/api/mentions-crowd?condition_ids=' + encodeURIComponent(ids))
@@ -547,16 +544,16 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
         if (!d) return;
         var sec = document.getElementById('crowd-section');
         if (sec) sec.style.display = '';
-        renderTakes(d.takes, imgMap);
+        renderTakes(d.takes);
         renderLeaderboard(d.leaderboard);
-        renderReceipts(d.receipts, imgMap);
+        renderReceipts(d.receipts);
       })
       .catch(function(e) { console.error('[crowd]', e); });
   }
 
-  window._crowdInit = function(conditionIds, imgMap) {
-    loadCrowd(conditionIds, imgMap);
-    setInterval(function() { loadCrowd(conditionIds, imgMap); }, 2 * 60 * 1000);
+  window._crowdInit = function(conditionIds) {
+    loadCrowd(conditionIds);
+    setInterval(function() { loadCrowd(conditionIds); }, 2 * 60 * 1000);
   };
 })();
 </script>
