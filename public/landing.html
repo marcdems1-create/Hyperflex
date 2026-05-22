@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HYPERFLEX — Prediction Markets</title>
+<meta name="description" content="Track whale moves, follow sharp predictors, trade on Polymarket.">
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a08;
+  --paper:#0e0e15;
+  --panel:#14141e;
+  --border:rgba(255,255,255,.08);
+  --ink:#f0f0f5;
+  --ink2:rgba(240,240,245,.65);
+  --muted:rgba(240,240,245,.35);
+  --cyan:#00d4ff;
+  --green:#00e68a;
+  --red:#ff4d6a;
+  --gold:#c9920d;
+  --mono:'Space Mono',monospace;
+  --sans:'Inter',sans-serif;
+  --display:'Syne',sans-serif;
+}
+html,body{background:var(--bg);color:var(--ink);min-height:100vh;font-family:var(--sans);}
+
+/* grain overlay */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:128px 128px;opacity:.4;
+}
+
+/* ── NAV ───────────────────────────────────────────────── */
+#nav-root{position:relative;z-index:10;}
+
+/* ── SECTION SHELL ─────────────────────────────────────── */
+.section{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:0 24px;}
+.section-label{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.22em;color:var(--muted);text-transform:uppercase;
+  margin-bottom:16px;
+}
+
+/* ── HERO ──────────────────────────────────────────────── */
+#hero{
+  position:relative;width:100%;min-height:580px;overflow:hidden;
+  margin-bottom:0;
+}
+#hero-bg{
+  position:absolute;inset:0;
+  background-size:cover;background-position:center 30%;
+  filter:brightness(.28) saturate(1.5);
+  transition:background-image .5s ease;
+}
+#hero-fade{
+  position:absolute;inset:0;
+  background:linear-gradient(to bottom,
+    rgba(10,10,8,0) 0%,
+    rgba(10,10,8,.1) 30%,
+    rgba(10,10,8,.85) 75%,
+    rgba(10,10,8,1) 100%);
+  pointer-events:none;
+}
+#hero-grain{
+  position:absolute;inset:0;
+  background-image:radial-gradient(rgba(0,212,255,.035) 1px,transparent 1px);
+  background-size:22px 22px;pointer-events:none;
+}
+#hero-content{
+  position:relative;z-index:2;
+  max-width:1240px;margin:0 auto;
+  padding:180px 24px 56px;
+}
+#hero-eyebrow{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.22em;color:rgba(0,212,255,.75);text-transform:uppercase;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+#hero-eyebrow-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px rgba(0,212,255,.8);
+  animation:hero-pulse 2s infinite;flex-shrink:0;
+}
+@keyframes hero-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#hero-title{
+  font-family:var(--display);
+  font-size:clamp(38px,6vw,76px);
+  font-weight:800;color:#fff;
+  line-height:1.04;letter-spacing:-.025em;
+  margin:0 0 28px;max-width:820px;
+  text-shadow:0 2px 48px rgba(0,0,0,.7);
+}
+#hero-meta{
+  display:flex;align-items:center;gap:32px;flex-wrap:wrap;margin-bottom:36px;
+}
+#hero-price{
+  font-family:var(--mono);font-size:52px;font-weight:700;line-height:1;
+}
+#hero-stats{display:flex;flex-direction:column;gap:5px;}
+#hero-volume,#hero-countdown{
+  font-family:var(--mono);font-size:11px;
+  color:rgba(255,255,255,.45);letter-spacing:.1em;
+}
+#hero-cta{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:13px 28px;
+  background:var(--cyan);color:#000;
+  font-family:var(--display);font-weight:700;font-size:13px;
+  letter-spacing:.06em;text-decoration:none;
+  border-radius:4px;transition:opacity .15s;
+}
+#hero-cta:hover{opacity:.88;}
+
+/* ── HOT MARKETS ──────────────────────────────────────── */
+#hot-markets{padding:40px 0 0;}
+.hm-scroll{
+  display:flex;gap:12px;overflow-x:auto;padding:0 24px 16px;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.hm-scroll::-webkit-scrollbar{display:none;}
+.hm-card{
+  flex:0 0 220px;
+  border:1px solid var(--border);
+  border-radius:6px;overflow:hidden;
+  background:var(--panel);
+  text-decoration:none;
+  display:flex;flex-direction:column;
+  transition:border-color .15s,transform .12s;
+  cursor:pointer;
+}
+.hm-card:hover{border-color:rgba(255,255,255,.18);transform:translateY(-2px);}
+.hm-card-img{
+  height:110px;background-size:cover;background-position:center;
+  filter:brightness(.55) saturate(1.2);flex-shrink:0;
+  background-color:var(--paper);
+}
+.hm-card-body{padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:6px;}
+.hm-card-title{
+  font-family:var(--sans);font-size:11px;font-weight:600;
+  color:var(--ink2);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.hm-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto;}
+.hm-card-price{
+  font-family:var(--mono);font-size:15px;font-weight:700;line-height:1;
+}
+.hm-card-vol{
+  font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.08em;
+}
+
+/* ── NAV CARDS ──────────────────────────────────────────── */
+#nav-cards{padding:36px 0 0;}
+.nav-cards-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  padding:0 24px;
+}
+@media(max-width:640px){.nav-cards-grid{grid-template-columns:1fr;}}
+.nav-card{
+  border:1px solid var(--border);border-radius:6px;
+  background:var(--panel);
+  padding:24px;text-decoration:none;
+  display:flex;flex-direction:column;gap:10px;
+  transition:border-color .15s,background .15s;
+}
+.nav-card:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.03);}
+.nav-card-label{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.2em;color:var(--cyan);text-transform:uppercase;
+}
+.nav-card-title{
+  font-family:var(--display);font-size:20px;font-weight:800;
+  color:var(--ink);letter-spacing:-.01em;
+}
+.nav-card-desc{
+  font-family:var(--sans);font-size:12px;color:var(--ink2);
+  line-height:1.55;
+}
+.nav-card-cta{
+  font-family:var(--mono);font-size:10px;font-weight:700;
+  color:var(--cyan);letter-spacing:.1em;margin-top:4px;
+}
+
+/* ── WHALE MOVES ────────────────────────────────────────── */
+#whale-moves{padding:36px 0 48px;}
+.whale-table{
+  border:1px solid var(--border);border-radius:6px;overflow:hidden;
+  margin:0 24px;
+}
+.whale-row{
+  display:grid;
+  grid-template-columns:130px 1fr 60px 80px;
+  align-items:center;gap:12px;
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  text-decoration:none;
+  transition:background .12s;
+}
+.whale-row:last-child{border-bottom:none;}
+.whale-row:hover{background:rgba(255,255,255,.025);}
+.whale-row-header{
+  background:var(--paper);
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.14em;color:var(--muted);text-transform:uppercase;
+}
+.whale-wallet{
+  font-family:var(--mono);font-size:11px;color:var(--ink2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.whale-market{
+  font-family:var(--sans);font-size:11px;color:var(--ink2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.whale-side-yes{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;}
+.whale-side-no {font-family:var(--mono);font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;}
+.whale-size{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink);text-align:right;}
+
+/* ── FOOTER ─────────────────────────────────────────────── */
+footer{
+  border-top:1px solid var(--border);
+  padding:24px;text-align:center;
+  font-family:var(--mono);font-size:9px;
+  letter-spacing:.14em;color:var(--muted);
+  text-transform:uppercase;
+  position:relative;z-index:1;
+}
+footer a{color:var(--muted);text-decoration:none;}
+footer a:hover{color:var(--ink2);}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=21"></script>
+
+<!-- ── HERO ───────────────────────────────────────────── -->
+<section id="hero">
+  <div id="hero-bg"></div>
+  <div id="hero-fade"></div>
+  <div id="hero-grain"></div>
+  <div id="hero-content">
+    <div id="hero-eyebrow">
+      <span id="hero-eyebrow-dot"></span>
+      <span>BIGGEST MARKET RIGHT NOW</span>
+    </div>
+    <h1 id="hero-title">—</h1>
+    <div id="hero-meta">
+      <div id="hero-price" style="color:#fff;">—</div>
+      <div id="hero-stats">
+        <div id="hero-volume"></div>
+        <div id="hero-countdown"></div>
+      </div>
+    </div>
+    <a id="hero-cta" href="#">VIEW MARKET →</a>
+  </div>
+</section>
+
+<!-- ── HOT MARKETS ─────────────────────────────────────── -->
+<section id="hot-markets">
+  <div class="section">
+    <div class="section-label">HOT MARKETS</div>
+  </div>
+  <div class="hm-scroll" id="hmScroll">
+    <!-- cards injected by JS -->
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:20px 0;">Loading…</div>
+  </div>
+</section>
+
+<!-- ── NAV CARDS ───────────────────────────────────────── -->
+<section id="nav-cards">
+  <div class="section">
+    <div class="section-label">EXPLORE</div>
+  </div>
+  <div class="nav-cards-grid">
+    <a class="nav-card" href="/mentions">
+      <div class="nav-card-label">Intel</div>
+      <div class="nav-card-title">MENTIONS</div>
+      <div class="nav-card-desc">Public figures. What they said. How the market reacted.</div>
+      <div class="nav-card-cta">VIEW MENTIONS →</div>
+    </a>
+    <a class="nav-card" href="/feed">
+      <div class="nav-card-label">Social</div>
+      <div class="nav-card-title">FEED</div>
+      <div class="nav-card-desc">Whale moves, sharp takes, live consensus.</div>
+      <div class="nav-card-cta">VIEW FEED →</div>
+    </a>
+    <a class="nav-card" href="/predictors">
+      <div class="nav-card-label">Rankings</div>
+      <div class="nav-card-title">LEADERBOARD</div>
+      <div class="nav-card-desc">Top predictors by P&amp;L. Follow the sharpest wallets.</div>
+      <div class="nav-card-cta">VIEW LEADERBOARD →</div>
+    </a>
+  </div>
+</section>
+
+<!-- ── WHALE MOVES ─────────────────────────────────────── -->
+<section id="whale-moves">
+  <div class="section" style="margin-bottom:16px;">
+    <div class="section-label">WHALE MOVES</div>
+  </div>
+  <div class="whale-table" id="whaleTable">
+    <div class="whale-row whale-row-header">
+      <span>WALLET</span><span>MARKET</span><span>SIDE</span><span style="text-align:right;">SIZE</span>
+    </div>
+    <div style="padding:20px 16px;font-family:var(--mono);font-size:11px;color:var(--muted);">Loading…</div>
+  </div>
+</section>
+
+<footer>
+  <span>© 2026 HYPERFLEX</span>
+  &nbsp;·&nbsp;
+  <a href="/mentions">MENTIONS</a>
+  &nbsp;·&nbsp;
+  <a href="/feed">FEED</a>
+  &nbsp;·&nbsp;
+  <a href="/predictors">LEADERBOARD</a>
+  &nbsp;·&nbsp;
+  <a href="/alpha-live">ALPHA TERMINAL</a>
+</footer>
+
+<script>
+(function() {
+  // ── Helpers ──────────────────────────────────────────
+  function fmtVol(v) {
+    v = Number(v || 0);
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+    return '$' + Math.round(v);
+  }
+  function fmtWallet(w) {
+    if (!w) return '—';
+    return w.slice(0, 6) + '…' + w.slice(-4);
+  }
+  function fmtSize(n) {
+    n = Number(n || 0);
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + n.toFixed(0);
+  }
+  function fmtCountdown(dateStr) {
+    if (!dateStr) return null;
+    var ms = new Date(dateStr).getTime() - Date.now();
+    if (ms <= 0) return null;
+    var d = Math.floor(ms / 86400000);
+    var h = Math.floor((ms % 86400000) / 3600000);
+    return d + 'd ' + h + 'h to close';
+  }
+  function priceColor(pct) {
+    if (pct == null) return '#fff';
+    if (pct >= 70) return '#00e68a';
+    if (pct <= 35) return '#ff4d6a';
+    return '#fff';
+  }
+
+  // ── HERO ─────────────────────────────────────────────
+  fetch('/api/mentions-stage')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (!d || !d.event) return;
+      var ev = d.event;
+      if (ev.image) document.getElementById('hero-bg').style.backgroundImage = "url('" + ev.image + "')";
+      document.getElementById('hero-title').textContent = ev.title || '';
+      var pct = d.primary_market && d.primary_market.yes_price_pct;
+      if (pct != null) {
+        var el = document.getElementById('hero-price');
+        el.textContent = pct + '¢';
+        el.style.color = priceColor(pct);
+        el.style.textShadow = '0 0 40px ' + priceColor(pct) + '44';
+      }
+      if (ev.volume) document.getElementById('hero-volume').textContent = fmtVol(ev.volume) + ' TRADED';
+      var cd = fmtCountdown(ev.end_date);
+      if (cd) document.getElementById('hero-countdown').textContent = cd.toUpperCase();
+      var cta = document.getElementById('hero-cta');
+      if (ev.slug) cta.href = '/market/' + ev.slug;
+    })
+    .catch(function() {});
+
+  // ── HOT MARKETS ──────────────────────────────────────
+  fetch('/api/hot-markets/carousel?limit=8')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var markets = d && Array.isArray(d.markets) ? d.markets : [];
+      if (!markets.length) return;
+      var scroll = document.getElementById('hmScroll');
+      scroll.innerHTML = markets.slice(0, 8).map(function(m) {
+        var pct = m.yes_price != null ? Math.round(Number(m.yes_price) * 100) : null;
+        var imgStyle = m.event_image_url
+          ? 'background-image:url(' + JSON.stringify(m.event_image_url) + ');'
+          : '';
+        return '<a class="hm-card" href="' + (m.cta_href || '#') + '">'
+          + '<div class="hm-card-img" style="' + imgStyle + '"></div>'
+          + '<div class="hm-card-body">'
+          + '<div class="hm-card-title">' + (m.market_question || m.event_title || '—') + '</div>'
+          + '<div class="hm-card-footer">'
+          + (pct != null ? '<div class="hm-card-price" style="color:' + priceColor(pct) + ';">' + pct + '¢</div>' : '<div></div>')
+          + '<div class="hm-card-vol">' + (m.volume_24h_label || '') + '</div>'
+          + '</div>'
+          + '</div>'
+          + '</a>';
+      }).join('');
+    })
+    .catch(function() {});
+
+  // ── WHALE MOVES ──────────────────────────────────────
+  fetch('/api/whale-profiles?limit=20')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      // Try whale positions from screener endpoint if whale-profiles is empty
+      var whales = (d && Array.isArray(d.whales) ? d.whales : null)
+                || (d && Array.isArray(d) ? d : null);
+      if (!whales || !whales.length) return loadWhalesFromScreener();
+      renderWhales(whales.slice(0, 4).map(function(w) {
+        return {
+          wallet: w.proxy_wallet || w.wallet || w.proxyWallet || '',
+          market: w.top_market || w.market || '—',
+          side:   w.top_side   || w.side   || null,
+          size:   w.total_pnl  || w.size   || 0,
+        };
+      }));
+    })
+    .catch(loadWhalesFromScreener);
+
+  function loadWhalesFromScreener() {
+    fetch('/api/screener?limit=5')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        var items = d && Array.isArray(d.markets) ? d.markets : (Array.isArray(d) ? d : []);
+        var rows = [];
+        items.forEach(function(m) {
+          if (!m.whale_positions) return;
+          m.whale_positions.slice(0, 1).forEach(function(w) {
+            rows.push({
+              wallet: w.proxy_wallet || w.wallet || '',
+              market: m.question || m.title || '—',
+              side:   w.outcome || w.side || null,
+              size:   Number(w.size || w.value || 0),
+            });
+          });
+        });
+        if (rows.length) renderWhales(rows.slice(0, 4));
+      })
+      .catch(function() {});
+  }
+
+  function renderWhales(rows) {
+    var table = document.getElementById('whaleTable');
+    if (!rows || !rows.length) return;
+    var header = '<div class="whale-row whale-row-header">'
+      + '<span>WALLET</span><span>MARKET</span><span>SIDE</span>'
+      + '<span style="text-align:right;">SIZE</span></div>';
+    var body = rows.map(function(w) {
+      var isYes = /yes|long|buy/i.test(w.side || '');
+      var sideClass = w.side ? (isYes ? 'whale-side-yes' : 'whale-side-no') : '';
+      var sideLabel = w.side ? w.side.toUpperCase() : '—';
+      return '<a class="whale-row" href="' + (w.slug ? '/market/' + w.slug : '#') + '">'
+        + '<span class="whale-wallet">' + fmtWallet(w.wallet) + '</span>'
+        + '<span class="whale-market">' + (w.market || '—') + '</span>'
+        + '<span class="' + sideClass + '">' + sideLabel + '</span>'
+        + '<span class="whale-size">' + fmtSize(w.size) + '</span>'
+        + '</a>';
+    }).join('');
+    table.innerHTML = header + body;
+  }
+})();
+</script>
+</body>
+</html>
