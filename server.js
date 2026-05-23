@@ -32670,15 +32670,20 @@ cron.schedule('* * * * *', () => {
             maxPrice = Math.max(...prices.map(p => parseFloat(p) || 0));
           }
         }
-        return {
+        // Gamma uses both `image` and `imageUrl` depending on endpoint version
+        const image = ev.image || ev.imageUrl || ev.icon
+          || (best && (best.image || best.imageUrl || best.icon)) || null;
+        const result = {
           slug:          ev.slug || '',
           title:         ev.title || '',
-          image:         ev.image || ev.icon || (best && (best.image || best.icon)) || null,
+          image,
           end_date:      ev.endDate || ev.end_date || null,
           volume:        Number(ev.volume || 0),
-          volume_24h:    Number(ev.volume_24hr || 0),
+          volume_24h:    Number(ev.volume24hr || ev.volume_24hr || 0),
           max_price_pct: maxPrice != null ? Math.round(maxPrice * 100) : null,
         };
+        console.log('[home-markets] slug:', result.slug, '| image:', result.image ? result.image.slice(0,60) : 'NULL', '| pct:', result.max_price_pct);
+        return result;
       }).filter(m => m.slug);
 
       _homeMarketsCache = { markets, count: markets.length, fetched_at: new Date().toISOString() };
