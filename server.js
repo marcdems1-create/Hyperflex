@@ -30628,7 +30628,7 @@ async function fetchWhalePositions() {
 
         // ── ENRICH with slug/conditionId/tokenId for copy-trade execution ──
         // Two-stage lookup: screener cache first (fast), gamma API fallback (any market)
-        let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null, eventImage = null;
+        let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null;
         try {
           // Extract slug from market_url (polymarket.com/event/SLUG)
           const urlMatch = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
@@ -30648,7 +30648,6 @@ async function fetchWhalePositions() {
                 clobTokenIds = typeof sm.clobTokenIds === 'string' ? sm.clobTokenIds : JSON.stringify(sm.clobTokenIds);
               }
               sidePrice = sm.yes_price;
-              if (sm.image || sm.event_image_url) eventImage = sm.image || sm.event_image_url;
             }
           }
 
@@ -30665,7 +30664,6 @@ async function fetchWhalePositions() {
                 if (gm) {
                   if (gm.conditionId) conditionId = gm.conditionId;
                   if (gm.clobTokenIds) clobTokenIds = gm.clobTokenIds;
-                  if (!eventImage && (gm.image || gm.icon)) eventImage = gm.image || gm.icon;
                 }
               }
               // If still no tokens, try events endpoint (for multi-outcome)
@@ -30675,16 +30673,13 @@ async function fetchWhalePositions() {
                 });
                 if (eRes.ok) {
                   const ed = _gammaUnwrap(await eRes.json());;
-                  if (Array.isArray(ed) && ed.length) {
-                    if (!eventImage && (ed[0].image || ed[0].icon)) eventImage = ed[0].image || ed[0].icon;
-                    if (ed[0].markets && ed[0].markets.length) {
-                      // Match market by question text within the event
-                      const qLower = (p.market || '').toLowerCase().trim();
-                      const em = ed[0].markets.find(m => (m.question || m.groupItemTitle || '').toLowerCase().trim() === qLower) || ed[0].markets[0];
-                      if (em) {
-                        if (em.conditionId) conditionId = em.conditionId;
-                        if (em.clobTokenIds) clobTokenIds = em.clobTokenIds;
-                      }
+                  if (Array.isArray(ed) && ed.length && ed[0].markets && ed[0].markets.length) {
+                    // Match market by question text within the event
+                    const qLower = (p.market || '').toLowerCase().trim();
+                    const em = ed[0].markets.find(m => (m.question || m.groupItemTitle || '').toLowerCase().trim() === qLower) || ed[0].markets[0];
+                    if (em) {
+                      if (em.conditionId) conditionId = em.conditionId;
+                      if (em.clobTokenIds) clobTokenIds = em.clobTokenIds;
                     }
                   }
                 }
@@ -30711,7 +30706,6 @@ async function fetchWhalePositions() {
           price: p.current_price || sidePrice || 0,
           url: p.market_url || 'https://polymarket.com',
           // Execution data for copy-bot
-          image: eventImage,
           slug: slug,
           condition_id: conditionId,
           clob_token_ids: clobTokenIds,
@@ -32748,11 +32742,9 @@ app.get('/api/mentions-stage', async (req, res) => {
       if (topPrice === null || hi > topPrice) topPrice = hi;
     }
     const yesPricePct = topPrice != null ? Math.round(topPrice * 100) : null;
-    const primaryMkt = markets.find(m => !m.closed) || markets[0] || null;
-    const eventImage = hero.image || hero.icon || null;
     const result = {
-      event: { slug: hero.slug, title: hero.title, image: eventImage, end_date: hero.endDate, volume: hero.volume },
-      primary_market: { yes_price_pct: yesPricePct, image: primaryMkt ? (primaryMkt.image || primaryMkt.icon || eventImage) : eventImage },
+      event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
+      primary_market: { yes_price_pct: yesPricePct },
       whales: [], stances: [],
     };
     console.log('[mentions-stage] hero:', hero.slug, '| title:', (hero.title||'').slice(0,50), '| image:', !!(hero.image||hero.icon), '| price:', yesPricePct);
@@ -32879,60 +32871,6 @@ app.get('/api/word-markets/upcoming', async (req, res) => {
     });
   } catch (e) {
     console.error('[word-markets/upcoming] endpoint error:', e.message);
-    res.status(500).json({ error: e.message, events: [], count: 0 });
-  }
-});
-
-// GET /api/hot-markets — top Polymarket events by 24h volume for the
-// Trending Now grid on /mentions. Normalizes event_image_url → image.
-app.get('/api/hot-markets', async (req, res) => {
-  try {
-    const limit = Math.max(1, Math.min(12, parseInt(req.query.limit, 10) || 6));
-    const tiles = await hotMarkets.getHotMarketsCarousel({ limit });
-    const markets = (Array.isArray(tiles) ? tiles : []).map(t => ({
-      slug:         t.event_slug,
-      question:     t.market_question || t.event_title || '',
-      image:        t.image || t.event_image_url || null,
-      yes_price:    t.yes_price != null ? Number(t.yes_price) : null,
-      volume_24h:   t.volume_24h_usd || 0,
-      volume_label: t.volume_24h_label || '',
-      end_date:     t.end_date || null,
-      category:     t.category || null,
-    }));
-    const nullImageSlugs = markets.filter(m => !m.image).map(m => m.slug);
-    if (nullImageSlugs.length) console.warn('[hot-markets] null image for slugs:', nullImageSlugs.join(', '));
-    res.set('Cache-Control', 'no-store');
-    res.json({ markets, count: markets.length });
-  } catch (e) {
-    console.error('[hot-markets] endpoint error:', e.message);
-    res.status(500).json({ error: e.message, markets: [], count: 0 });
-  }
-});
-
-// GET /api/whales/recent — recent whale trade events from _whaleTradeStream.
-// Returns up to limit items (default 8). Empty when stream is cold.
-app.get('/api/whales/recent', (req, res) => {
-  try {
-    const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 8));
-    const stream = Array.isArray(_whaleTradeStream) ? _whaleTradeStream : [];
-    const events = stream.slice(0, limit).map(e => ({
-      id:           e.id,
-      action:       e.action,
-      trader:       e.trader_name,
-      rank:         e.trader_rank || null,
-      question:     e.question,
-      side:         e.side,
-      size:         e.size,
-      size_display: e.size_display,
-      price:        e.price || null,
-      slug:         e.slug || null,
-      image:        e.image || null,
-      ts:           e.ts,
-    }));
-    res.set('Cache-Control', 'no-store');
-    res.json({ events, count: events.length });
-  } catch (e) {
-    console.error('[whales/recent] endpoint error:', e.message);
     res.status(500).json({ error: e.message, events: [], count: 0 });
   }
 });
@@ -56273,44 +56211,6 @@ app.listen(PORT, () => {
       ['screener', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener`); if (!r.ok) throw new Error(r.status); }],
       ['narratives', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener/narratives`); if (!r.ok) throw new Error(r.status); }],
       ['fear-greed', async () => { const r = await fetch(`http://localhost:${PORT}/api/fear-greed`); if (!r.ok) throw new Error(r.status); }],
-      ['whale-stream-seed', async () => {
-        if (!pool || _whaleTradeStream.length > 0) return;
-        const rows = await dbQuery(
-          `SELECT * FROM whale_trade_history ORDER BY created_at DESC LIMIT 50`
-        ).catch(() => []);
-        if (!rows || !rows.length) return;
-        const _fmtSize = v => {
-          const n = Number(v) || 0;
-          if (!n) return null;
-          return n >= 1000000 ? '$' + (n / 1000000).toFixed(1) + 'M'
-               : n >= 1000    ? '$' + (n / 1000).toFixed(0) + 'K'
-               : '$' + n.toFixed(0);
-        };
-        _whaleTradeStream = rows.map(r => ({
-          type: 'whale_trade',
-          id: `wt_db_${r.id}`,
-          action: r.action,
-          trader_name: r.trader_name,
-          trader_rank: r.trader_rank || null,
-          trader_pnl: r.trader_pnl || null,
-          question: r.question || 'Unknown',
-          side: r.side || 'Unknown',
-          size: Number(r.size) || 0,
-          size_display: _fmtSize(r.size),
-          old_size: r.old_size ? Number(r.old_size) : null,
-          old_size_display: r.old_size ? _fmtSize(r.old_size) : null,
-          new_size: r.new_size ? Number(r.new_size) : null,
-          new_size_display: r.new_size ? _fmtSize(r.new_size) : null,
-          price: r.price ? Number(r.price) : 0,
-          url: r.market_url || 'https://polymarket.com',
-          slug: r.slug || null,
-          condition_id: r.condition_id || null,
-          clob_token_ids: null,
-          ts: r.created_at
-            ? new Date(r.created_at).toISOString().slice(0, 10)
-            : new Date().toISOString().slice(0, 10),
-        }));
-      }],
     ];
     for (const [name, fn] of warmups) {
       try { await fn(); console.log(`[boot] ✓ ${name}`); } catch (e) { console.warn(`[boot] ✗ ${name}: ${e.message}`); }

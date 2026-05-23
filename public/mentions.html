@@ -329,22 +329,22 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(0,212,255,0.04) 1px,transparent 1px);background-size:20px 20px;pointer-events:none;"></div>
 
   <div style="position:relative;z-index:2;max-width:1200px;margin:0 auto;padding:200px 32px 56px;">
-    <div id="stage-eyebrow" style="font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:rgba(0,212,255,0.7);text-transform:uppercase;margin-bottom:16px;">● BIGGEST MARKET RIGHT NOW</div>
+    <div id="stage-eyebrow" style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.22em;color:rgba(0,212,255,0.7);text-transform:uppercase;margin-bottom:16px;">● BIGGEST MARKET RIGHT NOW</div>
 
-    <h1 id="stage-title" style="font-family:var(--sans);font-size:clamp(40px,6vw,80px);font-weight:800;color:#fff;line-height:1.05;letter-spacing:-.02em;margin:0 0 24px;max-width:760px;text-shadow:0 2px 40px rgba(0,0,0,0.6);"></h1>
+    <h1 id="stage-title" style="font-family:'Syne',sans-serif;font-size:clamp(40px,6vw,80px);font-weight:800;color:#fff;line-height:1.05;letter-spacing:-.02em;margin:0 0 24px;max-width:760px;text-shadow:0 2px 40px rgba(0,0,0,0.6);"></h1>
 
     <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:32px;">
-      <div id="stage-price" style="font-family:var(--mono);font-size:48px;font-weight:700;line-height:1;"></div>
+      <div id="stage-price" style="font-family:'Space Mono',monospace;font-size:48px;font-weight:700;line-height:1;"></div>
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <div id="stage-volume" style="font-family:var(--mono);font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:.1em;"></div>
-        <div id="stage-countdown" style="font-family:var(--mono);font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:.1em;"></div>
+        <div id="stage-volume" style="font-family:'Space Mono',monospace;font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:.1em;"></div>
+        <div id="stage-countdown" style="font-family:'Space Mono',monospace;font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:.1em;"></div>
       </div>
     </div>
 
     <div id="stage-whale-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:32px;"></div>
 
     <div style="display:flex;gap:12px;align-items:center;">
-      <a id="stage-cta" href="#" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:var(--cyan,#00d4ff);color:#000;font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:.06em;text-decoration:none;border-radius:6px;transition:opacity .15s;">VIEW MARKET →</a>
+      <a id="stage-cta" href="#" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:var(--cyan,#00d4ff);color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;letter-spacing:.06em;text-decoration:none;border-radius:6px;transition:opacity .15s;">VIEW MARKET →</a>
     </div>
   </div>
 </section>
@@ -398,8 +398,8 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
       whaleRow.innerHTML = d.whales.slice(0,3).map(function(w) {
         var sideColor = /yes/i.test(w.side||'') ? '#22c55e' : '#ef4444';
         return '<div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;backdrop-filter:blur(8px);">'
-          + '<span style="font-size:10px;font-weight:700;color:'+sideColor+';font-family:var(--mono);">'+(w.side||'').toUpperCase()+'</span>'
-          + '<span style="font-size:11px;color:rgba(255,255,255,.7);font-family:var(--mono);">'+w.display+'</span>'
+          + '<span style="font-size:10px;font-weight:700;color:'+sideColor+';font-family:Space Mono,monospace;">'+(w.side||'').toUpperCase()+'</span>'
+          + '<span style="font-size:11px;color:rgba(255,255,255,.7);font-family:Space Mono,monospace;">'+w.display+'</span>'
           + '</div>';
       }).join('');
     }
@@ -432,30 +432,6 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 
 
 <main class="page" id="page">
-  <!-- TRENDING NOW — top Polymarket events by 24h volume (/api/hot-markets) -->
-  <section id="trending-now" class="hm-section" style="display:none">
-    <div class="hm-header">
-      <div>
-        <h2 class="hm-title">Trending Now</h2>
-        <p class="hm-sub" id="tn-sub">Loading…</p>
-      </div>
-      <a href="/alpha-live" style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--cyan);text-transform:uppercase;text-decoration:none;border-bottom:1px dotted rgba(0,212,255,.5);padding-bottom:1px;flex-shrink:0;align-self:flex-end;">See all →</a>
-    </div>
-    <div id="tn-grid" class="hm-grid"></div>
-  </section>
-
-  <!-- WHALE ACTIVITY — recent large whale trades (/api/whales/recent) -->
-  <section id="whale-activity" class="hm-section" style="display:none">
-    <div class="hm-header">
-      <div>
-        <h2 class="hm-title">Whale Activity</h2>
-        <p class="hm-sub" id="wa-sub">Loading…</p>
-      </div>
-      <a href="/predictors" style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--cyan);text-transform:uppercase;text-decoration:none;border-bottom:1px dotted rgba(0,212,255,.5);padding-bottom:1px;flex-shrink:0;align-self:flex-end;">See all →</a>
-    </div>
-    <div id="wa-grid" class="hm-grid"></div>
-  </section>
-
   <!-- LIVE MENTION MARKETS heat-map — PR 2 UI of mentions rescope.
        Tier-bucketed grid sourced from /api/mentions-heatmap (slug-probe
        primary, 4-tier percentile bucketing). Default surface on /mentions;
@@ -513,113 +489,6 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 </main>
 
 <script>
-// ── TRENDING NOW — /api/hot-markets ──
-(function () {
-  function escHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  function fmtPct(p) {
-    if (p == null || !isFinite(p)) return '—';
-    var pct = p > 1 ? Math.round(p * 100) : Math.round(p * 100);
-    return pct + '¢';
-  }
-  function priceCls(p) {
-    if (p == null) return '';
-    var v = p > 1 ? p / 100 : p;
-    return v < 0.5 ? 'no-leaning' : '';
-  }
-  function renderTN(m) {
-    var href = m.slug ? '/market/' + escHtml(m.slug) : '#';
-    var q = escHtml(m.question || '');
-    var img = m.image || m.event_image || m.event_image_url || null;
-    var initials = (m.question || '').replace(/[^A-Z]/g,'').slice(0,2) || (m.question||'').slice(0,2).toUpperCase();
-    var imgHtml = img
-      ? '<img class="hm-market-img" src="'+escHtml(img)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=\\\"hm-market-initials\\\">'+escHtml(initials)+'</div>\'">'
-      : '<div class="hm-market-initials">'+escHtml(initials)+'</div>';
-    var priceText = fmtPct(m.yes_price);
-    var pCls = 'hm-price ' + priceCls(m.yes_price);
-    var vol = escHtml(m.volume_label || '');
-    return '<a class="hm-tile large" href="'+href+'">'
-      +'<div class="hm-tile-top">'+imgHtml+'<div class="hm-speaker">'+escHtml(m.category||'')+'</div></div>'
-      +'<div class="hm-q">'+q+'</div>'
-      +'<div class="hm-tile-bottom"><div class="'+escHtml(pCls)+'">'+priceText+' YES</div>'
-      +'<div class="hm-vol">'+vol+'</div></div>'
-      +'</a>';
-  }
-  function init() {
-    fetch('/api/hot-markets?limit=6', {credentials:'same-origin'})
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        var markets = d && Array.isArray(d.markets) ? d.markets : [];
-        if (!markets.length) return;
-        var sec = document.getElementById('trending-now');
-        var grid = document.getElementById('tn-grid');
-        var sub = document.getElementById('tn-sub');
-        if (!sec || !grid) return;
-        grid.innerHTML = markets.map(renderTN).join('');
-        if (sub) sub.textContent = markets.length + ' markets by 24h volume';
-        sec.style.display = 'block';
-      })
-      .catch(function(){});
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
-  else init();
-})();
-
-// ── WHALE ACTIVITY — /api/whales/recent ──
-(function () {
-  function escHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  function actionLabel(action) {
-    if (action === 'opened')   return 'Opened';
-    if (action === 'closed')   return 'Closed';
-    if (action === 'increased') return 'Increased';
-    if (action === 'decreased') return 'Decreased';
-    return action || 'Trade';
-  }
-  function renderWA(e) {
-    var href = e.slug ? '/market/' + escHtml(e.slug) : '#';
-    var q = escHtml(e.question || 'Unknown market');
-    var sideColor = /yes/i.test(e.side||'') ? 'var(--cyan)' : 'var(--hawk,#FF6B4D)';
-    var sideText = (e.side||'').toUpperCase();
-    var size = escHtml(e.size_display || '');
-    var trader = escHtml(e.trader || 'Whale');
-    var rankChip = e.rank ? '<span style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.14em;"> #'+e.rank+'</span>' : '';
-    var actLabel = escHtml(actionLabel(e.action));
-    return '<a class="hm-tile medium" href="'+href+'">'
-      +'<div class="hm-tile-top">'
-      +'<div class="hm-market-initials" style="background:rgba(255,107,77,0.10);color:var(--hawk,#FF6B4D);border-color:rgba(255,107,77,0.20);">🐳</div>'
-      +'<div class="hm-speaker">'+trader+rankChip+'</div>'
-      +'<div class="hm-badge" style="color:var(--muted);border-color:rgba(110,103,144,.3);font-size:9px;padding:2px 6px;">'+actLabel+'</div>'
-      +'</div>'
-      +'<div class="hm-q">'+q+'</div>'
-      +'<div class="hm-tile-bottom">'
-      +'<div class="hm-price" style="font-size:18px;color:'+sideColor+';">'+sideText+'</div>'
-      +'<div class="hm-vol">'+size+'</div>'
-      +'</div>'
-      +'</a>';
-  }
-  function init() {
-    fetch('/api/whales/recent?limit=6', {credentials:'same-origin'})
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        var events = d && Array.isArray(d.events) ? d.events : [];
-        if (!events.length) return;
-        var sec = document.getElementById('whale-activity');
-        var grid = document.getElementById('wa-grid');
-        var sub = document.getElementById('wa-sub');
-        if (!sec || !grid) return;
-        grid.innerHTML = events.map(renderWA).join('');
-        if (sub) sub.textContent = events.length + ' recent large trades';
-        sec.style.display = 'block';
-      })
-      .catch(function(){});
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
-  else init();
-})();
-
 // ── UPCOMING WORD-MARKET EVENTS (PR 2) ──
 // Consumes /api/word-markets/upcoming from lib/word-markets.js. Renders
 // calendar rows above the posture archive. Auto-hides section when

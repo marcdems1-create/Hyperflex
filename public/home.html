@@ -12,37 +12,33 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0a08;
-  --card:#111110;
   --border:rgba(255,255,255,.08);
-  --border-hover:rgba(255,255,255,.16);
+  --border-hover:rgba(255,255,255,.2);
   --ink:#f0f0f5;
-  --ink2:rgba(240,240,245,.6);
-  --muted:rgba(240,240,245,.32);
+  --ink2:rgba(240,240,245,.65);
+  --muted:rgba(240,240,245,.35);
   --cyan:#00d4ff;
   --green:#00c85a;
-  --red:#f03;
-  --gold:#c9920d;
+  --red:#ff1a3c;
   --mono:'Space Mono',monospace;
   --sans:'Inter',sans-serif;
   --display:'Syne',sans-serif;
 }
 html,body{background:var(--bg);color:var(--ink);min-height:100vh;font-family:var(--sans);-webkit-font-smoothing:antialiased;}
 
-/* ── GRAIN ── */
+/* grain */
 body::after{
   content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
   background-size:200px 200px;
 }
 
-/* ── TOP NAV ── */
+/* ── NAV ── */
 nav{
   position:sticky;top:0;z-index:100;
-  background:rgba(10,10,8,.92);
-  backdrop-filter:blur(12px);
+  background:rgba(10,10,8,.93);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:0;
-  height:52px;padding:0 20px;
+  display:flex;align-items:center;height:52px;padding:0 20px;
 }
 .nav-logo{
   font-family:var(--display);font-size:15px;font-weight:800;
@@ -51,14 +47,12 @@ nav{
 }
 .nav-tabs{display:flex;gap:2px;flex:1;min-width:0;}
 .nav-tab{
-  font-family:var(--mono);font-size:10px;font-weight:700;
-  letter-spacing:.1em;text-transform:uppercase;
-  color:var(--muted);text-decoration:none;
-  padding:6px 12px;border-radius:4px;
-  transition:color .12s,background .12s;white-space:nowrap;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);text-decoration:none;
+  padding:6px 12px;border-radius:4px;white-space:nowrap;
+  transition:color .12s,background .12s;
 }
 .nav-tab:hover{color:var(--ink);background:rgba(255,255,255,.05);}
-.nav-tab.active{color:var(--cyan);}
 .nav-right{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0;}
 .nav-live{
   display:flex;align-items:center;gap:6px;
@@ -67,185 +61,191 @@ nav{
 }
 .nav-live-dot{
   width:6px;height:6px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;flex-shrink:0;
+  box-shadow:0 0 6px var(--green);animation:blink 2s infinite;flex-shrink:0;
 }
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 .nav-connect{
-  font-family:var(--mono);font-size:10px;font-weight:700;
-  letter-spacing:.08em;color:var(--bg);
-  background:var(--cyan);border:none;border-radius:4px;
-  padding:7px 14px;cursor:pointer;text-decoration:none;
-  transition:opacity .12s;white-space:nowrap;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;
+  color:#0a0a08;background:var(--cyan);border:none;border-radius:4px;
+  padding:7px 14px;cursor:pointer;text-decoration:none;transition:opacity .12s;
 }
 .nav-connect:hover{opacity:.85;}
-@media(max-width:700px){
-  .nav-tabs{display:none;}
-  .nav-live span{display:none;}
-}
+@media(max-width:700px){.nav-tabs{display:none;}.nav-live span{display:none;}}
 
-/* ── TICKER BAR ── */
+/* ── TICKER ── */
 #ticker-bar{
-  border-bottom:1px solid var(--border);
-  background:rgba(10,10,8,.6);
+  border-bottom:1px solid var(--border);background:rgba(10,10,8,.5);
   height:34px;overflow:hidden;position:relative;z-index:1;
 }
 .ticker-track{
-  display:flex;align-items:center;gap:0;
-  height:34px;white-space:nowrap;
-  animation:ticker-scroll 40s linear infinite;
-  width:max-content;
+  display:flex;align-items:center;height:34px;white-space:nowrap;
+  animation:scroll-left 48s linear infinite;width:max-content;
 }
 .ticker-track:hover{animation-play-state:paused;}
-@keyframes ticker-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes scroll-left{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .ticker-item{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:0 24px;height:34px;
-  border-right:1px solid var(--border);
-  font-family:var(--mono);font-size:10px;
-  text-decoration:none;color:var(--ink2);
+  display:inline-flex;align-items:center;gap:10px;
+  padding:0 22px;height:34px;border-right:1px solid var(--border);
+  font-family:var(--mono);font-size:10px;color:var(--ink2);text-decoration:none;
   transition:background .1s;
 }
 .ticker-item:hover{background:rgba(255,255,255,.04);color:var(--ink);}
 .ticker-name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ticker-price-up{color:var(--green);font-weight:700;}
-.ticker-price-down{color:var(--red);font-weight:700;}
-.ticker-arrow{font-size:9px;}
+.t-up{color:var(--green);font-weight:700;}
+.t-dn{color:var(--red);font-weight:700;}
 
-/* ── PAGE BODY ── */
-main{
-  position:relative;z-index:1;
-  max-width:1280px;margin:0 auto;
-  padding:32px 20px 64px;
-}
+/* ── MAIN ── */
+main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:28px 20px 64px;}
 
 /* ── SECTION HEADER ── */
-.grid-header{
-  display:flex;align-items:center;gap:10px;margin-bottom:20px;
-}
-.grid-header-dot{
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.section-dot{
   width:7px;height:7px;border-radius:50%;background:var(--cyan);
-  box-shadow:0 0 8px rgba(0,212,255,.7);flex-shrink:0;
-  animation:pulse 1.6s infinite;
+  box-shadow:0 0 8px rgba(0,212,255,.75);flex-shrink:0;animation:blink 1.8s infinite;
 }
-.grid-header-title{
-  font-family:var(--display);font-size:13px;font-weight:800;
-  letter-spacing:.14em;text-transform:uppercase;color:var(--ink);
+.section-title{
+  font-family:var(--display);font-size:12px;font-weight:800;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--ink);
 }
-.grid-header-count{
-  font-family:var(--mono);font-size:10px;color:var(--muted);
-  margin-left:auto;
-}
+.section-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
 
-/* ── MARKETS GRID ── */
+/* ── GRID ── */
 .markets-grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  grid-template-rows:auto auto;
-  gap:12px;
+  grid-template-columns:5fr 3fr;
+  grid-template-rows:1fr 1fr;
+  gap:10px;
+  /* hero spans both rows on the left */
 }
-@media(max-width:900px){.markets-grid{grid-template-columns:1fr;}}
+@media(max-width:900px){
+  .markets-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;}
+}
+@media(max-width:580px){
+  .markets-grid{grid-template-columns:1fr;grid-template-rows:auto;}
+}
 
-/* ── HERO CARD ── */
+/* ── POSTER CARD ── */
+/* Full-bleed image card — image IS the card, content overlaid at bottom */
+.card{
+  position:relative;
+  border-radius:10px;overflow:hidden;
+  border:1px solid var(--border);
+  cursor:pointer;
+  transition:border-color .15s,transform .12s;
+  background:#111;
+}
+.card:hover{border-color:var(--border-hover);transform:translateY(-2px);}
+
+/* hero card: tall */
 .card-hero{
   grid-row:span 2;
-  display:flex;flex-direction:column;
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:8px;overflow:hidden;
-  text-decoration:none;
-  transition:border-color .15s;
+  height:100%;min-height:440px;
 }
-.card-hero:hover{border-color:var(--border-hover);}
-.card-img{
-  width:100%;aspect-ratio:16/9;
+/* small card */
+.card-sm{min-height:220px;}
+
+/* background image layer */
+.card-bg{
+  position:absolute;inset:0;
   background-size:cover;background-position:center;
-  background-color:rgba(255,255,255,.04);
-  filter:brightness(.55) saturate(1.2);
-  flex-shrink:0;
+  filter:brightness(.4) saturate(1.3);
+  transition:filter .2s;
 }
-.card-hero .card-img{aspect-ratio:16/8;}
-.card-body{padding:18px;display:flex;flex-direction:column;gap:12px;flex:1;}
-.card-meta{display:flex;align-items:center;gap:10px;}
-.card-vol{
-  font-family:var(--mono);font-size:9px;font-weight:700;
-  letter-spacing:.1em;color:var(--muted);text-transform:uppercase;
+.card:hover .card-bg{filter:brightness(.48) saturate(1.4);}
+
+/* cinematic gradient: bottom-heavy so text pops */
+.card-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(
+    to bottom,
+    rgba(10,10,8,0)    0%,
+    rgba(10,10,8,.05)  35%,
+    rgba(10,10,8,.55)  60%,
+    rgba(10,10,8,.92)  80%,
+    rgba(10,10,8,.98) 100%
+  );
+  pointer-events:none;
 }
-.card-watching{
+
+/* content pinned to bottom */
+.card-content{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:16px;z-index:2;
+}
+
+/* top badges row */
+.card-badges{
+  position:absolute;top:12px;left:12px;right:12px;
+  display:flex;align-items:center;gap:6px;z-index:3;
+}
+.badge{
+  font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;
+  padding:3px 7px;border-radius:3px;text-transform:uppercase;
+}
+.badge-vol{background:rgba(10,10,8,.7);border:1px solid rgba(255,255,255,.12);color:var(--ink2);}
+.badge-edge{background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:var(--cyan);}
+.badge-live{
   display:flex;align-items:center;gap:5px;
-  font-family:var(--mono);font-size:9px;color:var(--muted);
+  background:rgba(10,10,8,.7);border:1px solid rgba(0,200,90,.25);color:var(--green);
+  font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;
+  padding:3px 7px;border-radius:3px;
 }
-.card-watching-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0;}
-.card-edge{
-  margin-left:auto;
-  font-family:var(--mono);font-size:9px;font-weight:700;
-  letter-spacing:.08em;
-  background:rgba(0,212,255,.1);
-  border:1px solid rgba(0,212,255,.25);
-  color:var(--cyan);padding:2px 7px;border-radius:3px;
-  white-space:nowrap;
-}
+.badge-live-dot{width:4px;height:4px;border-radius:50%;background:var(--green);flex-shrink:0;}
+
+/* question title */
 .card-question{
-  font-family:var(--display);font-size:17px;font-weight:800;
-  color:var(--ink);line-height:1.25;letter-spacing:-.01em;
+  font-family:var(--display);font-weight:800;color:#fff;
+  line-height:1.2;letter-spacing:-.015em;
+  margin-bottom:10px;
+  text-shadow:0 1px 12px rgba(0,0,0,.8);
 }
 .card-hero .card-question{font-size:22px;}
-.card-price-row{display:flex;align-items:center;gap:10px;}
+.card-sm  .card-question{font-size:14px;}
+
+/* price row */
+.card-price-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 .card-price{
-  font-family:var(--mono);font-size:26px;font-weight:700;
-  line-height:1;
+  font-family:var(--mono);font-weight:700;line-height:1;
 }
-.card-hero .card-price{font-size:40px;}
-.card-price-label{font-family:var(--mono);font-size:10px;color:var(--muted);}
-.price-bar-wrap{flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
-.price-bar-fill{height:100%;border-radius:2px;transition:width .4s ease;}
-.card-close{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.06em;}
-.card-buttons{display:flex;gap:8px;margin-top:auto;}
-.btn-yes,.btn-no{
-  flex:1;padding:10px 0;border:none;border-radius:4px;
-  font-family:var(--mono);font-size:11px;font-weight:700;
-  letter-spacing:.08em;cursor:pointer;
-  text-decoration:none;display:flex;align-items:center;justify-content:center;
+.card-hero .card-price{font-size:38px;}
+.card-sm  .card-price{font-size:22px;}
+.price-bar-wrap{flex:1;height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;}
+.price-bar-fill{height:100%;border-radius:2px;}
+.price-label{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.06em;margin-top:3px;}
+
+/* close date */
+.card-close{font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.4);letter-spacing:.06em;margin-bottom:10px;}
+
+/* YES / NO buttons */
+.card-btns{display:flex;gap:6px;}
+.btn-y,.btn-n{
+  flex:1;padding:0;height:36px;
+  border:none;border-radius:4px;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;
+  cursor:pointer;text-decoration:none;
+  display:flex;align-items:center;justify-content:center;
   transition:opacity .12s,transform .1s;
 }
-.btn-yes{background:rgba(0,200,90,.15);color:var(--green);border:1px solid rgba(0,200,90,.3);}
-.btn-no {background:rgba(255,0,51,.1); color:var(--red);  border:1px solid rgba(255,0,51,.25);}
-.btn-yes:hover,.btn-no:hover{opacity:.8;transform:translateY(-1px);}
-
-/* ── SMALL CARD ── */
-.card-small{
-  display:flex;flex-direction:column;
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:8px;overflow:hidden;
-  text-decoration:none;
-  transition:border-color .15s;
-}
-.card-small:hover{border-color:var(--border-hover);}
-.card-small .card-img{aspect-ratio:16/6;min-height:80px;}
-.card-small .card-body{padding:13px;}
-.card-small .card-question{font-size:13px;}
-.card-small .card-price{font-size:20px;}
-.card-small .card-buttons .btn-yes,
-.card-small .card-buttons .btn-no{padding:8px 0;font-size:10px;}
+.card-sm .btn-y,.card-sm .btn-n{height:30px;font-size:9px;}
+.btn-y{background:rgba(0,200,90,.16);color:var(--green);border:1px solid rgba(0,200,90,.3);}
+.btn-n{background:rgba(255,26,60,.1); color:var(--red);  border:1px solid rgba(255,26,60,.25);}
+.btn-y:hover,.btn-n:hover{opacity:.78;transform:translateY(-1px);}
 
 /* ── SKELETON ── */
-@keyframes shimmer{0%{opacity:.4}50%{opacity:.7}100%{opacity:.4}}
-.skeleton{
-  background:rgba(255,255,255,.06);border-radius:4px;
-  animation:shimmer 1.5s infinite;
-}
+@keyframes shimmer{0%,100%{opacity:.35}50%{opacity:.6}}
+.sk{background:rgba(255,255,255,.06);border-radius:4px;animation:shimmer 1.6s infinite;}
 
-/* ── RESPONSIVE ── */
 @media(max-width:640px){
-  main{padding:20px 12px 48px;}
-  .card-hero .card-question{font-size:17px;}
+  main{padding:16px 12px 48px;}
+  .card-hero .card-question{font-size:18px;}
   .card-hero .card-price{font-size:28px;}
 }
 </style>
 </head>
 <body>
 
-<!-- ── TOP NAV ─────────────────────────────────────────── -->
+<!-- NAV -->
 <nav>
   <a class="nav-logo" href="/">HYPERFLEX</a>
   <div class="nav-tabs">
@@ -256,232 +256,214 @@ main{
     <a class="nav-tab" href="/mentions">Mentions</a>
   </div>
   <div class="nav-right">
-    <div class="nav-live">
-      <span class="nav-live-dot"></span>
-      <span>LIVE</span>
-    </div>
+    <div class="nav-live"><span class="nav-live-dot"></span><span>LIVE</span></div>
     <a class="nav-connect" href="/creator/login">Connect Wallet</a>
   </div>
 </nav>
 
-<!-- ── TICKER BAR ───────────────────────────────────────── -->
-<div id="ticker-bar">
-  <div class="ticker-track" id="tickerTrack">
-    <!-- injected by JS, doubled for seamless loop -->
-  </div>
-</div>
+<!-- TICKER -->
+<div id="ticker-bar"><div class="ticker-track" id="tickerTrack"></div></div>
 
-<!-- ── MAIN ─────────────────────────────────────────────── -->
+<!-- MAIN -->
 <main>
-  <div class="grid-header">
-    <span class="grid-header-dot"></span>
-    <span class="grid-header-title">HOT MARKETS RIGHT NOW</span>
-    <span class="grid-header-count" id="marketCount"></span>
+  <div class="section-head">
+    <span class="section-dot"></span>
+    <span class="section-title">HOT MARKETS RIGHT NOW</span>
+    <span class="section-sub" id="mktCount"></span>
   </div>
 
   <div class="markets-grid" id="marketsGrid">
-    <!-- skeleton while loading -->
-    <div class="card-hero" style="border-color:transparent;">
-      <div class="card-img skeleton" style="aspect-ratio:16/8;"></div>
-      <div class="card-body" style="gap:14px;">
-        <div class="skeleton" style="height:10px;width:80px;"></div>
-        <div class="skeleton" style="height:22px;width:90%;"></div>
-        <div class="skeleton" style="height:18px;width:40%;"></div>
-        <div class="skeleton" style="height:10px;width:60%;margin-top:auto;"></div>
-      </div>
+    <!-- skeleton -->
+    <div class="card card-hero" style="border-color:transparent;">
+      <div class="card-bg sk" style="filter:none;"></div>
     </div>
-    <div class="card-small" style="border-color:transparent;">
-      <div class="card-img skeleton" style="aspect-ratio:16/6;min-height:80px;"></div>
-      <div class="card-body"><div class="skeleton" style="height:13px;width:85%;"></div></div>
+    <div class="card card-sm" style="border-color:transparent;">
+      <div class="card-bg sk" style="filter:none;"></div>
     </div>
-    <div class="card-small" style="border-color:transparent;">
-      <div class="card-img skeleton" style="aspect-ratio:16/6;min-height:80px;"></div>
-      <div class="card-body"><div class="skeleton" style="height:13px;width:70%;"></div></div>
+    <div class="card card-sm" style="border-color:transparent;">
+      <div class="card-bg sk" style="filter:none;"></div>
     </div>
-    <div class="card-small" style="border-color:transparent;">
-      <div class="card-img skeleton" style="aspect-ratio:16/6;min-height:80px;"></div>
-      <div class="card-body"><div class="skeleton" style="height:13px;width:75%;"></div></div>
+    <div class="card card-sm" style="border-color:transparent;">
+      <div class="card-bg sk" style="filter:none;"></div>
     </div>
-    <div class="card-small" style="border-color:transparent;">
-      <div class="card-img skeleton" style="aspect-ratio:16/6;min-height:80px;"></div>
-      <div class="card-body"><div class="skeleton" style="height:13px;width:65%;"></div></div>
+    <div class="card card-sm" style="border-color:transparent;">
+      <div class="card-bg sk" style="filter:none;"></div>
     </div>
   </div>
 </main>
 
 <script>
-(function() {
-  // ── helpers ──────────────────────────────────────────
-  function fmtVol(v) {
-    v = Number(v || 0);
-    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
-    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
-    return v > 0 ? '$' + Math.round(v) : '';
+(function(){
+  /* ── helpers ── */
+  function fmtVol(v){
+    v=Number(v||0);
+    if(v>=1e9)return'$'+(v/1e9).toFixed(1)+'B';
+    if(v>=1e6)return'$'+(v/1e6).toFixed(1)+'M';
+    if(v>=1e3)return'$'+(v/1e3).toFixed(0)+'K';
+    return v>0?'$'+Math.round(v):'';
   }
-  function fmtClose(dateStr) {
-    if (!dateStr) return null;
-    var ms = new Date(dateStr).getTime() - Date.now();
-    if (ms <= 0) return 'Closing soon';
-    var d = Math.floor(ms / 86400000);
-    var h = Math.floor((ms % 86400000) / 3600000);
-    if (d > 30) {
-      var dt = new Date(dateStr);
-      return 'Closes ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-    return d > 0 ? 'Closes in ' + d + 'd ' + h + 'h' : 'Closes in ' + h + 'h';
+  function fmtClose(s){
+    if(!s)return null;
+    var ms=new Date(s).getTime()-Date.now();
+    if(ms<=0)return'Closing soon';
+    var d=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000);
+    if(d>30){var dt=new Date(s);return'Closes '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+    return d>0?'Closes in '+d+'d '+h+'h':'Closes in '+h+'h';
   }
-  function edgeScore(price) {
-    // placeholder until real edge scoring is wired
-    return Math.min(99, Math.round(Math.abs(price - 0.5) * 20 + Math.random() * 2 + 50));
+  function edge(p){
+    return Math.min(99,Math.round(Math.abs(p-0.5)*20+Math.random()*2+50));
   }
-  function priceColor(p) {
-    if (p >= 0.65) return 'var(--green)';
-    if (p <= 0.35) return 'var(--red)';
-    return 'var(--ink)';
+  function pColor(p){
+    return p>=0.65?'var(--green)':p<=0.35?'var(--red)':'#fff';
   }
-  function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function esc(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-
-  // ── parse outcomePrices ──────────────────────────────
-  function topPrice(market) {
-    var prices = market.outcomePrices;
-    if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(_) { return null; } }
-    if (!Array.isArray(prices)) return null;
-    return Math.max.apply(null, prices.map(function(p) { return parseFloat(p) || 0; }));
+  function topPrice(m){
+    var p=m.outcomePrices;
+    if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}
+    if(!Array.isArray(p))return null;
+    return Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}));
+  }
+  function getImg(m){
+    return m.image||m.icon||m.event_image_url||m.imageUrl||null;
   }
 
-  // ── build card HTML ──────────────────────────────────
-  function buildCard(m, isHero) {
-    var slug  = m.slug || m.event_slug || '';
-    var href  = '/market/' + esc(slug);
-    var img   = m.image || m.event_image_url || m.icon || '';
-    var title = m.question || m.market_question || m.event_title || m.title || '—';
-    var vol   = fmtVol(m.volume || m.volume_24hr || m.volume_24h_usd || 0);
-    var price = (m.yes_price != null ? Number(m.yes_price) : topPrice(m));
-    var pct   = price != null ? Math.round(price * 100) : null;
-    var close = fmtClose(m.endDate || m.end_date || m.end_date_iso || null);
-    var edge  = price != null ? edgeScore(price) : null;
-    var cls   = isHero ? 'card-hero' : 'card-small';
+  /* ── build one poster card ── */
+  function buildCard(m, isHero){
+    var slug  = m.slug||m.event_slug||'';
+    var href  = '/market/'+esc(slug);
+    var img   = getImg(m);
+    var title = m.question||m.title||m.market_question||m.event_title||'—';
+    var vol   = fmtVol(m.volume||m.volume_24hr||m.volume_24h_usd||0);
+    var price = m.yes_price!=null ? Number(m.yes_price) : topPrice(m);
+    var pct   = price!=null ? Math.round(price*100) : null;
+    var close = fmtClose(m.endDate||m.end_date||m.end_date_iso||null);
+    var e     = price!=null ? edge(price) : null;
+    var cls   = isHero ? 'card card-hero' : 'card card-sm';
+    var col   = price!=null ? pColor(price) : '#fff';
+    var dataSlug = slug ? ' data-slug="'+esc(slug)+'"' : '';
 
-    var imgDiv = '<div class="card-img"'
-      + (img ? ' style="background-image:url(' + JSON.stringify(img) + ');"' : '')
-      + '></div>';
+    var bgStyle = img
+      ? 'background-image:url('+JSON.stringify(img)+');'
+      : 'background:#1a1a18;';
 
-    var meta = '<div class="card-meta">'
-      + (vol ? '<span class="card-vol">' + esc(vol) + ' VOL</span>' : '')
-      + '<span class="card-watching"><span class="card-watching-dot"></span>LIVE</span>'
-      + (edge != null ? '<span class="card-edge">EDGE ' + edge + '</span>' : '')
-      + '</div>';
+    var badges = '<div class="card-badges">'
+      +'<span class="badge badge-live"><span class="badge-live-dot"></span>LIVE</span>'
+      +(vol?'<span class="badge badge-vol">'+esc(vol)+'</span>':'')
+      +(e!=null?'<span class="badge badge-edge">EDGE '+e+'</span>':'')
+      +'</div>';
 
-    var priceBar = '';
-    if (pct != null) {
-      var col = priceColor(price);
-      priceBar = '<div class="card-price-row">'
-        + '<div class="card-price" style="color:' + col + ';">' + pct + '¢</div>'
-        + '<div style="flex:1;">'
-        + '<div class="price-bar-wrap"><div class="price-bar-fill" style="width:' + pct + '%;background:' + col + ';"></div></div>'
-        + '<div class="card-price-label" style="margin-top:4px;">LEADING OUTCOME</div>'
-        + '</div>'
-        + '</div>';
-    }
+    var priceBlock = pct!=null
+      ? '<div class="card-price-row">'
+        +'<div class="card-price" style="color:'+col+';">'+pct+'¢</div>'
+        +'<div style="flex:1;">'
+        +'<div class="price-bar-wrap"><div class="price-bar-fill" style="width:'+pct+'%;background:'+col+';"></div></div>'
+        +'<div class="price-label">LEADING OUTCOME</div>'
+        +'</div>'
+        +'</div>'
+      : '';
 
-    var buttons = '<div class="card-buttons">'
-      + '<a class="btn-yes" href="' + href + '?side=YES">YES</a>'
-      + '<a class="btn-no"  href="' + href + '?side=NO">NO</a>'
-      + '</div>';
-
-    return '<div class="' + cls + '">'
-      + imgDiv
-      + '<div class="card-body">'
-      + meta
-      + '<div class="card-question">' + esc(title) + '</div>'
-      + priceBar
-      + (close ? '<div class="card-close">' + esc(close) + '</div>' : '')
-      + buttons
-      + '</div>'
-      + '</div>';
+    return '<div class="'+cls+'"'+dataSlug+'>'
+      +'<div class="card-bg" style="'+bgStyle+'"></div>'
+      +'<div class="card-overlay"></div>'
+      +badges
+      +'<div class="card-content">'
+      +'<div class="card-question">'+esc(title)+'</div>'
+      +priceBlock
+      +(close?'<div class="card-close">'+esc(close)+'</div>':'')
+      +'<div class="card-btns">'
+      +'<a class="btn-y" href="'+href+'?side=YES">YES</a>'
+      +'<a class="btn-n" href="'+href+'?side=NO">NO</a>'
+      +'</div>'
+      +'</div>'
+      +'</div>';
   }
 
-  // ── render grid ──────────────────────────────────────
-  function renderGrid(markets) {
-    if (!markets || !markets.length) return;
-    var grid = document.getElementById('marketsGrid');
-    var countEl = document.getElementById('marketCount');
-    if (countEl) countEl.textContent = markets.length + ' MARKETS';
-    var html = '';
-    markets.forEach(function(m, i) {
-      html += buildCard(m, i === 0);
+  /* ── after render: patch missing images from Gamma slug endpoint ── */
+  function patchMissingImages(){
+    var cards = document.querySelectorAll('[data-slug]');
+    cards.forEach(function(card){
+      var bg = card.querySelector('.card-bg');
+      if(!bg) return;
+      var style = bg.getAttribute('style')||'';
+      // already has an image
+      if(style.indexOf('background-image')!==-1) return;
+      var slug = card.getAttribute('data-slug');
+      if(!slug) return;
+      fetch('https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(slug))
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(ev){
+          if(!ev) return;
+          var img = (ev.image||ev.icon||null)
+            ||(Array.isArray(ev.markets)&&ev.markets[0]&&(ev.markets[0].image||ev.markets[0].icon)||null);
+          if(img) bg.style.backgroundImage='url('+JSON.stringify(img)+')';
+        })
+        .catch(function(){});
     });
-    grid.innerHTML = html;
   }
 
-  // ── fetch top markets from Gamma ─────────────────────
-  fetch('/api/mentions-stage')
-    .then(function(r) { return r.ok ? r.json() : null; })
-    .catch(function() { return null; });  // fire & forget for hero data
+  /* ── render grid ── */
+  function renderGrid(markets){
+    if(!markets||!markets.length) return;
+    var grid = document.getElementById('marketsGrid');
+    var count = document.getElementById('mktCount');
+    if(count) count.textContent = markets.length+' MARKETS';
+    grid.innerHTML = markets.map(function(m,i){return buildCard(m,i===0);}).join('');
+    // try to patch any card that ended up with no image
+    setTimeout(patchMissingImages, 0);
+  }
 
-  // Primary: hot-markets carousel (has images + prices pre-normalized)
-  fetch('/api/hot-markets/carousel?limit=5')
-    .then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(d) {
-      var items = d && Array.isArray(d.markets) ? d.markets : [];
-      if (items.length >= 3) { renderGrid(items); buildTicker(items); return; }
-      // fallback to Gamma direct
-      return fetch('https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=5')
-        .then(function(r) { return r.ok ? r.json() : []; })
-        .then(function(evts) {
-          if (!Array.isArray(evts)) return;
-          // flatten to market objects with event image
-          var markets = [];
-          evts.forEach(function(ev) {
-            var mList = Array.isArray(ev.markets) ? ev.markets : [];
-            // pick the highest-volume non-closed market
-            var best = null;
-            mList.forEach(function(m) {
-              if (m.closed) return;
-              if (!best || Number(m.volume || 0) > Number(best.volume || 0)) best = m;
-            });
-            if (best) {
-              best.image = best.image || ev.image || ev.icon || null;
-              best.event_title = ev.title;
-              markets.push(best);
-            } else if (ev.image || ev.title) {
-              markets.push({ slug: ev.slug, image: ev.image || ev.icon || null,
-                question: ev.title, volume: ev.volume, endDate: ev.endDate });
-            }
-          });
-          if (markets.length) { renderGrid(markets); buildTicker(markets); }
-        });
-    })
-    .catch(function(e) { console.error('[home] markets load failed', e); });
-
-  // ── ticker ───────────────────────────────────────────
-  function buildTicker(markets) {
-    if (!markets || !markets.length) return;
+  /* ── ticker ── */
+  function buildTicker(markets){
+    if(!markets||!markets.length) return;
     var track = document.getElementById('tickerTrack');
-    function item(m) {
-      var slug  = m.slug || m.event_slug || '';
-      var name  = (m.question || m.market_question || m.event_title || m.title || '—');
-      var price = (m.yes_price != null ? Number(m.yes_price) : topPrice(m));
-      var pct   = price != null ? Math.round(price * 100) : null;
-      var up    = price != null ? price >= 0.5 : null;
-      var col   = up === true ? 'var(--green)' : up === false ? 'var(--red)' : 'var(--ink2)';
-      return '<a class="ticker-item" href="/market/' + esc(slug) + '">'
-        + '<span class="ticker-name">' + esc(name.slice(0, 50)) + '</span>'
-        + (pct != null
-          ? '<span class="' + (up ? 'ticker-price-up' : 'ticker-price-down') + '">'
-            + pct + '¢ ' + (up ? '↑' : '↓') + '</span>'
-          : '')
-        + '</a>';
+    function item(m){
+      var slug  = m.slug||m.event_slug||'';
+      var name  = (m.question||m.market_question||m.event_title||m.title||'—');
+      var price = m.yes_price!=null?Number(m.yes_price):topPrice(m);
+      var pct   = price!=null?Math.round(price*100):null;
+      var up    = price!=null?price>=0.5:null;
+      return '<a class="ticker-item" href="/market/'+esc(slug)+'">'
+        +'<span class="ticker-name">'+esc(name.slice(0,55))+'</span>'
+        +(pct!=null
+          ?'<span class="'+(up?'t-up':'t-dn')+'">'+pct+'¢ '+(up?'↑':'↓')+'</span>'
+          :'')
+        +'</a>';
     }
     var inner = markets.map(item).join('');
-    // double for seamless loop
-    track.innerHTML = inner + inner;
-    // adjust animation duration to number of items
-    track.style.animationDuration = (markets.length * 8) + 's';
+    track.innerHTML = inner+inner; // doubled for seamless loop
+    track.style.animationDuration = (markets.length*8)+'s';
   }
+
+  /* ── fetch: hot-markets carousel → Gamma fallback ── */
+  fetch('/api/hot-markets/carousel?limit=5')
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      var items = d&&Array.isArray(d.markets)?d.markets:[];
+      if(items.length>=3){renderGrid(items);buildTicker(items);return;}
+      // Gamma direct fallback
+      return fetch('https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=5')
+        .then(function(r){return r.ok?r.json():[];})
+        .then(function(evts){
+          if(!Array.isArray(evts)) return;
+          var markets=[];
+          evts.forEach(function(ev){
+            var mList=Array.isArray(ev.markets)?ev.markets:[];
+            var best=null;
+            mList.forEach(function(m){
+              if(m.closed) return;
+              if(!best||Number(m.volume||0)>Number(best.volume||0)) best=m;
+            });
+            var entry = best
+              ? Object.assign({},best,{image:best.image||ev.image||ev.icon||null,event_title:ev.title})
+              : {slug:ev.slug,image:ev.image||ev.icon||null,question:ev.title,volume:ev.volume,endDate:ev.endDate};
+            markets.push(entry);
+          });
+          if(markets.length){renderGrid(markets);buildTicker(markets);}
+        });
+    })
+    .catch(function(e){console.error('[home]',e);});
 })();
 </script>
 </body>
