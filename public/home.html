@@ -356,8 +356,8 @@ main{
   function buildCard(m, isHero) {
     var slug  = m.slug || m.event_slug || '';
     var href  = '/market/' + esc(slug);
-    var img   = m.image || m.icon || m.event_image_url || '';
-    var title = m.question || m.title || m.event_title || '—';
+    var img   = m.image || m.event_image_url || m.icon || '';
+    var title = m.question || m.market_question || m.event_title || m.title || '—';
     var vol   = fmtVol(m.volume || m.volume_24hr || m.volume_24h_usd || 0);
     var price = (m.yes_price != null ? Number(m.yes_price) : topPrice(m));
     var pct   = price != null ? Math.round(price * 100) : null;

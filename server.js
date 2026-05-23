@@ -30628,7 +30628,7 @@ async function fetchWhalePositions() {
 
         // ── ENRICH with slug/conditionId/tokenId for copy-trade execution ──
         // Two-stage lookup: screener cache first (fast), gamma API fallback (any market)
-        let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null;
+        let slug = null, conditionId = null, clobTokenIds = null, sidePrice = null, eventImage = null;
         try {
           // Extract slug from market_url (polymarket.com/event/SLUG)
           const urlMatch = (p.market_url || '').match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
@@ -30648,6 +30648,7 @@ async function fetchWhalePositions() {
                 clobTokenIds = typeof sm.clobTokenIds === 'string' ? sm.clobTokenIds : JSON.stringify(sm.clobTokenIds);
               }
               sidePrice = sm.yes_price;
+              if (sm.image || sm.event_image_url) eventImage = sm.image || sm.event_image_url;
             }
           }
 
@@ -30664,6 +30665,7 @@ async function fetchWhalePositions() {
                 if (gm) {
                   if (gm.conditionId) conditionId = gm.conditionId;
                   if (gm.clobTokenIds) clobTokenIds = gm.clobTokenIds;
+                  if (!eventImage && (gm.image || gm.icon)) eventImage = gm.image || gm.icon;
                 }
               }
               // If still no tokens, try events endpoint (for multi-outcome)
@@ -30673,13 +30675,16 @@ async function fetchWhalePositions() {
                 });
                 if (eRes.ok) {
                   const ed = _gammaUnwrap(await eRes.json());;
-                  if (Array.isArray(ed) && ed.length && ed[0].markets && ed[0].markets.length) {
-                    // Match market by question text within the event
-                    const qLower = (p.market || '').toLowerCase().trim();
-                    const em = ed[0].markets.find(m => (m.question || m.groupItemTitle || '').toLowerCase().trim() === qLower) || ed[0].markets[0];
-                    if (em) {
-                      if (em.conditionId) conditionId = em.conditionId;
-                      if (em.clobTokenIds) clobTokenIds = em.clobTokenIds;
+                  if (Array.isArray(ed) && ed.length) {
+                    if (!eventImage && (ed[0].image || ed[0].icon)) eventImage = ed[0].image || ed[0].icon;
+                    if (ed[0].markets && ed[0].markets.length) {
+                      // Match market by question text within the event
+                      const qLower = (p.market || '').toLowerCase().trim();
+                      const em = ed[0].markets.find(m => (m.question || m.groupItemTitle || '').toLowerCase().trim() === qLower) || ed[0].markets[0];
+                      if (em) {
+                        if (em.conditionId) conditionId = em.conditionId;
+                        if (em.clobTokenIds) clobTokenIds = em.clobTokenIds;
+                      }
                     }
                   }
                 }
@@ -30706,6 +30711,7 @@ async function fetchWhalePositions() {
           price: p.current_price || sidePrice || 0,
           url: p.market_url || 'https://polymarket.com',
           // Execution data for copy-bot
+          image: eventImage,
           slug: slug,
           condition_id: conditionId,
           clob_token_ids: clobTokenIds,
@@ -32742,9 +32748,11 @@ app.get('/api/mentions-stage', async (req, res) => {
       if (topPrice === null || hi > topPrice) topPrice = hi;
     }
     const yesPricePct = topPrice != null ? Math.round(topPrice * 100) : null;
+    const primaryMkt = markets.find(m => !m.closed) || markets[0] || null;
+    const eventImage = hero.image || hero.icon || null;
     const result = {
-      event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
-      primary_market: { yes_price_pct: yesPricePct },
+      event: { slug: hero.slug, title: hero.title, image: eventImage, end_date: hero.endDate, volume: hero.volume },
+      primary_market: { yes_price_pct: yesPricePct, image: primaryMkt ? (primaryMkt.image || primaryMkt.icon || eventImage) : eventImage },
       whales: [], stances: [],
     };
     console.log('[mentions-stage] hero:', hero.slug, '| title:', (hero.title||'').slice(0,50), '| image:', !!(hero.image||hero.icon), '| price:', yesPricePct);
@@ -32884,13 +32892,15 @@ app.get('/api/hot-markets', async (req, res) => {
     const markets = (Array.isArray(tiles) ? tiles : []).map(t => ({
       slug:         t.event_slug,
       question:     t.market_question || t.event_title || '',
-      image:        t.event_image_url || null,
+      image:        t.image || t.event_image_url || null,
       yes_price:    t.yes_price != null ? Number(t.yes_price) : null,
       volume_24h:   t.volume_24h_usd || 0,
       volume_label: t.volume_24h_label || '',
       end_date:     t.end_date || null,
       category:     t.category || null,
     }));
+    const nullImageSlugs = markets.filter(m => !m.image).map(m => m.slug);
+    if (nullImageSlugs.length) console.warn('[hot-markets] null image for slugs:', nullImageSlugs.join(', '));
     res.set('Cache-Control', 'no-store');
     res.json({ markets, count: markets.length });
   } catch (e) {
@@ -32916,7 +32926,7 @@ app.get('/api/whales/recent', (req, res) => {
       size_display: e.size_display,
       price:        e.price || null,
       slug:         e.slug || null,
-      image:        null,
+      image:        e.image || null,
       ts:           e.ts,
     }));
     res.set('Cache-Control', 'no-store');
