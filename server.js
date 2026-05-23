@@ -32628,6 +32628,69 @@ cron.schedule('* * * * *', () => {
 // news). For now tiles link to the existing /market/:slug surface which
 // is the live trading page.
 
+// GET /api/home-markets — top 5 Polymarket events for the landing page.
+// Fetches Gamma server-side (no browser CORS issues), guarantees image URLs,
+// returns the MAX outcome price (not just YES) so non-binary markets display
+// the dominant outcome correctly. 90s TTL.
+{
+  let _homeMarketsCache = null;
+  let _homeMarketsCacheAt = 0;
+  const HOME_MARKETS_TTL = 90 * 1000;
+
+  app.get('/api/home-markets', async (req, res) => {
+    try {
+      if (_homeMarketsCache && Date.now() - _homeMarketsCacheAt < HOME_MARKETS_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_homeMarketsCache);
+      }
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      let resp;
+      try {
+        resp = await _nodeFetch(
+          'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=8',
+          { signal: ctrl.signal }
+        );
+      } finally { clearTimeout(t); }
+      if (!resp.ok) return res.status(503).json({ error: 'Gamma unavailable' });
+      const events = await resp.json();
+      if (!Array.isArray(events)) return res.status(503).json({ error: 'Bad response' });
+
+      const markets = events.slice(0, 5).map(ev => {
+        const mList = Array.isArray(ev.markets) ? ev.markets : [];
+        let best = null;
+        for (const m of mList) {
+          if (m.closed) continue;
+          if (!best || Number(m.volume || 0) > Number(best.volume || 0)) best = m;
+        }
+        let maxPrice = null;
+        if (best) {
+          let prices = best.outcomePrices;
+          if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) {} }
+          if (Array.isArray(prices) && prices.length) {
+            maxPrice = Math.max(...prices.map(p => parseFloat(p) || 0));
+          }
+        }
+        return {
+          slug:          ev.slug || '',
+          title:         ev.title || '',
+          image:         ev.image || ev.icon || (best && (best.image || best.icon)) || null,
+          end_date:      ev.endDate || ev.end_date || null,
+          volume:        Number(ev.volume || 0),
+          volume_24h:    Number(ev.volume_24hr || 0),
+          max_price_pct: maxPrice != null ? Math.round(maxPrice * 100) : null,
+        };
+      }).filter(m => m.slug);
+
+      _homeMarketsCache = { markets, count: markets.length, fetched_at: new Date().toISOString() };
+      _homeMarketsCacheAt = Date.now();
+      res.set('Cache-Control', 'public, max-age=60').json(_homeMarketsCache);
+    } catch (e) {
+      console.error('[home-markets]', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+}
+
 app.get('/api/hot-markets/carousel', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 7));

@@ -13,32 +13,24 @@
 :root{
   --bg:#0a0a08;
   --border:rgba(255,255,255,.08);
-  --border-hover:rgba(255,255,255,.2);
   --ink:#f0f0f5;
-  --ink2:rgba(240,240,245,.65);
-  --muted:rgba(240,240,245,.35);
+  --ink2:rgba(240,240,245,.6);
+  --muted:rgba(240,240,245,.32);
   --cyan:#00d4ff;
   --green:#00c85a;
-  --red:#ff1a3c;
+  --red:#ff2244;
   --mono:'Space Mono',monospace;
   --sans:'Inter',sans-serif;
   --display:'Syne',sans-serif;
 }
 html,body{background:var(--bg);color:var(--ink);min-height:100vh;font-family:var(--sans);-webkit-font-smoothing:antialiased;}
 
-/* grain */
-body::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  background-size:200px 200px;
-}
-
 /* ── NAV ── */
 nav{
   position:sticky;top:0;z-index:100;
-  background:rgba(10,10,8,.93);backdrop-filter:blur(14px);
+  background:rgba(10,10,8,.94);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
-  display:flex;align-items:center;height:52px;padding:0 20px;
+  display:flex;align-items:center;height:52px;padding:0 20px;gap:0;
 }
 .nav-logo{
   font-family:var(--display);font-size:15px;font-weight:800;
@@ -54,198 +46,133 @@ nav{
 }
 .nav-tab:hover{color:var(--ink);background:rgba(255,255,255,.05);}
 .nav-right{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0;}
-.nav-live{
-  display:flex;align-items:center;gap:6px;
-  font-family:var(--mono);font-size:9px;font-weight:700;
-  letter-spacing:.12em;color:var(--green);text-transform:uppercase;
-}
-.nav-live-dot{
-  width:6px;height:6px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 6px var(--green);animation:blink 2s infinite;flex-shrink:0;
-}
+.nav-live{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--green);text-transform:uppercase;}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s infinite;flex-shrink:0;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.nav-connect{
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;
-  color:#0a0a08;background:var(--cyan);border:none;border-radius:4px;
-  padding:7px 14px;cursor:pointer;text-decoration:none;transition:opacity .12s;
-}
+.nav-connect{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#0a0a08;background:var(--cyan);border:none;border-radius:4px;padding:7px 14px;cursor:pointer;text-decoration:none;transition:opacity .12s;}
 .nav-connect:hover{opacity:.85;}
-@media(max-width:700px){.nav-tabs{display:none;}.nav-live span{display:none;}}
+@media(max-width:700px){.nav-tabs{display:none;}.nav-live span:not(.nav-dot){display:none;}}
 
 /* ── TICKER ── */
-#ticker-bar{
-  border-bottom:1px solid var(--border);background:rgba(10,10,8,.5);
-  height:34px;overflow:hidden;position:relative;z-index:1;
-}
-.ticker-track{
-  display:flex;align-items:center;height:34px;white-space:nowrap;
-  animation:scroll-left 48s linear infinite;width:max-content;
-}
-.ticker-track:hover{animation-play-state:paused;}
-@keyframes scroll-left{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.ticker-item{
-  display:inline-flex;align-items:center;gap:10px;
-  padding:0 22px;height:34px;border-right:1px solid var(--border);
-  font-family:var(--mono);font-size:10px;color:var(--ink2);text-decoration:none;
-  transition:background .1s;
-}
-.ticker-item:hover{background:rgba(255,255,255,.04);color:var(--ink);}
-.ticker-name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#ticker{border-bottom:1px solid var(--border);height:34px;overflow:hidden;background:rgba(10,10,8,.5);}
+.t-track{display:flex;align-items:center;height:34px;white-space:nowrap;animation:t-scroll 50s linear infinite;width:max-content;}
+.t-track:hover{animation-play-state:paused;}
+@keyframes t-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.t-item{display:inline-flex;align-items:center;gap:10px;padding:0 22px;height:34px;border-right:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--ink2);text-decoration:none;transition:background .1s;}
+.t-item:hover{background:rgba(255,255,255,.04);color:var(--ink);}
+.t-name{max-width:180px;overflow:hidden;text-overflow:ellipsis;}
 .t-up{color:var(--green);font-weight:700;}
 .t-dn{color:var(--red);font-weight:700;}
 
 /* ── MAIN ── */
-main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:28px 20px 64px;}
+main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
 
-/* ── SECTION HEADER ── */
-.section-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
-.section-dot{
-  width:7px;height:7px;border-radius:50%;background:var(--cyan);
-  box-shadow:0 0 8px rgba(0,212,255,.75);flex-shrink:0;animation:blink 1.8s infinite;
-}
-.section-title{
-  font-family:var(--display);font-size:12px;font-weight:800;
-  letter-spacing:.15em;text-transform:uppercase;color:var(--ink);
-}
-.section-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+.hdr-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px rgba(0,212,255,.7);flex-shrink:0;animation:blink 1.8s infinite;}
+.hdr-title{font-family:var(--display);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;}
+.hdr-count{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
 
 /* ── GRID ── */
-.markets-grid{
+/* Left hero spans both rows; right is 2×2 */
+.grid{
   display:grid;
-  grid-template-columns:5fr 3fr;
-  grid-template-rows:1fr 1fr;
+  grid-template-columns:3fr 2fr;
+  grid-template-rows:repeat(2, 1fr);
   gap:10px;
-  /* hero spans both rows on the left */
+  min-height:520px;
 }
-@media(max-width:900px){
-  .markets-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;}
-}
-@media(max-width:580px){
-  .markets-grid{grid-template-columns:1fr;grid-template-rows:auto;}
-}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr;grid-template-rows:auto;}}
+@media(max-width:560px){.grid{grid-template-columns:1fr;}}
 
 /* ── POSTER CARD ── */
-/* Full-bleed image card — image IS the card, content overlaid at bottom */
 .card{
-  position:relative;
-  border-radius:10px;overflow:hidden;
+  position:relative;overflow:hidden;border-radius:10px;
   border:1px solid var(--border);
-  cursor:pointer;
-  transition:border-color .15s,transform .12s;
-  background:#111;
+  transition:border-color .15s,transform .13s;
 }
-.card:hover{border-color:var(--border-hover);transform:translateY(-2px);}
+.card:hover{border-color:rgba(255,255,255,.22);transform:translateY(-2px);}
+.card-hero{grid-row:span 2;}
 
-/* hero card: tall */
-.card-hero{
-  grid-row:span 2;
-  height:100%;min-height:440px;
-}
-/* small card */
-.card-sm{min-height:220px;}
-
-/* background image layer */
+/* the image IS the card — fills 100% */
 .card-bg{
   position:absolute;inset:0;
-  background-size:cover;background-position:center;
+  background:#1a1a18 center/cover no-repeat;
   filter:brightness(.4) saturate(1.3);
   transition:filter .2s;
 }
-.card:hover .card-bg{filter:brightness(.48) saturate(1.4);}
+.card:hover .card-bg{filter:brightness(.5) saturate(1.4);}
 
-/* cinematic gradient: bottom-heavy so text pops */
-.card-overlay{
-  position:absolute;inset:0;
+/* gradient from transparent at top → near-opaque at bottom */
+.card-grad{
+  position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(
-    to bottom,
-    rgba(10,10,8,0)    0%,
-    rgba(10,10,8,.05)  35%,
-    rgba(10,10,8,.55)  60%,
-    rgba(10,10,8,.92)  80%,
-    rgba(10,10,8,.98) 100%
+    160deg,
+    rgba(10,10,8,0) 0%,
+    rgba(10,10,8,.1) 40%,
+    rgba(10,10,8,.75) 68%,
+    rgba(10,10,8,.97) 88%,
+    rgba(10,10,8,1) 100%
   );
-  pointer-events:none;
 }
+
+/* badges top-left */
+.badges{position:absolute;top:12px;left:12px;display:flex;gap:6px;z-index:3;flex-wrap:wrap;}
+.badge{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;padding:3px 7px;border-radius:3px;text-transform:uppercase;}
+.b-live{background:rgba(10,10,8,.72);border:1px solid rgba(0,200,90,.3);color:var(--green);display:flex;align-items:center;gap:4px;}
+.b-live-dot{width:4px;height:4px;border-radius:50%;background:var(--green);}
+.b-vol{background:rgba(10,10,8,.72);border:1px solid rgba(255,255,255,.12);color:var(--ink2);}
+.b-edge{background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.28);color:var(--cyan);}
 
 /* content pinned to bottom */
-.card-content{
-  position:absolute;inset:0;
+.card-body{
+  position:absolute;inset:0;z-index:2;
   display:flex;flex-direction:column;justify-content:flex-end;
-  padding:16px;z-index:2;
+  padding:14px;
 }
 
-/* top badges row */
-.card-badges{
-  position:absolute;top:12px;left:12px;right:12px;
-  display:flex;align-items:center;gap:6px;z-index:3;
-}
-.badge{
-  font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;
-  padding:3px 7px;border-radius:3px;text-transform:uppercase;
-}
-.badge-vol{background:rgba(10,10,8,.7);border:1px solid rgba(255,255,255,.12);color:var(--ink2);}
-.badge-edge{background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:var(--cyan);}
-.badge-live{
-  display:flex;align-items:center;gap:5px;
-  background:rgba(10,10,8,.7);border:1px solid rgba(0,200,90,.25);color:var(--green);
-  font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;
-  padding:3px 7px;border-radius:3px;
-}
-.badge-live-dot{width:4px;height:4px;border-radius:50%;background:var(--green);flex-shrink:0;}
-
-/* question title */
-.card-question{
+.card-q{
   font-family:var(--display);font-weight:800;color:#fff;
-  line-height:1.2;letter-spacing:-.015em;
-  margin-bottom:10px;
-  text-shadow:0 1px 12px rgba(0,0,0,.8);
+  line-height:1.18;letter-spacing:-.015em;margin-bottom:10px;
+  text-shadow:0 1px 16px rgba(0,0,0,.9);
 }
-.card-hero .card-question{font-size:22px;}
-.card-sm  .card-question{font-size:14px;}
+.card-hero .card-q{font-size:clamp(18px,2.2vw,26px);}
+.card .card-q{font-size:clamp(13px,1.4vw,16px);}
 
 /* price row */
-.card-price-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
-.card-price{
-  font-family:var(--mono);font-weight:700;line-height:1;
-}
-.card-hero .card-price{font-size:38px;}
-.card-sm  .card-price{font-size:22px;}
-.price-bar-wrap{flex:1;height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;}
-.price-bar-fill{height:100%;border-radius:2px;}
-.price-label{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.06em;margin-top:3px;}
+.price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;}
+.price-num{font-family:var(--mono);font-weight:700;line-height:1;}
+.card-hero .price-num{font-size:clamp(28px,3.2vw,44px);}
+.card    .price-num{font-size:clamp(20px,2vw,28px);}
+.price-label{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.06em;}
 
-/* close date */
-.card-close{font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.4);letter-spacing:.06em;margin-bottom:10px;}
+/* progress bar */
+.bar-wrap{height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-bottom:8px;}
+.bar-fill{height:100%;border-radius:2px;}
 
-/* YES / NO buttons */
-.card-btns{display:flex;gap:6px;}
-.btn-y,.btn-n{
-  flex:1;padding:0;height:36px;
-  border:none;border-radius:4px;
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;
-  cursor:pointer;text-decoration:none;
-  display:flex;align-items:center;justify-content:center;
+.card-close{font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.38);letter-spacing:.05em;margin-bottom:10px;}
+
+/* YES / NO */
+.btns{display:flex;gap:6px;}
+.btn{
+  flex:1;border:none;border-radius:4px;cursor:pointer;
+  font-family:var(--mono);font-weight:700;letter-spacing:.08em;
+  text-decoration:none;display:flex;align-items:center;justify-content:center;
   transition:opacity .12s,transform .1s;
 }
-.card-sm .btn-y,.card-sm .btn-n{height:30px;font-size:9px;}
-.btn-y{background:rgba(0,200,90,.16);color:var(--green);border:1px solid rgba(0,200,90,.3);}
-.btn-n{background:rgba(255,26,60,.1); color:var(--red);  border:1px solid rgba(255,26,60,.25);}
-.btn-y:hover,.btn-n:hover{opacity:.78;transform:translateY(-1px);}
+.card-hero .btn{height:40px;font-size:11px;}
+.card      .btn{height:32px;font-size:10px;}
+.btn-y{background:rgba(0,200,90,.14);color:var(--green);border:1px solid rgba(0,200,90,.28);}
+.btn-n{background:rgba(255,34,68,.1); color:var(--red);  border:1px solid rgba(255,34,68,.22);}
+.btn:hover{opacity:.75;transform:translateY(-1px);}
 
 /* ── SKELETON ── */
-@keyframes shimmer{0%,100%{opacity:.35}50%{opacity:.6}}
-.sk{background:rgba(255,255,255,.06);border-radius:4px;animation:shimmer 1.6s infinite;}
-
-@media(max-width:640px){
-  main{padding:16px 12px 48px;}
-  .card-hero .card-question{font-size:18px;}
-  .card-hero .card-price{font-size:28px;}
-}
+@keyframes sk{0%,100%{opacity:.3}50%{opacity:.55}}
+.sk{background:rgba(255,255,255,.07);animation:sk 1.5s infinite;}
 </style>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
   <a class="nav-logo" href="/">HYPERFLEX</a>
   <div class="nav-tabs">
@@ -256,45 +183,33 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:28px 20p
     <a class="nav-tab" href="/mentions">Mentions</a>
   </div>
   <div class="nav-right">
-    <div class="nav-live"><span class="nav-live-dot"></span><span>LIVE</span></div>
+    <div class="nav-live"><span class="nav-dot"></span><span>LIVE</span></div>
     <a class="nav-connect" href="/creator/login">Connect Wallet</a>
   </div>
 </nav>
 
-<!-- TICKER -->
-<div id="ticker-bar"><div class="ticker-track" id="tickerTrack"></div></div>
+<div id="ticker">
+  <div class="t-track" id="tTrack"><!-- filled by JS --></div>
+</div>
 
-<!-- MAIN -->
 <main>
-  <div class="section-head">
-    <span class="section-dot"></span>
-    <span class="section-title">HOT MARKETS RIGHT NOW</span>
-    <span class="section-sub" id="mktCount"></span>
+  <div class="hdr">
+    <span class="hdr-dot"></span>
+    <span class="hdr-title">HOT MARKETS RIGHT NOW</span>
+    <span class="hdr-count" id="mktCount"></span>
   </div>
-
-  <div class="markets-grid" id="marketsGrid">
-    <!-- skeleton -->
-    <div class="card card-hero" style="border-color:transparent;">
-      <div class="card-bg sk" style="filter:none;"></div>
-    </div>
-    <div class="card card-sm" style="border-color:transparent;">
-      <div class="card-bg sk" style="filter:none;"></div>
-    </div>
-    <div class="card card-sm" style="border-color:transparent;">
-      <div class="card-bg sk" style="filter:none;"></div>
-    </div>
-    <div class="card card-sm" style="border-color:transparent;">
-      <div class="card-bg sk" style="filter:none;"></div>
-    </div>
-    <div class="card card-sm" style="border-color:transparent;">
-      <div class="card-bg sk" style="filter:none;"></div>
-    </div>
+  <div class="grid" id="grid">
+    <!-- skeletons -->
+    <div class="card card-hero sk" style="border-color:transparent;min-height:440px;"></div>
+    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
+    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
+    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
+    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
   </div>
 </main>
 
 <script>
 (function(){
-  /* ── helpers ── */
   function fmtVol(v){
     v=Number(v||0);
     if(v>=1e9)return'$'+(v/1e9).toFixed(1)+'B';
@@ -305,163 +220,90 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:28px 20p
   function fmtClose(s){
     if(!s)return null;
     var ms=new Date(s).getTime()-Date.now();
-    if(ms<=0)return'Closing soon';
+    if(ms<=0)return'Resolving soon';
     var d=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000);
-    if(d>30){var dt=new Date(s);return'Closes '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+    if(d>30){var dt=new Date(s);return'Closes '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
     return d>0?'Closes in '+d+'d '+h+'h':'Closes in '+h+'h';
   }
-  function edge(p){
-    return Math.min(99,Math.round(Math.abs(p-0.5)*20+Math.random()*2+50));
+  function edgeScore(pct){
+    // placeholder — distance from 50¢ signals informativeness
+    return Math.min(97,Math.round(Math.abs(pct-50)*0.4+50+Math.random()*2));
   }
-  function pColor(p){
-    return p>=0.65?'var(--green)':p<=0.35?'var(--red)':'#fff';
+  function pCol(pct){
+    return pct>=65?'var(--green)':pct<=35?'var(--red)':'#e8e8e0';
   }
-  function esc(s){
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function topPrice(m){
-    var p=m.outcomePrices;
-    if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}
-    if(!Array.isArray(p))return null;
-    return Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}));
-  }
-  function getImg(m){
-    return m.image||m.icon||m.event_image_url||m.imageUrl||null;
-  }
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-  /* ── build one poster card ── */
-  function buildCard(m, isHero){
-    var slug  = m.slug||m.event_slug||'';
-    var href  = '/market/'+esc(slug);
-    var img   = getImg(m);
-    var title = m.question||m.title||m.market_question||m.event_title||'—';
-    var vol   = fmtVol(m.volume||m.volume_24hr||m.volume_24h_usd||0);
-    var price = m.yes_price!=null ? Number(m.yes_price) : topPrice(m);
-    var pct   = price!=null ? Math.round(price*100) : null;
-    var close = fmtClose(m.endDate||m.end_date||m.end_date_iso||null);
-    var e     = price!=null ? edge(price) : null;
-    var cls   = isHero ? 'card card-hero' : 'card card-sm';
-    var col   = price!=null ? pColor(price) : '#fff';
-    var dataSlug = slug ? ' data-slug="'+esc(slug)+'"' : '';
-
-    var bgStyle = img
-      ? 'background-image:url('+JSON.stringify(img)+');'
-      : 'background:#1a1a18;';
-
-    var badges = '<div class="card-badges">'
-      +'<span class="badge badge-live"><span class="badge-live-dot"></span>LIVE</span>'
-      +(vol?'<span class="badge badge-vol">'+esc(vol)+'</span>':'')
-      +(e!=null?'<span class="badge badge-edge">EDGE '+e+'</span>':'')
-      +'</div>';
-
-    var priceBlock = pct!=null
-      ? '<div class="card-price-row">'
-        +'<div class="card-price" style="color:'+col+';">'+pct+'¢</div>'
-        +'<div style="flex:1;">'
-        +'<div class="price-bar-wrap"><div class="price-bar-fill" style="width:'+pct+'%;background:'+col+';"></div></div>'
-        +'<div class="price-label">LEADING OUTCOME</div>'
-        +'</div>'
-        +'</div>'
+  function buildCard(m, hero){
+    var href  = '/market/'+esc(m.slug);
+    var pct   = m.max_price_pct;
+    var col   = pct!=null?pCol(pct):'#e8e8e0';
+    var vol   = fmtVol(m.volume_24h||m.volume||0);
+    var close = fmtClose(m.end_date);
+    var edge  = pct!=null?edgeScore(pct):null;
+    var bgStyle = m.image
+      ? 'background-image:url('+JSON.stringify(m.image)+');'
       : '';
 
-    return '<div class="'+cls+'"'+dataSlug+'>'
+    return '<div class="card'+(hero?' card-hero':'')+'">'
+      // background image layer
       +'<div class="card-bg" style="'+bgStyle+'"></div>'
-      +'<div class="card-overlay"></div>'
-      +badges
-      +'<div class="card-content">'
-      +'<div class="card-question">'+esc(title)+'</div>'
-      +priceBlock
+      // gradient overlay
+      +'<div class="card-grad"></div>'
+      // top badges
+      +'<div class="badges">'
+      +'<span class="badge b-live"><span class="b-live-dot"></span>LIVE</span>'
+      +(vol?'<span class="badge b-vol">'+esc(vol)+'</span>':'')
+      +(edge!=null?'<span class="badge b-edge">EDGE '+edge+'</span>':'')
+      +'</div>'
+      // content
+      +'<div class="card-body">'
+      +'<div class="card-q">'+esc(m.title||'—')+'</div>'
+      +(pct!=null
+        ?'<div class="price-row">'
+          +'<span class="price-num" style="color:'+col+';">'+pct+'¢</span>'
+          +'<span class="price-label">LEADING OUTCOME</span>'
+          +'</div>'
+          +'<div class="bar-wrap"><div class="bar-fill" style="width:'+pct+'%;background:'+col+';"></div></div>'
+        :'')
       +(close?'<div class="card-close">'+esc(close)+'</div>':'')
-      +'<div class="card-btns">'
-      +'<a class="btn-y" href="'+href+'?side=YES">YES</a>'
-      +'<a class="btn-n" href="'+href+'?side=NO">NO</a>'
+      +'<div class="btns">'
+      +'<a class="btn btn-y" href="'+href+'?side=YES">YES</a>'
+      +'<a class="btn btn-n" href="'+href+'?side=NO">NO</a>'
       +'</div>'
       +'</div>'
       +'</div>';
   }
 
-  /* ── after render: patch missing images from Gamma slug endpoint ── */
-  function patchMissingImages(){
-    var cards = document.querySelectorAll('[data-slug]');
-    cards.forEach(function(card){
-      var bg = card.querySelector('.card-bg');
-      if(!bg) return;
-      var style = bg.getAttribute('style')||'';
-      // already has an image
-      if(style.indexOf('background-image')!==-1) return;
-      var slug = card.getAttribute('data-slug');
-      if(!slug) return;
-      fetch('https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(slug))
-        .then(function(r){return r.ok?r.json():null;})
-        .then(function(ev){
-          if(!ev) return;
-          var img = (ev.image||ev.icon||null)
-            ||(Array.isArray(ev.markets)&&ev.markets[0]&&(ev.markets[0].image||ev.markets[0].icon)||null);
-          if(img) bg.style.backgroundImage='url('+JSON.stringify(img)+')';
-        })
-        .catch(function(){});
-    });
-  }
-
-  /* ── render grid ── */
   function renderGrid(markets){
-    if(!markets||!markets.length) return;
-    var grid = document.getElementById('marketsGrid');
-    var count = document.getElementById('mktCount');
-    if(count) count.textContent = markets.length+' MARKETS';
-    grid.innerHTML = markets.map(function(m,i){return buildCard(m,i===0);}).join('');
-    // try to patch any card that ended up with no image
-    setTimeout(patchMissingImages, 0);
+    if(!markets||!markets.length)return;
+    var grid=document.getElementById('grid');
+    var count=document.getElementById('mktCount');
+    if(count)count.textContent=markets.length+' MARKETS';
+    grid.innerHTML=markets.map(function(m,i){return buildCard(m,i===0);}).join('');
   }
 
-  /* ── ticker ── */
   function buildTicker(markets){
-    if(!markets||!markets.length) return;
-    var track = document.getElementById('tickerTrack');
+    var track=document.getElementById('tTrack');
     function item(m){
-      var slug  = m.slug||m.event_slug||'';
-      var name  = (m.question||m.market_question||m.event_title||m.title||'—');
-      var price = m.yes_price!=null?Number(m.yes_price):topPrice(m);
-      var pct   = price!=null?Math.round(price*100):null;
-      var up    = price!=null?price>=0.5:null;
-      return '<a class="ticker-item" href="/market/'+esc(slug)+'">'
-        +'<span class="ticker-name">'+esc(name.slice(0,55))+'</span>'
-        +(pct!=null
-          ?'<span class="'+(up?'t-up':'t-dn')+'">'+pct+'¢ '+(up?'↑':'↓')+'</span>'
-          :'')
+      var pct=m.max_price_pct;
+      var up=pct!=null&&pct>=50;
+      return '<a class="t-item" href="/market/'+esc(m.slug)+'">'
+        +'<span class="t-name">'+esc((m.title||'').slice(0,55))+'</span>'
+        +(pct!=null?'<span class="'+(up?'t-up':'t-dn')+'">'+pct+'¢ '+(up?'↑':'↓')+'</span>':'')
         +'</a>';
     }
-    var inner = markets.map(item).join('');
-    track.innerHTML = inner+inner; // doubled for seamless loop
-    track.style.animationDuration = (markets.length*8)+'s';
+    var inner=markets.map(item).join('');
+    track.innerHTML=inner+inner;
+    track.style.animationDuration=(markets.length*9)+'s';
   }
 
-  /* ── fetch: hot-markets carousel → Gamma fallback ── */
-  fetch('/api/hot-markets/carousel?limit=5')
+  // single server-side endpoint — images guaranteed, CORS-free
+  fetch('/api/home-markets')
     .then(function(r){return r.ok?r.json():null;})
     .then(function(d){
-      var items = d&&Array.isArray(d.markets)?d.markets:[];
-      if(items.length>=3){renderGrid(items);buildTicker(items);return;}
-      // Gamma direct fallback
-      return fetch('https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=5')
-        .then(function(r){return r.ok?r.json():[];})
-        .then(function(evts){
-          if(!Array.isArray(evts)) return;
-          var markets=[];
-          evts.forEach(function(ev){
-            var mList=Array.isArray(ev.markets)?ev.markets:[];
-            var best=null;
-            mList.forEach(function(m){
-              if(m.closed) return;
-              if(!best||Number(m.volume||0)>Number(best.volume||0)) best=m;
-            });
-            var entry = best
-              ? Object.assign({},best,{image:best.image||ev.image||ev.icon||null,event_title:ev.title})
-              : {slug:ev.slug,image:ev.image||ev.icon||null,question:ev.title,volume:ev.volume,endDate:ev.endDate};
-            markets.push(entry);
-          });
-          if(markets.length){renderGrid(markets);buildTicker(markets);}
-        });
+      var markets=d&&Array.isArray(d.markets)?d.markets:[];
+      if(markets.length){renderGrid(markets);buildTicker(markets);}
     })
     .catch(function(e){console.error('[home]',e);});
 })();
