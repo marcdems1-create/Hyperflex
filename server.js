@@ -32875,6 +32875,58 @@ app.get('/api/word-markets/upcoming', async (req, res) => {
   }
 });
 
+// GET /api/hot-markets — top Polymarket events by 24h volume for the
+// Trending Now grid on /mentions. Normalizes event_image_url → image.
+app.get('/api/hot-markets', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(12, parseInt(req.query.limit, 10) || 6));
+    const tiles = await hotMarkets.getHotMarketsCarousel({ limit });
+    const markets = (Array.isArray(tiles) ? tiles : []).map(t => ({
+      slug:         t.event_slug,
+      question:     t.market_question || t.event_title || '',
+      image:        t.event_image_url || null,
+      yes_price:    t.yes_price != null ? Number(t.yes_price) : null,
+      volume_24h:   t.volume_24h_usd || 0,
+      volume_label: t.volume_24h_label || '',
+      end_date:     t.end_date || null,
+      category:     t.category || null,
+    }));
+    res.set('Cache-Control', 'no-store');
+    res.json({ markets, count: markets.length });
+  } catch (e) {
+    console.error('[hot-markets] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, markets: [], count: 0 });
+  }
+});
+
+// GET /api/whales/recent — recent whale trade events from _whaleTradeStream.
+// Returns up to limit items (default 8). Empty when stream is cold.
+app.get('/api/whales/recent', (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 8));
+    const stream = Array.isArray(_whaleTradeStream) ? _whaleTradeStream : [];
+    const events = stream.slice(0, limit).map(e => ({
+      id:           e.id,
+      action:       e.action,
+      trader:       e.trader_name,
+      rank:         e.trader_rank || null,
+      question:     e.question,
+      side:         e.side,
+      size:         e.size,
+      size_display: e.size_display,
+      price:        e.price || null,
+      slug:         e.slug || null,
+      image:        null,
+      ts:           e.ts,
+    }));
+    res.set('Cache-Control', 'no-store');
+    res.json({ events, count: events.length });
+  } catch (e) {
+    console.error('[whales/recent] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, events: [], count: 0 });
+  }
+});
+
 // GET /api/event/:slug/sub-markets — sub-markets for one Polymarket
 // event, shaped to match the hot-markets carousel response so
 // public/carousel.js renders them with the same .hfx-c-* tiles used
