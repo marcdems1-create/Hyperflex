@@ -32696,6 +32696,91 @@ cron.schedule('* * * * *', () => {
   });
 }
 
+// GET /api/ipo-markets — IPO / pre-IPO prediction markets from Polymarket.
+// Searches Gamma by keyword "IPO" + "nasdaq" + "listing", dedupes by slug,
+// sorts by volume descending. 2-min TTL.
+{
+  let _ipoCache = null;
+  let _ipoCacheAt = 0;
+  const IPO_TTL = 2 * 60 * 1000;
+
+  async function _fetchIpoEvents() {
+    const queries = ['IPO', 'nasdaq', 'stock listing', 'public offering', 'shares'];
+    const seen = new Set();
+    const all = [];
+    for (const kw of queries) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const r = await _nodeFetch(
+          `https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=${encodeURIComponent(kw)}&order=volume&ascending=false&limit=20`,
+          { signal: ctrl.signal, headers: { 'User-Agent': 'Hyperflex/1.0' } }
+        );
+        clearTimeout(t);
+        if (!r.ok) continue;
+        const evts = await r.json();
+        if (!Array.isArray(evts)) continue;
+        for (const ev of evts) {
+          if (!ev.slug || seen.has(ev.slug)) continue;
+          seen.add(ev.slug);
+          all.push(ev);
+        }
+      } catch (_) { clearTimeout(t); }
+    }
+    // sort by total volume desc
+    all.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+    return all;
+  }
+
+  app.get('/api/ipo-markets', async (req, res) => {
+    try {
+      if (_ipoCache && Date.now() - _ipoCacheAt < IPO_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_ipoCache);
+      }
+      const events = await _fetchIpoEvents();
+      const markets = events.slice(0, 12).map(ev => {
+        const mList = Array.isArray(ev.markets) ? ev.markets : [];
+        let best = null;
+        for (const m of mList) {
+          if (m.closed) continue;
+          if (!best || Number(m.volume || 0) > Number(best.volume || 0)) best = m;
+        }
+        let maxPrice = null;
+        if (best) {
+          let prices = best.outcomePrices;
+          if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) {} }
+          if (Array.isArray(prices) && prices.length) {
+            maxPrice = Math.max(...prices.map(p => parseFloat(p) || 0));
+          }
+        }
+        const image = ev.image || ev.imageUrl || ev.icon
+          || (best && (best.image || best.imageUrl || best.icon)) || null;
+        return {
+          slug:          ev.slug || '',
+          title:         ev.title || '',
+          image,
+          end_date:      ev.endDate || ev.end_date || null,
+          volume:        Number(ev.volume || 0),
+          volume_24h:    Number(ev.volume24hr || ev.volume_24hr || 0),
+          max_price_pct: maxPrice != null ? Math.round(maxPrice * 100) : null,
+        };
+      }).filter(m => m.slug);
+
+      _ipoCache = { markets, count: markets.length, fetched_at: new Date().toISOString() };
+      _ipoCacheAt = Date.now();
+      res.set('Cache-Control', 'public, max-age=60').json(_ipoCache);
+    } catch (e) {
+      console.error('[ipo-markets]', e.message);
+      res.status(500).json({ error: e.message, markets: [] });
+    }
+  });
+}
+
+app.get('/ipo', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'ipo.html'));
+});
+
 app.get('/api/hot-markets/carousel', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 7));
