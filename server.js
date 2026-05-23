@@ -56263,6 +56263,44 @@ app.listen(PORT, () => {
       ['screener', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener`); if (!r.ok) throw new Error(r.status); }],
       ['narratives', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener/narratives`); if (!r.ok) throw new Error(r.status); }],
       ['fear-greed', async () => { const r = await fetch(`http://localhost:${PORT}/api/fear-greed`); if (!r.ok) throw new Error(r.status); }],
+      ['whale-stream-seed', async () => {
+        if (!pool || _whaleTradeStream.length > 0) return;
+        const rows = await dbQuery(
+          `SELECT * FROM whale_trade_history ORDER BY created_at DESC LIMIT 50`
+        ).catch(() => []);
+        if (!rows || !rows.length) return;
+        const _fmtSize = v => {
+          const n = Number(v) || 0;
+          if (!n) return null;
+          return n >= 1000000 ? '$' + (n / 1000000).toFixed(1) + 'M'
+               : n >= 1000    ? '$' + (n / 1000).toFixed(0) + 'K'
+               : '$' + n.toFixed(0);
+        };
+        _whaleTradeStream = rows.map(r => ({
+          type: 'whale_trade',
+          id: `wt_db_${r.id}`,
+          action: r.action,
+          trader_name: r.trader_name,
+          trader_rank: r.trader_rank || null,
+          trader_pnl: r.trader_pnl || null,
+          question: r.question || 'Unknown',
+          side: r.side || 'Unknown',
+          size: Number(r.size) || 0,
+          size_display: _fmtSize(r.size),
+          old_size: r.old_size ? Number(r.old_size) : null,
+          old_size_display: r.old_size ? _fmtSize(r.old_size) : null,
+          new_size: r.new_size ? Number(r.new_size) : null,
+          new_size_display: r.new_size ? _fmtSize(r.new_size) : null,
+          price: r.price ? Number(r.price) : 0,
+          url: r.market_url || 'https://polymarket.com',
+          slug: r.slug || null,
+          condition_id: r.condition_id || null,
+          clob_token_ids: null,
+          ts: r.created_at
+            ? new Date(r.created_at).toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10),
+        }));
+      }],
     ];
     for (const [name, fn] of warmups) {
       try { await fn(); console.log(`[boot] ✓ ${name}`); } catch (e) { console.warn(`[boot] ✗ ${name}: ${e.message}`); }
