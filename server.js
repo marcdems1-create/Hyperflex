@@ -22807,6 +22807,101 @@ async function sendPredictorSpotlightEmail() {
 }
 cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight cron triggered'); sendPredictorSpotlightEmail().catch(err => console.error('[spotlight] Cron error:', err.message)); });
 
+// Weekly performance recap — Sunday 19:00 UTC (prep for Monday)
+// Sends each user their own picks summary: wins/losses, P&L, tier progress, top markets
+async function sendWeeklyRecapEmails() {
+  if (!pool) return;
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  try {
+    // Find users who have resolved takes in the last 7 days and have email
+    const rows = await dbQuery(`
+      SELECT DISTINCT u.id, u.email, u.display_name,
+        COUNT(t.id) FILTER (WHERE t.is_correct = true)  AS wins,
+        COUNT(t.id) FILTER (WHERE t.is_correct = false) AS losses,
+        COUNT(t.id) AS total,
+        COUNT(t.id) FILTER (WHERE t.resolved_at IS NOT NULL) AS settled
+      FROM users u
+      JOIN takes t ON t.user_id = u.id
+      WHERE t.created_at >= $1 AND u.email IS NOT NULL AND u.email != ''
+        AND u.email_weekly_recap IS NOT DISTINCT FROM true
+      GROUP BY u.id, u.email, u.display_name
+      HAVING COUNT(t.id) >= 1
+      LIMIT 500
+    `, [weekAgo]).catch(() => []);
+
+    let sent = 0;
+    for (const r of (rows || [])) {
+      const wins  = parseInt(r.wins   || 0);
+      const losses = parseInt(r.losses || 0);
+      const total  = parseInt(r.total  || 0);
+      if (total < 1) continue;
+      const wr = total > 0 ? Math.round(wins / total * 100) : 0;
+      const name = r.display_name || 'Trader';
+      const wrColor = wr >= 60 ? '#00e68a' : wr >= 50 ? '#c9920d' : '#ff4d6a';
+
+      const resultLine = wins > 0 && losses === 0
+        ? `${wins}-0 this week. Perfect record.`
+        : wins === 0 && losses > 0
+        ? `0-${losses} this week. Post the comeback.`
+        : `${wins}-${losses} this week.`;
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Your Week — HYPERFLEX</title></head>
+<body style="background:#0e0e15;margin:0;padding:40px 20px;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:520px;margin:0 auto;">
+  <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-.02em;margin-bottom:4px;">HYPERFLEX</div>
+  <div style="font-size:12px;color:rgba(240,240,245,.4);letter-spacing:.12em;text-transform:uppercase;margin-bottom:32px;">Weekly record</div>
+
+  <div style="background:#111118;border:1px solid rgba(255,255,255,.08);border-left:3px solid ${wrColor};border-radius:8px;padding:24px;margin-bottom:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,240,245,.4);margin-bottom:12px;">THIS WEEK</div>
+    <div style="font-size:36px;font-weight:900;color:${wrColor};font-family:monospace;margin-bottom:6px;">${wr}%</div>
+    <div style="font-size:14px;color:rgba(240,240,245,.7);">${resultLine}</div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-bottom:20px;">
+    <div style="flex:1;background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:6px;padding:16px;text-align:center;">
+      <div style="font-size:28px;font-weight:900;color:#00e68a;font-family:monospace;">${wins}</div>
+      <div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.4);text-transform:uppercase;margin-top:4px;">CORRECT</div>
+    </div>
+    <div style="flex:1;background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:6px;padding:16px;text-align:center;">
+      <div style="font-size:28px;font-weight:900;color:#ff4d6a;font-family:monospace;">${losses}</div>
+      <div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.4);text-transform:uppercase;margin-top:4px;">INCORRECT</div>
+    </div>
+    <div style="flex:1;background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:6px;padding:16px;text-align:center;">
+      <div style="font-size:28px;font-weight:900;color:#fff;font-family:monospace;">${total}</div>
+      <div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.4);text-transform:uppercase;margin-top:4px;">PICKS</div>
+    </div>
+  </div>
+
+  <a href="https://hyperflex.network/feed" style="display:block;background:#4d9fff;color:#000;text-decoration:none;text-align:center;padding:14px;border-radius:6px;font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:24px;">POST THIS WEEK'S PICKS →</a>
+
+  <div style="font-size:11px;color:rgba(240,240,245,.25);line-height:1.6;">
+    You're getting this because you have picks on HYPERFLEX.<br>
+    <a href="https://hyperflex.network/settings" style="color:rgba(240,240,245,.35);">Manage email preferences</a>
+  </div>
+</div>
+</body></html>`;
+
+      await sendResendEmail({
+        to: r.email,
+        subject: `${resultLine} — HYPERFLEX weekly`,
+        html,
+        text: `${name} — ${resultLine} Win rate: ${wr}% (${wins}W / ${losses}L). See your full record at hyperflex.network`,
+      }).catch(() => {});
+      sent++;
+    }
+    console.log(`[weekly-recap] Sent ${sent} recap emails`);
+  } catch (e) {
+    console.error('[weekly-recap]', e.message);
+  }
+}
+// Sunday 19:00 UTC — lands in inboxes before Monday open
+cron.schedule('0 19 * * 0', () => { sendWeeklyRecapEmails().catch(e => console.error('[weekly-recap cron]', e.message)); });
+
+// POST /api/admin/weekly-recap/send — manual trigger for testing
+app.post('/api/admin/weekly-recap/send', requireAdminSecret, (req, res) => {
+  sendWeeklyRecapEmails().then(() => res.json({ ok: true })).catch(e => res.status(500).json({ error: e.message }));
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ── POLYMARKET INFLUENCER FEED ────────────────────────────────────────────────
 // Monitors X/Twitter, YouTube, and Reddit for top prediction-market voices.
