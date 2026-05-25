@@ -264,6 +264,7 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 .mcard-yes-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
 .mcard-no-pct{flex:1;padding:7px 10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:5px;font-family:var(--mono);font-size:14px;font-weight:700;color:#ff4d6a;text-align:center;}
 .mcard-no-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
+.mcard-summary{font-family:var(--mono);font-size:10px;color:rgba(240,240,245,.6);line-height:1.4;margin-top:7px;font-style:italic;}
 
 /* ── WIDE CARD (featured) ── */
 .wcard{
@@ -547,6 +548,7 @@ function buildCard(m, rank, pillClass, pillLabel){
           +'<span class="mcard-no-pct">'+(100-pct)+'% <small>NO</small></span>'
           +'</div>'
         :'')
+      +'<div class="mcard-summary" data-slug="'+esc(slug)+'"></div>'
     +'</div>'
     +'</a>';
 }
@@ -745,6 +747,29 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     return buildCard(m,i+1,'mcard-pill-live','● LIVE');
   }).join('');
   setTimeout(function(){patchImages(rowVolume);},0);
+
+  /* load AI summaries for visible cards (non-blocking, staggered) */
+  setTimeout(function(){
+    var slugSet = [];
+    var seen = {};
+    primary.slice(0,24).forEach(function(m){
+      var s = getSlug(m);
+      if(s && !seen[s]){ seen[s]=1; slugSet.push(s); }
+    });
+    slugSet.forEach(function(slug, i){
+      setTimeout(function(){
+        fetch('/api/market-summary/'+encodeURIComponent(slug))
+          .then(function(r){return r.ok?r.json():null;})
+          .then(function(d){
+            if(!d||!d.summary) return;
+            document.querySelectorAll('.mcard-summary[data-slug="'+slug+'"]').forEach(function(el){
+              el.textContent = d.summary;
+            });
+          })
+          .catch(function(){});
+      }, i*120); // stagger requests 120ms apart
+    });
+  }, 400);
 });
 
 })();
@@ -754,17 +779,27 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   var dropdown=document.getElementById('searchDropdown');
   if(!input||!dropdown) return;
   var timer=null,current='';
-  function pct(m){var p=m.outcomePrices;if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}if(!Array.isArray(p))return null;return Math.round(Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}))*100);}
+  function evtPct(ev){
+    // Try event-level outcomePrices first, then first active market
+    var src=ev;
+    if((!ev.outcomePrices)&&Array.isArray(ev.markets)&&ev.markets[0]) src=ev.markets[0];
+    var p=src.outcomePrices;
+    if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}
+    if(!Array.isArray(p))return null;
+    return Math.round(Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}))*100);
+  }
   function col(n){return n>=65?'var(--green)':n<=35?'var(--red)':'#fff';}
   function render(results){
     if(!results.length){dropdown.innerHTML='<div class="search-empty">No markets found</div>';dropdown.classList.add('open');return;}
-    dropdown.innerHTML=results.map(function(m){
-      var slug=m.slug||'';
-      var img=m.image||m.icon||'';
-      var q=(m.question||m.title||'—').replace(/</g,'&lt;');
-      var vol=Number(m.volume||0);
+    dropdown.innerHTML=results.map(function(ev){
+      // Events endpoint: use ev.slug; link to /market/ev.slug
+      var bestMkt=Array.isArray(ev.markets)&&ev.markets[0];
+      var slug=ev.slug||(bestMkt&&bestMkt.slug)||'';
+      var img=ev.image||ev.icon||(bestMkt&&(bestMkt.image||bestMkt.icon))||'';
+      var q=(ev.title||ev.question||'—').replace(/</g,'&lt;');
+      var vol=Number(ev.volume||0);
       var vf=vol>=1e6?'$'+(vol/1e6).toFixed(1)+'M vol':vol>=1e3?'$'+Math.round(vol/1e3)+'K vol':'';
-      var p=pct(m);
+      var p=evtPct(ev);
       return '<a class="search-result" href="/market/'+slug+'">'
         +(img?'<img class="search-result-img" src="'+img+'" alt="" loading="lazy">':'<div class="search-result-img"></div>')
         +'<div class="search-result-body"><div class="search-result-q">'+q+'</div>'+(vf?'<div class="search-result-meta">'+vf+'</div>':'')+'</div>'
@@ -778,7 +813,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     current=q;
     dropdown.innerHTML='<div class="search-loading">Searching…</div>';
     dropdown.classList.add('open');
-    fetch('https://gamma-api.polymarket.com/markets?term='+encodeURIComponent(q)+'&limit=10&closed=false&active=true&order=volume&ascending=false')
+    fetch('https://gamma-api.polymarket.com/events?term='+encodeURIComponent(q)+'&limit=10&closed=false&active=true&order=volume&ascending=false')
       .then(function(r){return r.ok?r.json():[];})
       .then(function(d){if(current!==q)return;render(Array.isArray(d)?d:[]);})
       .catch(function(){if(current!==q)return;dropdown.innerHTML='<div class="search-empty">Search unavailable</div>';});

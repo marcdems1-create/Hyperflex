@@ -142,6 +142,7 @@ const polymarket = require('./lib/polymarket'); // initialized below once _nodeF
 const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
+const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
 const mentionSync = require('./lib/mention-sync');
 const mentionsHeatmap = require('./lib/mentions-heatmap');
@@ -32829,6 +32830,27 @@ app.get('/api/hot-markets/carousel', async (req, res) => {
   }
 });
 
+// GET /api/market-summary/:slug — one-sentence AI probability summary for a market card
+app.get('/api/market-summary/:slug', async (req, res) => {
+  const slug = req.params.slug;
+  try {
+    const cached = await pool.query(
+      `SELECT summary FROM market_summaries WHERE slug = $1 AND updated_at > NOW() - INTERVAL '4 hours' LIMIT 1`,
+      [slug]
+    );
+    if (cached.rows.length && cached.rows[0].summary) {
+      return res.set('Cache-Control', 'public, max-age=3600').json({ slug, summary: cached.rows[0].summary });
+    }
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const market = screenerData.find(m => m.slug === slug || m.event_slug === slug) || {};
+    const summary = await marketSummaryLib.getSummary(slug, market, { db: pool, anthropic });
+    res.set('Cache-Control', 'public, max-age=3600').json({ slug, summary: summary || null });
+  } catch (e) {
+    console.error('[market-summary] endpoint error:', e.message);
+    res.json({ slug, summary: null });
+  }
+});
+
 // POST /api/admin/hot-markets/refresh — admin-gated cache bust.
 app.post('/api/admin/hot-markets/refresh', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
@@ -56382,6 +56404,23 @@ app.listen(PORT, () => {
     }
   })();
 
+  // market_summaries — AI-generated one-sentence market summary, 4h TTL
+  (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS market_summaries (
+          slug        TEXT PRIMARY KEY,
+          summary     TEXT NOT NULL,
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_market_summaries_updated ON market_summaries(updated_at DESC);
+      `);
+      console.log('[boot] ✓ market_summaries schema ensured');
+    } catch (err) {
+      console.error('[boot] ✗ failed to ensure market_summaries schema:', err.message);
+    }
+  })();
+
   // Pre-warm critical data caches on startup (non-blocking)
   setTimeout(async () => {
     console.log('[boot] Pre-warming data caches...');
@@ -56420,5 +56459,29 @@ app.listen(PORT, () => {
       console.warn('[boot] ✗ live-stream start failed:', e.message);
     }
   }, 5000); // Wait 5s for DB connections to establish
+
+  // Pre-warm top-10 market summaries (15s delay — after screener cache is populated)
+  setTimeout(async () => {
+    try {
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+      const top10 = screenerData.slice(0, 10);
+      if (!top10.length) { console.log('[summaries] No screener data yet — skipping pre-warm'); return; }
+      console.log(`[summaries] Pre-warming ${top10.length} market summaries...`);
+      let warmed = 0;
+      for (const market of top10) {
+        try {
+          const slug = market.slug || market.event_slug;
+          if (!slug) continue;
+          const summary = await marketSummaryLib.getSummary(slug, market, { db: pool, anthropic });
+          if (summary) warmed++;
+        } catch (e) {
+          console.warn('[summaries] Pre-warm item error:', e.message);
+        }
+      }
+      console.log(`[summaries] Pre-warmed ${warmed}/${top10.length} market summaries`);
+    } catch (e) {
+      console.warn('[summaries] Pre-warm failed:', e.message);
+    }
+  }, 15000);
 });
 
