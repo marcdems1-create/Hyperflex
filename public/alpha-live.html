@@ -421,6 +421,18 @@ function render(data){
         '<span class="entry-detail">'+entry+'¢ → '+win+'¢</span>'+
       '</div>'+
       (m.ai_hook?'<div class="hook">'+esc(m.ai_hook)+'</div>':'')+
+      (m.edge_delta != null && Math.abs(m.edge_delta) >= 1
+        ? '<div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;padding:6px 10px;border-radius:4px;background:' +
+          (m.edge_delta < 0 ? 'rgba(255,77,106,.06)' : 'rgba(0,230,138,.06)') + ';border-left:2px solid ' +
+          (m.edge_delta < 0 ? '#ff4d6a' : '#00e68a') + ';">' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;color:' +
+          (m.edge_delta < 0 ? '#ff4d6a' : '#00e68a') + ';">' +
+          (m.edge_delta < 0 ? 'EDGE SHRINKING' : 'EDGE GROWING') + '</span>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:900;color:' +
+          (m.edge_delta < 0 ? '#ff4d6a' : '#00e68a') + ';margin-left:auto;">' +
+          (m.edge_delta > 0 ? '+' : '') + m.edge_delta + '</span>' +
+          '</div>'
+        : '') +
       '<div class="meta-row">'+
         '<span>Vol '+fmtUSD(m.volume||0)+'</span>'+
         (m.days_until_expiry!=null?'<span>Expires '+m.days_until_expiry+'d</span>':'')+

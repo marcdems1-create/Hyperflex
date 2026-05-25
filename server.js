@@ -34804,6 +34804,11 @@ async function fetchClobDepth(markets, opts = {}) {
 // ════════════════════════════════════════════════════════════
 let _screenerCache = null;
 
+// ── Edge Velocity Tracker ──────────────────────────────────────────────────
+// Remembers each market's previous edge score so we can compute
+// edge_delta (velocity) each cycle. Maps market_id → {score, ts}
+const _edgePrev = new Map();
+
 // ── Volume Tracker: in-memory ring buffer for spike detection ──
 // Tracks volume deltas between screener refreshes (5-min intervals, 24 samples = 2h)
 let _volumeTracker = {};  // { market_id: { samples: [{volume, yes_price, ts}] } }
@@ -35918,6 +35923,26 @@ async function _buildAlphaListInner(opts = {}) {
       const top5 = [...markets].sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)).slice(0, 5);
       await generateAlphaHooks(top5);
     } catch (e) { console.warn('[screener] alpha hook generation failed:', e.message); }
+
+    // ── Edge velocity — score delta vs previous cycle ──────────────────────
+    const _edgeNow = Date.now();
+    for (const m of markets) {
+      const prev = _edgePrev.get(m.market_id);
+      if (prev) {
+        const deltaScore = (m.edge_score || 0) - prev.score;
+        const elapsedMin = (_edgeNow - prev.ts) / 60000;
+        m.edge_delta      = Math.round(deltaScore * 10) / 10; // signed, 1 dp
+        m.edge_velocity   = elapsedMin > 0 ? Math.round((deltaScore / elapsedMin) * 100) / 100 : 0; // pts/min
+        m.edge_peak_score = Math.max(m.edge_score || 0, prev.peak || prev.score || 0);
+        m.edge_shrinking  = deltaScore < -1; // edge dropped >1pt since last cycle
+      } else {
+        m.edge_delta     = 0;
+        m.edge_velocity  = 0;
+        m.edge_peak_score = m.edge_score || 0;
+        m.edge_shrinking  = false;
+      }
+      _edgePrev.set(m.market_id, { score: m.edge_score || 0, ts: _edgeNow, peak: m.edge_peak_score });
+    }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
