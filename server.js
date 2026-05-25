@@ -33412,6 +33412,74 @@ app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/t/:handle', (req, res) => res.redirect(302, '/@' + req.params.handle));
 
 // ════════════════════════════════════════════════════════════
+// GET /api/forecast-card/:slug.png — OG image generator for market share cards
+{
+  const { generateForecastCard } = require('./lib/forecast-card');
+  const _fcCache = new Map(); // slug → {buf, at}
+  const FC_TTL = 60 * 60 * 1000; // 1h
+
+  app.get('/api/forecast-card/:slug([^.]+).png', async (req, res) => {
+    const slug = req.params.slug;
+    const now = Date.now();
+    const cached = _fcCache.get(slug);
+    if (cached && now - cached.at < FC_TTL) {
+      res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600', 'X-Cache': 'HIT' });
+      return res.send(cached.buf);
+    }
+    try {
+      const _gh = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+      const gRes = await _nodeFetch(`https://gamma-api.polymarket.com/markets/keyset?slug=${encodeURIComponent(slug)}&limit=1`, { headers: _gh });
+      const raw = gRes.ok ? _gammaUnwrap(await gRes.json()) : [];
+      const m = Array.isArray(raw) && raw[0];
+      if (!m) return res.status(404).type('text/plain').send('Market not found');
+
+      let pct = 50;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices)) pct = Math.round(parseFloat(prices[0]) * 100);
+      } catch (_) {}
+
+      const vol = Number(m.volume || 0);
+      const volFmt = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M'
+                   : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '';
+
+      let closes = null;
+      if (m.endDate) {
+        const d = new Date(m.endDate);
+        closes = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+
+      // Classify topic from question text
+      const q = (m.question || '').toLowerCase();
+      const topic = q.includes('bitcoin') || q.includes('crypto') || q.includes('eth') ? 'Crypto'
+        : q.includes('trump') || q.includes('biden') || q.includes('election') ? 'Politics'
+        : q.includes('fed') || q.includes('rate') || q.includes('inflation') ? 'Macro'
+        : q.includes('ai') || q.includes('openai') || q.includes('model') ? 'AI'
+        : null;
+
+      // Fetch image via img-proxy route to reuse caching; fall back to raw URL
+      let imageUrl = null;
+      if (m.image) imageUrl = `http://localhost:${process.env.PORT || 3000}/api/img-proxy?url=${encodeURIComponent(m.image)}`;
+
+      const buf = await generateForecastCard({
+        question: m.question || '',
+        pct,
+        volume: volFmt,
+        closes,
+        imageUrl,
+        topic,
+      });
+
+      _fcCache.set(slug, { buf, at: now });
+      res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600', 'X-Cache': 'MISS' });
+      res.send(buf);
+    } catch (e) {
+      console.error('[forecast-card]', e.message);
+      res.status(500).type('text/plain').send('Card generation failed');
+    }
+  });
+}
+
 // POLYMARKET MARKET DETAIL PAGE
 // ════════════════════════════════════════════════════════════
 app.get('/market/:slug', async (req, res) => {
@@ -33457,7 +33525,7 @@ app.get('/market/:slug', async (req, res) => {
     const yesPrice = (() => { try { const p = JSON.parse(market.outcomePrices); return Math.round(p[0] * 100); } catch(e) { return 50; } })();
     const noPrice = 100 - yesPrice;
     const vol = market.volume ? '$' + (market.volume > 1e6 ? (market.volume/1e6).toFixed(1)+'M' : (market.volume/1e3).toFixed(0)+'K') : '';
-    const ogImg = market.image ? market.image : 'https://hyperflex.network/og-image.png';
+    const ogImg = `https://hyperflex.network/api/forecast-card/${encodeURIComponent(slug)}.png`;
     const canonicalUrl = `https://hyperflex.network/market/${encodeURIComponent(slug)}`;
     const endDate = market.endDate || market.end_date_iso || '';
 
