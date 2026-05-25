@@ -500,7 +500,7 @@ function buildCard(m, rank, pillClass, pillLabel){
   var priceHtml= pct!=null
     ?'<div class="mcard-price-row"><div class="mcard-price" style="color:'+col+';">'+pct+'¢</div><div class="mcard-bar-wrap"><div class="mcard-bar" style="width:'+pct+'%;background:'+col+';"></div></div></div>'
     :'';
-  return '<a class="mcard" href="'+href+'">'
+  return '<a class="mcard" href="'+href+'" data-slug="'+esc(slug)+'">'
     +'<div class="mcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="mcard-grad"></div>'
     +'<div class="mcard-top">'
@@ -530,7 +530,7 @@ function buildWide(m, category){
   var pct    = price!=null?Math.round(price*100):null;
   var col    = price!=null?pColor(price):'#fff';
   var bgStyle= img?'background-image:url('+JSON.stringify(img)+');':'background:#1e1e28;';
-  return '<a class="wcard" href="'+href+'">'
+  return '<a class="wcard" href="'+href+'" data-slug="'+esc(slug)+'">'
     +'<div class="wcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="wcard-grad"></div>'
     +'<div class="wcard-content">'
@@ -589,10 +589,8 @@ function renderHero(m){
   document.getElementById('hero-yes').href = href+'?side=YES';
   document.getElementById('hero-no').href  = href+'?side=NO';
   document.getElementById('hero-more').href= href;
-  if(img){
-    var bg = document.getElementById('hero-bg');
-    bg.style.backgroundImage='url('+JSON.stringify(img)+')';
-  }
+  var bg = document.getElementById('hero-bg');
+  bg.style.backgroundImage = img ? 'url('+JSON.stringify(img)+')' : '';
 }
 function setHeroIdx(i){
   heroIdx=i;
@@ -618,13 +616,17 @@ function patchImages(container){
   container.querySelectorAll('.mcard,.wcard').forEach(function(card){
     var bg = card.querySelector('.mcard-bg,.wcard-bg');
     if(!bg||bg.style.backgroundImage) return;
-    var slug = card.href?card.href.split('/market/')[1]:null;
+    var slug = (card.dataset&&card.dataset.slug)
+      || (card.href ? card.href.split('/market/').pop() : null);
     if(!slug) return;
-    fetch('https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(slug))
+    fetch('https://gamma-api.polymarket.com/events?slug='+encodeURIComponent(slug)+'&limit=1')
       .then(function(r){return r.ok?r.json():null;})
-      .then(function(ev){
+      .then(function(data){
+        var ev = Array.isArray(data) ? data[0] : data;
         if(!ev) return;
-        var img=(ev.image||ev.icon||null)||(Array.isArray(ev.markets)&&ev.markets[0]&&(ev.markets[0].image||ev.markets[0].icon)||null);
+        var img = ev.image || ev.icon
+          || (Array.isArray(ev.markets)&&ev.markets[0]&&(ev.markets[0].image||ev.markets[0].icon))
+          || null;
         if(img) bg.style.backgroundImage='url('+JSON.stringify(img)+')';
       }).catch(function(){});
   });
@@ -650,7 +652,7 @@ function loadGamma(){
           if(!m.closed&&(!best||Number(m.volume||0)>Number(best.volume||0))) best=m;
         });
         var entry=best
-          ?Object.assign({},best,{image:best.image||ev.image||null,event_title:ev.title,volume:ev.volume||best.volume})
+          ?Object.assign({},best,{slug:ev.slug,image:best.image||ev.image||null,event_title:ev.title,volume:ev.volume||best.volume})
           :{slug:ev.slug,image:ev.image||null,question:ev.title,volume:ev.volume,endDate:ev.endDate};
         out.push(entry);
       });
@@ -663,8 +665,12 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   var primary = carousel.length>=3 ? carousel : gamma;
   if(!primary.length) return;
 
-  /* hero — top 5 by volume */
-  heroMarkets = primary.slice(0,5);
+  /* hero — top 5 with a valid mid-range price (skip 0¢/100¢ shells) */
+  heroMarkets = primary.filter(function(m){
+    var p = getYesPrice(m);
+    return p != null && p > 0.01 && p < 0.99;
+  }).slice(0,5);
+  if(!heroMarkets.length) heroMarkets = primary.slice(0,1);
   renderHero(heroMarkets[0]);
   buildHeroDots(heroMarkets);
 
