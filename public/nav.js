@@ -348,9 +348,7 @@
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
-    { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
-    { href: '/whales', label: 'Market Intel' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/mentions', label: 'Mentions' }
   ];
@@ -688,22 +686,20 @@
   (function() {
     // Page definitions for static search
     var pages = [
-      { name: 'Whale Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
-      { name: 'Market Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
+      { name: 'Whales', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
       { name: 'Predictors', desc: 'Top predictor leaderboard', href: '/predictors', icon: '🏆' },
       { name: 'Odds', desc: 'Cross-platform odds comparison', href: '/odds', icon: '🎲' },
       { name: 'AI Brief', desc: 'Daily AI market briefing', href: '/brief', icon: '🧠' },
       { name: 'Daily Brief', desc: 'Daily AI market briefing', href: '/brief', icon: '🧠' },
       { name: 'Ecosystem', desc: 'Prediction market ecosystem', href: '/ecosystem', icon: '🌐' },
       { name: 'Features', desc: 'All HYPERFLEX features & tools', href: '/features', icon: '✨' },
-      { name: 'Alpha Terminal', desc: 'Live edges ranked by Edge Score', href: '/alpha', icon: '⚡' },
+      { name: 'Alpha', desc: 'Live edges ranked by Edge Score', href: '/alpha', icon: '⚡' },
       { name: 'Home', desc: 'Live market activity & intelligence', href: '/', icon: '🏠' },
       { name: 'Data', desc: 'Market data & analytics', href: '/data', icon: '📈' },
       { name: 'API', desc: 'Developer API docs', href: '/api-docs', icon: '⚙️' },
       { name: '99% Bets', desc: 'High probability markets', href: '/high-prob', icon: '🎯' },
       { name: 'Dashboard', desc: 'Your creator dashboard', href: '/creator/dashboard', icon: '🛠' },
-      { name: 'Compare', desc: 'HYPERFLEX vs competitors', href: '/compare', icon: '⚖️' },
-      { name: 'Copy Bot', desc: 'Auto-mirror whale trades', href: '/whales#copy', icon: '🤖' }
+      { name: 'Compare', desc: 'HYPERFLEX vs competitors', href: '/compare', icon: '⚖️' }
     ];
 
     // Build overlay + modal DOM

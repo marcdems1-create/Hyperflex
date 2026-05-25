@@ -12110,8 +12110,10 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
              u.is_whale, u.whale_rank, u.whale_pnl,
              u.flex_score, u.flex_tier, u.flex_qualifies, u.flex_settled_events,
              u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
-             u.prediction_win_rate, u.wallet_verified
+             u.prediction_win_rate, u.wallet_verified,
+             ws.total_volume_usd, ws.closed_positions AS ws_closed_positions
       FROM users u
+      LEFT JOIN wallet_scores ws ON ws.user_id = u.id
       WHERE u.${col} IS NOT NULL
       ORDER BY ${order}
       LIMIT $1`, [limit]);
@@ -12140,6 +12142,8 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
         whale_pnl:  u.whale_pnl  != null ? Number(u.whale_pnl)  : null,
         win_rate: u.prediction_win_rate != null ? Number(u.prediction_win_rate) : null,
         predictions_resolved: u.predictions_resolved != null ? Number(u.predictions_resolved) : 0,
+        total_volume_usd: u.total_volume_usd != null ? Math.round(Number(u.total_volume_usd)) : null,
+        closed_positions: u.ws_closed_positions != null ? Number(u.ws_closed_positions) : null,
       };
     });
 
@@ -12400,13 +12404,16 @@ async function fetchPolymarketLeaderboard(period) {
       const volPts = vol > 500000 ? 20 : vol > 100000 ? 15 : vol > 10000 ? 8 : 0;
       const profitBonus = roi > 0 ? 10 : 0;
       const sharpScore = Math.max(0, Math.min(99, Math.round(roiPts + pnlPts + volPts + profitBonus)));
+      const winRate = t.winRate != null ? parseFloat(t.winRate)
+                    : t.win_rate != null ? parseFloat(t.win_rate) : null;
       return {
         display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || 'Trader'; })(),
         total_pnl: Math.round(pnl),
         volume: Math.round(vol),
         roi: Math.round(roi * 10) / 10,
         wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
-        win_rate: 0,
+        win_rate: winRate != null ? Math.round(winRate * 100) : 0,
+        win_streak: 0,
         sharp_score: sharpScore,
         platforms: ['POLY'],
         _profitable: pnl > 0 && roi >= 1,
@@ -21253,7 +21260,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       if (cursor) { tParams.push(cursor); tWhere += ` AND t.created_at < $${tParams.length}`; }
       tParams.push(lim);
       userTakes = await dbQuery(
-        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug, t.condition_id,
                 t.question, t.side, t.entry_price, t.thesis, t.source,
                 t.agree_count, t.disagree_count, t.is_correct, t.created_at,
                 u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
@@ -21270,7 +21277,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       id: 'utake_' + t.id,
       _source: t.source === 'whale' ? 'whale' : t.source === 'consensus' ? 'consensus' : 'user',
       user_id: t.user_id,
-      market_id: t.market_slug,
+      market_id: t.market_slug || t.condition_id,
       market_title: t.question,
       direction: (t.side || '').toUpperCase(),
       entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
@@ -21302,7 +21309,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     let promotedPosts = [];
     if (pool && !cursor) {
       promotedPosts = await dbQuery(
-        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug, t.condition_id,
                 t.question, t.side, t.entry_price, t.thesis, t.source,
                 t.agree_count, t.disagree_count, t.is_correct, t.created_at,
                 t.promotion_impressions
@@ -21324,7 +21331,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       _source: t.source || 'user',
       _promoted: true,
       user_id: t.user_id,
-      market_id: t.market_slug,
+      market_id: t.market_slug || t.condition_id,
       market_title: t.question,
       direction: (t.side || '').toUpperCase(),
       entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
@@ -32628,6 +32635,181 @@ cron.schedule('* * * * *', () => {
 // news). For now tiles link to the existing /market/:slug surface which
 // is the live trading page.
 
+// GET /api/home-markets — top 5 Polymarket events for the landing page.
+// Fetches Gamma server-side (no browser CORS issues), guarantees image URLs,
+// returns the MAX outcome price (not just YES) so non-binary markets display
+// the dominant outcome correctly. 90s TTL.
+{
+  let _homeMarketsCache = null;
+  let _homeMarketsCacheAt = 0;
+  const HOME_MARKETS_TTL = 90 * 1000;
+
+  app.get('/api/home-markets', async (req, res) => {
+    try {
+      if (_homeMarketsCache && Date.now() - _homeMarketsCacheAt < HOME_MARKETS_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_homeMarketsCache);
+      }
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      let resp;
+      try {
+        resp = await _nodeFetch(
+          'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=8',
+          { signal: ctrl.signal }
+        );
+      } finally { clearTimeout(t); }
+      if (!resp.ok) return res.status(503).json({ error: 'Gamma unavailable' });
+      const events = await resp.json();
+      if (!Array.isArray(events)) return res.status(503).json({ error: 'Bad response' });
+
+      const markets = events.slice(0, 5).map(ev => {
+        const mList = Array.isArray(ev.markets) ? ev.markets : [];
+        let best = null;
+        for (const m of mList) {
+          if (m.closed) continue;
+          if (!best || Number(m.volume || 0) > Number(best.volume || 0)) best = m;
+        }
+        let maxPrice = null;
+        if (best) {
+          let prices = best.outcomePrices;
+          if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) {} }
+          if (Array.isArray(prices) && prices.length) {
+            maxPrice = Math.max(...prices.map(p => parseFloat(p) || 0));
+          }
+        }
+        // Gamma uses both `image` and `imageUrl` depending on endpoint version
+        const image = ev.image || ev.imageUrl || ev.icon
+          || (best && (best.image || best.imageUrl || best.icon)) || null;
+        const result = {
+          slug:          ev.slug || '',
+          title:         ev.title || '',
+          image,
+          end_date:      ev.endDate || ev.end_date || null,
+          volume:        Number(ev.volume || 0),
+          volume_24h:    Number(ev.volume24hr || ev.volume_24hr || 0),
+          max_price_pct: maxPrice != null ? Math.round(maxPrice * 100) : null,
+        };
+        console.log('[home-markets] slug:', result.slug, '| image:', result.image ? result.image.slice(0,60) : 'NULL', '| pct:', result.max_price_pct);
+        return result;
+      }).filter(m => m.slug);
+
+      _homeMarketsCache = { markets, count: markets.length, fetched_at: new Date().toISOString() };
+      _homeMarketsCacheAt = Date.now();
+      res.set('Cache-Control', 'public, max-age=60').json(_homeMarketsCache);
+    } catch (e) {
+      console.error('[home-markets]', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+}
+
+// GET /api/img-proxy — server-side image proxy for Polymarket/S3 images.
+// Bypasses CORS restrictions; 24h CDN cache. Only allows https:// URLs.
+app.get('/api/img-proxy', async (req, res) => {
+  const url = String(req.query.url || '');
+  if (!url.startsWith('https://')) return res.status(400).end();
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try { r = await _nodeFetch(url, { signal: ctrl.signal }); }
+    finally { clearTimeout(t); }
+    if (!r.ok) return res.status(r.status).end();
+    const ct = r.headers.get('content-type') || 'image/jpeg';
+    res.set('Content-Type', ct);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    r.body.pipe(res);
+  } catch (e) {
+    res.status(502).end();
+  }
+});
+
+// GET /api/ipo-markets — IPO / pre-IPO prediction markets from Polymarket.
+// Searches Gamma by keyword "IPO" + "nasdaq" + "listing", dedupes by slug,
+// sorts by volume descending. 2-min TTL.
+{
+  let _ipoCache = null;
+  let _ipoCacheAt = 0;
+  const IPO_TTL = 2 * 60 * 1000;
+
+  async function _fetchIpoEvents() {
+    const queries = ['IPO', 'nasdaq', 'stock listing', 'public offering', 'shares'];
+    const seen = new Set();
+    const all = [];
+    for (const kw of queries) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const r = await _nodeFetch(
+          `https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=${encodeURIComponent(kw)}&order=volume&ascending=false&limit=20`,
+          { signal: ctrl.signal, headers: { 'User-Agent': 'Hyperflex/1.0' } }
+        );
+        clearTimeout(t);
+        if (!r.ok) continue;
+        const evts = await r.json();
+        if (!Array.isArray(evts)) continue;
+        for (const ev of evts) {
+          if (!ev.slug || seen.has(ev.slug)) continue;
+          seen.add(ev.slug);
+          all.push(ev);
+        }
+      } catch (_) { clearTimeout(t); }
+    }
+    // sort by total volume desc
+    all.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+    return all;
+  }
+
+  app.get('/api/ipo-markets', async (req, res) => {
+    try {
+      if (_ipoCache && Date.now() - _ipoCacheAt < IPO_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_ipoCache);
+      }
+      const events = await _fetchIpoEvents();
+      const markets = events.slice(0, 12).map(ev => {
+        const mList = Array.isArray(ev.markets) ? ev.markets : [];
+        let best = null;
+        for (const m of mList) {
+          if (m.closed) continue;
+          if (!best || Number(m.volume || 0) > Number(best.volume || 0)) best = m;
+        }
+        let maxPrice = null;
+        if (best) {
+          let prices = best.outcomePrices;
+          if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) {} }
+          if (Array.isArray(prices) && prices.length) {
+            maxPrice = Math.max(...prices.map(p => parseFloat(p) || 0));
+          }
+        }
+        const image = ev.image || ev.imageUrl || ev.icon
+          || (best && (best.image || best.imageUrl || best.icon)) || null;
+        return {
+          slug:          ev.slug || '',
+          title:         ev.title || '',
+          image,
+          end_date:      ev.endDate || ev.end_date || null,
+          volume:        Number(ev.volume || 0),
+          volume_24h:    Number(ev.volume24hr || ev.volume_24hr || 0),
+          max_price_pct: maxPrice != null ? Math.round(maxPrice * 100) : null,
+        };
+      }).filter(m => m.slug);
+
+      _ipoCache = { markets, count: markets.length, fetched_at: new Date().toISOString() };
+      _ipoCacheAt = Date.now();
+      res.set('Cache-Control', 'public, max-age=60').json(_ipoCache);
+    } catch (e) {
+      console.error('[ipo-markets]', e.message);
+      res.status(500).json({ error: e.message, markets: [] });
+    }
+  });
+}
+
+app.get('/ipo', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'ipo.html'));
+});
+
 app.get('/api/hot-markets/carousel', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 7));
@@ -34934,7 +35116,7 @@ async function _buildAlphaListInner(opts = {}) {
         days_until_expiry: daysUntilExpiry,
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
-        slug: eventSlug,
+        slug: eventSlug || slug,
         neg_risk: m.neg_risk === true || m.negRisk === true,
         group_item: m.groupItemTitle || '',
         edge_score: edgeScore,

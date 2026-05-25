@@ -119,6 +119,21 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
   .r-stats .r-cta-cell { grid-column:span 2; }
   .r-cta { display:block; text-align:center; }
 }
+/* ── WHAT TO POST block ── */
+.r-post-label{font-family:var(--mono,monospace);font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(240,240,245,.35);text-transform:uppercase;margin:14px 0 8px;}
+.r-post-row{display:flex;align-items:stretch;gap:0;border:1px solid rgba(255,255,255,.08);border-radius:6px;overflow:hidden;margin-bottom:14px;}
+.r-post-side{flex:1;display:flex;flex-direction:column;gap:3px;padding:10px 12px;}
+.r-post-side-label{font-family:var(--mono,monospace);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;}
+.r-post-side-label.yes{color:#00c85a;}
+.r-post-side-label.no{color:#ff1a3c;}
+.r-post-price{font-family:var(--mono,monospace);font-size:22px;font-weight:700;line-height:1;}
+.r-post-price.yes{color:#00c85a;}
+.r-post-price.no{color:#ff1a3c;}
+.r-post-range{font-family:var(--mono,monospace);font-size:9px;color:rgba(240,240,245,.4);letter-spacing:.04em;}
+.r-post-divider{width:1px;background:rgba(255,255,255,.08);flex-shrink:0;}
+.r-post-est{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:10px 14px;background:rgba(0,212,255,.04);border-left:1px solid rgba(0,212,255,.12);}
+.r-est-num{font-family:var(--mono,monospace);font-size:15px;font-weight:700;color:#00d4ff;}
+.r-est-sub{font-family:var(--mono,monospace);font-size:8px;color:rgba(0,212,255,.5);letter-spacing:.06em;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -253,23 +268,57 @@ function renderRewardCards(list) {
     return;
   }
   el.innerHTML = list.map(function(m){
-    var yesPct = pctFromYes(m.yes_price);
-    var noPct  = 100 - yesPct;
-    var rate   = Number(m.reward_rate || 0);
-    var spread = Number(m.max_spread  || 0);
-    var slug   = m.slug || '';
-    var href   = slug ? '/market/' + encodeURIComponent(slug) : (m.url || '#');
-    var spreadLabel = spread > 0 ? ('±' + (spread * 100).toFixed(spread < 0.01 ? 2 : 1) + '¢') : '';
+    var yesPct  = pctFromYes(m.yes_price);
+    var noPct   = 100 - yesPct;
+    var rate    = Number(m.reward_rate || 0);
+    var spread  = Number(m.max_spread  || 0);
+    var minSize = Number(m.min_size    || 0);
+    var liq     = Number(m.liquidity   || 0);
+    var slug    = m.slug || '';
+    var href    = slug ? '/market/' + encodeURIComponent(slug) : (m.url || '#');
+
+    // qualifying price ranges for each side
+    var yesLo = Math.max(0,  yesPct - spread).toFixed(0);
+    var yesHi = Math.min(99, yesPct + spread).toFixed(0);
+    var noLo  = Math.max(0,  noPct  - spread).toFixed(0);
+    var noHi  = Math.min(99, noPct  + spread).toFixed(0);
+
+    // estimated daily earnings per min_size posted
+    var estDay = (liq > 0 && minSize > 0 && rate > 0)
+      ? '$' + ((minSize / liq) * rate).toFixed(2)
+      : null;
+
+    var spreadLabel = spread > 0 ? ('±' + spread.toFixed(1) + '¢') : '';
+
     return '<a class="r-card" href="' + esc(href) + '">' +
       '<div class="r-card-top">' +
         '<span class="r-badge">' + fmtRate(rate) + ' / day</span>' +
         (spreadLabel ? '<span class="r-meta">spread ' + esc(spreadLabel) + '</span>' : '') +
       '</div>' +
       '<div class="r-q">' + esc(m.question || 'Untitled market') + '</div>' +
+
+      // ── WHAT TO POST ──
+      '<div class="r-post-label">WHAT TO POST</div>' +
+      '<div class="r-post-row">' +
+        '<div class="r-post-side">' +
+          '<span class="r-post-side-label yes">YES</span>' +
+          '<span class="r-post-price yes">' + yesPct + '¢</span>' +
+          '<span class="r-post-range">post ' + yesLo + '¢ – ' + yesHi + '¢</span>' +
+        '</div>' +
+        '<div class="r-post-divider"></div>' +
+        '<div class="r-post-side">' +
+          '<span class="r-post-side-label no">NO</span>' +
+          '<span class="r-post-price no">' + noPct + '¢</span>' +
+          '<span class="r-post-range">post ' + noLo + '¢ – ' + noHi + '¢</span>' +
+        '</div>' +
+        (estDay ? '<div class="r-post-est"><span class="r-est-num">' + estDay + '/day</span><span class="r-est-sub">per $' + minSize + ' posted</span></div>' : '') +
+      '</div>' +
+
+      // ── STATS ──
       '<div class="r-stats">' +
-        '<div><span class="stat-k">Yes</span><span class="stat-v yes">' + yesPct + '¢</span></div>' +
-        '<div><span class="stat-k">No</span><span class="stat-v no">' + noPct + '¢</span></div>' +
+        '<div><span class="stat-k">Min order</span><span class="stat-v">$' + minSize.toLocaleString() + '</span></div>' +
         '<div><span class="stat-k">24h vol</span><span class="stat-v">' + fmtVol(m.volume_24h) + '</span></div>' +
+        '<div><span class="stat-k">Liquidity</span><span class="stat-v">' + fmtVol(m.liquidity) + '</span></div>' +
         '<div class="r-cta-cell"><span class="r-cta">Trade →</span></div>' +
       '</div>' +
     '</a>';

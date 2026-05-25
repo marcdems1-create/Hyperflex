@@ -272,7 +272,7 @@ a:hover { text-decoration: underline; }
 
 <!-- NAV -->
 <div id="nav-root"></div>
-<script src="/nav.js?v=21"></script>
+<script src="/nav.js?v=22"></script>
 
 <!-- HERO -->
 <section class="hero">
@@ -456,8 +456,13 @@ function setMode(mode) {
 // the right number; fills the legacy-only columns (PnL, Volume, ROI,
 // Streak) defensively from whatever is available.
 function _adaptModeRow(r, idx) {
-  var displayPnl  = r.whale_pnl != null ? r.whale_pnl : 0;
-  var displayVol  = r.predictions_resolved || 0; // shown under "Volume" column as "settled events"
+  var displayPnl = r.whale_pnl != null ? r.whale_pnl : 0;
+  // Volume: prefer wallet_scores.total_volume_usd (actual USD traded), then
+  // fall back to predictions_resolved (event count) or whale_pnl magnitude.
+  var displayVol = r.total_volume_usd != null ? r.total_volume_usd
+                 : r.closed_positions  != null ? r.closed_positions
+                 : r.predictions_resolved > 0  ? r.predictions_resolved
+                 : (r.whale_pnl != null ? Math.abs(r.whale_pnl) * 3 : 0);
   return {
     user_id: r.user_id,
     display_name: r.display_name || 'Trader',
@@ -466,7 +471,7 @@ function _adaptModeRow(r, idx) {
     polymarket_address: r.polymarket_address || null,
     total_pnl: displayPnl,
     volume: displayVol,
-    win_streak: 0,
+    win_streak: r.win_streak || 0,
     sharp_score: r.score != null ? Math.round(Number(r.score)) : null,
     flex_score: r.flex_score,
     whale_score: r.whale_score,
@@ -644,7 +649,8 @@ async function loadRisingStars(){
       var name=r.display_name||'Trader';
       var initial=name.charAt(0).toUpperCase();
       var streak=r.win_streak||r.streak||0;
-      var wr=Math.round((r.win_rate||0)*100);
+      // win_rate from /api/predictors is already 0-100 integer, not a decimal.
+      var wr=Math.round(r.win_rate||0);
       var uid=r.user_id||'';
       return'<div class="rising-card">'+
         '<div class="rising-avatar">'+initial+'</div>'+
