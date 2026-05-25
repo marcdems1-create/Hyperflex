@@ -1324,6 +1324,7 @@ const clustererBlurb = require('./lib/clusterer/blurb');
 // one event-level mention_event row with a 60-100 word narrative blurb.
 const clustererCompose = require('./lib/clusterer/compose');
 const clustererComposeGeneric = require('./lib/clusterer/compose-generic');
+const signalAgent = require('./lib/signal-agent');
 
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
@@ -1425,6 +1426,9 @@ if (pool) clustererBlurb.init({ pool, anthropic });
 
 // Phase 2f — composer module wiring.
 if (pool) clustererCompose.init({ pool, anthropic });
+
+// Signal agent — autonomous whale signal evaluator
+if (pool && anthropic) signalAgent.init({ pool, anthropic });
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
@@ -31738,6 +31742,16 @@ async function fetchWhalePositions() {
             );
             console.log(`[whale-consensus] NEW: ${sig.whale_count} whales ${sig.side} on "${sig.market.substring(0, 60)}" ($${Math.round(sig.total_capital/1000)}k)`);
 
+            // ── Signal agent: autonomous Claude evaluation of this whale cluster ──
+            signalAgent.onWhaleConsensus({
+              market:        sig.market,
+              side:          sig.side,
+              whale_count:   sig.whale_count,
+              total_capital: sig.total_capital,
+              market_price:  sig.market_price || sig.avg_price || 50,
+              slug:          sig.slug || '',
+            }).catch(() => {});
+
             // ── Synthesize whale consensus take for the social feed ──
             try {
               // Dedupe: don't create a take for the same market+side within 6 hours
@@ -48707,6 +48721,28 @@ app.get('/api/agent/sharpness', async (req, res) => {
 // Serve agent signal detail + performance pages
 app.get('/agent/signal/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent-signal.html')));
 app.get('/agent/performance', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent-performance.html')));
+
+// ── SIGNAL AGENT API ─────────────────────────────────────────────────────
+// GET /api/agent-signals — latest AI-evaluated whale signals
+app.get('/api/agent-signals', async (req, res) => {
+  const limit = Math.min(50, parseInt(req.query.limit) || 20);
+  const signals = await signalAgent.getRecent(limit);
+  res.json({ signals, count: signals.length });
+});
+
+// GET /api/agent-signals/stream — SSE feed (real-time push as signals fire)
+app.get('/api/agent-signals/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (res.flushHeaders) res.flushHeaders();
+  signalAgent.addClient(res);
+  const hb = setInterval(() => {
+    try { res.write(`event: heartbeat\ndata: ${Date.now()}\n\n`); } catch {}
+  }, 15000);
+  req.on('close', () => clearInterval(hb));
+});
 
 // ── AGENT EVALUATION CRON ─────────────────────────────────────────────────
 // Runs every 5 minutes: evaluates live signals against each active user's config
