@@ -1801,6 +1801,11 @@ a:hover { text-decoration: underline; }
     <button class="post-bar-btn">Predict</button>
   </div>
 
+  <!-- New takes banner (Twitter-style "X new takes — click to load") -->
+  <div id="newTakesBanner" style="display:none;text-align:center;margin-bottom:12px;">
+    <button onclick="loadNewTakes()" style="background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.3);color:#4d9fff;font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 20px;border-radius:20px;cursor:pointer;letter-spacing:.06em;transition:background .12s;" id="newTakesBtn">↑ 0 new takes</button>
+  </div>
+
   <!-- Feed -->
   <div id="feedContainer">
     <div class="feed-loading">Loading predictions...</div>
@@ -3186,9 +3191,80 @@ function renderCard(p) {
     tagsHtml +
     '<div class="pred-foot">' +
       '<span class="pred-foot-time">' + timeAgo(p.posted_at) + '</span>' +
-      (p.id ? '<a href="/takes/' + esc(p.id) + '" style="font-size:11px;color:var(--text-faint);margin-left:auto;display:inline-flex;align-items:center;gap:4px;text-decoration:none" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'" title="View replies">💬 ' + (p.comment_count || 0) + ' ' + (p.comment_count === 1 ? 'reply' : 'replies') + ' →</a>' : '') +
+      (p.agree_count != null
+        ? '<button class="pred-react-btn" onclick="feedReact(this,\'agree\',\'' + esc(String(p.id||'')) + '\')" data-take-id="' + esc(String(p.id||'')) + '" data-reaction="agree" title="Agree" style="background:none;border:1px solid rgba(0,230,138,.2);color:rgba(0,230,138,.7);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s,color .1s,transform .1s;">' +
+            '↑ ' + (p.agree_count || 0) +
+          '</button>'
+        : '') +
+      (p.id
+        ? '<button onclick="feedShare(this)" data-q="' + esc((p.market_title||'').slice(0,80)) + '" data-pct="' + (Math.round(parseFloat(p.entry_price||0)*100)||'') + '" data-slug="' + esc(p.market_id||'') + '" title="Share on X" style="background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.4);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;">↗</button>'
+        : '') +
+      (p.id ? '<a href="/takes/' + esc(p.id) + '" style="font-size:11px;color:var(--text-faint);margin-left:auto;display:inline-flex;align-items:center;gap:4px;text-decoration:none" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'" title="View replies">💬 ' + (p.comment_count || 0) + '</a>' : '') +
     '</div>' +
   '</div>';
+}
+
+/* ── NEW TAKES POLLER (Twitter "X new takes" banner) ── */
+var _newTakesQueue = [];
+var _lastSeenAt = null;
+var _newTakesTimer = null;
+
+function startNewTakesPoller() {
+  if (_newTakesTimer) return;
+  _newTakesTimer = setInterval(function() {
+    fetch(API + '/api/takes/feed?mode=foryou&limit=5').then(function(r){return r.ok?r.json():null;}).then(function(d){
+      var takes = (d&&(d.takes||d))||[];
+      if(!Array.isArray(takes)||!takes.length) return;
+      var newest = takes[0].posted_at || takes[0].created_at;
+      if(!_lastSeenAt) { _lastSeenAt = newest; return; }
+      var fresh = takes.filter(function(t){ return (t.posted_at||t.created_at) > _lastSeenAt; });
+      fresh.forEach(function(t){ if(!_newTakesQueue.find(function(x){return x.id===t.id;})) _newTakesQueue.push(t); });
+      if(_newTakesQueue.length) {
+        var btn = document.getElementById('newTakesBtn');
+        var banner = document.getElementById('newTakesBanner');
+        if(btn&&banner) {
+          btn.textContent = '↑ ' + _newTakesQueue.length + ' new take' + (_newTakesQueue.length>1?'s':'');
+          banner.style.display = 'block';
+        }
+      }
+    }).catch(function(){});
+  }, 60000); // check every 60s
+}
+
+function loadNewTakes() {
+  var banner = document.getElementById('newTakesBanner');
+  if(banner) banner.style.display = 'none';
+  _newTakesQueue = [];
+  loadFeed(false);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+setTimeout(startNewTakesPoller, 5000);
+
+function feedReact(btn, reaction, takeId) {
+  if (!takeId) return;
+  var prev = btn.style.color;
+  btn.style.transform = 'scale(1.2)';
+  btn.style.background = 'rgba(0,230,138,.15)';
+  btn.style.color = '#00e68a';
+  setTimeout(function(){btn.style.transform='';},180);
+  fetch('/api/takes/' + encodeURIComponent(takeId) + '/react', {
+    method: 'POST',
+    headers: Object.assign({'Content-Type':'application/json'}, authHeaders ? authHeaders() : {}),
+    body: JSON.stringify({ reaction: reaction }),
+  }).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(d && d.agree_count != null) btn.textContent = '↑ ' + d.agree_count;
+  }).catch(function(){btn.style.color=prev;btn.style.background='';});
+}
+
+function feedShare(btn) {
+  var q = btn.getAttribute('data-q') || '';
+  var pct = btn.getAttribute('data-pct') || '';
+  var slug = btn.getAttribute('data-slug') || '';
+  var text = (q || 'Market prediction') + (pct ? '\n\n' + pct + '% YES on Polymarket' : '') + '\nhyperflex.network' + (slug ? '/market/' + slug : '');
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'width=600,height=400');
+  btn.style.color = '#1da1f2';
+  setTimeout(function(){btn.style.color='';},1200);
 }
 
 // ── Follow toggle ──
