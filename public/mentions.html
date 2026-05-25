@@ -305,7 +305,51 @@ a{color:inherit;text-decoration:none}
 
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
 
-#stage-section{display:none}
+/* ── POSTER CARDS (Netflix redesign) ── */
+#grid-host{display:flex;gap:12px;overflow-x:auto;padding:4px 0 20px;scrollbar-width:none;}
+#grid-host::-webkit-scrollbar{display:none;}
+.mcard{
+  flex-shrink:0;width:200px;height:300px;border-radius:10px;overflow:hidden;
+  position:relative;text-decoration:none;border:1px solid rgba(255,255,255,.06);
+  background:#111;transition:transform .18s,border-color .18s;cursor:pointer;
+}
+.mcard:hover{transform:scale(1.05);border-color:rgba(255,255,255,.2);}
+.mcard-bg{
+  position:absolute;inset:0;background-size:cover;background-position:center;
+  transition:filter .2s;
+}
+.mcard:hover .mcard-bg{filter:brightness(1.15)!important;}
+.mcard-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(10,10,8,.97) 0%,rgba(10,10,8,.6) 45%,transparent 75%);
+}
+.mcard-monogram{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--display,'Syne',sans-serif);font-size:80px;font-weight:800;
+  color:rgba(255,255,255,.07);letter-spacing:-.05em;pointer-events:none;
+  z-index:1;
+}
+.mcard-pill{
+  position:absolute;top:10px;right:10px;z-index:3;
+  font-family:var(--mono,'Space Mono',monospace);font-size:8px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border-radius:20px;
+}
+.mcard-pill.deescalatory,.mcard-pill.hawkish{background:rgba(0,200,90,.18);color:#00c85a;border:1px solid rgba(0,200,90,.3);}
+.mcard-pill.escalatory,.mcard-pill.dovish{background:rgba(255,26,60,.14);color:#ff1a3c;border:1px solid rgba(255,26,60,.28);}
+.mcard-pill.neutral,.mcard-pill.moderate{background:rgba(240,240,245,.1);color:rgba(240,240,245,.6);border:1px solid rgba(255,255,255,.12);}
+.mcard-content{position:absolute;bottom:0;left:0;right:0;padding:12px;z-index:3;}
+.mcard-speaker{font-family:var(--mono,'Space Mono',monospace);font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(0,212,255,.8);text-transform:uppercase;margin-bottom:5px;}
+.mcard-q{font-family:var(--display,'Syne',sans-serif);font-size:12px;font-weight:800;color:#fff;line-height:1.25;letter-spacing:-.01em;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.mcard-meta{font-family:var(--mono,'Space Mono',monospace);font-size:9px;color:rgba(240,240,245,.4);letter-spacing:.04em;}
+.mcard-cta{
+  position:absolute;inset:0;z-index:4;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;background:rgba(0,212,255,.08);transition:opacity .15s;
+}
+.mcard:hover .mcard-cta{opacity:1;}
+.mcard-cta span{font-family:var(--mono,'Space Mono',monospace);font-size:10px;font-weight:700;letter-spacing:.12em;color:#00d4ff;background:rgba(10,10,8,.8);padding:8px 16px;border-radius:3px;border:1px solid rgba(0,212,255,.35);}
 </style>
 </head>
 <body>
@@ -917,84 +961,49 @@ function truncate(s, n) {
 //                            stance pill + TRADE →
 //   card_type='composed_only' → headline = posture-as-of-date, blurb,
 //                            stance pill + RECEIPT →
+// Stance → background gradient
+function stanceBg(stance) {
+  var s = (stance||'neutral').toLowerCase();
+  if(s==='deescalatory'||s==='dovish')  return 'linear-gradient(135deg,#0a1a12 0%,#0d1f18 100%)';
+  if(s==='escalatory'||s==='hawkish')   return 'linear-gradient(135deg,#1a0a0d 0%,#1f0d12 100%)';
+  return 'linear-gradient(135deg,#0e0e0e 0%,#141414 100%)';
+}
+
 function renderCard(ev) {
-  const dateStr = fmtDate(ev.event_date || ev.event_at);
-  const typeLabel = fmtEventType(ev.event_type);
-  const compared = ev.compared_to_speaker
-    ? `<div class="compared-chip">vs <strong>${esc(ev.compared_to_speaker)}</strong></div>`
-    : '<div class="compared-chip" style="visibility:hidden">·</div>';
+  const cardType  = ev.card_type || 'composed_only';
+  const tm        = ev.top_market || null;
+  const stance    = (ev.dominant_stance || 'neutral').toLowerCase();
+  const speaker   = ev.speaker || '?';
+  const monogram  = speaker.charAt(0).toUpperCase();
+  const slugLink  = '/event/' + esc(ev.slug);
+  const ctaLabel  = (cardType === 'language' || cardType === 'outcome') ? 'TRADE →' : 'VIEW →';
 
-  const cardType = ev.card_type || 'composed_only';
-  const tm = ev.top_market || null;
-  const ctaLabel = (cardType === 'language' || cardType === 'outcome') ? 'Trade →' : 'Receipt →';
+  // Headline: prefer market question, fall back to posture
+  const headline = tm ? (tm.question || speaker + "'s posture") : (speaker + "'s posture");
 
-  // Live dot fires only on language cards (the marquee shape). Outcome
-  // cards still get the cyan TRADE CTA but no live-dot pulse.
-  const liveDot = cardType === 'language'
-    ? '<span class="live-dot" aria-hidden="true"></span><span class="live-label">Live</span><span class="sep">·</span>'
-    : '';
-
-  let body;
-  // Prefer pct_display (formatted "X%" or "X¢" string from the server)
-  // and fall back to the legacy integer-pct field for any cached response
-  // shipped pre-cents-formatter.
+  // Price display
   const pctDisplay = tm && tm.leading_outcome_pct_display != null
     ? tm.leading_outcome_pct_display
-    : (tm && tm.leading_outcome_pct != null ? tm.leading_outcome_pct + '%' : null);
-  if (cardType === 'language' && tm) {
-    const leaderLine = (tm.leading_outcome_label && pctDisplay != null)
-      ? `<div class="card-leading">${esc(tm.leading_outcome_label)} leads at <span class="card-leading-pct">${esc(pctDisplay)}</span></div>`
-      : '';
-    const volLine = tm.volume_display
-      ? `<div class="card-volume">${esc(tm.volume_display)} traded · ${tm.candidate_count} candidates</div>`
-      : '';
-    body = `
-      <div class="card-headline">${esc(tm.question || ev.speaker + "'s posture")}</div>
-      ${leaderLine}
-      ${volLine}
-    `;
-  } else if (cardType === 'outcome' && tm) {
-    const pctLine = (pctDisplay != null)
-      ? `<div class="card-leading"><span class="card-leading-pct">${esc(pctDisplay)}</span> YES</div>`
-      : '';
-    const volLine = tm.volume_display
-      ? `<div class="card-volume">${esc(tm.volume_display)} traded</div>`
-      : '';
-    body = `
-      <div class="card-headline">${esc(tm.question || ev.speaker + "'s posture")}</div>
-      ${pctLine}
-      ${volLine}
-    `;
-  } else {
-    // composed_only — posture-as-headline, with the existing blurb
-    // truncated short. Stance pill stays prominent in the foot since
-    // the pill IS the headline for these events.
-    const blurbShort = truncate(ev.blurb || '', 140);
-    body = `
-      <div class="card-headline">${esc(ev.speaker)}'s posture as of ${esc(dateStr)}</div>
-      <div class="card-blurb">${esc(blurbShort)}</div>
-    `;
-  }
+    : (tm && tm.leading_outcome_pct != null ? tm.leading_outcome_pct + '¢' : null);
 
-  return `
-    <a class="card t-${esc(cardType.replace('composed_only', 'composed'))}" href="/event/${esc(ev.slug)}">
-      <div class="card-eyebrow">
-        ${liveDot}
-        <span class="speaker">${esc(ev.speaker)}</span>
-        <span class="sep">·</span>
-        <span>${esc(dateStr)}</span>
-        <span class="card-type">${esc(typeLabel)}</span>
-      </div>
-      ${body}
-      <div class="card-foot">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          ${pill(ev.dominant_stance, ev.dominant_confidence)}
-          ${compared}
-        </div>
-        <span class="card-arrow">${esc(ctaLabel)}</span>
-      </div>
-    </a>
-  `;
+  const vol = tm && tm.volume_display ? tm.volume_display : null;
+
+  const meta = [pctDisplay ? pctDisplay + ' YES' : null, vol].filter(Boolean).join(' · ');
+
+  const bgStyle = 'background:' + stanceBg(stance) + ';';
+
+  return `<a class="mcard" href="${slugLink}" data-ev-slug="${esc(ev.slug)}">
+    <div class="mcard-bg" style="${bgStyle}"></div>
+    <div class="mcard-overlay"></div>
+    <div class="mcard-monogram">${esc(monogram)}</div>
+    <div class="mcard-pill ${esc(stance)}">${esc(stance)}</div>
+    <div class="mcard-content">
+      <div class="mcard-speaker">${esc(speaker)}</div>
+      <div class="mcard-q">${esc(headline)}</div>
+      ${meta ? `<div class="mcard-meta">${esc(meta)}</div>` : ''}
+    </div>
+    <div class="mcard-cta"><span>${ctaLabel}</span></div>
+  </a>`;
 }
 
 // Powell-collapse — when a speaker has > THRESHOLD published events,
@@ -1031,6 +1040,31 @@ function applyCollapse(events) {
   return { rendered, expanders };
 }
 
+function patchMentionImages() {
+  document.querySelectorAll('.mcard[data-ev-slug]').forEach(card => {
+    var bg = card.querySelector('.mcard-bg');
+    if (!bg || bg.style.backgroundImage) return;
+    var evSlug = card.getAttribute('data-ev-slug') || '';
+    if (!evSlug) return;
+    var speakerEl = card.querySelector('.mcard-speaker');
+    var speaker = speakerEl ? speakerEl.textContent.trim() : '';
+    if (!speaker) return;
+    fetch('https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=5&tag=' + encodeURIComponent(speaker))
+      .then(r => r.ok ? r.json() : null)
+      .then(evts => {
+        if (!Array.isArray(evts) || !evts.length) return;
+        var img = evts[0].image || evts[0].icon || null;
+        if (img) {
+          bg.style.background = 'none';
+          bg.style.backgroundImage = 'url(' + JSON.stringify(img) + ')';
+          bg.style.backgroundSize = 'cover';
+          bg.style.backgroundPosition = 'center';
+          bg.style.filter = 'brightness(.45) saturate(1.3)';
+        }
+      }).catch(() => {});
+  });
+}
+
 function applyFilters() {
   const events = STATE.events.filter(ev => {
     if (STATE.domainFilter !== 'all' && (ev.domain || 'fed_monetary_policy') !== STATE.domainFilter) return false;
@@ -1052,6 +1086,7 @@ function applyFilters() {
       `<div class="speaker-expand" data-speaker="${esc(e.speaker)}">View all <strong>${e.hidden + COLLAPSE_INLINE}</strong> ${esc(e.speaker)} events →</div>`
     ).join('');
     host.innerHTML = '<div class="grid">' + cards + expanderHtml + '</div>';
+    setTimeout(() => patchMentionImages(), 0);
     // Wire expander clicks
     host.querySelectorAll('.speaker-expand').forEach(el => {
       el.onclick = () => {
