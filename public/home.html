@@ -195,6 +195,13 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 .row-see-all{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--cyan);text-decoration:none;margin-left:auto;text-transform:uppercase;transition:opacity .12s;}
 .row-see-all:hover{opacity:.7;}
 
+/* ── TOPIC CHIPS (home) ── */
+.home-topics{display:flex;gap:8px;padding:12px 48px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--border);}
+.home-topics::-webkit-scrollbar{display:none;}
+.home-chip{flex-shrink:0;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;padding:6px 14px;text-decoration:none;transition:color .12s,border-color .12s,background .12s;white-space:nowrap;}
+.home-chip:hover{color:var(--ink);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08);}
+@media(max-width:720px){.home-topics{padding:10px 16px;}}
+
 /* horizontal scroll container */
 .row-scroll{
   display:flex;gap:10px;
@@ -411,6 +418,17 @@ footer{
   </div>
 </div>
 
+<!-- ── TOPIC CHIPS ── -->
+<div class="home-topics" id="homeTopics">
+  <a class="home-chip" href="/explore">All Markets</a>
+  <a class="home-chip" href="/explore?topic=US+Politics">US Politics</a>
+  <a class="home-chip" href="/explore?topic=Crypto">Crypto</a>
+  <a class="home-chip" href="/explore?topic=Sports">Sports</a>
+  <a class="home-chip" href="/explore?topic=World+Events">World Events</a>
+  <a class="home-chip" href="/explore?topic=Economics">Economics</a>
+  <a class="home-chip" href="/explore?topic=AI+%26+Tech">AI &amp; Tech</a>
+</div>
+
 <!-- ── ROWS ── -->
 <div class="rows-wrap" id="rowsWrap">
 
@@ -419,7 +437,7 @@ footer{
     <div class="row-head">
       <span class="row-title">Hot Right Now</span>
       <span class="row-tag row-tag-hot">TRENDING</span>
-      <a class="row-see-all" href="/explore">See all →</a>
+      <a class="row-see-all" href="/explore#trending">See all →</a>
     </div>
     <div class="row-wrap">
       <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
@@ -451,7 +469,7 @@ footer{
     <div class="row-head">
       <span class="row-title">Events in Focus</span>
       <span class="row-tag row-tag-live">● LIVE</span>
-      <a class="row-see-all" href="/explore">See all →</a>
+      <a class="row-see-all" href="/explore#featured">See all →</a>
     </div>
     <div class="row-wrap">
       <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
@@ -467,7 +485,7 @@ footer{
     <div class="row-head">
       <span class="row-title">Highest Volume</span>
       <span class="row-tag row-tag-live">● LIVE</span>
-      <a class="row-see-all" href="/explore">See all →</a>
+      <a class="row-see-all" href="/explore#volume">See all →</a>
     </div>
     <div class="row-wrap">
       <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
