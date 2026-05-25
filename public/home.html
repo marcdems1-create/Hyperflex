@@ -662,8 +662,11 @@ function loadGamma(){
 
 Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   var carousel = results[0], gamma = results[1];
-  var primary = carousel.length>=3 ? carousel : gamma;
-  if(!primary.length) return;
+  var raw = carousel.length>=3 ? carousel : gamma;
+  if(!raw.length) return;
+  function isValidMarket(m){var p=getYesPrice(m);return p==null||(p>0.01&&p<0.99);}
+  var primary = raw.filter(isValidMarket);
+  if(!primary.length) primary = raw;
 
   /* hero — top 5 with a valid mid-range price (skip 0¢/100¢ shells) */
   heroMarkets = primary.filter(function(m){
