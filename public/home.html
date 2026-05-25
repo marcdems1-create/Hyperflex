@@ -258,22 +258,12 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
   text-shadow:0 1px 8px rgba(0,0,0,.8);
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
 }
-.mcard-price-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.mcard-price{font-family:var(--mono);font-size:18px;font-weight:700;line-height:1;}
-.mcard-bar-wrap{flex:1;height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;}
-.mcard-bar{height:100%;border-radius:2px;}
 .mcard-vol{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px;}
-.mcard-btns{display:flex;gap:5px;}
-.mcard-btn{
-  flex:1;height:28px;border:none;border-radius:4px;
-  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.06em;
-  cursor:pointer;text-decoration:none;
-  display:flex;align-items:center;justify-content:center;
-  transition:opacity .1s;
-}
-.mcard-btn:hover{opacity:.75;}
-.mcard-btn-y{background:rgba(0,230,138,.18);color:var(--green);border:1px solid rgba(0,230,138,.3);}
-.mcard-btn-n{background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.25);}
+.mcard-outcomes{display:flex;gap:6px;margin-top:8px;}
+.mcard-yes-pct{flex:1;padding:7px 10px;background:rgba(0,230,138,.12);border:1px solid rgba(0,230,138,.25);border-radius:5px;font-family:var(--mono);font-size:14px;font-weight:700;color:#00e68a;text-align:center;}
+.mcard-yes-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
+.mcard-no-pct{flex:1;padding:7px 10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:5px;font-family:var(--mono);font-size:14px;font-weight:700;color:#ff4d6a;text-align:center;}
+.mcard-no-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
 
 /* ── WIDE CARD (featured) ── */
 .wcard{
@@ -290,7 +280,7 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 .wcard-category{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.14em;color:var(--cyan);text-transform:uppercase;margin-bottom:8px;}
 .wcard-q{font-family:var(--display);font-size:16px;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.01em;margin-bottom:10px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;}
 .wcard-bottom{display:flex;align-items:center;gap:12px;}
-.wcard-price{font-family:var(--mono);font-size:24px;font-weight:700;}
+.wcard-outcomes{display:flex;gap:8px;align-items:center;}
 .wcard-vol{font-family:var(--mono);font-size:9px;color:var(--muted);}
 .wcard-cta{
   margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;
@@ -541,9 +531,6 @@ function buildCard(m, rank, pillClass, pillLabel){
   var col    = price!=null?pColor(price):'#fff';
   var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
   var rankHtml = rank?'<div class="mcard-rank">'+rank+'</div>':'';
-  var priceHtml= pct!=null
-    ?'<div class="mcard-price-row"><div class="mcard-price" style="color:'+col+';">'+pct+'¢</div><div class="mcard-bar-wrap"><div class="mcard-bar" style="width:'+pct+'%;background:'+col+';"></div></div></div>'
-    :'';
   return '<a class="mcard" href="'+href+'" data-slug="'+esc(slug)+'">'
     +'<div class="mcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="mcard-grad"></div>'
@@ -553,12 +540,13 @@ function buildCard(m, rank, pillClass, pillLabel){
     +'</div>'
     +'<div class="mcard-content">'
       +'<div class="mcard-q">'+esc(title)+'</div>'
-      +priceHtml
       +(vol?'<div class="mcard-vol">'+esc(vol)+' vol</div>':'')
-      +'<div class="mcard-btns">'
-        +'<span class="mcard-btn mcard-btn-y">YES</span>'
-        +'<span class="mcard-btn mcard-btn-n">NO</span>'
-      +'</div>'
+      +(pct!=null
+        ?'<div class="mcard-outcomes">'
+          +'<span class="mcard-yes-pct">'+pct+'% <small>YES</small></span>'
+          +'<span class="mcard-no-pct">'+(100-pct)+'% <small>NO</small></span>'
+          +'</div>'
+        :'')
     +'</div>'
     +'</a>';
 }
@@ -581,7 +569,10 @@ function buildWide(m, category){
       +'<div class="wcard-category">'+esc(category||'LIVE MARKET')+'</div>'
       +'<div class="wcard-q">'+esc(title)+'</div>'
       +'<div class="wcard-bottom">'
-        +(pct!=null?'<span class="wcard-price" style="color:'+col+';">'+pct+'¢ YES</span>':'')
+        +'<div class="wcard-outcomes">'
+          +(pct!=null?'<span style="color:#00e68a;font-family:var(--mono);font-size:13px;font-weight:700;">'+pct+'% YES</span>':'')
+          +(pct!=null?'<span style="color:#ff4d6a;font-family:var(--mono);font-size:13px;font-weight:700;">'+(100-pct)+'% NO</span>':'')
+        +'</div>'
         +(vol?'<span class="wcard-vol">'+esc(vol)+'</span>':'')
         +'<span class="wcard-cta">TRADE →</span>'
       +'</div>'
