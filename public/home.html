@@ -160,7 +160,7 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 
 /* ── ROWS (Netflix-style) ── */
 .rows-wrap{padding:0 0 80px;}
-.row-section{margin-top:40px;}
+.row-section{margin-top:40px;overflow:visible;}
 .row-head{
   display:flex;align-items:baseline;gap:14px;
   padding:0 48px;margin-bottom:14px;
@@ -182,8 +182,8 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 /* horizontal scroll container */
 .row-scroll{
   display:flex;gap:10px;
-  padding:4px 48px 16px;
-  overflow-x:auto;scrollbar-width:none;
+  padding:4px 48px 28px;
+  overflow-x:auto;overflow-y:visible;scrollbar-width:none;
   scroll-snap-type:x mandatory;
 }
 .row-scroll::-webkit-scrollbar{display:none;}
@@ -290,7 +290,7 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 .sk-wcard{flex-shrink:0;width:380px;height:220px;border-radius:8px;}
 
 /* ── SCROLL HINT ARROWS ── */
-.row-wrap{position:relative;}
+.row-wrap{position:relative;overflow:visible;}
 .row-arrow{
   position:absolute;top:0;bottom:16px;width:72px;z-index:20;
   display:flex;align-items:center;justify-content:center;
