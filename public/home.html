@@ -495,7 +495,7 @@ function buildCard(m, rank, pillClass, pillLabel){
   var price  = getYesPrice(m);
   var pct    = price!=null?Math.round(price*100):null;
   var col    = price!=null?pColor(price):'#fff';
-  var bgStyle= img?'background-image:url('+JSON.stringify(img)+');':'background:#1e1e28;';
+  var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
   var rankHtml = rank?'<div class="mcard-rank">'+rank+'</div>':'';
   var priceHtml= pct!=null
     ?'<div class="mcard-price-row"><div class="mcard-price" style="color:'+col+';">'+pct+'¢</div><div class="mcard-bar-wrap"><div class="mcard-bar" style="width:'+pct+'%;background:'+col+';"></div></div></div>'
@@ -529,7 +529,7 @@ function buildWide(m, category){
   var price  = getYesPrice(m);
   var pct    = price!=null?Math.round(price*100):null;
   var col    = price!=null?pColor(price):'#fff';
-  var bgStyle= img?'background-image:url('+JSON.stringify(img)+');':'background:#1e1e28;';
+  var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
   return '<a class="wcard" href="'+href+'" data-slug="'+esc(slug)+'">'
     +'<div class="wcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="wcard-grad"></div>'
