@@ -21260,7 +21260,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       if (cursor) { tParams.push(cursor); tWhere += ` AND t.created_at < $${tParams.length}`; }
       tParams.push(lim);
       userTakes = await dbQuery(
-        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug, t.condition_id,
                 t.question, t.side, t.entry_price, t.thesis, t.source,
                 t.agree_count, t.disagree_count, t.is_correct, t.created_at,
                 u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
@@ -21277,7 +21277,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       id: 'utake_' + t.id,
       _source: t.source === 'whale' ? 'whale' : t.source === 'consensus' ? 'consensus' : 'user',
       user_id: t.user_id,
-      market_id: t.market_slug,
+      market_id: t.market_slug || t.condition_id,
       market_title: t.question,
       direction: (t.side || '').toUpperCase(),
       entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
@@ -21309,7 +21309,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
     let promotedPosts = [];
     if (pool && !cursor) {
       promotedPosts = await dbQuery(
-        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug,
+        `SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.market_slug, t.condition_id,
                 t.question, t.side, t.entry_price, t.thesis, t.source,
                 t.agree_count, t.disagree_count, t.is_correct, t.created_at,
                 t.promotion_impressions
@@ -21331,7 +21331,7 @@ app.get('/api/predictions/feed', optionalAuth, async (req, res) => {
       _source: t.source || 'user',
       _promoted: true,
       user_id: t.user_id,
-      market_id: t.market_slug,
+      market_id: t.market_slug || t.condition_id,
       market_title: t.question,
       direction: (t.side || '').toUpperCase(),
       entry_price: t.entry_price ? parseFloat(t.entry_price) : null,
@@ -35116,7 +35116,7 @@ async function _buildAlphaListInner(opts = {}) {
         days_until_expiry: daysUntilExpiry,
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
-        slug: eventSlug,
+        slug: eventSlug || slug,
         neg_risk: m.neg_risk === true || m.negRisk === true,
         group_item: m.groupItemTitle || '',
         edge_score: edgeScore,

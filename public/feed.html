@@ -3003,7 +3003,7 @@ function normaliseNew(p) {
     _external_url: p._external_url || null,
     author: p.author || {},
     market_title: p.market_title,
-    market_id: p.market_id,
+    market_id: p.market_id || p.condition_id || null,
     market_live: p.market_live || null,   // live market snapshot from screener cache
     direction: p.direction,
     entry_price: p.entry_price,
@@ -3339,7 +3339,7 @@ function renderCard(p) {
     : '';
 
   var marketHref = (p.market_live && p.market_live.url) ||
-    (p.market_id ? ('/market/' + encodeURIComponent(p.market_id)) : '#');
+    (p.market_id ? ('/market/' + encodeURIComponent(p.market_id)) : null);
 
   // Source badge — whale, consensus, or X influencer origin
   var influencerBadge = p._source === 'influencer'
@@ -3430,7 +3430,7 @@ function renderCard(p) {
       (p.entry_price ? '<span class="badge badge-price">' + priceLabel + '</span>' : '') +
       convBadge +
     '</div>' +
-    (liveMarketHtml || ('<a href="' + marketHref + '" class="pred-market">' + esc(p.market_title) + '</a>')) +
+    (liveMarketHtml || (marketHref ? '<a href="' + marketHref + '" class="pred-market">' + esc(p.market_title) + '</a>' : (p.market_title ? '<div class="pred-market">' + esc(p.market_title) + '</div>' : ''))) +
     outcomeHtml +
     thesisHtml +
     tagsHtml +
