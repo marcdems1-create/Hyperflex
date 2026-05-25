@@ -32696,6 +32696,28 @@ cron.schedule('* * * * *', () => {
   });
 }
 
+// GET /api/img-proxy — server-side image proxy for Polymarket/S3 images.
+// Bypasses CORS restrictions; 24h CDN cache. Only allows https:// URLs.
+app.get('/api/img-proxy', async (req, res) => {
+  const url = String(req.query.url || '');
+  if (!url.startsWith('https://')) return res.status(400).end();
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try { r = await _nodeFetch(url, { signal: ctrl.signal }); }
+    finally { clearTimeout(t); }
+    if (!r.ok) return res.status(r.status).end();
+    const ct = r.headers.get('content-type') || 'image/jpeg';
+    res.set('Content-Type', ct);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    r.body.pipe(res);
+  } catch (e) {
+    res.status(502).end();
+  }
+});
+
 // GET /api/ipo-markets — IPO / pre-IPO prediction markets from Polymarket.
 // Searches Gamma by keyword "IPO" + "nasdaq" + "listing", dedupes by slug,
 // sorts by volume descending. 2-min TTL.

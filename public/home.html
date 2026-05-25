@@ -19,6 +19,7 @@
   --cyan:#00d4ff;
   --green:#00c85a;
   --red:#ff2244;
+  --gold:#f0b429;
   --mono:'Space Mono',monospace;
   --sans:'Inter',sans-serif;
   --display:'Syne',sans-serif;
@@ -73,45 +74,58 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
 .hdr-title{font-family:var(--display);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;}
 .hdr-count{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
 
-/* ── GRID ── */
-/* Left hero spans both rows; right is 2×2 */
+/* ── MAIN GRID ── hero left | 2×2 right */
 .grid{
   display:grid;
   grid-template-columns:3fr 2fr;
-  grid-template-rows:repeat(2, 1fr);
   gap:10px;
   min-height:520px;
 }
-@media(max-width:900px){.grid{grid-template-columns:1fr 1fr;grid-template-rows:auto;}}
-@media(max-width:560px){.grid{grid-template-columns:1fr;}}
+.right-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:1fr 1fr;
+  gap:10px;
+}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr;}
+  .right-grid{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:560px){
+  .right-grid{grid-template-columns:1fr;}
+}
 
 /* ── POSTER CARD ── */
 .card{
   position:relative;overflow:hidden;border-radius:10px;
   border:1px solid var(--border);
   transition:border-color .15s,transform .13s;
+  min-height:220px;
 }
+.card-hero{min-height:520px;}
 .card:hover{border-color:rgba(255,255,255,.22);transform:translateY(-2px);}
-.card-hero{grid-row:span 2;}
 
-/* the image IS the card — fills 100% */
-.card-bg{
+/* full-bleed image — first child, position:absolute */
+.card-img{
   position:absolute;inset:0;
-  background:#1a1a18 center/cover no-repeat;
-  filter:brightness(.4) saturate(1.3);
+  width:100%;height:100%;
+  object-fit:cover;
+  filter:brightness(.35) saturate(1.3);
+  z-index:0;
   transition:filter .2s;
+  background:#1a1a18;
 }
-.card:hover .card-bg{filter:brightness(.5) saturate(1.4);}
+.card:hover .card-img{filter:brightness(.48) saturate(1.4);}
 
-/* gradient from transparent at top → near-opaque at bottom */
+/* gradient overlay */
 .card-grad{
-  position:absolute;inset:0;pointer-events:none;
+  position:absolute;inset:0;pointer-events:none;z-index:1;
   background:linear-gradient(
     160deg,
     rgba(10,10,8,0) 0%,
-    rgba(10,10,8,.1) 40%,
-    rgba(10,10,8,.75) 68%,
-    rgba(10,10,8,.97) 88%,
+    rgba(10,10,8,.08) 38%,
+    rgba(10,10,8,.72) 66%,
+    rgba(10,10,8,.96) 86%,
     rgba(10,10,8,1) 100%
   );
 }
@@ -143,7 +157,7 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
 .price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;}
 .price-num{font-family:var(--mono);font-weight:700;line-height:1;}
 .card-hero .price-num{font-size:clamp(28px,3.2vw,44px);}
-.card    .price-num{font-size:clamp(20px,2vw,28px);}
+.card      .price-num{font-size:clamp(20px,2vw,28px);}
 .price-label{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.06em;}
 
 /* progress bar */
@@ -166,6 +180,35 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
 .btn-n{background:rgba(255,34,68,.1); color:var(--red);  border:1px solid rgba(255,34,68,.22);}
 .btn:hover{opacity:.75;transform:translateY(-1px);}
 
+/* ── NAV CARDS ── */
+.nav-cards{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  margin-top:10px;
+}
+@media(max-width:700px){.nav-cards{grid-template-columns:1fr;}}
+.nav-card{
+  position:relative;overflow:hidden;border-radius:10px;
+  border:1px solid var(--border);
+  background:#111110;
+  padding:24px 22px 20px;
+  text-decoration:none;
+  display:flex;flex-direction:column;gap:8px;
+  transition:border-color .15s,background .15s,transform .13s;
+}
+.nav-card:hover{border-color:rgba(255,255,255,.2);background:#161614;transform:translateY(-2px);}
+.nav-card-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+.nav-card-title{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--ink);}
+.nav-card-desc{font-family:var(--sans);font-size:13px;color:var(--ink2);line-height:1.45;margin-top:2px;flex:1;}
+.nav-card-arrow{font-family:var(--mono);font-size:18px;color:var(--muted);margin-top:8px;transition:color .12s,transform .12s;}
+.nav-card:hover .nav-card-arrow{color:var(--ink);transform:translateX(4px);}
+
+/* accent lines per card */
+.nav-card--mentions{border-top:2px solid var(--cyan);}
+.nav-card--feed{border-top:2px solid var(--green);}
+.nav-card--leaders{border-top:2px solid var(--gold);}
+
 /* ── SKELETON ── */
 @keyframes sk{0%,100%{opacity:.3}50%{opacity:.55}}
 .sk{background:rgba(255,255,255,.07);animation:sk 1.5s infinite;}
@@ -181,6 +224,7 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
     <a class="nav-tab" href="/feed">Feed</a>
     <a class="nav-tab" href="/predictors">Leaderboard</a>
     <a class="nav-tab" href="/mentions">Mentions</a>
+    <a class="nav-tab" href="/ipo">Pre-IPO</a>
   </div>
   <div class="nav-right">
     <div class="nav-live"><span class="nav-dot"></span><span>LIVE</span></div>
@@ -198,13 +242,38 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
     <span class="hdr-title">HOT MARKETS RIGHT NOW</span>
     <span class="hdr-count" id="mktCount"></span>
   </div>
+
   <div class="grid" id="grid">
-    <!-- skeletons -->
-    <div class="card card-hero sk" style="border-color:transparent;min-height:440px;"></div>
-    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
-    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
-    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
-    <div class="card sk" style="border-color:transparent;min-height:210px;"></div>
+    <!-- hero skeleton -->
+    <div class="card card-hero sk" style="border-color:transparent;"></div>
+    <!-- right 2×2 skeleton -->
+    <div class="right-grid">
+      <div class="card sk" style="border-color:transparent;"></div>
+      <div class="card sk" style="border-color:transparent;"></div>
+      <div class="card sk" style="border-color:transparent;"></div>
+      <div class="card sk" style="border-color:transparent;"></div>
+    </div>
+  </div>
+
+  <div class="nav-cards">
+    <a class="nav-card nav-card--mentions" href="/mentions">
+      <span class="nav-card-label">Intelligence</span>
+      <span class="nav-card-title">Mentions</span>
+      <span class="nav-card-desc">Track how Fed chairs and policymakers talk about key economic terms — and how markets move on their words.</span>
+      <span class="nav-card-arrow">→</span>
+    </a>
+    <a class="nav-card nav-card--feed" href="/feed">
+      <span class="nav-card-label">Social</span>
+      <span class="nav-card-title">Feed</span>
+      <span class="nav-card-desc">Takes, reactions, and whale moves from the sharpest predictors on Polymarket. Follow the edge.</span>
+      <span class="nav-card-arrow">→</span>
+    </a>
+    <a class="nav-card nav-card--leaders" href="/predictors">
+      <span class="nav-card-label">Rankings</span>
+      <span class="nav-card-title">Leaderboard</span>
+      <span class="nav-card-desc">Ranked by FLEX Score — calibration, ROI, dog rate, recency. The only number that matters.</span>
+      <span class="nav-card-arrow">→</span>
+    </a>
   </div>
 </main>
 
@@ -226,7 +295,6 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
     return d>0?'Closes in '+d+'d '+h+'h':'Closes in '+h+'h';
   }
   function edgeScore(pct){
-    // placeholder — distance from 50¢ signals informativeness
     return Math.min(97,Math.round(Math.abs(pct-50)*0.4+50+Math.random()*2));
   }
   function pCol(pct){
@@ -234,20 +302,20 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
   }
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-  function buildCard(m, hero){
+  function buildCard(m,hero){
     var href  = '/market/'+esc(m.slug);
     var pct   = m.max_price_pct;
     var col   = pct!=null?pCol(pct):'#e8e8e0';
     var vol   = fmtVol(m.volume_24h||m.volume||0);
     var close = fmtClose(m.end_date);
     var edge  = pct!=null?edgeScore(pct):null;
-    var bgStyle = m.image
-      ? 'background-image:url('+JSON.stringify(m.image)+');'
-      : '';
+    var imgSrc = m.image ? '/api/img-proxy?url='+encodeURIComponent(m.image) : '';
 
     return '<div class="card'+(hero?' card-hero':'')+'">'
-      // background image layer
-      +'<div class="card-bg" style="'+bgStyle+'"></div>'
+      // full-bleed image — first child, absolute positioned
+      +(imgSrc
+        ?'<img class="card-img" src="'+imgSrc+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">'
+        :'<div class="card-img" style="background:#1e1e1c;"></div>')
       // gradient overlay
       +'<div class="card-grad"></div>'
       // top badges
@@ -256,7 +324,7 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
       +(vol?'<span class="badge b-vol">'+esc(vol)+'</span>':'')
       +(edge!=null?'<span class="badge b-edge">EDGE '+edge+'</span>':'')
       +'</div>'
-      // content
+      // content bottom
       +'<div class="card-body">'
       +'<div class="card-q">'+esc(m.title||'—')+'</div>'
       +(pct!=null
@@ -280,7 +348,12 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
     var grid=document.getElementById('grid');
     var count=document.getElementById('mktCount');
     if(count)count.textContent=markets.length+' MARKETS';
-    grid.innerHTML=markets.map(function(m,i){return buildCard(m,i===0);}).join('');
+    var hero=markets[0];
+    var smalls=markets.slice(1,5);
+    grid.innerHTML=buildCard(hero,true)
+      +'<div class="right-grid">'
+      +smalls.map(function(m){return buildCard(m,false);}).join('')
+      +'</div>';
   }
 
   function buildTicker(markets){
@@ -298,7 +371,6 @@ main{max-width:1300px;margin:0 auto;padding:28px 20px 80px;}
     track.style.animationDuration=(markets.length*9)+'s';
   }
 
-  // single server-side endpoint — images guaranteed, CORS-free
   fetch('/api/home-markets')
     .then(function(r){return r.ok?r.json():null;})
     .then(function(d){
