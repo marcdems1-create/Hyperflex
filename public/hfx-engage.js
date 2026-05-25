@@ -157,7 +157,7 @@
   }
 
   window.HFX.celebrate = function (opts) {
-    /* opts: { question, units, side } — call on correct resolution */
+    /* opts: { question, units, side, entry_price, winRate, streak } — call on correct resolution */
     opts = opts || {};
     _loadConfetti(function () {
       if (typeof confetti !== 'function') return;
@@ -171,7 +171,53 @@
       body: opts.question ? opts.question.slice(0, 72) : null,
       duration: 8000,
     });
+    // Win card overlay — shareable DraftKings-style receipt
+    setTimeout(function () { _showWinCard(opts); }, 1200);
   };
+
+  function _showWinCard(opts) {
+    var existing = document.getElementById('hfx-win-card-overlay');
+    if (existing) existing.remove();
+
+    var q = (opts.question || '').slice(0, 90);
+    var side = (opts.side || 'YES').toUpperCase();
+    var entry = opts.entry_price ? Math.round(opts.entry_price * 100) + '¢' : '';
+    var wr = opts.winRate ? Math.round(opts.winRate * 100) + '%' : null;
+    var streak = opts.streak || null;
+    var tweetText = 'Called it on HYPERFLEX' +
+      (q ? ': ' + q : '') +
+      (entry ? ' at ' + entry : '') +
+      '. Track record: hyperflex.network';
+
+    var overlay = document.createElement('div');
+    overlay.id = 'hfx-win-card-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;';
+
+    overlay.innerHTML = [
+      '<div style="background:linear-gradient(145deg,#0a1a12 0%,#0d2018 100%);border:1px solid rgba(0,230,138,.25);border-radius:16px;padding:32px 28px;width:90%;max-width:400px;position:relative;box-shadow:0 0 60px rgba(0,230,138,.12);">',
+        '<button onclick="document.getElementById(\'hfx-win-card-overlay\').remove()" style="position:absolute;top:14px;right:16px;background:none;border:none;color:rgba(240,240,245,.3);font-size:18px;cursor:pointer;line-height:1;">×</button>',
+        '<div style="font-family:monospace;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(0,230,138,.6);margin-bottom:14px;">CORRECT</div>',
+        '<div style="font-size:18px;font-weight:800;color:#f0f0f5;line-height:1.4;margin-bottom:20px;">' + (q || 'Market resolved.') + '</div>',
+        '<div style="display:flex;gap:10px;margin-bottom:20px;">',
+          '<div style="flex:1;background:rgba(0,230,138,.08);border:1px solid rgba(0,230,138,.15);border-radius:8px;padding:14px;text-align:center;">',
+            '<div style="font-family:monospace;font-size:20px;font-weight:900;color:#00e68a;">' + side + '</div>',
+            '<div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.35);text-transform:uppercase;margin-top:4px;">Side</div>',
+          '</div>',
+          (entry ? '<div style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:14px;text-align:center;"><div style="font-family:monospace;font-size:20px;font-weight:900;color:#f0f0f5;">' + entry + '</div><div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.35);text-transform:uppercase;margin-top:4px;">Entry</div></div>' : ''),
+          (wr ? '<div style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:14px;text-align:center;"><div style="font-family:monospace;font-size:20px;font-weight:900;color:#c9920d;">' + wr + '</div><div style="font-size:10px;letter-spacing:.1em;color:rgba(240,240,245,.35);text-transform:uppercase;margin-top:4px;">Win rate</div></div>' : ''),
+        '</div>',
+        (streak && streak >= 3 ? '<div style="font-size:12px;color:rgba(245,158,11,.8);font-family:monospace;font-weight:700;margin-bottom:16px;">' + streak + '-pick win streak.</div>' : ''),
+        '<div style="display:flex;gap:10px;">',
+          '<button onclick="window.open(\'https://twitter.com/intent/tweet?text=\'+encodeURIComponent(\'' + tweetText.replace(/'/g, "\\'") + '\'),\'_blank\',\'width=600,height=400\')" style="flex:1;background:#1da1f2;color:#fff;border:none;border-radius:8px;padding:13px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.04em;">Post on X</button>',
+          '<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + tweetText.replace(/'/g, "\\'") + '\').then(function(){window.HFX&&window.HFX.toast({type:\'info\',title:\'Copied.\',duration:2500})})" style="background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.6);border-radius:8px;padding:13px 18px;font-size:13px;cursor:pointer;">Copy</button>',
+        '</div>',
+        '<div style="margin-top:14px;font-size:10px;font-family:monospace;color:rgba(240,240,245,.2);letter-spacing:.06em;">HYPERFLEX · hyperflex.network</div>',
+      '</div>',
+    ].join('');
+
+    document.body.appendChild(overlay);
+    overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+  }
 
   window.HFX.showLoss = function (opts) {
     opts = opts || {};
