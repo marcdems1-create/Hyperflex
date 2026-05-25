@@ -575,11 +575,26 @@ function buildCard(m, rank, pillClass, pillLabel){
   var col    = price!=null?pColor(price):'#fff';
   var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
   var rankHtml = rank?'<div class="mcard-rank">'+rank+'</div>':'';
-  return '<a class="mcard" href="'+href+'" data-slug="'+esc(slug)+'">'
+  var endDate = m.end_date||m.endDate||m.end_date_iso||null;
+  var endMs   = endDate ? new Date(endDate).getTime() : null;
+  var hoursLeft = endMs ? (endMs - Date.now()) / 3600000 : null;
+  var cdId    = endMs ? 'cd-'+esc(slug) : null;
+  // Closing urgency — show red countdown when <24h
+  var urgency = '';
+  if (hoursLeft != null && hoursLeft > 0 && hoursLeft < 24) {
+    urgency = '<span class="mcard-countdown" id="'+cdId+'" style="color:#ff4d6a;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.06em;margin-left:6px;">CLOSING</span>';
+  }
+  // Share button
+  var shareBtn = pct != null
+    ? '<button class="mcard-share" onclick="event.preventDefault();event.stopPropagation();hfxShare(\''+esc(slug)+'\',\''+esc(title.replace(/'/g,"&#39;").slice(0,80))+'\','+pct+')" title="Share on X" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;transition:background .12s;">↗</button>'
+    : '';
+  return '<a class="mcard" href="'+href+'" data-slug="'+esc(slug)+'" style="position:relative;">'
+    +shareBtn
     +'<div class="mcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="mcard-grad"></div>'
     +'<div class="mcard-top">'
       +'<span class="mcard-pill '+pillClass+'">'+pillLabel+'</span>'
+      +urgency
       +rankHtml
     +'</div>'
     +'<div class="mcard-content">'
@@ -594,6 +609,11 @@ function buildCard(m, rank, pillClass, pillLabel){
       +'<div class="mcard-summary" data-slug="'+esc(slug)+'"></div>'
     +'</div>'
     +'</a>';
+}
+
+function hfxShare(slug, title, pct) {
+  var text = title + '\n\n' + pct + '% YES on Polymarket\nhyperflex.network/market/' + slug;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'width=600,height=400');
 }
 
 /* ── build wide card ── */
@@ -791,6 +811,46 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   }).join('');
   setTimeout(function(){patchImages(rowVolume);},0);
 
+  /* wire countdown timers for cards with end_date */
+  setTimeout(function(){
+    if(window.HFX && window.HFX.watchCountdown){
+      document.querySelectorAll('[id^="cd-"]').forEach(function(el){
+        var slug = el.id.replace('cd-','');
+        var card = document.querySelector('[data-slug="'+slug+'"]');
+        var m = card && primary.concat(byWhale||[],byVol||[]).find(function(x){return getSlug(x)===slug;});
+        var ed = m && (m.end_date||m.endDate||null);
+        if(ed) window.HFX.watchCountdown(el, ed);
+      });
+    }
+  }, 600);
+
+  /* Closing Soon row — markets expiring in <24h */
+  (function(){
+    var soon = primary.filter(function(m){
+      var ed = m.end_date||m.endDate||null;
+      if(!ed) return false;
+      var ms = new Date(ed).getTime()-Date.now();
+      return ms>0 && ms < 24*3600000;
+    }).slice(0,8);
+    if(!soon.length) return;
+    var section = document.createElement('div');
+    section.className = 'row-section';
+    section.innerHTML = '<div class="row-head">'
+      +'<span class="row-title">Closing Soon</span>'
+      +'<span class="row-tag" style="background:rgba(255,77,106,.14);color:#ff4d6a;border-color:rgba(255,77,106,.28);">URGENT</span>'
+      +'</div>'
+      +'<div class="row-wrap">'
+        +'<button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>'
+        +'<div class="row-scroll" id="rowSoon">'
+          +soon.map(function(m,i){return buildCard(m,null,'mcard-pill-hot','CLOSES SOON');}).join('')
+        +'</div>'
+        +'<button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>'
+      +'</div>';
+    var rowsWrap = document.getElementById('rowsWrap');
+    if(rowsWrap) rowsWrap.insertBefore(section, rowsWrap.firstChild);
+    setTimeout(function(){patchImages(document.getElementById('rowSoon'));},0);
+  })();
+
   /* load AI summaries for visible cards (non-blocking, staggered) */
   setTimeout(function(){
     var slugSet = [];
@@ -814,6 +874,32 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     });
   }, 400);
 });
+
+  /* live price ticking — refresh YES% every 90s without reload */
+  setInterval(function(){
+    var cards = document.querySelectorAll('[data-slug]');
+    var slugs = Array.from(new Set(Array.from(cards).map(function(c){return c.getAttribute('data-slug');}).filter(Boolean)));
+    if(!slugs.length) return;
+    fetch('/api/screener?slugs='+encodeURIComponent(slugs.slice(0,12).join(',')))
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        var list = (d&&(d.markets||d)) || [];
+        if(!Array.isArray(list)) return;
+        list.forEach(function(m){
+          if(!m.slug||m.yes_price==null) return;
+          var pct = Math.round(m.yes_price*100);
+          var noPct = 100-pct;
+          var col = m.yes_price>=0.65?'#00e68a':m.yes_price<=0.35?'#ff4d6a':'#fff';
+          document.querySelectorAll('[data-slug="'+m.slug+'"] .mcard-yes-pct').forEach(function(el){
+            el.innerHTML = pct+'% <small>YES</small>';
+            el.style.color = col;
+          });
+          document.querySelectorAll('[data-slug="'+m.slug+'"] .mcard-no-pct').forEach(function(el){
+            el.innerHTML = noPct+'% <small>NO</small>';
+          });
+        });
+      }).catch(function(){});
+  }, 90000);
 
 })();
 
