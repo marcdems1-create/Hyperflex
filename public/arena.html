@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLEX Arena — Live Prediction Tournaments</title>
+<meta name="description" content="Compete in live prediction tournaments. Post takes, score in real time as markets move, get crowned when you're right.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#0e0e15;--paper-2:#111118;--paper-3:#16161f;
+  --ink:#f0f0f5;--dim:rgba(240,240,245,.45);--faint:rgba(240,240,245,.2);
+  --gold:#c9920d;--green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;
+  --border:rgba(255,255,255,.07);
+  --sans:'Inter',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:var(--gold);text-decoration:none}
+
+/* ── NAV ── */
+.nav{position:sticky;top:0;z-index:200;background:rgba(14,14,21,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;gap:20px}
+.nav-logo{font-weight:900;font-size:16px;letter-spacing:-.02em;color:var(--ink)}
+.nav-logo span{color:var(--gold)}
+.nav-links{display:flex;gap:16px;margin-left:auto;font-size:12px;font-weight:600;color:var(--dim)}
+.nav-links a{color:var(--dim);transition:color .15s}
+.nav-links a:hover{color:var(--ink)}
+.nav-cta{background:var(--gold);color:#000;padding:6px 14px;border-radius:6px;font-weight:700;font-size:12px;margin-left:8px}
+
+/* ── HERO ── */
+.hero{padding:56px 24px 40px;max-width:900px;margin:0 auto;text-align:center}
+.hero-eyebrow{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:14px}
+.hero h1{font-size:clamp(36px,5vw,64px);font-weight:900;letter-spacing:-.03em;line-height:1.05;margin-bottom:16px}
+.hero h1 em{background:linear-gradient(135deg,var(--gold),var(--red));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:normal}
+.hero-sub{font-size:16px;color:var(--dim);max-width:560px;margin:0 auto 32px;line-height:1.6}
+.hero-stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap}
+.hstat-n{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--ink)}
+.hstat-l{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:2px}
+
+/* ── ARENA GRID ── */
+.main{max-width:1100px;margin:0 auto;padding:0 24px 60px}
+.section-head{display:flex;align-items:center;gap:12px;padding:32px 0 18px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.section-head h2{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.arena-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+
+.arena-card{background:var(--paper-2);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all .15s;text-decoration:none;color:inherit;display:block;position:relative;overflow:hidden}
+.arena-card:hover{border-color:rgba(201,146,13,.3);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.arena-card.hot{border-color:rgba(201,146,13,.25);background:linear-gradient(180deg,rgba(201,146,13,.04),var(--paper-2))}
+
+.arena-badge{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:5px;margin-bottom:12px}
+.arena-badge.open{background:rgba(0,230,138,.1);color:var(--green);border:1px solid rgba(0,230,138,.2)}
+.arena-badge.closed{background:rgba(255,77,106,.08);color:var(--red);border:1px solid rgba(255,77,106,.2)}
+.arena-badge.hot{background:rgba(201,146,13,.1);color:var(--gold);border:1px solid rgba(201,146,13,.2)}
+
+.arena-title{font-size:15px;font-weight:700;line-height:1.4;margin-bottom:16px;color:var(--ink)}
+
+.arena-stats{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
+.astat{flex:1;padding:10px 12px;text-align:center;border-right:1px solid var(--border)}
+.astat:last-child{border-right:none}
+.astat-n{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--ink)}
+.astat-l{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:3px}
+
+.arena-cta{display:block;text-align:center;background:var(--gold);color:#000;border-radius:8px;padding:11px;font-weight:700;font-size:13px;letter-spacing:.04em;transition:opacity .15s}
+.arena-cta:hover{opacity:.85;text-decoration:none;color:#000}
+.arena-cta.entered{background:rgba(0,230,138,.15);color:var(--green);border:1px solid rgba(0,230,138,.3)}
+
+/* ── ARENA DETAIL MODAL ── */
+.modal-overlay{position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.8);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--paper-2);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:100%;max-width:640px;margin:auto}
+.modal-head{padding:24px 24px 20px;border-bottom:1px solid var(--border)}
+.modal-body{padding:24px}
+.modal-title{font-size:17px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+.modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1}
+
+/* ── LEADERBOARD ── */
+.lb-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.lb-row:last-child{border-bottom:none}
+.lb-rank{font-family:var(--mono);font-size:14px;font-weight:700;width:24px;text-align:center;flex-shrink:0}
+.lb-rank.r1{color:var(--gold)}
+.lb-rank.r2{color:rgba(240,240,245,.6)}
+.lb-rank.r3{color:#cd7f32}
+.lb-avatar{width:32px;height:32px;border-radius:50%;background:var(--paper-3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--dim);overflow:hidden}
+.lb-avatar img{width:100%;height:100%;object-fit:cover}
+.lb-name{font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-side{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px}
+.lb-side.yes{background:rgba(0,230,138,.1);color:var(--green)}
+.lb-side.no{background:rgba(255,77,106,.1);color:var(--red)}
+.lb-score{font-family:var(--mono);font-size:14px;font-weight:700;min-width:52px;text-align:right}
+.lb-score.pos{color:var(--green)}
+.lb-score.neg{color:var(--red)}
+.lb-score.zero{color:var(--dim)}
+
+/* Enter form */
+.enter-form{background:var(--paper-3);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px}
+.enter-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.side-toggle{display:flex;gap:8px;margin-bottom:12px}
+.side-btn{flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--dim);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+.side-btn.yes.active{background:rgba(0,230,138,.12);border-color:var(--green);color:var(--green)}
+.side-btn.no.active{background:rgba(255,77,106,.1);border-color:var(--red);color:var(--red)}
+
+@media(max-width:640px){
+  .arena-grid{grid-template-columns:1fr}
+  .hero h1{font-size:32px}
+  .nav-links{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/feed">Feed</a>
+    <a href="/alpha-live">Alpha</a>
+    <a href="/predictors">Leaderboard</a>
+    <a href="/arena" style="color:var(--gold)">Arena</a>
+  </div>
+  <a href="/creator/login" class="nav-cta">Sign in</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-eyebrow">⚡ FLEX Arena</div>
+  <h1>Prediction markets as a <em>sport.</em></h1>
+  <p class="hero-sub">Enter an arena, post your take, and score in real time as the market moves. Winner crowned on resolution.</p>
+  <div class="hero-stats">
+    <div><div class="hstat-n" id="stat-arenas">—</div><div class="hstat-l">Live arenas</div></div>
+    <div><div class="hstat-n" id="stat-entries">—</div><div class="hstat-l">Total entries</div></div>
+    <div><div class="hstat-n" id="stat-traders">—</div><div class="hstat-l">Competing</div></div>
+  </div>
+</section>
+
+<main class="main">
+  <div class="section-head">
+    <div class="live-dot"></div>
+    <h2>Open Arenas</h2>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;" id="last-update">—</span>
+  </div>
+  <div class="arena-grid" id="arena-grid">
+    <div style="color:var(--faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">Loading arenas…</div>
+  </div>
+</main>
+
+<!-- Arena detail modal -->
+<div class="modal-overlay" id="arenaModal" onclick="if(event.target===this)closeArena()">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" onclick="closeArena()">×</button>
+    <div class="modal-head" id="arenaModalHead"></div>
+    <div class="modal-body" id="arenaModalBody"></div>
+  </div>
+</div>
+
+<script src="/hfx-engage.js" defer></script>
+<script>
+var API = '';
+var token = localStorage.getItem('hfx_token') || sessionStorage.getItem('hfx_token') || '';
+function authH() { return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }; }
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function fmtScore(n) {
+  var v = parseFloat(n||0);
+  return (v > 0 ? '+' : '') + v.toFixed(1);
+}
+
+function scoreClass(n) {
+  var v = parseFloat(n||0);
+  return v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+}
+
+function timeLeft(s) {
+  if (!s) return '—';
+  var ms = new Date(s) - Date.now();
+  if (ms <= 0) return 'Ended';
+  var h = Math.floor(ms/3600000);
+  var d = Math.floor(h/24);
+  if (d > 0) return d + 'd left';
+  if (h > 0) return h + 'h left';
+  return Math.floor(ms/60000) + 'm left';
+}
+
+// ── Load arenas ──────────────────────────────────────────────────────────────
+async function loadArenas() {
+  try {
+    var r = await fetch(API + '/api/arenas');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var arenas = await r.json();
+
+    var totalEntries = arenas.reduce(function(s, a) { return s + (a.entry_count || 0); }, 0);
+    var userSet = new Set();
+
+    document.getElementById('stat-arenas').textContent = arenas.filter(function(a){ return a.status==='open'; }).length;
+    document.getElementById('stat-entries').textContent = totalEntries;
+    document.getElementById('stat-traders').textContent = '—';
+    document.getElementById('last-update').textContent = 'Updated just now';
+
+    if (!arenas.length) {
+      document.getElementById('arena-grid').innerHTML = '<div style="color:var(--faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No open arenas right now — check back soon.</div>';
+      return;
+    }
+
+    document.getElementById('arena-grid').innerHTML = arenas.map(function(a) {
+      var isHot = (a.entry_count || 0) >= 5;
+      var badge = a.status === 'open'
+        ? '<span class="arena-badge ' + (isHot ? 'hot' : 'open') + '">' + (isHot ? '◆ ' : '') + (a.status === 'open' ? 'OPEN' : 'CLOSED') + '</span>'
+        : '<span class="arena-badge closed">CLOSED</span>';
+
+      return '<div class="arena-card ' + (isHot?'hot':'') + '" onclick="openArena(' + a.id + ')">' +
+        badge +
+        '<div class="arena-title">' + esc(a.title) + '</div>' +
+        '<div class="arena-stats">' +
+          '<div class="astat"><div class="astat-n">' + (a.entry_count||0) + '</div><div class="astat-l">Entries</div></div>' +
+          '<div class="astat"><div class="astat-n">' + (a.market_price != null ? a.market_price + '¢' : '—') + '</div><div class="astat-l">Market</div></div>' +
+          '<div class="astat"><div class="astat-n">' + timeLeft(a.closes_at) + '</div><div class="astat-l">Time left</div></div>' +
+        '</div>' +
+        (a.status === 'open'
+          ? '<div class="arena-cta">Enter Arena →</div>'
+          : '<div class="arena-cta" style="opacity:.5;pointer-events:none;">Closed</div>') +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('arena-grid').innerHTML = '<div style="color:var(--faint);font-size:13px;padding:20px 0;grid-column:1/-1;">Failed to load arenas: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ── Open arena detail modal ──────────────────────────────────────────────────
+var _currentArenaId = null;
+var _selectedSide = 'YES';
+
+async function openArena(id) {
+  _currentArenaId = id;
+  var modal = document.getElementById('arenaModal');
+  document.getElementById('arenaModalHead').innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.12em;margin-bottom:8px;">LOADING…</div>';
+  document.getElementById('arenaModalBody').innerHTML = '';
+  modal.classList.add('open');
+
+  try {
+    var r = await fetch(API + '/api/arenas/' + id);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    renderArenaModal(d.arena, d.entries);
+  } catch(e) {
+    document.getElementById('arenaModalHead').innerHTML = '<div style="color:var(--red)">Failed to load: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderArenaModal(arena, entries) {
+  var head = document.getElementById('arenaModalHead');
+  var body = document.getElementById('arenaModalBody');
+
+  head.innerHTML = [
+    '<div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">FLEX Arena</div>',
+    '<div class="modal-title">' + esc(arena.title) + '</div>',
+    '<div style="display:flex;gap:20px;font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:8px;">',
+      '<span>Market: ' + arena.market_price + '¢</span>',
+      '<span>' + (arena.entry_count||0) + ' entries</span>',
+      '<span>' + timeLeft(arena.closes_at) + '</span>',
+    '</div>',
+  ].join('');
+
+  var enterHtml = '';
+  if (arena.status === 'open' && token) {
+    enterHtml = [
+      '<div class="enter-form">',
+        '<div class="enter-label">Your prediction</div>',
+        '<div class="side-toggle">',
+          '<button class="side-btn yes active" id="sideYes" onclick="selectSide(\'YES\')">YES · ' + arena.market_price + '¢</button>',
+          '<button class="side-btn no" id="sideNo" onclick="selectSide(\'NO\')">NO · ' + (100 - arena.market_price) + '¢</button>',
+        '</div>',
+        '<button onclick="enterArena(' + arena.id + ',' + (arena.market_price||50) + ')" style="width:100%;background:var(--gold);color:#000;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.04em;" id="enterBtn">Enter — Predict ' + _selectedSide + '</button>',
+        '<div id="enterErr" style="font-size:11px;color:var(--red);margin-top:8px;min-height:16px;"></div>',
+      '</div>',
+    ].join('');
+  } else if (!token) {
+    enterHtml = '<a href="/creator/login?next=/arena" style="display:block;text-align:center;background:rgba(201,146,13,.1);border:1px solid rgba(201,146,13,.3);color:var(--gold);border-radius:8px;padding:12px;font-weight:700;font-size:13px;margin-bottom:20px;">Sign in to compete →</a>';
+  }
+
+  var lbHtml = entries.length === 0
+    ? '<div style="color:var(--faint);font-size:13px;padding:20px 0;text-align:center;">No entries yet — be first.</div>'
+    : entries.map(function(e, i) {
+        var rank = e.rank || (i + 1);
+        var rankClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : '';
+        var initials = (e.display_name || '?').slice(0, 2).toUpperCase();
+        var avatarHtml = e.avatar_url
+          ? '<img src="' + esc(e.avatar_url) + '" onerror="this.style.display=\'none\'">'
+          : initials;
+        return '<div class="lb-row">' +
+          '<div class="lb-rank ' + rankClass + '">' + (rank <= 3 ? ['◆','◈','●'][rank-1] : rank) + '</div>' +
+          '<div class="lb-avatar">' + avatarHtml + '</div>' +
+          '<a href="/m/' + esc(e.user_id) + '" class="lb-name" style="color:var(--ink)">' + esc(e.display_name||'Anonymous') + '</a>' +
+          '<span class="lb-side ' + (e.side||'YES').toLowerCase() + '">' + esc(e.side||'YES') + '</span>' +
+          '<div class="lb-score ' + scoreClass(e.live_score) + '">' + fmtScore(e.live_score) + '</div>' +
+        '</div>';
+      }).join('');
+
+  body.innerHTML = enterHtml +
+    '<div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;">LIVE LEADERBOARD</div>' +
+    lbHtml +
+    (arena.market_slug ? '<a href="/market/' + esc(arena.market_slug) + '" style="display:block;margin-top:20px;text-align:center;font-size:12px;color:var(--blue);">View market →</a>' : '');
+}
+
+function selectSide(side) {
+  _selectedSide = side;
+  document.getElementById('sideYes').className = 'side-btn yes' + (side==='YES'?' active':'');
+  document.getElementById('sideNo').className  = 'side-btn no'  + (side==='NO'?' active':'');
+  var btn = document.getElementById('enterBtn');
+  if (btn) btn.textContent = 'Enter — Predict ' + side;
+}
+
+async function enterArena(arenaId, marketPrice) {
+  var btn = document.getElementById('enterBtn');
+  var errEl = document.getElementById('enterErr');
+  if (!btn) return;
+  btn.disabled = true; btn.textContent = 'Entering…';
+  errEl.textContent = '';
+
+  try {
+    var r = await fetch(API + '/api/arenas/' + arenaId + '/enter', {
+      method: 'POST',
+      headers: authH(),
+      body: JSON.stringify({ side: _selectedSide, entry_price: _selectedSide === 'YES' ? marketPrice : 100 - marketPrice }),
+    });
+    var d = await r.json();
+    if (d.ok) {
+      btn.textContent = 'Entered ✓';
+      btn.style.background = 'rgba(0,230,138,.15)';
+      btn.style.color = 'var(--green)';
+      btn.style.border = '1px solid rgba(0,230,138,.3)';
+      if (window.HFX && window.HFX.toast) {
+        window.HFX.toast({ type: 'win', title: 'Arena entered. Predict ' + _selectedSide + '.', duration: 5000 });
+      }
+      // Reload leaderboard
+      setTimeout(function() { openArena(arenaId); }, 1500);
+    } else {
+      errEl.textContent = d.error || 'Entry failed.';
+      btn.disabled = false; btn.textContent = 'Enter — Predict ' + _selectedSide;
+    }
+  } catch(e) {
+    errEl.textContent = 'Network error.';
+    btn.disabled = false; btn.textContent = 'Enter — Predict ' + _selectedSide;
+  }
+}
+
+function closeArena() {
+  document.getElementById('arenaModal').classList.remove('open');
+  _currentArenaId = null;
+}
+
+loadArenas();
+setInterval(loadArenas, 60000);
+// Auto-refresh leaderboard if modal is open
+setInterval(function() { if (_currentArenaId) openArena(_currentArenaId); }, 30000);
+</script>
+</body>
+</html>

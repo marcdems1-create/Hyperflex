@@ -22934,6 +22934,210 @@ app.post('/api/admin/weekly-recap/send', requireAdminSecret, (req, res) => {
   sendWeeklyRecapEmails().then(() => res.json({ ok: true })).catch(e => res.status(500).json({ error: e.message }));
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── FLEX ARENA — Live prediction tournaments ──────────────────────────────────
+//
+// Each arena is a timed competition around a specific Polymarket market.
+// Users enter by posting a take. Takes score as the market price moves.
+// Live leaderboard shows who's crushing it. Winner crowned on resolution.
+//
+// Tables auto-created on boot (idempotent):
+//   flex_arenas      — arena definitions (one per market)
+//   arena_entries    — one entry per user per arena (linked to their take)
+//   arena_scores     — hourly snapshots (for leaderboard graph)
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function ensureArenaTables() {
+  if (!pool) return;
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS flex_arenas (
+      id            SERIAL PRIMARY KEY,
+      market_slug   TEXT NOT NULL UNIQUE,
+      condition_id  TEXT,
+      title         TEXT NOT NULL,
+      category      TEXT,
+      market_price  NUMERIC,
+      opens_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      closes_at     TIMESTAMPTZ,
+      resolved_at   TIMESTAMPTZ,
+      winner_id     INT,
+      status        TEXT NOT NULL DEFAULT 'open',  -- open|closed|resolved
+      entry_count   INT NOT NULL DEFAULT 0,
+      prize_label   TEXT DEFAULT 'Top FLEX Score',
+      banner_url    TEXT
+    );
+    CREATE TABLE IF NOT EXISTS arena_entries (
+      id         SERIAL PRIMARY KEY,
+      arena_id   INT NOT NULL REFERENCES flex_arenas(id) ON DELETE CASCADE,
+      user_id    INT NOT NULL,
+      take_id    INT,
+      side       TEXT NOT NULL,
+      entry_price NUMERIC,
+      live_score  NUMERIC DEFAULT 0,
+      rank        INT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(arena_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS arena_entries_arena_idx ON arena_entries(arena_id);
+    CREATE INDEX IF NOT EXISTS arena_entries_user_idx  ON arena_entries(user_id);
+  `).catch(() => {});
+}
+ensureArenaTables();
+
+// Score all open arena entries — runs every 10 min
+async function scoreArenas() {
+  if (!pool) return;
+  try {
+    const arenas = await dbQuery(`SELECT * FROM flex_arenas WHERE status='open'`).catch(() => []);
+    if (!arenas.length) return;
+
+    // Build a price map from screener cache
+    const priceMap = {};
+    if (_screenerCache && _screenerCache.data) {
+      for (const m of _screenerCache.data) {
+        if (m.slug) priceMap[m.slug] = (m.yes_ask || m.yes_price || 0.5) * 100;
+      }
+    }
+
+    for (const arena of arenas) {
+      const currentPct = priceMap[arena.market_slug];
+      if (currentPct == null) continue;
+
+      const entries = await dbQuery(
+        `SELECT * FROM arena_entries WHERE arena_id = $1`, [arena.id]
+      ).catch(() => []);
+
+      // Score = if your side is moving your way, you gain points
+      for (const entry of entries) {
+        const entryPct = parseFloat(entry.entry_price) || currentPct;
+        const side     = (entry.side || 'YES').toUpperCase();
+        // Linear score: distance traveled toward correct resolution
+        const correct_price = side === 'YES' ? currentPct : (100 - currentPct);
+        const entry_correct = side === 'YES' ? entryPct : (100 - entryPct);
+        const live_score = Math.round((correct_price - entry_correct) * 10) / 10; // points, can be negative
+
+        await dbQuery(
+          `UPDATE arena_entries SET live_score=$1 WHERE id=$2`,
+          [live_score, entry.id]
+        ).catch(() => {});
+      }
+
+      // Update ranks
+      const ranked = await dbQuery(
+        `SELECT id, ROW_NUMBER() OVER (ORDER BY live_score DESC) AS rank FROM arena_entries WHERE arena_id=$1`,
+        [arena.id]
+      ).catch(() => []);
+      for (const r of ranked) {
+        await dbQuery(`UPDATE arena_entries SET rank=$1 WHERE id=$2`, [r.rank, r.id]).catch(() => {});
+      }
+
+      // Update entry count
+      await dbQuery(`UPDATE flex_arenas SET entry_count=$1 WHERE id=$2`,
+        [entries.length, arena.id]).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[arena-score]', e.message);
+  }
+}
+cron.schedule('*/10 * * * *', () => scoreArenas().catch(() => {}));
+
+// GET /api/arenas — list open arenas
+app.get('/api/arenas', async (req, res) => {
+  const rows = await dbQuery(
+    `SELECT a.*, u.display_name AS winner_name
+     FROM flex_arenas a
+     LEFT JOIN users u ON u.id = a.winner_id
+     WHERE a.status != 'resolved' OR a.resolved_at > NOW() - INTERVAL '7 days'
+     ORDER BY a.opens_at DESC LIMIT 20`
+  ).catch(() => []);
+  res.json(rows || []);
+});
+
+// GET /api/arenas/:id — arena detail + leaderboard
+app.get('/api/arenas/:id', async (req, res) => {
+  const arenaId = parseInt(req.params.id);
+  const arena = await dbQuery(`SELECT * FROM flex_arenas WHERE id=$1`, [arenaId])
+    .then(r => r && r[0]).catch(() => null);
+  if (!arena) return res.status(404).json({ error: 'not found' });
+
+  const entries = await dbQuery(`
+    SELECT e.*, u.display_name, u.avatar_url, u.handle
+    FROM arena_entries e
+    JOIN users u ON u.id = e.user_id
+    WHERE e.arena_id = $1
+    ORDER BY e.live_score DESC, e.created_at ASC
+    LIMIT 100
+  `, [arenaId]).catch(() => []);
+
+  res.json({ arena, entries: entries || [], total: (entries || []).length });
+});
+
+// POST /api/arenas/:id/enter — enter an arena with a take
+app.post('/api/arenas/:id/enter', requireAuth, async (req, res) => {
+  const uid = req.userId;
+  const arenaId = parseInt(req.params.id);
+  const { side, take_id, entry_price } = req.body || {};
+  if (!side) return res.status(400).json({ error: 'side required' });
+
+  const arena = await dbQuery(`SELECT * FROM flex_arenas WHERE id=$1 AND status='open'`, [arenaId])
+    .then(r => r && r[0]).catch(() => null);
+  if (!arena) return res.status(404).json({ error: 'arena not open' });
+
+  const rows = await dbQuery(`
+    INSERT INTO arena_entries (arena_id, user_id, take_id, side, entry_price, live_score)
+    VALUES ($1,$2,$3,$4,$5,0)
+    ON CONFLICT (arena_id, user_id) DO NOTHING
+    RETURNING id
+  `, [arenaId, uid, take_id || null, side.toUpperCase(), entry_price || arena.market_price || 50])
+    .catch(() => []);
+
+  if (!rows || !rows[0]) return res.status(409).json({ error: 'already entered' });
+  await dbQuery(`UPDATE flex_arenas SET entry_count=entry_count+1 WHERE id=$1`, [arenaId]).catch(() => {});
+
+  res.json({ ok: true, entry_id: rows[0].id });
+});
+
+// POST /api/admin/arenas — create arena from a market slug
+app.post('/api/admin/arenas', requireAdminSecret, async (req, res) => {
+  const { market_slug, title, category, closes_at, prize_label } = req.body || {};
+  if (!market_slug || !title) return res.status(400).json({ error: 'market_slug + title required' });
+
+  // Get current market price
+  let market_price = 50;
+  if (_screenerCache && _screenerCache.data) {
+    const m = _screenerCache.data.find(x => x.slug === market_slug);
+    if (m) market_price = Math.round((m.yes_ask || m.yes_price || 0.5) * 100);
+  }
+
+  const rows = await dbQuery(`
+    INSERT INTO flex_arenas (market_slug, title, category, closes_at, prize_label, market_price, status)
+    VALUES ($1,$2,$3,$4,$5,$6,'open')
+    ON CONFLICT (market_slug) DO UPDATE SET title=EXCLUDED.title, status='open', market_price=EXCLUDED.market_price
+    RETURNING id
+  `, [market_slug, title, category || 'general', closes_at || null, prize_label || 'Top FLEX Score', market_price])
+    .catch(e => { console.warn('[arena-create]', e.message); return []; });
+
+  if (!rows || !rows[0]) return res.status(500).json({ error: 'insert failed' });
+  res.json({ ok: true, arena_id: rows[0].id });
+});
+
+// Auto-create arena for high-edge markets (edge_score >= 75) — fires on screener refresh
+async function autoCreateArenas() {
+  if (!pool || !_screenerCache || !_screenerCache.data) return;
+  const topMarkets = _screenerCache.data
+    .filter(m => (m.edge_score || 0) >= 75 && m.slug && m.question)
+    .slice(0, 3);
+
+  for (const m of topMarkets) {
+    await dbQuery(`
+      INSERT INTO flex_arenas (market_slug, title, category, market_price, status)
+      VALUES ($1,$2,$3,$4,'open')
+      ON CONFLICT (market_slug) DO NOTHING
+    `, [m.slug, m.question.slice(0, 120), m.category || 'general',
+        Math.round((m.yes_ask || m.yes_price || 0.5) * 100)]).catch(() => {});
+  }
+}
+
 // ── RESOLUTION ANTICIPATION EMAILS ───────────────────────────────────────────
 // Fires hourly. For each user with a take on a market resolving in 1-3h, sends
 // a single "your pick is resolving in X hours" email. One per user per market
@@ -25007,6 +25211,7 @@ app.get('/health', (req, res) => {
 
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
 app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
 app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
@@ -35946,6 +36151,10 @@ async function _buildAlphaListInner(opts = {}) {
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
+
+    // Auto-create arenas for top-edge markets (fire-and-forget, non-blocking)
+    autoCreateArenas().catch(() => {});
+
     return markets;
 }
 
