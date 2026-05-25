@@ -350,9 +350,9 @@ footer{
 <!-- ── NAV ── -->
 <nav id="mainNav">
   <a class="nav-logo" href="/">HYPERFLEX</a>
-  <div class="nav-links">
+  <div class="nav-links" id="navLinks">
     <a class="nav-link" href="/feed">Feed</a>
-    <a class="nav-link" href="/alpha-live">Alpha</a>
+    <a class="nav-link" href="/alpha">Alpha</a>
     <a class="nav-link" href="/whales">Whales</a>
     <a class="nav-link" href="/mentions">Mentions</a>
     <a class="nav-link" href="/predictors">Leaderboard</a>
@@ -364,9 +364,33 @@ footer{
   </div>
   <div class="nav-right">
     <div class="nav-live"><span class="live-dot"></span><span>LIVE</span></div>
-    <a class="btn-connect" href="/creator/login">Connect Wallet</a>
+    <a class="btn-dashboard" id="navDashBtn" href="/creator/dashboard" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:5px;padding:7px 14px;text-decoration:none;transition:background .12s;">Dashboard</a>
+    <a class="btn-connect" id="navConnectBtn" href="/creator/login">Connect Wallet</a>
   </div>
 </nav>
+<script>
+(function(){
+  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+  if(tok){
+    var db=document.getElementById('navDashBtn');
+    var co=document.getElementById('navConnectBtn');
+    if(db)db.style.display='';
+    if(co)co.style.display='none';
+    // Append Profile link to nav-links when logged in
+    try{
+      var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      var uid=p.userId||p.sub||p.id;
+      if(uid){
+        var a=document.createElement('a');
+        a.className='nav-link';
+        a.href='/m/'+uid;
+        a.textContent='Profile';
+        document.getElementById('navLinks').appendChild(a);
+      }
+    }catch(e){}
+  }
+})();
+</script>
 
 <!-- ── HERO ── -->
 <div id="hero">
