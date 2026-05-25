@@ -25212,6 +25212,7 @@ app.get('/health', (req, res) => {
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
 app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
+app.get('/quiz',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'quiz.html')));
 app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
 app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
