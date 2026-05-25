@@ -1001,6 +1001,38 @@ async function load() {
 
           ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
 
+          ${isOwnProfile && (() => {
+            // Tier progress bar: show what's needed for next tier
+            const TIERS = [
+              { label:'BUILDING', min:0,  wr:0,   settled:0   },
+              { label:'TRADER',   min:5,  wr:0,   settled:5   },
+              { label:'PROFITABLE', min:10, wr:50, settled:10  },
+              { label:'SHARP',    min:25, wr:55,  settled:25  },
+              { label:'SHARK',    min:50, wr:62,  settled:50  },
+            ];
+            const currentIdx = TIERS.map(t=>t.label).indexOf(tierLabel.toUpperCase());
+            const nextTier   = TIERS[Math.min(currentIdx + 1, TIERS.length - 1)];
+            if (currentIdx < 0 || currentIdx >= TIERS.length - 1) return '';
+            const settled = stats.settled_predictions || 0;
+            const wr      = stats.win_rate || 0;
+            const needSettled = Math.max(0, nextTier.settled - settled);
+            const needWr      = nextTier.wr > wr ? nextTier.wr : 0;
+            const pct = nextTier.settled > 0
+              ? Math.min(99, Math.round(settled / nextTier.settled * 100))
+              : 99;
+            const msg = needSettled > 0
+              ? needSettled + ' more settled pick' + (needSettled > 1 ? 's' : '') + (needWr > 0 ? ' at ' + nextTier.wr + '%+ win rate' : '') + ' to reach ' + nextTier.label
+              : (needWr > 0 ? 'Reach ' + nextTier.wr + '% win rate to unlock ' + nextTier.label : '');
+            if (!msg) return '';
+            return `<div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:6px;">
+              <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">${msg}</div>
+              <div style="height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:var(--gold);border-radius:2px;transition:width .8s;"></div>
+              </div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px;text-align:right;">${pct}% to ${nextTier.label}</div>
+            </div>`;
+          })()}
+
           ${walletAddr ? `<div class="wallet-row">
             <span>${shortWallet}</span>
             <button onclick="navigator.clipboard.writeText('${walletAddr}');this.textContent='COPIED';setTimeout(()=>this.textContent='COPY',1500)">COPY</button>
@@ -2213,5 +2245,6 @@ function showOwnerTools(profileUserId, walletVerified) {
 }
 
 </script>
+<script src="/hfx-engage.js" defer></script>
 </body>
 </html>

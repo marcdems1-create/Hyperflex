@@ -429,6 +429,31 @@ footer{
   <a class="home-chip" href="/explore?topic=AI+%26+Tech">AI &amp; Tech</a>
 </div>
 
+<!-- ── DAILY CHALLENGE ── -->
+<div id="daily-challenge" style="margin-bottom:32px;display:none;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+    <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);">◆ TODAY'S CHALLENGE</span>
+    <span id="dc-streak" style="display:none;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);color:#f59e0b;letter-spacing:.08em;"></span>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:auto;">Resets midnight UTC</span>
+  </div>
+  <div style="background:#111118;border:1px solid rgba(201,146,13,.2);border-left:3px solid var(--gold);border-radius:10px;padding:22px 24px;">
+    <div id="dc-q" style="font-family:var(--display);font-size:18px;font-weight:800;color:#fff;line-height:1.3;letter-spacing:-.02em;margin-bottom:16px;"></div>
+    <div id="dc-prices" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;letter-spacing:.04em;"></div>
+    <div id="dc-btns" style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="dc-yes" onclick="dcVote('YES')" style="flex:1;min-width:120px;height:44px;background:rgba(0,230,138,.12);border:1px solid rgba(0,230,138,.28);border-radius:6px;color:var(--green);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">YES</button>
+      <button id="dc-no" onclick="dcVote('NO')" style="flex:1;min-width:120px;height:44px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.22);border-radius:6px;color:var(--red);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">NO</button>
+    </div>
+    <div id="dc-result" style="display:none;margin-top:14px;"></div>
+    <div id="dc-community" style="margin-top:14px;display:none;">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:6px;text-transform:uppercase;">Community split</div>
+      <div id="dc-bar-wrap" style="height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+        <div id="dc-bar-fill" style="height:100%;border-radius:3px;background:var(--green);width:50%;transition:width .6s;"></div>
+      </div>
+      <div id="dc-bar-labels" style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ── ROWS ── -->
 <div class="rows-wrap" id="rowsWrap">
 
@@ -842,5 +867,93 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();input.focus();input.select();}});
 })();
 </script>
+<script>
+// ── DAILY CHALLENGE ──
+(function(){
+  var _dcVoted = false;
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  function loadDailyChallenge() {
+    fetch('/api/daily-pick').then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d||!d.pick) return;
+      var p = d.pick;
+      var el = document.getElementById('daily-challenge');
+      el.style.display = 'block';
+
+      document.getElementById('dc-q').textContent = p.question;
+
+      var yesPct = p.yes_price != null ? Math.round(p.yes_price * 100) : null;
+      var noPct  = yesPct != null ? 100 - yesPct : null;
+      if(yesPct != null) {
+        document.getElementById('dc-prices').textContent = 'YES ' + yesPct + '¢  ·  NO ' + noPct + '¢';
+      }
+
+      if(d.streak >= 2) {
+        var sc = document.getElementById('dc-streak');
+        sc.textContent = d.streak + '-day streak';
+        sc.style.display = 'inline';
+      }
+
+      if(d.user_vote) {
+        _dcVoted = true;
+        showDCVoted(d.user_vote, p);
+      }
+
+      showDCCommunity(p);
+    }).catch(function(){});
+  }
+
+  function showDCVoted(side, p) {
+    document.getElementById('dc-btns').style.display = 'none';
+    var res = document.getElementById('dc-result');
+    res.style.display = 'block';
+    res.innerHTML = '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' +
+      (side==='YES' ? 'var(--green)' : 'var(--red)') + ';">Voted ' + esc(side) + '.</span>' +
+      '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:10px;">Come back tomorrow.</span>';
+    if(p && p.market_slug) {
+      res.innerHTML += ' <a href="/market/'+esc(p.market_slug)+'" style="font-family:var(--mono);font-size:10px;color:var(--cyan);">Trade it →</a>';
+    }
+  }
+
+  function showDCCommunity(p) {
+    var yes = p.yes_votes || 0;
+    var no  = p.no_votes  || 0;
+    var total = yes + no;
+    if(total < 1) return;
+    var yPct = Math.round(yes / total * 100);
+    var dc = document.getElementById('dc-community');
+    dc.style.display = 'block';
+    document.getElementById('dc-bar-fill').style.width = yPct + '%';
+    document.getElementById('dc-bar-labels').innerHTML =
+      '<span style="color:var(--green);">' + yPct + '% YES (' + yes + ')</span>' +
+      '<span style="color:var(--red);">' + (100-yPct) + '% NO (' + no + ')</span>';
+  }
+
+  window.dcVote = function(side) {
+    if(_dcVoted) return;
+    fetch('/api/daily-pick/vote', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side:side})})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        if(!d) return;
+        _dcVoted = true;
+        showDCVoted(side, null);
+        if(d.yes_votes != null) {
+          showDCCommunity({yes_votes:d.yes_votes, no_votes:d.no_votes});
+        }
+        // Fire streak toast via engage engine
+        if(window.HFX && d.streak >= 2) {
+          window.HFX.toast({type:'streak',title:'Pick locked. Streak: '+d.streak+' days.',duration:5000});
+        }
+      })
+      .catch(function(){
+        // Not logged in — redirect
+        window.location.href = '/creator/login?next=/';
+      });
+  };
+
+  loadDailyChallenge();
+})();
+</script>
+<script src="/hfx-engage.js" defer></script>
 </body>
 </html>

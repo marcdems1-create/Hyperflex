@@ -31897,6 +31897,40 @@ app.get('/api/whales/:address/portfolio', async (req, res) => {
   }
 });
 
+// GET /api/whale-stream/recent — public feed of last N whale moves for FOMO toasts
+// Returns newest-first, caller tracks `last_id` and shows toast on new items.
+app.get('/api/whale-stream/recent', (req, res) => {
+  const limit = Math.min(20, parseInt(req.query.limit) || 10);
+  const since = req.query.since || null; // id of last seen item
+  const stream = _whaleTradeStream.slice(0, limit);
+  let isNew = stream;
+  if (since) {
+    const idx = stream.findIndex(e => e.id === since);
+    isNew = idx === -1 ? stream : stream.slice(0, idx);
+  }
+  res.json({ events: stream, new_since: isNew, count: stream.length });
+});
+
+// GET /api/market-pulse — markets with biggest price move in last hour (from screener cache)
+app.get('/api/market-pulse', (req, res) => {
+  const markets = (_screenerCache && _screenerCache.data) || [];
+  const movers = markets
+    .filter(m => m.yes_price != null && m.slug && (Math.abs(m.price_change_24hr || 0) > 3 || m.edge_score > 65))
+    .sort((a, b) => Math.abs(b.price_change_24hr || 0) - Math.abs(a.price_change_24hr || 0))
+    .slice(0, 8)
+    .map(m => ({
+      slug: m.slug,
+      question: m.question,
+      yes_price: m.yes_price,
+      price_change: m.price_change_24hr || 0,
+      volume: m.volume24hr || m.volume || 0,
+      edge_score: m.edge_score || 0,
+      whale_count: m.whale_count || 0,
+      image: m.image || null,
+    }));
+  res.json({ movers, cached_at: _screenerCache ? _screenerCache.ts : null });
+});
+
 app.get('/api/whale-watch', async (req, res) => {
   try {
     // Check cache (10 minute TTL)

@@ -1,0 +1,412 @@
+/**
+ * hfx-engage.js — HYPERFLEX global engagement engine
+ * Inject on every page. Handles:
+ *   - Toast notification stack (bottom-right)
+ *   - Whale FOMO alerts (poll every 45s)
+ *   - Win/loss celebration (confetti on correct take)
+ *   - Live market countdown timers
+ *   - Daily challenge streak warning
+ *   - Market pulse badge injection
+ *   - Price ticker live refresh
+ */
+(function () {
+  'use strict';
+
+  /* ─────────────────────── TOAST ENGINE ─────────────────────── */
+  var _toastContainer = null;
+  var _toastCount = 0;
+
+  function _ensureContainer() {
+    if (_toastContainer) return;
+    _toastContainer = document.createElement('div');
+    _toastContainer.id = 'hfx-toast-wrap';
+    _toastContainer.style.cssText = [
+      'position:fixed', 'bottom:24px', 'right:24px', 'z-index:99999',
+      'display:flex', 'flex-direction:column-reverse', 'gap:10px',
+      'max-width:340px', 'pointer-events:none',
+    ].join(';');
+    document.body.appendChild(_toastContainer);
+  }
+
+  var _ACCENT = {
+    whale:   { border: '#c9920d', icon: '◆', bg: 'rgba(201,146,13,.1)'  },
+    win:     { border: '#00e68a', icon: '✓',  bg: 'rgba(0,230,138,.1)'  },
+    loss:    { border: '#ff4d6a', icon: '×',  bg: 'rgba(255,77,106,.08)' },
+    streak:  { border: '#4d9fff', icon: '↑',  bg: 'rgba(77,159,255,.1)'  },
+    warning: { border: '#f59e0b', icon: '!',  bg: 'rgba(245,158,11,.1)'  },
+    info:    { border: 'rgba(255,255,255,.2)', icon: '·', bg: 'rgba(255,255,255,.04)' },
+  };
+
+  window.HFX = window.HFX || {};
+
+  window.HFX.toast = function (opts) {
+    /* opts: { type, title, body, href, duration } */
+    _ensureContainer();
+    var type = opts.type || 'info';
+    var ac = _ACCENT[type] || _ACCENT.info;
+    var id = 'hfxt-' + (++_toastCount);
+    var dur = opts.duration != null ? opts.duration : (type === 'whale' ? 9000 : 6000);
+
+    var el = document.createElement('div');
+    el.id = id;
+    el.style.cssText = [
+      'pointer-events:auto',
+      'background:#111118',
+      'border:1px solid ' + ac.border,
+      'border-left:3px solid ' + ac.border,
+      'border-radius:8px',
+      'padding:12px 14px',
+      'display:flex', 'align-items:flex-start', 'gap:10px',
+      'box-shadow:0 8px 32px rgba(0,0,0,.6)',
+      'cursor:' + (opts.href ? 'pointer' : 'default'),
+      'transition:opacity .3s,transform .3s',
+      'opacity:0', 'transform:translateX(20px)',
+      'font-family:"JetBrains Mono",monospace',
+      'background:' + ac.bg,
+    ].join(';');
+
+    el.innerHTML =
+      '<div style="font-size:14px;color:' + ac.border + ';flex-shrink:0;line-height:1;margin-top:2px;">' + ac.icon + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        (opts.title ? '<div style="font-size:11px;font-weight:700;color:#f0f0f5;letter-spacing:.04em;margin-bottom:3px;">' + _esc(opts.title) + '</div>' : '') +
+        (opts.body  ? '<div style="font-size:10px;color:rgba(240,240,245,.55);line-height:1.4;">' + _esc(opts.body)  + '</div>' : '') +
+      '</div>' +
+      '<button style="background:none;border:none;color:rgba(240,240,245,.3);cursor:pointer;font-size:14px;padding:0;flex-shrink:0;line-height:1;" aria-label="Dismiss">×</button>';
+
+    el.querySelector('button').onclick = function (e) { e.stopPropagation(); _dismiss(el); };
+    if (opts.href) el.onclick = function () { window.location.href = opts.href; };
+
+    _toastContainer.appendChild(el);
+    requestAnimationFrame(function () {
+      el.style.opacity = '1';
+      el.style.transform = 'translateX(0)';
+    });
+
+    if (dur > 0) setTimeout(function () { _dismiss(el); }, dur);
+    return el;
+  };
+
+  function _dismiss(el) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(20px)';
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 320);
+  }
+
+  function _esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ─────────────────────── WHALE FOMO TOASTS ─────────────────────── */
+  var _lastWhaleId = null;
+  var _whaleSeenIds = new Set();
+  var _whaleShownCount = 0;
+  var _WHALE_POLL_MS = 45000;
+  var _WHALE_MAX_PER_LOAD = 2; // don't spam on first load
+
+  function _fetchWhaleAlerts() {
+    var url = '/api/whale-stream/recent?limit=5' + (_lastWhaleId ? '&since=' + encodeURIComponent(_lastWhaleId) : '');
+    fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !Array.isArray(d.new_since)) return;
+      var fresh = d.new_since.filter(function (e) { return !_whaleSeenIds.has(e.id); });
+      if (fresh.length && d.events && d.events[0]) _lastWhaleId = d.events[0].id;
+      fresh.forEach(function (e) { _whaleSeenIds.add(e.id); });
+
+      // On cold load, skip the backlog — just seed the seen set
+      if (_whaleShownCount === 0 && fresh.length > 0) {
+        _whaleShownCount = -1; // mark as seeded
+        return;
+      }
+      if (_whaleShownCount === -1) _whaleShownCount = 0;
+
+      fresh.slice(0, _WHALE_MAX_PER_LOAD).forEach(function (e, i) {
+        setTimeout(function () {
+          var action = e.action === 'opened' ? 'entered' : e.action === 'increased' ? 'added to' : e.action;
+          var size = e.size_display || '';
+          var q = (e.question || '').slice(0, 60) + ((e.question || '').length > 60 ? '…' : '');
+          var side = e.side ? ' ' + e.side : '';
+          window.HFX.toast({
+            type: 'whale',
+            title: (e.trader_name || 'Whale') + ' ' + action + ' ' + size + side,
+            body: q,
+            href: e.slug ? '/market/' + e.slug : null,
+            duration: 10000,
+          });
+          _whaleShownCount++;
+        }, i * 1800);
+      });
+    }).catch(function () {});
+  }
+
+  // Start polling after a 4s delay (let page paint first)
+  setTimeout(function () {
+    _fetchWhaleAlerts();
+    setInterval(_fetchWhaleAlerts, _WHALE_POLL_MS);
+  }, 4000);
+
+  /* ─────────────────────── WIN CELEBRATION (CONFETTI) ─────────────────────── */
+  var _confettiLoaded = false;
+  var _confettiQueue = [];
+
+  function _loadConfetti(cb) {
+    if (_confettiLoaded) { cb(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+    s.onload = function () { _confettiLoaded = true; cb(); _confettiQueue.forEach(function (f) { f(); }); _confettiQueue = []; };
+    s.onerror = function () {};
+    document.head.appendChild(s);
+  }
+
+  window.HFX.celebrate = function (opts) {
+    /* opts: { question, units, side } — call on correct resolution */
+    opts = opts || {};
+    _loadConfetti(function () {
+      if (typeof confetti !== 'function') return;
+      confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ['#00e68a','#4d9fff','#c9920d','#fff'] });
+      setTimeout(function () { confetti({ particleCount: 60, spread: 100, origin: { y: 0.5 } }); }, 400);
+    });
+    var units = opts.units ? (opts.units > 0 ? '+' + opts.units.toFixed(2) + 'u' : opts.units.toFixed(2) + 'u') : null;
+    window.HFX.toast({
+      type: 'win',
+      title: 'Pick landed.' + (units ? ' ' + units + '.' : ''),
+      body: opts.question ? opts.question.slice(0, 72) : null,
+      duration: 8000,
+    });
+  };
+
+  window.HFX.showLoss = function (opts) {
+    opts = opts || {};
+    var units = opts.units ? opts.units.toFixed(2) + 'u' : null;
+    window.HFX.toast({
+      type: 'loss',
+      title: 'Resolved a loss.' + (units ? ' ' + units + '.' : ''),
+      body: opts.closeness != null && opts.closeness <= 12
+        ? 'Called it right directionally. ' + opts.closeness + '¢ off.'
+        : (opts.question ? opts.question.slice(0, 60) : null),
+      duration: 7000,
+    });
+  };
+
+  /* ─────────────────────── STREAK WARNING ─────────────────────── */
+  function _checkStreakWarning() {
+    // Only fire once per session
+    if (sessionStorage.getItem('hfx_streak_warned')) return;
+    fetch('/api/daily-pick').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d) return;
+      var streak = d.streak || 0;
+      var voted = d.user_vote;
+      if (streak >= 2 && !voted) {
+        // Has a streak but hasn't voted today — risk of losing it
+        var today = new Date();
+        var midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        var hoursLeft = Math.round((midnight - today) / 3600000);
+        if (hoursLeft <= 6) {
+          sessionStorage.setItem('hfx_streak_warned', '1');
+          window.HFX.toast({
+            type: 'warning',
+            title: streak + '-day streak at risk.',
+            body: 'Vote on today\'s pick before midnight to keep it alive.',
+            href: '/',
+            duration: 12000,
+          });
+        }
+      }
+    }).catch(function () {});
+  }
+
+  setTimeout(_checkStreakWarning, 8000);
+
+  /* ─────────────────────── COUNTDOWN TIMERS ─────────────────────── */
+  function _fmtCountdown(ms) {
+    if (ms <= 0) return 'Resolving';
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60); s %= 60;
+    var h = Math.floor(m / 60); m %= 60;
+    var d = Math.floor(h / 24); h %= 24;
+    if (d > 7)  return null; // don't show countdown for far-future
+    if (d > 0)  return d + 'd ' + h + 'h';
+    if (h > 0)  return h + 'h ' + m + 'm';
+    return m + 'm ' + s + 's';
+  }
+
+  function _urgencyColor(ms) {
+    var h = ms / 3600000;
+    if (h <= 1) return '#ff4d6a';
+    if (h <= 6) return '#f59e0b';
+    if (h <= 24) return '#c9920d';
+    return null;
+  }
+
+  var _cdElements = []; // [{el, endMs}]
+  var _cdTimer = null;
+
+  window.HFX.watchCountdown = function (el, endDateStr) {
+    var endMs = new Date(endDateStr).getTime();
+    if (isNaN(endMs)) return;
+    _cdElements.push({ el: el, endMs: endMs });
+    if (!_cdTimer) {
+      _cdTimer = setInterval(function () {
+        var now = Date.now();
+        _cdElements = _cdElements.filter(function (item) {
+          if (!document.contains(item.el)) return false;
+          var left = item.endMs - now;
+          var label = _fmtCountdown(left);
+          if (!label) { item.el.style.display = 'none'; return false; }
+          item.el.textContent = label;
+          var col = _urgencyColor(left);
+          if (col) {
+            item.el.style.color = col;
+            if (left <= 3600000) item.el.style.fontWeight = '700';
+          }
+          return left > 0;
+        });
+      }, 1000);
+    }
+  };
+
+  /* ─────────────────────── MARKET PULSE BADGES ─────────────────────── */
+  window.HFX.injectPulseBadges = function () {
+    fetch('/api/market-pulse').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !Array.isArray(d.movers)) return;
+      d.movers.forEach(function (m) {
+        if (!m.slug) return;
+        var cards = document.querySelectorAll('[data-slug="' + m.slug + '"], [href*="/market/' + m.slug + '"]');
+        cards.forEach(function (card) {
+          if (card.querySelector('.hfx-pulse-badge')) return;
+          var chg = m.price_change;
+          if (!chg || Math.abs(chg) < 3) return;
+          var badge = document.createElement('span');
+          badge.className = 'hfx-pulse-badge';
+          var dir = chg > 0 ? '↑' : '↓';
+          badge.textContent = dir + Math.abs(chg).toFixed(0) + '¢';
+          badge.style.cssText = [
+            'font-family:"JetBrains Mono",monospace',
+            'font-size:9px', 'font-weight:700',
+            'padding:2px 6px', 'border-radius:3px',
+            'color:' + (chg > 0 ? '#00e68a' : '#ff4d6a'),
+            'background:' + (chg > 0 ? 'rgba(0,230,138,.12)' : 'rgba(255,77,106,.1)'),
+            'border:1px solid ' + (chg > 0 ? 'rgba(0,230,138,.25)' : 'rgba(255,77,106,.2)'),
+            'margin-left:6px', 'vertical-align:middle',
+          ].join(';');
+          // Append to any text element inside the card
+          var target = card.querySelector('h2,h3,.card-q,.mcard-q,.r-q') || card;
+          target.appendChild(badge);
+        });
+      });
+    }).catch(function () {});
+  };
+
+  setTimeout(window.HFX.injectPulseBadges, 3000);
+
+  /* ─────────────────────── NOTIFICATION BELL PULSE ─────────────────────── */
+  function _pulseNotifBell() {
+    var bell = document.querySelector('#notifBell, .notif-bell, [data-notif-bell]');
+    if (!bell) return;
+    fetch('/api/notifications?limit=1&unread=true').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var count = (d && (d.unread_count || (Array.isArray(d) ? d.filter(function (n) { return !n.read; }).length : 0))) || 0;
+      if (!count) return;
+      var badge = bell.querySelector('.notif-count') || document.createElement('span');
+      badge.className = 'notif-count';
+      badge.textContent = count > 9 ? '9+' : count;
+      badge.style.cssText = [
+        'position:absolute', 'top:-4px', 'right:-4px',
+        'background:#ff4d6a', 'color:#fff',
+        'font-family:"JetBrains Mono",monospace', 'font-size:8px', 'font-weight:700',
+        'width:16px', 'height:16px', 'border-radius:50%',
+        'display:flex', 'align-items:center', 'justify-content:center',
+      ].join(';');
+      bell.style.position = 'relative';
+      if (!bell.contains(badge)) bell.appendChild(badge);
+    }).catch(function () {});
+  }
+
+  setTimeout(_pulseNotifBell, 2000);
+
+  /* ─────────────────────── RESOLVE TAKES CHECK ─────────────────────── */
+  // On feed/profile load, check for freshly-resolved correct/incorrect takes
+  // and fire the appropriate celebration or loss toast.
+  window.HFX.checkResolvedTakes = function () {
+    var lastCheck = localStorage.getItem('hfx_last_resolve_check') || '1970-01-01';
+    fetch('/api/takes/feed?mode=foryou&limit=20').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var takes = (d && (d.takes || d)) || [];
+      if (!Array.isArray(takes)) return;
+      var newLastCheck = lastCheck;
+      takes.forEach(function (t) {
+        if (!t.resolved_at) return;
+        if (t.resolved_at <= lastCheck) return;
+        if (t.resolved_at > newLastCheck) newLastCheck = t.resolved_at;
+        if (!t.is_my_take) return; // only own takes
+
+        if (t.is_correct === true) {
+          window.HFX.celebrate({ question: t.question || t.market_slug, units: t.roi_units });
+        } else if (t.is_correct === false) {
+          var closeness = t.entry_price != null && t.resolved_price != null
+            ? Math.round(Math.abs(t.entry_price - t.resolved_price) * 100)
+            : null;
+          window.HFX.showLoss({ question: t.question || t.market_slug, units: t.loss_units, closeness: closeness });
+        }
+      });
+      if (newLastCheck > lastCheck) localStorage.setItem('hfx_last_resolve_check', newLastCheck);
+    }).catch(function () {});
+  };
+
+  /* ─────────────────────── SOCIAL PROOF INJECTOR ─────────────────────── */
+  window.HFX.injectSocialProof = function () {
+    // Inject "X watching" or "X agree" counts on cards that have data-slug
+    var cards = document.querySelectorAll('[data-slug]:not([data-sp-done])');
+    if (!cards.length) return;
+    var slugs = Array.from(cards).map(function (c) { return c.getAttribute('data-slug'); }).filter(Boolean);
+    if (!slugs.length) return;
+    fetch('/api/screener?slugs=' + encodeURIComponent(slugs.slice(0, 10).join(','))).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var markets = (d && (d.markets || d)) || [];
+      var bySlug = {};
+      markets.forEach(function (m) { if (m.slug) bySlug[m.slug] = m; });
+      cards.forEach(function (card) {
+        var slug = card.getAttribute('data-slug');
+        var m = bySlug[slug];
+        if (!m) return;
+        card.setAttribute('data-sp-done', '1');
+        if (!m.whale_count && !m.volume24hr) return;
+        var proof = document.createElement('div');
+        proof.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:9px;color:rgba(240,240,245,.4);letter-spacing:.04em;margin-top:4px;';
+        var parts = [];
+        if (m.whale_count > 0) parts.push(m.whale_count + ' whale' + (m.whale_count > 1 ? 's' : '') + ' positioned');
+        if (m.volume24hr > 50000) parts.push('$' + (m.volume24hr >= 1e6 ? (m.volume24hr/1e6).toFixed(1)+'M' : Math.round(m.volume24hr/1e3)+'K') + ' today');
+        proof.textContent = parts.join(' · ');
+        if (parts.length) {
+          var target = card.querySelector('.card-body,.mcard-content,.card-meta') || card;
+          target.appendChild(proof);
+        }
+      });
+    }).catch(function () {});
+  };
+
+  setTimeout(window.HFX.injectSocialProof, 2500);
+
+  /* ─────────────────────── AUTO-INJECT NAV STREAK ─────────────────────── */
+  // If user is logged in, append streak chip to nav
+  function _injectNavStreak() {
+    var nav = document.querySelector('nav');
+    if (!nav || nav.querySelector('.hfx-streak-chip')) return;
+    fetch('/api/daily-pick').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.streak || d.streak < 2) return;
+      var chip = document.createElement('a');
+      chip.href = '/';
+      chip.className = 'hfx-streak-chip';
+      chip.style.cssText = [
+        'font-family:"JetBrains Mono",monospace', 'font-size:9px', 'font-weight:700',
+        'letter-spacing:.1em', 'text-transform:uppercase',
+        'color:#f59e0b', 'background:rgba(245,158,11,.1)',
+        'border:1px solid rgba(245,158,11,.25)', 'border-radius:4px',
+        'padding:4px 9px', 'text-decoration:none',
+        'display:inline-flex', 'align-items:center', 'gap:5px',
+      ].join(';');
+      chip.innerHTML = '<span style="font-size:11px;">◆</span>' + d.streak + '-day streak';
+      var right = nav.querySelector('.nav-right');
+      if (right) right.insertBefore(chip, right.firstChild);
+      else nav.appendChild(chip);
+    }).catch(function () {});
+  }
+
+  setTimeout(_injectNavStreak, 1500);
+
+})();
