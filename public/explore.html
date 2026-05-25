@@ -1714,6 +1714,205 @@ nav {
 })();
 </script>
 
+<!-- ═══ TOPIC DASHBOARD ═══ -->
+<div id="topic-dashboard" style="max-width:1200px;margin:0 auto 32px;padding:0 40px">
+
+  <!-- Topic chips bar -->
+  <div id="topicChips" style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:24px">
+    <button class="t-chip t-chip-active" data-topic="all" onclick="filterTopic('all')">All</button>
+  </div>
+
+  <!-- Loading state -->
+  <div id="topicLoading" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;padding:32px">Loading markets...</div>
+
+  <!-- Topic sections injected here -->
+  <div id="topicSections"></div>
+</div>
+
+<style>
+.t-chip {
+  flex-shrink:0;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:rgba(240,240,245,.45);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+  border-radius:20px;padding:6px 14px;cursor:pointer;white-space:nowrap;
+  transition:color .12s,border-color .12s,background .12s;
+}
+.t-chip:hover { color:var(--ink);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08); }
+.t-chip-active { color:#4d9fff !important;border-color:rgba(77,159,255,.45) !important;background:rgba(77,159,255,.1) !important; }
+#topicChips::-webkit-scrollbar { display:none; }
+
+.topic-section { margin-bottom:32px; }
+.topic-section-head {
+  display:flex;align-items:center;gap:10px;margin-bottom:12px;
+}
+.topic-section-title {
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(240,240,245,.7);
+}
+.topic-section-count {
+  font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3);
+}
+.topic-see-all {
+  margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;
+  color:#4d9fff;text-transform:uppercase;text-decoration:none;transition:opacity .12s;
+}
+.topic-see-all:hover { opacity:.7; }
+.topic-row {
+  display:grid;grid-template-columns:repeat(6,1fr);gap:10px;
+}
+@media(max-width:1100px){.topic-row{grid-template-columns:repeat(4,1fr);}}
+@media(max-width:760px){.topic-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:480px){.topic-row{grid-template-columns:repeat(2,1fr);}}
+
+.t-mcard {
+  background:#1a1a22;border:1px solid rgba(255,255,255,.07);border-radius:8px;
+  overflow:hidden;position:relative;cursor:pointer;text-decoration:none;
+  display:block;aspect-ratio:3/4;min-height:180px;
+  transition:transform .18s,border-color .18s;
+}
+.t-mcard:hover { transform:translateY(-3px);border-color:rgba(255,255,255,.18); }
+.t-mcard-bg {
+  position:absolute;inset:0;background-size:cover;background-position:center;
+  filter:brightness(.35) saturate(1.2);
+}
+.t-mcard-grad {
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(14,14,21,.97) 0%,rgba(14,14,21,.4) 60%,transparent 100%);
+}
+.t-mcard-content {
+  position:absolute;inset:0;z-index:2;padding:12px;display:flex;flex-direction:column;justify-content:flex-end;
+}
+.t-mcard-q {
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:700;color:#fff;line-height:1.22;
+  letter-spacing:-.01em;margin-bottom:6px;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+  text-shadow:0 1px 6px rgba(0,0,0,.8);
+}
+.t-mcard-pcts {
+  display:flex;gap:4px;
+}
+.t-mcard-yes {
+  flex:1;padding:4px 6px;background:rgba(0,230,138,.12);border:1px solid rgba(0,230,138,.25);
+  border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:700;color:#00e68a;text-align:center;
+}
+.t-mcard-no {
+  flex:1;padding:4px 6px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);
+  border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:700;color:#ff4d6a;text-align:center;
+}
+#topic-dashboard { padding:0 40px; }
+@media(max-width:760px){ #topic-dashboard { padding:0 16px; } }
+</style>
+
+<script>
+(function(){
+  var _allTopics = [];
+  var _activeFilter = 'all';
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function _tCard(m){
+    var slug  = m.event_slug || m.slug || '';
+    var href  = '/market/' + _esc(slug);
+    var img   = m.image || m.event_image_url || '';
+    var title = m.market_question || m.event_title || m.question || m.title || '—';
+    var price = m.yes_price != null ? Number(m.yes_price) : null;
+    var pct   = price != null ? Math.round(price * 100) : null;
+    var bgStyle = img ? 'background-image:url(' + _esc(img) + ');' : 'background:#1e1e28;';
+    return '<a class="t-mcard" href="' + href + '">'
+      + '<div class="t-mcard-bg" style="' + bgStyle + '"></div>'
+      + '<div class="t-mcard-grad"></div>'
+      + '<div class="t-mcard-content">'
+        + '<div class="t-mcard-q">' + _esc(title) + '</div>'
+        + (pct != null
+          ? '<div class="t-mcard-pcts">'
+            + '<span class="t-mcard-yes">' + pct + '%</span>'
+            + '<span class="t-mcard-no">' + (100 - pct) + '%</span>'
+            + '</div>'
+          : '')
+      + '</div>'
+      + '</a>';
+  }
+
+  function _renderSection(group) {
+    var topicSlug = group.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    var cards = group.markets.slice(0, 6).map(_tCard).join('');
+    return '<div class="topic-section" id="t-section-' + _esc(topicSlug) + '" data-topic="' + _esc(group.topic) + '">'
+      + '<div class="topic-section-head">'
+        + '<span class="topic-section-title">' + _esc(group.topic) + '</span>'
+        + '<span class="topic-section-count">' + group.count + ' markets</span>'
+        + '<a class="topic-see-all" href="/explore?topic=' + encodeURIComponent(group.topic) + '">See all ' + group.count + ' →</a>'
+      + '</div>'
+      + '<div class="topic-row">' + cards + '</div>'
+      + '</div>';
+  }
+
+  function _renderAll() {
+    var sections = document.getElementById('topicSections');
+    if (!sections) return;
+    var groups = _activeFilter === 'all'
+      ? _allTopics
+      : _allTopics.filter(function(g){ return g.topic === _activeFilter; });
+    if (!groups.length) {
+      sections.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:24px 0">No markets in this category right now.</div>';
+      return;
+    }
+    sections.innerHTML = groups.map(_renderSection).join('');
+
+    // Auto-scroll on ?topic= param or hash
+    var params = new URLSearchParams(location.search);
+    var topicParam = params.get('topic');
+    var hash = location.hash.replace('#', '');
+    var scrollTarget = topicParam || hash;
+    if (scrollTarget) {
+      var targetSlug = scrollTarget.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      var el = document.getElementById('t-section-' + targetSlug);
+      if (el) setTimeout(function(){ el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 200);
+    }
+  }
+
+  window.filterTopic = function(topic) {
+    _activeFilter = topic;
+    document.querySelectorAll('.t-chip').forEach(function(btn){
+      btn.classList.toggle('t-chip-active', btn.dataset.topic === topic);
+    });
+    _renderAll();
+  };
+
+  // Load from API
+  fetch('/api/topics?limit=80')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var loading = document.getElementById('topicLoading');
+      if (loading) loading.style.display = 'none';
+      if (!d || !Array.isArray(d.topics) || !d.topics.length) {
+        var s = document.getElementById('topicSections');
+        if (s) s.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:24px 0">No market data available right now.</div>';
+        return;
+      }
+      _allTopics = d.topics;
+
+      // Inject chips
+      var chips = document.getElementById('topicChips');
+      if (chips) {
+        chips.innerHTML = '<button class="t-chip t-chip-active" data-topic="all" onclick="filterTopic(\'all\')">All</button>'
+          + d.topics.map(function(g){
+            return '<button class="t-chip" data-topic="' + _esc(g.topic) + '" onclick="filterTopic(\'' + g.topic.replace(/'/g,"\\'") + '\')">' + _esc(g.topic) + ' <span style="opacity:.5;font-size:8px">' + g.count + '</span></button>';
+          }).join('');
+        // Activate chip matching ?topic= param
+        var params = new URLSearchParams(location.search);
+        var topicParam = params.get('topic');
+        if (topicParam) {
+          filterTopic(topicParam);
+        }
+      }
+      _renderAll();
+    })
+    .catch(function(){
+      var loading = document.getElementById('topicLoading');
+      if (loading) loading.textContent = 'Could not load markets.';
+    });
+})();
+</script>
+
 <div class="explore-layout">
   <div class="main-col">
 
