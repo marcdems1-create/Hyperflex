@@ -22902,6 +22902,225 @@ app.post('/api/admin/weekly-recap/send', requireAdminSecret, (req, res) => {
   sendWeeklyRecapEmails().then(() => res.json({ ok: true })).catch(e => res.status(500).json({ error: e.message }));
 });
 
+// ── RESOLUTION ANTICIPATION EMAILS ───────────────────────────────────────────
+// Fires hourly. For each user with a take on a market resolving in 1-3h, sends
+// a single "your pick is resolving in X hours" email. One per user per market
+// per resolution event (deduplicated via a sent-set in memory; worst-case
+// one extra send across restarts, which is acceptable).
+const _resolutionAlertSent = new Set(); // "userId:conditionId"
+
+async function sendResolutionAlertEmails() {
+  if (!pool) return;
+  const nowMs   = Date.now();
+  const soon    = new Date(nowMs + 3 * 3600000).toISOString(); // 3h window
+  const tooSoon = new Date(nowMs + 1 * 3600000).toISOString(); // already in final hour → skip (too late to act)
+  try {
+    const rows = await dbQuery(`
+      SELECT DISTINCT u.id, u.email, u.display_name,
+        t.id AS take_id, t.question, t.side, t.entry_price,
+        m.end_date_iso AS end_date, m.slug, t.condition_id
+      FROM users u
+      JOIN takes t ON t.user_id = u.id AND t.resolved_at IS NULL
+      JOIN LATERAL (
+        SELECT slug,
+               (data->>'endDateIso') AS end_date_iso
+        FROM market_cache
+        WHERE data->>'conditionId' = t.condition_id
+        LIMIT 1
+      ) m ON true
+      WHERE u.email IS NOT NULL AND u.email != ''
+        AND m.end_date_iso >= $1 AND m.end_date_iso <= $2
+      LIMIT 300
+    `, [tooSoon, soon]).catch(() => []);
+
+    let sent = 0;
+    for (const r of (rows || [])) {
+      const key = `${r.id}:${r.condition_id}`;
+      if (_resolutionAlertSent.has(key)) continue;
+      _resolutionAlertSent.add(key);
+
+      const endMs   = new Date(r.end_date).getTime();
+      const diffMin = Math.round((endMs - nowMs) / 60000);
+      const diffStr = diffMin >= 120 ? `${Math.round(diffMin / 60)}h` : `${diffMin}m`;
+      const side    = (r.side || 'YES').toUpperCase();
+      const pct     = r.entry_price ? Math.round(r.entry_price * 100) + '¢' : '';
+      const name    = r.display_name || 'Trader';
+      const sideColor = side === 'YES' ? '#00e68a' : '#ff4d6a';
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="background:#0e0e15;margin:0;padding:40px 20px;font-family:'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:520px;margin:0 auto;">
+  <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-.02em;margin-bottom:4px;">HYPERFLEX</div>
+  <div style="font-size:12px;color:rgba(240,240,245,.4);letter-spacing:.12em;text-transform:uppercase;margin-bottom:32px;">Resolution alert</div>
+
+  <div style="background:#111118;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:28px;margin-bottom:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,240,245,.35);margin-bottom:16px;">RESOLVING IN ${diffStr}</div>
+    <div style="font-size:17px;font-weight:700;color:#fff;line-height:1.45;margin-bottom:20px;">${r.question}</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="background:rgba(${side==='YES'?'0,230,138':'255,77,106'},.1);border:1px solid ${sideColor};border-radius:4px;padding:6px 14px;">
+        <span style="font-family:monospace;font-weight:900;font-size:14px;color:${sideColor};">${side}</span>
+        ${pct ? `<span style="font-family:monospace;font-size:13px;color:rgba(240,240,245,.5);margin-left:8px;">${pct}</span>` : ''}
+      </div>
+      <div style="font-size:13px;color:rgba(240,240,245,.5);">Your position</div>
+    </div>
+  </div>
+
+  <a href="https://hyperflex.network/market/${r.slug || ''}" style="display:block;background:#4d9fff;color:#000;text-decoration:none;text-align:center;padding:14px;border-radius:6px;font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:24px;">VIEW MARKET →</a>
+
+  <div style="font-size:11px;color:rgba(240,240,245,.25);line-height:1.6;">
+    You posted this take on HYPERFLEX. Result will be graded automatically.<br>
+    <a href="https://hyperflex.network/settings" style="color:rgba(240,240,245,.35);">Manage alerts</a>
+  </div>
+</div>
+</body></html>`;
+
+      await sendResendEmail({
+        to: r.email,
+        subject: `Resolving in ${diffStr}: ${r.question.slice(0,60)}${r.question.length > 60 ? '…' : ''}`,
+        html,
+        text: `${name} — Your ${side} take resolves in ${diffStr}. Question: ${r.question}. Track it: https://hyperflex.network/market/${r.slug}`,
+      }).catch(() => {});
+      sent++;
+    }
+    console.log(`[resolution-alert] Sent ${sent} anticipation emails`);
+  } catch (e) {
+    console.error('[resolution-alert]', e.message);
+  }
+}
+// Runs every 30 minutes to catch markets resolving 1-3h out
+cron.schedule('10,40 * * * *', () => { sendResolutionAlertEmails().catch(e => console.error('[resolution-alert cron]', e.message)); });
+
+// POST /api/admin/resolution-alert/send — test trigger
+app.post('/api/admin/resolution-alert/send', requireAdminSecret, (req, res) => {
+  sendResolutionAlertEmails().then(() => res.json({ ok: true })).catch(e => res.status(500).json({ error: e.message }));
+});
+
+// ── HEAD-TO-HEAD CHALLENGE SYSTEM ────────────────────────────────────────────
+// GET  /api/challenges                  — list challenges for current user
+// POST /api/challenges                  — create a challenge (challenger → target)
+// POST /api/challenges/:id/accept       — target accepts
+// POST /api/challenges/:id/decline      — target declines
+// Challenges are stored in `take_challenges` table (created by migration below if not exists)
+
+async function ensureChallengeTbl() {
+  if (!pool) return;
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS take_challenges (
+      id          SERIAL PRIMARY KEY,
+      slug        TEXT NOT NULL,
+      question    TEXT,
+      condition_id TEXT,
+      challenger_id INT NOT NULL,
+      target_id     INT,
+      target_handle TEXT,
+      challenger_side TEXT NOT NULL,
+      target_side     TEXT,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ,
+      winner_id   INT
+    )
+  `).catch(() => {});
+}
+ensureChallengeTbl();
+
+app.get('/api/challenges', requireAuth, async (req, res) => {
+  const uid = req.session.userId;
+  const rows = await dbQuery(`
+    SELECT c.*,
+      u1.display_name AS challenger_name, u1.avatar_url AS challenger_avatar,
+      u2.display_name AS target_name,     u2.avatar_url AS target_avatar
+    FROM take_challenges c
+    LEFT JOIN users u1 ON u1.id = c.challenger_id
+    LEFT JOIN users u2 ON u2.id = c.target_id
+    WHERE c.challenger_id = $1 OR c.target_id = $1
+    ORDER BY c.created_at DESC LIMIT 50
+  `, [uid]).catch(() => []);
+  res.json(rows || []);
+});
+
+app.get('/api/challenges/pending-count', requireAuth, async (req, res) => {
+  const uid = req.session.userId;
+  const rows = await dbQuery(
+    `SELECT COUNT(*)::int AS n FROM take_challenges WHERE target_id=$1 AND status='pending'`, [uid]
+  ).catch(() => [{ n: 0 }]);
+  res.json({ count: (rows && rows[0] ? rows[0].n : 0) });
+});
+
+app.post('/api/challenges', requireAuth, async (req, res) => {
+  const uid = req.session.userId;
+  const { slug, question, condition_id, challenger_side, target_handle } = req.body || {};
+  if (!slug || !challenger_side) return res.status(400).json({ error: 'slug + challenger_side required' });
+
+  // Resolve target by handle if provided
+  let target_id = null;
+  if (target_handle) {
+    const tr = await dbQuery(
+      `SELECT id FROM users WHERE LOWER(handle)=LOWER($1) OR LOWER(display_name)=LOWER($1) LIMIT 1`,
+      [target_handle]
+    ).catch(() => []);
+    if (tr && tr[0]) target_id = tr[0].id;
+  }
+
+  const rows = await dbQuery(`
+    INSERT INTO take_challenges (slug, question, condition_id, challenger_id, target_id, target_handle, challenger_side, status)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
+    RETURNING id
+  `, [slug, question || '', condition_id || '', uid, target_id, target_handle || null, challenger_side.toUpperCase()]).catch(() => []);
+
+  if (!rows || !rows[0]) return res.status(500).json({ error: 'insert failed' });
+
+  // Notify target if found
+  if (target_id) {
+    const challenger = await dbQuery(`SELECT display_name FROM users WHERE id=$1`, [uid]).catch(() => []);
+    const cname = (challenger && challenger[0]) ? (challenger[0].display_name || 'Someone') : 'Someone';
+    await dbQuery(`
+      INSERT INTO notifications (user_id, type, title, body, url, created_at)
+      VALUES ($1,'challenge',$2,$3,$4,NOW())
+    `, [target_id, 'New challenge',
+        `${cname} challenged you: ${(question||slug).slice(0,80)}`,
+        `/feed?challenge=${rows[0].id}`]).catch(() => {});
+  }
+
+  res.json({ id: rows[0].id, ok: true });
+});
+
+app.post('/api/challenges/:id/accept', requireAuth, async (req, res) => {
+  const uid = req.session.userId;
+  const { id } = req.params;
+  const { target_side } = req.body || {};
+  if (!target_side) return res.status(400).json({ error: 'target_side required' });
+
+  const rows = await dbQuery(
+    `UPDATE take_challenges SET status='active', target_id=COALESCE(target_id,$1), target_side=$2 WHERE id=$3 AND (target_id=$1 OR target_id IS NULL) RETURNING *`,
+    [uid, target_side.toUpperCase(), id]
+  ).catch(() => []);
+  if (!rows || !rows[0]) return res.status(404).json({ error: 'challenge not found or not yours' });
+
+  // Notify challenger
+  const ch = rows[0];
+  const accepter = await dbQuery(`SELECT display_name FROM users WHERE id=$1`, [uid]).catch(() => []);
+  const aname = (accepter && accepter[0]) ? (accepter[0].display_name || 'Someone') : 'Someone';
+  await dbQuery(`
+    INSERT INTO notifications (user_id, type, title, body, url, created_at)
+    VALUES ($1,'challenge_accepted',$2,$3,$4,NOW())
+  `, [ch.challenger_id, 'Challenge accepted',
+      `${aname} accepted your challenge — ${(ch.question||ch.slug).slice(0,70)}`,
+      `/feed?challenge=${id}`]).catch(() => {});
+
+  res.json({ ok: true });
+});
+
+app.post('/api/challenges/:id/decline', requireAuth, async (req, res) => {
+  const uid = req.session.userId;
+  const { id } = req.params;
+  await dbQuery(
+    `UPDATE take_challenges SET status='declined' WHERE id=$1 AND (target_id=$1 OR target_id IS NULL)`,
+    [id]
+  ).catch(() => {});
+  res.json({ ok: true });
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ── POLYMARKET INFLUENCER FEED ────────────────────────────────────────────────
 // Monitors X/Twitter, YouTube, and Reddit for top prediction-market voices.

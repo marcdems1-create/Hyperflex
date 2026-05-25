@@ -1862,6 +1862,16 @@ a:hover { text-decoration: underline; }
     <a href="/whales" class="rail-more">Whale Tracker ↗</a>
   </div>
 
+  <!-- Active Challenges -->
+  <div class="sb-card" id="challengeRailCard" style="display:none">
+    <div class="sb-card-title" style="display:flex;align-items:center;gap:8px;">
+      <span>Challenges</span>
+      <span id="challengeRailBadge" style="background:#c9920d;color:#000;font-size:9px;font-weight:900;padding:1px 6px;border-radius:10px;display:none;">0</span>
+    </div>
+    <div id="challengeRailList"></div>
+    <a href="/feed?tab=challenges" class="sb-showmore">All challenges</a>
+  </div>
+
   <!-- Search -->
   <div class="sb-search-wrap">
     <span class="sb-search-icon">🔍</span>
@@ -3017,6 +3027,43 @@ function renderInfluencerCard(p) {
   '</div>';
 }
 
+/* "You vs Market" edge bar — shows whether the take has drifted in your favour */
+function buildPriceEdgeBar(p) {
+  if (!p.entry_price || !p.market_live) return '';
+  var ml = p.market_live;
+  var yesPct = ml.yes_pct != null ? ml.yes_pct : null;
+  if (yesPct == null) return '';
+
+  var side = (p.direction || p.outcome || 'YES').toUpperCase();
+  var entry = Math.round(parseFloat(p.entry_price) * 100);   // in cents
+  var current = side === 'YES' ? Math.round(yesPct) : Math.round(100 - yesPct);
+  if (!entry || !current) return '';
+
+  var diff = current - entry;
+  if (Math.abs(diff) < 2) return ''; // noise — skip tiny moves
+
+  var sign = diff > 0 ? '+' : '';
+  var isWinning = diff > 0;
+  var color = isWinning ? '#00e68a' : '#ff4d6a';
+  var label = isWinning ? 'Market moved your way' : 'Market moved against you';
+  var pctBar = Math.min(Math.abs(diff), 40); // cap visual at 40¢ swing
+
+  return '<div style="margin:8px 0 4px;padding:8px 12px;background:rgba(' +
+    (isWinning ? '0,230,138' : '255,77,106') + ',.05);border-left:2px solid ' + color +
+    ';border-radius:0 4px 4px 0;">' +
+    '<div style="display:flex;align-items:center;gap:10px;">' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + color + ';font-family:monospace;margin-bottom:4px;">' + label + '</div>' +
+        '<div style="height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;">' +
+          '<div style="height:100%;width:' + Math.round(pctBar/40*100) + '%;background:' + color + ';border-radius:2px;transition:width .6s;"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-family:monospace;font-size:14px;font-weight:900;color:' + color + ';min-width:44px;text-align:right;">' + sign + diff + '¢</div>' +
+    '</div>' +
+    '<div style="font-size:10px;color:rgba(240,240,245,.3);margin-top:5px;font-family:monospace;">Entry: ' + entry + '¢ &nbsp;→&nbsp; Now: ' + current + '¢</div>' +
+  '</div>';
+}
+
 function renderCard(p) {
   var author = p.author || {};
   var name = esc(author.display_name || 'Anonymous');
@@ -3186,6 +3233,7 @@ function renderCard(p) {
       convBadge +
     '</div>' +
     (liveMarketHtml || (marketHref ? '<a href="' + marketHref + '" class="pred-market">' + esc(p.market_title) + '</a>' : (p.market_title ? '<div class="pred-market">' + esc(p.market_title) + '</div>' : ''))) +
+    buildPriceEdgeBar(p) +
     outcomeHtml +
     thesisHtml +
     tagsHtml +
@@ -3200,8 +3248,51 @@ function renderCard(p) {
         ? '<button onclick="feedShare(this)" data-q="' + esc((p.market_title||'').slice(0,80)) + '" data-pct="' + (Math.round(parseFloat(p.entry_price||0)*100)||'') + '" data-slug="' + esc(p.market_id||'') + '" title="Share on X" style="background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.4);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;">↗</button>'
         : '') +
       (p.id ? '<a href="/takes/' + esc(p.id) + '" style="font-size:11px;color:var(--text-faint);margin-left:auto;display:inline-flex;align-items:center;gap:4px;text-decoration:none" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'" title="View replies">💬 ' + (p.comment_count || 0) + '</a>' : '') +
+      (p.id && p.market_id
+        ? '<button onclick="openChallenge(this)" data-slug="' + esc(p.market_id||'') + '" data-q="' + esc((p.market_title||'').slice(0,120)) + '" data-cid="' + esc(p.condition_id||'') + '" data-side="' + esc(p.outcome||'YES') + '" title="Challenge someone on this market" style="background:none;border:1px solid rgba(201,146,13,.2);color:rgba(201,146,13,.55);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;letter-spacing:.05em;">⚡ CHALLENGE</button>'
+        : '') +
     '</div>' +
   '</div>';
+}
+
+/* ── CHALLENGE MODAL ── */
+var _challengeSlug='', _challengeQ='', _challengeCid='', _challengeSide='';
+function openChallenge(btn) {
+  _challengeSlug = btn.getAttribute('data-slug') || '';
+  _challengeQ    = btn.getAttribute('data-q')    || '';
+  _challengeCid  = btn.getAttribute('data-cid')  || '';
+  _challengeSide = btn.getAttribute('data-side') || 'YES';
+  var m = document.getElementById('challengeModal');
+  if(!m) return;
+  document.getElementById('cmQuestion').textContent = _challengeQ.slice(0,100);
+  document.getElementById('cmYourSide').textContent = _challengeSide;
+  document.getElementById('cmHandle').value = '';
+  document.getElementById('cmErr').textContent = '';
+  m.style.display = 'flex';
+}
+function closeChallenge() {
+  var m = document.getElementById('challengeModal');
+  if(m) m.style.display = 'none';
+}
+function submitChallenge() {
+  var handle  = (document.getElementById('cmHandle').value || '').trim();
+  var errEl   = document.getElementById('cmErr');
+  var btn     = document.getElementById('cmSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  fetch('/api/challenges', {
+    method:'POST',
+    headers: Object.assign({'Content-Type':'application/json'}, authHeaders ? authHeaders() : {}),
+    body: JSON.stringify({ slug:_challengeSlug, question:_challengeQ, condition_id:_challengeCid,
+      challenger_side:_challengeSide, target_handle:handle||undefined }),
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d && d.ok) {
+      closeChallenge();
+      if(window.HFX && window.HFX.toast) window.HFX.toast({type:'info',title:'Challenge sent.',body: handle ? 'Notified @'+handle : 'Open challenge posted to the feed.',duration:4000});
+    } else {
+      errEl.textContent = (d&&d.error) || 'Send failed.';
+    }
+  }).catch(function(){ errEl.textContent = 'Network error.'; })
+  .finally(function(){ btn.disabled=false; btn.textContent='Send challenge'; });
 }
 
 /* ── NEW TAKES POLLER (Twitter "X new takes" banner) ── */
@@ -3396,6 +3487,54 @@ async function sidebarFollow(userId, btn) {
   } catch (e) {}
 }
 loadSidebar();
+
+// ── Challenge Rail ──
+async function loadChallengeRail() {
+  try {
+    var r = await fetch('/api/challenges', { headers: authHeaders ? authHeaders() : {} });
+    if (!r.ok) return;
+    var list = await r.json();
+    if (!list || !list.length) return;
+
+    var card = document.getElementById('challengeRailCard');
+    var rail = document.getElementById('challengeRailList');
+    var badge = document.getElementById('challengeRailBadge');
+    if (!card || !rail) return;
+    card.style.display = '';
+
+    var pending = list.filter(function(c){ return c.status==='pending'; });
+    if (pending.length) {
+      badge.textContent = pending.length;
+      badge.style.display = '';
+    }
+
+    var html = list.slice(0, 5).map(function(c) {
+      var statusColor = c.status==='active' ? '#00e68a' : c.status==='pending' ? '#c9920d' : '#666';
+      var label = c.status==='active' ? 'LIVE' : c.status==='pending' ? 'OPEN' : c.status.toUpperCase();
+      return '<div class="sb-item" style="flex-direction:column;align-items:flex-start;gap:4px;">' +
+        '<div style="display:flex;align-items:center;gap:6px;width:100%;">' +
+          '<span style="font-size:9px;font-weight:700;letter-spacing:.1em;color:' + statusColor + ';font-family:monospace;">' + label + '</span>' +
+          '<span style="font-size:11px;color:rgba(240,240,245,.45);margin-left:auto;">' + (c.challenger_name||'You') + ' vs ' + (c.target_name||'Open') + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#f0f0f5;line-height:1.3;">' + (c.question||c.slug||'').slice(0,65) + '</div>' +
+        (c.status === 'pending' && !c.target_id
+          ? '<button onclick="copyChallengeLinkRail(' + c.id + ')" style="font-size:10px;font-family:monospace;background:none;border:1px solid rgba(201,146,13,.3);color:#c9920d;padding:2px 8px;border-radius:3px;cursor:pointer;margin-top:2px;">Copy link</button>'
+          : '') +
+      '</div>';
+    }).join('');
+    rail.innerHTML = html;
+  } catch(e) {}
+}
+
+function copyChallengeLinkRail(id) {
+  navigator.clipboard.writeText('https://hyperflex.network/feed?challenge=' + id).then(function() {
+    if(window.HFX && window.HFX.toast) window.HFX.toast({type:'info',title:'Challenge link copied.',duration:3000});
+  }).catch(function(){});
+}
+
+if (typeof token !== 'undefined' && token) {
+  setTimeout(loadChallengeRail, 1200);
+}
 
 // ── Helpers ──
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -4550,6 +4689,23 @@ async function loadTopPredictors() {
   }
 }
 </script>
+<!-- Challenge modal -->
+<div id="challengeModal" style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;" onclick="if(event.target===this)closeChallenge()">
+  <div style="background:#111118;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:28px;width:90%;max-width:400px;position:relative;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,240,245,.35);margin-bottom:10px;">ISSUE A CHALLENGE</div>
+    <div id="cmQuestion" style="font-size:14px;font-weight:700;color:#f0f0f5;line-height:1.4;margin-bottom:14px;"></div>
+    <div style="font-size:11px;color:rgba(240,240,245,.4);margin-bottom:20px;">Your side: <strong id="cmYourSide" style="color:#c9920d;font-family:monospace;"></strong> — opponent takes the other side.</div>
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,240,245,.35);display:block;margin-bottom:6px;">CHALLENGE SPECIFIC PERSON (OPTIONAL)</label>
+      <input id="cmHandle" placeholder="@handle or display name" style="width:100%;background:#0e0e15;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:10px 12px;color:#f0f0f5;font-size:13px;outline:none;font-family:monospace;">
+    </div>
+    <div id="cmErr" style="font-size:11px;color:#ff4d6a;min-height:16px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button id="cmSubmitBtn" onclick="submitChallenge()" style="flex:1;background:#c9920d;color:#000;border:none;border-radius:6px;padding:12px;font-weight:700;font-size:13px;letter-spacing:.05em;cursor:pointer;">Send challenge</button>
+      <button onclick="closeChallenge()" style="background:none;border:1px solid rgba(255,255,255,.12);color:rgba(240,240,245,.6);border-radius:6px;padding:12px 16px;font-size:13px;cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
 <script src="/hfx-engage.js" defer></script>
 <script>document.addEventListener('DOMContentLoaded',function(){if(window.HFX&&window.HFX.checkResolvedTakes)window.HFX.checkResolvedTakes();});</script>
 </body>
