@@ -212,6 +212,15 @@
   <!-- Anomaly alerts bar -->
   <div id="anomaly-bar" style="display:none;margin-bottom:16px"></div>
 
+  <!-- AI Signal Rail — live stream from signal agent -->
+  <div id="signal-rail" style="display:none;margin-bottom:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(0,230,138,.7);font-family:'JetBrains Mono',monospace;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e68a;box-shadow:0 0 8px #00e68a;animation:pulse 2s infinite"></span>
+      AI Signal — live
+    </div>
+    <div id="signal-rail-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
   <div class="edge-grid" id="grid">
     <div class="loading">Loading live alpha…</div>
   </div>
@@ -484,6 +493,106 @@ function truncate(s,n){return s&&s.length>n?s.slice(0,n)+'…':s||'';}
 
 loadAnomalies();
 setInterval(loadAnomalies,90000);
+
+// ── AI Signal Rail (SSE) ──────────────────────────────────────────────────
+var _signalRail = document.getElementById('signal-rail');
+var _signalList = document.getElementById('signal-rail-list');
+var _signalSeen = new Set();
+
+function renderSignalCard(sig, flash) {
+  var existing = document.getElementById('sig-' + sig.market_slug + '-' + sig.side);
+  if (existing) return; // already shown
+
+  var edgeColor = sig.edge_rating >= 8 ? '#00e68a' : sig.edge_rating >= 6 ? '#c9920d' : '#4d9fff';
+  var actionLabel = sig.action === 'BUY_YES' ? 'BUY YES' : sig.action === 'BUY_NO' ? 'BUY NO' : 'WATCH';
+  var actionColor = sig.action === 'BUY_YES' ? '#00e68a' : sig.action === 'BUY_NO' ? '#ff4d6a' : '#4d9fff';
+
+  var card = document.createElement('div');
+  card.id = 'sig-' + sig.market_slug + '-' + sig.side;
+  card.style.cssText = [
+    'background:#111118', 'border:1px solid rgba(255,255,255,.08)',
+    'border-left:3px solid ' + edgeColor,
+    'border-radius:8px', 'padding:14px 16px',
+    'transition:border-color .4s,box-shadow .4s',
+    flash ? 'box-shadow:0 0 20px ' + edgeColor + '55;border-color:' + edgeColor : '',
+  ].join(';');
+
+  var marketHref = sig.market_slug ? '/market/' + sig.market_slug : '#';
+  card.innerHTML = [
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">',
+      '<span style="font-family:monospace;font-size:20px;font-weight:900;color:' + edgeColor + ';">' + sig.edge_rating + '</span>',
+      '<span style="font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(240,240,245,.3);">/10</span>',
+      '<span style="font-family:monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:rgba(' +
+        (sig.action==='BUY_YES'?'0,230,138':sig.action==='BUY_NO'?'255,77,106':'77,159,255') + ',.12);color:' + actionColor + ';margin-left:4px;">' + actionLabel + '</span>',
+      (sig.risk_flag ? '<span style="font-family:monospace;font-size:9px;color:#f59e0b;letter-spacing:.08em;margin-left:auto;">' + sig.risk_flag + '</span>' : '<span style="margin-left:auto"></span>'),
+      '<span style="font-family:monospace;font-size:10px;color:rgba(240,240,245,.3);">' + sig.whale_count + ' whale' + (sig.whale_count !== 1 ? 's' : '') + ' · $' + (sig.capital_m || (sig.total_capital/1e6).toFixed(1)) + 'M</span>',
+    '</div>',
+    '<div style="font-size:13px;font-weight:700;color:#f0f0f5;line-height:1.4;margin-bottom:6px;">' + esc(sig.headline || '') + '</div>',
+    (sig.rationale ? '<div style="font-size:12px;color:rgba(240,240,245,.5);line-height:1.5;margin-bottom:8px;">' + esc(sig.rationale) + '</div>' : ''),
+    '<div style="display:flex;gap:8px;align-items:center;">',
+      '<a href="' + marketHref + '" style="font-family:monospace;font-size:10px;font-weight:700;color:#4d9fff;letter-spacing:.06em;text-decoration:none;">VIEW MARKET →</a>',
+      (sig.x_copy ? '<button onclick="window.open(\'https://twitter.com/intent/tweet?text=\'+encodeURIComponent(this.dataset.copy),\'_blank\',\'width=600,height=400\')" data-copy="' + esc(sig.x_copy) + '" style="font-family:monospace;font-size:10px;background:none;border:1px solid rgba(29,161,242,.3);color:#1da1f2;padding:3px 8px;border-radius:3px;cursor:pointer;">Post on X</button>' : ''),
+    '</div>',
+  ].join('');
+
+  _signalList.insertBefore(card, _signalList.firstChild);
+  _signalRail.style.display = '';
+
+  if (flash) {
+    setTimeout(function() {
+      card.style.boxShadow = '';
+      card.style.borderLeftColor = edgeColor;
+      card.style.borderColor = 'rgba(255,255,255,.08)';
+    }, 3000);
+  }
+
+  // Keep rail to last 8 cards
+  while (_signalList.children.length > 8) {
+    _signalList.removeChild(_signalList.lastChild);
+  }
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Initial load from REST
+fetch('/api/agent-signals?limit=5').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if (!d || !d.signals || !d.signals.length) return;
+  d.signals.slice().reverse().forEach(function(s) { renderSignalCard(s, false); });
+}).catch(function(){});
+
+// SSE stream for live signals
+if (typeof EventSource !== 'undefined') {
+  var _sse = new EventSource('/api/agent-signals/stream');
+  _sse.addEventListener('signal', function(e) {
+    try {
+      var sig = JSON.parse(e.data);
+      if (_signalSeen.has(sig.market_slug + sig.side)) return;
+      _signalSeen.add(sig.market_slug + sig.side);
+      renderSignalCard(sig, true);
+      // Toast in bottom-right
+      if (window.HFX && window.HFX.toast) {
+        window.HFX.toast({
+          type: 'whale',
+          title: sig.edge_rating + '/10 edge: ' + (sig.headline || '').slice(0, 60),
+          body: sig.action + ' · $' + (sig.capital_m||'?') + 'M · ' + sig.whale_count + ' whales',
+          href: sig.market_slug ? '/market/' + sig.market_slug : null,
+          duration: 12000,
+        });
+      }
+    } catch(err) {}
+  });
+  _sse.addEventListener('snapshot', function(e) {
+    try {
+      var sigs = JSON.parse(e.data);
+      sigs.slice().reverse().forEach(function(s) { renderSignalCard(s, false); });
+    } catch(err) {}
+  });
+  _sse.onerror = function() {
+    // SSE will auto-reconnect; no action needed
+  };
+}
 </script>
 <script src="/hfx-engage.js" defer></script>
 </body>
