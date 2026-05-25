@@ -46,6 +46,22 @@ nav.scrolled{background:rgba(14,14,21,.97);border-bottom:1px solid var(--border)
 .btn-connect{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#000;background:#fff;border:none;border-radius:5px;padding:8px 16px;cursor:pointer;text-decoration:none;transition:opacity .12s;}
 .btn-connect:hover{opacity:.85;}
 @media(max-width:720px){.nav-links{display:none;}.nav-live span:last-child{display:none;}}
+.nav-search{position:relative;flex:1;max-width:380px;margin:0 16px;}
+#searchInput{width:100%;height:32px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:0 12px 0 32px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;transition:border-color .15s,background .15s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,.4)' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:10px center;}
+#searchInput:focus{border-color:rgba(255,255,255,.3);background-color:rgba(255,255,255,.1);}
+#searchInput::placeholder{color:var(--muted);}
+.search-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#1a1a22;border:1px solid rgba(255,255,255,.12);border-radius:8px;display:none;z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.6);max-height:480px;overflow-y:auto;}
+.search-dropdown.open{display:block;}
+.search-result{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05);transition:background .1s;}
+.search-result:last-child{border-bottom:none;}
+.search-result:hover{background:rgba(255,255,255,.06);}
+.search-result-img{width:36px;height:36px;border-radius:4px;object-fit:cover;background:#2a2a32;flex-shrink:0;}
+.search-result-body{flex:1;min-width:0;}
+.search-result-q{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.search-result-meta{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+.search-result-price{font-family:var(--mono);font-size:13px;font-weight:700;flex-shrink:0;}
+.search-empty,.search-loading{padding:16px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;}
+@media(max-width:720px){.nav-search{max-width:140px;margin:0 8px;}}
 
 /* ── HERO ── */
 #hero{
@@ -341,6 +357,10 @@ footer{
     <a class="nav-link" href="/mentions">Mentions</a>
     <a class="nav-link" href="/predictors">Leaderboard</a>
     <a class="nav-link" href="/explore">Explore</a>
+  </div>
+  <div class="nav-search" id="navSearch">
+    <input type="text" id="searchInput" placeholder="Search markets…" autocomplete="off" spellcheck="false">
+    <div class="search-dropdown" id="searchDropdown"></div>
   </div>
   <div class="nav-right">
     <div class="nav-live"><span class="live-dot"></span><span>LIVE</span></div>
@@ -712,6 +732,46 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   setTimeout(function(){patchImages(rowVolume);},0);
 });
 
+})();
+
+(function(){
+  var input=document.getElementById('searchInput');
+  var dropdown=document.getElementById('searchDropdown');
+  if(!input||!dropdown) return;
+  var timer=null,current='';
+  function pct(m){var p=m.outcomePrices;if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}if(!Array.isArray(p))return null;return Math.round(Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}))*100);}
+  function col(n){return n>=65?'var(--green)':n<=35?'var(--red)':'#fff';}
+  function render(results){
+    if(!results.length){dropdown.innerHTML='<div class="search-empty">No markets found</div>';dropdown.classList.add('open');return;}
+    dropdown.innerHTML=results.map(function(m){
+      var slug=m.slug||'';
+      var img=m.image||m.icon||'';
+      var q=(m.question||m.title||'—').replace(/</g,'&lt;');
+      var vol=Number(m.volume||0);
+      var vf=vol>=1e6?'$'+(vol/1e6).toFixed(1)+'M vol':vol>=1e3?'$'+Math.round(vol/1e3)+'K vol':'';
+      var p=pct(m);
+      return '<a class="search-result" href="/market/'+slug+'">'
+        +(img?'<img class="search-result-img" src="'+img+'" alt="" loading="lazy">':'<div class="search-result-img"></div>')
+        +'<div class="search-result-body"><div class="search-result-q">'+q+'</div>'+(vf?'<div class="search-result-meta">'+vf+'</div>':'')+'</div>'
+        +(p!=null?'<div class="search-result-price" style="color:'+col(p)+';">'+p+'¢</div>':'')
+        +'</a>';
+    }).join('');
+    dropdown.classList.add('open');
+  }
+  function search(q){
+    if(!q||q.length<2){dropdown.classList.remove('open');return;}
+    current=q;
+    dropdown.innerHTML='<div class="search-loading">Searching…</div>';
+    dropdown.classList.add('open');
+    fetch('https://gamma-api.polymarket.com/markets?term='+encodeURIComponent(q)+'&limit=10&closed=false&active=true&order=volume&ascending=false')
+      .then(function(r){return r.ok?r.json():[];})
+      .then(function(d){if(current!==q)return;render(Array.isArray(d)?d:[]);})
+      .catch(function(){if(current!==q)return;dropdown.innerHTML='<div class="search-empty">Search unavailable</div>';});
+  }
+  input.addEventListener('input',function(){clearTimeout(timer);var q=input.value.trim();timer=setTimeout(function(){search(q);},250);});
+  input.addEventListener('keydown',function(e){if(e.key==='Escape'){dropdown.classList.remove('open');input.blur();}if(e.key==='Enter'){var f=dropdown.querySelector('.search-result');if(f)f.click();}});
+  document.addEventListener('click',function(e){if(!document.getElementById('navSearch').contains(e.target))dropdown.classList.remove('open');});
+  document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();input.focus();input.select();}});
 })();
 </script>
 </body>
