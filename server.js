@@ -12110,8 +12110,10 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
              u.is_whale, u.whale_rank, u.whale_pnl,
              u.flex_score, u.flex_tier, u.flex_qualifies, u.flex_settled_events,
              u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
-             u.prediction_win_rate, u.wallet_verified
+             u.prediction_win_rate, u.wallet_verified,
+             ws.total_volume_usd, ws.closed_positions AS ws_closed_positions
       FROM users u
+      LEFT JOIN wallet_scores ws ON ws.user_id = u.id
       WHERE u.${col} IS NOT NULL
       ORDER BY ${order}
       LIMIT $1`, [limit]);
@@ -12140,6 +12142,8 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
         whale_pnl:  u.whale_pnl  != null ? Number(u.whale_pnl)  : null,
         win_rate: u.prediction_win_rate != null ? Number(u.prediction_win_rate) : null,
         predictions_resolved: u.predictions_resolved != null ? Number(u.predictions_resolved) : 0,
+        total_volume_usd: u.total_volume_usd != null ? Math.round(Number(u.total_volume_usd)) : null,
+        closed_positions: u.ws_closed_positions != null ? Number(u.ws_closed_positions) : null,
       };
     });
 
@@ -12400,13 +12404,16 @@ async function fetchPolymarketLeaderboard(period) {
       const volPts = vol > 500000 ? 20 : vol > 100000 ? 15 : vol > 10000 ? 8 : 0;
       const profitBonus = roi > 0 ? 10 : 0;
       const sharpScore = Math.max(0, Math.min(99, Math.round(roiPts + pnlPts + volPts + profitBonus)));
+      const winRate = t.winRate != null ? parseFloat(t.winRate)
+                    : t.win_rate != null ? parseFloat(t.win_rate) : null;
       return {
         display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || 'Trader'; })(),
         total_pnl: Math.round(pnl),
         volume: Math.round(vol),
         roi: Math.round(roi * 10) / 10,
         wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
-        win_rate: 0,
+        win_rate: winRate != null ? Math.round(winRate * 100) : 0,
+        win_streak: 0,
         sharp_score: sharpScore,
         platforms: ['POLY'],
         _profitable: pnl > 0 && roi >= 1,
