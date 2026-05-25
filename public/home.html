@@ -687,10 +687,11 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   }).join('');
   setTimeout(function(){patchImages(rowHot);},0);
 
-  /* whale row — sort by volume descending, take 8 */
+  /* whale row — sort by volume descending, take 8 from second tier (fallback: first tier) */
   var byVol = primary.slice().sort(function(a,b){return Number(b.volume||0)-Number(a.volume||0);});
+  var whaleMarkets = byVol.length > 8 ? byVol.slice(8,16) : byVol.slice(0,8);
   var rowWhale = document.getElementById('rowWhale');
-  rowWhale.innerHTML = byVol.slice(8,16).map(function(m){
+  rowWhale.innerHTML = whaleMarkets.map(function(m){
     return buildCard(m,null,'mcard-pill-whale','WHALE');
   }).join('');
   setTimeout(function(){patchImages(rowWhale);},0);
