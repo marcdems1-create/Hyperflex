@@ -409,4 +409,168 @@
 
   setTimeout(_injectNavStreak, 1500);
 
+  /* ─────────────────────── WEB PUSH OPT-IN ─────────────────────── */
+  // Show a subtle opt-in prompt after user is engaged (not on first load, not
+  // if already subscribed, not more than once per week).
+  var _pushPromptKey = 'hfx_push_prompted';
+  var _pushSubKey    = 'hfx_push_subscribed';
+
+  function _base64UrlToUint8Array(base64UrlData) {
+    var padding = '='.repeat((4 - (base64UrlData.length % 4)) % 4);
+    var base64 = (base64UrlData + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = atob(base64);
+    var out = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; i++) out[i] = rawData.charCodeAt(i);
+    return out;
+  }
+
+  function _doSubscribePush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    navigator.serviceWorker.register('/sw.js').then(function (reg) {
+      return fetch('/api/push/vapid-key').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+        if (!d || !d.publicKey) return;
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: _base64UrlToUint8Array(d.publicKey),
+        }).then(function (sub) {
+          var j = sub.toJSON();
+          return fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }),
+          });
+        }).then(function () {
+          localStorage.setItem(_pushSubKey, '1');
+          window.HFX.toast({ type: 'info', title: 'Alerts enabled.', body: 'Push when your takes resolve.', duration: 4000 });
+        });
+      });
+    }).catch(function () {});
+  }
+
+  function _showPushPrompt() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
+    if (localStorage.getItem(_pushSubKey)) return;
+    var now = Date.now();
+    var last = parseInt(localStorage.getItem(_pushPromptKey) || '0');
+    if (now - last < 7 * 86400000) return; // once per week
+    localStorage.setItem(_pushPromptKey, String(now));
+
+    // Build inline prompt (not a browser native dialog yet — user clicks to trigger)
+    var wrap = document.createElement('div');
+    wrap.id = 'hfx-push-prompt';
+    wrap.style.cssText = [
+      'position:fixed', 'bottom:80px', 'right:24px', 'z-index:99998',
+      'background:#111118', 'border:1px solid rgba(77,159,255,.25)',
+      'border-radius:10px', 'padding:16px 18px', 'max-width:300px',
+      'box-shadow:0 4px 24px rgba(0,0,0,.5)', 'font-family:"Inter",sans-serif',
+    ].join(';');
+    wrap.innerHTML = [
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(77,159,255,.8);margin-bottom:8px;">Stay in the loop</div>',
+      '<div style="font-size:13px;color:#f0f0f5;line-height:1.45;margin-bottom:14px;">Get a push when your takes resolve or a challenge drops.</div>',
+      '<div style="display:flex;gap:8px;">',
+        '<button id="hfx-push-yes" style="flex:1;background:#4d9fff;color:#000;border:none;border-radius:6px;padding:9px;font-weight:700;font-size:12px;cursor:pointer;">Enable</button>',
+        '<button id="hfx-push-no" style="background:none;border:1px solid rgba(255,255,255,.12);color:rgba(240,240,245,.5);border-radius:6px;padding:9px 12px;font-size:12px;cursor:pointer;">Not now</button>',
+      '</div>',
+    ].join('');
+    document.body.appendChild(wrap);
+
+    document.getElementById('hfx-push-yes').onclick = function () {
+      wrap.remove();
+      if (Notification.permission === 'granted') {
+        _doSubscribePush();
+      } else {
+        Notification.requestPermission().then(function (perm) {
+          if (perm === 'granted') _doSubscribePush();
+        });
+      }
+    };
+    document.getElementById('hfx-push-no').onclick = function () { wrap.remove(); };
+  }
+
+  // Show push prompt 45s after page load — user is engaged by then
+  setTimeout(_showPushPrompt, 45000);
+
+  /* ─────────────────────── REFERRAL SYSTEM ─────────────────────── */
+  var _refCode = null;
+
+  function _buildInviteModal(code, count, total) {
+    var existing = document.getElementById('hfx-invite-modal');
+    if (existing) { existing.style.display = 'flex'; return; }
+
+    var link = 'https://hyperflex.network/creator/signup?ref_code=' + code;
+    var tweetText = 'Building a track record on @hyperflexnet — the prediction market social layer. Join with my link and post your first take: ' + link;
+
+    var modal = document.createElement('div');
+    modal.id = 'hfx-invite-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = [
+      '<div style="background:#111118;border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:28px;width:90%;max-width:420px;position:relative;">',
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(168,85,247,.8);margin-bottom:10px;">Invite traders</div>',
+        '<div style="font-size:15px;font-weight:700;color:#f0f0f5;line-height:1.4;margin-bottom:6px;">Your track record does the selling.</div>',
+        '<div style="font-size:13px;color:rgba(240,240,245,.5);margin-bottom:20px;">Share your invite link. Every person who joins and posts a take is credited to you.',
+          count > 0 ? ' <strong style="color:#a855f7;">' + count + ' joined so far.</strong>' : '',
+        '</div>',
+        '<div style="background:#0e0e15;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px 14px;font-family:monospace;font-size:11px;color:#f0f0f5;word-break:break-all;margin-bottom:14px;">' + link + '</div>',
+        '<div style="display:flex;gap:10px;margin-bottom:16px;">',
+          '<button id="hfx-ref-copy" style="flex:1;background:#a855f7;color:#fff;border:none;border-radius:6px;padding:11px;font-weight:700;font-size:12px;cursor:pointer;letter-spacing:.05em;">Copy link</button>',
+          '<button onclick="window.open(\'https://twitter.com/intent/tweet?text=\'+encodeURIComponent(\'' + tweetText.replace(/'/g, "\\'") + '\'),\'_blank\',\'width=600,height=400\')" style="flex:1;background:#1da1f2;color:#fff;border:none;border-radius:6px;padding:11px;font-weight:700;font-size:12px;cursor:pointer;">Post on X</button>',
+        '</div>',
+        '<button onclick="document.getElementById(\'hfx-invite-modal\').style.display=\'none\'" style="width:100%;background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.5);border-radius:6px;padding:9px;font-size:12px;cursor:pointer;">Close</button>',
+      '</div>',
+    ].join('');
+    document.body.appendChild(modal);
+
+    modal.onclick = function (e) { if (e.target === modal) modal.style.display = 'none'; };
+    document.getElementById('hfx-ref-copy').onclick = function () {
+      navigator.clipboard.writeText(link).then(function () {
+        document.getElementById('hfx-ref-copy').textContent = 'Copied ✓';
+        setTimeout(function () { document.getElementById('hfx-ref-copy').textContent = 'Copy link'; }, 2000);
+      }).catch(function () {});
+    };
+  }
+
+  window.HFX.openInvite = function () {
+    if (_refCode) { _buildInviteModal(_refCode, 0, 0); return; }
+    fetch('/api/referral/code', { headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('hfx_token') || '') } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.referral_code) return;
+        _refCode = d.referral_code;
+        _buildInviteModal(d.referral_code, (d.referrals || []).length, d.total_fp || 0);
+      }).catch(function () {});
+  };
+
+  // Injects "Invite" chip in the nav once user is logged in
+  window.HFX.showReferralChip = function () {
+    var nav = document.querySelector('nav');
+    if (!nav || nav.querySelector('.hfx-ref-chip')) return;
+    var chip = document.createElement('button');
+    chip.className = 'hfx-ref-chip';
+    chip.title = 'Invite friends to HYPERFLEX';
+    chip.style.cssText = [
+      'font-family:"JetBrains Mono",monospace', 'font-size:9px', 'font-weight:700',
+      'letter-spacing:.1em', 'text-transform:uppercase',
+      'color:#a855f7', 'background:rgba(168,85,247,.08)',
+      'border:1px solid rgba(168,85,247,.2)', 'border-radius:4px',
+      'padding:4px 9px', 'cursor:pointer',
+      'display:inline-flex', 'align-items:center', 'gap:5px',
+    ].join(';');
+    chip.textContent = '+ Invite';
+    chip.onclick = function () { window.HFX.openInvite(); };
+    var right = nav.querySelector('.nav-right');
+    if (right) right.insertBefore(chip, right.firstChild);
+    else nav.appendChild(chip);
+  };
+
+  // Check session and show invite chip for logged-in users
+  setTimeout(function () {
+    var tok = localStorage.getItem('hfx_token') || sessionStorage.getItem('hfx_token');
+    if (!tok) return;
+    try {
+      var payload = JSON.parse(atob(tok.split('.')[1]));
+      if (payload && (payload.sub || payload.id)) window.HFX.showReferralChip();
+    } catch (e) {}
+  }, 2500);
+
 })();

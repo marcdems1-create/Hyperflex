@@ -2765,6 +2765,30 @@ app.post('/api/notifications/read', async (req, res) => {
 });
 
 // Helper: push a notification to a user
+// sendUserWebPush — send a web push to all subscriptions for a specific user_id.
+// Fire-and-forget (does not throw). Cleans up expired endpoints automatically.
+async function sendUserWebPush(userId, title, body, url) {
+  if (!webpush || !pool) return;
+  try {
+    const subs = await dbQuery(
+      'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
+      [userId]
+    ).catch(() => []);
+    const payload = JSON.stringify({ title: title || 'HYPERFLEX', body: body || '', url: url || 'https://hyperflex.network' });
+    for (const sub of (subs || [])) {
+      webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload)
+        .catch(err => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
+          }
+        });
+    }
+  } catch (_) {}
+}
+
+// HIGH-VALUE PUSH TYPE LIST — these get a web push in addition to the in-app bell
+const _WEB_PUSH_TYPES = new Set(['take_correct', 'take_incorrect', 'challenge_won', 'challenge', 'challenge_accepted', 'reaction']);
+
 async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null, refs = null) {
   try {
     const refType = refs && refs.refType ? refs.refType : null;
@@ -2791,6 +2815,10 @@ async function pushNotification(userId, type, title, body, marketId = null, comm
         market_id: marketId || null, community_slug: communitySlug || null,
         ref_type: refType, ref_id: refId,
       }]);
+    }
+    // Web push for high-value notification types
+    if (userId && _WEB_PUSH_TYPES.has(type)) {
+      sendUserWebPush(userId, title, body, marketId ? `https://hyperflex.network/market/${marketId}` : 'https://hyperflex.network/feed');
     }
   } catch (err) {
     // non-blocking — swallow errors
