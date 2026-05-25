@@ -32830,6 +32830,43 @@ app.get('/api/hot-markets/carousel', async (req, res) => {
   }
 });
 
+// GET /api/topics — markets grouped by topic for the explore dashboard
+app.get('/api/topics', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 80));
+    const tiles = await hotMarkets.getHotMarketsCarousel(
+      { limit },
+      { newsImpactCache: typeof _newsImpactCache !== 'undefined' ? _newsImpactCache : null }
+    );
+    const { classifyTopic, TOPIC_RULES } = hotMarkets;
+
+    // Seed all known topics (preserves order, removes empties at the end)
+    const groups = {};
+    TOPIC_RULES.forEach(r => { groups[r.topic] = []; });
+    groups['Other'] = [];
+
+    const seen = new Set();
+    (Array.isArray(tiles) ? tiles : []).forEach(m => {
+      const slug = m.event_slug || m.slug || '';
+      if (seen.has(slug)) return;
+      seen.add(slug);
+      const topic = classifyTopic(m);
+      if (!groups[topic]) groups[topic] = [];
+      groups[topic].push(m);
+    });
+
+    const result = Object.entries(groups)
+      .filter(([, mList]) => mList.length > 0)
+      .map(([topic, mList]) => ({ topic, markets: mList, count: mList.length }));
+
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ topics: result, total: tiles ? tiles.length : 0, updated_at: new Date().toISOString() });
+  } catch (e) {
+    console.error('[topics] endpoint error:', e.message);
+    res.status(500).json({ error: e.message, topics: [] });
+  }
+});
+
 // GET /api/market-summary/:slug — one-sentence AI probability summary for a market card
 app.get('/api/market-summary/:slug', async (req, res) => {
   const slug = req.params.slug;
