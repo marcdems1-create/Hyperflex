@@ -3218,16 +3218,21 @@ function renderCard(p) {
     ? '<span class="badge badge-platform" style="text-transform:capitalize">' + esc(p.conviction) + ' conviction</span>'
     : '';
 
+  // Trending badge — take has 5+ agrees
+  var trendingBadge = (p.agree_count >= 5)
+    ? '<span class="badge" style="background:rgba(168,85,247,.1);color:#a855f7;border:1px solid rgba(168,85,247,.25);font-family:var(--mono);">↑ ' + p.agree_count + ' agree</span>'
+    : '';
+
   var marketHref = (p.market_live && p.market_live.url) ||
     (p.market_id ? ('/market/' + encodeURIComponent(p.market_id)) : null);
 
   // Source badge — whale, consensus, or X influencer origin
   var influencerBadge = p._source === 'influencer'
-    ? '<span class="badge" style="background:rgba(29,161,242,0.15);color:#1da1f2;border:1px solid rgba(29,161,242,0.3)">𝕏 Influencer</span>'
+    ? '<span class="badge" style="background:rgba(29,161,242,0.15);color:#1da1f2;border:1px solid rgba(29,161,242,0.3)">X</span>'
     : p._source === 'whale'
-    ? '<span class="badge" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);font-family:var(--mono)">🐋 Whale</span>'
+    ? '<span class="badge" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);font-family:var(--mono)">WHALE</span>'
     : p._source === 'consensus'
-    ? '<span class="badge" style="background:rgba(77,159,255,0.12);color:#4d9fff;border:1px solid rgba(77,159,255,0.25);font-family:var(--mono)">⚡ Consensus</span>'
+    ? '<span class="badge" style="background:rgba(77,159,255,0.12);color:#4d9fff;border:1px solid rgba(77,159,255,0.25);font-family:var(--mono)">CONSENSUS</span>'
     : '';
 
   // External link (tweet URL) if present
@@ -3306,6 +3311,7 @@ function renderCard(p) {
     '</div>' +
     '<div class="pred-badges">' +
       influencerBadge +
+      trendingBadge +
       '<span class="badge ' + sideClass + '">' + esc(p.direction) + '</span>' +
       (p.entry_price ? '<span class="badge badge-price">' + priceLabel + '</span>' : '') +
       convBadge +
