@@ -387,7 +387,19 @@
         // Update last seen to newest
         localStorage.setItem(_rxLastSeenKey, fresh[0].id);
         // Surface first fresh reaction/agree notification as a toast
-        // Check for challenge notification (highest priority — loss aversion)
+        // Check for market resolving soon (time-pressure, highest urgency)
+        var resolvingNotif = fresh.find(function(n){ return n.type === 'market_resolving'; });
+        if (resolvingNotif) {
+          window.HFX.toast({
+            type: 'warning',
+            title: resolvingNotif.title || 'Market resolving soon.',
+            body: (resolvingNotif.body || '').slice(0, 80),
+            href: '/feed',
+            duration: 10000
+          });
+          return;
+        }
+        // Check for challenge notification (second priority — loss aversion)
         var challengeNotif = fresh.find(function(n){ return n.type === 'take_challenged'; });
         if (challengeNotif) {
           window.HFX.toast({

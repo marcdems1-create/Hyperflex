@@ -52003,6 +52003,60 @@ async function gradeExpiredPredictions() {
 
 cron.schedule('*/30 * * * *', () => { console.log('[accuracy/grade] Cron triggered'); gradeExpiredPredictions().catch(err => console.error('[accuracy/grade] Cron error:', err.message)); });
 
+// ── "Market resolving soon" take notifications (every 30 min) ──
+// Finds takes on markets expiring in 1-3 hours and notifies the author.
+// Only fires once per take (tracked via a simple SET in memory, resets on restart).
+const _notifiedResolving = new Set();
+cron.schedule('*/30 * * * *', safeCron('resolvingSoonNotifs', async () => {
+  if (!pool) return;
+  // Join takes with screener cache (in-memory): find user takes where the
+  // market's end_date is 1-3h away and we haven't already notified this take.
+  if (!_screenerCache || !_screenerCache.data || !_screenerCache.data.length) return;
+  const now = Date.now();
+  const windowMs1 = 1 * 3600 * 1000;
+  const windowMs3 = 3 * 3600 * 1000;
+  // Build a set of market slugs expiring in 1-3h
+  const expiringSlugs = new Set();
+  const expiryBySlug = {};
+  for (const m of _screenerCache.data) {
+    if (!m.end_date && !m.endDate) continue;
+    const exp = new Date(m.end_date || m.endDate).getTime();
+    const diff = exp - now;
+    if (diff > windowMs1 && diff < windowMs3) {
+      const slug = m.slug || m.event_slug;
+      if (slug) { expiringSlugs.add(slug); expiryBySlug[slug] = m; }
+    }
+  }
+  if (!expiringSlugs.size) return;
+  // Fetch user takes on those markets (not already graded)
+  const slugArr = Array.from(expiringSlugs);
+  const rows = await dbQuery(
+    `SELECT id, user_id, question, market_slug, side FROM takes
+     WHERE source = 'user' AND is_correct IS NULL
+       AND market_slug = ANY($1)
+     LIMIT 200`,
+    [slugArr]
+  ).catch(() => []);
+  let fired = 0;
+  for (const t of rows) {
+    if (_notifiedResolving.has(t.id)) continue;
+    _notifiedResolving.add(t.id);
+    const m = expiryBySlug[t.market_slug] || {};
+    const exp = new Date(m.end_date || m.endDate);
+    const hrsLeft = Math.round((exp.getTime() - now) / 3600000 * 10) / 10;
+    const shortQ = (t.question || t.market_slug || '').substring(0, 60);
+    await pushNotification(
+      t.user_id, 'market_resolving',
+      `Market resolves in ~${hrsLeft}h`,
+      `${String(t.side).toUpperCase()} on "${shortQ}"`,
+      null, null
+    ).catch(() => {});
+    fired++;
+    if (fired >= 50) break; // cap per cron run
+  }
+  if (fired) console.log(`[resolving-soon] Notified ${fired} takes`);
+}));
+
 // ── Price Alert Checker (every 2 min) ──
 cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
   // Get current market prices from screener cache
