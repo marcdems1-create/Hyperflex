@@ -20465,6 +20465,48 @@ app.get('/api/takes/trending', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/takes/contested — takes where agree/disagree split closest to 50/50 (hot debates)
+app.get('/api/takes/contested', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 30);
+    // Controversy score: total reactions * (1 - |agree_pct - 0.5| * 2)
+    // Higher = more total reactions AND closer to 50/50 split
+    // Min 3 reactions to qualify; recency decay over 7 days
+    const rows = await dbQuery(`
+      SELECT t.*,
+        (t.agree_count + t.disagree_count) AS total_reacts,
+        CASE WHEN (t.agree_count + t.disagree_count) > 0
+          THEN t.agree_count::float / (t.agree_count + t.disagree_count)
+          ELSE 0.5 END AS agree_pct,
+        (t.agree_count + t.disagree_count) *
+          (1.0 - ABS(
+            CASE WHEN (t.agree_count + t.disagree_count) > 0
+              THEN t.agree_count::float / (t.agree_count + t.disagree_count)
+              ELSE 0.5 END - 0.5
+          ) * 2.0) *
+          (1.0 / (1.0 + EXTRACT(EPOCH FROM (now() - t.created_at)) / 604800.0))
+        AS controversy_score
+      FROM takes t
+      WHERE t.created_at > now() - interval '30 days'
+        AND (t.agree_count + t.disagree_count) >= 3
+      ORDER BY controversy_score DESC
+      LIMIT $1
+    `, [limit]);
+
+    let myReactions = {};
+    if (req.userId && rows.length) {
+      const takeIds = rows.map(r => r.id);
+      const rr = await dbQuery('SELECT take_id, reaction FROM take_reactions WHERE user_id = $1 AND take_id = ANY($2)', [req.userId, takeIds]);
+      for (const r of rr) myReactions[r.take_id] = r.reaction;
+    }
+
+    res.json({ takes: rows.map(r => ({ ...r, my_reaction: myReactions[r.id] || null })) });
+  } catch (err) {
+    console.error('[takes] contested error:', err.message);
+    res.status(500).json({ error: 'Failed to load contested takes' });
+  }
+});
+
 // GET /api/takes/search-markets?q= — search real Polymarket markets for the compose modal
 app.get('/api/takes/search-markets', async (req, res) => {
   try {
@@ -20896,6 +20938,31 @@ app.get('/api/data/sharps/leaderboard', apiKeyAuth, async (req, res) => {
 
 // GET /api/takes/mine/resolved — auth-gated, returns own takes that resolved
 // in the last 7d. Used by hfx-engage.js to surface win/loss cards on return visits.
+// GET /api/takes/recently-resolved — public feed of takes graded in last 24h
+// Used by home.html "Just Resolved" row
+app.get('/api/takes/recently-resolved', optionalAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 12, 30);
+    const hours = Math.min(parseInt(req.query.hours) || 24, 72);
+    const rows = await dbQuery(`
+      SELECT t.id, t.question, t.side, t.entry_price, t.is_correct, t.resolved_at,
+             t.market_slug, t.agree_count, t.disagree_count, t.source,
+             u.username, u.display_name, u.tier
+      FROM takes t
+      LEFT JOIN users u ON u.id = t.user_id
+      WHERE t.resolved_at > now() - ($2 || ' hours')::interval
+        AND t.is_correct IS NOT NULL
+        AND t.source = 'user'
+      ORDER BY t.resolved_at DESC
+      LIMIT $1
+    `, [limit, hours]);
+    res.json({ takes: rows });
+  } catch (err) {
+    console.error('[takes] recently-resolved error:', err.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 app.get('/api/takes/mine/resolved', requireAuth, async (req, res) => {
   try {
     const since = req.query.since || new Date(Date.now() - 7 * 86400e3).toISOString();

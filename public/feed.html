@@ -1806,6 +1806,15 @@ a:hover { text-decoration: underline; }
     <button onclick="loadNewTakes()" style="background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.3);color:#4d9fff;font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 20px;border-radius:20px;cursor:pointer;letter-spacing:.06em;transition:background .12s;" id="newTakesBtn">↑ 0 new takes</button>
   </div>
 
+  <!-- Hot Debates strip (Trending tab only) -->
+  <div id="hotDebatesStrip" style="display:none;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:0 2px;">
+      <span style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#ff4d6a;">⚔ HOT DEBATES</span>
+      <span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3);">Most contested takes · community split</span>
+    </div>
+    <div id="hotDebatesList"></div>
+  </div>
+
   <!-- Feed -->
   <div id="feedContainer">
     <div class="feed-loading">Loading predictions...</div>
@@ -3390,7 +3399,48 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
+  var hds = document.getElementById('hotDebatesStrip');
+  if (hds) hds.style.display = tab === 'trending' ? '' : 'none';
+  if (tab === 'trending') loadHotDebates();
   loadFeed(false);
+}
+
+var _hotDebatesLoaded = false;
+function loadHotDebates() {
+  if (_hotDebatesLoaded) return;
+  _hotDebatesLoaded = true;
+  fetch(API + '/api/takes/contested?limit=5', { headers: authHeaders() })
+    .then(function(r){ return r.ok ? r.json() : {takes:[]}; })
+    .then(function(d){
+      var takes = d.takes || [];
+      var list = document.getElementById('hotDebatesList');
+      if (!list || !takes.length) return;
+      list.innerHTML = takes.map(function(t) {
+        var total = (t.agree_count||0) + (t.disagree_count||0);
+        var agreePct = total > 0 ? Math.round((t.agree_count||0) / total * 100) : 50;
+        var side = t.side ? t.side.toUpperCase() : 'YES';
+        var sideCol = side === 'YES' ? '#00e68a' : '#ff4d6a';
+        var q = (t.question || '').replace(/</g,'&lt;').slice(0, 80);
+        var slug = t.market_slug || '';
+        return '<div style="background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start;">'
+          + '<div style="flex-shrink:0;width:3px;border-radius:2px;background:linear-gradient(180deg,#00e68a,#ff4d6a);align-self:stretch;"></div>'
+          + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + sideCol + ';letter-spacing:.1em;margin-bottom:4px;">' + side + '</div>'
+            + '<div style="font-size:13px;font-weight:600;color:#f0f0f5;margin-bottom:8px;line-height:1.4;">' + q + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;">'
+              + '<div style="flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;">'
+                + '<div style="width:' + agreePct + '%;height:100%;background:#00e68a;border-radius:2px;"></div>'
+              + '</div>'
+              + '<span style="font-family:var(--mono);font-size:9px;color:#00e68a;white-space:nowrap;">' + agreePct + '% agree</span>'
+              + '<span style="font-family:var(--mono);font-size:9px;color:#ff4d6a;white-space:nowrap;">' + (100-agreePct) + '% disagree</span>'
+            + '</div>'
+            + '<div style="margin-top:6px;font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3);">' + total + ' reactions · ' + (slug ? '<a href="/market/' + slug + '" style="color:rgba(77,159,255,.7);text-decoration:none;">view market →</a>' : '') + '</div>'
+          + '</div>'
+        + '</div>';
+      }).join('');
+      document.getElementById('hotDebatesStrip').style.display = '';
+    })
+    .catch(function(){});
 }
 
 // ── Sidebar ──

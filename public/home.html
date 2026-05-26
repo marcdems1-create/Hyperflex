@@ -545,6 +545,28 @@ footer{
 })();
 </script>
 
+<!-- ── STREAK AT RISK BANNER (shown by loadDailyChallenge when streak≥2 and not yet voted today) ── -->
+<div id="streakRiskBanner" style="display:none;max-width:1400px;margin:16px auto 0;padding:0 20px;">
+  <a href="#daily-challenge" id="streakRiskInner" onclick="document.getElementById('daily-challenge').scrollIntoView({behavior:'smooth',block:'center'});return false;"
+     style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(245,158,11,.1) 0%,rgba(255,77,106,.07) 100%);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:14px 20px;text-decoration:none;color:inherit;cursor:pointer;position:relative;overflow:hidden;transition:border-color .15s,transform .15s;"
+     onmouseover="this.style.borderColor='rgba(245,158,11,.6)';this.style.transform='translateY(-1px)'"
+     onmouseout="this.style.borderColor='rgba(245,158,11,.3)';this.style.transform=''">
+    <!-- pulsing left accent bar -->
+    <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#f59e0b,#ff4d6a);border-radius:12px 0 0 12px;"></div>
+    <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.15);border:2px solid rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;animation:streakPulse 1.6s ease-in-out infinite;">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:#f59e0b;" id="streakRiskIcon">🔥</span>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(245,158,11,.6);margin-bottom:3px;">Streak at risk</div>
+      <div style="font-size:14px;font-weight:700;letter-spacing:-.01em;color:#f0f0f5;" id="streakRiskMsg">Your streak resets at midnight UTC if you skip today.</div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#f59e0b;flex-shrink:0;letter-spacing:.06em;white-space:nowrap;">Lock pick →</div>
+  </a>
+</div>
+<style>
+@keyframes streakPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 8px rgba(245,158,11,0)}}
+</style>
+
 <!-- ── TIER PROGRESS (logged-in only, renders via JS) ── -->
 <div id="tierProgressWrap" style="display:none;max-width:1400px;margin:20px auto 0;padding:0 20px;">
   <div id="tierProgressInner" style="background:rgba(17,17,24,.8);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
@@ -706,6 +728,22 @@ footer{
     <div class="row-wrap">
       <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
       <div class="row-scroll" id="rowSignals">
+        <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      </div>
+      <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
+  <!-- JUST RESOLVED -->
+  <div class="row-section" id="justResolvedSection" style="display:none">
+    <div class="row-head">
+      <span class="row-title">Just Resolved</span>
+      <span class="row-tag" style="background:rgba(0,230,138,.08);color:#00e68a;border:1px solid rgba(0,230,138,.2);">GRADED</span>
+      <a class="row-see-all" href="/feed">Feed →</a>
+    </div>
+    <div class="row-wrap">
+      <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
+      <div class="row-scroll" id="rowJustResolved">
         <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
       </div>
       <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
@@ -1105,6 +1143,48 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     }).catch(function(){});
   }, 500);
 
+  /* Just Resolved — graded community takes from last 24h */
+  setTimeout(function(){
+    fetch('/api/takes/recently-resolved?limit=12&hours=24').then(function(r){return r.ok?r.json():null;}).then(function(d){
+      var takes = (d&&d.takes)||[];
+      if(!takes.length) return;
+      var rowEl = document.getElementById('rowJustResolved');
+      if(!rowEl) return;
+      function timeAgo(ts){
+        var diff=Date.now()-new Date(ts).getTime();
+        var m=Math.round(diff/60000);
+        return m<60?m+'m ago':Math.round(m/60)+'h ago';
+      }
+      rowEl.innerHTML = takes.map(function(t){
+        var correct = t.is_correct;
+        var outcomeColor = correct ? '#00e68a' : '#ff4d6a';
+        var outcomeBg = correct ? 'rgba(0,230,138,.08)' : 'rgba(255,77,106,.07)';
+        var outcomeBorder = correct ? 'rgba(0,230,138,.2)' : 'rgba(255,77,106,.18)';
+        var outcomeLabel = correct ? 'CORRECT' : 'WRONG';
+        var outcomeIcon = correct ? '✓' : '×';
+        var side = (t.side||'YES').toUpperCase();
+        var sideColor = side==='YES'?'#00e68a':'#ff4d6a';
+        var q = (t.question||'').slice(0,80);
+        var user = (t.display_name||t.username||'Predictor').slice(0,20);
+        var href = t.market_slug ? '/market/'+t.market_slug : '/feed';
+        return '<a href="'+href+'" style="flex-shrink:0;width:220px;height:280px;background:'+outcomeBg+';border:1px solid '+outcomeBorder+';border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\''+outcomeColor+'55\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\''+outcomeBorder+'\';this.style.transform=\'\'">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;">'
+            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:'+outcomeColor+';letter-spacing:.1em;">'+outcomeIcon+' '+outcomeLabel+'</span>'
+            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.resolved_at)+'</span>'
+          +'</div>'
+          +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
+          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</div>'
+          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+user+'</div>'
+          +'<div style="display:flex;gap:8px;margin-top:auto;">'
+            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
+            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
+          +'</div>'
+        +'</a>';
+      }).join('');
+      document.getElementById('justResolvedSection').style.display='';
+    }).catch(function(){});
+  }, 700);
+
   /* load AI summaries for visible cards (non-blocking, staggered) */
   setTimeout(function(){
     var slugSet = [];
@@ -1232,6 +1312,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         var sc = document.getElementById('dc-streak');
         sc.textContent = d.streak + '-day streak';
         sc.style.display = 'inline';
+        // Show streak-at-risk banner only if they haven't voted today
+        if(!d.user_vote) {
+          var srb = document.getElementById('streakRiskBanner');
+          var srm = document.getElementById('streakRiskMsg');
+          if(srb && srm) {
+            srm.textContent = d.streak + '-day streak resets at midnight UTC if you skip today.';
+            srb.style.display = '';
+          }
+        }
       }
 
       if(d.user_vote) {
@@ -1280,6 +1369,9 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         if(d.yes_votes != null) {
           showDCCommunity({yes_votes:d.yes_votes, no_votes:d.no_votes});
         }
+        // Hide streak-at-risk banner now that pick is locked
+        var srb2 = document.getElementById('streakRiskBanner');
+        if(srb2) srb2.style.display='none';
         // Fire streak toast via engage engine
         if(window.HFX && d.streak >= 2) {
           window.HFX.toast({type:'streak',title:'Pick locked. Streak: '+d.streak+' days.',duration:5000});

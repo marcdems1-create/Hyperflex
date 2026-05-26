@@ -34,6 +34,7 @@
     loss:    { border: '#ff4d6a', icon: '×',  bg: 'rgba(255,77,106,.08)' },
     streak:  { border: '#4d9fff', icon: '↑',  bg: 'rgba(77,159,255,.1)'  },
     warning: { border: '#f59e0b', icon: '!',  bg: 'rgba(245,158,11,.1)'  },
+    agree:   { border: '#a855f7', icon: '↑',  bg: 'rgba(168,85,247,.1)'  },
     info:    { border: 'rgba(255,255,255,.2)', icon: '·', bg: 'rgba(255,255,255,.04)' },
   };
 
@@ -366,6 +367,40 @@
   }
 
   setTimeout(_pulseNotifBell, 2000);
+
+  /* ─────────────────────── REACTION NOTIFICATION POLLER ─────────────────────── */
+  // Every 90s, check for new reaction notifications and surface as toast.
+  // Tracks last-seen notification ID in localStorage to avoid re-firing.
+  var _rxLastSeenKey = 'hfx_rx_last_notif_id';
+  function _pollReactionNotifs() {
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+    if (!tok) return;
+    fetch('/api/notifications?limit=5&unread=true', { headers: { 'Authorization': 'Bearer ' + tok } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var notifs = d && (d.notifications || (Array.isArray(d) ? d : []));
+        if (!notifs || !notifs.length) return;
+        var lastSeenId = localStorage.getItem(_rxLastSeenKey);
+        // Find notifications newer than last seen
+        var fresh = notifs.filter(function(n){ return !n.read && n.id !== lastSeenId; });
+        if (!fresh.length) return;
+        // Update last seen to newest
+        localStorage.setItem(_rxLastSeenKey, fresh[0].id);
+        // Surface first fresh reaction/agree notification as a toast
+        var rxNotif = fresh.find(function(n){ return n.type === 'take_reaction' || n.type === 'agree' || n.type === 'reaction'; });
+        if (!rxNotif) return;
+        var body = rxNotif.body || rxNotif.title || '';
+        window.HFX.toast({
+          type: 'agree',
+          title: rxNotif.title || 'Someone reacted to your take.',
+          body: body.slice(0, 80),
+          duration: 6000
+        });
+      }).catch(function(){});
+  }
+  // Initial check after 8s (let page settle), then every 90s
+  setTimeout(_pollReactionNotifs, 8000);
+  setInterval(_pollReactionNotifs, 90000);
 
   /* ─────────────────────── RESOLVE TAKES CHECK ─────────────────────── */
   // On feed/profile load, check for freshly-resolved correct/incorrect takes
