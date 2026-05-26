@@ -1072,6 +1072,35 @@ async function load() {
         </div>
       </section>
 
+      ${isOwner ? (() => {
+        // Profile completion score — owner-only
+        const checks = [
+          { label: 'Wallet connected', done: !!walletAddr, href: '/creator/dashboard' },
+          { label: 'Bio written', done: !!(user.bio && user.bio.trim()), href: '#ownerTools' },
+          { label: 'Archetype found', done: !!user.archetype, href: '/quiz' },
+          { label: 'First take posted', done: !!(take_stats && take_stats.total > 0), href: '/feed' },
+          { label: 'Passport shared', done: !!(stats.follower_count > 0), href: '/passport/' + userId },
+        ];
+        const done = checks.filter(c => c.done).length;
+        const pct = Math.round(done / checks.length * 100);
+        if (pct === 100) return ''; // fully complete — no bar
+        const firstIncomplete = checks.find(c => !c.done);
+        const barColor = pct >= 80 ? '#00e68a' : pct >= 60 ? '#4d9fff' : pct >= 40 ? '#c9920d' : '#ff4d6a';
+        return `<div style="margin:16px 0;padding:14px 16px;background:rgba(17,17,24,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(240,240,245,.4);">Profile strength</span>
+            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${barColor};">${pct}%</span>
+          </div>
+          <div style="height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-bottom:10px;">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1);"></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${checks.map(c => `<a href="${c.href}" style="font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:12px;text-decoration:none;border:1px solid ${c.done ? 'rgba(0,230,138,.2)' : 'rgba(255,255,255,.08)'};background:${c.done ? 'rgba(0,230,138,.07)' : 'transparent'};color:${c.done ? '#00e68a' : 'rgba(240,240,245,.35)'};white-space:nowrap;">${c.done ? '✓' : '+'} ${c.label}</a>`).join('')}
+          </div>
+          ${firstIncomplete ? `<div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:rgba(240,240,245,.4);">Next: <a href="${firstIncomplete.href}" style="color:#4d9fff;text-decoration:none;">${firstIncomplete.label} →</a></div>` : ''}
+        </div>`;
+      })() : ''}
+
       <!-- STATS GRID -->
       <section class="stats">
         <div class="stat ${pStats.pnl_usd >= 0 ? 'gold' : 'red'}" id="statPnlCard">
