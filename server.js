@@ -25220,10 +25220,110 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ── Archetype OG card — SVG share image for quiz results ──
+// GET /api/archetype-card/:archetype.svg
+// Used in og:image meta on /quiz?result=THE+SHARP etc.
+{
+  const ARCH_META = {
+    'the contrarian': { color: '#ff4d6a', bg: '#1a0812', symbol: '↙', rarity: '8.2% of traders' },
+    'the sharp':      { color: '#00e68a', bg: '#071a10', symbol: '◆', rarity: '6.1% of traders' },
+    'the oracle':     { color: '#c9920d', bg: '#1a1208', symbol: '◉', rarity: '4.7% of traders' },
+    'the catalyst':   { color: '#a855f7', bg: '#130d1a', symbol: '⚡', rarity: '9.3% of traders' },
+    'the handicapper':{ color: '#4d9fff', bg: '#08101a', symbol: '▲', rarity: '11.2% of traders' },
+    'the wonk':       { color: '#f59e0b', bg: '#1a1408', symbol: '◎', rarity: '7.8% of traders' },
+    'the strategist': { color: '#00d4ff', bg: '#081718', symbol: '═', rarity: '5.9% of traders' },
+    'the native':     { color: '#818cf8', bg: '#0d0d1a', symbol: '∞', rarity: '12.4% of traders' },
+    'macro hawk':     { color: '#fb923c', bg: '#1a0e08', symbol: '◈', rarity: '3.1% of traders' },
+  };
+  const _archCardCache = new Map();
+
+  app.get(/^\/api\/archetype-card\/(.+)\.svg$/, (req, res) => {
+    const raw = decodeURIComponent(req.params[0]).toLowerCase().trim();
+    if (_archCardCache.has(raw)) {
+      res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+      return res.send(_archCardCache.get(raw));
+    }
+    const meta = ARCH_META[raw] || { color: '#c9920d', bg: '#111118', symbol: '◆', rarity: 'Rare archetype' };
+    const label = raw.toUpperCase();
+    const c = meta.color;
+    const bg = meta.bg;
+    const sym = meta.symbol;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${bg}"/>
+      <stop offset="100%" stop-color="#07070e"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="${c}" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="${c}" stop-opacity="0.4"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accentGrad)"/>
+  <!-- Ambient glow orb -->
+  <circle cx="900" cy="200" r="300" fill="${c}" fill-opacity="0.05"/>
+  <!-- Symbol -->
+  <text x="100" y="240" font-family="monospace" font-size="120" fill="${c}" fill-opacity="0.18" font-weight="700">${sym}</text>
+  <!-- Kicker -->
+  <text x="100" y="160" font-family="monospace" font-size="13" fill="${c}" fill-opacity="0.7" letter-spacing="4" text-transform="uppercase">PREDICTION ARCHETYPE · HYPERFLEX</text>
+  <!-- Main label -->
+  <text x="100" y="300" font-family="monospace" font-size="72" font-weight="900" fill="${c}" filter="url(#glow)" letter-spacing="-2">${label}</text>
+  <!-- Rarity -->
+  <rect x="98" y="324" width="${meta.rarity.length * 9 + 28}" height="28" rx="14" fill="${c}" fill-opacity="0.12"/>
+  <rect x="98" y="324" width="${meta.rarity.length * 9 + 28}" height="28" rx="14" fill="none" stroke="${c}" stroke-opacity="0.3" stroke-width="1"/>
+  <circle cx="116" cy="338" r="4" fill="${c}"/>
+  <text x="128" y="343" font-family="monospace" font-size="12" fill="${c}" fill-opacity="0.9" font-weight="700">${meta.rarity.toUpperCase()}</text>
+  <!-- Divider -->
+  <rect x="100" y="390" width="240" height="2" fill="${c}" fill-opacity="0.3"/>
+  <!-- Sub text -->
+  <text x="100" y="430" font-family="monospace" font-size="16" fill="#a0a0b4" letter-spacing="2">7 questions revealed your edge.</text>
+  <text x="100" y="458" font-family="monospace" font-size="16" fill="#a0a0b4" letter-spacing="2">Find yours at hyperflex.network/quiz</text>
+  <!-- HFX logo -->
+  <text x="100" y="570" font-family="monospace" font-size="22" font-weight="900" fill="#ffffff" fill-opacity="0.9" letter-spacing="-1">HYPER<tspan fill="${c}">FLEX</tspan></text>
+  <text x="240" y="570" font-family="monospace" font-size="11" fill="#6b6880" letter-spacing="2"> · PREDICTION MARKET INTELLIGENCE</text>
+</svg>`;
+
+    _archCardCache.set(raw, svg);
+    res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+    res.send(svg);
+  });
+}
+
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
 app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
-app.get('/quiz',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'quiz.html')));
+app.get('/quiz', (req, res) => {
+  // When ?result=THE+SHARP is present, inject OG meta for the share card
+  const result = (req.query.result || '').trim().toLowerCase();
+  if (!result) return res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
+  try {
+    let html = require('fs').readFileSync(path.join(__dirname, 'public', 'quiz.html'), 'utf8');
+    const label = result.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const cardUrl = `https://hyperflex.network/api/archetype-card/${encodeURIComponent(result)}.svg`;
+    html = html.replace(
+      '<meta property="og:title" content="What kind of predictor are you? — HYPERFLEX">',
+      `<meta property="og:title" content="I'm ${label} — HYPERFLEX">`
+    ).replace(
+      '<meta property="og:image" content="https://hyperflex.network/hyperflex-logo.png">',
+      `<meta property="og:image" content="${cardUrl}">\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">`
+    ).replace(
+      '<meta name="description" content="7 choices that reveal how you already think. Your archetype. Your markets. 60 seconds.">',
+      `<meta name="description" content="I tested as ${label} on HYPERFLEX. 7 questions reveal your prediction edge. Find yours.">`
+    );
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (e) {
+    res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
+  }
+});
 app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
 app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 

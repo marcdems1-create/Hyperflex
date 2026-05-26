@@ -896,7 +896,8 @@ async function fetchMarkets(arch){
 ══════════════════════════════════════════════════════ */
 function shareIt(){
   if(!_arch) return;
-  var text=_arch.share+' hyperflex.network/quiz';
+  var resultUrl='https://hyperflex.network/quiz?result='+encodeURIComponent((_arch.tag||'').toLowerCase());
+  var text=_arch.share+' '+resultUrl;
   window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','width=600,height=400');
 }
 function redo(){

@@ -146,6 +146,14 @@ a:hover { text-decoration: underline; }
 .lb-table tbody tr.rank-top10 td { font-size: 14px; }
 .lb-table tbody tr.rank-top10 .trader-name { font-size: 15px; }
 .lb-table tbody tr.rank-top10 .pnl-val { font-size: 14px; }
+/* Logged-in user row */
+.lb-table tbody tr.lb-me td { background: rgba(201,146,13,.06) !important; }
+.lb-table tbody tr.lb-me { box-shadow: inset 0 0 0 1px rgba(201,146,13,.25); }
+.lb-table tbody tr.lb-me:hover td { background: rgba(201,146,13,.10) !important; }
+.trader-avatar-me { border-color: rgba(201,146,13,.5) !important; color: #c9920d !important; }
+/* Rival rows */
+.lb-table tbody tr.lb-rival td { background: rgba(255,77,106,.03) !important; }
+.lb-table tbody tr.lb-rival { border-left: 2px solid rgba(255,77,106,.25); }
 .rank-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--dim); }
 .trader-cell { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .trader-cell:hover { text-decoration: none; }
@@ -751,10 +759,22 @@ function renderPodium(topN){
   }).join('');
 }
 
+// Resolve logged-in userId for row highlighting
+var _lbMyUserId=(function(){try{var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');if(!tok)return null;var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return p.userId||p.sub||p.id||null;}catch(e){return null;}})();
+
 function renderTable(data){
   var body=document.getElementById('lbBody');
   if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="9"><div class="state-msg">Only top performers shown above</div></td></tr>';return}
   if(!data.length){body.innerHTML='<tr><td colspan="9"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
+
+  // Find the logged-in user's index so we can flag rivals
+  var myIdx=-1;
+  if(_lbMyUserId){
+    for(var _i=0;_i<data.length;_i++){
+      if(data[_i].user_id===_lbMyUserId){myIdx=_i;break;}
+    }
+  }
+
   body.innerHTML=data.map(function(r,idx){
     var rank=r._displayRank||(idx+4);
     var dname=r.display_name||r.userName||r.name||'';
@@ -777,16 +797,21 @@ function renderTable(data){
       return'<span class="platform-pill '+cls+'">'+p+'</span>';
     }).join(' ');
     var isTop10=rank<=10;
-    var trClass=isTop10?' rank-top10':'';
+    var isMe=(_lbMyUserId&&r.user_id===_lbMyUserId);
+    var isRival=(!isMe&&myIdx>=0&&(idx===myIdx-1||idx===myIdx+1||idx===myIdx-2||idx===myIdx+2));
+    var rivalDir=(!isMe&&myIdx>=0)?(idx<myIdx?'above':'below'):'';
+    var trClass=(isTop10?' rank-top10':'')+(isMe?' lb-me':'')+(isRival?' lb-rival':'');
     var sharpScore=r.sharp_score||0;
     var sharpColor=sharpScore>=70?'var(--green)':sharpScore>=40?'var(--blue)':'var(--muted)';
     var sharpHtml=sharpScore?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+sharpColor+'">'+sharpScore+'</span>':'<span style="color:var(--muted);font-family:var(--mono);font-size:11px">&mdash;</span>';
-    return'<tr class="'+trClass+'" onclick="window.location=\''+profileUrl+'\'">'+
+    var rivalBadge=isRival?'<span style="font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:10px;background:rgba(255,77,106,.12);color:#ff4d6a;border:1px solid rgba(255,77,106,.25);margin-left:6px;text-transform:uppercase;">RIVAL'+(rivalDir==='above'?' ↑':' ↓')+'</span>':'';
+    var meBadge=isMe?'<span style="font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:10px;background:rgba(201,146,13,.14);color:#c9920d;border:1px solid rgba(201,146,13,.3);margin-left:6px;text-transform:uppercase;">YOU</span>':'';
+    return'<tr class="'+trClass+'"'+(isMe?' id="myLbRow"':'')+' onclick="window.location=\''+profileUrl+'\'">'+
       '<td><span class="rank-num">'+rank+'</span></td>'+
       '<td class="td-trader">'+
         '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
-          '<div class="trader-avatar">'+initial+'</div>'+
-          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</span>'+
+          '<div class="trader-avatar'+(isMe?' trader-avatar-me':'')+'">'+initial+'</div>'+
+          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+meBadge+rivalBadge+'</span>'+
         '</a>'+
         '<div class="mobile-stats">'+
           '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
@@ -805,6 +830,14 @@ function renderTable(data){
       '</td>'+
     '</tr>';
   }).join('');
+
+  // Scroll logged-in user's row into view (once, with slight delay for paint)
+  if(myIdx>=0){
+    setTimeout(function(){
+      var myRow=document.getElementById('myLbRow');
+      if(myRow) myRow.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 400);
+  }
 }
 
 function renderHallOfFame(){

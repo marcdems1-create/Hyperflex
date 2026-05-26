@@ -545,6 +545,122 @@ footer{
 })();
 </script>
 
+<!-- ── TIER PROGRESS (logged-in only, renders via JS) ── -->
+<div id="tierProgressWrap" style="display:none;max-width:1400px;margin:20px auto 0;padding:0 20px;">
+  <div id="tierProgressInner" style="background:rgba(17,17,24,.8);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+    <!-- filled by JS -->
+  </div>
+</div>
+<style>
+.tier-pill{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border-radius:20px;border:1px solid;}
+.tier-prog-bar{height:4px;border-radius:2px;background:rgba(255,255,255,.07);flex:1;min-width:120px;overflow:hidden;}
+.tier-prog-fill{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1);}
+</style>
+<script>
+(function(){
+  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+  if(!tok) return;
+  var uid;
+  try{ var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); uid=p.userId||p.sub||p.id; }catch(e){ return; }
+  if(!uid) return;
+
+  var TIERS=[
+    {label:'BUILDING',  color:'#6b7280', minWr:0,  minSettled:0},
+    {label:'TRADER',    color:'#9ca3af', minWr:0,  minSettled:5},
+    {label:'PROFITABLE',color:'#4d9fff', minWr:50, minSettled:10},
+    {label:'SHARP',     color:'#00e68a', minWr:55, minSettled:20},
+    {label:'SHARK',     color:'#00d4ff', minWr:60, minSettled:40},
+    {label:'WHALE',     color:'#a855f7', minWr:65, minSettled:60},
+    {label:'FLEXIN',    color:'#c9920d', minWr:70, minSettled:100},
+  ];
+
+  function getCurrentTier(wr, settled){
+    var cur=TIERS[0];
+    for(var i=0;i<TIERS.length;i++){
+      if(settled>=TIERS[i].minSettled && wr>=TIERS[i].minWr) cur=TIERS[i];
+    }
+    return cur;
+  }
+  function getNextTier(wr, settled){
+    for(var i=TIERS.length-1;i>=0;i--){
+      if(!(settled>=TIERS[i].minSettled && wr>=TIERS[i].minWr)) continue;
+      return TIERS[i+1]||null;
+    }
+    return TIERS[1]||null;
+  }
+
+  fetch('/api/member/'+uid, {headers:{'Authorization':'Bearer '+tok}})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.stats) return;
+      var s=d.stats;
+      var wr=s.win_rate||0;
+      var settled=s.settled_predictions||0;
+      var wins=s.wins||0;
+
+      var cur=getCurrentTier(wr,settled);
+      var nxt=getNextTier(wr,settled);
+
+      var wrap=document.getElementById('tierProgressWrap');
+      var inner=document.getElementById('tierProgressInner');
+      if(!wrap||!inner) return;
+
+      if(!nxt){
+        // Already at top tier
+        inner.innerHTML='<span class="tier-pill" style="color:'+cur.color+';border-color:'+cur.color+'44;background:'+cur.color+'14;">◆ '+cur.label+'</span>'
+          +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(240,240,245,.4);">Top tier reached · '+settled+' picks · '+wr+'% win rate</span>';
+        wrap.style.display='';
+        return;
+      }
+
+      // Progress to next tier
+      var pickNeed=Math.max(0, nxt.minSettled-settled);
+      var wrNeed  =Math.max(0, nxt.minWr-wr);
+
+      // Progress bar: whichever constraint is tighter
+      var pct=0;
+      if(nxt.minSettled>0){
+        pct=Math.min(100,Math.round((settled/nxt.minSettled)*100));
+      }
+      if(nxt.minWr>0){
+        var wrPct=Math.min(100,Math.round((wr/nxt.minWr)*100));
+        pct=Math.min(pct||wrPct, wrPct);
+      }
+
+      var needParts=[];
+      if(pickNeed>0) needParts.push(pickNeed+' more pick'+(pickNeed===1?'':'s'));
+      if(wrNeed>0)   needParts.push(wrNeed+'% more accuracy');
+      var needStr=needParts.join(' + ')||'Almost there';
+
+      inner.innerHTML=[
+        '<span class="tier-pill" style="color:'+cur.color+';border-color:'+cur.color+'44;background:'+cur.color+'14;">'+cur.label+'</span>',
+        '<div style="flex:1;min-width:140px;">',
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">',
+            '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:rgba(240,240,245,.55);">'+needStr+' to reach <span style="color:'+nxt.color+'">'+nxt.label+'</span></span>',
+            '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.28);">'+pct+'%</span>',
+          '</div>',
+          '<div class="tier-prog-bar">',
+            '<div class="tier-prog-fill" style="width:0%;background:linear-gradient(90deg,'+cur.color+','+nxt.color+');" id="tierFill"></div>',
+          '</div>',
+          '<div style="display:flex;justify-content:space-between;margin-top:5px;font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.22);">',
+            '<span>'+settled+' picks · '+wr+'% win rate</span>',
+            '<span><a href="/m/'+uid+'" style="color:rgba(240,240,245,.35);text-decoration:none;">View profile →</a></span>',
+          '</div>',
+        '</div>',
+        '<span class="tier-pill" style="color:'+nxt.color+'88;border-color:'+nxt.color+'22;background:'+nxt.color+'08;">'+nxt.label+'</span>',
+      ].join('');
+
+      wrap.style.display='';
+      // Animate fill after paint
+      setTimeout(function(){
+        var fill=document.getElementById('tierFill');
+        if(fill) fill.style.width=pct+'%';
+      }, 120);
+    })
+    .catch(function(){});
+})();
+</script>
+
 <!-- ── ROWS ── -->
 <div class="rows-wrap" id="rowsWrap">
 
