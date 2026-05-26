@@ -2675,6 +2675,37 @@ async function loadFeed(append) {
     var data = await r.json();
 
     if (data.empty && data.reason === 'no_follows') {
+      // Show suggested predictors panel above the fallback feed (once per session)
+      if (!window._suggestedShown) {
+        window._suggestedShown = true;
+        fetch(API + '/api/predictors?limit=6&sort=sharp_score', { headers: authHeaders() })
+          .then(function(r){ return r.ok ? r.json() : {predictors:[]}; })
+          .then(function(pd){
+            var preds = (pd.predictors || pd.leaderboard || []).slice(0, 5);
+            if (!preds.length) return;
+            var suggestEl = document.createElement('div');
+            suggestEl.style.cssText = 'background:#111118;border:1px solid rgba(77,159,255,.2);border-radius:12px;padding:16px;margin-bottom:16px;';
+            suggestEl.innerHTML = '<div style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#4d9fff;margin-bottom:12px;">Suggested predictors</div>'
+              + preds.map(function(p) {
+                  var name = (p.display_name || p.username || 'Predictor').slice(0, 22);
+                  var uid = p.user_id || p.id || '';
+                  var ss = p.sharp_score || 0;
+                  var tier = p.tier || '';
+                  var ssColor = ss >= 70 ? '#00e68a' : ss >= 40 ? '#4d9fff' : 'rgba(240,240,245,.4)';
+                  return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);">'
+                    + '<a href="/m/' + uid + '" style="width:32px;height:32px;border-radius:50%;background:rgba(77,159,255,.15);border:1px solid rgba(77,159,255,.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:#4d9fff;text-decoration:none;flex-shrink:0;">' + name.charAt(0).toUpperCase() + '</a>'
+                    + '<div style="flex:1;min-width:0;">'
+                      + '<a href="/m/' + uid + '" style="font-family:var(--sans);font-size:13px;font-weight:600;color:#f0f0f5;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">' + name + '</a>'
+                      + '<span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.35);">' + (tier ? tier + ' · ' : '') + 'Sharp ' + ss + '</span>'
+                    + '</div>'
+                    + '<button onclick="toggleFollow(\'' + uid + '\',this)" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.18);background:none;color:rgba(240,240,245,.7);cursor:pointer;transition:all .12s;" class="follow-btn" id="follow-' + uid + '">Follow</button>'
+                  + '</div>';
+              }).join('')
+              + '<a href="/predictors" style="display:block;margin-top:10px;font-family:var(--mono);font-size:10px;font-weight:700;color:#4d9fff;text-decoration:none;letter-spacing:.08em;">View all predictors →</a>';
+            var fc = document.getElementById('feedContainer');
+            if (fc) fc.insertBefore(suggestEl, fc.firstChild);
+          }).catch(function(){});
+      }
       // Fall back to influencer posts + social predictions for discovery.
       // Only keep influencer items that have an actual market attached —
       // a raw subreddit title with no prediction direction has no place
