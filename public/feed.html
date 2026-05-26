@@ -2475,9 +2475,9 @@ async function submitAuto() {
     if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
 
     closeModal('autoModal');
-    showFeedToast('\u2705 Posted — viewing your feed', 'ok');
+    showFeedToast('Take locked.', 'ok');
     // Inject immediately so the user sees their own post at the top
-    // without waiting for the next fetch.
+    var postedAutoId = (data.prediction && data.prediction.id) || null;
     if (data.prediction) {
       try {
         var newPred = normaliseNew(data.prediction);
@@ -2486,6 +2486,9 @@ async function submitAuto() {
       } catch (e) { /* fall through to refresh */ }
     }
     switchTab('foryou');
+    setTimeout(function() {
+      openSharePrompt(postedAutoId, _autoPos && _autoPos.market_title, _autoPos && _autoPos.direction, _autoPos && _autoPos.entry_price);
+    }, 350);
   } catch (e) {
     console.error('[post-auto] failed', e);
     showFeedToast('Post failed: ' + e.message, 'err');
@@ -2494,6 +2497,36 @@ async function submitAuto() {
     btn.textContent = 'Post Prediction';
   }
 }
+
+// Share prompt — shown after a take is successfully posted
+var _sharePromptTimer = null;
+function openSharePrompt(takeId, marketTitle, side, entryPriceDec) {
+  var existing = document.getElementById('hfxSharePrompt');
+  if (existing) existing.remove();
+  if (_sharePromptTimer) clearTimeout(_sharePromptTimer);
+
+  var shortQ = (marketTitle || '').slice(0, 80);
+  var pct = entryPriceDec ? Math.round(parseFloat(entryPriceDec) * 100) : null;
+  var tweetText = (side ? side.toUpperCase() + ' ' : '') + '"' + shortQ + '"'
+    + (pct ? ' @ ' + pct + '¢' : '')
+    + '\n\nTracking the call on HYPERFLEX →';
+  var tweetUrl = takeId ? 'https://hyperflex.network/takes/' + takeId : 'https://hyperflex.network/feed';
+  var xLink = 'https://x.com/intent/tweet?text=' + encodeURIComponent(tweetText) + '&url=' + encodeURIComponent(tweetUrl);
+
+  var el = document.createElement('div');
+  el.id = 'hfxSharePrompt';
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111118;border:1px solid rgba(77,159,255,.3);color:#f0f0f5;font-family:Inter,sans-serif;font-size:13px;border-radius:10px;z-index:10001;box-shadow:0 8px 32px rgba(0,0,0,.5);padding:14px 18px;display:flex;align-items:center;gap:14px;max-width:440px;width:calc(100vw - 32px);';
+  el.innerHTML = '<div style="flex:1;min-width:0;">'
+    + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#4d9fff;letter-spacing:.1em;margin-bottom:3px;">TAKE LOCKED</div>'
+    + '<div style="font-size:12px;color:rgba(240,240,245,.65);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escText(shortQ) + '</div>'
+    + '</div>'
+    + '<a href="' + xLink + '" target="_blank" rel="noopener" style="flex-shrink:0;background:#4d9fff;color:#000;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;letter-spacing:.05em;white-space:nowrap;">Post on X ↗</a>'
+    + '<button onclick="document.getElementById(\'hfxSharePrompt\').remove();" style="flex-shrink:0;background:none;border:none;color:rgba(240,240,245,.3);font-size:16px;cursor:pointer;padding:0 0 0 2px;line-height:1;">×</button>';
+  document.body.appendChild(el);
+  _sharePromptTimer = setTimeout(function(){ if (el.parentNode) el.remove(); }, 12000);
+}
+
+function escText(s) { var d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
 
 // Lightweight toast for the feed page — beats alert() which gets
 // dismissed as a popup and hides the reason for failures. Auto-dismisses
@@ -2595,7 +2628,8 @@ async function submitManual() {
     if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
 
     closeModal('manualModal');
-    showFeedToast('\u2705 Posted', 'ok');
+    showFeedToast('Take locked.', 'ok');
+    var postedManualId = (data.prediction && data.prediction.id) || null;
     // Immediately add the new prediction to the feed for instant feedback
     if (data.prediction) {
       var newPred = normaliseNew(data.prediction);
@@ -2604,6 +2638,10 @@ async function submitManual() {
     }
     // Refresh full feed to get server-enriched version
     setTimeout(function() { loadFeed(false); }, 1500);
+    // Share prompt
+    setTimeout(function() {
+      openSharePrompt(postedManualId, marketTitle, _mSide, entryPrice);
+    }, 350);
   } catch (e) {
     console.error('[post-manual] failed', e);
     showFeedToast('Post failed: ' + e.message, 'err');
