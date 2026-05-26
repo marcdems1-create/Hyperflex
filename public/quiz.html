@@ -22,6 +22,9 @@
 }
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
 
+/* FLASH */
+#flash{position:fixed;inset:0;z-index:9999;opacity:0;pointer-events:none;}
+
 /* AURA */
 #aura{position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 1.6s cubic-bezier(.4,0,.2,1);}
 
@@ -39,8 +42,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .i-kicker{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(201,146,13,.65);margin-bottom:22px;animation:riseIn .7s ease both;}
 .i-head{font-size:clamp(38px,6.5vw,82px);font-weight:900;letter-spacing:-.05em;line-height:1;text-align:center;max-width:800px;margin-bottom:18px;animation:riseIn .7s .1s ease both;}
 .i-head em{font-style:italic;background:linear-gradient(135deg,#c9920d 0%,#ff6b35 45%,#ff4d6a 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.i-sub{font-size:15px;color:var(--dim);text-align:center;max-width:400px;line-height:1.7;margin-bottom:48px;animation:riseIn .7s .2s ease both;}
-.i-pills{display:flex;gap:8px;margin-bottom:44px;flex-wrap:wrap;justify-content:center;animation:riseIn .7s .3s ease both;}
+.i-sub{font-size:15px;color:var(--dim);text-align:center;max-width:400px;line-height:1.7;margin-bottom:28px;animation:riseIn .7s .2s ease both;}
+.i-counter{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:rgba(240,239,250,.28);margin-bottom:32px;animation:riseIn .7s .25s ease both;}
+.i-cdot{width:6px;height:6px;border-radius:50%;background:#00e68a;box-shadow:0 0 8px rgba(0,230,138,.7);animation:cdotPulse 2s ease-in-out infinite;}
+@keyframes cdotPulse{0%,100%{opacity:.7;transform:scale(1);}50%{opacity:1;transform:scale(1.4);}}
+.i-pills{display:flex;gap:8px;margin-bottom:40px;flex-wrap:wrap;justify-content:center;animation:riseIn .7s .3s ease both;}
 .i-pill{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;padding:5px 12px;border-radius:20px;border:1px solid;}
 .btn-go{font-size:15px;font-weight:800;letter-spacing:.03em;padding:18px 60px;border:none;border-radius:100px;cursor:pointer;background:linear-gradient(135deg,#c9920d,#ff6b35);color:#000;box-shadow:0 0 0 0 rgba(201,146,13,.4);transition:transform .2s,box-shadow .2s;animation:riseIn .7s .4s ease both;}
 .btn-go:hover{transform:translateY(-3px) scale(1.02);box-shadow:0 16px 48px rgba(201,146,13,.35);}
@@ -48,129 +54,99 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 
 /* ═══ QUIZ ═══ */
 #sq{background:transparent;padding:0;justify-content:flex-start;}
-
-/* constellation */
 #constellation{position:fixed;top:20px;right:20px;z-index:200;width:68px;height:68px;pointer-events:none;}
-.c-dot{position:absolute;width:7px;height:7px;border-radius:50%;opacity:0;transform:scale(0);transition:opacity .5s,transform .5s cubic-bezier(.175,.885,.32,1.275);}
-.c-dot.on{opacity:.85;transform:scale(1);}
-
-/* ambient per question */
 .q-ambient{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1s;}
 .q-ambient.show{opacity:1;}
-
-/* question stage */
 .qstage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 28px 32px;z-index:10;}
-.qstage.in {animation:stageIn .38s cubic-bezier(.25,.46,.45,.94) both;}
+.qstage.in{animation:stageIn .38s cubic-bezier(.25,.46,.45,.94) both;}
 .qstage.out{animation:stageOut .28s cubic-bezier(.55,.06,.68,.19) both;}
-
 .q-num{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:rgba(240,239,250,.22);margin-bottom:16px;}
-.q-text{font-size:clamp(22px,3.8vw,46px);font-weight:800;letter-spacing:-.04em;line-height:1.12;text-align:center;max-width:700px;margin-bottom:40px;color:var(--ink);}
+.q-text{font-size:clamp(20px,3.4vw,42px);font-weight:800;letter-spacing:-.04em;line-height:1.12;text-align:center;max-width:680px;margin-bottom:36px;color:var(--ink);}
 
 /* 2×2 answer grid */
 .q-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:700px;}
 .ans-card{
   position:relative;overflow:hidden;
   background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.08);border-radius:16px;
-  padding:20px 18px 18px;cursor:pointer;
-  display:flex;flex-direction:column;gap:8px;min-height:140px;
-  transition:transform .18s,border-color .2s,box-shadow .22s,background .2s;
+  padding:14px 16px 16px;cursor:pointer;
+  display:flex;flex-direction:column;gap:6px;min-height:150px;
+  transition:transform .18s,border-color .2s,box-shadow .22s;
   user-select:none;-webkit-user-select:none;
 }
 .ans-card::before{content:'';position:absolute;inset:0;background:var(--cc,#c9920d);opacity:0;transition:opacity .32s;border-radius:inherit;}
-.ans-card:hover{transform:translateY(-2px);border-color:var(--cc,#c9920d);box-shadow:0 0 0 1px var(--cc,#c9920d), 0 12px 40px rgba(0,0,0,.5);}
+.ans-card:hover{transform:translateY(-2px);border-color:var(--cc,#c9920d);box-shadow:0 0 0 1px var(--cc,#c9920d),0 12px 40px rgba(0,0,0,.5);}
 .ans-card:hover::before{opacity:.06;}
 .ans-card.selected{border-color:var(--cc,#c9920d)!important;box-shadow:0 0 0 2px var(--cc,#c9920d),0 20px 56px rgba(0,0,0,.6)!important;transform:scale(1.01)!important;}
 .ans-card.selected::before{opacity:.14!important;}
-
-.ans-emoji{font-size:24px;line-height:1;margin-bottom:2px;position:relative;z-index:1;}
+.ans-key{position:absolute;top:11px;left:13px;font-family:var(--mono);font-size:8px;font-weight:700;color:rgba(240,239,250,.2);background:rgba(255,255,255,.07);width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;z-index:1;}
+.ans-sym{font-size:22px;line-height:1;margin-top:20px;color:var(--cc,#c9920d);opacity:.7;position:relative;z-index:1;font-style:normal;}
 .ans-tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--cc,#c9920d);position:relative;z-index:1;}
-.ans-desc{font-size:12px;color:rgba(240,239,250,.55);line-height:1.45;position:relative;z-index:1;}
-
-/* checkmark that pops in on selection */
-.ans-check{
-  position:absolute;top:12px;right:12px;
-  width:18px;height:18px;border-radius:50%;
-  background:var(--cc,#c9920d);
-  display:flex;align-items:center;justify-content:center;
-  opacity:0;transform:scale(0);
-  transition:opacity .18s,transform .28s cubic-bezier(.175,.885,.32,1.275);
-  z-index:2;
-}
+.ans-desc{font-size:11.5px;color:rgba(240,239,250,.5);line-height:1.45;position:relative;z-index:1;}
+.ans-check{position:absolute;top:11px;right:12px;width:18px;height:18px;border-radius:50%;background:var(--cc,#c9920d);display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(0);transition:opacity .18s,transform .28s cubic-bezier(.175,.885,.32,1.275);z-index:2;}
 .ans-card.selected .ans-check{opacity:1;transform:scale(1);}
 .check-icon{width:10px;height:10px;fill:none;stroke:#000;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
-
-/* keyboard hint */
-.ans-key{
-  position:absolute;bottom:10px;right:12px;
-  font-family:var(--mono);font-size:8px;color:rgba(240,239,250,.15);
-  z-index:1;
-}
-
-/* progress strip */
 #pstrip{position:fixed;top:0;left:0;right:0;z-index:100;height:2px;background:rgba(255,255,255,.06);}
 #pfill{height:100%;background:linear-gradient(90deg,#c9920d,#ff6b35,#ff4d6a);transition:width .55s cubic-bezier(.4,0,.2,1);width:0%;}
 
 /* ═══ ANALYZING ═══ */
 #sl{background:transparent;}
-#ana-wrap{display:flex;flex-direction:column;align-items:center;gap:32px;}
-#ana-dots{display:flex;gap:10px;align-items:center;justify-content:center;min-height:24px;}
-.ana-dot{width:10px;height:10px;border-radius:50%;opacity:0;transform:scale(0) translateY(4px);transition:opacity .35s,transform .4s cubic-bezier(.175,.885,.32,1.275);}
-.ana-dot.on{opacity:.9;transform:scale(1) translateY(0);}
-#ana-lines{min-height:56px;text-align:center;}
-.ana-line{
-  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.2em;
-  text-transform:uppercase;color:rgba(240,239,250,.25);
-  min-height:18px;transition:color .5s;
-}
-.ana-line.active{color:rgba(240,239,250,.7);}
-.ana-line.done{color:rgba(240,239,250,.25);}
-#ana-arch{
-  font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.18em;
-  text-transform:uppercase;
-  min-height:20px;opacity:0;transition:opacity .6s;
-}
-#ana-arch.show{opacity:1;}
+#ana-wrap{display:flex;flex-direction:column;align-items:center;gap:40px;}
+#ana-constellation{opacity:0;transition:opacity .6s;filter:drop-shadow(0 0 16px rgba(255,255,255,.06));}
+#ana-constellation.show{opacity:1;}
+#ana-lines{min-height:64px;text-align:center;display:flex;flex-direction:column;gap:7px;}
+.ana-line{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(240,239,250,.18);min-height:18px;transition:color .5s;}
+.ana-line.active{color:rgba(240,239,250,.65);}
+.ana-line.done{color:rgba(240,239,250,.18);}
+#ana-arch{font-size:clamp(26px,4.5vw,50px);font-weight:900;letter-spacing:-.04em;min-height:1em;opacity:0;transition:opacity .7s,transform .7s cubic-bezier(.175,.885,.32,1.275);transform:scale(.88) translateY(6px);}
+#ana-arch.show{opacity:1;transform:scale(1) translateY(0);}
 
 /* ═══ RESULT ═══ */
 #sr{background:transparent;overflow-y:auto;overflow-x:hidden;justify-content:flex-start;padding:0;}
-
-.r-hero{
-  min-height:100vh;width:100%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:80px 28px 60px;position:relative;
-}
+.r-hero{min-height:100vh;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 28px 60px;position:relative;}
 .r-hero::before{content:'';position:absolute;inset:0;background:var(--hero-bg,none);z-index:0;}
 .r-hero>*{position:relative;z-index:1;}
-
-.r-icon{font-size:72px;line-height:1;margin-bottom:16px;opacity:0;animation:riseIn .7s .1s ease forwards;display:block;text-align:center;}
-.r-type{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(240,239,250,.38);margin-bottom:12px;opacity:0;animation:riseIn .5s .35s ease forwards;}
-.r-name{font-size:clamp(48px,9vw,100px);font-weight:900;letter-spacing:-.06em;line-height:.95;text-align:center;margin-bottom:20px;min-height:1em;opacity:0;animation:riseIn .7s .5s cubic-bezier(.175,.885,.32,1.275) forwards;}
-.r-tagline{font-size:16px;font-weight:500;color:var(--dim);text-align:center;max-width:480px;line-height:1.6;margin-bottom:40px;opacity:0;animation:riseIn .5s .8s ease forwards;}
+.r-icon{font-size:64px;line-height:1;margin-bottom:14px;opacity:0;animation:riseIn .7s .1s ease forwards;display:block;text-align:center;}
+.r-type{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(240,239,250,.38);margin-bottom:10px;opacity:0;animation:riseIn .5s .35s ease forwards;}
+.r-name{font-size:clamp(44px,8.5vw,96px);font-weight:900;letter-spacing:-.06em;line-height:.95;text-align:center;margin-bottom:12px;min-height:1em;opacity:0;animation:riseIn .7s .5s cubic-bezier(.175,.885,.32,1.275) forwards;}
+.r-secondary{display:flex;align-items:center;gap:8px;margin-bottom:20px;opacity:0;animation:riseIn .5s .65s ease forwards;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,239,250,.25);}
+.r-secondary-badge{padding:3px 10px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(240,239,250,.5);}
+.r-tagline{font-size:16px;font-weight:500;color:var(--dim);text-align:center;max-width:480px;line-height:1.6;margin-bottom:32px;opacity:0;animation:riseIn .5s .8s ease forwards;}
 
 /* trait bars */
-.r-traits{display:flex;flex-direction:column;gap:9px;width:100%;max-width:440px;margin-bottom:36px;opacity:0;animation:riseIn .5s 1s ease forwards;}
+.r-traits{display:flex;flex-direction:column;gap:9px;width:100%;max-width:440px;margin-bottom:24px;opacity:0;animation:riseIn .5s 1s ease forwards;}
 .tr{display:flex;align-items:center;gap:12px;}
 .tr-lbl{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,239,250,.28);width:90px;text-align:right;flex-shrink:0;}
 .tr-track{flex:1;height:2px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
 .tr-fill{height:100%;border-radius:2px;transform:scaleX(0);transform-origin:left;transition:transform 1.1s cubic-bezier(.4,0,.2,1);}
 .tr-val{font-family:var(--mono);font-size:10px;font-weight:700;width:28px;text-align:right;flex-shrink:0;}
 
+/* score breakdown — all 7 archetypes */
+.r-score-viz{width:100%;max-width:440px;margin-bottom:28px;opacity:0;animation:riseIn .5s 1.15s ease forwards;}
+.r-score-title{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(240,239,250,.18);margin-bottom:12px;}
+.r-score-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.r-score-lbl{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,239,250,.2);width:68px;text-align:right;flex-shrink:0;}
+.r-score-lbl.hi{color:rgba(240,239,250,.5);}
+.r-score-track{flex:1;height:1.5px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;}
+.r-score-fill{height:100%;border-radius:2px;transform:scaleX(0);transform-origin:left;transition:transform .9s cubic-bezier(.4,0,.2,1);}
+
 /* beliefs */
-.r-beliefs{width:100%;max-width:440px;margin-bottom:36px;opacity:0;animation:riseIn .5s 1.2s ease forwards;}
+.r-beliefs{width:100%;max-width:440px;margin-bottom:32px;opacity:0;animation:riseIn .5s 1.3s ease forwards;}
 .r-beliefs-title{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(240,239,250,.28);margin-bottom:14px;}
 .r-belief{display:flex;gap:10px;font-size:13px;color:rgba(240,239,250,.62);line-height:1.5;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);}
 .r-belief:last-child{border-bottom:none;}
 .r-belief-dot{width:4px;height:4px;border-radius:50%;background:var(--arch-color,#c9920d);flex-shrink:0;margin-top:7px;}
-
-/* social + actions */
-.r-social{font-family:var(--mono);font-size:10px;color:rgba(240,239,250,.22);text-align:center;letter-spacing:.06em;margin-bottom:32px;opacity:0;animation:riseIn .5s 1.35s ease forwards;}
+.r-social{font-family:var(--mono);font-size:10px;color:rgba(240,239,250,.22);text-align:center;letter-spacing:.06em;margin-bottom:28px;opacity:0;animation:riseIn .5s 1.45s ease forwards;}
 .r-social strong{color:rgba(240,239,250,.5);}
-.r-acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;opacity:0;animation:riseIn .5s 1.5s ease forwards;}
+.r-acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;opacity:0;animation:riseIn .5s 1.6s ease forwards;}
 .btn-share{background:#000;color:#fff;font-weight:700;font-size:12px;padding:13px 24px;border:1px solid rgba(255,255,255,.18);border-radius:100px;cursor:pointer;transition:all .18s;letter-spacing:.04em;display:flex;align-items:center;gap:8px;}
 .btn-share:hover{background:#111;border-color:rgba(255,255,255,.35);}
 .btn-feed{background:var(--arch-color,#c9920d);color:#000;font-weight:800;font-size:12px;padding:13px 24px;border:none;border-radius:100px;cursor:pointer;transition:all .18s;letter-spacing:.04em;text-decoration:none;display:inline-flex;align-items:center;}
 .btn-feed:hover{transform:translateY(-2px);box-shadow:0 12px 36px rgba(0,0,0,.4);}
 .btn-redo{background:none;border:none;color:rgba(240,239,250,.25);font-size:11px;cursor:pointer;text-decoration:underline;padding:10px;font-family:var(--mono);}
+.r-scroll-hint{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(240,239,250,.16);display:flex;align-items:center;gap:6px;opacity:0;animation:riseIn .5s 1.8s ease forwards;cursor:pointer;transition:color .2s;}
+.r-scroll-hint:hover{color:rgba(240,239,250,.38);}
+.r-scroll-hint svg{animation:bounceY 1.6s ease-in-out infinite;}
+@keyframes bounceY{0%,100%{transform:translateY(0);}50%{transform:translateY(4px);}}
 
 /* markets */
 .r-mkts{width:100%;max-width:1020px;margin:0 auto;padding:48px 28px 90px;}
@@ -187,6 +163,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .yes{font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a;}
 .no{font-family:var(--mono);font-size:12px;font-weight:800;color:#ff4d6a;}
 .mcard-vol{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;color:rgba(240,239,250,.3);}
+.mcard-edge{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:3px;margin-left:4px;}
 .mkts-cta{text-align:center;padding:24px 0 0;font-size:13px;color:var(--dim);}
 .mkts-cta a{color:var(--arch-color,#c9920d);font-weight:700;text-decoration:none;}
 
@@ -197,18 +174,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 @keyframes orbPulse{0%,100%{transform:scale(1);opacity:.8;}50%{transform:scale(1.12);opacity:1;}}
 @keyframes breathe{0%,100%{opacity:.65;}50%{opacity:1;}}
 @keyframes spin{to{transform:rotate(360deg);}}
-@keyframes iconPulse{0%{transform:scale(.9);opacity:0;}60%{transform:scale(1.06);}100%{transform:scale(1);opacity:1;}}
 
 /* ═══ RESPONSIVE ═══ */
 @media(max-width:640px){
-  .q-text{font-size:20px;margin-bottom:24px;}
+  .q-text{font-size:18px;margin-bottom:24px;}
   .q-grid{gap:8px;}
-  .ans-card{padding:16px 14px 14px;min-height:120px;}
-  .ans-emoji{font-size:20px;}
+  .ans-card{padding:14px 12px 14px;min-height:130px;}
+  .ans-sym{font-size:18px;}
   .ans-desc{font-size:11px;}
-  .r-name{font-size:52px;}
+  .r-name{font-size:46px;}
   .r-tagline{font-size:14px;}
   .mkts-grid{grid-template-columns:1fr;}
+  #ana-constellation{width:130px;height:130px;}
 }
 @media(max-width:480px){
   .q-grid{grid-template-columns:1fr;}
@@ -218,6 +195,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </head>
 <body>
 
+<div id="flash" style="position:fixed;inset:0;z-index:9999;opacity:0;pointer-events:none;transition:opacity .15s;"></div>
 <div id="aura"></div>
 <canvas id="particles" width="1" height="1"></canvas>
 
@@ -232,7 +210,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
   <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;">
     <div class="i-kicker">Prediction Market Archetype Test</div>
     <h1 class="i-head">Not a quiz.<br>A <em>mirror.</em></h1>
-    <p class="i-sub">7 choices that reveal how you already think. Your archetype surfaces in 60 seconds.</p>
+    <p class="i-sub">7 choices that reveal how you already think.<br>Your archetype surfaces in 60 seconds.</p>
+    <div class="i-counter">
+      <div class="i-cdot"></div>
+      <span id="ctCounter">2,841</span>&nbsp;traders identified
+    </div>
     <div class="i-pills">
       <div class="i-pill" style="color:#00e68a;border-color:rgba(0,230,138,.25);background:rgba(0,230,138,.06);">7 archetypes</div>
       <div class="i-pill" style="color:#4d9fff;border-color:rgba(77,159,255,.25);background:rgba(77,159,255,.06);">Live market matching</div>
@@ -245,18 +227,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 <!-- ═══ QUIZ ═══ -->
 <section class="scr gone" id="sq">
   <div id="pstrip"><div id="pfill"></div></div>
-  <!-- constellation tracker -->
   <svg id="constellation" viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg"></svg>
-  <!-- ambient bg per question -->
   <div id="q-ambient" class="q-ambient"></div>
-  <!-- question stages mount here -->
   <div style="position:relative;width:100%;height:100%;" id="sw"></div>
 </section>
 
 <!-- ═══ ANALYZING ═══ -->
 <section class="scr gone" id="sl">
   <div id="ana-wrap">
-    <div id="ana-dots"></div>
+    <svg id="ana-constellation" width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="ana-lines">
       <div class="ana-line" id="al0">&nbsp;</div>
       <div class="ana-line" id="al1">&nbsp;</div>
@@ -272,11 +251,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
     <div class="r-icon" id="rIcon"></div>
     <div class="r-type" id="rType"></div>
     <div class="r-name" id="rName"></div>
+    <div class="r-secondary" id="rSecondary"></div>
     <div class="r-tagline" id="rTagline"></div>
     <div class="r-traits" id="rTraits"></div>
+    <div class="r-score-viz" id="rScoreViz"></div>
     <div class="r-beliefs" id="rBeliefs"></div>
     <div class="r-social" id="rSocial"></div>
     <div class="r-acts" id="rActs"></div>
+    <div class="r-scroll-hint" onclick="document.getElementById('sr').scrollTo({top:window.innerHeight,behavior:'smooth'})">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="2,4 6,8 10,4"/></svg>
+      Matched markets below
+    </div>
   </div>
   <div class="r-mkts">
     <div class="mkts-head">
@@ -302,70 +287,70 @@ var QS = [
     q: 'It\'s 11pm. Markets are closed. Breaking news drops that changes everything. Your first move is:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".04" stroke="rgba(255,255,255,.5)" stroke-width=".5" fill="none"><path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M0 600h800M0 700h800"/><path d="M100 0v800M200 0v800M300 0v800M400 0v800M500 0v800M600 0v800M700 0v800"/></g></svg>',
     a: [
-      { id:'INTEL',      emoji:'🔴', label:'INTEL',      color:'#ff4d6a', desc:'Open Twitter and read every thread. You need the full picture before you act.' },
-      { id:'DATA',       emoji:'📊', label:'DATA',       color:'#4d9fff', desc:'Pull up the charts. Price tells you what words can\'t.' },
-      { id:'NETWORK',    emoji:'📞', label:'NETWORK',    color:'#00e68a', desc:'Text three people who would know. Your edge is who you know.' },
-      { id:'CONTRARIAN', emoji:'💤', label:'CONTRARIAN', color:'#a855f7', desc:'Go to sleep. Overreaction is the opportunity.' },
+      { id:'INTEL',      sym:'◉', label:'INTEL',      color:'#ff4d6a', desc:'Open Twitter. Read every thread. You need the full picture before you act.' },
+      { id:'DATA',       sym:'▲', label:'CHARTS',     color:'#4d9fff', desc:'Pull the data. Price tells you what words can\'t.' },
+      { id:'NETWORK',    sym:'⊕', label:'SOURCES',    color:'#00e68a', desc:'Text three people who would know. Your edge is who you know.' },
+      { id:'CONTRARIAN', sym:'◌', label:'FADE',       color:'#a855f7', desc:'Go to sleep. Overreaction is the opportunity. Wait for morning.' },
     ],
   },
   {
-    q: 'A market is sitting at 12¢. You\'ve done your research. You\'re right and you know it. You:',
+    q: 'A market is at 12¢. You\'ve done the work. You\'re right and you know it. You:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><path d="M0 350 C200 350 250 100 400 100 S600 300 800 50" stroke="rgba(255,255,255,.05)" stroke-width="1.5" fill="none"/><circle cx="400" cy="100" r="4" fill="rgba(255,255,255,.06)"/></svg>',
     a: [
-      { id:'SHARK',      emoji:'💰', label:'SHARK',      color:'#00e68a', desc:'Size up. Conviction means nothing without capital.' },
-      { id:'DISCIPLINED',emoji:'⚖️', label:'DISCIPLINED',color:'#4d9fff', desc:'Take a moderate position. Being right matters more than being rich.' },
-      { id:'ANALYST',    emoji:'👀', label:'ANALYST',    color:'#c9920d', desc:'Watch it. You need one more data point.' },
-      { id:'ARCHITECT',  emoji:'🔄', label:'ARCHITECT',  color:'#a855f7', desc:'Look for the opposite side. 88¢ NO is the same bet.' },
+      { id:'SHARK',      sym:'◆', label:'SIZE UP',    color:'#00e68a', desc:'Conviction means nothing without capital behind it.' },
+      { id:'DISCIPLINED',sym:'⬡', label:'MEASURED',   color:'#4d9fff', desc:'Take a moderate position. Being right matters more than being rich quick.' },
+      { id:'ANALYST',    sym:'◎', label:'WATCH',      color:'#c9920d', desc:'You need one more confirmation before you commit.' },
+      { id:'ARCHITECT',  sym:'↻', label:'FLIP SIDE',  color:'#a855f7', desc:'88¢ NO is the same bet. Find the better entry.' },
     ],
   },
   {
     q: 'The most predictable thing in the world is:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".05" fill="none" stroke="rgba(255,255,255,.6)" stroke-width=".5"><polygon points="400,50 700,200 700,600 400,750 100,600 100,200"/><polygon points="400,150 620,260 620,540 400,650 180,540 180,260"/><polygon points="400,250 540,320 540,480 400,550 260,480 260,320"/></g></svg>',
     a: [
-      { id:'WONK_D',  emoji:'🏛️', label:'WONK',   color:'#ff4d6a', desc:'Political incentives. Politicians always protect power.' },
-      { id:'MACRO_D', emoji:'📈', label:'MACRO',   color:'#00e68a', desc:'Market structure. Capital flows where returns are.' },
-      { id:'NATIVE_D',emoji:'⛓️', label:'NATIVE',  color:'#a855f7', desc:'On-chain data. The ledger doesn\'t lie.' },
-      { id:'ORACLE_D',emoji:'🏆', label:'ORACLE',  color:'#4d9fff', desc:'Human performance. Athletes and teams have patterns.' },
+      { id:'WONK_D',  sym:'■', label:'POLITICS',    color:'#ff4d6a', desc:'Political incentives. Politicians always protect their power.' },
+      { id:'MACRO_D', sym:'△', label:'MARKETS',     color:'#00e68a', desc:'Capital flows where returns are. Structure never lies.' },
+      { id:'NATIVE_D',sym:'⬢', label:'ON-CHAIN',    color:'#a855f7', desc:'The ledger doesn\'t lie. Wallet flow predicts everything.' },
+      { id:'ORACLE_D',sym:'✦', label:'PERFORMANCE', color:'#4d9fff', desc:'Athletes and teams have patterns. Performance is measurable.' },
     ],
   },
   {
     q: 'Your real edge comes from:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".04" fill="rgba(255,255,255,.5)"><circle cx="200" cy="200" r="3"/><circle cx="400" cy="150" r="3"/><circle cx="600" cy="250" r="3"/><circle cx="300" cy="400" r="3"/><circle cx="500" cy="450" r="3"/><circle cx="150" cy="550" r="3"/><circle cx="650" cy="500" r="3"/><line x1="200" y1="200" x2="400" y2="150" stroke="rgba(255,255,255,.03)" stroke-width="1"/><line x1="400" y1="150" x2="600" y2="250" stroke="rgba(255,255,255,.03)" stroke-width="1"/><line x1="300" y1="400" x2="500" y2="450" stroke="rgba(255,255,255,.03)" stroke-width="1"/></g></svg>',
     a: [
-      { id:'RESEARCH', emoji:'📰', label:'RESEARCH', color:'#c9920d', desc:'Reading more than everyone else.' },
-      { id:'NETWORK_E',emoji:'🤝', label:'NETWORK',  color:'#00e68a', desc:'Knowing people others don\'t.' },
-      { id:'QUANT',    emoji:'🧮', label:'QUANT',    color:'#4d9fff', desc:'Modeling what others won\'t.' },
-      { id:'PATIENCE', emoji:'🚶', label:'PATIENCE', color:'#a855f7', desc:'Thinking longer than everyone else.' },
+      { id:'RESEARCH', sym:'▣', label:'READING',  color:'#c9920d', desc:'Consuming more primary sources than anyone else in the room.' },
+      { id:'NETWORK_E',sym:'⊕', label:'SOURCING', color:'#00e68a', desc:'Knowing people who know things before it\'s public.' },
+      { id:'QUANT',    sym:'⊞', label:'MODELING', color:'#4d9fff', desc:'Building frameworks that see what intuition misses.' },
+      { id:'PATIENCE', sym:'→', label:'TIMING',   color:'#a855f7', desc:'Thinking further out than the market is pricing.' },
     ],
   },
   {
     q: 'You were right on a market. Resolved against you on a technicality. You:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" opacity=".04"><path d="M400 400 m-280 0 a280 280 0 1 0 560 0 a280 280 0 1 0-560 0" stroke="rgba(255,255,255,.4)" fill="none" stroke-width=".5"/><path d="M400 400 m-200 0 a200 200 0 1 0 400 0 a200 200 0 1 0-400 0" stroke="rgba(255,255,255,.3)" fill="none" stroke-width=".5"/></svg>',
     a: [
-      { id:'VIGILANT',   emoji:'😤', label:'VIGILANT',   color:'#ff4d6a', desc:'Document everything. This is a pattern.' },
-      { id:'GROWTH',     emoji:'📝', label:'GROWTH',     color:'#4d9fff', desc:'Write a post-mortem. What would you do differently?' },
-      { id:'RELENTLESS', emoji:'🔁', label:'RELENTLESS', color:'#00e68a', desc:'Immediately find the next version of the trade.' },
-      { id:'ZEN',        emoji:'🤷', label:'ZEN',        color:'#a855f7', desc:'Move on. One trade doesn\'t define your edge.' },
+      { id:'VIGILANT',   sym:'⊗', label:'DOCUMENT', color:'#ff4d6a', desc:'Log it. This is a pattern and it will happen again.' },
+      { id:'GROWTH',     sym:'↗', label:'DEBRIEF',  color:'#4d9fff', desc:'Write a post-mortem. The loss is still data.' },
+      { id:'RELENTLESS', sym:'↺', label:'RELOAD',   color:'#00e68a', desc:'Find the next version of the trade immediately.' },
+      { id:'ZEN',        sym:'○', label:'MOVE ON',  color:'#a855f7', desc:'One resolution doesn\'t change your edge. Next trade.' },
     ],
   },
   {
     q: 'Your natural timeframe is:',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="100"><line x1="50" y1="50" x2="750" y2="50" stroke="rgba(255,255,255,.05)" stroke-width="1"/><circle cx="50" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="250" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="450" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="650" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="750" cy="50" r="4" fill="rgba(255,255,255,.07)"/></svg>',
     a: [
-      { id:'TRADER',   emoji:'⚡', label:'TRADER',   color:'#ff4d6a', desc:'Minutes to hours. The world moves fast.' },
-      { id:'SWINGER',  emoji:'📅', label:'SWINGER',  color:'#c9920d', desc:'Days to weeks. Enough time for thesis to play out.' },
-      { id:'INVESTOR', emoji:'🗓️', label:'INVESTOR', color:'#4d9fff', desc:'Months. You want the market to come to you.' },
-      { id:'VISIONARY',emoji:'🔭', label:'VISIONARY',color:'#a855f7', desc:'Years. You\'re betting on civilizational trends.' },
+      { id:'TRADER',   sym:'▶', label:'HOURS',   color:'#ff4d6a', desc:'Minutes to hours. Speed is the edge.' },
+      { id:'SWINGER',  sym:'▷', label:'WEEKS',   color:'#c9920d', desc:'Days to weeks. Enough time for the thesis to play out.' },
+      { id:'INVESTOR', sym:'▭', label:'MONTHS',  color:'#4d9fff', desc:'Months. You want the market to come to you.' },
+      { id:'VISIONARY',sym:'◯', label:'YEARS',   color:'#a855f7', desc:'Years. You\'re betting on civilizational trends.' },
     ],
   },
   {
     q: 'Deep down, what are you really doing here?',
     ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".05" fill="rgba(255,255,255,.7)"><circle cx="200" cy="150" r="1.5"/><circle cx="400" cy="80" r="2"/><circle cx="600" cy="180" r="1"/><circle cx="700" cy="300" r="1.5"/><circle cx="100" cy="400" r="1"/><circle cx="500" cy="350" r="2.5"/><circle cx="350" cy="500" r="1.5"/><circle cx="650" cy="550" r="1"/></g></svg>',
     a: [
-      { id:'PROVING',      emoji:'🎯', label:'THE SHARP',     color:'#4d9fff', desc:'Proving I see things others miss.' },
-      { id:'UNDERSTANDING',emoji:'🌍', label:'THE WONK',      color:'#ff4d6a', desc:'Understanding how the world actually works.' },
-      { id:'BUILDING',     emoji:'💎', label:'THE ARCHITECT', color:'#c9920d', desc:'Building something that compounds.' },
-      { id:'PLAYER',       emoji:'🔥', label:'THE PLAYER',    color:'#00e68a', desc:'I just love the game.' },
+      { id:'PROVING',      sym:'◉', label:'PROVING',      color:'#4d9fff', desc:'Proving I see things others consistently miss.' },
+      { id:'UNDERSTANDING',sym:'■', label:'UNDERSTANDING', color:'#ff4d6a', desc:'Understanding how the world actually works.' },
+      { id:'BUILDING',     sym:'◆', label:'BUILDING',     color:'#c9920d', desc:'Building something that compounds over time.' },
+      { id:'PLAYER',       sym:'▲', label:'PLAYING',      color:'#00e68a', desc:'I love the game. That\'s enough.' },
     ],
   },
 ];
@@ -409,132 +394,88 @@ var WEIGHTS = {
 ══════════════════════════════════════════════════════ */
 var AX = {
   ORACLE: {
-    name: 'THE ORACLE',
-    type: 'Pattern Recognition',
-    tagline: 'You see patterns in noise others call chaos.',
-    color: '#4d9fff',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(77,159,255,.22) 0%, rgba(6,182,212,.08) 50%, transparent 80%)',
-    icon: '◎',
-    rarity: '8.4%',
-    traits: { 'Pattern': 94, 'Instinct': 88, 'Speed': 76, 'Patience': 45 },
-    beliefs: [
-      'Momentum is real and measurable.',
-      'The crowd is usually wrong at inflection points.',
-      'Data without context is just noise.',
-    ],
-    keywords: ['sports','performance','tournament','championship','record','nba','nfl','mlb','season','playoff','streak'],
-    share: 'I\'m THE ORACLE on @HyperflexNetwork — I see patterns others call chaos.',
+    name:'THE ORACLE', type:'Pattern Recognition',
+    tagline:'You see patterns in noise others call chaos.',
+    color:'#4d9fff',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(77,159,255,.22) 0%, rgba(6,182,212,.08) 50%, transparent 80%)',
+    icon:'◎', rarity:'8.4%',
+    traits:{ 'Pattern':94, 'Instinct':88, 'Speed':76, 'Patience':45 },
+    beliefs:['Momentum is real and measurable.','The crowd is usually wrong at inflection points.','Data without context is just noise.'],
+    keywords:['sports','performance','tournament','championship','nba','nfl','mlb','season','playoff','streak','record'],
+    share:'I\'m THE ORACLE on @HyperflexNetwork — I see patterns others call chaos.',
   },
   WONK: {
-    name: 'THE WONK',
-    type: 'Policy & Incentives',
-    tagline: 'Policy is just incentives wearing a suit.',
-    color: '#ff4d6a',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,77,106,.2) 0%, rgba(245,158,11,.06) 50%, transparent 80%)',
-    icon: '⬡',
-    rarity: '7.1%',
-    traits: { 'Policy': 96, 'Research': 91, 'Speed': 38, 'Contrarianism': 62 },
-    beliefs: [
-      'Every political action has a paper trail.',
-      'Incentives explain 90% of outcomes.',
-      'The boring answer is usually right.',
-    ],
-    keywords: ['election','congress','senate','policy','president','fed','regulation','vote','democrat','republican','supreme court'],
-    share: 'I\'m THE WONK on @HyperflexNetwork — policy is just incentives wearing a suit.',
+    name:'THE WONK', type:'Policy & Incentives',
+    tagline:'Policy is just incentives wearing a suit.',
+    color:'#ff4d6a',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,77,106,.2) 0%, rgba(245,158,11,.06) 50%, transparent 80%)',
+    icon:'⬡', rarity:'7.1%',
+    traits:{ 'Policy':96, 'Research':91, 'Speed':38, 'Contrarianism':62 },
+    beliefs:['Every political action has a paper trail.','Incentives explain 90% of outcomes.','The boring answer is usually right.'],
+    keywords:['election','congress','senate','policy','president','fed','regulation','vote','democrat','republican','supreme court'],
+    share:'I\'m THE WONK on @HyperflexNetwork — policy is just incentives wearing a suit.',
   },
   HAWK: {
-    name: 'MACRO HAWK',
-    type: 'Macro Strategist',
-    tagline: 'Everything is a rate decision in disguise.',
-    color: '#00e68a',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,230,138,.18) 0%, rgba(6,182,212,.06) 50%, transparent 80%)',
-    icon: '△',
-    rarity: '9.7%',
-    traits: { 'Macro': 97, 'Patience': 85, 'Contrarianism': 78, 'Speed': 42 },
-    beliefs: [
-      'Central banks move markets more than any news event.',
-      'The real trade is always 6 months early.',
-      'Inflation is always and everywhere a monetary phenomenon.',
-    ],
-    keywords: ['fed','inflation','rate','gdp','recession','dollar','treasury','cpi','yield','fomc','powell'],
-    share: 'I\'m MACRO HAWK on @HyperflexNetwork — everything is a rate decision in disguise.',
+    name:'MACRO HAWK', type:'Macro Strategist',
+    tagline:'Everything is a rate decision in disguise.',
+    color:'#00e68a',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,230,138,.18) 0%, rgba(6,182,212,.06) 50%, transparent 80%)',
+    icon:'△', rarity:'9.7%',
+    traits:{ 'Macro':97, 'Patience':85, 'Contrarianism':78, 'Speed':42 },
+    beliefs:['Central banks move markets more than any news event.','The real trade is always 6 months early.','Inflation is always and everywhere a monetary phenomenon.'],
+    keywords:['fed','inflation','rate','gdp','recession','dollar','treasury','cpi','yield','fomc','powell'],
+    share:'I\'m MACRO HAWK on @HyperflexNetwork — everything is a rate decision in disguise.',
   },
   NATIVE: {
-    name: 'CHAIN NATIVE',
-    type: 'On-Chain Intelligence',
-    tagline: 'The ledger is the only source of truth.',
-    color: '#a855f7',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(168,85,247,.22) 0%, rgba(236,72,153,.07) 50%, transparent 80%)',
-    icon: '⬢',
-    rarity: '11.3%',
-    traits: { 'On-chain': 95, 'Contrarianism': 82, 'Instinct': 79, 'Patience': 31 },
-    beliefs: [
-      'Transparency is the only real edge.',
-      'Most financial infrastructure will be rebuilt on-chain.',
-      'The best trades make TradFi uncomfortable.',
-    ],
-    keywords: ['bitcoin','ethereum','crypto','defi','blockchain','btc','eth','solana','token','nft','protocol'],
-    share: 'I\'m CHAIN NATIVE on @HyperflexNetwork — the ledger is the only source of truth.',
+    name:'CHAIN NATIVE', type:'On-Chain Intelligence',
+    tagline:'The ledger is the only source of truth.',
+    color:'#a855f7',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(168,85,247,.22) 0%, rgba(236,72,153,.07) 50%, transparent 80%)',
+    icon:'⬢', rarity:'11.3%',
+    traits:{ 'On-chain':95, 'Contrarianism':82, 'Instinct':79, 'Patience':31 },
+    beliefs:['Transparency is the only real edge.','Most financial infrastructure will be rebuilt on-chain.','The best trades make TradFi uncomfortable.'],
+    keywords:['bitcoin','ethereum','crypto','defi','blockchain','btc','eth','solana','token','nft','protocol'],
+    share:'I\'m CHAIN NATIVE on @HyperflexNetwork — the ledger is the only source of truth.',
   },
   STRATEGIST: {
-    name: 'THE STRATEGIST',
-    type: 'Geopolitical Intelligence',
-    tagline: 'Geography is destiny. You never forgot it.',
-    color: '#c9920d',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(201,146,13,.2) 0%, rgba(239,68,68,.06) 50%, transparent 80%)',
-    icon: '◈',
-    rarity: '6.1%',
-    traits: { 'Geopolitics': 93, 'Long-term': 89, 'Pattern': 84, 'Speed': 35 },
-    beliefs: [
-      'Every conflict is about resources or identity, usually both.',
-      'The map matters more than the headline.',
-      'History rhymes loudly enough to trade on.',
-    ],
-    keywords: ['russia','china','iran','nato','war','taiwan','nuclear','election','treaty','conflict','geopolit'],
-    share: 'I\'m THE STRATEGIST on @HyperflexNetwork — geography is destiny.',
+    name:'THE STRATEGIST', type:'Geopolitical Intelligence',
+    tagline:'Geography is destiny. You never forgot it.',
+    color:'#c9920d',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(201,146,13,.2) 0%, rgba(239,68,68,.06) 50%, transparent 80%)',
+    icon:'◈', rarity:'6.1%',
+    traits:{ 'Geopolitics':93, 'Long-term':89, 'Pattern':84, 'Speed':35 },
+    beliefs:['Every conflict is about resources or identity, usually both.','The map matters more than the headline.','History rhymes loudly enough to trade on.'],
+    keywords:['russia','china','iran','nato','war','taiwan','nuclear','treaty','conflict','geopolit'],
+    share:'I\'m THE STRATEGIST on @HyperflexNetwork — geography is destiny.',
   },
   CONTRARIAN: {
-    name: 'THE CONTRARIAN',
-    type: 'Market Dissenter',
-    tagline: 'Consensus is a signal. A sell signal.',
-    color: '#ff6b35',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,107,53,.2) 0%, rgba(255,77,106,.07) 50%, transparent 80%)',
-    icon: '↯',
-    rarity: '9.8%',
-    traits: { 'Contrarianism': 99, 'Conviction': 91, 'Patience': 88, 'Social comfort': 22 },
-    beliefs: [
-      'The most crowded trade is the most dangerous trade.',
-      'If everyone knows it, it\'s already priced in.',
-      'Being early and being wrong are indistinguishable until they\'re not.',
-    ],
-    keywords: ['unlikely','impossible','surprise','fade','against','upset','underdog'],
-    share: 'I\'m THE CONTRARIAN on @HyperflexNetwork — consensus is a sell signal.',
+    name:'THE CONTRARIAN', type:'Market Dissenter',
+    tagline:'Consensus is a signal. A sell signal.',
+    color:'#ff6b35',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,107,53,.2) 0%, rgba(255,77,106,.07) 50%, transparent 80%)',
+    icon:'↯', rarity:'9.8%',
+    traits:{ 'Contrarianism':99, 'Conviction':91, 'Patience':88, 'Social comfort':22 },
+    beliefs:['The most crowded trade is the most dangerous trade.','If everyone knows it, it\'s already priced in.','Being early and being wrong are indistinguishable — until they\'re not.'],
+    keywords:['unlikely','impossible','surprise','fade','against','upset','underdog'],
+    share:'I\'m THE CONTRARIAN on @HyperflexNetwork — consensus is a sell signal.',
   },
   SHARP: {
-    name: 'THE SHARP',
-    type: 'Quantitative Analyst',
-    tagline: 'You don\'t have opinions. You have models.',
-    color: '#00d4ff',
-    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,212,255,.2) 0%, rgba(77,159,255,.07) 50%, transparent 80%)',
-    icon: '✦',
-    rarity: '7.4%',
-    traits: { 'Analytical': 98, 'Discipline': 95, 'Emotion ctrl': 92, 'Instinct': 41 },
-    beliefs: [
-      'Every belief should have a confidence interval.',
-      'The process is the edge, not the outcome.',
-      'Good forecasters are made, not born.',
-    ],
-    keywords: ['probability','forecast','model','data','accuracy','statistics','calibration','odds'],
-    share: 'I\'m THE SHARP on @HyperflexNetwork — I don\'t have opinions, I have models.',
+    name:'THE SHARP', type:'Quantitative Analyst',
+    tagline:'You don\'t have opinions. You have models.',
+    color:'#00d4ff',
+    gradient:'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,212,255,.2) 0%, rgba(77,159,255,.07) 50%, transparent 80%)',
+    icon:'✦', rarity:'7.4%',
+    traits:{ 'Analytical':98, 'Discipline':95, 'Emotion ctrl':92, 'Instinct':41 },
+    beliefs:['Every belief should have a confidence interval.','The process is the edge, not the outcome.','Good forecasters are made, not born.'],
+    keywords:['probability','forecast','model','data','accuracy','statistics','calibration','odds'],
+    share:'I\'m THE SHARP on @HyperflexNetwork — I don\'t have opinions, I have models.',
   },
 };
 
-/* constellation dot positions (px in 68×68 SVG) */
-var CPOS = [
-  {x:34,y:34},{x:14,y:18},{x:54,y:14},{x:60,y:40},{x:44,y:58},{x:18,y:56},{x:8,y:36}
-];
+/* constellation dot positions in 68×68 and 160×160 coordinate spaces */
+var CPOS = [{x:34,y:34},{x:14,y:18},{x:54,y:14},{x:60,y:40},{x:44,y:58},{x:18,y:56},{x:8,y:36}];
+var CPOS_L = CPOS.map(function(p){return{x:Math.round(p.x*2.35),y:Math.round(p.y*2.35)};});
 
-/* aura gradients per answer color */
 var AURAS = {
   '#ff4d6a':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255,77,106,.11) 0%, transparent 75%)',
   '#4d9fff':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(77,159,255,.11) 0%, transparent 75%)',
@@ -549,15 +490,16 @@ var AURAS = {
    STATE
 ══════════════════════════════════════════════════════ */
 var _scores  = {oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
-var _answers = []; /* {id, color} */
+var _answers = [];
 var _qIdx    = 0;
 var _arch    = null;
 var _busy    = false;
+var _hasData = false; /* true after full quiz completed */
 
 /* ══════════════════════════════════════════════════════
    PARTICLES
 ══════════════════════════════════════════════════════ */
-var _pts=[], _ptCtx;
+var _pts=[],_ptCtx;
 function initParticles(){
   var c=document.getElementById('particles');
   c.width=window.innerWidth;c.height=window.innerHeight;
@@ -573,12 +515,27 @@ function initParticles(){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function show(id){['si','sq','sl','sr'].forEach(function(i){var el=document.getElementById(i);if(i===id)el.classList.remove('gone');else el.classList.add('gone');});}
 
+function flashReveal(color){
+  var fl=document.getElementById('flash');
+  fl.style.background=color;
+  fl.style.transition='opacity .12s';
+  fl.style.opacity='.18';
+  setTimeout(function(){fl.style.transition='opacity .9s';fl.style.opacity='0';},160);
+}
+
 /* ══════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded',function(){
-  // ?reset=1 clears saved result
   if(location.search.indexOf('reset=1')!==-1) localStorage.removeItem('hfx_archetype');
+  // animate counter
+  var target=2841+Math.floor(Math.random()*120);
+  var start=target-Math.floor(Math.random()*200+100);
+  var el=document.getElementById('ctCounter');
+  var step=Math.ceil((target-start)/40);
+  var cur=start;
+  el.textContent=cur.toLocaleString();
+  var t=setInterval(function(){cur+=step;if(cur>=target){cur=target;clearInterval(t);}el.textContent=cur.toLocaleString();},40);
   checkReturning();
 });
 
@@ -588,10 +545,13 @@ function checkReturning(){
   try{
     var arc=JSON.parse(saved);
     if(!arc.key||!AX[arc.key]) return;
+    var A=AX[arc.key];
     var chip=document.createElement('div');
-    chip.style.cssText='position:absolute;top:22px;right:24px;background:'+arc.color+'18;border:1px solid '+arc.color+'44;border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:'+arc.color+';cursor:pointer;z-index:10;';
-    chip.textContent='◆ '+AX[arc.key].name;
-    chip.onclick=function(){_arch=AX[arc.key];showResult();};
+    chip.style.cssText='position:absolute;top:22px;right:24px;background:'+A.color+'18;border:1px solid '+A.color+'44;border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:'+A.color+';cursor:pointer;z-index:10;transition:background .2s;';
+    chip.textContent='◆ '+A.name;
+    chip.onmouseenter=function(){chip.style.background=A.color+'28';};
+    chip.onmouseleave=function(){chip.style.background=A.color+'18';};
+    chip.onclick=function(){_arch=A;_arch._key=arc.key;showResult(false);};
     document.getElementById('si').appendChild(chip);
   }catch(e){}
 }
@@ -600,15 +560,11 @@ function checkReturning(){
    QUIZ FLOW
 ══════════════════════════════════════════════════════ */
 function startQuiz(){
-  if(location.search.indexOf('reset=1')===-1&&localStorage.getItem('hfx_archetype')){
-    // returning user hit Start — show fresh quiz
-    localStorage.removeItem('hfx_archetype');
-  }
+  localStorage.removeItem('hfx_archetype');
   _scores={oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
-  _answers=[];_qIdx=0;_arch=null;_busy=false;
+  _answers=[];_qIdx=0;_arch=null;_busy=false;_hasData=false;
   document.getElementById('particles').style.opacity='1';
   initParticles();
-  // reset constellation
   document.getElementById('constellation').innerHTML='';
   show('sq');
   renderQ(0,false);
@@ -625,23 +581,20 @@ function keyHandler(e){
 function renderQ(idx,fromPrev){
   var q=QS[idx];
   document.getElementById('pfill').style.width=((idx/QS.length)*100)+'%';
-
-  // ambient background
   var amb=document.getElementById('q-ambient');
-  amb.style.backgroundImage=q.ambient?'url("'+q.ambient+'")':(amb.style.backgroundImage||'');
+  amb.style.backgroundImage=q.ambient?'url("'+q.ambient+'")':'';
   amb.classList.add('show');
-
   var html='<div class="qstage'+(fromPrev?' in':'')+'">'+
     '<div class="q-num">'+String(idx+1).padStart(2,'0')+' / 0'+QS.length+'</div>'+
     '<div class="q-text">'+esc(q.q)+'</div>'+
     '<div class="q-grid">'+
       q.a.map(function(a,i){
         return '<div class="ans-card" style="--cc:'+a.color+'" onclick="pick('+idx+',this,\''+a.id+'\',\''+a.color+'\')" role="button" tabindex="0">'+
+          '<div class="ans-key">'+(i+1)+'</div>'+
           '<div class="ans-check"><svg class="check-icon" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg></div>'+
-          '<div class="ans-emoji">'+a.emoji+'</div>'+
+          '<div class="ans-sym">'+a.sym+'</div>'+
           '<div class="ans-tag">'+esc(a.label)+'</div>'+
           '<div class="ans-desc">'+esc(a.desc)+'</div>'+
-          '<div class="ans-key">'+(i+1)+'</div>'+
         '</div>';
       }).join('')+
     '</div>'+
@@ -653,33 +606,27 @@ function pick(qIdx,el,answerId,color){
   if(_busy) return;
   _busy=true;
   el.classList.add('selected');
-  // haptic
   try{if(navigator.vibrate) navigator.vibrate(45);}catch(_){}
-
-  // score
   var w=WEIGHTS[answerId]||{};
   Object.keys(w).forEach(function(k){_scores[k]=(_scores[k]||0)+w[k];});
   _answers.push({id:answerId,color:color});
+  document.getElementById('aura').style.background=AURAS[color]||'';
 
-  // aura shift
-  var aura=document.getElementById('aura');
-  aura.style.background=AURAS[color]||'';
-
-  // constellation dot
+  /* small constellation dot (top-right) */
   var pos=CPOS[_answers.length-1]||{x:34,y:34};
   var svg=document.getElementById('constellation');
+  if(!document.getElementById('cglow')){
+    var defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+    var flt=document.createElementNS('http://www.w3.org/2000/svg','filter');flt.setAttribute('id','cglow');
+    var blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','1.8');blur.setAttribute('result','blur');
+    var merge=document.createElementNS('http://www.w3.org/2000/svg','feMerge');
+    ['blur','SourceGraphic'].forEach(function(n){var mn=document.createElementNS('http://www.w3.org/2000/svg','feMergeNode');mn.setAttribute('in',n);merge.appendChild(mn);});
+    flt.appendChild(blur);flt.appendChild(merge);defs.appendChild(flt);svg.insertBefore(defs,svg.firstChild);
+  }
   var circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
   circle.setAttribute('cx',pos.x);circle.setAttribute('cy',pos.y);circle.setAttribute('r','3.5');
   circle.setAttribute('fill',color);circle.setAttribute('filter','url(#cglow)');
   circle.style.cssText='opacity:0;transform-origin:'+pos.x+'px '+pos.y+'px;transform:scale(0);transition:opacity .45s,transform .45s cubic-bezier(.175,.885,.32,1.275);';
-  if(!document.getElementById('cglow')){
-    var defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
-    var filter=document.createElementNS('http://www.w3.org/2000/svg','filter');filter.setAttribute('id','cglow');
-    var blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','1.8');blur.setAttribute('result','blur');
-    var merge=document.createElementNS('http://www.w3.org/2000/svg','feMerge');
-    ['blur','SourceGraphic'].forEach(function(n){var mn=document.createElementNS('http://www.w3.org/2000/svg','feMergeNode');mn.setAttribute('in',n);merge.appendChild(mn);});
-    filter.appendChild(blur);filter.appendChild(merge);defs.appendChild(filter);svg.insertBefore(defs,svg.firstChild);
-  }
   svg.appendChild(circle);
   setTimeout(function(){circle.style.opacity='.85';circle.style.transform='scale(1)';},20);
 
@@ -691,116 +638,167 @@ function pick(qIdx,el,answerId,color){
       if(next<QS.length){renderQ(next,true);_busy=false;}
       else{document.removeEventListener('keydown',keyHandler);showAnalyzing();}
     },280);
-  },500);
+  },480);
 }
 
 /* ══════════════════════════════════════════════════════
-   ANALYZING
+   ANALYZING — large constellation + lines + typewriter
 ══════════════════════════════════════════════════════ */
 function showAnalyzing(){
   show('sl');
-  // reset ana state
-  document.getElementById('ana-dots').innerHTML='';
   ['al0','al1','al2'].forEach(function(id){var el=document.getElementById(id);el.textContent=' ';el.className='ana-line';});
-  document.getElementById('ana-arch').className='';document.getElementById('ana-arch').textContent='';
+  var archEl=document.getElementById('ana-arch');archEl.className='';archEl.textContent='';
+  var svg=document.getElementById('ana-constellation');
+  svg.innerHTML='';svg.classList.remove('show');
 
-  // drop answer dots one by one
+  /* build glow filter for large constellation */
+  var defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+  var flt=document.createElementNS('http://www.w3.org/2000/svg','filter');flt.setAttribute('id','acglow');
+  var blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','3');blur.setAttribute('result','blur');
+  var merge=document.createElementNS('http://www.w3.org/2000/svg','feMerge');
+  ['blur','SourceGraphic'].forEach(function(n){var mn=document.createElementNS('http://www.w3.org/2000/svg','feMergeNode');mn.setAttribute('in',n);merge.appendChild(mn);});
+  flt.appendChild(blur);flt.appendChild(merge);defs.appendChild(flt);svg.appendChild(defs);
+
+  setTimeout(function(){svg.classList.add('show');},50);
+
+  var circles=[];
   _answers.forEach(function(ans,i){
+    var pos=CPOS_L[i];
     setTimeout(function(){
-      var dot=document.createElement('div');
-      dot.className='ana-dot';
-      dot.style.background=ans.color;
-      dot.style.boxShadow='0 0 10px '+ans.color;
-      document.getElementById('ana-dots').appendChild(dot);
-      setTimeout(function(){dot.classList.add('on');},20);
-    },i*220);
+      var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx',pos.x);c.setAttribute('cy',pos.y);c.setAttribute('r','5.5');
+      c.setAttribute('fill',ans.color);c.setAttribute('filter','url(#acglow)');
+      c.style.cssText='opacity:0;transform-origin:'+pos.x+'px '+pos.y+'px;transform:scale(0);transition:opacity .4s,transform .5s cubic-bezier(.175,.885,.32,1.275);';
+      svg.appendChild(c);
+      circles.push({pos:pos,color:ans.color,el:c});
+      setTimeout(function(){c.style.opacity='.9';c.style.transform='scale(1)';},20);
+    },i*160);
   });
 
-  var startMs=_answers.length*220+500;
-
-  // sequence: line 0
+  /* draw connecting lines after all dots */
+  var lineDelay=_answers.length*160+280;
   setTimeout(function(){
-    typewriterEl(document.getElementById('al0'),'PROCESSING MARKET PROFILE...',38,function(){
+    for(var i=0;i<circles.length-1;i++){
+      (function(fi){
+        var from=CPOS_L[fi],to=CPOS_L[fi+1];
+        var line=document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1',from.x);line.setAttribute('y1',from.y);
+        line.setAttribute('x2',to.x);line.setAttribute('y2',to.y);
+        line.setAttribute('stroke','rgba(255,255,255,.14)');
+        line.setAttribute('stroke-width','0.8');
+        line.setAttribute('stroke-linecap','round');
+        line.style.cssText='opacity:0;transition:opacity .5s '+(fi*70)+'ms;';
+        svg.insertBefore(line,svg.children[1]||svg.firstChild);
+        setTimeout(function(){line.style.opacity='1';},20);
+      })(i);
+    }
+  },lineDelay);
+
+  /* typewriter sequence */
+  var twStart=lineDelay+_answers.length*70+500;
+  setTimeout(function(){
+    typewriterEl(document.getElementById('al0'),'PROCESSING MARKET PROFILE...',36,function(){
       document.getElementById('al0').classList.add('done');
       setTimeout(function(){
-        typewriterEl(document.getElementById('al1'),'CROSS-REFERENCING 847 PREDICTION MARKETS...',28,function(){
+        typewriterEl(document.getElementById('al1'),'CROSS-REFERENCING 847 PREDICTION MARKETS...',26,function(){
           document.getElementById('al1').classList.add('done');
           setTimeout(function(){
             document.getElementById('al2').classList.add('active');
-            typewriterEl(document.getElementById('al2'),'ARCHETYPE IDENTIFIED',55,function(){
+            typewriterEl(document.getElementById('al2'),'ARCHETYPE IDENTIFIED',52,function(){
               setTimeout(function(){
-                // compute & reveal
                 var sorted=Object.entries(_scores).sort(function(a,b){return b[1]-a[1];});
                 var key=sorted[0][0].toUpperCase();
                 if(!AX[key]) key='SHARP';
-                _arch=AX[key];
-                _arch._key=key.toLowerCase();
-                var archEl=document.getElementById('ana-arch');
+                _arch=AX[key];_arch._key=key.toLowerCase();_arch._sorted=sorted;
+                _hasData=true;
                 archEl.style.color=_arch.color;
                 archEl.textContent=_arch.name;
                 archEl.classList.add('show');
-                setTimeout(showResult,900);
+                setTimeout(function(){flashReveal(_arch.color);setTimeout(showResult,200);},1000);
               },300);
             });
-          },350);
+          },300);
         });
-      },380);
+      },340);
     });
-  },startMs);
+  },twStart);
 }
 
 function typewriterEl(el,text,delay,cb){
   var i=0;el.textContent='';el.classList.add('active');
-  var t=setInterval(function(){
-    el.textContent+=text[i]||'';i++;
-    if(i>=text.length){clearInterval(t);if(cb) setTimeout(cb,80);}
-  },delay);
+  var t=setInterval(function(){el.textContent+=text[i]||'';i++;if(i>=text.length){clearInterval(t);if(cb) setTimeout(cb,80);}},delay);
 }
 
 /* ══════════════════════════════════════════════════════
    RESULT
 ══════════════════════════════════════════════════════ */
-function showResult(){
+function showResult(isNew){
+  if(isNew===undefined) isNew=true;
   var A=_arch;
   var key=A._key||Object.keys(AX).find(function(k){return AX[k]===A;})||'sharp';
   document.documentElement.style.setProperty('--arch-color',A.color);
-
-  // hero gradient
   document.getElementById('rh').style.setProperty('--hero-bg',A.gradient);
   document.getElementById('rh').style.setProperty('--arch-color',A.color);
 
-  // icon (pulsing, renders after brief delay for cinematic effect)
+  /* icon */
   var iconEl=document.getElementById('rIcon');
   iconEl.textContent=A.icon;
-  iconEl.style.cssText='font-size:72px;line-height:1;margin-bottom:16px;color:'+A.color+';opacity:0;animation:riseIn .7s .1s ease forwards, orbPulse 3s 1s ease-in-out infinite;display:block;text-align:center;';
+  iconEl.style.cssText='font-size:64px;line-height:1;margin-bottom:14px;color:'+A.color+';opacity:0;animation:riseIn .7s .1s ease forwards, orbPulse 3s 1s ease-in-out infinite;display:block;text-align:center;';
 
   document.getElementById('rType').textContent=A.type;
-  // typewriter name
+
+  /* typewriter name */
   var nameEl=document.getElementById('rName');
-  nameEl.style.color=A.color;
-  nameEl.style.opacity='1';
-  nameEl.style.animation='none';
-  nameEl.textContent='';
-  setTimeout(function(){typewriterEl(nameEl,A.name,50,null);},600);
+  nameEl.style.color=A.color;nameEl.style.opacity='1';nameEl.style.animation='none';nameEl.textContent='';
+  setTimeout(function(){typewriterEl(nameEl,A.name,48,null);},550);
+
+  /* secondary archetype */
+  var secEl=document.getElementById('rSecondary');
+  var sorted=A._sorted||Object.entries(_scores).sort(function(a,b){return b[1]-a[1];});
+  var primScore=sorted[0]?sorted[0][1]:0;
+  var secEntry=sorted[1];
+  var secKey=secEntry?secEntry[0].toUpperCase():null;
+  var secScore=secEntry?secEntry[1]:0;
+  if(_hasData&&secKey&&AX[secKey]&&secScore>0&&secScore>=primScore*0.4){
+    var secName=AX[secKey].name.split(' ').pop();
+    secEl.innerHTML='with a <span class="r-secondary-badge" style="color:'+AX[secKey].color+';border-color:'+AX[secKey].color+'33;">'+secName+' UNDERCURRENT</span>';
+    secEl.style.display='';
+  } else {
+    secEl.style.display='none';
+  }
 
   document.getElementById('rTagline').textContent=A.tagline;
 
-  // traits
-  var trHtml=Object.entries(A.traits).map(function(t){
-    return '<div class="tr">'+
-      '<div class="tr-lbl">'+esc(t[0])+'</div>'+
-      '<div class="tr-track"><div class="tr-fill" data-v="'+(t[1]/100)+'" style="background:'+A.color+'"></div></div>'+
-      '<div class="tr-val" style="color:'+A.color+'">'+t[1]+'</div>'+
-    '</div>';
+  /* trait bars */
+  document.getElementById('rTraits').innerHTML=Object.entries(A.traits).map(function(t){
+    return '<div class="tr"><div class="tr-lbl">'+esc(t[0])+'</div><div class="tr-track"><div class="tr-fill" data-v="'+(t[1]/100)+'" style="background:'+A.color+'"></div></div><div class="tr-val" style="color:'+A.color+'">'+t[1]+'</div></div>';
   }).join('');
-  document.getElementById('rTraits').innerHTML=trHtml;
 
-  // beliefs
+  /* score breakdown — all 7 */
+  var svEl=document.getElementById('rScoreViz');
+  if(_hasData){
+    var maxSc=Math.max.apply(null,Object.values(_scores).concat(1));
+    var archLabels={oracle:'ORACLE',wonk:'WONK',hawk:'HAWK',native:'NATIVE',strategist:'STRAT',contrarian:'CONTRA',sharp:'SHARP'};
+    var archColors={oracle:AX.ORACLE.color,wonk:AX.WONK.color,hawk:AX.HAWK.color,native:AX.NATIVE.color,strategist:AX.STRATEGIST.color,contrarian:AX.CONTRARIAN.color,sharp:AX.SHARP.color};
+    svEl.innerHTML='<div class="r-score-title">Score breakdown</div>'+
+      sorted.map(function(entry,i){
+        var k=entry[0];var v=entry[1];var pct=maxSc>0?v/maxSc:0;var isPri=i===0;
+        return '<div class="r-score-row">'+
+          '<div class="r-score-lbl'+(isPri?' hi':'')+'">'+(archLabels[k]||k.toUpperCase())+'</div>'+
+          '<div class="r-score-track'+(isPri?' primary':'')+'">'+
+            '<div class="r-score-fill" data-v="'+pct+'" style="background:'+archColors[k]+(isPri?';box-shadow:0 0 6px '+archColors[k]+'66':'')+'"></div>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    svEl.style.display='';
+  } else {
+    svEl.style.display='none';
+  }
+
+  /* beliefs */
   document.getElementById('rBeliefs').innerHTML=
     '<div class="r-beliefs-title">You believe:</div>'+
-    (A.beliefs||[]).map(function(b){
-      return '<div class="r-belief"><div class="r-belief-dot"></div><span>'+esc(b)+'</span></div>';
-    }).join('');
+    (A.beliefs||[]).map(function(b){return '<div class="r-belief"><div class="r-belief-dot"></div><span>'+esc(b)+'</span></div>';}).join('');
   document.getElementById('rBeliefs').style.setProperty('--arch-color',A.color);
 
   document.getElementById('rSocial').innerHTML='<strong>'+A.rarity+' of traders</strong> share your archetype.';
@@ -816,18 +814,28 @@ function showResult(){
   show('sr');
   document.getElementById('sr').scrollTop=0;
 
-  // animate trait bars staggered
+  /* stagger trait bars */
   setTimeout(function(){
-    var fills=document.querySelectorAll('.tr-fill');
-    fills.forEach(function(el,i){
+    document.querySelectorAll('.tr-fill').forEach(function(el,i){
       setTimeout(function(){el.style.transform='scaleX('+el.getAttribute('data-v')+')';},i*100);
     });
   },700);
 
-  // save
+  /* stagger score bars */
+  if(_hasData){
+    setTimeout(function(){
+      document.querySelectorAll('.r-score-fill').forEach(function(el,i){
+        setTimeout(function(){el.style.transform='scaleX('+el.getAttribute('data-v')+')';},i*70);
+      });
+    },1200);
+  }
+
+  /* save */
   localStorage.setItem('hfx_archetype',JSON.stringify({key:key,color:A.color,name:A.name}));
-  // persist to profile if authed
-  try{var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');if(tok){fetch('/api/user/archetype',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({archetype:A.name,archetype_color:A.color,archetype_rarity:A.rarity})}).catch(function(){});}}catch(_){}
+  try{
+    var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');
+    if(tok){fetch('/api/user/archetype',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({archetype:A.name,archetype_color:A.color,archetype_rarity:A.rarity})}).catch(function(){});}
+  }catch(_){}
 
   fetchMarkets(A);
 }
@@ -836,12 +844,13 @@ function showResult(){
    MARKET MATCHING
 ══════════════════════════════════════════════════════ */
 function scoreM(m,arch){
-  var q=(m.question||m.title||'').toLowerCase();
+  var q=(m.question||m.title||m.market_question||'').toLowerCase();
   var c=(m.category||'').toLowerCase();
   var sc=0;
-  (arch.keywords||[]).forEach(function(kw){if(q.indexOf(kw)!==-1||c.indexOf(kw)!==-1) sc+=kw.length>5?4:2;});
+  (arch.keywords||[]).forEach(function(kw){if(q.indexOf(kw)!==-1||c.indexOf(kw)!==-1) sc+=kw.length>5?5:2;});
   sc+=Math.min(16,(m.edge_score||0)/5);
-  if((m.whale_count||0)>2) sc+=4;
+  if((m.whale_count||0)>2) sc+=5;
+  if((m.volume_24h_usd||m.volume_24hr||0)>100000) sc+=2;
   return sc;
 }
 function fmtVol(n){if(!n||n<=0)return null;if(n>=1e6)return'$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return'$'+Math.round(n/1e3)+'K';return'$'+Math.round(n);}
@@ -861,11 +870,16 @@ async function fetchMarkets(arch){
       var yp=m.yes_price!=null?Math.round(m.yes_price*100):(m.yes_ask!=null?Math.round(m.yes_ask*100):null);
       var np=yp!=null?100-yp:null;
       var href=m.slug?'/market/'+m.slug:'#';
-      var vol=fmtVol(m.volume||m.volume_24h);
+      var vol=fmtVol(m.volume||m.volume_24h||m.volume_24h_usd);
       var cat=(m.category||'MARKET').toUpperCase().slice(0,12);
+      var es=m.edge_score?Math.round(m.edge_score):null;
       return '<a class="mcard" href="'+esc(href)+'" style="--arch-color:'+arch.color+'">'+
-        '<span class="mcard-cat" style="background:'+arch.color+'18;color:'+arch.color+';border:1px solid '+arch.color+'30;">'+esc(cat)+'</span>'+
-        '<div class="mcard-q">'+esc((m.question||m.title||'').slice(0,92))+'</div>'+
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:9px;">'+
+          '<span class="mcard-cat" style="background:'+arch.color+'18;color:'+arch.color+';border:1px solid '+arch.color+'30;margin-bottom:0;">'+esc(cat)+'</span>'+
+          (es?'<span class="mcard-edge" style="background:rgba(255,255,255,.06);color:rgba(240,239,250,.45);">⚡'+es+'</span>':'')+
+          ((m.whale_count&&m.whale_count>0)?'<span class="mcard-edge" style="background:rgba(255,255,255,.06);color:rgba(240,239,250,.35);">'+m.whale_count+'w</span>':'')+
+        '</div>'+
+        '<div class="mcard-q">'+esc((m.question||m.title||m.market_question||'').slice(0,92))+'</div>'+
         '<div class="mcard-foot">'+
           (yp!=null?'<span class="yes">YES&nbsp;'+yp+'¢</span><span class="no">NO&nbsp;'+np+'¢</span>':'')+
           (vol?'<span class="mcard-vol">'+vol+'</span>':'')+
@@ -887,7 +901,7 @@ function shareIt(){
 }
 function redo(){
   _scores={oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
-  _answers=[];_qIdx=0;_arch=null;_busy=false;
+  _answers=[];_qIdx=0;_arch=null;_busy=false;_hasData=false;
   document.getElementById('aura').style.background='';
   document.getElementById('constellation').innerHTML='';
   document.getElementById('mktG').innerHTML='<div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;"><div style="width:24px;height:24px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--arch-color,#c9920d);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;"></div>Matching markets to your archetype…</div>';
