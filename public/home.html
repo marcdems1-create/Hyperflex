@@ -454,9 +454,63 @@ footer{
   </div>
 </div>
 
+<!-- ── LIVE ALPHA TAPE ── -->
+<div id="alphaTape" style="border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04);background:rgba(0,0,0,.25);overflow:hidden;position:relative;height:34px;display:flex;align-items:center;">
+  <div style="flex-shrink:0;padding:0 14px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.18em;color:#c9920d;text-transform:uppercase;border-right:1px solid rgba(255,255,255,.06);height:100%;display:flex;align-items:center;gap:7px;white-space:nowrap;z-index:1;background:rgba(14,14,21,.95);">
+    <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#00e68a;animation:pulse 1.8s infinite;flex-shrink:0;"></span>LIVE
+  </div>
+  <div style="overflow:hidden;flex:1;position:relative;">
+    <div id="tapeTrack" style="display:flex;gap:0;white-space:nowrap;animation:tapeScroll 45s linear infinite;">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.3);padding:0 24px;">Fetching live activity...</span>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes tapeScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+#tapeTrack:hover{animation-play-state:paused}
+.tape-evt{display:inline-flex;align-items:center;gap:7px;padding:0 20px;border-right:1px solid rgba(255,255,255,.05);font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.55);white-space:nowrap;cursor:pointer;text-decoration:none;transition:color .12s;}
+.tape-evt:hover{color:#f0f0f5;}
+.tape-side-yes{color:#00e68a;font-weight:700;}
+.tape-side-no{color:#ff4d6a;font-weight:700;}
+.tape-amt{font-weight:700;color:#c9920d;}
+.tape-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+</style>
+<script>
+(function(){
+  function fmtAmt(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n||0);}
+  function loadTape(){
+    fetch('/api/whale-stream/recent?limit=20').then(function(r){return r.json();}).then(function(d){
+      var events = d.events||[];
+      if(!events.length) return;
+      var html = events.map(function(e){
+        var side = (e.side||'YES').toUpperCase();
+        var cls  = side==='YES'?'tape-side-yes':'tape-side-no';
+        var trader = (e.trader_name||'Whale').replace(/</g,'&lt;').slice(0,18);
+        var mkt = (e.question||'').replace(/</g,'&lt;').slice(0,55);
+        var slug = e.slug||'';
+        var href = slug?'/market/'+slug:'#';
+        return '<a class="tape-evt" href="'+href+'">'
+          +'<span class="tape-dot" style="background:'+(side==='YES'?'#00e68a':'#ff4d6a')+'"></span>'
+          +'<span class="tape-amt">'+fmtAmt(e.size||0)+'</span>'
+          +'<span class="'+cls+'">'+side+'</span>'
+          +'<span>'+trader+'</span>'
+          +'<span style="color:rgba(240,240,245,.28)">→</span>'
+          +'<span>'+mkt+'</span>'
+        +'</a>';
+      }).join('');
+      // Double for seamless loop
+      var track = document.getElementById('tapeTrack');
+      if(track){ track.innerHTML = html+html; var w=track.scrollWidth/2; var dur=Math.max(20,w/60); track.style.animationDuration=dur+'s'; }
+    }).catch(function(){});
+  }
+  loadTape();
+  setInterval(loadTape, 45000);
+})();
+</script>
+
 <!-- ── QUIZ BANNER ── -->
-<div style="max-width:1400px;margin:0 auto 0;padding:24px 20px 0;">
-  <a href="/quiz" style="display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,rgba(201,146,13,.08) 0%,rgba(255,107,53,.06) 50%,rgba(168,85,247,.06) 100%);border:1px solid rgba(201,146,13,.18);border-radius:14px;padding:20px 24px;text-decoration:none;color:inherit;transition:all .18s;overflow:hidden;position:relative;" onmouseover="this.style.borderColor='rgba(201,146,13,.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(201,146,13,.18)';this.style.transform=''">
+<div style="max-width:1400px;margin:0 auto 0;padding:24px 20px 0;" id="quizBannerWrap">
+  <a href="/quiz" id="quizBanner" style="display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,rgba(201,146,13,.08) 0%,rgba(255,107,53,.06) 50%,rgba(168,85,247,.06) 100%);border:1px solid rgba(201,146,13,.18);border-radius:14px;padding:20px 24px;text-decoration:none;color:inherit;transition:all .18s;overflow:hidden;position:relative;" onmouseover="this.style.borderColor='rgba(201,146,13,.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(201,146,13,.18)';this.style.transform=''">
     <div style="font-size:32px;flex-shrink:0;">⚡</div>
     <div style="flex:1;min-width:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(201,146,13,.7);margin-bottom:5px;">New · 60 seconds</div>
@@ -466,6 +520,30 @@ footer{
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#c9920d;flex-shrink:0;letter-spacing:.06em;">Find my edge →</div>
   </a>
 </div>
+<script>
+// Personalize quiz banner for returning users
+(function(){
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem('hfx_archetype')); } catch(e){}
+  if (!saved||!saved.tag) return;
+  var color = saved.color||'#c9920d';
+  var banner = document.getElementById('quizBanner');
+  if (!banner) return;
+  banner.style.background = 'linear-gradient(135deg,'+color+'0f,'+color+'07,transparent)';
+  banner.style.borderColor = color+'2a';
+  banner.onmouseover = function(){ this.style.borderColor=color+'55';this.style.transform='translateY(-1px)'; };
+  banner.onmouseout  = function(){ this.style.borderColor=color+'2a';this.style.transform=''; };
+  banner.innerHTML = [
+    '<div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:'+color+'18;border:1px solid '+color+'44;display:flex;align-items:center;justify-content:center;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:800;color:'+color+';">◆</div>',
+    '<div style="flex:1;min-width:0;">',
+      '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:'+color+'99;margin-bottom:5px;">Your Archetype · '+saved.rarity+'</div>',
+      '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em;color:#f0f0f5;margin-bottom:3px;"><span style="color:'+color+'">'+saved.tag.toUpperCase()+'</span></div>',
+      '<div style="font-size:13px;color:rgba(240,240,245,.45);">'+(saved.sub||'Your matched markets are waiting')+'</div>',
+    '</div>',
+    '<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;color:'+color+';flex-shrink:0;letter-spacing:.06em;">View edge →</div>',
+  ].join('');
+})();
+</script>
 
 <!-- ── ROWS ── -->
 <div class="rows-wrap" id="rowsWrap">
@@ -1054,5 +1132,95 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
 })();
 </script>
 <script src="/hfx-engage.js" defer></script>
+
+<!-- ── ARCHETYPE PERSONALIZATION ── -->
+<script>
+(function() {
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem('hfx_archetype')); } catch(e) {}
+  if (!saved || !saved.tag) return;
+
+  var color = saved.color || '#c9920d';
+  var tag = saved.tag;
+
+  // Inject section before rowsWrap
+  var wrap = document.getElementById('rowsWrap');
+  if (!wrap) return;
+
+  var section = document.createElement('div');
+  section.id = 'archetypeRow';
+  section.style.cssText = 'margin-bottom:8px;';
+  section.innerHTML = [
+    '<div class="row-section" style="border-left:2px solid ' + color + ';padding-left:12px;">',
+      '<div class="row-head">',
+        '<span class="row-title" style="color:' + color + '">For ' + tag.toUpperCase() + '</span>',
+        '<span class="row-tag" style="background:' + color + '14;color:' + color + ';border:1px solid ' + color + '33;">YOUR EDGE</span>',
+        '<a class="row-see-all" href="/quiz" style="color:' + color + '88;">Retake quiz →</a>',
+      '</div>',
+      '<div class="row-wrap">',
+        '<button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>',
+        '<div class="row-scroll" id="rowArch">',
+          '<div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>',
+        '</div>',
+        '<button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>',
+      '</div>',
+    '</div>',
+  ].join('');
+  wrap.insertBefore(section, wrap.firstChild);
+
+  // Category map — mirrors quiz.js AX definitions
+  var catMap = {
+    'the contrarian':  ['politics','economics','crypto','policy'],
+    'the sharp':       ['crypto','finance','economics','sports'],
+    'the oracle':      ['politics','economics','policy','world'],
+    'the catalyst':    ['crypto','ai','tech','science'],
+    'the handicapper': ['sports','esports','entertainment'],
+    'the wonk':        ['politics','policy','regulation'],
+    'the strategist':  ['economics','finance','macro','rates'],
+    'the native':      ['crypto','defi','nft','web3'],
+    'macro hawk':      ['economics','fed','rates','macro','bond'],
+  };
+  var arcKey = tag.toLowerCase();
+  var cats = catMap[arcKey] || ['crypto','economics','politics'];
+
+  // Fetch markets and score them
+  fetch('/api/screener?limit=80').then(function(r){ return r.json(); }).then(function(data) {
+    var mkts = Array.isArray(data) ? data : (data.markets || data.data || []);
+    var scored = mkts.filter(function(m) {
+      var q = (m.question || '').toLowerCase();
+      var c = (m.category || '').toLowerCase();
+      return cats.some(function(cat) { return c.indexOf(cat) !== -1 || q.indexOf(cat) !== -1; });
+    }).sort(function(a, b) {
+      // Prefer high-edge, high-whale markets
+      var sa = (a.edge_score || 0) + (a.whale_count || 0) * 4;
+      var sb = (b.edge_score || 0) + (b.whale_count || 0) * 4;
+      return sb - sa;
+    }).slice(0, 12);
+
+    if (!scored.length) scored = mkts.slice(0, 8);
+
+    var el = document.getElementById('rowArch');
+    if (!el) return;
+    el.innerHTML = scored.map(function(m) {
+      // Use existing buildCard if available, else minimal card
+      if (typeof buildCard === 'function') return buildCard(m, null, 'mcard-pill-arch', 'YOUR EDGE');
+      var yp = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      var slug = m.slug || '';
+      var vol = m.volume24hr || m.volume || 0;
+      var volStr = vol >= 1e6 ? '$'+(vol/1e6).toFixed(1)+'M' : vol >= 1e3 ? '$'+Math.round(vol/1e3)+'K' : '';
+      return '<a href="/market/'+slug+'" style="display:flex;flex-direction:column;justify-content:space-between;min-width:200px;max-width:220px;height:140px;background:#111118;border:1px solid '+color+'33;border-radius:10px;padding:12px;text-decoration:none;color:#f0f0f5;flex-shrink:0;transition:border-color .15s;" onmouseover="this.style.borderColor=\''+color+'88\'" onmouseout="this.style.borderColor=\''+color+'33\'">'
+        +'<div style="font-size:12px;line-height:1.4;color:#e8e6f0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">'+(m.question||'').slice(0,100)+'</div>'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">'
+          +(yp!=null?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:'+color+'">'+yp+'¢</span>':'')
+          +(m.edge_score?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:'+color+'88;">⚡'+m.edge_score+'</span>':'')
+        +'</div>'
+      +'</a>';
+    }).join('');
+  }).catch(function() {
+    var el = document.getElementById('rowArch');
+    if (el) el.innerHTML = '<div style="padding:20px;color:rgba(240,240,245,.3);font-size:12px;">Couldn\'t load markets.</div>';
+  });
+})();
+</script>
 </body>
 </html>

@@ -1,0 +1,50 @@
+name: Boot check
+on: [push]
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Syntax check server.js
+        run: node --check server.js
+
+      - name: Verify server starts and /health responds
+        timeout-minutes: 2
+        run: |
+          PORT=3099 node server.js &
+          SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+
+          # Wait up to 20s for the server to bind
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3099/health > /dev/null 2>&1; then
+              echo "Server up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3099/health)
+          kill $SERVER_PID 2>/dev/null || true
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "ERROR: /health returned HTTP $HTTP_STATUS (expected 200)"
+            exit 1
+          fi
+          echo "Boot check passed — /health: $HTTP_STATUS"
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://fake:fake@localhost/fake
+          JWT_SECRET: test-secret-at-least-32-chars-here-xx
+          ADMIN_SECRET: test-admin-secret
+          RESEND_API_KEY: re_fake_key
+          ANTHROPIC_API_KEY: sk-ant-fake
