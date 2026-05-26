@@ -844,6 +844,15 @@ footer{
     </div>
   </div>
 
+  <!-- WHALE TICKER — live stream of last 30 min whale activity -->
+  <div id="whaleTicker" style="display:none;margin-bottom:16px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--green);">● LIVE</span>
+      <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:rgba(240,240,245,.5);">Whale activity</span>
+    </div>
+    <div id="whaleTickerInner" style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;"></div>
+  </div>
+
   <!-- WHALE MOVES -->
   <div class="row-section">
     <div class="row-head">
@@ -1398,6 +1407,39 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     }).catch(function(){});
   }, 700);
 
+  /* ── WHALE TICKER — live recent whale activity (last 30 min) ── */
+  (function loadWhaleTicker() {
+    fetch('/api/whale-stream/recent?limit=12')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        var events = (d && d.events) || [];
+        var cutoff = Date.now() - 30 * 60 * 1000; // last 30 min
+        var recent = events.filter(function(e){ return e.ts && e.ts > cutoff; });
+        if (recent.length < 2) return;
+        var ticker = document.getElementById('whaleTicker');
+        var inner = document.getElementById('whaleTickerInner');
+        if (!ticker || !inner) return;
+        inner.innerHTML = recent.slice(0, 8).map(function(e) {
+          var actionColors = { opened:'#00e68a', closed:'#ff4d6a', increased:'#00e68a', decreased:'rgba(240,240,245,.4)' };
+          var actionColor = actionColors[e.action] || '#c9920d';
+          var actionVerb = { opened:'opened', closed:'closed', increased:'added to', decreased:'trimmed' }[e.action] || e.action;
+          var minAgo = Math.round((Date.now() - e.ts) / 60000);
+          var timeStr = minAgo < 2 ? 'just now' : minAgo + 'min ago';
+          var marketHref = e.slug ? '/market/' + e.slug : '#';
+          var q = (e.question || '').slice(0, 50);
+          return '<a href="' + marketHref + '" style="flex-shrink:0;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.15);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;text-decoration:none;min-width:200px;max-width:200px;transition:border-color .15s;" onmouseover="this.style.borderColor=\'rgba(201,146,13,.35)\'" onmouseout="this.style.borderColor=\'rgba(201,146,13,.15)\'">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:rgba(240,240,245,.4);">#' + (e.trader_rank || '?') + '</span>'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">' + timeStr + '</span>'
+            + '</div>'
+            + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:' + actionColor + ';">' + actionVerb + ' ' + (e.size_display || '') + '</div>'
+            + '<div style="font-size:11px;color:rgba(240,240,245,.65);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(q) + '</div>'
+          + '</a>';
+        }).join('');
+        ticker.style.display = '';
+      }).catch(function(){});
+  })();
+
   /* ── INFLUENCER TAKES — external voices from X/Reddit ── */
   setTimeout(function(){
     fetch('/api/influencer-feed?limit=8')
@@ -1692,6 +1734,13 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
 })();
 </script>
 <script src="/hfx-engage.js" defer></script>
+<script>
+// Fire resolved-takes check on home page so returning users see win/loss
+// celebration immediately when they open the app (not just on /feed).
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.HFX && window.HFX.checkResolvedTakes) window.HFX.checkResolvedTakes();
+});
+</script>
 
 <!-- ── ARCHETYPE PERSONALIZATION ── -->
 <script>
