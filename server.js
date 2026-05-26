@@ -14417,6 +14417,9 @@ app.get('/api/member/:userId', async (req, res) => {
         whale_pnl:    userData.whale_pnl != null ? parseFloat(userData.whale_pnl) : null,
         polymarket_address: userData.polymarket_address || null,
         wallet_verified: userData.wallet_verified || false,
+        archetype:        userData.archetype || null,
+        archetype_color:  userData.archetype_color || null,
+        archetype_rarity: userData.archetype_rarity || null,
       },
       stats: {
         total_predictions:  positions.length,
@@ -28180,6 +28183,34 @@ app.put('/api/user/profile', requireAuth, async (req, res) => {
       if (error) return res.status(500).json({ error: error.message });
     }
     res.json({ ok: true, display_name: name, bio: bioText });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/user/archetype — save quiz result to user profile
+app.put('/api/user/archetype', requireAuth, async (req, res) => {
+  try {
+    const { archetype, archetype_color, archetype_rarity } = req.body || {};
+    if (!archetype || !archetype.trim()) return res.status(400).json({ error: 'archetype required' });
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS archetype TEXT').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS archetype_color TEXT').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS archetype_rarity TEXT').catch(() => {});
+    await dbQuery(
+      'UPDATE users SET archetype = $1, archetype_color = $2, archetype_rarity = $3 WHERE id = $4',
+      [archetype.trim().slice(0, 40), (archetype_color || '').slice(0, 20), (archetype_rarity || '').slice(0, 20), req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/user/archetype — fetch own archetype
+app.get('/api/user/archetype', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT archetype, archetype_color, archetype_rarity FROM users WHERE id = $1', [req.user.id]);
+    res.json(rows[0] || {});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

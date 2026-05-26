@@ -304,6 +304,7 @@ async function load() {
           '<div class="passport-name">' + (u.display_name || 'Anonymous') + '</div>' +
           (u.username ? '<div class="passport-handle">@' + u.username + '</div>' : '') +
           (u.bio ? '<div class="passport-bio">' + u.bio.replace(/</g,'&lt;') + '</div>' : '') +
+          (u.archetype ? '<div style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid ' + (u.archetype_color||'#c9920d') + '55;background:' + (u.archetype_color||'#c9920d') + '12;color:' + (u.archetype_color||'#c9920d') + '">◆ ' + u.archetype.replace(/</g,'&lt;') + '</div>' : '') +
         '</div>' +
       '</div>' +
 

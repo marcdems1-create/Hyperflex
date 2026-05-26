@@ -695,6 +695,8 @@ window.addEventListener('resize', function() {
   c.width = window.innerWidth; c.height = window.innerHeight;
 });
 
+document.addEventListener('DOMContentLoaded', function() { checkExistingArchetype(); });
+
 /* ══════════════════════════════════════════════════════════════════
    UTILS
 ══════════════════════════════════════════════════════════════════ */
@@ -726,6 +728,28 @@ function fmtVol(n) {
 /* ══════════════════════════════════════════════════════════════════
    QUIZ FLOW
 ══════════════════════════════════════════════════════════════════ */
+function checkExistingArchetype() {
+  var saved = localStorage.getItem('hfx_archetype');
+  if (!saved) return;
+  try {
+    var arc = JSON.parse(saved);
+    if (!arc.tag) return;
+    // Show a returning chip on the intro screen
+    var chip = document.createElement('div');
+    chip.style.cssText = 'position:absolute;top:22px;right:28px;background:' + (arc.color||'#c9920d') + '18;border:1px solid ' + (arc.color||'#c9920d') + '55;border-radius:20px;padding:7px 16px;font-family:var(--mono);font-size:11px;font-weight:600;color:' + (arc.color||'#c9920d') + ';cursor:pointer;';
+    chip.title = 'Your saved archetype';
+    chip.innerHTML = '◆ ' + arc.tag.toUpperCase();
+    chip.onclick = function() {
+      // Quick-show result for returning user
+      for (var k in AX) {
+        if (AX[k].tag === arc.tag) { _arch = AX[k]; break; }
+      }
+      if (_arch) { document.getElementById('particles').style.opacity='1'; initParticles(); showResult(); }
+    };
+    document.getElementById('si').appendChild(chip);
+  } catch(e) {}
+}
+
 function startQuiz() {
   _s = {contra:0,data:0,domain:0,timing:0,sports:0,politics:0,geo:0,crypto:0,finance:0};
   _ans = []; _qIdx = 0; _arch = null; _busy = false;
@@ -877,8 +901,25 @@ function showResult() {
     });
   }, 500);
 
+  // Persist archetype to profile if logged in
+  saveArchetype(A);
+
   // Fetch markets
   fetchMarkets(A);
+}
+
+async function saveArchetype(A) {
+  try {
+    await fetch('/api/user/archetype', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ archetype: A.tag, archetype_color: A.color, archetype_rarity: A.rarity })
+    });
+    // Store locally too
+    localStorage.setItem('hfx_archetype', JSON.stringify({ tag: A.tag, color: A.color, rarity: A.rarity, sub: A.sub }));
+  } catch(e) { /* not logged in — still saved locally */ }
+  // Save locally regardless
+  localStorage.setItem('hfx_archetype', JSON.stringify({ tag: A.tag, color: A.color, rarity: A.rarity, sub: A.sub }));
 }
 
 /* ══════════════════════════════════════════════════════════════════

@@ -619,4 +619,83 @@
     } catch (e) {}
   }, 2500);
 
+  // ── Archetype nav chip — shows saved archetype in nav for identity reinforcement
+  setTimeout(function () {
+    var saved = localStorage.getItem('hfx_archetype');
+    if (!saved) return;
+    var nav = document.querySelector('nav, .nav, #nav, header');
+    if (!nav || nav.querySelector('.hfx-arch-chip')) return;
+    try {
+      var arc = JSON.parse(saved);
+      if (!arc || !arc.tag) return;
+      var chip = document.createElement('a');
+      chip.href = '/quiz';
+      chip.className = 'hfx-arch-chip';
+      chip.title = 'Your prediction archetype — ' + arc.tag;
+      chip.style.cssText = [
+        'font-family:var(--mono,"JetBrains Mono",monospace)',
+        'font-size:10px', 'font-weight:700', 'letter-spacing:.12em',
+        'text-transform:uppercase',
+        'background:' + (arc.color || '#c9920d') + '14',
+        'border:1px solid ' + (arc.color || '#c9920d') + '44',
+        'color:' + (arc.color || '#c9920d'),
+        'border-radius:100px', 'padding:4px 10px',
+        'text-decoration:none', 'cursor:pointer',
+        'display:inline-flex', 'align-items:center', 'gap:5px',
+      ].join(';');
+      chip.innerHTML = '◆ ' + arc.tag.toUpperCase().slice(0, 16);
+      var right = nav.querySelector('.nav-right');
+      if (right) right.insertBefore(chip, right.firstChild);
+      else nav.appendChild(chip);
+    } catch(e) {}
+  }, 3200);
+
+  // ── Archetype market alert — if user has saved archetype and screener
+  //    has 3+ matching whale markets, fire a toast nudging them to the feed.
+  setTimeout(function () {
+    var saved = localStorage.getItem('hfx_archetype');
+    var alerted = sessionStorage.getItem('hfx_arch_alerted');
+    if (!saved || alerted) return;
+    try {
+      var arc = JSON.parse(saved);
+      if (!arc || !arc.tag) return;
+      fetch('/api/screener?limit=60').then(function(r){ return r.json(); }).then(function(data) {
+        var mkts = Array.isArray(data) ? data : (data.markets || data.data || []);
+        var matches = mkts.filter(function(m) {
+          if (!m.whale_count || m.whale_count < 2) return false;
+          var q = (m.question || '').toLowerCase();
+          var c = (m.category || '').toLowerCase();
+          var kws = (arc.tag || '').toLowerCase().split(/\s+/);
+          // rough match by category or keywords embedded in archetype name
+          var catMap = {
+            'contrarian': ['politics','economics','crypto'],
+            'sharp': ['crypto','finance','economics'],
+            'oracle': ['politics','economics'],
+            'catalyst': ['crypto','ai','tech'],
+            'handicapper': ['sports','esports'],
+            'wonk': ['politics','policy'],
+            'strategist': ['economics','finance','macro'],
+            'native': ['crypto','defi','nft'],
+            'macro': ['economics','fed','rates','macro'],
+          };
+          var arcKey = arc.tag.toLowerCase().split(' ')[0];
+          var relevantCats = catMap[arcKey] || [];
+          return relevantCats.some(function(rc) { return c.indexOf(rc) !== -1 || q.indexOf(rc) !== -1; });
+        });
+        if (matches.length >= 2) {
+          sessionStorage.setItem('hfx_arch_alerted', '1');
+          setTimeout(function() {
+            window.HFX && window.HFX.toast && window.HFX.toast({
+              type: 'info',
+              title: matches.length + ' ' + arc.tag + ' markets moving.',
+              body: 'Whales active in your archetype. Check the feed →',
+              duration: 7000,
+              href: '/feed',
+            });
+          }, 1500);
+        }
+      }).catch(function(){});
+    } catch(e) {}
+  }, 8000);
+
 })();

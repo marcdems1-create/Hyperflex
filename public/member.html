@@ -1051,6 +1051,7 @@ async function load() {
           <div class="hero-badges" style="margin-top:6px">
             ${tierBadge(stats.win_rate, stats.streak)}
             <span id="sharpBadge" class="badge badge-oracle" style="display:none"></span>
+            ${user.archetype ? `<a href="/quiz" title="Prediction archetype — click to retake" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid ${user.archetype_color || '#c9920d'}55;background:${user.archetype_color || '#c9920d'}12;color:${user.archetype_color || '#c9920d'};text-decoration:none;cursor:pointer;" onmouseover="this.style.background='${user.archetype_color || '#c9920d'}22'" onmouseout="this.style.background='${user.archetype_color || '#c9920d'}12'">◆ ${user.archetype.replace(/</g,'&lt;')}</a>` : (isOwner ? `<a href="/quiz" style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);color:rgba(240,239,250,.35);text-decoration:none;">◇ Find archetype →</a>` : '')}
           </div>
         </div>
 
