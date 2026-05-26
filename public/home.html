@@ -812,6 +812,22 @@ footer{
 <!-- ── ROWS ── -->
 <div class="rows-wrap" id="rowsWrap">
 
+  <!-- FOLLOWING TAKES (logged-in users with follows only) -->
+  <div class="row-section" id="followingTakesSection" style="display:none">
+    <div class="row-head">
+      <span class="row-title">From Your Feed</span>
+      <span class="row-tag" style="background:rgba(77,159,255,.1);color:#4d9fff;border:1px solid rgba(77,159,255,.2);">FOLLOWING</span>
+      <a class="row-see-all" href="/feed">Full feed →</a>
+    </div>
+    <div class="row-wrap">
+      <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
+      <div class="row-scroll" id="rowFollowing">
+        <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      </div>
+      <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
   <!-- HOT RIGHT NOW -->
   <div class="row-section">
     <div class="row-head">
@@ -1268,6 +1284,45 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       document.getElementById('aiSignalsSection').style.display='';
     }).catch(function(){});
   }, 500);
+
+  /* Following takes — latest takes from people user follows */
+  setTimeout(function(){
+    var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+    if(!tok) return;
+    fetch('/api/takes/feed?mode=following&limit=8', {headers:{'Authorization':'Bearer '+tok}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        var takes=(d&&d.takes)||[];
+        if(takes.length < 1) return; // don't show if no follows
+        var rowEl=document.getElementById('rowFollowing');
+        if(!rowEl) return;
+        function timeAgo(ts){var diff=Date.now()-new Date(ts).getTime();var m=Math.round(diff/60000);return m<60?m+'m ago':Math.round(m/60)+'h ago';}
+        rowEl.innerHTML=takes.map(function(t){
+          var side=(t.side||'YES').toUpperCase();
+          var sideColor=side==='YES'?'#00e68a':'#ff4d6a';
+          var q=(t.question||'').slice(0,80);
+          var user=(t.display_name||t.username||'Predictor').slice(0,20);
+          var href=t.market_slug?'/market/'+t.market_slug:'#';
+          var userId=t.user_id||'';
+          var correct=t.is_correct;
+          var correctBadge=correct===true?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;background:rgba(0,230,138,.1);border:1px solid rgba(0,230,138,.25);color:#00e68a;margin-left:4px;">✓ CORRECT</span>':correct===false?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);color:#ff4d6a;margin-left:4px;">× WRONG</span>':'';
+          return '<a href="'+href+'" style="flex-shrink:0;width:220px;height:280px;background:#111118;border:1px solid rgba(77,159,255,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(77,159,255,.4)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(77,159,255,.15)\';this.style.transform=\'\'">'
+            +'<div style="display:flex;align-items:center;gap:6px;">'
+              +'<a href="/m/'+userId+'" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(77,159,255,.8);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">'+user+'</a>'
+              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.created_at)+'</span>'
+            +'</div>'
+            +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+correctBadge+'</div>'
+            +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
+            +(t.thesis?'<div style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+t.thesis.slice(0,80)+'</div>':'')
+            +'<div style="display:flex;gap:10px;margin-top:auto;">'
+              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
+              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
+            +'</div>'
+          +'</a>';
+        }).join('');
+        document.getElementById('followingTakesSection').style.display='';
+      }).catch(function(){});
+  }, 300);
 
   /* Just Resolved — graded community takes from last 24h */
   setTimeout(function(){
