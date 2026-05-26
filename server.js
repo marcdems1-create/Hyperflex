@@ -20043,6 +20043,13 @@ async function recomputeFlexScore(userId, opts) {
     if (!diag.errors) diag.errors = [];
   }
 
+  // Read current tier before any update so we can detect upgrades.
+  let previousTier = null;
+  try {
+    const prev = await dbQuery('SELECT flex_tier FROM users WHERE id = $1 LIMIT 1', [userId]).catch(() => []);
+    previousTier = (prev[0] && prev[0].flex_tier) || null;
+  } catch (_) {}
+
   // Phase 1: read + compute. Failure here means no score to write — but we
   // still stamp flex_computed_at so the user shows as "ran" downstream.
   let stats, result, tier;
@@ -20107,6 +20114,21 @@ async function recomputeFlexScore(userId, opts) {
       ]
     );
     if (diag) diag.update = { stage: 'full', rowCount: upd.rowCount };
+
+    // Tier upgrade notification (non-blocking)
+    const tierOrder = ['Unranked', 'Speculator', 'Solid', 'Sharp', 'Oracle'];
+    const prevIdx = tierOrder.indexOf(previousTier || 'Unranked');
+    const newIdx = tierOrder.indexOf(tier);
+    if (newIdx > prevIdx && previousTier && tier !== 'Unranked') {
+      pushNotification(
+        userId,
+        'tier_upgrade',
+        'Tier: ' + tier + '.',
+        'Track record now qualifies for the ' + tier + ' tier on HYPERFLEX.',
+        null, null
+      ).catch(() => {});
+    }
+
     return { ...result, tier, stats };
   } catch (e) {
     if (diag) diag.errors.push({ stage: 'full_update', message: e.message });
@@ -27997,15 +28019,57 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
       );
       scored++;
 
-      // Notify user if their take was correct
-      if (isCorrect && take.user_id) {
+      // Notify user — bell + async resolution email
+      if (take.user_id) {
+        const shortQ = (marketQuestion || '').substring(0, 60);
+        const notifTitle = isCorrect
+          ? 'Pick landed.'
+          : 'Pick resolved ' + upperOutcome + '.';
+        const notifBody = isCorrect
+          ? `${take.side} on "${shortQ}" — correct.`
+          : `${take.side} on "${shortQ}" — wrong.`;
         pushNotification(
           take.user_id,
-          'take_correct',
-          '🎯 Your take was right!',
-          `Your ${take.side} call on "${(marketQuestion || '').substring(0, 50)}" resolved ${upperOutcome}. Your track record just got stronger.`,
-          null, null
-        );
+          isCorrect ? 'take_correct' : 'take_incorrect',
+          notifTitle,
+          notifBody,
+          take.id, null
+        ).catch(() => {});
+
+        // Resolution email (correct only — wins get the inbox, losses get the weekly recap)
+        if (isCorrect) {
+          (async () => {
+            try {
+              const uRows = await dbQuery(
+                'SELECT email, display_name FROM users WHERE id = $1 AND email IS NOT NULL LIMIT 1',
+                [take.user_id]
+              ).catch(() => []);
+              if (!uRows.length || !uRows[0].email) return;
+              const displayName = uRows[0].display_name || 'there';
+              const shortQ60 = (marketQuestion || '').substring(0, 80);
+              const profileUrl = `https://hyperflex.network/m/${take.user_id}`;
+              await sendResendEmail({
+                to: uRows[0].email,
+                subject: 'Pick landed. ' + take.side + ' on "' + shortQ60.slice(0, 50) + (shortQ60.length > 50 ? '…' : '') + '"',
+                html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="background:#0e0e15;margin:0;padding:0;font-family:'Inter',system-ui,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;padding:40px 20px;">
+<tr><td>
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.14em;color:#00e68a;text-transform:uppercase;margin-bottom:24px;">HYPERFLEX</div>
+<h1 style="font-size:24px;font-weight:800;color:#f0f0f5;margin:0 0 8px;letter-spacing:-.02em;">Pick landed.</h1>
+<p style="font-size:15px;color:rgba(240,240,245,.7);margin:0 0 24px;line-height:1.5;">${take.side} on &ldquo;${shortQ60}&rdquo; resolved ${upperOutcome}.</p>
+<div style="background:rgba(0,230,138,.08);border:1px solid rgba(0,230,138,.2);border-radius:8px;padding:20px;margin-bottom:28px;">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#00e68a;letter-spacing:.1em;margin-bottom:4px;">✓ CORRECT</div>
+<div style="font-size:14px;color:rgba(240,240,245,.6);line-height:1.5;">${shortQ60}</div>
+</div>
+<a href="${profileUrl}" style="display:inline-block;background:#f0f0f5;color:#0e0e15;font-weight:700;font-size:13px;padding:12px 24px;border-radius:6px;text-decoration:none;letter-spacing:.01em;margin-bottom:32px;">View track record →</a>
+<p style="font-size:12px;color:rgba(240,240,245,.25);margin:0;">HYPERFLEX · <a href="https://hyperflex.network/unsubscribe?email=${encodeURIComponent(uRows[0].email)}" style="color:rgba(240,240,245,.25);">Unsubscribe</a></p>
+</td></tr></table></body></html>`,
+                text: `Pick landed.\n\n${take.side} on "${shortQ60}" resolved ${upperOutcome}.\n\nView your track record: ${profileUrl}\n\n—HYPERFLEX`
+              });
+            } catch (_) { /* non-blocking */ }
+          })();
+        }
       }
     }
     if (scored > 0) console.log(`[takes] Scored ${scored} takes for "${(marketQuestion || '').substring(0, 40)}" → ${upperOutcome}`);

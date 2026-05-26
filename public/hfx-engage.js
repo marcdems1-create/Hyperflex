@@ -400,7 +400,19 @@
         // Update last seen to newest
         localStorage.setItem(_rxLastSeenKey, fresh[0].id);
         // Surface first fresh reaction/agree notification as a toast
-        // New follower — highest priority (identity validation, peak social dopamine)
+        // Tier upgrade — identity milestone, very rare, show first
+        var tierNotif = fresh.find(function(n){ return n.type === 'tier_upgrade'; });
+        if (tierNotif) {
+          window.HFX.toast({
+            type: 'streak',
+            title: tierNotif.title || 'Tier upgraded.',
+            body: (tierNotif.body || 'Track record qualifies for a new tier.').slice(0, 80),
+            href: '/predictors',
+            duration: 10000
+          });
+          return;
+        }
+        // New follower — highest priority social dopamine
         var followerNotif = fresh.find(function(n){ return n.type === 'new_follower'; });
         if (followerNotif) {
           window.HFX.toast({
