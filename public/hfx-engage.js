@@ -371,27 +371,32 @@
   // On feed/profile load, check for freshly-resolved correct/incorrect takes
   // and fire the appropriate celebration or loss toast.
   window.HFX.checkResolvedTakes = function () {
-    var lastCheck = localStorage.getItem('hfx_last_resolve_check') || '1970-01-01';
-    fetch('/api/takes/feed?mode=foryou&limit=20').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-      var takes = (d && (d.takes || d)) || [];
-      if (!Array.isArray(takes)) return;
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+    if (!tok) return;
+    var lastCheck = localStorage.getItem('hfx_last_resolve_check') || new Date(Date.now() - 86400e3).toISOString();
+    fetch('/api/takes/mine/resolved?since=' + encodeURIComponent(lastCheck), {
+      headers: { 'Authorization': 'Bearer ' + tok }
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var takes = (d && d.takes) || [];
+      if (!takes.length) return;
       var newLastCheck = lastCheck;
+      var wins = [], losses = [];
       takes.forEach(function (t) {
-        if (!t.resolved_at) return;
-        if (t.resolved_at <= lastCheck) return;
+        if (!t.resolved_at || t.resolved_at <= lastCheck) return;
         if (t.resolved_at > newLastCheck) newLastCheck = t.resolved_at;
-        if (!t.is_my_take) return; // only own takes
-
-        if (t.is_correct === true) {
-          window.HFX.celebrate({ question: t.question || t.market_slug, units: t.roi_units });
-        } else if (t.is_correct === false) {
-          var closeness = t.entry_price != null && t.resolved_price != null
-            ? Math.round(Math.abs(t.entry_price - t.resolved_price) * 100)
-            : null;
-          window.HFX.showLoss({ question: t.question || t.market_slug, units: t.loss_units, closeness: closeness });
-        }
+        if (t.is_correct === true) wins.push(t);
+        else if (t.is_correct === false) losses.push(t);
       });
       if (newLastCheck > lastCheck) localStorage.setItem('hfx_last_resolve_check', newLastCheck);
+      // Surface most recent win first, then most recent loss
+      if (wins.length) {
+        var w = wins[0];
+        window.HFX.celebrate({ question: w.question || w.market_slug, units: w.roi_pct != null ? parseFloat(w.roi_pct).toFixed(1) : null });
+      }
+      if (losses.length) {
+        var l = losses[0];
+        window.HFX.showLoss({ question: l.question || l.market_slug, units: null, closeness: null });
+      }
     }).catch(function () {});
   };
 

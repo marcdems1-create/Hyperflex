@@ -20894,6 +20894,26 @@ app.get('/api/data/sharps/leaderboard', apiKeyAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/takes/mine/resolved — auth-gated, returns own takes that resolved
+// in the last 7d. Used by hfx-engage.js to surface win/loss cards on return visits.
+app.get('/api/takes/mine/resolved', requireAuth, async (req, res) => {
+  try {
+    const since = req.query.since || new Date(Date.now() - 7 * 86400e3).toISOString();
+    const rows = await dbQuery(
+      `SELECT id, market_slug, question, side, entry_price, resolved_at, is_correct,
+              ROUND((COALESCE(taker_amount,0) - COALESCE(maker_amount,0))::numeric / NULLIF(COALESCE(maker_amount,0),0) * 100, 1) AS roi_pct
+       FROM takes
+       WHERE user_id = $1 AND resolved_at IS NOT NULL AND resolved_at > $2
+         AND source = 'user'
+       ORDER BY resolved_at DESC LIMIT 20`,
+      [req.user.id, since]
+    );
+    res.json({ takes: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/takes/:id — single take by id (public, for permalink pages).
 // Accepts either raw UUID or the `utake_<uuid>` form the feed returns (see
 // the /api/activity/feed normaliser that prefixes IDs for namespacing).

@@ -696,6 +696,22 @@ footer{
     </div>
   </div>
 
+  <!-- AI SIGNALS — compact 3-card strip from signal agent -->
+  <div class="row-section" id="aiSignalsSection" style="display:none">
+    <div class="row-head">
+      <span class="row-title">AI Signals</span>
+      <span class="row-tag" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.25);">● LIVE</span>
+      <a class="row-see-all" href="/alpha-live" style="color:#a855f7;">See all →</a>
+    </div>
+    <div class="row-wrap">
+      <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
+      <div class="row-scroll" id="rowSignals">
+        <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      </div>
+      <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
   <!-- FEATURED (wide) -->
   <div class="row-section">
     <div class="row-head">
@@ -1057,6 +1073,37 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     if(rowsWrap) rowsWrap.insertBefore(section, rowsWrap.firstChild);
     setTimeout(function(){patchImages(document.getElementById('rowSoon'));},0);
   })();
+
+  /* AI signal cards — load from signal agent (non-blocking) */
+  setTimeout(function(){
+    fetch('/api/agent-signals').then(function(r){return r.ok?r.json():null;}).then(function(d){
+      var sigs = (d&&d.signals)||[];
+      if(!sigs.length) return;
+      var rowEl = document.getElementById('rowSignals');
+      if(!rowEl) return;
+      var top = sigs.slice(0,6);
+      var EDGE_COLORS = {9:'#00e68a',8:'#00e68a',7:'#4d9fff',6:'#4d9fff',5:'#f59e0b',4:'#f59e0b',3:'#ff4d6a'};
+      rowEl.innerHTML = top.map(function(sig){
+        var ec = EDGE_COLORS[Math.round(sig.edge_rating||5)]||'#a855f7';
+        var side = (sig.side||'YES').toUpperCase();
+        var sideColor = side==='YES'?'#00e68a':'#ff4d6a';
+        var mktUrl = sig.market_slug ? '/market/'+sig.market_slug : '/alpha-live';
+        var ageMin = sig.fired_at ? Math.round((Date.now()-new Date(sig.fired_at).getTime())/60000) : null;
+        var ageStr = ageMin!=null ? (ageMin<60?ageMin+'m ago':Math.round(ageMin/60)+'h ago') : '';
+        return '<a href="'+mktUrl+'" style="flex-shrink:0;width:220px;height:310px;background:#111118;border:1px solid rgba(168,85,247,.2);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.5)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.2)\';this.style.transform=\'\'">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;">'
+            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.18em;color:#a855f7;text-transform:uppercase;">AI SIGNAL</span>'
+            +(ageStr?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+ageStr+'</span>':'')
+          +'</div>'
+          +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+(sig.question||'').slice(0,120)+'</div>'
+          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:'+sideColor+';">'+side+' · Edge '+sig.edge_rating+'/10</div>'
+          +'<div style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+(sig.rationale||'').slice(0,90)+'</div>'
+          +'<div style="margin-top:auto;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#a855f7;">Trade this →</div>'
+        +'</a>';
+      }).join('');
+      document.getElementById('aiSignalsSection').style.display='';
+    }).catch(function(){});
+  }, 500);
 
   /* load AI summaries for visible cards (non-blocking, staggered) */
   setTimeout(function(){
