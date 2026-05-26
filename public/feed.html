@@ -3287,12 +3287,53 @@ function renderCard(p) {
       (p.id
         ? '<button onclick="feedShare(this)" data-q="' + esc((p.market_title||'').slice(0,80)) + '" data-pct="' + (Math.round(parseFloat(p.entry_price||0)*100)||'') + '" data-slug="' + esc(p.market_id||'') + '" title="Share on X" style="background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.4);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;">↗</button>'
         : '') +
-      (p.id ? '<a href="/takes/' + esc(p.id) + '" style="font-size:11px;color:var(--text-faint);margin-left:auto;display:inline-flex;align-items:center;gap:4px;text-decoration:none" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'" title="View replies">💬 ' + (p.comment_count || 0) + '</a>' : '') +
+      (p.id ? '<button onclick="toggleComments(this,\'' + esc(p.id) + '\')" data-take-id="' + esc(p.id) + '" style="background:none;border:none;font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-left:auto;padding:3px 6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:color .12s;" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text-faint)\'">↩ <span class="comment-count-' + esc(p.id) + '">' + (p.comment_count || 0) + '</span></button>' : '') +
       (p.id && p.market_id
-        ? '<button onclick="openChallenge(this)" data-slug="' + esc(p.market_id||'') + '" data-q="' + esc((p.market_title||'').slice(0,120)) + '" data-cid="' + esc(p.condition_id||'') + '" data-side="' + esc(p.outcome||'YES') + '" title="Challenge someone on this market" style="background:none;border:1px solid rgba(201,146,13,.2);color:rgba(201,146,13,.55);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;letter-spacing:.05em;">⚡ CHALLENGE</button>'
+        ? '<button onclick="openChallenge(this)" data-slug="' + esc(p.market_id||'') + '" data-q="' + esc((p.market_title||'').slice(0,120)) + '" data-cid="' + esc(p.condition_id||'') + '" data-side="' + esc(p.outcome||'YES') + '" title="Challenge someone on this market" style="background:none;border:1px solid rgba(201,146,13,.2);color:rgba(201,146,13,.55);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;transition:background .1s;letter-spacing:.05em;">CHALLENGE</button>'
         : '') +
     '</div>' +
+    (p.id ? '<div id="inline-comments-' + esc(p.id) + '" style="display:none;margin-top:10px;border-top:1px solid rgba(255,255,255,.06);padding-top:10px;"></div>' : '') +
   '</div>';
+}
+
+var _commentsOpen = {};
+function toggleComments(btn, takeId) {
+  var panel = document.getElementById('inline-comments-' + takeId);
+  if (!panel) { window.location.href = '/takes/' + takeId; return; }
+  if (_commentsOpen[takeId]) {
+    panel.style.display = 'none';
+    _commentsOpen[takeId] = false;
+    return;
+  }
+  _commentsOpen[takeId] = true;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);padding:4px 0;">Loading…</div>';
+  fetch('/api/takes/' + takeId + '/comments')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var comments = (d && d.comments) || [];
+      var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+      var replyLink = '<a href="/takes/' + takeId + '" style="font-family:var(--mono);font-size:10px;color:var(--cyan);display:block;margin-top:8px;">Stake a side to reply →</a>';
+      if (!comments.length) {
+        panel.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">No replies yet.</div>' + replyLink;
+        return;
+      }
+      var preview = comments.slice(-2);
+      panel.innerHTML = preview.map(function(c) {
+        var rxnColor = c.reaction === 'agree' ? 'var(--green)' : c.reaction === 'disagree' ? 'var(--red)' : 'var(--text-faint)';
+        var rxnArrow = c.reaction === 'agree' ? '↑' : c.reaction === 'disagree' ? '↓' : '';
+        return '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;">'
+          + '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + rxnColor + ';flex-shrink:0;margin-top:1px;">' + rxnArrow + '</span>'
+          + '<div>'
+            + '<span style="font-size:12px;font-weight:700;color:rgba(240,240,245,.7);">' + esc(c.display_name || 'Anonymous') + '</span>'
+            + '<span style="font-size:12px;color:rgba(240,240,245,.55);margin-left:8px;">' + esc((c.body || '').slice(0, 120)) + '</span>'
+          + '</div>'
+        + '</div>';
+      }).join('')
+      + (comments.length > 2 ? '<a href="/takes/' + takeId + '" style="font-family:var(--mono);font-size:10px;color:var(--text-faint);">' + comments.length + ' replies →</a>' : replyLink);
+    }).catch(function() {
+      panel.innerHTML = '<a href="/takes/' + takeId + '" style="font-family:var(--mono);font-size:10px;color:var(--cyan);">View thread →</a>';
+    });
 }
 
 /* ── CHALLENGE MODAL ── */

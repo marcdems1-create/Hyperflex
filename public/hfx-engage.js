@@ -459,6 +459,18 @@
           });
           return;
         }
+        // Check for reply to your take
+        var commentNotif = fresh.find(function(n){ return n.type === 'take_comment'; });
+        if (commentNotif) {
+          window.HFX.toast({
+            type: 'info',
+            title: commentNotif.title || 'Reply on your take.',
+            body: (commentNotif.body || '').slice(0, 80),
+            href: commentNotif.entity_id ? '/takes/' + commentNotif.entity_id : '/feed',
+            duration: 8000
+          });
+          return;
+        }
         var rxNotif = fresh.find(function(n){ return n.type === 'take_reaction' || n.type === 'agree' || n.type === 'reaction'; });
         if (!rxNotif) return;
         var body = rxNotif.body || rxNotif.title || '';

@@ -21172,6 +21172,25 @@ app.post('/api/takes/:id/comments', requireAuth, async (req, res) => {
       }
     } catch {}
 
+    // Notify the take author (non-blocking; skip if commenter IS the author)
+    (async () => {
+      try {
+        const takeRow = await dbQuery('SELECT user_id, question FROM takes WHERE id = $1 LIMIT 1', [takeId]).catch(() => []);
+        if (!takeRow.length) return;
+        const authorId = takeRow[0].user_id;
+        if (!authorId || authorId === req.userId) return;
+        const shortQ = (takeRow[0].question || '').slice(0, 80);
+        await pushNotification(
+          authorId,
+          'take_comment',
+          displayName + ' replied to your take.',
+          shortQ || 'Tap to see the reply.',
+          takeId,
+          null
+        );
+      } catch (_) { /* non-blocking */ }
+    })();
+
     res.json({ ok: true, comment: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

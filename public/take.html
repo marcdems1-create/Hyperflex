@@ -110,7 +110,7 @@ async function load() {
   try {
     var r = await fetch(API + '/api/takes/' + takeId);
     if (r.status === 404) {
-      page.innerHTML = '<div class="error-state"><div class="error-icon">🔍</div><div style="font-size:16px;font-weight:700">Take not found</div><div style="font-size:13px;color:var(--muted);margin-top:6px">This take may have been deleted.</div></div>';
+      page.innerHTML = '<div class="error-state"><div style="font-size:16px;font-weight:700">Take not found.</div><div style="font-size:13px;color:var(--muted);margin-top:6px">This take may have been deleted.</div></div>';
       return;
     }
     if (!r.ok) throw new Error('fetch failed');
@@ -121,7 +121,7 @@ async function load() {
     loadComments();
   } catch (e) {
     console.warn('[take-load]', e);
-    page.innerHTML = '<div class="error-state"><div class="error-icon">⚡</div><div style="font-size:16px;font-weight:700">Couldn\'t load</div><div style="font-size:13px;color:var(--muted);margin-top:6px">Please try again.</div></div>';
+    page.innerHTML = '<div class="error-state"><div style="font-size:16px;font-weight:700">Couldn\'t load.</div><div style="font-size:13px;color:var(--muted);margin-top:6px">Please try again.</div></div>';
   }
 }
 
@@ -155,16 +155,16 @@ function render() {
       (t.thesis ? '<div class="take-thesis">' + escHtml(t.thesis) + '</div>' : '') +
       '<div class="take-badges">' + entryTxt + correctBadge + '</div>' +
       '<div class="take-actions">' +
-        '<button class="agree" onclick="reactTo(\'agree\',this)">👍 <span id="agreeCount">' + (t.agree_count || 0) + '</span></button>' +
-        '<button class="disagree" onclick="reactTo(\'disagree\',this)">👎 <span id="disagreeCount">' + (t.disagree_count || 0) + '</span></button>' +
-        '<button onclick="shareTake()">🔗 Share</button>' +
+        '<button class="agree" onclick="reactTo(\'agree\',this)">↑ Agree <span id="agreeCount">' + (t.agree_count || 0) + '</span></button>' +
+        '<button class="disagree" onclick="reactTo(\'disagree\',this)">↓ Disagree <span id="disagreeCount">' + (t.disagree_count || 0) + '</span></button>' +
+        '<button onclick="shareTake()">↗ Share</button>' +
       '</div>' +
     '</article>' +
     '<section class="reply-wrap">' +
-      '<div class="reply-lbl">Reply — pick a side first</div>' +
+      '<div class="reply-lbl">Reply — stake a side first</div>' +
       '<div class="gate-row">' +
-        '<button class="gate-btn" data-reaction="agree" onclick="setReplyReaction(\'agree\')">👍 Agree</button>' +
-        '<button class="gate-btn" data-reaction="disagree" onclick="setReplyReaction(\'disagree\')">👎 Disagree</button>' +
+        '<button class="gate-btn" data-reaction="agree" onclick="setReplyReaction(\'agree\')">↑ Agree</button>' +
+        '<button class="gate-btn" data-reaction="disagree" onclick="setReplyReaction(\'disagree\')">↓ Disagree</button>' +
       '</div>' +
       '<textarea id="replyBody" class="reply-textarea" disabled placeholder="Pick a side to reply…" maxlength="500" oninput="updateReplyUi()"></textarea>' +
       '<div class="reply-foot">' +
@@ -172,7 +172,7 @@ function render() {
         '<button id="replySubmit" class="reply-submit" disabled onclick="submitReply()">Post reply</button>' +
       '</div>' +
     '</section>' +
-    '<div class="comments-title">💬 <span id="commentsHeading">Replies</span></div>' +
+    '<div class="comments-title"><span id="commentsHeading">Replies</span></div>' +
     '<div id="commentsList"><div class="loading" style="padding:20px">Loading replies…</div></div>';
 }
 
@@ -283,8 +283,8 @@ async function loadComments() {
     }
     list.innerHTML = comments.map(function(c) {
       var rxn = c.reaction === 'agree'
-        ? '<span class="side side-yes">👍 AGREE</span>'
-        : c.reaction === 'disagree' ? '<span class="side side-no">👎 DISAGREE</span>' : '';
+        ? '<span class="side side-yes">↑ AGREE</span>'
+        : c.reaction === 'disagree' ? '<span class="side side-no">↓ DISAGREE</span>' : '';
       var name = escHtml(c.display_name || 'Anonymous');
       var nameHtml = c.user_id
         ? '<a href="/m/' + c.user_id + '" class="comment-author">' + name + '</a>'
