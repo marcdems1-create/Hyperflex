@@ -20816,7 +20816,7 @@ app.get('/api/data/stats', async (req, res) => {
     const payload = { generated_at: new Date().toISOString() };
 
     if (q) {
-      const [snapCounts, walletCounts, lastBucket, marketCount] = await Promise.all([
+      const [snapCounts, walletCounts, lastBucket, marketCount, recentActivity] = await Promise.all([
         q(`SELECT COUNT(*)::int AS total,
              COUNT(*) FILTER (WHERE bucket_start > now() - interval '24 hours')::int AS last_24h,
              COUNT(DISTINCT market_slug)::int AS markets_covered
@@ -20826,6 +20826,11 @@ app.get('/api/data/stats', async (req, res) => {
            FROM wallet_scores`).catch(() => [{}]),
         q(`SELECT MAX(bucket_start) AS latest FROM sentiment_snapshots`).catch(() => [{}]),
         q(`SELECT COUNT(*)::int AS n FROM takes WHERE source='user'`).catch(() => [{}]),
+        q(`SELECT
+             COUNT(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS takes_last_hour,
+             COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS takes_last_24h,
+             COUNT(DISTINCT user_id) FILTER (WHERE created_at > now() - interval '24 hours')::int AS active_predictors_24h
+           FROM takes WHERE source='user'`).catch(() => [{}]),
       ]);
       payload.snapshots_total = snapCounts[0]?.total || 0;
       payload.snapshots_last_24h = snapCounts[0]?.last_24h || 0;
@@ -20834,6 +20839,9 @@ app.get('/api/data/stats', async (req, res) => {
       payload.sharp_wallets = walletCounts[0]?.sharps || 0;
       payload.latest_snapshot = lastBucket[0]?.latest || null;
       payload.user_takes = marketCount[0]?.n || 0;
+      payload.takes_last_hour = recentActivity[0]?.takes_last_hour || 0;
+      payload.takes_last_24h = recentActivity[0]?.takes_last_24h || 0;
+      payload.active_predictors_24h = recentActivity[0]?.active_predictors_24h || 0;
     }
     _dataStatsCache.at = now;
     _dataStatsCache.payload = payload;

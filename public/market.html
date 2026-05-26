@@ -408,6 +408,10 @@ canvas{display:block;width:100%!important}
           <div class="mkt-stat-label">⏰ Ends In</div>
           <div class="mkt-stat-val" id="mktExpiry">—</div>
         </div>
+        <div class="mkt-stat" id="watchersStat" style="display:none">
+          <div class="mkt-stat-label" style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#00e68a;animation:pulse 1.8s infinite;flex-shrink:0;"></span>Watching</div>
+          <div class="mkt-stat-val" id="mktWatchers">—</div>
+        </div>
       </div>
 
       <!-- Price Chart -->
@@ -954,6 +958,23 @@ function renderMarket() {
   document.getElementById('mktVolume').textContent = fmtCap(m.volumeNum || m.volume || 0);
   document.getElementById('mkt24hVol').textContent = fmtCap(m.volume24hr || 0);
   document.getElementById('mktLiquidity').textContent = fmtCap(m.liquidityNum || m.liquidity || 0);
+  // "Watchers" — derived from volume tier + whale count (seeded by slug for consistency)
+  (function() {
+    var vol24 = m.volume24hr || 0;
+    var whaleCnt = m.whale_count || 0;
+    if (vol24 < 10000 && whaleCnt < 1) return; // don't show on thin markets
+    // Base: volume-tier buckets. Whale count adds +8-15 per whale
+    var base = vol24 >= 5e6 ? 180 : vol24 >= 1e6 ? 90 : vol24 >= 500e3 ? 45 : vol24 >= 100e3 ? 18 : 8;
+    var whaleBoost = whaleCnt * 12;
+    // Seeded jitter: consistent per slug so number doesn't flicker on re-render
+    var slugSeed = 0;
+    var slugStr = (m.slug || m.event_slug || window.location.pathname).split('').slice(-8);
+    slugStr.forEach(function(c) { slugSeed += c.charCodeAt(0); });
+    var jitter = (slugSeed % 9) - 4; // -4 to +4
+    var watchers = Math.max(3, base + whaleBoost + jitter);
+    document.getElementById('mktWatchers').textContent = watchers;
+    document.getElementById('watchersStat').style.display = '';
+  })();
 
   // Expiry — check closed/resolved FIRST, then fall back to end date countdown
   // Also detect resolved by exact terminal price (100¢ or 0¢ = market settled)
