@@ -483,6 +483,54 @@
           });
           return;
         }
+        // Challenge won — biggest competitive dopamine
+        var wonNotif = fresh.find(function(n){ return n.type === 'challenge_won'; });
+        if (wonNotif) {
+          window.HFX.toast({
+            type: 'win',
+            title: wonNotif.title || 'Challenge won.',
+            body: (wonNotif.body || '').slice(0, 80),
+            href: '/feed',
+            duration: 10000
+          });
+          return;
+        }
+        // Challenge accepted — opponent committed
+        var acceptedNotif = fresh.find(function(n){ return n.type === 'challenge_accepted'; });
+        if (acceptedNotif) {
+          window.HFX.toast({
+            type: 'warning',
+            title: acceptedNotif.title || 'Challenge accepted.',
+            body: (acceptedNotif.body || '').slice(0, 80),
+            href: '/feed',
+            duration: 8000
+          });
+          return;
+        }
+        // Challenge received — someone wants to duel
+        var challengeRecNotif = fresh.find(function(n){ return n.type === 'challenge'; });
+        if (challengeRecNotif) {
+          window.HFX.toast({
+            type: 'warning',
+            title: challengeRecNotif.title || 'Challenge received.',
+            body: (challengeRecNotif.body || '').slice(0, 80),
+            href: '/feed',
+            duration: 9000
+          });
+          return;
+        }
+        // Someone you follow posted a new take
+        var newTakeNotif = fresh.find(function(n){ return n.type === 'new_take' || n.type === 'new_prediction'; });
+        if (newTakeNotif) {
+          window.HFX.toast({
+            type: 'info',
+            title: newTakeNotif.title || 'New take from someone you follow.',
+            body: (newTakeNotif.body || '').slice(0, 80),
+            href: newTakeNotif.entity_id ? '/takes/' + newTakeNotif.entity_id : '/feed',
+            duration: 7000
+          });
+          return;
+        }
         var rxNotif = fresh.find(function(n){ return n.type === 'take_reaction' || n.type === 'agree' || n.type === 'reaction'; });
         if (!rxNotif) return;
         var body = rxNotif.body || rxNotif.title || '';

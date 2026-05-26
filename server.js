@@ -20384,6 +20384,27 @@ app.post('/api/takes', requireAuth, async (req, res) => {
       }
     }
 
+    // Notify followers of this user (non-blocking, cap at 50 to avoid spam on big accounts)
+    (async () => {
+      try {
+        const followerRows = await dbQuery(
+          'SELECT follower_id FROM predictor_follows WHERE following_id = $1 LIMIT 50',
+          [req.userId]
+        ).catch(() => []);
+        if (!followerRows.length) return;
+        const shortQ = (question || '').substring(0, 70);
+        const sideStr = String(side).toUpperCase();
+        for (const f of followerRows) {
+          pushNotification(
+            f.follower_id, 'new_take',
+            displayName + ' posted a take.',
+            sideStr + ' on "' + shortQ + '"',
+            rows[0].id, null
+          ).catch(() => {});
+        }
+      } catch (_) {}
+    })();
+
     res.json({ ok: true, take: rows[0] });
   } catch (err) {
     // Surface the real DB / validation error to the client instead of the
