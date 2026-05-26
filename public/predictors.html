@@ -361,6 +361,14 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
+<!-- RANK MOVEMENT BANNER (shown by renderTable when rank changed since last visit) -->
+<div id="rankMoveBanner" style="display:none;max-width:1200px;margin:0 auto 16px;padding:0 20px;opacity:1;transition:opacity .4s;">
+  <div style="background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:12px;">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;" id="rankMoveMsg"></span>
+    <a href="/m/" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(240,240,245,.4);text-decoration:none;margin-left:auto;white-space:nowrap;" id="rankMoveProfileLink">View profile →</a>
+  </div>
+</div>
+
 <!-- RANKINGS TABLE -->
 <div class="rankings-section">
   <table class="lb-table" id="lbTable">
@@ -837,6 +845,35 @@ function renderTable(data){
       var myRow=document.getElementById('myLbRow');
       if(myRow) myRow.scrollIntoView({behavior:'smooth',block:'center'});
     }, 400);
+    // Rank movement: compare current rank to last-visited rank
+    var currentRank = data[myIdx]._displayRank || (myIdx + 4);
+    var _rankKey = 'hfx_lb_last_rank_' + _lbMyUserId;
+    var lastRank = parseInt(localStorage.getItem(_rankKey) || '0');
+    if (lastRank > 0 && lastRank !== currentRank) {
+      var moved = lastRank - currentRank; // positive = moved up
+      var banner = document.getElementById('rankMoveBanner');
+      var msg = document.getElementById('rankMoveMsg');
+      if (banner && msg) {
+        if (moved > 0) {
+          msg.innerHTML = 'Up <strong>' + moved + '</strong> spot' + (moved > 1 ? 's' : '') + ' since last visit. Now ranked <strong>#' + currentRank + '</strong>.';
+          banner.style.borderColor = 'rgba(0,230,138,.3)';
+          banner.style.color = '#00e68a';
+        } else {
+          var dropped = Math.abs(moved);
+          var rivalRow = data[myIdx - 1]; // person now above you
+          var rivalName = rivalRow ? (rivalRow.display_name || 'someone') : 'someone';
+          msg.innerHTML = 'Down <strong>' + dropped + '</strong> spot' + (dropped > 1 ? 's' : '') + '. ' + rivalName.replace(/</g,'&lt;').slice(0,20) + ' passed you.';
+          banner.style.borderColor = 'rgba(255,77,106,.3)';
+          banner.style.color = '#ff4d6a';
+        }
+        banner.style.display = 'flex';
+        setTimeout(function(){ banner.style.opacity='0'; setTimeout(function(){ banner.style.display='none'; }, 400); }, 8000);
+      }
+    }
+    localStorage.setItem(_rankKey, String(currentRank));
+    // Update profile link
+    var rpl = document.getElementById('rankMoveProfileLink');
+    if (rpl && _lbMyUserId) rpl.href = '/m/' + _lbMyUserId;
   }
 }
 

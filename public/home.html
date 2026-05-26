@@ -429,6 +429,55 @@ footer{
   <a class="home-chip" href="/explore?topic=AI+%26+Tech">AI &amp; Tech</a>
 </div>
 
+<!-- ── WELCOME BACK PANEL (logged-in users with settled takes only) ── -->
+<div id="welcomeBackPanel" style="display:none;margin-bottom:20px;">
+  <div style="background:rgba(17,17,24,.8);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:160px;">
+      <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(240,240,245,.35);margin-bottom:6px;">Welcome back</div>
+      <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:#f0f0f5;" id="wbRecord">—</div>
+      <div style="font-family:var(--mono);font-size:10px;color:rgba(240,240,245,.4);margin-top:3px;" id="wbSubline"></div>
+    </div>
+    <div id="wbStats" style="display:flex;gap:16px;flex-wrap:wrap;"></div>
+    <div style="flex-shrink:0;display:flex;gap:8px;">
+      <a id="wbFeedLink" href="/feed" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#4d9fff;text-decoration:none;border:1px solid rgba(77,159,255,.3);border-radius:6px;padding:7px 14px;transition:border-color .12s;" onmouseover="this.style.borderColor='rgba(77,159,255,.6)'" onmouseout="this.style.borderColor='rgba(77,159,255,.3)'">Feed →</a>
+      <a id="wbProfileLink" href="/feed" style="font-family:var(--mono);font-size:10px;font-weight:700;color:rgba(240,240,245,.5);text-decoration:none;border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:7px 14px;transition:border-color .12s;" onmouseover="this.style.borderColor='rgba(255,255,255,.2)'" onmouseout="this.style.borderColor='rgba(255,255,255,.08)'">Profile →</a>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+  if(!tok) return;
+  var uid;
+  try{var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));uid=p.userId||p.sub||p.id;}catch(e){return;}
+  if(!uid) return;
+  fetch('/api/member/'+uid,{headers:{'Authorization':'Bearer '+tok}})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.stats) return;
+      var s=d.stats;
+      var settled=s.settled_predictions||0;
+      if(settled<1) return; // Don't show for brand-new users with no track record
+      var wins=s.wins||0;
+      var losses=s.losses||0;
+      var wr=s.win_rate||0;
+      var followers=s.follower_count||0;
+      var tier=d.user&&d.user.tier||s.tier||'BUILDING';
+      var tierColors={'BUILDING':'#6b7280','TRADER':'#9ca3af','PROFITABLE':'#4d9fff','SHARP':'#00e68a','SHARK':'#00d4ff','WHALE':'#a855f7','FLEXIN':'#c9920d'};
+      var tierColor=tierColors[tier]||'#c9920d';
+      var recordStr=wins+'-'+losses;
+      document.getElementById('wbRecord').innerHTML=recordStr+'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+tierColor+';margin-left:8px;padding:3px 8px;border-radius:4px;background:'+tierColor+'18;border:1px solid '+tierColor+'33;">'+tier+'</span>';
+      document.getElementById('wbSubline').textContent=wr+'% win rate · '+settled+' settled';
+      var statsHtml='';
+      if(followers>0) statsHtml+='<div style="text-align:center;"><div style="font-family:var(--mono);font-size:18px;font-weight:800;color:#f0f0f5;">'+followers+'</div><div style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.35);text-transform:uppercase;letter-spacing:.1em;">followers</div></div>';
+      if(s.total_agrees>0) statsHtml+='<div style="text-align:center;"><div style="font-family:var(--mono);font-size:18px;font-weight:800;color:#00e68a;">'+s.total_agrees+'</div><div style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.35);text-transform:uppercase;letter-spacing:.1em;">agrees</div></div>';
+      document.getElementById('wbStats').innerHTML=statsHtml;
+      document.getElementById('wbProfileLink').href='/m/'+uid;
+      document.getElementById('welcomeBackPanel').style.display='';
+    }).catch(function(){});
+})();
+</script>
+
 <!-- ── TAKE OF THE DAY ── -->
 <div id="totdSection" style="display:none;margin-bottom:24px;">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
