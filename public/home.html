@@ -1374,7 +1374,14 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         if(srb2) srb2.style.display='none';
         // Fire streak toast via engage engine
         if(window.HFX && d.streak >= 2) {
-          window.HFX.toast({type:'streak',title:'Pick locked. Streak: '+d.streak+' days.',duration:5000});
+          var streakMilestones = {3:'3-day streak.',5:'5-day streak.',7:'7-day streak.',14:'14-day streak.',30:'30-day streak.'};
+          var milestoneMsg = streakMilestones[d.streak];
+          if(milestoneMsg) {
+            // Milestone — slightly warmer framing (within the voice charter: durability is one of the 5 warmth triggers)
+            window.HFX.toast({type:'streak',title:'Pick locked. '+milestoneMsg,body:'Consecutive days with a locked take.',duration:7000});
+          } else {
+            window.HFX.toast({type:'streak',title:'Pick locked. Streak: '+d.streak+' days.',duration:5000});
+          }
         }
       })
       .catch(function(){

@@ -387,6 +387,29 @@
         // Update last seen to newest
         localStorage.setItem(_rxLastSeenKey, fresh[0].id);
         // Surface first fresh reaction/agree notification as a toast
+        // Check for challenge notification (highest priority — loss aversion)
+        var challengeNotif = fresh.find(function(n){ return n.type === 'take_challenged'; });
+        if (challengeNotif) {
+          window.HFX.toast({
+            type: 'warning',
+            title: challengeNotif.title || 'Someone took the other side.',
+            body: (challengeNotif.body || '').slice(0, 80),
+            href: '/feed',
+            duration: 9000
+          });
+          return;
+        }
+        // Check for viral milestone next
+        var viralNotif = fresh.find(function(n){ return n.type === 'take_viral'; });
+        if (viralNotif) {
+          window.HFX.toast({
+            type: 'win',
+            title: viralNotif.title || 'Take gaining traction.',
+            body: (viralNotif.body || '').slice(0, 80),
+            duration: 8000
+          });
+          return;
+        }
         var rxNotif = fresh.find(function(n){ return n.type === 'take_reaction' || n.type === 'agree' || n.type === 'reaction'; });
         if (!rxNotif) return;
         var body = rxNotif.body || rxNotif.title || '';

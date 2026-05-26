@@ -20311,6 +20311,29 @@ app.post('/api/takes', requireAuth, async (req, res) => {
       );
     }
 
+    // Counter-take detection: if another user already has a take on the same market
+    // with the OPPOSITE side, notify them (limit to 1 notification per take post).
+    if (market_slug && !parent_take_id) {
+      const newSide = String(side).toUpperCase();
+      const oppSide = newSide === 'YES' ? 'NO' : 'YES';
+      const oppTakers = await dbQuery(
+        `SELECT DISTINCT user_id FROM takes
+         WHERE market_slug = $1 AND side = $2 AND user_id != $3
+           AND source = 'user' AND created_at > now() - interval '7 days'
+         LIMIT 3`,
+        [market_slug, oppSide, req.userId]
+      ).catch(() => []);
+      const shortQ = (question || '').substring(0, 50);
+      for (const opp of oppTakers) {
+        pushNotification(
+          opp.user_id, 'take_challenged',
+          `${displayName} took the other side.`,
+          `${newSide} on "${shortQ}" \u2014 someone just disagreed.`,
+          null, null
+        ).catch(() => {});
+      }
+    }
+
     res.json({ ok: true, take: rows[0] });
   } catch (err) {
     // Surface the real DB / validation error to the client instead of the
@@ -20370,7 +20393,7 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
 
     // Notify take author of new reactions (don't notify yourself)
     if (isNewReaction && take.user_id && take.user_id !== req.userId) {
-      // Get reactor's name
+      // Get reactor's name + updated counts
       const reactorRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
       const reactorName = reactorRows[0]?.display_name || 'Someone';
       const emoji = reaction === 'agree' ? '\u2191' : '\u2193';
@@ -20382,6 +20405,19 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
         `"${shortQ}"`,
         null, null
       );
+      // Viral milestones: fire a separate notification when agree_count crosses 5, 10, 25
+      if (reaction === 'agree') {
+        const newAgree = (take.agree_count || 0) + 1;
+        const MILESTONES = [5, 10, 25, 50];
+        if (MILESTONES.includes(newAgree)) {
+          pushNotification(
+            take.user_id, 'take_viral',
+            `Take at ${newAgree} agrees.`,
+            `"${shortQ}" \u2014 ${newAgree} traders aligned.`,
+            null, null
+          ).catch(() => {});
+        }
+      }
     }
 
     // Return updated counts
