@@ -400,6 +400,18 @@
         // Update last seen to newest
         localStorage.setItem(_rxLastSeenKey, fresh[0].id);
         // Surface first fresh reaction/agree notification as a toast
+        // Check for passport view milestone
+        var passportNotif = fresh.find(function(n){ return n.type === 'passport_views'; });
+        if (passportNotif) {
+          window.HFX.toast({
+            type: 'info',
+            title: passportNotif.title || 'Passport views.',
+            body: (passportNotif.body || 'Share your Passport to grow your following.').slice(0, 80),
+            href: '/feed',
+            duration: 7000
+          });
+          return;
+        }
         // Check for market resolving soon (time-pressure, highest urgency)
         var resolvingNotif = fresh.find(function(n){ return n.type === 'market_resolving'; });
         if (resolvingNotif) {

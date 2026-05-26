@@ -11460,15 +11460,43 @@ app.get('/passport/:userId', async (req, res) => {
   try {
     const rows = await dbQuery('SELECT handle FROM users WHERE id = $1 LIMIT 1', [req.params.userId]).catch(() => []);
     if (rows[0] && rows[0].handle) return res.redirect(302, '/@' + rows[0].handle + '/passport');
+    // Track passport view for the owner — fire-and-forget
+    _trackPassportView(req.params.userId, req.get('referer') || '').catch(() => {});
   } catch {}
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
 
 // GET /@:handle/passport — handle-based passport route (canonical).
-app.get('/@:handle/passport', (req, res) => {
+app.get('/@:handle/passport', async (req, res) => {
   if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  // Track view — resolve handle to userId, then fire-and-forget
+  try {
+    const userRow = await dbQuery('SELECT id FROM users WHERE handle = $1 LIMIT 1', [req.params.handle]).catch(() => []);
+    if (userRow[0]) _trackPassportView(userRow[0].id, req.get('referer') || '').catch(() => {});
+  } catch {}
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
+
+// Helper: track passport views and batch-notify owner once per 4h max
+const _passportViewCounts = new Map(); // userId -> { count, lastNotified }
+async function _trackPassportView(userId, referer) {
+  if (!userId || !pool) return;
+  const entry = _passportViewCounts.get(userId) || { count: 0, lastNotified: 0 };
+  entry.count++;
+  _passportViewCounts.set(userId, entry);
+  // Notify owner at 3, 10, 25 views (at most once per 4h)
+  const MILESTONES = [3, 10, 25, 50, 100];
+  const now = Date.now();
+  if (MILESTONES.includes(entry.count) && (now - entry.lastNotified) > 4 * 3600 * 1000) {
+    entry.lastNotified = now;
+    await pushNotification(
+      userId, 'passport_views',
+      `${entry.count} people viewed your Passport.`,
+      referer ? `Via ${new URL(referer.startsWith('http') ? referer : 'https://hyperflex.network' + referer).hostname}` : 'Share it to build your following.',
+      null, null
+    ).catch(() => {});
+  }
+}
 
 // GET /takes/:id — single take permalink page (full thread, reply UI)
 app.get('/takes/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'take.html')));
