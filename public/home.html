@@ -429,6 +429,59 @@ footer{
   <a class="home-chip" href="/explore?topic=AI+%26+Tech">AI &amp; Tech</a>
 </div>
 
+<!-- ── TAKE OF THE DAY ── -->
+<div id="totdSection" style="display:none;margin-bottom:24px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+    <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a855f7;">⚡ TAKE OF THE DAY</span>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">Most agreed take · 24h</span>
+    <a href="/feed" style="font-family:var(--mono);font-size:9px;color:rgba(168,85,247,.7);text-decoration:none;margin-left:auto;">See feed →</a>
+  </div>
+  <div id="totdCard" style="background:#111118;border:1px solid rgba(168,85,247,.2);border-left:3px solid #a855f7;border-radius:10px;padding:18px 20px;cursor:pointer;transition:border-color .15s;" onclick="window._totdHref&&(window.location.href=window._totdHref)" onmouseover="this.style.borderColor='rgba(168,85,247,.5)'" onmouseout="this.style.borderColor='rgba(168,85,247,.2)'">
+    <div id="totdMeta" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"></div>
+    <div id="totdQ" style="font-size:16px;font-weight:700;color:#f0f0f5;line-height:1.35;margin-bottom:10px;"></div>
+    <div id="totdThesis" style="font-size:13px;color:rgba(240,240,245,.5);line-height:1.5;margin-bottom:12px;display:none;"></div>
+    <div id="totdStats" style="display:flex;align-items:center;gap:14px;"></div>
+  </div>
+</div>
+<script>
+(function(){
+  fetch('/api/takes/hot?limit=1').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    var takes = (d&&d.takes)||[];
+    if(!takes.length) return;
+    var t = takes[0];
+    if(!t.question) return;
+    var side = (t.side||'YES').toUpperCase();
+    var sideColor = side==='YES'?'#00e68a':'#ff4d6a';
+    var total = (t.agree_count||0)+(t.disagree_count||0);
+    var agreePct = total>0?Math.round((t.agree_count||0)/total*100):0;
+    var user = (t.display_name||t.username||'Predictor').replace(/</g,'&lt;').slice(0,24);
+    var href = t.market_slug?'/market/'+t.market_slug:'/feed';
+    window._totdHref = href;
+
+    var meta = document.getElementById('totdMeta');
+    meta.innerHTML =
+      '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</span>'
+      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">·</span>'
+      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.4);">'+user+'</span>'
+      +(t.entry_price!=null?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">@ '+Math.round(t.entry_price*100)+'¢</span>':'');
+
+    document.getElementById('totdQ').textContent = (t.question||'').slice(0,120);
+
+    var thesis = document.getElementById('totdThesis');
+    if(t.thesis) { thesis.textContent = t.thesis.slice(0,200); thesis.style.display=''; }
+
+    var stats = document.getElementById('totdStats');
+    stats.innerHTML =
+      '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#00e68a;">↑ '+t.agree_count+' agree</span>'
+      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#ff4d6a;">↓ '+t.disagree_count+' disagree</span>'
+      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+total+' total</span>'
+      +(total>0?'<div style="flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;max-width:120px;"><div style="width:'+agreePct+'%;height:100%;background:#00e68a;border-radius:2px;"></div></div>':'');
+
+    document.getElementById('totdSection').style.display='';
+  }).catch(function(){});
+})();
+</script>
+
 <!-- ── DAILY CHALLENGE ── -->
 <div id="daily-challenge" style="margin-bottom:32px;display:none;">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">

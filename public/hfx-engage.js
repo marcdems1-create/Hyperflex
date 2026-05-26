@@ -449,10 +449,25 @@
       // Surface most recent win first, then most recent loss
       if (wins.length) {
         var w = wins[0];
-        window.HFX.celebrate({ question: w.question || w.market_slug, units: w.roi_pct != null ? parseFloat(w.roi_pct).toFixed(1) : null });
+        // Recovery framing: if user had prior losses this session, acknowledge the comeback
+        var priorLossKey = 'hfx_recent_loss_count';
+        var priorLosses = parseInt(localStorage.getItem(priorLossKey) || '0');
+        if (priorLosses >= 3) {
+          localStorage.setItem(priorLossKey, '0');
+          window.HFX.toast({
+            type: 'win',
+            title: 'Pick landed after ' + priorLosses + ' losses.',
+            body: (w.question || '').slice(0, 70),
+            duration: 8000
+          });
+        } else {
+          window.HFX.celebrate({ question: w.question || w.market_slug, units: w.roi_pct != null ? parseFloat(w.roi_pct).toFixed(1) : null });
+        }
       }
       if (losses.length) {
         var l = losses[0];
+        var lossCount = parseInt(localStorage.getItem('hfx_recent_loss_count') || '0') + 1;
+        localStorage.setItem('hfx_recent_loss_count', String(lossCount));
         window.HFX.showLoss({ question: l.question || l.market_slug, units: null, closeness: null });
       }
     }).catch(function () {});
