@@ -892,6 +892,38 @@ footer{
     </div>
   </div>
 
+  <!-- INFLUENCER TAKES — external voices from X/Reddit on live markets -->
+  <div class="row-section" id="influencerTakesSection" style="display:none">
+    <div class="row-head">
+      <span class="row-title">Sharp Takes on X</span>
+      <span class="row-tag" style="background:rgba(168,85,247,.1);color:#a855f7;border:1px solid rgba(168,85,247,.22);">EXTERNAL</span>
+      <a class="row-see-all" href="/feed?tab=trending" style="color:#a855f7;">Full feed →</a>
+    </div>
+    <div class="row-wrap">
+      <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
+      <div class="row-scroll" id="rowInfluencer">
+        <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      </div>
+      <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
+  <!-- FADE THE PUBLIC — markets where whales diverge from the crowd -->
+  <div class="row-section" id="fadePublicSection" style="display:none">
+    <div class="row-head">
+      <span class="row-title">Fade the Public</span>
+      <span class="row-tag" style="background:rgba(201,146,13,.1);color:#c9920d;border:1px solid rgba(201,146,13,.22);">CONTRARIAN</span>
+      <a class="row-see-all" href="/alpha-live" style="color:#c9920d;">Full alpha →</a>
+    </div>
+    <div class="row-wrap">
+      <button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>
+      <div class="row-scroll" id="rowFadePublic">
+        <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
+      </div>
+      <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
   <!-- FEATURED (wide) -->
   <div class="row-section">
     <div class="row-head">
@@ -1365,6 +1397,91 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       document.getElementById('justResolvedSection').style.display='';
     }).catch(function(){});
   }, 700);
+
+  /* ── INFLUENCER TAKES — external voices from X/Reddit ── */
+  setTimeout(function(){
+    fetch('/api/influencer-feed?limit=8')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        var posts = (d && d.posts) || [];
+        // Filter to posts that have actual content + market match
+        posts = posts.filter(function(p){ return p.content_text && p.content_text.length > 20; });
+        if (posts.length < 2) return;
+        var rowEl = document.getElementById('rowInfluencer');
+        if (!rowEl) return;
+        var platformColors = { twitter:'#4d9fff', x:'#4d9fff', reddit:'#ff6314', youtube:'#ff4d6a' };
+        var platformLabels = { twitter:'X', x:'X', reddit:'Reddit', youtube:'YouTube' };
+        rowEl.innerHTML = posts.slice(0, 8).map(function(p) {
+          var platform = (p.platform || p.influencer_platform || 'x').toLowerCase();
+          var pColor = platformColors[platform] || '#a855f7';
+          var pLabel = platformLabels[platform] || 'X';
+          var handle = p.influencer_handle || p.handle || 'unknown';
+          var name = p.influencer_name || p.name || handle;
+          var snippet = (p.content_text || '').slice(0, 140);
+          var mktQ = (p.market_question || '').slice(0, 60);
+          var href = p.market_slug ? '/market/' + p.market_slug : (p.content_url || '#');
+          var side = (p.predicted_side || '').toUpperCase();
+          var sideColor = side === 'YES' ? '#00e68a' : side === 'NO' ? '#ff4d6a' : 'rgba(240,240,245,.4)';
+          var matchBadge = side ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:' + sideColor + ';">' + side + '</span>' : '';
+          return '<a href="' + href + '" target="_blank" rel="noopener" style="flex-shrink:0;width:240px;height:280px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.35)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.15)\';this.style.transform=\'\'">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:' + pColor + ';letter-spacing:.12em;">' + pLabel + '</span>'
+              + matchBadge
+            + '</div>'
+            + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.5);">@' + esc(handle) + '</div>'
+            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.5;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;">"' + esc(snippet) + '"</div>'
+            + (mktQ ? '<div style="font-size:10px;color:rgba(240,240,245,.35);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + esc(mktQ) + '</div>' : '')
+          + '</a>';
+        }).join('');
+        document.getElementById('influencerTakesSection').style.display = '';
+      }).catch(function(){});
+  }, 900);
+
+  /* ── FADE THE PUBLIC — contrarian edges where whales diverge ── */
+  setTimeout(function(){
+    fetch('/api/alpha/top?n=20')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        var markets = (d && d.markets) || [];
+        // Filter: needs divergence signal and meaningful whale count
+        var contrarian = markets.filter(function(m){
+          return (m.edge_components && (m.edge_components.divergence || 0) >= 5) && (m.whale_count || 0) >= 2;
+        });
+        if (contrarian.length < 2) return;
+        var rowEl = document.getElementById('rowFadePublic');
+        if (!rowEl) return;
+        rowEl.innerHTML = contrarian.slice(0, 8).map(function(m) {
+          var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+          var q = (m.question || m.market || '').slice(0, 80);
+          var href = m.slug ? '/market/' + m.slug : '/alpha-live';
+          var whaleSide = m.depth_side === 'ask' ? 'NO' : 'YES';
+          var whaleSideColor = whaleSide === 'YES' ? '#00e68a' : '#ff4d6a';
+          var crowdPct = yesPct != null ? (whaleSide === 'YES' ? (yesPct < 40 ? yesPct : 100 - yesPct) : (yesPct > 60 ? 100 - yesPct : yesPct)) : null;
+          var whaleCount = m.whale_count || 0;
+          var vol = m.volume_24h || m.volume24hr || 0;
+          var volStr = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '';
+          return '<a href="' + href + '" style="flex-shrink:0;width:240px;height:280px;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.18);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(201,146,13,.4)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(201,146,13,.18)\';this.style.transform=\'\'">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:#c9920d;letter-spacing:.12em;">CONTRARIAN EDGE</span>'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">' + whaleCount + ' whales</span>'
+            + '</div>'
+            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">' + esc(q) + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:4px;">'
+              + '<div style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
+                + '<span style="color:rgba(240,240,245,.45);">Whales</span>'
+                + '<span style="color:' + whaleSideColor + ';font-weight:700;">' + whaleSide + '</span>'
+              + '</div>'
+              + (crowdPct != null ? '<div style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
+                + '<span style="color:rgba(240,240,245,.45);">Crowd</span>'
+                + '<span style="color:rgba(240,240,245,.5);">' + crowdPct + '%</span>'
+              + '</div>' : '')
+            + '</div>'
+            + (volStr ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">' + volStr + ' vol</div>' : '')
+          + '</a>';
+        }).join('');
+        document.getElementById('fadePublicSection').style.display = '';
+      }).catch(function(){});
+  }, 1100);
 
   /* load AI summaries for visible cards (non-blocking, staggered) */
   setTimeout(function(){

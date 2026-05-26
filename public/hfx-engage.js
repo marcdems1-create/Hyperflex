@@ -400,6 +400,18 @@
         // Update last seen to newest
         localStorage.setItem(_rxLastSeenKey, fresh[0].id);
         // Surface first fresh reaction/agree notification as a toast
+        // New follower — highest priority (identity validation, peak social dopamine)
+        var followerNotif = fresh.find(function(n){ return n.type === 'new_follower'; });
+        if (followerNotif) {
+          window.HFX.toast({
+            type: 'win',
+            title: followerNotif.title || 'New follower.',
+            body: (followerNotif.body || 'Someone added you to their feed.').slice(0, 80),
+            href: '/m/' + (followerNotif.actor_id || ''),
+            duration: 8000
+          });
+          return;
+        }
         // Check for passport view milestone
         var passportNotif = fresh.find(function(n){ return n.type === 'passport_views'; });
         if (passportNotif) {
