@@ -387,6 +387,10 @@ function render(data){
       if(t.recommended_size_usd) _params.push('size='+t.recommended_size_usd);
       _href='/market/'+m.slug+'?'+_params.join('&');
     }
+    // NEW badge — market crossed edge 60 within last 60 min
+    const newBadge = m.is_new ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;padding:2px 7px;border-radius:10px;background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#a855f7;text-transform:uppercase;vertical-align:middle;margin-left:6px;">NEW</span>' : '';
+    const ageMin = m.edge_age_minutes;
+    const ageStr = ageMin != null ? (ageMin < 60 ? ageMin + 'm' : Math.round(ageMin/60) + 'h') : '';
     return '<a class="edge-card '+rankClass+'" href="'+_href+'">'+
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
@@ -399,8 +403,10 @@ function render(data){
         '</div>'+
         '<div class="badges">'+
           bs.map(b=>'<span class="badge badge-'+b[0]+'">'+b[1]+'</span>').join('')+
+          (ageStr ? '<span class="badge" style="opacity:.5">'+ageStr+'</span>' : '')+
         '</div>'+
       '</div>'+
+      (m.is_new ? '<div style="margin:-6px 0 8px;font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#a855f7;padding:4px 8px;background:rgba(168,85,247,.08);border-radius:4px;display:inline-block;">● NEW EDGE DETECTED</div>' : '')+
       '<div class="card-q">'+esc(m.question)+'</div>'+
       consensusHtml+
       tradeStrip+

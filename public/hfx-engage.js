@@ -165,13 +165,26 @@
       confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ['#00e68a','#4d9fff','#c9920d','#fff'] });
       setTimeout(function () { confetti({ particleCount: 60, spread: 100, origin: { y: 0.5 } }); }, 400);
     });
-    var units = opts.units ? (opts.units > 0 ? '+' + opts.units.toFixed(2) + 'u' : opts.units.toFixed(2) + 'u') : null;
-    window.HFX.toast({
-      type: 'win',
-      title: 'Pick landed.' + (units ? ' ' + units + '.' : ''),
-      body: opts.question ? opts.question.slice(0, 72) : null,
-      duration: 8000,
-    });
+    var units = opts.units ? (parseFloat(opts.units) > 0 ? '+' + parseFloat(opts.units).toFixed(2) + 'u' : parseFloat(opts.units).toFixed(2) + 'u') : null;
+    // First-ever correct take — voice charter warmth trigger (once per account, lifetime)
+    var _firstWinKey = 'hfx_first_win_seen';
+    var isFirstWin = !localStorage.getItem(_firstWinKey);
+    if (isFirstWin) {
+      localStorage.setItem(_firstWinKey, '1');
+      window.HFX.toast({
+        type: 'win',
+        title: 'First graded win.' + (units ? ' ' + units + '.' : ''),
+        body: opts.question ? opts.question.slice(0, 72) : 'Track record starts here.',
+        duration: 10000,
+      });
+    } else {
+      window.HFX.toast({
+        type: 'win',
+        title: 'Pick landed.' + (units ? ' ' + units + '.' : ''),
+        body: opts.question ? opts.question.slice(0, 72) : null,
+        duration: 8000,
+      });
+    }
     // Win card overlay — shareable DraftKings-style receipt
     setTimeout(function () { _showWinCard(opts); }, 1200);
   };
