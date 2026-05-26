@@ -1686,6 +1686,14 @@ function requireAuth(req, res, next) {
   }
 }
 
+function requireAdminSecret(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
+  const provided = req.headers['x-admin-secret'] || req.query.secret || (req.body && req.body.secret) || '';
+  if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
+  next();
+}
+
 // ── USER ACTIVITY TRACKING ────────────────────────────────────────────
 // Called by requireAuth + optionalAuth whenever they successfully
 // authenticate a request. Two things get updated (both debounced /
@@ -34041,12 +34049,18 @@ app.get('/t/:handle', (req, res) => res.redirect(302, '/@' + req.params.handle))
 // ════════════════════════════════════════════════════════════
 // GET /api/forecast-card/:slug.png — OG image generator for market share cards
 {
-  const { generateForecastCard } = require('./lib/forecast-card');
+  let generateForecastCard;
+  try {
+    generateForecastCard = require('./lib/forecast-card').generateForecastCard;
+  } catch (e) {
+    console.warn('[forecast-card] not available (canvas missing?):', e.message);
+    generateForecastCard = async () => null;
+  }
   const _fcCache = new Map(); // slug → {buf, at}
   const FC_TTL = 60 * 60 * 1000; // 1h
 
-  app.get('/api/forecast-card/:slug([^.]+).png', async (req, res) => {
-    const slug = req.params.slug;
+  app.get(/^\/api\/forecast-card\/([^/.]+)\.png$/, async (req, res) => {
+    const slug = req.params[0];
     const now = Date.now();
     const cached = _fcCache.get(slug);
     if (cached && now - cached.at < FC_TTL) {
@@ -34097,6 +34111,7 @@ app.get('/t/:handle', (req, res) => res.redirect(302, '/@' + req.params.handle))
         topic,
       });
 
+      if (!buf) return res.status(503).type('text/plain').send('Card generation not available');
       _fcCache.set(slug, { buf, at: now });
       res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600', 'X-Cache': 'MISS' });
       res.send(buf);
