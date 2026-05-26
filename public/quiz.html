@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>What kind of predictor are you? — HYPERFLEX</title>
-<meta name="description" content="7 questions. We identify your prediction market archetype and surface the exact markets you're built to crush.">
-<meta property="og:title" content="Find your prediction market archetype — HYPERFLEX">
+<title>Find your prediction archetype — HYPERFLEX</title>
+<meta name="description" content="7 choices that reveal how you already think. Your archetype. Your markets. 60 seconds.">
+<meta property="og:title" content="What kind of predictor are you? — HYPERFLEX">
+<meta property="og:description" content="7 choices. Your exact edge. Your matched markets.">
 <meta property="og:image" content="https://hyperflex.network/hyperflex-logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -16,398 +17,264 @@
   --dim:rgba(240,239,250,.42);
   --faint:rgba(240,239,250,.15);
   --border:rgba(255,255,255,.07);
-  --aura:rgba(201,146,13,.0);
-  --sans:'Inter',-apple-system,sans-serif;
   --mono:'JetBrains Mono',monospace;
+  --sans:'Inter',-apple-system,sans-serif;
 }
-
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
 
-/* ─── AURA BACKGROUND — morphs with every answer ─── */
-#aura{
-  position:fixed;inset:0;z-index:0;pointer-events:none;
-  transition:background 1.4s cubic-bezier(.4,0,.2,1),opacity 1s;
-}
+/* AURA */
+#aura{position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 1.6s cubic-bezier(.4,0,.2,1);}
 
-/* ─── CANVAS (particles) ─── */
-#particles{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity 1s;}
+/* PARTICLES */
+#particles{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity 1.2s;}
 
-/* ─── SCREENS ─── */
-.scr{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;opacity:1;transition:opacity .45s;}
-.scr.gone{opacity:0;pointer-events:none;}
+/* SCREENS */
+.scr{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;transition:opacity .4s,transform .4s;}
+.scr.gone{opacity:0;pointer-events:none;transform:scale(.98);}
 
-/* ══════════════ INTRO ══════════════ */
+/* ═══ INTRO ═══ */
 #si{background:transparent;}
-
-.i-logo{
-  position:absolute;top:24px;left:28px;
-  font-weight:900;font-size:15px;letter-spacing:-.02em;color:rgba(240,239,250,.5);
-  font-family:var(--sans);
-}
+.i-logo{position:absolute;top:24px;left:28px;font-weight:900;font-size:15px;letter-spacing:-.02em;color:rgba(240,239,250,.45);font-family:var(--sans);}
 .i-logo span{color:#c9920d;}
-
-.i-kicker{
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.22em;
-  text-transform:uppercase;color:rgba(201,146,13,.75);margin-bottom:22px;
-  animation:riseIn .7s ease both;
-}
-.i-head{
-  font-size:clamp(40px,7vw,80px);font-weight:900;letter-spacing:-.05em;
-  line-height:1;text-align:center;max-width:780px;margin-bottom:18px;
-  animation:riseIn .7s .1s ease both;
-}
+.i-kicker{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(201,146,13,.65);margin-bottom:22px;animation:riseIn .7s ease both;}
+.i-head{font-size:clamp(38px,6.5vw,82px);font-weight:900;letter-spacing:-.05em;line-height:1;text-align:center;max-width:800px;margin-bottom:18px;animation:riseIn .7s .1s ease both;}
 .i-head em{font-style:italic;background:linear-gradient(135deg,#c9920d 0%,#ff6b35 45%,#ff4d6a 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.i-sub{
-  font-size:16px;color:var(--dim);text-align:center;max-width:440px;line-height:1.65;
-  margin-bottom:52px;animation:riseIn .7s .2s ease both;
-}
-.i-pills{
-  display:flex;gap:10px;margin-bottom:52px;flex-wrap:wrap;justify-content:center;
-  animation:riseIn .7s .3s ease both;
-}
-.i-pill{
-  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;
-  padding:6px 14px;border-radius:20px;border:1px solid;
-}
-.btn-go{
-  font-size:16px;font-weight:800;letter-spacing:.04em;
-  padding:20px 64px;border:none;border-radius:100px;cursor:pointer;
-  background:linear-gradient(135deg,#c9920d,#ff6b35);color:#000;
-  box-shadow:0 0 0 0 rgba(201,146,13,.4);
-  transition:transform .2s,box-shadow .2s;
-  animation:riseIn .7s .4s ease both;
-}
+.i-sub{font-size:15px;color:var(--dim);text-align:center;max-width:400px;line-height:1.7;margin-bottom:48px;animation:riseIn .7s .2s ease both;}
+.i-pills{display:flex;gap:8px;margin-bottom:44px;flex-wrap:wrap;justify-content:center;animation:riseIn .7s .3s ease both;}
+.i-pill{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;padding:5px 12px;border-radius:20px;border:1px solid;}
+.btn-go{font-size:15px;font-weight:800;letter-spacing:.03em;padding:18px 60px;border:none;border-radius:100px;cursor:pointer;background:linear-gradient(135deg,#c9920d,#ff6b35);color:#000;box-shadow:0 0 0 0 rgba(201,146,13,.4);transition:transform .2s,box-shadow .2s;animation:riseIn .7s .4s ease both;}
 .btn-go:hover{transform:translateY(-3px) scale(1.02);box-shadow:0 16px 48px rgba(201,146,13,.35);}
 .btn-go:active{transform:scale(.98);}
 
-/* ══════════════ QUIZ ══════════════ */
+/* ═══ QUIZ ═══ */
 #sq{background:transparent;padding:0;justify-content:flex-start;}
 
-/* Progress strip */
-#pstrip{
-  position:fixed;top:0;left:0;right:0;z-index:100;
-  height:3px;background:rgba(255,255,255,.08);
-}
-#pfill{
-  height:100%;background:linear-gradient(90deg,#c9920d,#ff6b35,#ff4d6a);
-  transition:width .6s cubic-bezier(.4,0,.2,1);width:0%;
-}
-#pcount{
-  position:fixed;top:14px;right:24px;z-index:100;
-  font-family:var(--mono);font-size:11px;font-weight:600;color:rgba(240,239,250,.3);
-  letter-spacing:.08em;
-}
+/* constellation */
+#constellation{position:fixed;top:20px;right:20px;z-index:200;width:68px;height:68px;pointer-events:none;}
+.c-dot{position:absolute;width:7px;height:7px;border-radius:50%;opacity:0;transform:scale(0);transition:opacity .5s,transform .5s cubic-bezier(.175,.885,.32,1.275);}
+.c-dot.on{opacity:.85;transform:scale(1);}
 
-/* Question stage */
-.qstage{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:80px 28px 40px;
-}
-.qstage.in {animation:stageIn .42s cubic-bezier(.25,.46,.45,.94) both;}
-.qstage.out{animation:stageOut .32s cubic-bezier(.55,.06,.68,.19) both;}
+/* ambient per question */
+.q-ambient{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1s;}
+.q-ambient.show{opacity:1;}
 
-.q-n{
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;
-  text-transform:uppercase;color:rgba(240,239,250,.28);margin-bottom:20px;
-}
-.q-text{
-  font-size:clamp(26px,4.5vw,52px);font-weight:800;letter-spacing:-.04em;
-  line-height:1.12;text-align:center;max-width:680px;margin-bottom:52px;
-  color:var(--ink);
-}
+/* question stage */
+.qstage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 28px 32px;z-index:10;}
+.qstage.in {animation:stageIn .38s cubic-bezier(.25,.46,.45,.94) both;}
+.qstage.out{animation:stageOut .28s cubic-bezier(.55,.06,.68,.19) both;}
 
-/* Answer bands — the key visual element */
-.q-grid{
-  display:flex;flex-direction:column;gap:10px;
-  width:100%;max-width:660px;
-}
-.ans{
+.q-num{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:rgba(240,239,250,.22);margin-bottom:16px;}
+.q-text{font-size:clamp(22px,3.8vw,46px);font-weight:800;letter-spacing:-.04em;line-height:1.12;text-align:center;max-width:700px;margin-bottom:40px;color:var(--ink);}
+
+/* 2×2 answer grid */
+.q-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:700px;}
+.ans-card{
   position:relative;overflow:hidden;
-  border:1px solid rgba(255,255,255,.09);border-radius:14px;
-  padding:18px 22px;cursor:pointer;
-  display:flex;align-items:center;gap:18px;
-  transition:transform .18s,border-color .25s,box-shadow .25s;
-  background:rgba(255,255,255,.03);
+  background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.08);border-radius:16px;
+  padding:20px 18px 18px;cursor:pointer;
+  display:flex;flex-direction:column;gap:8px;min-height:140px;
+  transition:transform .18s,border-color .2s,box-shadow .22s,background .2s;
   user-select:none;-webkit-user-select:none;
 }
-/* Color flood layer behind text */
-.ans::before{
-  content:'';position:absolute;inset:0;
-  background:var(--ans-color,#c9920d);
-  opacity:0;transition:opacity .35s;
-  border-radius:inherit;
-}
-/* Left accent bar */
-.ans::after{
-  content:'';position:absolute;left:0;top:20%;bottom:20%;width:3px;
-  background:var(--ans-color,#c9920d);border-radius:0 2px 2px 0;
-  opacity:0;transition:opacity .3s,top .3s,bottom .3s;
-}
-.ans:hover{transform:translateX(4px);border-color:rgba(255,255,255,.18);}
-.ans:hover::after{opacity:.7;}
-.ans:hover::before{opacity:.04;}
-.ans.chosen{
-  border-color:var(--ans-color,#c9920d)!important;
-  box-shadow:0 0 0 1px var(--ans-color,#c9920d),0 12px 40px rgba(0,0,0,.5);
-  transform:translateX(6px);
-}
-.ans.chosen::before{opacity:.12;}
-.ans.chosen::after{opacity:1;top:0;bottom:0;}
+.ans-card::before{content:'';position:absolute;inset:0;background:var(--cc,#c9920d);opacity:0;transition:opacity .32s;border-radius:inherit;}
+.ans-card:hover{transform:translateY(-2px);border-color:var(--cc,#c9920d);box-shadow:0 0 0 1px var(--cc,#c9920d), 0 12px 40px rgba(0,0,0,.5);}
+.ans-card:hover::before{opacity:.06;}
+.ans-card.selected{border-color:var(--cc,#c9920d)!important;box-shadow:0 0 0 2px var(--cc,#c9920d),0 20px 56px rgba(0,0,0,.6)!important;transform:scale(1.01)!important;}
+.ans-card.selected::before{opacity:.14!important;}
 
-.ans-letter{
-  font-family:var(--mono);font-size:11px;font-weight:700;
-  color:rgba(240,239,250,.25);letter-spacing:.08em;min-width:18px;
-  position:relative;z-index:1;transition:color .25s;flex-shrink:0;
-}
-.ans.chosen .ans-letter{color:var(--ans-color,#c9920d);}
-.ans-body{flex:1;position:relative;z-index:1;}
-.ans-label{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:3px;color:var(--ink);}
-.ans-desc{font-size:12px;color:var(--dim);line-height:1.45;}
+.ans-emoji{font-size:24px;line-height:1;margin-bottom:2px;position:relative;z-index:1;}
+.ans-tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--cc,#c9920d);position:relative;z-index:1;}
+.ans-desc{font-size:12px;color:rgba(240,239,250,.55);line-height:1.45;position:relative;z-index:1;}
 
-/* ══════════════ LOADING / COMPUTING ══════════════ */
+/* checkmark that pops in on selection */
+.ans-check{
+  position:absolute;top:12px;right:12px;
+  width:18px;height:18px;border-radius:50%;
+  background:var(--cc,#c9920d);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transform:scale(0);
+  transition:opacity .18s,transform .28s cubic-bezier(.175,.885,.32,1.275);
+  z-index:2;
+}
+.ans-card.selected .ans-check{opacity:1;transform:scale(1);}
+.check-icon{width:10px;height:10px;fill:none;stroke:#000;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
+
+/* keyboard hint */
+.ans-key{
+  position:absolute;bottom:10px;right:12px;
+  font-family:var(--mono);font-size:8px;color:rgba(240,239,250,.15);
+  z-index:1;
+}
+
+/* progress strip */
+#pstrip{position:fixed;top:0;left:0;right:0;z-index:100;height:2px;background:rgba(255,255,255,.06);}
+#pfill{height:100%;background:linear-gradient(90deg,#c9920d,#ff6b35,#ff4d6a);transition:width .55s cubic-bezier(.4,0,.2,1);width:0%;}
+
+/* ═══ ANALYZING ═══ */
 #sl{background:transparent;}
-.l-orb{
-  width:80px;height:80px;border-radius:50%;margin:0 auto 32px;
-  background:conic-gradient(from 0deg, #c9920d, #ff6b35, #ff4d6a, #a855f7, #4d9fff, #c9920d);
-  animation:spin 1.2s linear infinite;
-  filter:blur(1px);
+#ana-wrap{display:flex;flex-direction:column;align-items:center;gap:32px;}
+#ana-dots{display:flex;gap:10px;align-items:center;justify-content:center;min-height:24px;}
+.ana-dot{width:10px;height:10px;border-radius:50%;opacity:0;transform:scale(0) translateY(4px);transition:opacity .35s,transform .4s cubic-bezier(.175,.885,.32,1.275);}
+.ana-dot.on{opacity:.9;transform:scale(1) translateY(0);}
+#ana-lines{min-height:56px;text-align:center;}
+.ana-line{
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:rgba(240,239,250,.25);
+  min-height:18px;transition:color .5s;
 }
-@keyframes spin{to{transform:rotate(360deg);}}
-.l-text{
-  font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--dim);text-align:center;
+.ana-line.active{color:rgba(240,239,250,.7);}
+.ana-line.done{color:rgba(240,239,250,.25);}
+#ana-arch{
+  font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;
+  min-height:20px;opacity:0;transition:opacity .6s;
 }
-.l-detail{
-  font-size:13px;color:rgba(240,239,250,.2);text-align:center;
-  margin-top:10px;min-height:20px;transition:opacity .4s;
-}
+#ana-arch.show{opacity:1;}
 
-/* ══════════════ RESULT ══════════════ */
-#sr{
-  background:transparent;overflow-y:auto;overflow-x:hidden;
-  justify-content:flex-start;padding:0;
-}
+/* ═══ RESULT ═══ */
+#sr{background:transparent;overflow-y:auto;overflow-x:hidden;justify-content:flex-start;padding:0;}
 
 .r-hero{
   min-height:100vh;width:100%;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:80px 28px 60px;position:relative;
 }
-.r-hero::before{
-  content:'';position:absolute;inset:0;
-  background:var(--hero-bg,none);z-index:0;
-}
+.r-hero::before{content:'';position:absolute;inset:0;background:var(--hero-bg,none);z-index:0;}
 .r-hero>*{position:relative;z-index:1;}
 
-.r-rarity{
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;
-  text-transform:uppercase;padding:6px 16px;border-radius:20px;
-  border:1px solid;display:inline-flex;align-items:center;gap:8px;
-  margin-bottom:24px;opacity:0;animation:riseIn .6s .2s ease forwards;
-}
-.r-type{
-  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.16em;
-  text-transform:uppercase;color:rgba(240,239,250,.4);
-  margin-bottom:16px;opacity:0;animation:riseIn .6s .4s ease forwards;
-}
-.r-name{
-  font-size:clamp(52px,10vw,110px);font-weight:900;letter-spacing:-.06em;
-  line-height:.95;text-align:center;margin-bottom:24px;
-  opacity:0;animation:riseIn .8s .6s cubic-bezier(.175,.885,.32,1.275) forwards;
-}
-.r-sub{
-  font-size:16px;line-height:1.7;color:var(--dim);text-align:center;
-  max-width:520px;margin-bottom:44px;
-  opacity:0;animation:riseIn .6s .9s ease forwards;
-}
+.r-icon{font-size:72px;line-height:1;margin-bottom:16px;opacity:0;animation:riseIn .7s .1s ease forwards;display:block;text-align:center;}
+.r-type{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(240,239,250,.38);margin-bottom:12px;opacity:0;animation:riseIn .5s .35s ease forwards;}
+.r-name{font-size:clamp(48px,9vw,100px);font-weight:900;letter-spacing:-.06em;line-height:.95;text-align:center;margin-bottom:20px;min-height:1em;opacity:0;animation:riseIn .7s .5s cubic-bezier(.175,.885,.32,1.275) forwards;}
+.r-tagline{font-size:16px;font-weight:500;color:var(--dim);text-align:center;max-width:480px;line-height:1.6;margin-bottom:40px;opacity:0;animation:riseIn .5s .8s ease forwards;}
 
-/* Trait radar */
-.r-traits{
-  display:flex;flex-direction:column;gap:10px;width:100%;max-width:460px;
-  margin-bottom:44px;
-  opacity:0;animation:riseIn .6s 1.1s ease forwards;
-}
+/* trait bars */
+.r-traits{display:flex;flex-direction:column;gap:9px;width:100%;max-width:440px;margin-bottom:36px;opacity:0;animation:riseIn .5s 1s ease forwards;}
 .tr{display:flex;align-items:center;gap:12px;}
-.tr-lbl{
-  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;
-  text-transform:uppercase;color:rgba(240,239,250,.3);width:80px;text-align:right;flex-shrink:0;
-}
-.tr-track{flex:1;height:3px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
-.tr-fill{height:100%;border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform 1.2s cubic-bezier(.4,0,.2,1);}
-.tr-val{
-  font-family:var(--mono);font-size:10px;font-weight:700;
-  width:30px;text-align:right;flex-shrink:0;
-}
+.tr-lbl{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,239,250,.28);width:90px;text-align:right;flex-shrink:0;}
+.tr-track{flex:1;height:2px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+.tr-fill{height:100%;border-radius:2px;transform:scaleX(0);transform-origin:left;transition:transform 1.1s cubic-bezier(.4,0,.2,1);}
+.tr-val{font-family:var(--mono);font-size:10px;font-weight:700;width:28px;text-align:right;flex-shrink:0;}
 
-/* Social proof badge */
-.r-social{
-  font-family:var(--mono);font-size:11px;color:rgba(240,239,250,.25);
-  text-align:center;letter-spacing:.06em;margin-bottom:40px;
-  opacity:0;animation:riseIn .6s 1.3s ease forwards;
-}
-.r-social strong{color:rgba(240,239,250,.6);}
+/* beliefs */
+.r-beliefs{width:100%;max-width:440px;margin-bottom:36px;opacity:0;animation:riseIn .5s 1.2s ease forwards;}
+.r-beliefs-title{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(240,239,250,.28);margin-bottom:14px;}
+.r-belief{display:flex;gap:10px;font-size:13px;color:rgba(240,239,250,.62);line-height:1.5;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);}
+.r-belief:last-child{border-bottom:none;}
+.r-belief-dot{width:4px;height:4px;border-radius:50%;background:var(--arch-color,#c9920d);flex-shrink:0;margin-top:7px;}
 
-/* Actions */
-.r-acts{
-  display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
-  opacity:0;animation:riseIn .6s 1.5s ease forwards;
-}
-.btn-x{
-  background:#000;color:#fff;font-weight:700;font-size:13px;
-  padding:14px 28px;border:1px solid rgba(255,255,255,.2);border-radius:100px;
-  cursor:pointer;transition:all .18s;letter-spacing:.04em;display:flex;align-items:center;gap:8px;
-}
-.btn-x:hover{background:#111;border-color:rgba(255,255,255,.4);}
-.btn-feed{
-  background:var(--arch-color,#c9920d);color:#000;font-weight:800;font-size:13px;
-  padding:14px 28px;border:none;border-radius:100px;cursor:pointer;
-  transition:all .18s;letter-spacing:.04em;text-decoration:none;display:inline-flex;align-items:center;
-}
+/* social + actions */
+.r-social{font-family:var(--mono);font-size:10px;color:rgba(240,239,250,.22);text-align:center;letter-spacing:.06em;margin-bottom:32px;opacity:0;animation:riseIn .5s 1.35s ease forwards;}
+.r-social strong{color:rgba(240,239,250,.5);}
+.r-acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;opacity:0;animation:riseIn .5s 1.5s ease forwards;}
+.btn-share{background:#000;color:#fff;font-weight:700;font-size:12px;padding:13px 24px;border:1px solid rgba(255,255,255,.18);border-radius:100px;cursor:pointer;transition:all .18s;letter-spacing:.04em;display:flex;align-items:center;gap:8px;}
+.btn-share:hover{background:#111;border-color:rgba(255,255,255,.35);}
+.btn-feed{background:var(--arch-color,#c9920d);color:#000;font-weight:800;font-size:12px;padding:13px 24px;border:none;border-radius:100px;cursor:pointer;transition:all .18s;letter-spacing:.04em;text-decoration:none;display:inline-flex;align-items:center;}
 .btn-feed:hover{transform:translateY(-2px);box-shadow:0 12px 36px rgba(0,0,0,.4);}
-.btn-redo{
-  background:none;border:none;color:rgba(240,239,250,.28);font-size:12px;
-  cursor:pointer;text-decoration:underline;padding:10px;
-}
+.btn-redo{background:none;border:none;color:rgba(240,239,250,.25);font-size:11px;cursor:pointer;text-decoration:underline;padding:10px;font-family:var(--mono);}
 
-/* ── MARKETS ── */
-.r-mkts{
-  width:100%;max-width:1060px;margin:0 auto;
-  padding:56px 28px 100px;
-}
-.mkts-head{
-  display:flex;align-items:baseline;gap:14px;
-  margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border);
-}
-.mkts-head h2{font-size:22px;font-weight:800;letter-spacing:-.03em;}
-.mkts-head .n{
-  font-family:var(--mono);font-size:11px;color:var(--dim);
-  background:rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;
-}
-
-.mkts-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;
-  margin-bottom:48px;
-}
-.mcard{
-  background:rgba(255,255,255,.028);border:1px solid var(--border);
-  border-radius:14px;padding:18px 18px 14px;
-  text-decoration:none;color:inherit;display:block;
-  transition:all .18s;position:relative;overflow:hidden;
-}
-.mcard::before{
-  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:var(--arch-color,#c9920d);opacity:.7;
-  border-radius:0;
-}
-.mcard:hover{border-color:rgba(255,255,255,.14);transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.35);}
-.mcard-cat{
-  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;
-  text-transform:uppercase;padding:2px 8px;border-radius:4px;
-  display:inline-block;margin-bottom:10px;
-}
-.mcard-q{font-size:13px;font-weight:600;line-height:1.45;margin-bottom:14px;color:var(--ink);}
-.mcard-foot{display:flex;align-items:center;gap:10px;}
-.yes{font-family:var(--mono);font-size:13px;font-weight:800;color:#00e68a;}
-.no {font-family:var(--mono);font-size:13px;font-weight:800;color:#ff4d6a;}
-.mcard-edge{
-  margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;
-  color:rgba(240,239,250,.3);letter-spacing:.06em;
-}
-
-/* Swipe instruction */
-.mkts-cta{
-  text-align:center;padding:32px 0 0;
-  font-size:14px;color:var(--dim);
-}
+/* markets */
+.r-mkts{width:100%;max-width:1020px;margin:0 auto;padding:48px 28px 90px;}
+.mkts-head{display:flex;align-items:baseline;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.07);}
+.mkts-head h2{font-size:20px;font-weight:800;letter-spacing:-.03em;}
+.mkts-head .n{font-family:var(--mono);font-size:10px;color:var(--dim);background:rgba(255,255,255,.06);padding:3px 10px;border-radius:12px;}
+.mkts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:40px;}
+.mcard{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:12px;padding:16px 16px 12px;text-decoration:none;color:inherit;display:block;transition:all .18s;position:relative;overflow:hidden;}
+.mcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--arch-color,#c9920d);opacity:.65;}
+.mcard:hover{border-color:rgba(255,255,255,.13);transform:translateY(-2px);box-shadow:0 10px 28px rgba(0,0,0,.3);}
+.mcard-cat{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;border-radius:4px;display:inline-block;margin-bottom:9px;}
+.mcard-q{font-size:13px;font-weight:600;line-height:1.45;margin-bottom:12px;color:var(--ink);}
+.mcard-foot{display:flex;align-items:center;gap:8px;}
+.yes{font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a;}
+.no{font-family:var(--mono);font-size:12px;font-weight:800;color:#ff4d6a;}
+.mcard-vol{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;color:rgba(240,239,250,.3);}
+.mkts-cta{text-align:center;padding:24px 0 0;font-size:13px;color:var(--dim);}
 .mkts-cta a{color:var(--arch-color,#c9920d);font-weight:700;text-decoration:none;}
 
-/* ─── ANIMATIONS ─── */
-@keyframes riseIn{
-  from{opacity:0;transform:translateY(22px);}
-  to{opacity:1;transform:translateY(0);}
-}
-@keyframes stageIn{
-  from{opacity:0;transform:translateX(44px) scale(.97);}
-  to{opacity:1;transform:translateX(0) scale(1);}
-}
-@keyframes stageOut{
-  from{opacity:1;transform:translateX(0) scale(1);}
-  to{opacity:0;transform:translateX(-44px) scale(.97);}
-}
-@keyframes orbit{
-  0%{transform:rotate(0deg) translateX(120px) rotate(0deg);}
-  100%{transform:rotate(360deg) translateX(120px) rotate(-360deg);}
-}
-@keyframes orbitalPulse{0%,100%{opacity:.5;transform:scale(1);}50%{opacity:1;transform:scale(1.15);}}
-@keyframes breathe{0%,100%{opacity:.7;}50%{opacity:1;}}
-@keyframes flash{0%{opacity:0;}20%{opacity:1;}100%{opacity:0;}}
+/* ═══ ANIMATIONS ═══ */
+@keyframes riseIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+@keyframes stageIn{from{opacity:0;transform:translateX(40px) scale(.97);}to{opacity:1;transform:translateX(0) scale(1);}}
+@keyframes stageOut{from{opacity:1;transform:translateX(0) scale(1);}to{opacity:0;transform:translateX(-40px) scale(.97);}}
+@keyframes orbPulse{0%,100%{transform:scale(1);opacity:.8;}50%{transform:scale(1.12);opacity:1;}}
+@keyframes breathe{0%,100%{opacity:.65;}50%{opacity:1;}}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes iconPulse{0%{transform:scale(.9);opacity:0;}60%{transform:scale(1.06);}100%{transform:scale(1);opacity:1;}}
 
-/* ─── RESPONSIVE ─── */
+/* ═══ RESPONSIVE ═══ */
 @media(max-width:640px){
-  .q-text{font-size:26px;margin-bottom:36px;}
-  .ans{padding:15px 16px;gap:14px;}
-  .ans-label{font-size:14px;}
-  .r-name{font-size:58px;}
-  .r-sub{font-size:14px;}
+  .q-text{font-size:20px;margin-bottom:24px;}
+  .q-grid{gap:8px;}
+  .ans-card{padding:16px 14px 14px;min-height:120px;}
+  .ans-emoji{font-size:20px;}
+  .ans-desc{font-size:11px;}
+  .r-name{font-size:52px;}
+  .r-tagline{font-size:14px;}
   .mkts-grid{grid-template-columns:1fr;}
+}
+@media(max-width:480px){
+  .q-grid{grid-template-columns:1fr;}
+  .ans-card{min-height:80px;}
 }
 </style>
 </head>
 <body>
 
-<!-- AMBIENT AURA -->
 <div id="aura"></div>
 <canvas id="particles" width="1" height="1"></canvas>
 
-<!-- ══════════════ INTRO ══════════════ -->
+<!-- ═══ INTRO ═══ -->
 <section class="scr" id="si">
   <div class="i-logo">HYPER<span>FLEX</span></div>
-
-  <!-- Floating orbs decoration -->
   <div aria-hidden="true" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;">
-    <div style="position:absolute;width:600px;height:600px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-55%);background:radial-gradient(ellipse,rgba(201,146,13,.07) 0%,transparent 70%);filter:blur(40px);animation:breathe 4s ease-in-out infinite;"></div>
-    <div style="position:absolute;width:300px;height:300px;border-radius:50%;top:20%;right:10%;background:radial-gradient(ellipse,rgba(255,77,106,.05) 0%,transparent 70%);filter:blur(30px);animation:breathe 5s 1s ease-in-out infinite;"></div>
-    <div style="position:absolute;width:200px;height:200px;border-radius:50%;bottom:25%;left:8%;background:radial-gradient(ellipse,rgba(77,159,255,.05) 0%,transparent 70%);filter:blur(24px);animation:breathe 6s 2s ease-in-out infinite;"></div>
+    <div style="position:absolute;width:700px;height:700px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-55%);background:radial-gradient(ellipse,rgba(201,146,13,.07) 0%,transparent 70%);filter:blur(48px);animation:breathe 4s ease-in-out infinite;"></div>
+    <div style="position:absolute;width:280px;height:280px;border-radius:50%;top:18%;right:8%;background:radial-gradient(ellipse,rgba(255,77,106,.05) 0%,transparent 70%);filter:blur(28px);animation:breathe 5s 1.2s ease-in-out infinite;"></div>
+    <div style="position:absolute;width:200px;height:200px;border-radius:50%;bottom:22%;left:6%;background:radial-gradient(ellipse,rgba(77,159,255,.05) 0%,transparent 70%);filter:blur(24px);animation:breathe 6s 2s ease-in-out infinite;"></div>
   </div>
-
   <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;">
     <div class="i-kicker">Prediction Market Archetype Test</div>
-    <h1 class="i-head">What kind of predictor<br>are <em>you?</em></h1>
-    <p class="i-sub">7 questions that identify your exact edge — and surface the markets you're built to crush. Takes 60 seconds.</p>
+    <h1 class="i-head">Not a quiz.<br>A <em>mirror.</em></h1>
+    <p class="i-sub">7 choices that reveal how you already think. Your archetype surfaces in 60 seconds.</p>
     <div class="i-pills">
       <div class="i-pill" style="color:#00e68a;border-color:rgba(0,230,138,.25);background:rgba(0,230,138,.06);">7 archetypes</div>
       <div class="i-pill" style="color:#4d9fff;border-color:rgba(77,159,255,.25);background:rgba(77,159,255,.06);">Live market matching</div>
       <div class="i-pill" style="color:#a855f7;border-color:rgba(168,85,247,.25);background:rgba(168,85,247,.06);">Shareable identity</div>
     </div>
-    <button class="btn-go" onclick="startQuiz()">Identify my edge &rarr;</button>
+    <button class="btn-go" onclick="startQuiz()">Find my archetype &rarr;</button>
   </div>
 </section>
 
-<!-- ══════════════ QUIZ ══════════════ -->
+<!-- ═══ QUIZ ═══ -->
 <section class="scr gone" id="sq">
   <div id="pstrip"><div id="pfill"></div></div>
-  <div id="pcount"></div>
+  <!-- constellation tracker -->
+  <svg id="constellation" viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg"></svg>
+  <!-- ambient bg per question -->
+  <div id="q-ambient" class="q-ambient"></div>
+  <!-- question stages mount here -->
   <div style="position:relative;width:100%;height:100%;" id="sw"></div>
 </section>
 
-<!-- ══════════════ LOADING ══════════════ -->
+<!-- ═══ ANALYZING ═══ -->
 <section class="scr gone" id="sl">
-  <div style="text-align:center;">
-    <div class="l-orb"></div>
-    <div class="l-text">Building your profile</div>
-    <div class="l-detail" id="ldtl">Mapping your instincts…</div>
+  <div id="ana-wrap">
+    <div id="ana-dots"></div>
+    <div id="ana-lines">
+      <div class="ana-line" id="al0">&nbsp;</div>
+      <div class="ana-line" id="al1">&nbsp;</div>
+      <div class="ana-line" id="al2">&nbsp;</div>
+    </div>
+    <div id="ana-arch"></div>
   </div>
 </section>
 
-<!-- ══════════════ RESULT ══════════════ -->
+<!-- ═══ RESULT ═══ -->
 <section class="scr gone" id="sr">
   <div class="r-hero" id="rh">
-    <div class="r-rarity" id="rRarity"></div>
+    <div class="r-icon" id="rIcon"></div>
     <div class="r-type" id="rType"></div>
     <div class="r-name" id="rName"></div>
-    <p class="r-sub" id="rSub"></p>
+    <div class="r-tagline" id="rTagline"></div>
     <div class="r-traits" id="rTraits"></div>
+    <div class="r-beliefs" id="rBeliefs"></div>
     <div class="r-social" id="rSocial"></div>
     <div class="r-acts" id="rActs"></div>
   </div>
@@ -418,580 +285,612 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
     </div>
     <div class="mkts-grid" id="mktG">
       <div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">
-        <div style="width:28px;height:28px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--arch-color,#c9920d);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px;"></div>
+        <div style="width:24px;height:24px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--arch-color,#c9920d);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;"></div>
         Matching markets to your archetype…
       </div>
     </div>
-    <div class="mkts-cta">
-      <span style="color:var(--dim)">See all edges on the</span>
-      <a href="/alpha-live">Alpha Terminal →</a>
-    </div>
+    <div class="mkts-cta">Browse all edges on the <a href="/alpha-live">Alpha Terminal →</a></div>
   </div>
 </section>
 
 <script>
-/* ══════════════════════════════════════════════════════════════════
-   QUESTIONS — psychologically precise, not just interest surveys
-══════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   QUESTIONS
+══════════════════════════════════════════════════════ */
 var QS = [
   {
-    q: 'Your biggest prediction win happened because…',
+    q: 'It\'s 11pm. Markets are closed. Breaking news drops that changes everything. Your first move is:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".04" stroke="rgba(255,255,255,.5)" stroke-width=".5" fill="none"><path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M0 600h800M0 700h800"/><path d="M100 0v800M200 0v800M300 0v800M400 0v800M500 0v800M600 0v800M700 0v800"/></g></svg>',
     a: [
-      { id:'A', cat:'contra',  color:'#ff6b35', label:'Everyone laughed at your take.',           desc:'You saw what the crowd missed. The market came to you.' },
-      { id:'B', cat:'data',    color:'#06b6d4', label:'You built the model and trusted it.',     desc:'Your framework was right. You had the receipts.' },
-      { id:'C', cat:'domain',  color:'#4d9fff', label:'You knew the space better than anyone.',  desc:'Domain depth that no algorithm can replicate.' },
-      { id:'D', cat:'timing',  color:'#00e68a', label:'You got in before the information spread.',desc:'You read signals early. The crowd caught up.' },
+      { id:'INTEL',      emoji:'🔴', label:'INTEL',      color:'#ff4d6a', desc:'Open Twitter and read every thread. You need the full picture before you act.' },
+      { id:'DATA',       emoji:'📊', label:'DATA',       color:'#4d9fff', desc:'Pull up the charts. Price tells you what words can\'t.' },
+      { id:'NETWORK',    emoji:'📞', label:'NETWORK',    color:'#00e68a', desc:'Text three people who would know. Your edge is who you know.' },
+      { id:'CONTRARIAN', emoji:'💤', label:'CONTRARIAN', color:'#a855f7', desc:'Go to sleep. Overreaction is the opportunity.' },
     ],
   },
   {
-    q: 'A market is at 60% YES. You think it should be 80%. You…',
+    q: 'A market is sitting at 12¢. You\'ve done your research. You\'re right and you know it. You:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><path d="M0 350 C200 350 250 100 400 100 S600 300 800 50" stroke="rgba(255,255,255,.05)" stroke-width="1.5" fill="none"/><circle cx="400" cy="100" r="4" fill="rgba(255,255,255,.06)"/></svg>',
     a: [
-      { id:'A', cat:'contra',  color:'#ff6b35', label:'Size in immediately.',                     desc:'Edge evaporates. You hit it before the thesis spreads.' },
-      { id:'B', cat:'data',    color:'#06b6d4', label:'Verify your model first, then move.',      desc:'You need the framework to confirm before capital goes in.' },
-      { id:'C', cat:'timing',  color:'#00e68a', label:'Wait for confirmation — then size in.',    desc:'Right thesis, wrong timing is still wrong. You\'re patient.' },
-      { id:'D', cat:'domain',  color:'#a855f7', label:'Check who else is positioned.',            desc:'Smart money alignment matters. You trade with confirmation.' },
+      { id:'SHARK',      emoji:'💰', label:'SHARK',      color:'#00e68a', desc:'Size up. Conviction means nothing without capital.' },
+      { id:'DISCIPLINED',emoji:'⚖️', label:'DISCIPLINED',color:'#4d9fff', desc:'Take a moderate position. Being right matters more than being rich.' },
+      { id:'ANALYST',    emoji:'👀', label:'ANALYST',    color:'#c9920d', desc:'Watch it. You need one more data point.' },
+      { id:'ARCHITECT',  emoji:'🔄', label:'ARCHITECT',  color:'#a855f7', desc:'Look for the opposite side. 88¢ NO is the same bet.' },
     ],
   },
   {
-    q: 'What type of market keeps you up at night?',
+    q: 'The most predictable thing in the world is:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".05" fill="none" stroke="rgba(255,255,255,.6)" stroke-width=".5"><polygon points="400,50 700,200 700,600 400,750 100,600 100,200"/><polygon points="400,150 620,260 620,540 400,650 180,540 180,260"/><polygon points="400,250 540,320 540,480 400,550 260,480 260,320"/></g></svg>',
     a: [
-      { id:'A', cat:'sports',   color:'#4d9fff', label:'The game where you spotted the injury.',  desc:'Real-time, domain-driven. You live for this edge.' },
-      { id:'B', cat:'politics', color:'#ff4d6a', label:'The election where the polls are lying.',  desc:'You read the methodology. You know what they missed.' },
-      { id:'C', cat:'finance',  color:'#00e68a', label:'The Fed decision the market has wrong.',   desc:'Macro positioning. You\'re playing chess while they play checkers.' },
-      { id:'D', cat:'crypto',   color:'#a855f7', label:'The protocol launch with a token unlock.', desc:'On-chain data priced in before anyone notices.' },
+      { id:'WONK_D',  emoji:'🏛️', label:'WONK',   color:'#ff4d6a', desc:'Political incentives. Politicians always protect power.' },
+      { id:'MACRO_D', emoji:'📈', label:'MACRO',   color:'#00e68a', desc:'Market structure. Capital flows where returns are.' },
+      { id:'NATIVE_D',emoji:'⛓️', label:'NATIVE',  color:'#a855f7', desc:'On-chain data. The ledger doesn\'t lie.' },
+      { id:'ORACLE_D',emoji:'🏆', label:'ORACLE',  color:'#4d9fff', desc:'Human performance. Athletes and teams have patterns.' },
     ],
   },
   {
-    q: 'You\'re most confident when…',
+    q: 'Your real edge comes from:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".04" fill="rgba(255,255,255,.5)"><circle cx="200" cy="200" r="3"/><circle cx="400" cy="150" r="3"/><circle cx="600" cy="250" r="3"/><circle cx="300" cy="400" r="3"/><circle cx="500" cy="450" r="3"/><circle cx="150" cy="550" r="3"/><circle cx="650" cy="500" r="3"/><line x1="200" y1="200" x2="400" y2="150" stroke="rgba(255,255,255,.03)" stroke-width="1"/><line x1="400" y1="150" x2="600" y2="250" stroke="rgba(255,255,255,.03)" stroke-width="1"/><line x1="300" y1="400" x2="500" y2="450" stroke="rgba(255,255,255,.03)" stroke-width="1"/></g></svg>',
     a: [
-      { id:'A', cat:'contra',  color:'#ff6b35', label:'The crowd is clearly overconfident.',     desc:'Consensus complacency is your buy signal.' },
-      { id:'B', cat:'data',    color:'#06b6d4', label:'Every data point lines up the same way.', desc:'When the model is clean, you press hard.' },
-      { id:'C', cat:'domain',  color:'#4d9fff', label:'You have information they don\'t.',       desc:'Information asymmetry is your entire edge.' },
-      { id:'D', cat:'timing',  color:'#00e68a', label:'The timing window is closing fast.',      desc:'Urgency sharpens your conviction. You act under pressure.' },
+      { id:'RESEARCH', emoji:'📰', label:'RESEARCH', color:'#c9920d', desc:'Reading more than everyone else.' },
+      { id:'NETWORK_E',emoji:'🤝', label:'NETWORK',  color:'#00e68a', desc:'Knowing people others don\'t.' },
+      { id:'QUANT',    emoji:'🧮', label:'QUANT',    color:'#4d9fff', desc:'Modeling what others won\'t.' },
+      { id:'PATIENCE', emoji:'🚶', label:'PATIENCE', color:'#a855f7', desc:'Thinking longer than everyone else.' },
     ],
   },
   {
-    q: 'How do you handle a losing streak?',
+    q: 'You were right on a market. Resolved against you on a technicality. You:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" opacity=".04"><path d="M400 400 m-280 0 a280 280 0 1 0 560 0 a280 280 0 1 0-560 0" stroke="rgba(255,255,255,.4)" fill="none" stroke-width=".5"/><path d="M400 400 m-200 0 a200 200 0 1 0 400 0 a200 200 0 1 0-400 0" stroke="rgba(255,255,255,.3)" fill="none" stroke-width=".5"/></svg>',
     a: [
-      { id:'A', cat:'data',    color:'#06b6d4', label:'Audit the model. Find the error.',        desc:'You don\'t blame the market. You debug your process.' },
-      { id:'B', cat:'contra',  color:'#ff6b35', label:'Size down and wait for the obvious trade.',desc:'Capital preservation. Let the edge come to you.' },
-      { id:'C', cat:'domain',  color:'#4d9fff', label:'Go back to your core domain.',            desc:'Losses happen outside your edge. You refocus.' },
-      { id:'D', cat:'timing',  color:'#00e68a', label:'Study what you timed wrong.',             desc:'The thesis was right. The entry was wrong. You learn timing.' },
+      { id:'VIGILANT',   emoji:'😤', label:'VIGILANT',   color:'#ff4d6a', desc:'Document everything. This is a pattern.' },
+      { id:'GROWTH',     emoji:'📝', label:'GROWTH',     color:'#4d9fff', desc:'Write a post-mortem. What would you do differently?' },
+      { id:'RELENTLESS', emoji:'🔁', label:'RELENTLESS', color:'#00e68a', desc:'Immediately find the next version of the trade.' },
+      { id:'ZEN',        emoji:'🤷', label:'ZEN',        color:'#a855f7', desc:'Move on. One trade doesn\'t define your edge.' },
     ],
   },
   {
-    q: 'Your information diet looks like…',
+    q: 'Your natural timeframe is:',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="100"><line x1="50" y1="50" x2="750" y2="50" stroke="rgba(255,255,255,.05)" stroke-width="1"/><circle cx="50" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="250" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="450" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="650" cy="50" r="4" fill="rgba(255,255,255,.07)"/><circle cx="750" cy="50" r="4" fill="rgba(255,255,255,.07)"/></svg>',
     a: [
-      { id:'A', cat:'sports',   color:'#4d9fff', label:'ESPN, The Athletic, injury reports.',      desc:'You're closer to the sport than most analysts.' },
-      { id:'B', cat:'politics', color:'#ff4d6a', label:'Politico, Nate Silver, FEC filings.',      desc:'Primary sources, methodology critiques, district-level data.' },
-      { id:'C', cat:'finance',  color:'#00e68a', label:'Bloomberg, Fed releases, earnings calls.', desc:'You read primary financial data, not headlines about it.' },
-      { id:'D', cat:'crypto',   color:'#a855f7', label:'CT, Dune dashboards, Discord alpha.',      desc:'On-chain before off-chain. You\'re always early.' },
+      { id:'TRADER',   emoji:'⚡', label:'TRADER',   color:'#ff4d6a', desc:'Minutes to hours. The world moves fast.' },
+      { id:'SWINGER',  emoji:'📅', label:'SWINGER',  color:'#c9920d', desc:'Days to weeks. Enough time for thesis to play out.' },
+      { id:'INVESTOR', emoji:'🗓️', label:'INVESTOR', color:'#4d9fff', desc:'Months. You want the market to come to you.' },
+      { id:'VISIONARY',emoji:'🔭', label:'VISIONARY',color:'#a855f7', desc:'Years. You\'re betting on civilizational trends.' },
     ],
   },
   {
-    q: 'The prediction market you'd build if you could…',
+    q: 'Deep down, what are you really doing here?',
+    ambient: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><g opacity=".05" fill="rgba(255,255,255,.7)"><circle cx="200" cy="150" r="1.5"/><circle cx="400" cy="80" r="2"/><circle cx="600" cy="180" r="1"/><circle cx="700" cy="300" r="1.5"/><circle cx="100" cy="400" r="1"/><circle cx="500" cy="350" r="2.5"/><circle cx="350" cy="500" r="1.5"/><circle cx="650" cy="550" r="1"/></g></svg>',
     a: [
-      { id:'A', cat:'geo',     color:'#f59e0b', label:'Will this geopolitical event escalate?',  desc:'Global macro, conflict analysis, long-horizon structural bets.' },
-      { id:'B', cat:'data',   color:'#06b6d4',  label:'Will this model outperform by X%?',       desc:'Quantifiable, objective, scoring-based. Pure data.' },
-      { id:'C', cat:'domain', color:'#4d9fff',  label:'Will this player\'s stat line hold?',     desc:'Domain-deep, unmodeled by generalists, priced wrong.' },
-      { id:'D', cat:'contra', color:'#ff6b35',  label:'Something the crowd says is impossible.', desc:'Tail risk is underpriced. You\'ve always believed this.' },
+      { id:'PROVING',      emoji:'🎯', label:'THE SHARP',     color:'#4d9fff', desc:'Proving I see things others miss.' },
+      { id:'UNDERSTANDING',emoji:'🌍', label:'THE WONK',      color:'#ff4d6a', desc:'Understanding how the world actually works.' },
+      { id:'BUILDING',     emoji:'💎', label:'THE ARCHITECT', color:'#c9920d', desc:'Building something that compounds.' },
+      { id:'PLAYER',       emoji:'🔥', label:'THE PLAYER',    color:'#00e68a', desc:'I just love the game.' },
     ],
   },
 ];
 
-/* ══════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════
+   SCORING WEIGHTS
+══════════════════════════════════════════════════════ */
+var WEIGHTS = {
+  INTEL:        { wonk:3, sharp:1 },
+  DATA:         { sharp:3, hawk:2 },
+  NETWORK:      { strategist:3, wonk:1 },
+  CONTRARIAN:   { contrarian:4 },
+  SHARK:        { native:2, contrarian:2 },
+  DISCIPLINED:  { sharp:3, hawk:1 },
+  ANALYST:      { sharp:2, wonk:2 },
+  ARCHITECT:    { strategist:3, sharp:1 },
+  WONK_D:       { wonk:4 },
+  MACRO_D:      { hawk:4 },
+  NATIVE_D:     { native:4 },
+  ORACLE_D:     { oracle:4 },
+  RESEARCH:     { wonk:2, sharp:2 },
+  NETWORK_E:    { strategist:3 },
+  QUANT:        { sharp:4 },
+  PATIENCE:     { hawk:2, contrarian:2 },
+  VIGILANT:     { wonk:2, sharp:2 },
+  GROWTH:       { sharp:3 },
+  RELENTLESS:   { oracle:2, contrarian:2 },
+  ZEN:          { hawk:2, strategist:2 },
+  TRADER:       { oracle:2, native:2 },
+  SWINGER:      { sharp:2, contrarian:2 },
+  INVESTOR:     { hawk:3 },
+  VISIONARY:    { strategist:3, native:1 },
+  PROVING:      { sharp:3, contrarian:1 },
+  UNDERSTANDING:{ wonk:3, strategist:1 },
+  BUILDING:     { hawk:2, native:2 },
+  PLAYER:       { oracle:3, contrarian:1 },
+};
+
+/* ══════════════════════════════════════════════════════
    ARCHETYPES
-══════════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════ */
 var AX = {
-  contra: {
-    tag:      'THE CONTRARIAN',
-    type:     'Market Dissenter',
-    color:    '#ff6b35',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(255,107,53,.18) 0%, rgba(255,77,106,.08) 50%, transparent 80%)',
-    sub:      'Consensus makes you uncomfortable. When everyone agrees, you start questioning. When everyone panics, you stay flat — then size in. Your biggest wins came when you were most alone. The crowd is your edge.',
-    traits:   { 'Conviction':97, 'Discipline':92, 'Patience':88, 'Timing':75, 'Data':55 },
-    rarity:   '9.8% of traders',
-    rarityColor: 'rgba(255,107,53,.15)',
-    rarityBorder:'rgba(255,107,53,.35)',
-    keywords: ['against', 'fade', 'wrong', 'overpriced', 'underpriced', 'consensus'],
-    cats:     ['finance','crypto','politics'],
-    share:    'I got THE CONTRARIAN on @hyperflexnet. I fade the crowd. Find your archetype →',
+  ORACLE: {
+    name: 'THE ORACLE',
+    type: 'Pattern Recognition',
+    tagline: 'You see patterns in noise others call chaos.',
+    color: '#4d9fff',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(77,159,255,.22) 0%, rgba(6,182,212,.08) 50%, transparent 80%)',
+    icon: '◎',
+    rarity: '8.4%',
+    traits: { 'Pattern': 94, 'Instinct': 88, 'Speed': 76, 'Patience': 45 },
+    beliefs: [
+      'Momentum is real and measurable.',
+      'The crowd is usually wrong at inflection points.',
+      'Data without context is just noise.',
+    ],
+    keywords: ['sports','performance','tournament','championship','record','nba','nfl','mlb','season','playoff','streak'],
+    share: 'I\'m THE ORACLE on @HyperflexNetwork — I see patterns others call chaos.',
   },
-  data: {
-    tag:      'THE SHARP',
-    type:     'Quantitative Analyst',
-    color:    '#06b6d4',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(6,182,212,.16) 0%, rgba(77,159,255,.07) 50%, transparent 80%)',
-    sub:      'You don\'t bet on vibes. Every prediction has a model — calibrated probabilities, base rates, sample sizes. You\'re slow to move but when the data aligns, you press hard. Accuracy over volume. Always.',
-    traits:   { 'Accuracy':97, 'Discipline':94, 'Data':91, 'Patience':85, 'Instinct':38 },
-    rarity:   '7.4% of traders',
-    rarityColor: 'rgba(6,182,212,.12)',
-    rarityBorder:'rgba(6,182,212,.35)',
-    keywords: ['data', 'statistics', 'probability', 'model', 'analysis', 'calibration'],
-    cats:     ['finance','politics','sports'],
-    share:    'I got THE SHARP on @hyperflexnet. I model everything before I bet. Find yours →',
+  WONK: {
+    name: 'THE WONK',
+    type: 'Policy & Incentives',
+    tagline: 'Policy is just incentives wearing a suit.',
+    color: '#ff4d6a',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,77,106,.2) 0%, rgba(245,158,11,.06) 50%, transparent 80%)',
+    icon: '⬡',
+    rarity: '7.1%',
+    traits: { 'Policy': 96, 'Research': 91, 'Speed': 38, 'Contrarianism': 62 },
+    beliefs: [
+      'Every political action has a paper trail.',
+      'Incentives explain 90% of outcomes.',
+      'The boring answer is usually right.',
+    ],
+    keywords: ['election','congress','senate','policy','president','fed','regulation','vote','democrat','republican','supreme court'],
+    share: 'I\'m THE WONK on @HyperflexNetwork — policy is just incentives wearing a suit.',
   },
-  domain: {
-    tag:      'THE ORACLE',
-    type:     'Domain Specialist',
-    color:    '#4d9fff',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(77,159,255,.18) 0%, rgba(6,182,212,.07) 50%, transparent 80%)',
-    sub:      'You see outcomes others miss because you\'ve spent years in one space. Box scores, injury reports, committee votes, earnings footnotes — whatever your domain, you\'re three levels deeper than the market. That depth is your moat.',
-    traits:   { 'Domain':97, 'Instinct':90, 'Pattern':84, 'Timing':72, 'Macro':48 },
-    rarity:   '12.4% of traders',
-    rarityColor: 'rgba(77,159,255,.12)',
-    rarityBorder:'rgba(77,159,255,.35)',
-    keywords: ['sports','nba','nfl','election','vote','earnings','player','team','game'],
-    cats:     ['sports','politics','finance'],
-    share:    'I got THE ORACLE on @hyperflexnet. Domain depth is my edge. Find yours →',
+  HAWK: {
+    name: 'MACRO HAWK',
+    type: 'Macro Strategist',
+    tagline: 'Everything is a rate decision in disguise.',
+    color: '#00e68a',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,230,138,.18) 0%, rgba(6,182,212,.06) 50%, transparent 80%)',
+    icon: '△',
+    rarity: '9.7%',
+    traits: { 'Macro': 97, 'Patience': 85, 'Contrarianism': 78, 'Speed': 42 },
+    beliefs: [
+      'Central banks move markets more than any news event.',
+      'The real trade is always 6 months early.',
+      'Inflation is always and everywhere a monetary phenomenon.',
+    ],
+    keywords: ['fed','inflation','rate','gdp','recession','dollar','treasury','cpi','yield','fomc','powell'],
+    share: 'I\'m MACRO HAWK on @HyperflexNetwork — everything is a rate decision in disguise.',
   },
-  timing: {
-    tag:      'THE CATALYST',
-    type:     'Flow & Momentum Trader',
-    color:    '#00e68a',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(0,230,138,.16) 0%, rgba(6,182,212,.06) 50%, transparent 80%)',
-    sub:      'Right thesis, wrong timing is still wrong. You understand that better than anyone. You read momentum before it shows up in prices — whale flow, volume spikes, narrative shifts. You\'re not the first to see it, but you\'re first to time it.',
-    traits:   { 'Timing':97, 'Flow':92, 'Momentum':88, 'Discipline':80, 'Patience':60 },
-    rarity:   '13.1% of traders',
-    rarityColor: 'rgba(0,230,138,.1)',
-    rarityBorder:'rgba(0,230,138,.3)',
-    keywords: ['momentum','whale','volume','surge','spike','move','trend'],
-    cats:     ['crypto','finance','sports'],
-    share:    'I got THE CATALYST on @hyperflexnet. I trade timing and flow. Find yours →',
+  NATIVE: {
+    name: 'CHAIN NATIVE',
+    type: 'On-Chain Intelligence',
+    tagline: 'The ledger is the only source of truth.',
+    color: '#a855f7',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(168,85,247,.22) 0%, rgba(236,72,153,.07) 50%, transparent 80%)',
+    icon: '⬢',
+    rarity: '11.3%',
+    traits: { 'On-chain': 95, 'Contrarianism': 82, 'Instinct': 79, 'Patience': 31 },
+    beliefs: [
+      'Transparency is the only real edge.',
+      'Most financial infrastructure will be rebuilt on-chain.',
+      'The best trades make TradFi uncomfortable.',
+    ],
+    keywords: ['bitcoin','ethereum','crypto','defi','blockchain','btc','eth','solana','token','nft','protocol'],
+    share: 'I\'m CHAIN NATIVE on @HyperflexNetwork — the ledger is the only source of truth.',
   },
-  sports: {
-    tag:      'THE HANDICAPPER',
-    type:     'Sports Market Specialist',
-    color:    '#3b82f6',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(59,130,246,.18) 0%, rgba(77,159,255,.08) 50%, transparent 80%)',
-    sub:      'Injury feeds, lineup changes, referee tendencies, weather at kickoff — you read the details that algorithms can\'t replicate. The market prices the narrative. You price the game. That gap is your edge, and you exploit it obsessively.',
-    traits:   { 'Domain':96, 'Real-time':90, 'Pattern':85, 'Instinct':88, 'Macro':30 },
-    rarity:   '14.2% of traders',
-    rarityColor: 'rgba(59,130,246,.12)',
-    rarityBorder:'rgba(59,130,246,.35)',
-    keywords: ['nba','nfl','mlb','nhl','soccer','game','championship','team','player','season','playoff'],
-    cats:     ['sports'],
-    share:    'I got THE HANDICAPPER on @hyperflexnet. Sports markets are my edge. Find yours →',
+  STRATEGIST: {
+    name: 'THE STRATEGIST',
+    type: 'Geopolitical Intelligence',
+    tagline: 'Geography is destiny. You never forgot it.',
+    color: '#c9920d',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(201,146,13,.2) 0%, rgba(239,68,68,.06) 50%, transparent 80%)',
+    icon: '◈',
+    rarity: '6.1%',
+    traits: { 'Geopolitics': 93, 'Long-term': 89, 'Pattern': 84, 'Speed': 35 },
+    beliefs: [
+      'Every conflict is about resources or identity, usually both.',
+      'The map matters more than the headline.',
+      'History rhymes loudly enough to trade on.',
+    ],
+    keywords: ['russia','china','iran','nato','war','taiwan','nuclear','election','treaty','conflict','geopolit'],
+    share: 'I\'m THE STRATEGIST on @HyperflexNetwork — geography is destiny.',
   },
-  politics: {
-    tag:      'THE WONK',
-    type:     'Political Analyst',
-    color:    '#f43f5e',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(244,63,94,.18) 0%, rgba(245,158,11,.07) 50%, transparent 80%)',
-    sub:      'Committee votes, polling methodology, district-level data — you read what others skim. Most traders treat politics like a coin flip. You treat it like a chess match. You price policy, not optics.',
-    traits:   { 'Policy':97, 'Research':91, 'Patience':88, 'Timing':68, 'Instinct':55 },
-    rarity:   '8.7% of traders',
-    rarityColor: 'rgba(244,63,94,.1)',
-    rarityBorder:'rgba(244,63,94,.32)',
-    keywords: ['election','president','senate','congress','vote','poll','party','democrat','republican','governor','legislative','bill','supreme court'],
-    cats:     ['politics','government'],
-    share:    'I got THE WONK on @hyperflexnet. I predict politics. Policy is my edge. Find yours →',
+  CONTRARIAN: {
+    name: 'THE CONTRARIAN',
+    type: 'Market Dissenter',
+    tagline: 'Consensus is a signal. A sell signal.',
+    color: '#ff6b35',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,107,53,.2) 0%, rgba(255,77,106,.07) 50%, transparent 80%)',
+    icon: '↯',
+    rarity: '9.8%',
+    traits: { 'Contrarianism': 99, 'Conviction': 91, 'Patience': 88, 'Social comfort': 22 },
+    beliefs: [
+      'The most crowded trade is the most dangerous trade.',
+      'If everyone knows it, it\'s already priced in.',
+      'Being early and being wrong are indistinguishable until they\'re not.',
+    ],
+    keywords: ['unlikely','impossible','surprise','fade','against','upset','underdog'],
+    share: 'I\'m THE CONTRARIAN on @HyperflexNetwork — consensus is a sell signal.',
   },
-  geo: {
-    tag:      'THE STRATEGIST',
-    type:     'Geopolitical Intelligence',
-    color:    '#f59e0b',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(245,158,11,.18) 0%, rgba(239,68,68,.07) 50%, transparent 80%)',
-    sub:      'You read the world differently. Conflict patterns, escalation dynamics, election outcomes in places most traders couldn\'t find on a map. Long horizons. Structural thinking. The market is priced for the obvious scenario — you\'re positioned for the real one.',
-    traits:   { 'Global':97, 'Patience':94, 'Research':88, 'Macro':80, 'Timing':55 },
-    rarity:   '6.1% of traders',
-    rarityColor: 'rgba(245,158,11,.1)',
-    rarityBorder:'rgba(245,158,11,.32)',
-    keywords: ['war','nato','china','russia','ukraine','iran','taiwan','sanction','treaty','coup','peace','ceasefire','conflict','geopolit'],
-    cats:     ['geopolitics','politics','finance'],
-    share:    'I got THE STRATEGIST on @hyperflexnet. Geopolitics is my edge. Find yours →',
-  },
-  crypto: {
-    tag:      'THE NATIVE',
-    type:     'On-Chain Intelligence',
-    color:    '#a855f7',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(168,85,247,.18) 0%, rgba(236,72,153,.07) 50%, transparent 80%)',
-    sub:      'You live on-chain. Protocol launches, token unlocks, liquidation cascades, wallet clustering — you see the alpha before it surfaces anywhere else. The market is always catching up to you. That lag is your edge.',
-    traits:   { 'On-chain':98, 'Velocity':93, 'Conviction':84, 'Timing':76, 'Patience':35 },
-    rarity:   '11.3% of traders',
-    rarityColor: 'rgba(168,85,247,.1)',
-    rarityBorder:'rgba(168,85,247,.32)',
-    keywords: ['bitcoin','ethereum','crypto','btc','eth','solana','defi','nft','token','blockchain','altcoin','stablecoin','dex','protocol','dao','wallet'],
-    cats:     ['crypto','technology'],
-    share:    'I got THE NATIVE on @hyperflexnet. On-chain intelligence is my edge. Find yours →',
-  },
-  finance: {
-    tag:      'MACRO HAWK',
-    type:     'Macro Strategist',
-    color:    '#34d399',
-    heroGrad: 'radial-gradient(ellipse 90% 70% at 50% 35%, rgba(52,211,153,.16) 0%, rgba(6,182,212,.07) 50%, transparent 80%)',
-    sub:      'You trade the cycle. Fed minutes, CPI prints, yield curve inversions — you know what these mean before the market reacts. Most people predict events. You predict what events do to prices. That\'s a different game entirely.',
-    traits:   { 'Macro':97, 'Timing':91, 'Data':86, 'Cycle':82, 'Patience':70 },
-    rarity:   '15.2% of traders',
-    rarityColor: 'rgba(52,211,153,.1)',
-    rarityBorder:'rgba(52,211,153,.3)',
-    keywords: ['fed','federal reserve','rate','interest','inflation','cpi','gdp','recession','yield','bond','dollar','treasury','earnings','macro'],
-    cats:     ['finance','economics'],
-    share:    'I got MACRO HAWK on @hyperflexnet. I trade the macro cycle. Find yours →',
+  SHARP: {
+    name: 'THE SHARP',
+    type: 'Quantitative Analyst',
+    tagline: 'You don\'t have opinions. You have models.',
+    color: '#00d4ff',
+    gradient: 'radial-gradient(ellipse 90% 70% at 50% 30%, rgba(0,212,255,.2) 0%, rgba(77,159,255,.07) 50%, transparent 80%)',
+    icon: '✦',
+    rarity: '7.4%',
+    traits: { 'Analytical': 98, 'Discipline': 95, 'Emotion ctrl': 92, 'Instinct': 41 },
+    beliefs: [
+      'Every belief should have a confidence interval.',
+      'The process is the edge, not the outcome.',
+      'Good forecasters are made, not born.',
+    ],
+    keywords: ['probability','forecast','model','data','accuracy','statistics','calibration','odds'],
+    share: 'I\'m THE SHARP on @HyperflexNetwork — I don\'t have opinions, I have models.',
   },
 };
 
-/* ══════════════════════════════════════════════════════════════════
-   AURA PALETTE — per-category background morphs
-══════════════════════════════════════════════════════════════════ */
-var AURA = {
-  contra:  'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255,107,53,.12) 0%, rgba(255,77,106,.06) 50%, transparent 80%)',
-  data:    'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(6,182,212,.11) 0%, rgba(77,159,255,.05) 50%, transparent 80%)',
-  domain:  'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(77,159,255,.12) 0%, rgba(6,182,212,.05) 50%, transparent 80%)',
-  timing:  'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,230,138,.10) 0%, rgba(6,182,212,.04) 50%, transparent 80%)',
-  sports:  'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(59,130,246,.12) 0%, rgba(6,182,212,.05) 50%, transparent 80%)',
-  politics:'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(244,63,94,.11) 0%, rgba(245,158,11,.05) 50%, transparent 80%)',
-  geo:     'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(245,158,11,.11) 0%, rgba(239,68,68,.04) 50%, transparent 80%)',
-  crypto:  'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(168,85,247,.13) 0%, rgba(236,72,153,.05) 50%, transparent 80%)',
-  finance: 'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(52,211,153,.10) 0%, rgba(6,182,212,.04) 50%, transparent 80%)',
+/* constellation dot positions (px in 68×68 SVG) */
+var CPOS = [
+  {x:34,y:34},{x:14,y:18},{x:54,y:14},{x:60,y:40},{x:44,y:58},{x:18,y:56},{x:8,y:36}
+];
+
+/* aura gradients per answer color */
+var AURAS = {
+  '#ff4d6a':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255,77,106,.11) 0%, transparent 75%)',
+  '#4d9fff':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(77,159,255,.11) 0%, transparent 75%)',
+  '#00e68a':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,230,138,.09) 0%, transparent 75%)',
+  '#a855f7':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(168,85,247,.12) 0%, transparent 75%)',
+  '#c9920d':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(201,146,13,.10) 0%, transparent 75%)',
+  '#ff6b35':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255,107,53,.10) 0%, transparent 75%)',
+  '#00d4ff':'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,212,255,.10) 0%, transparent 75%)',
 };
 
-/* ══════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════
    STATE
-══════════════════════════════════════════════════════════════════ */
-var _s = {
-  contra:0, data:0, domain:0, timing:0,
-  sports:0, politics:0, geo:0, crypto:0, finance:0,
-};
-var _ans   = [];
-var _qIdx  = 0;
-var _arch  = null;
-var _busy  = false;
+══════════════════════════════════════════════════════ */
+var _scores  = {oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
+var _answers = []; /* {id, color} */
+var _qIdx    = 0;
+var _arch    = null;
+var _busy    = false;
 
-/* ══════════════════════════════════════════════════════════════════
-   PARTICLES (canvas — floating dots)
-══════════════════════════════════════════════════════════════════ */
-var _pts = [], _ptCtx;
-function initParticles() {
-  var c = document.getElementById('particles');
-  c.width = window.innerWidth; c.height = window.innerHeight;
-  _ptCtx = c.getContext('2d');
-  for (var i = 0; i < 60; i++) _pts.push({
-    x: Math.random() * c.width,
-    y: Math.random() * c.height,
-    r: Math.random() * 1.5 + 0.3,
-    dx: (Math.random() - .5) * 0.25,
-    dy: (Math.random() - .5) * 0.25,
-    o: Math.random() * .4 + .1,
-  });
-  animateParticles();
+/* ══════════════════════════════════════════════════════
+   PARTICLES
+══════════════════════════════════════════════════════ */
+var _pts=[], _ptCtx;
+function initParticles(){
+  var c=document.getElementById('particles');
+  c.width=window.innerWidth;c.height=window.innerHeight;
+  _ptCtx=c.getContext('2d');
+  for(var i=0;i<55;i++) _pts.push({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.4+0.3,dx:(Math.random()-.5)*.22,dy:(Math.random()-.5)*.22,o:Math.random()*.35+.08});
+  (function loop(){var c2=document.getElementById('particles');_ptCtx.clearRect(0,0,c2.width,c2.height);_pts.forEach(function(p){p.x+=p.dx;p.y+=p.dy;if(p.x<0)p.x=c2.width;if(p.x>c2.width)p.x=0;if(p.y<0)p.y=c2.height;if(p.y>c2.height)p.y=0;_ptCtx.beginPath();_ptCtx.arc(p.x,p.y,p.r,0,Math.PI*2);_ptCtx.fillStyle='rgba(240,239,250,'+p.o+')';_ptCtx.fill();});requestAnimationFrame(loop);})();
+  window.addEventListener('resize',function(){var c3=document.getElementById('particles');c3.width=window.innerWidth;c3.height=window.innerHeight;});
 }
-function animateParticles() {
-  var c = document.getElementById('particles');
-  _ptCtx.clearRect(0, 0, c.width, c.height);
-  _pts.forEach(function(p) {
-    p.x += p.dx; p.y += p.dy;
-    if (p.x < 0) p.x = c.width; if (p.x > c.width) p.x = 0;
-    if (p.y < 0) p.y = c.height; if (p.y > c.height) p.y = 0;
-    _ptCtx.beginPath();
-    _ptCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    _ptCtx.fillStyle = 'rgba(240,239,250,' + p.o + ')';
-    _ptCtx.fill();
-  });
-  requestAnimationFrame(animateParticles);
-}
-window.addEventListener('resize', function() {
-  var c = document.getElementById('particles');
-  c.width = window.innerWidth; c.height = window.innerHeight;
+
+/* ══════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════ */
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function show(id){['si','sq','sl','sr'].forEach(function(i){var el=document.getElementById(i);if(i===id)el.classList.remove('gone');else el.classList.add('gone');});}
+
+/* ══════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded',function(){
+  // ?reset=1 clears saved result
+  if(location.search.indexOf('reset=1')!==-1) localStorage.removeItem('hfx_archetype');
+  checkReturning();
 });
 
-document.addEventListener('DOMContentLoaded', function() { checkExistingArchetype(); });
-
-/* ══════════════════════════════════════════════════════════════════
-   UTILS
-══════════════════════════════════════════════════════════════════ */
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-function show(id) {
-  ['si','sq','sl','sr'].forEach(function(i) {
-    var el = document.getElementById(i);
-    if (i === id) el.classList.remove('gone');
-    else el.classList.add('gone');
-  });
-}
-function topCat() {
-  return Object.entries(_s).sort(function(a,b){return b[1]-a[1];})[0][0];
-}
-function setAura(cat) {
-  var aura = document.getElementById('aura');
-  var bg = AURA[cat] || AURA.contra;
-  aura.style.background = bg;
-}
-function fmtVol(n) {
-  if (!n) return null;
-  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
-  return '$' + Math.round(n);
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   QUIZ FLOW
-══════════════════════════════════════════════════════════════════ */
-function checkExistingArchetype() {
-  var saved = localStorage.getItem('hfx_archetype');
-  if (!saved) return;
-  try {
-    var arc = JSON.parse(saved);
-    if (!arc.tag) return;
-    // Show a returning chip on the intro screen
-    var chip = document.createElement('div');
-    chip.style.cssText = 'position:absolute;top:22px;right:28px;background:' + (arc.color||'#c9920d') + '18;border:1px solid ' + (arc.color||'#c9920d') + '55;border-radius:20px;padding:7px 16px;font-family:var(--mono);font-size:11px;font-weight:600;color:' + (arc.color||'#c9920d') + ';cursor:pointer;';
-    chip.title = 'Your saved archetype';
-    chip.innerHTML = '◆ ' + arc.tag.toUpperCase();
-    chip.onclick = function() {
-      // Quick-show result for returning user
-      for (var k in AX) {
-        if (AX[k].tag === arc.tag) { _arch = AX[k]; break; }
-      }
-      if (_arch) { document.getElementById('particles').style.opacity='1'; initParticles(); showResult(); }
-    };
+function checkReturning(){
+  var saved=localStorage.getItem('hfx_archetype');
+  if(!saved) return;
+  try{
+    var arc=JSON.parse(saved);
+    if(!arc.key||!AX[arc.key]) return;
+    var chip=document.createElement('div');
+    chip.style.cssText='position:absolute;top:22px;right:24px;background:'+arc.color+'18;border:1px solid '+arc.color+'44;border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:'+arc.color+';cursor:pointer;z-index:10;';
+    chip.textContent='◆ '+AX[arc.key].name;
+    chip.onclick=function(){_arch=AX[arc.key];showResult();};
     document.getElementById('si').appendChild(chip);
-  } catch(e) {}
+  }catch(e){}
 }
 
-function startQuiz() {
-  _s = {contra:0,data:0,domain:0,timing:0,sports:0,politics:0,geo:0,crypto:0,finance:0};
-  _ans = []; _qIdx = 0; _arch = null; _busy = false;
-  document.getElementById('particles').style.opacity = '1';
-  initParticles();
-  show('sq');
-  renderQ(0, false);
-}
-
-function renderQ(idx, fromPrev) {
-  var q = QS[idx];
-  var pct = (idx / QS.length * 100).toFixed(0);
-  document.getElementById('pfill').style.width = pct + '%';
-  document.getElementById('pcount').textContent = (idx + 1) + ' / ' + QS.length;
-
-  var letters = ['A','B','C','D','E','F'];
-  var html = '<div class="qstage' + (fromPrev ? ' in' : '') + '" id="qs">' +
-    '<div class="q-n">Question ' + (idx + 1) + ' of ' + QS.length + '</div>' +
-    '<div class="q-text">' + esc(q.q) + '</div>' +
-    '<div class="q-grid">' +
-      q.a.map(function(a, i) {
-        return '<div class="ans" data-cat="' + a.cat + '" data-color="' + a.color + '" style="--ans-color:' + a.color + '" onclick="pick(' + idx + ',\'' + a.cat + '\',this)">' +
-          '<div class="ans-letter">' + letters[i] + '</div>' +
-          '<div class="ans-body"><div class="ans-label">' + esc(a.label) + '</div>' +
-          (a.desc ? '<div class="ans-desc">' + esc(a.desc) + '</div>' : '') +
-          '</div></div>';
-      }).join('') +
-    '</div></div>';
-
-  document.getElementById('sw').innerHTML = html;
-}
-
-function pick(qIdx, cat, el) {
-  if (_busy) return;
-  _busy = true;
-  el.classList.add('chosen');
-
-  // Score
-  _s[cat] = (_s[cat] || 0) + 3;
-  // Secondary scoring based on answer position
-  var parentCat = QS[qIdx].a.find(function(a){ return a.cat === cat; });
-  _ans.push({ q: qIdx, cat: cat });
-
-  // Shift aura
-  setAura(topCat());
-
-  setTimeout(function() {
-    var next = qIdx + 1;
-    if (next < QS.length) {
-      var stage = document.getElementById('qs');
-      if (stage) { stage.className = 'qstage out'; }
-      setTimeout(function() { renderQ(next, true); _busy = false; }, 320);
-    } else {
-      computeAndReveal();
-    }
-  }, 420);
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   COMPUTE RESULT
-══════════════════════════════════════════════════════════════════ */
-function computeAndReveal() {
-  show('sl');
-
-  // Domain-specific boosting based on q6 (media diet)
-  var q6 = _ans.find(function(a){ return a.q === 5; });
-  if (q6) {
-    if (q6.cat === 'sports')   _s.sports   += 4;
-    if (q6.cat === 'politics') _s.politics += 4;
-    if (q6.cat === 'finance')  _s.finance  += 4;
-    if (q6.cat === 'crypto')   _s.crypto   += 4;
+/* ══════════════════════════════════════════════════════
+   QUIZ FLOW
+══════════════════════════════════════════════════════ */
+function startQuiz(){
+  if(location.search.indexOf('reset=1')===-1&&localStorage.getItem('hfx_archetype')){
+    // returning user hit Start — show fresh quiz
+    localStorage.removeItem('hfx_archetype');
   }
-
-  var details = [
-    'Analyzing your risk profile…',
-    'Mapping information sources…',
-    'Calibrating your edge…',
-    'Identifying your archetype…',
-    'Surfacing matched markets…',
-  ];
-  var di = 0;
-  var dtl = document.getElementById('ldtl');
-  var _dt = setInterval(function() {
-    di++;
-    if (di < details.length) { dtl.textContent = details[di]; }
-    else { clearInterval(_dt); }
-  }, 500);
-
-  setTimeout(function() {
-    clearInterval(_dt);
-    var sorted = Object.entries(_s).sort(function(a,b){ return b[1]-a[1]; });
-    var best = sorted[0][0];
-    _arch = AX[best] || AX.contra;
-    showResult();
-  }, 2800);
+  _scores={oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
+  _answers=[];_qIdx=0;_arch=null;_busy=false;
+  document.getElementById('particles').style.opacity='1';
+  initParticles();
+  // reset constellation
+  document.getElementById('constellation').innerHTML='';
+  show('sq');
+  renderQ(0,false);
+  document.addEventListener('keydown',keyHandler);
 }
 
-/* ══════════════════════════════════════════════════════════════════
+function keyHandler(e){
+  if(!['1','2','3','4'].includes(e.key)) return;
+  var idx=parseInt(e.key)-1;
+  var cards=document.querySelectorAll('.ans-card');
+  if(cards[idx]) cards[idx].click();
+}
+
+function renderQ(idx,fromPrev){
+  var q=QS[idx];
+  document.getElementById('pfill').style.width=((idx/QS.length)*100)+'%';
+
+  // ambient background
+  var amb=document.getElementById('q-ambient');
+  amb.style.backgroundImage=q.ambient?'url("'+q.ambient+'")':(amb.style.backgroundImage||'');
+  amb.classList.add('show');
+
+  var html='<div class="qstage'+(fromPrev?' in':'')+'">'+
+    '<div class="q-num">'+String(idx+1).padStart(2,'0')+' / 0'+QS.length+'</div>'+
+    '<div class="q-text">'+esc(q.q)+'</div>'+
+    '<div class="q-grid">'+
+      q.a.map(function(a,i){
+        return '<div class="ans-card" style="--cc:'+a.color+'" onclick="pick('+idx+',this,\''+a.id+'\',\''+a.color+'\')" role="button" tabindex="0">'+
+          '<div class="ans-check"><svg class="check-icon" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg></div>'+
+          '<div class="ans-emoji">'+a.emoji+'</div>'+
+          '<div class="ans-tag">'+esc(a.label)+'</div>'+
+          '<div class="ans-desc">'+esc(a.desc)+'</div>'+
+          '<div class="ans-key">'+(i+1)+'</div>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+  document.getElementById('sw').innerHTML=html;
+}
+
+function pick(qIdx,el,answerId,color){
+  if(_busy) return;
+  _busy=true;
+  el.classList.add('selected');
+  // haptic
+  try{if(navigator.vibrate) navigator.vibrate(45);}catch(_){}
+
+  // score
+  var w=WEIGHTS[answerId]||{};
+  Object.keys(w).forEach(function(k){_scores[k]=(_scores[k]||0)+w[k];});
+  _answers.push({id:answerId,color:color});
+
+  // aura shift
+  var aura=document.getElementById('aura');
+  aura.style.background=AURAS[color]||'';
+
+  // constellation dot
+  var pos=CPOS[_answers.length-1]||{x:34,y:34};
+  var svg=document.getElementById('constellation');
+  var circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circle.setAttribute('cx',pos.x);circle.setAttribute('cy',pos.y);circle.setAttribute('r','3.5');
+  circle.setAttribute('fill',color);circle.setAttribute('filter','url(#cglow)');
+  circle.style.cssText='opacity:0;transform-origin:'+pos.x+'px '+pos.y+'px;transform:scale(0);transition:opacity .45s,transform .45s cubic-bezier(.175,.885,.32,1.275);';
+  if(!document.getElementById('cglow')){
+    var defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+    var filter=document.createElementNS('http://www.w3.org/2000/svg','filter');filter.setAttribute('id','cglow');
+    var blur=document.createElementNS('http://www.w3.org/2000/svg','feGaussianBlur');blur.setAttribute('stdDeviation','1.8');blur.setAttribute('result','blur');
+    var merge=document.createElementNS('http://www.w3.org/2000/svg','feMerge');
+    ['blur','SourceGraphic'].forEach(function(n){var mn=document.createElementNS('http://www.w3.org/2000/svg','feMergeNode');mn.setAttribute('in',n);merge.appendChild(mn);});
+    filter.appendChild(blur);filter.appendChild(merge);defs.appendChild(filter);svg.insertBefore(defs,svg.firstChild);
+  }
+  svg.appendChild(circle);
+  setTimeout(function(){circle.style.opacity='.85';circle.style.transform='scale(1)';},20);
+
+  setTimeout(function(){
+    var stage=document.getElementById('sw').firstElementChild;
+    if(stage) stage.classList.add('out');
+    setTimeout(function(){
+      var next=qIdx+1;
+      if(next<QS.length){renderQ(next,true);_busy=false;}
+      else{document.removeEventListener('keydown',keyHandler);showAnalyzing();}
+    },280);
+  },500);
+}
+
+/* ══════════════════════════════════════════════════════
+   ANALYZING
+══════════════════════════════════════════════════════ */
+function showAnalyzing(){
+  show('sl');
+  // reset ana state
+  document.getElementById('ana-dots').innerHTML='';
+  ['al0','al1','al2'].forEach(function(id){var el=document.getElementById(id);el.textContent=' ';el.className='ana-line';});
+  document.getElementById('ana-arch').className='';document.getElementById('ana-arch').textContent='';
+
+  // drop answer dots one by one
+  _answers.forEach(function(ans,i){
+    setTimeout(function(){
+      var dot=document.createElement('div');
+      dot.className='ana-dot';
+      dot.style.background=ans.color;
+      dot.style.boxShadow='0 0 10px '+ans.color;
+      document.getElementById('ana-dots').appendChild(dot);
+      setTimeout(function(){dot.classList.add('on');},20);
+    },i*220);
+  });
+
+  var startMs=_answers.length*220+500;
+
+  // sequence: line 0
+  setTimeout(function(){
+    typewriterEl(document.getElementById('al0'),'PROCESSING MARKET PROFILE...',38,function(){
+      document.getElementById('al0').classList.add('done');
+      setTimeout(function(){
+        typewriterEl(document.getElementById('al1'),'CROSS-REFERENCING 847 PREDICTION MARKETS...',28,function(){
+          document.getElementById('al1').classList.add('done');
+          setTimeout(function(){
+            document.getElementById('al2').classList.add('active');
+            typewriterEl(document.getElementById('al2'),'ARCHETYPE IDENTIFIED',55,function(){
+              setTimeout(function(){
+                // compute & reveal
+                var sorted=Object.entries(_scores).sort(function(a,b){return b[1]-a[1];});
+                var key=sorted[0][0].toUpperCase();
+                if(!AX[key]) key='SHARP';
+                _arch=AX[key];
+                _arch._key=key.toLowerCase();
+                var archEl=document.getElementById('ana-arch');
+                archEl.style.color=_arch.color;
+                archEl.textContent=_arch.name;
+                archEl.classList.add('show');
+                setTimeout(showResult,900);
+              },300);
+            });
+          },350);
+        });
+      },380);
+    });
+  },startMs);
+}
+
+function typewriterEl(el,text,delay,cb){
+  var i=0;el.textContent='';el.classList.add('active');
+  var t=setInterval(function(){
+    el.textContent+=text[i]||'';i++;
+    if(i>=text.length){clearInterval(t);if(cb) setTimeout(cb,80);}
+  },delay);
+}
+
+/* ══════════════════════════════════════════════════════
    RESULT
-══════════════════════════════════════════════════════════════════ */
-function showResult() {
-  var A = _arch;
-  document.documentElement.style.setProperty('--arch-color', A.color);
+══════════════════════════════════════════════════════ */
+function showResult(){
+  var A=_arch;
+  var key=A._key||Object.keys(AX).find(function(k){return AX[k]===A;})||'sharp';
+  document.documentElement.style.setProperty('--arch-color',A.color);
 
-  // Hero
-  var hero = document.getElementById('rh');
-  hero.style.setProperty('--hero-bg', A.heroGrad);
-  hero.style.setProperty('--arch-color', A.color);
+  // hero gradient
+  document.getElementById('rh').style.setProperty('--hero-bg',A.gradient);
+  document.getElementById('rh').style.setProperty('--arch-color',A.color);
 
-  // Rarity badge
-  var rar = document.getElementById('rRarity');
-  rar.style.cssText = 'background:' + A.rarityColor + ';border-color:' + A.rarityBorder + ';color:' + A.color;
-  rar.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + A.color + ';animation:orbitalPulse 2s infinite;"></span> Rare archetype · ' + A.rarity;
+  // icon (pulsing, renders after brief delay for cinematic effect)
+  var iconEl=document.getElementById('rIcon');
+  iconEl.textContent=A.icon;
+  iconEl.style.cssText='font-size:72px;line-height:1;margin-bottom:16px;color:'+A.color+';opacity:0;animation:riseIn .7s .1s ease forwards, orbPulse 3s 1s ease-in-out infinite;display:block;text-align:center;';
 
-  document.getElementById('rType').textContent = A.type;
-  document.getElementById('rName').innerHTML = '<span style="color:' + A.color + '">' + esc(A.tag) + '</span>';
-  document.getElementById('rSub').textContent = A.sub;
+  document.getElementById('rType').textContent=A.type;
+  // typewriter name
+  var nameEl=document.getElementById('rName');
+  nameEl.style.color=A.color;
+  nameEl.style.opacity='1';
+  nameEl.style.animation='none';
+  nameEl.textContent='';
+  setTimeout(function(){typewriterEl(nameEl,A.name,50,null);},600);
 
-  // Traits
-  var trHtml = Object.entries(A.traits).map(function(t) {
-    return '<div class="tr">' +
-      '<div class="tr-lbl">' + t[0] + '</div>' +
-      '<div class="tr-track"><div class="tr-fill" data-v="' + (t[1]/100) + '" style="background:' + A.color + '"></div></div>' +
-      '<div class="tr-val" style="color:' + A.color + '">' + t[1] + '</div>' +
+  document.getElementById('rTagline').textContent=A.tagline;
+
+  // traits
+  var trHtml=Object.entries(A.traits).map(function(t){
+    return '<div class="tr">'+
+      '<div class="tr-lbl">'+esc(t[0])+'</div>'+
+      '<div class="tr-track"><div class="tr-fill" data-v="'+(t[1]/100)+'" style="background:'+A.color+'"></div></div>'+
+      '<div class="tr-val" style="color:'+A.color+'">'+t[1]+'</div>'+
     '</div>';
   }).join('');
-  document.getElementById('rTraits').innerHTML = trHtml;
+  document.getElementById('rTraits').innerHTML=trHtml;
 
-  // Social
-  document.getElementById('rSocial').innerHTML = '<strong>' + A.rarity + '</strong> of traders share your archetype.';
+  // beliefs
+  document.getElementById('rBeliefs').innerHTML=
+    '<div class="r-beliefs-title">You believe:</div>'+
+    (A.beliefs||[]).map(function(b){
+      return '<div class="r-belief"><div class="r-belief-dot"></div><span>'+esc(b)+'</span></div>';
+    }).join('');
+  document.getElementById('rBeliefs').style.setProperty('--arch-color',A.color);
 
-  // Actions
-  document.getElementById('rActs').innerHTML = [
-    '<button class="btn-x" onclick="shareIt()">',
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.26 5.636zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
-      'Share my type',
-    '</button>',
-    '<a class="btn-feed" href="/feed" style="background:' + A.color + ';color:#000;">Go to feed &rarr;</a>',
-    '<button class="btn-redo" onclick="redo()">Retake quiz</button>',
-  ].join('');
+  document.getElementById('rSocial').innerHTML='<strong>'+A.rarity+' of traders</strong> share your archetype.';
+
+  document.getElementById('rActs').innerHTML=
+    '<button class="btn-share" onclick="shareIt()">'+
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.26 5.636zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>'+
+      'Share archetype'+
+    '</button>'+
+    '<a class="btn-feed" href="/feed" style="background:'+A.color+';color:#000;">Go to feed &rarr;</a>'+
+    '<button class="btn-redo" onclick="redo()">Retake</button>';
 
   show('sr');
-  document.getElementById('sr').scrollTop = 0;
+  document.getElementById('sr').scrollTop=0;
 
-  // Animate trait bars
-  setTimeout(function() {
-    document.querySelectorAll('.tr-fill').forEach(function(el) {
-      el.style.transform = 'scaleX(' + el.getAttribute('data-v') + ')';
+  // animate trait bars staggered
+  setTimeout(function(){
+    var fills=document.querySelectorAll('.tr-fill');
+    fills.forEach(function(el,i){
+      setTimeout(function(){el.style.transform='scaleX('+el.getAttribute('data-v')+')';},i*100);
     });
-  }, 500);
+  },700);
 
-  // Persist archetype to profile if logged in
-  saveArchetype(A);
+  // save
+  localStorage.setItem('hfx_archetype',JSON.stringify({key:key,color:A.color,name:A.name}));
+  // persist to profile if authed
+  try{var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');if(tok){fetch('/api/user/archetype',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({archetype:A.name,archetype_color:A.color,archetype_rarity:A.rarity})}).catch(function(){});}}catch(_){}
 
-  // Fetch markets
   fetchMarkets(A);
 }
 
-async function saveArchetype(A) {
-  try {
-    await fetch('/api/user/archetype', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ archetype: A.tag, archetype_color: A.color, archetype_rarity: A.rarity })
-    });
-    // Store locally too
-    localStorage.setItem('hfx_archetype', JSON.stringify({ tag: A.tag, color: A.color, rarity: A.rarity, sub: A.sub }));
-  } catch(e) { /* not logged in — still saved locally */ }
-  // Save locally regardless
-  localStorage.setItem('hfx_archetype', JSON.stringify({ tag: A.tag, color: A.color, rarity: A.rarity, sub: A.sub }));
-}
-
-/* ══════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════
    MARKET MATCHING
-══════════════════════════════════════════════════════════════════ */
-function scoreM(m, arch) {
-  var q = (m.question || m.title || '').toLowerCase();
-  var c = (m.category || '').toLowerCase();
-  var sc = 0;
-  (arch.keywords || []).forEach(function(kw) {
-    if (q.indexOf(kw) !== -1 || c.indexOf(kw) !== -1) sc += kw.length > 5 ? 4 : 2;
-  });
-  (arch.cats || []).forEach(function(cat) {
-    if (c.indexOf(cat) !== -1) sc += 6;
-  });
-  sc += Math.min(18, (m.edge_score || 0) / 5);
-  if (m.whale_count > 2) sc += 5;
+══════════════════════════════════════════════════════ */
+function scoreM(m,arch){
+  var q=(m.question||m.title||'').toLowerCase();
+  var c=(m.category||'').toLowerCase();
+  var sc=0;
+  (arch.keywords||[]).forEach(function(kw){if(q.indexOf(kw)!==-1||c.indexOf(kw)!==-1) sc+=kw.length>5?4:2;});
+  sc+=Math.min(16,(m.edge_score||0)/5);
+  if((m.whale_count||0)>2) sc+=4;
   return sc;
 }
+function fmtVol(n){if(!n||n<=0)return null;if(n>=1e6)return'$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return'$'+Math.round(n/1e3)+'K';return'$'+Math.round(n);}
 
-async function fetchMarkets(arch) {
-  var grid = document.getElementById('mktG');
-  try {
-    var r = await fetch('/api/screener?limit=120');
-    if (!r.ok) throw new Error(r.status);
-    var data = await r.json();
-    var mkts = Array.isArray(data) ? data : (data.markets || data.data || []);
-
-    var scored = mkts.map(function(m){ return {m:m, sc:scoreM(m,arch)}; })
-      .filter(function(x){ return x.sc > 0; })
-      .sort(function(a,b){ return b.sc - a.sc; })
-      .slice(0, 12);
-
-    if (!scored.length) scored = mkts.slice(0,9).map(function(m){ return {m:m,sc:50}; });
-    document.getElementById('mktN').textContent = scored.length + ' matched';
-
-    grid.innerHTML = scored.map(function(x) {
-      var m = x.m;
-      var yp = m.yes_price != null ? Math.round(m.yes_price*100) : (m.yes_ask != null ? Math.round(m.yes_ask*100) : null);
-      var np = yp != null ? 100-yp : null;
-      var href = m.slug ? '/market/'+m.slug : '#';
-      var vol = fmtVol(m.volume || m.volume_24h);
-      var cat = (m.category || 'MARKET').toUpperCase().slice(0,12);
-      return '<a class="mcard" href="' + esc(href) + '" style="--arch-color:' + arch.color + '">' +
-        '<span class="mcard-cat" style="background:' + arch.color + '1a;color:' + arch.color + ';border:1px solid ' + arch.color + '33;">' + esc(cat) + '</span>' +
-        '<div class="mcard-q">' + esc((m.question||m.title||'').slice(0,95)) + '</div>' +
-        '<div class="mcard-foot">' +
-          (yp != null ? '<span class="yes">YES&nbsp;' + yp + '¢</span><span class="no">NO&nbsp;' + np + '¢</span>' : '') +
-          (vol ? '<span class="mcard-edge">' + vol + '</span>' : '') +
-          (m.edge_score ? '<span class="mcard-edge" style="color:' + arch.color + ';margin-left:' + (vol?'8px':'auto') + '">⚡' + m.edge_score + '</span>' : '') +
-        '</div>' +
+async function fetchMarkets(arch){
+  var grid=document.getElementById('mktG');
+  try{
+    var r=await fetch('/api/screener?limit=120');
+    if(!r.ok) throw new Error(r.status);
+    var data=await r.json();
+    var mkts=Array.isArray(data)?data:(data.markets||data.data||[]);
+    var scored=mkts.map(function(m){return{m:m,sc:scoreM(m,arch)};}).filter(function(x){return x.sc>0;}).sort(function(a,b){return b.sc-a.sc;}).slice(0,12);
+    if(!scored.length) scored=mkts.slice(0,9).map(function(m){return{m:m,sc:50};});
+    document.getElementById('mktN').textContent=scored.length+' matched';
+    grid.innerHTML=scored.map(function(x){
+      var m=x.m;
+      var yp=m.yes_price!=null?Math.round(m.yes_price*100):(m.yes_ask!=null?Math.round(m.yes_ask*100):null);
+      var np=yp!=null?100-yp:null;
+      var href=m.slug?'/market/'+m.slug:'#';
+      var vol=fmtVol(m.volume||m.volume_24h);
+      var cat=(m.category||'MARKET').toUpperCase().slice(0,12);
+      return '<a class="mcard" href="'+esc(href)+'" style="--arch-color:'+arch.color+'">'+
+        '<span class="mcard-cat" style="background:'+arch.color+'18;color:'+arch.color+';border:1px solid '+arch.color+'30;">'+esc(cat)+'</span>'+
+        '<div class="mcard-q">'+esc((m.question||m.title||'').slice(0,92))+'</div>'+
+        '<div class="mcard-foot">'+
+          (yp!=null?'<span class="yes">YES&nbsp;'+yp+'¢</span><span class="no">NO&nbsp;'+np+'¢</span>':'')+
+          (vol?'<span class="mcard-vol">'+vol+'</span>':'')+
+        '</div>'+
       '</a>';
     }).join('');
-  } catch(e) {
-    grid.innerHTML = '<div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">Couldn\'t load markets — <a href="/alpha-live" style="color:' + arch.color + '">browse manually →</a></div>';
+  }catch(e){
+    grid.innerHTML='<div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">Couldn\'t load markets — <a href="/alpha-live" style="color:'+arch.color+'">browse manually →</a></div>';
   }
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   ACTIONS
-══════════════════════════════════════════════════════════════════ */
-function shareIt() {
-  if (!_arch) return;
-  var text = _arch.share + ' hyperflex.network/quiz';
-  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'width=600,height=400');
+/* ══════════════════════════════════════════════════════
+   SHARE + REDO
+══════════════════════════════════════════════════════ */
+function shareIt(){
+  if(!_arch) return;
+  var text=_arch.share+' hyperflex.network/quiz';
+  window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','width=600,height=400');
 }
-
-function redo() {
-  _s = {contra:0,data:0,domain:0,timing:0,sports:0,politics:0,geo:0,crypto:0,finance:0};
-  _ans=[]; _qIdx=0; _arch=null; _busy=false;
+function redo(){
+  _scores={oracle:0,wonk:0,hawk:0,native:0,strategist:0,contrarian:0,sharp:0};
+  _answers=[];_qIdx=0;_arch=null;_busy=false;
   document.getElementById('aura').style.background='';
-  document.getElementById('mktG').innerHTML='<div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;"><div style="width:28px;height:28px;border:2px solid rgba(255,255,255,.1);border-top-color:#c9920d;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px;"></div>Matching markets to your archetype…</div>';
+  document.getElementById('constellation').innerHTML='';
+  document.getElementById('mktG').innerHTML='<div style="color:var(--dim);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;"><div style="width:24px;height:24px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--arch-color,#c9920d);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;"></div>Matching markets to your archetype…</div>';
   show('si');
 }
 </script>
