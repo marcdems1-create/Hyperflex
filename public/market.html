@@ -9465,5 +9465,39 @@ function dismissTakePrompt() {
 })();
 </script>
 <script src="/hfx-engage.js" defer></script>
+
+<script>
+// ── LURKER NUDGE — prompt logged-in viewers to post a take after 30s ──
+(function() {
+  var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+  if (!tok) return; // not logged in — no prompt
+  var slug = (location.pathname.match(/\/market\/([^/?#]+)/) || [])[1] || '';
+  if (!slug) return;
+  var sessionKey = 'hfx_lurker_nudge_' + slug;
+  if (sessionStorage.getItem(sessionKey)) return; // already shown this session
+
+  setTimeout(function() {
+    // Don't show if a take-prompt-bar or other modal is already up
+    if (document.getElementById('take-prompt-bar')) return;
+    if (document.querySelector('.hfx-tcs-backdrop.open')) return;
+    sessionStorage.setItem(sessionKey, '1');
+
+    var nudge = document.createElement('div');
+    nudge.id = 'lurkerNudge';
+    nudge.style.cssText = 'position:fixed;bottom:24px;right:24px;background:rgba(14,14,21,.97);border:1px solid rgba(201,146,13,.35);border-radius:10px;padding:14px 18px;z-index:1001;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:260px;animation:slideUp .3s ease;backdrop-filter:blur(12px);';
+    nudge.innerHTML =
+      '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#c9920d;letter-spacing:.1em;margin-bottom:6px;">HAVE A VIEW?</div>'
+      + '<div style="font-size:12px;color:rgba(240,240,245,.65);margin-bottom:12px;line-height:1.4;">Post your take. Track your accuracy. Build your record.</div>'
+      + '<div style="display:flex;gap:8px;">'
+        + '<button onclick="(function(){ var n=document.getElementById(\'lurkerNudge\'); if(n) n.remove(); var q=document.querySelector(\'.mkt-title\'); var question=q?q.textContent:\'\'; if(window.showTakePrompt) showTakePrompt(\''+slug+'\',question,null,\'YES\',\'?\',null,\''+tok+'\'); })()" style="flex:1;background:#c9920d;color:#000;border:none;border-radius:6px;font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;padding:8px 10px;cursor:pointer;letter-spacing:.04em;">Post take</button>'
+        + '<button onclick="document.getElementById(\'lurkerNudge\').remove()" style="background:none;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.4);border-radius:6px;font-size:11px;padding:8px 10px;cursor:pointer;">×</button>'
+      + '</div>';
+    document.body.appendChild(nudge);
+
+    // Auto-dismiss after 12s
+    setTimeout(function() { if (nudge.parentNode) nudge.remove(); }, 12000);
+  }, 30000); // 30s dwell time
+})();
+</script>
 </body>
 </html>
