@@ -1191,6 +1191,9 @@ window.hfxOpenDeposit = function() {
     take_reaction:  { color: '#4d9fff', href: function(n) {
       return n.market_id ? '/takes/' + n.market_id : '/feed';
     }},
+    whale_alert:    { color: '#a855f7', href: function() { return '/alpha-live'; } },
+    take_correct:   { color: '#00e68a', href: function(n) { return n.market_id ? '/takes/' + n.market_id : '/feed'; } },
+    take_incorrect: { color: '#ff4d6a', href: function() { return '/feed'; } },
   };
 
   function _poll() {

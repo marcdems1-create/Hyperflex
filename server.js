@@ -27251,15 +27251,20 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
       );
       scored++;
 
-      // Notify user if their take was correct
-      if (isCorrect && take.user_id) {
-        pushNotification(
-          take.user_id,
-          'take_correct',
-          '🎯 Your take was right!',
-          `Your ${take.side} call on "${(marketQuestion || '').substring(0, 50)}" resolved ${upperOutcome}. Your track record just got stronger.`,
-          null, null
-        );
+      // Notify on resolution — correct gets a win message, wrong gets a reengagement hook.
+      if (take.user_id) {
+        const shortQ = (marketQuestion || '').substring(0, 55);
+        if (isCorrect) {
+          pushNotification(take.user_id, 'take_correct',
+            `${take.side} call correct.`,
+            `"${shortQ}" resolved ${upperOutcome}. Track record updated.`,
+            null, null);
+        } else {
+          pushNotification(take.user_id, 'take_incorrect',
+            `${take.side} call missed.`,
+            `"${shortQ}" resolved ${upperOutcome}. Post a counter take.`,
+            null, null);
+        }
       }
     }
     if (scored > 0) console.log(`[takes] Scored ${scored} takes for "${(marketQuestion || '').substring(0, 40)}" → ${upperOutcome}`);
@@ -31104,7 +31109,7 @@ async function fetchWhalePositions() {
             for (const evt of matched.slice(0, 3)) {
               const tName = al.trader_name || evt.trader_name || 'A whale';
               const verb = { opened: 'just opened', closed: 'just closed', increased: 'increased', decreased: 'decreased' }[evt.action] || evt.action;
-              pushNotification(al.user_id, 'whale_alert', `\uD83D\uDC0B ${tName} ${verb} ${evt.size_display} on ${(evt.question || '').substring(0, 60)}`, `${(evt.side || '').toUpperCase()} position on "${evt.question}"`);
+              pushNotification(al.user_id, 'whale_alert', `${tName} ${verb} ${evt.size_display}.`, `${(evt.side || '').toUpperCase()} \u2014 "${(evt.question || '').substring(0, 60)}"`);
             }
           }
         } catch (e) { console.warn('[whale-alert-notify]', e.message); }
