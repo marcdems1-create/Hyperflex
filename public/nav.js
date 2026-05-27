@@ -1118,3 +1118,117 @@ window.hfxOpenDeposit = function() {
   }
   tryOpen();
 };
+
+// ── HFX universal notification toast poller ──────────────────────────────
+// Runs on every page (nav.js is universal). Polls /api/notifications every
+// 90s, shows a toast for high-signal types the user hasn't dismissed this
+// session. Does not duplicate toasts the page's own bell already handles.
+(function() {
+  var _lastSeenId = null;
+  var _shown = {};  // dedupes within the session
+
+  // Toast styles injected once
+  var _cssInjected = false;
+  function _injectCss() {
+    if (_cssInjected) return;
+    _cssInjected = true;
+    var s = document.createElement('style');
+    s.textContent = [
+      '#hfx-nav-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(30px);',
+      'background:#16161f;border:1px solid #1e1e2a;color:#f0f0f5;',
+      'font-family:"Inter",-apple-system,sans-serif;font-size:13px;font-weight:600;',
+      'padding:12px 20px;border-radius:10px;z-index:99990;opacity:0;',
+      'transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw;',
+      'box-shadow:0 8px 32px rgba(0,0,0,0.4);cursor:pointer;pointer-events:auto}',
+      '#hfx-nav-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}',
+      '#hfx-nav-toast .nt-title{color:#f0f0f5}',
+      '#hfx-nav-toast .nt-body{color:#8888a0;font-weight:500;margin-top:2px;font-size:12px}',
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  var _toastTimer = null;
+  function _showNavToast(title, body, href, borderColor) {
+    _injectCss();
+    var el = document.getElementById('hfx-nav-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'hfx-nav-toast';
+      document.body.appendChild(el);
+    }
+    el.style.borderColor = borderColor || '#1e1e2a';
+    el.innerHTML = '<div class="nt-title">' + _esc(title) + '</div>' +
+      (body ? '<div class="nt-body">' + _esc(body) + '</div>' : '');
+    el.onclick = href ? function() { window.location.href = href; } : null;
+    el.classList.add('show');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 6000);
+  }
+
+  function _esc(s) {
+    var d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
+  }
+
+  // Map notification type → { border color, href builder }
+  var _typeMap = {
+    market_resolving: { color: '#f59e0b', href: function(n) {
+      var slug = n.community_slug && n.community_slug.startsWith('market:')
+        ? n.community_slug.slice(7) : null;
+      return slug ? '/market/' + slug : null;
+    }},
+    tier_upgrade:  { color: '#00e68a', href: function() { return '/predictors'; } },
+    new_follower:  { color: '#a855f7', href: function(n) {
+      return n.actor_id ? '/m/' + n.actor_id : '/predictors';
+    }},
+    take_viral:    { color: '#4d9fff', href: function(n) {
+      return n.market_id ? '/takes/' + n.market_id : '/feed';
+    }},
+    challenge_won: { color: '#00e68a', href: function() { return '/challenges'; } },
+    agent_signal:  { color: '#f59e0b', href: function() { return '/alpha-live'; } },
+  };
+
+  function _poll() {
+    var tok = localStorage.getItem('hf_token') ||
+              localStorage.getItem('hf_creator_token') ||
+              localStorage.getItem('hf_member_token');
+    if (!tok) return;
+
+    fetch('/api/notifications?limit=10&unread=true', {
+      headers: { Authorization: 'Bearer ' + tok }
+    })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (!d) return;
+      var notifs = (d.notifications || []).filter(function(n) { return !n.read; });
+      if (!notifs.length) return;
+
+      // Newest first; skip if already shown this session
+      var candidate = null;
+      for (var i = 0; i < notifs.length; i++) {
+        var n = notifs[i];
+        if (_shown[n.id]) continue;
+        if (!_typeMap[n.type]) continue;
+        // Prioritize market_resolving and tier_upgrade
+        if (!candidate || n.type === 'market_resolving' || n.type === 'tier_upgrade') {
+          candidate = n;
+          if (n.type === 'market_resolving' || n.type === 'tier_upgrade') break;
+        }
+      }
+      if (!candidate) return;
+      _shown[candidate.id] = true;
+
+      var cfg = _typeMap[candidate.type];
+      var href = cfg.href(candidate);
+      _showNavToast(candidate.title, candidate.body, href, cfg.color);
+    })
+    .catch(function() {});
+  }
+
+  // Start polling 8s after page load (let the page settle first)
+  setTimeout(function() {
+    _poll();
+    setInterval(_poll, 90 * 1000);
+  }, 8000);
+})();

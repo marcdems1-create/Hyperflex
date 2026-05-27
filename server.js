@@ -50670,6 +50670,71 @@ async function gradeExpiredPredictions() {
 
 cron.schedule('*/30 * * * *', () => { console.log('[accuracy/grade] Cron triggered'); gradeExpiredPredictions().catch(err => console.error('[accuracy/grade] Cron error:', err.message)); });
 
+// ── Market Resolving Soon — push notification 90-150 min before resolution ──
+// Fires once per user per market (dedupe via in-memory Set, reset every 6h).
+const _resolvingSoonFired = new Map(); // key: `${userId}:${slug}` → timestamp
+cron.schedule('*/30 * * * *', safeCron('resolvingSoonNotifs', async () => {
+  if (!pool) return;
+  const markets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+  if (!markets.length) return;
+
+  // Find markets resolving within 90–150 min
+  const now = Date.now();
+  const windowMs = [90 * 60 * 1000, 150 * 60 * 1000]; // [90min, 150min] from now
+  const approaching = markets.filter(m => {
+    if (!m.end_date && !m.endDate) return false;
+    const t = new Date(m.end_date || m.endDate).getTime();
+    return t >= now + windowMs[0] && t <= now + windowMs[1];
+  });
+  if (!approaching.length) return;
+
+  const slugs = approaching.map(m => m.slug).filter(Boolean);
+  if (!slugs.length) return;
+
+  // Find users who have unresolved takes on these markets
+  let takes;
+  try {
+    takes = await dbQuery(
+      `SELECT DISTINCT t.user_id, t.market_slug, t.side, t.question
+       FROM takes t
+       WHERE t.market_slug = ANY($1::text[])
+         AND t.user_id IS NOT NULL
+         AND t.is_correct IS NULL
+         AND t.source = 'user'
+       LIMIT 200`,
+      [slugs]
+    );
+  } catch { return; }
+  if (!takes.length) return;
+
+  // Clean stale dedupe entries (>6h old)
+  for (const [k, ts] of _resolvingSoonFired) {
+    if (now - ts > 6 * 60 * 60 * 1000) _resolvingSoonFired.delete(k);
+  }
+
+  let fired = 0;
+  for (const row of takes) {
+    const dedupeKey = `${row.user_id}:${row.market_slug}`;
+    if (_resolvingSoonFired.has(dedupeKey)) continue;
+    _resolvingSoonFired.set(dedupeKey, now);
+
+    const shortQ = (row.question || '').length > 70
+      ? (row.question || '').slice(0, 67) + '…'
+      : (row.question || '');
+    const side = (row.side || '').toUpperCase();
+    pushNotification(
+      row.user_id,
+      'market_resolving',
+      'Resolves in ~2h.',
+      side + ' — "' + shortQ + '"',
+      null,
+      row.market_slug ? 'market:' + row.market_slug : null
+    ).catch(() => {});
+    fired++;
+  }
+  if (fired) console.log(`[resolving-soon] fired ${fired} notifications for ${approaching.length} approaching markets`);
+}));
+
 // ── Price Alert Checker (every 2 min) ──
 cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
   // Get current market prices from screener cache
