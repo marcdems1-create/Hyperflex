@@ -204,12 +204,12 @@ async function load() {
 
     // Tier — same ladder, but driven by the chosen primary win-rate.
     var tier, tierIcon, tierColor;
-    if (primaryWinPct == null) { tier = 'NEWCOMER'; tierIcon = '🆕'; tierColor = '#a0a0aa'; }
-    else if (primaryWinPct >= 70 && primarySample >= 10) { tier = 'ORACLE';     tierIcon = '🎯'; tierColor = '#c9920d'; }
-    else if (primaryWinPct >= 60 && primarySample >= 5)  { tier = 'SHARP';      tierIcon = '🎯'; tierColor = '#00e68a'; }
-    else if (primaryWinPct >= 50 && primarySample >= 5)  { tier = 'SOLID';      tierIcon = '📊'; tierColor = '#4d9fff'; }
-    else if (primarySample >= 3)                          { tier = 'SPECULATOR'; tierIcon = '🎲'; tierColor = '#a0a0aa'; }
-    else                                                  { tier = 'NEWCOMER';   tierIcon = '🆕'; tierColor = '#a0a0aa'; }
+    if (primaryWinPct == null) { tier = 'NEWCOMER'; tierIcon = '○'; tierColor = '#a0a0aa'; }
+    else if (primaryWinPct >= 70 && primarySample >= 10) { tier = 'ORACLE';     tierIcon = '★'; tierColor = '#c9920d'; }
+    else if (primaryWinPct >= 60 && primarySample >= 5)  { tier = 'SHARP';      tierIcon = '▲'; tierColor = '#00e68a'; }
+    else if (primaryWinPct >= 50 && primarySample >= 5)  { tier = 'SOLID';      tierIcon = '◆'; tierColor = '#4d9fff'; }
+    else if (primarySample >= 3)                          { tier = 'SPECULATOR'; tierIcon = '●'; tierColor = '#a0a0aa'; }
+    else                                                  { tier = 'NEWCOMER';   tierIcon = '○'; tierColor = '#a0a0aa'; }
 
     // OG tags
     document.title = u.display_name + ' — Prediction Passport | HYPERFLEX';
@@ -292,13 +292,13 @@ async function load() {
     if (pnlTile) statTiles.push(pnlTile);
     if (openTile) statTiles.push(openTile);
     statTiles.push('<div class="passport-stat"><div class="passport-stat-value">' + (s.followers || 0) + '</div><div class="passport-stat-label">Followers</div></div>');
-    if (s.streak > 0) statTiles.push('<div class="passport-stat"><div class="passport-stat-value" style="color:#ff8c00">🔥' + s.streak + '</div><div class="passport-stat-label">Streak</div></div>');
+    if (s.streak > 0) statTiles.push('<div class="passport-stat"><div class="passport-stat-value" style="color:#ff8c00">' + s.streak + 'w</div><div class="passport-stat-label">Streak</div></div>');
 
     el.innerHTML =
-      '<div class="passport-badge">🛂 Prediction Passport</div>' +
+      '<div class="passport-badge">Prediction Passport</div>' +
 
       '<div class="passport-identity">' +
-        '<div class="passport-avatar" style="background:' + avatarBg + ';color:' + tierColor + '">' + (u.is_whale ? '🐋' : initials) + '</div>' +
+        '<div class="passport-avatar" style="background:' + avatarBg + ';color:' + tierColor + '">' + initials + '</div>' +
         '<div>' +
           '<div class="passport-name">' + (u.display_name || 'Anonymous') + '</div>' +
           (u.username ? '<div class="passport-handle">@' + u.username + '</div>' : '') +

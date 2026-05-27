@@ -631,7 +631,7 @@ function renderSportsTab(d) {
   const clvEducation = `
     <div class="glass-inset sfs-edu">
       <div class="sfs-edu-head">
-        <span class="sfs-edu-title">📈 CLV · Closing Line Value</span>
+        <span class="sfs-edu-title">CLV · Closing Line Value</span>
         <span class="sfs-edu-val" style="color:${parseFloat(d.avg_clv_cents||0) > 0 ? 'var(--green)' : 'var(--muted)'}">${_fmtCLV(d.avg_clv_cents)}</span>
       </div>
       <div class="sfs-edu-body">Beating the close by <b>${_fmtCLV(d.avg_clv_cents)}</b> means you're getting better prices than the market thinks fair. Over time, positive CLV is the single best signal of sharp picks — more predictive than win rate.</div>
@@ -757,10 +757,10 @@ function showFlexScoreInfo() {
     <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
     <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
     <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
-      70+ → 🎯 Oracle tier<br>
-      60+ → 🎯 Sharp<br>
-      50+ → 📊 Solid<br>
-      &lt;50 → 🎲 Speculator
+      70+ → ORACLE tier<br>
+      60+ → SHARP<br>
+      50+ → SOLID<br>
+      &lt;50 → SPECULATOR
     </div>
     <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
   `);

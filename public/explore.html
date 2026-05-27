@@ -1202,7 +1202,7 @@ nav {
   <div class="intel-grid-top" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
     <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
-      <div style="font-size:22px;margin-bottom:8px">🎯</div>
+      <div style="font-size:22px;margin-bottom:8px;font-family:var(--mono);color:var(--gold)">▲</div>
       <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Edge scores, whale flow, depth signals — ranked by alpha</div>
       <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="alphaCardPreview">Top edge: loading...</div>
@@ -1227,12 +1227,12 @@ nav {
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale moves, momentum, edge scores — live feed</div>
     </a>
     <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">⚡</div>
+      <div style="font-size:22px;margin-bottom:8px;font-family:var(--mono);color:var(--accent-amber)">◆</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Spread Scanner</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Live orderbook arb detection on crypto windows</div>
     </a>
     <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">🐋</div>
+      <div style="font-size:22px;margin-bottom:8px;font-family:var(--mono);color:var(--accent-amber)">●</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Market Intel</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">$20M+ tracked across 50 whale wallets</div>
     </a>
@@ -1286,7 +1286,7 @@ nav {
       var profitBoth = h.profit_if_both_win != null ? h.profit_if_both_win : (200 - totalCost);
       var maxLoss = h.max_loss || totalCost;
       return '<div style="background:var(--card);border:1px solid rgba(168,85,247,0.25);border-radius:12px;padding:14px;position:relative;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(168,85,247,0.55)\'" onmouseleave="this.style.borderColor=\'rgba(168,85,247,0.25)\'">' +
-        '<a href="' + hedgeUrl + '" style="position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:5px;background:rgba(168,85,247,0.2);color:#a855f7;text-decoration:none;font-weight:700;cursor:pointer;border:1px solid rgba(168,85,247,0.35)">⚡ BUY HEDGE</a>' +
+        '<a href="' + hedgeUrl + '" style="position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:5px;background:rgba(168,85,247,0.2);color:#a855f7;text-decoration:none;font-weight:700;cursor:pointer;border:1px solid rgba(168,85,247,0.35)">BUY HEDGE</a>' +
         '<a href="' + linkA + '" style="display:block;text-decoration:none;color:inherit;padding-right:100px;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.35">' + _esc((h.market_a.question||'').substring(0,55)) + '</div></a>' +
         '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + colA + ';margin-bottom:8px">' + sA + ' ' + h.market_a.entry_cost + '¢</div>' +
         '<div style="text-align:center;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin:4px 0">⟷ CORRELATED ⟷</div>' +
@@ -1764,7 +1764,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s' + (stale ? ';opacity:.55' : '') + '" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.market || '') + '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
@@ -1813,7 +1813,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (score > 75 ? '🔥 ' : '') + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:11px;color:var(--muted)">' + scoreLabel + '</span></span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(m.question || '') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted)">' +
@@ -1854,7 +1854,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<span style="font-family:var(--sans);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(168,85,247,.1);color:#a855f7">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + (combined > 75 ? '🔥 ' : '') + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
         '</div>' +
         (q ? '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(q.substring(0, 80)) + '</div>' : '') +
         (p.action ? '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
@@ -2057,7 +2057,7 @@ function activityCard(a) {
             <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.3}"></div></div>
             ${yesPct !== null
               ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="font-family:var(--mono);font-size:11px;color:#22c55e;font-weight:700">ROI: ${yesPct > 0 ? Math.round((100 - yesPct) / yesPct * 100) : 0}%</span><span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">ROI: ${noPct > 0 ? Math.round((100 - noPct) / noPct * 100) : 0}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>`
-              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">🎯 First prediction</span></div>`}
+              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">First prediction</span></div>`}
           </div>
         </div>
         <div class="ac-footer">
@@ -2108,7 +2108,7 @@ function activityCard(a) {
       <div class="ac-body">
         <div class="ac-header">
           <span class="ac-actor">${escHtml(a.user)}</span>
-          <span class="ac-action">called it correctly 🏆</span>
+          <span class="ac-action">called it correctly</span>
           <span class="ac-time">${timeAgo(a.ts)}</span>
         </div>
         <div class="ac-market-card" style="border-color:rgba(34,197,94,0.2)">
@@ -2171,11 +2171,11 @@ function activityCard(a) {
             <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${mcYesPct !== null ? mcYesPct : 50}%;background:#22c55e;opacity:${mcYesPct !== null ? 1 : 0.3}"></div></div>
             ${mcYesPct !== null
               ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${mcYesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${mcNoPct}%</span></div>`
-              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">🎯 Be the first to predict</span></div>`}
+              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">Be the first to predict</span></div>`}
           </div>
         </div>
         <div class="ac-footer">
-          <span class="ac-tag ac-tag-new">🎯 New</span>
+          <span class="ac-tag ac-tag-new">New</span>
           ${a.category ? `<span class="ac-stat">${a.category}</span>` : ''}
           <span class="ac-join-link">Predict →</span>
         </div>
@@ -2198,12 +2198,12 @@ function activityCard(a) {
         <div class="ac-market-card">
           <div class="ac-market-inner">
             <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
-            ${preview.map(m => `<div style="font-size:13px;color:var(--text);padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.4">🎯 ${escHtml(m.question || '')}</div>`).join('')}
+            ${preview.map(m => `<div style="font-size:13px;color:var(--text);padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.4">${escHtml(m.question || '')}</div>`).join('')}
             ${extra > 0 ? `<div style="font-size:12px;color:var(--muted);padding-top:6px">+${extra} more market${extra > 1 ? 's' : ''}</div>` : ''}
           </div>
         </div>
         <div class="ac-footer">
-          <span class="ac-tag ac-tag-new">🎯 ${a.count} New</span>
+          <span class="ac-tag ac-tag-new">${a.count} New</span>
           <span class="ac-join-link">Predict now →</span>
         </div>
       </div>
@@ -2251,10 +2251,10 @@ function activityCard(a) {
     const dest = (platform !== 'kalshi' && typeof hfxMarketUrl === 'function' && _rawDest.includes('polymarket.com')) ? hfxMarketUrl(_rawDest) : _rawDest;
     const fmtDate = a.end_date ? new Date(a.end_date).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
     return `<div class="activity-card" style="cursor:pointer;border-left:3px solid ${pm.color}" onclick="${dest.startsWith('/') ? `window.location.href='${dest}'` : `window.open('${dest}','_blank')`}">
-      <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center">📈</div>
+      <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:900;font-size:13px;color:${pm.color}">▲</div>
       <div class="ac-body">
         <div class="ac-header">
-          <span style="font-weight:700;color:${pm.color}">${a.whale_trader ? '🐋 ' + escHtml(a.whale_trader) : pm.label}</span>
+          <span style="font-weight:700;color:${pm.color}">${a.whale_trader ? escHtml(a.whale_trader) : pm.label}</span>
           <span class="ac-action">${a.whale_trader ? 'whale position · #' + (a.whale_rank || '') : 'trending market'}</span>
           <span class="ac-time">${a.volume_display ? a.volume_display + ' · ' + timeAgo(a.ts) : timeAgo(a.ts)}</span>
         </div>
@@ -2594,7 +2594,7 @@ function renderMarkets(markets, communities, containerId) {
         <div class="sentiment-labels">
           ${yesPct !== null
             ? `<span class="yes-label">YES ${yesPct}%</span><span style="font-family:var(--mono);font-size:11px;color:var(--green);font-weight:700">ROI: ${yesPct > 0 ? Math.round((100 - yesPct) / yesPct * 100) : 0}%</span><span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span><span style="font-family:var(--mono);font-size:11px;color:var(--red);font-weight:700">ROI: ${noPct > 0 ? Math.round((100 - noPct) / noPct * 100) : 0}%</span><span class="no-label">NO ${noPct}%</span>`
-            : `<span class="trader-count" style="margin:auto">🎯 No predictions yet · ${(m.trader_count || 0).toLocaleString()} traders</span>`}
+            : `<span class="trader-count" style="margin:auto">No predictions yet · ${(m.trader_count || 0).toLocaleString()} traders</span>`}
         </div>
       </a>`;
   }).join('');
@@ -2658,10 +2658,10 @@ function renderCommunitySections(sections, communities, topPredictors) {
   let topPredCard = '';
   if (topPredictors && topPredictors[0]) {
     const tp = topPredictors[0];
-    const tierLabel = tp.win_rate >= 70 ? '🎯 ORACLE' : tp.win_rate >= 60 ? '🎯 SHARP' : '📊 SOLID';
+    const tierLabel = tp.win_rate >= 70 ? 'ORACLE' : tp.win_rate >= 60 ? 'SHARP' : 'SOLID';
     topPredCard = `
       <div style="background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.25);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px">
-        <div style="font-size:30px;line-height:1">🥇</div>
+        <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold);line-height:1">#1</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Top Global Predictor</div>
           <div style="font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(tp.display_name || 'Anonymous')}</div>
@@ -2677,9 +2677,9 @@ function renderCommunitySections(sections, communities, topPredictors) {
   const html = `
     ${spotlight}
     ${topPredCard}
-    ${section('Most Active', '🔥', sections.mostActive, 'No active communities yet')}
-    ${section('Up & Coming', '🌱', sections.upAndComing, 'Nothing new yet')}
-    ${section('Ghost Town', '👻', sections.ghostTown, 'All communities are jumping!')}
+    ${section('Most Active', '●', sections.mostActive, 'No active communities yet')}
+    ${section('Up & Coming', '▲', sections.upAndComing, 'Nothing new yet')}
+    ${section('Ghost Town', '○', sections.ghostTown, 'All communities are jumping!')}
   `;
   document.getElementById('communities-feed').innerHTML = html;
 }
@@ -2845,7 +2845,7 @@ function renderFeaturedSpotlight(sections, communities) {
   const markets = top.market_count || 0;
   return `
     <a href="/${top.slug}" class="featured-card" style="border-color:${color}44" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='${color}44'">
-      <div class="featured-label" style="color:${color}">🔥 Most Active Community</div>
+      <div class="featured-label" style="color:${color}">Most Active Community</div>
       <div class="featured-name" style="color:${color}">${c.display_name || top.slug}</div>
       <div class="featured-meta">${traders} total trades · ${markets} open markets</div>
       <div class="featured-cta" style="border-left-color:${color}">Visit community →</div>

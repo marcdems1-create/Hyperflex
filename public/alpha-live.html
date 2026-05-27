@@ -290,7 +290,7 @@ function badges(m){
   }
   if(m.price_change_24h!=null&&Math.abs(m.price_change_24h)>=5){
     const dir=m.price_change_24h>0?'up':'down';
-    out.push(['momentum'+(dir==='down'?' down':''), (dir==='up'?'📈':'📉')+' '+(m.price_change_24h>0?'+':'')+m.price_change_24h+'%']);
+    out.push(['momentum'+(dir==='down'?' down':''), (dir==='up'?'↑':'↓')+' '+(m.price_change_24h>0?'+':'')+m.price_change_24h+'%']);
   }
   if(m.days_until_expiry!=null&&m.days_until_expiry<=3)
     out.push(['decay','Expires '+(m.days_until_expiry===0?'today':m.days_until_expiry+'d')]);
@@ -603,7 +603,7 @@ function removeWatch(alertId,condId,btn){
   .catch(function(){if(btn){btn.disabled=false;btn.textContent='Remove';}});
 }
 // ── Anomaly detection bar ──
-var _anomalyIcons={volume_spike:'📊',price_velocity:'⚡',whale_cluster:'🐋',correlation_break:'⚖️'};
+var _anomalyIcons={volume_spike:'VOL',price_velocity:'VEL',whale_cluster:'WHL',correlation_break:'COR'};
 
 function loadAnomalies(){
   fetch('/api/v1/anomalies?severity=medium&limit=12')
