@@ -50782,6 +50782,85 @@ cron.schedule('*/30 * * * *', safeCron('resolvingSoonNotifs', async () => {
   if (fired) console.log(`[resolving-soon] fired ${fired} notifications for ${approaching.length} approaching markets`);
 }));
 
+// ── Take aging well — "price moved your way" notification ──────────────────
+// Runs every 30 min. For each user's unresolved takes with an entry_price,
+// checks if the live market price has moved 10+ points in their favor.
+// Fires once per take per 6h via in-memory dedupe (resets on server restart).
+const _takeAgedFired = new Map(); // key: takeId → timestamp
+cron.schedule('*/30 * * * *', safeCron('takeAgedWell', async () => {
+  if (!pool) return;
+  const markets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+  if (!markets.length) return;
+
+  // Build slug→price + conditionId→price maps
+  const priceBySlug = new Map();
+  const priceByCid = new Map();
+  for (const m of markets) {
+    if (m.slug && m.yes_price != null) priceBySlug.set(m.slug, m.yes_price);
+    const cid = (m.conditionId || m.condition_id || '').toLowerCase();
+    if (cid && m.yes_price != null) priceByCid.set(cid, m.yes_price);
+  }
+
+  // Find all unresolved user takes with an entry_price set
+  let takes;
+  try {
+    takes = await dbQuery(
+      `SELECT id, user_id, market_slug, condition_id, question, side, entry_price
+       FROM takes
+       WHERE user_id IS NOT NULL
+         AND source = 'user'
+         AND is_correct IS NULL
+         AND entry_price IS NOT NULL
+         AND entry_price > 0
+       LIMIT 500`,
+      []
+    );
+  } catch { return; }
+  if (!takes.length) return;
+
+  // Clean stale dedupe (>6h)
+  const now = Date.now();
+  for (const [k, ts] of _takeAgedFired) {
+    if (now - ts > 6 * 60 * 60 * 1000) _takeAgedFired.delete(k);
+  }
+
+  let fired = 0;
+  for (const take of takes) {
+    if (_takeAgedFired.has(take.id)) continue;
+
+    // Resolve live price
+    const cid = (take.condition_id || '').toLowerCase();
+    let livePrice = (cid && priceByCid.get(cid)) ?? (take.market_slug && priceBySlug.get(take.market_slug)) ?? null;
+    if (livePrice == null) continue;
+
+    const entry = parseFloat(take.entry_price);
+    if (isNaN(entry) || entry <= 0) continue;
+
+    // Check if price moved 10+ points in the user's favor
+    const side = (take.side || '').toUpperCase();
+    const moved = side === 'YES'
+      ? livePrice - entry          // YES: want price to go up
+      : (1 - entry) - (1 - livePrice); // NO: want price to go down = entry was 1-p, now 1-livePrice
+
+    if (moved < 0.10) continue; // less than 10 points — skip
+
+    _takeAgedFired.set(take.id, now);
+    const entryPct = Math.round(entry * 100);
+    const livePct  = Math.round(livePrice * 100);
+    const shortQ   = (take.question || '').substring(0, 60);
+    const movedPts = Math.round(moved * 100);
+    pushNotification(
+      take.user_id,
+      'take_viral',
+      `${side} call up ${movedPts} points.`,
+      `${entryPct}¢ → ${livePct}¢ on "${shortQ}"`,
+      take.id, null
+    ).catch(() => {});
+    fired++;
+  }
+  if (fired) console.log(`[take-aged-well] fired ${fired} price-movement notifications`);
+}));
+
 // ── Price Alert Checker (every 2 min) ──
 cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
   // Get current market prices from screener cache
