@@ -27292,16 +27292,17 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
       // Notify on resolution — correct gets a win message, wrong gets a reengagement hook.
       if (take.user_id) {
         const shortQ = (marketQuestion || '').substring(0, 55);
+        const notifMarket = marketSlug || null;
         if (isCorrect) {
           pushNotification(take.user_id, 'take_correct',
             `${take.side} call correct.`,
             `"${shortQ}" resolved ${upperOutcome}. Track record updated.`,
-            null, null);
+            notifMarket, null);
         } else {
           pushNotification(take.user_id, 'take_incorrect',
             `${take.side} call missed.`,
             `"${shortQ}" resolved ${upperOutcome}. Post a counter take.`,
-            null, null);
+            notifMarket, null);
         }
       }
     }
