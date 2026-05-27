@@ -25078,6 +25078,64 @@ app.post('/api/admin/mention-sync/run-llm', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin: mention_events stats — counts for admin Mentions tab dashboard.
+app.get('/api/admin/mention-stats', requireAdmin, async (req, res) => {
+  try {
+    const [evRows, txRows] = await Promise.all([
+      dbQuery(`
+        SELECT
+          COUNT(*) FILTER (WHERE published = true)  AS published,
+          COUNT(*) FILTER (WHERE published = false AND blurb IS NOT NULL) AS draft,
+          COUNT(*) FILTER (WHERE blurb IS NULL)      AS no_blurb
+        FROM mention_events
+      `),
+      dbQuery(`SELECT COUNT(*) AS total FROM transcripts`)
+    ]);
+    const ev = evRows[0] || {};
+    res.json({
+      published:   parseInt(ev.published   || 0, 10),
+      draft:       parseInt(ev.draft       || 0, 10),
+      no_blurb:    parseInt(ev.no_blurb    || 0, 10),
+      transcripts: parseInt((txRows[0] || {}).total || 0, 10)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Admin: list draft mention_events (blurb ready, not yet published).
+app.get('/api/admin/mention-drafts', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbQuery(`
+      SELECT id, slug, speaker, event_date, market_slug, blurb,
+             published, created_at
+      FROM mention_events
+      WHERE published = false AND blurb IS NOT NULL
+      ORDER BY event_date DESC
+      LIMIT 100
+    `);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Admin: publish a mention_event by slug.
+app.post('/api/admin/mention-publish', requireAdmin, async (req, res) => {
+  const { slug } = req.body || {};
+  if (!slug) return res.status(400).json({ error: 'slug required' });
+  try {
+    const rows = await dbQuery(
+      `UPDATE mention_events SET published = true WHERE slug = $1 RETURNING id, slug`,
+      [slug]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json({ ok: true, slug: rows[0].slug });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // was we stored the EOA but Polymarket positions live on the Safe proxy.
 app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
   // Build the query in two fallbacks: preferred query uses polymarket_proxy
