@@ -238,12 +238,11 @@ async function load() {
     var verifyUrl = 'https://hyperflex.network/api/verify/' + userId;
 
     var tweetText = encodeURIComponent(
-      'My verified prediction track record:\n\n' +
-      '🎯 ' + tier + ' tier\n' +
-      (primaryWinPct != null ? '📊 ' + primaryWinPct + '% accuracy across ' + primarySample + ' predictions\n' : '') +
-      (allPnL ? '💰 ' + fmtPnL(allPnL) + ' lifetime P&L\n' : '') +
-      (flexScore != null ? '⚡ Flex Score: ' + flexScore + '/100\n' : '') +
-      '\nVerify it yourself 👇\n' + passportUrl
+      (tier && tier !== 'Unranked' ? tier + ' tier on HYPERFLEX.\n\n' : 'Prediction track record on HYPERFLEX.\n\n') +
+      (primaryWinPct != null ? primaryWinPct + '% accuracy — ' + primarySample + ' resolved markets.\n' : '') +
+      (allPnL ? fmtPnL(allPnL) + ' P&L.\n' : '') +
+      (flexScore != null ? 'FLEX Score ' + flexScore + '/100.\n' : '') +
+      '\n' + passportUrl
     );
 
     // Tier card body — primary win % when we have data, else a copy block
@@ -326,9 +325,9 @@ async function load() {
       '</div>' +
 
       '<div class="share-bar">' +
-        '<a class="share-btn primary" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">🐦 Share on X</a>' +
-        '<button class="share-btn" onclick="navigator.clipboard.writeText(\'' + passportUrl + '\');this.textContent=\'✓ Copied!\';setTimeout(()=>this.textContent=\'📋 Copy Link\',2000)">📋 Copy Link</button>' +
-        '<a class="share-btn" href="' + profileUrl + '">View Full Profile →</a>' +
+        '<a class="share-btn primary" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank" rel="noopener">Share on X ↗</a>' +
+        '<button class="share-btn" onclick="navigator.clipboard.writeText(\'' + passportUrl + '\').then(function(){this.textContent=\'✓ Copied\';var b=this;setTimeout(function(){b.textContent=\'Copy link\'},2200)}).bind(this)" >Copy link</button>' +
+        '<a class="share-btn" href="' + profileUrl + '">Full profile →</a>' +
       '</div>' +
 
       '<div class="embed-section" style="text-align:center">' +
