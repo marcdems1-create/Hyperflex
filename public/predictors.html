@@ -855,7 +855,7 @@ function showStickyBar(){
         var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
         var pnlColor=pnl>=0?'#00e68a':'#ff4d6a';
         document.getElementById('barContent').innerHTML=
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">🏆 #'+userRank+'</span>'+
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">#'+userRank+'</span>'+
           '<span class="bar-stat" style="color:var(--ink);font-weight:700">'+escHtml(userEntry.display_name||'You')+'</span>'+
           '<span class="bar-stat" style="color:'+pnlColor+';font-weight:700">'+formatPnl(pnl)+'</span>'+
           '<span class="bar-stat">ROI <strong style="color:'+pnlColor+'">'+(pnl>=0?'+':'')+roi+'%</strong></span>'+

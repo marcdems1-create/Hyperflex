@@ -2696,7 +2696,7 @@ async function loadFeed(append) {
       renderFeed(false);
       document.getElementById('loadMoreBtn').style.display = 'none';
     } catch(e) {
-      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔥</div><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Check back soon for trending predictions and influencer posts.</div></div>';
+      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-title">Nothing trending yet.</div><div class="feed-empty-sub">Check back soon for trending predictions and influencer posts.</div></div>';
     }
     return;
   }
@@ -4347,7 +4347,7 @@ function _whaleShortSize(n) {
 }
 
 function _whaleInitials(name) {
-  if (!name) return '🐋';
+  if (!name) return 'W';
   var clean = String(name).replace(/^Whale\s*#?/i, '').trim();
   if (!clean || /^\d+$/.test(clean)) return '#' + (clean || '?');
   // Pull first 1-2 uppercase letters; fall back to first char

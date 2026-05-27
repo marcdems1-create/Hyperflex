@@ -193,7 +193,7 @@
 
 <section class="hero">
   <div class="container">
-    <div class="hero-eyebrow">⚡ Alpha Terminal</div>
+    <div class="hero-eyebrow">Alpha Terminal</div>
     <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
     <p class="hero-sub">Live edges scored from whale clusters, momentum, book depth, and expiry decay. Not financial advice — all markets can resolve to zero.</p>
     <div class="hero-stats">
@@ -280,7 +280,7 @@ function esc(s){return(s||'').replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":
 function badges(m){
   const out=[];
   if(m.whale_count>0)
-    out.push(['whale','🐋 '+m.whale_count+' Whale'+(m.whale_count>1?'s':'')+' '+fmtUSD(m.total_whale_capital||0)]);
+    out.push(['whale',m.whale_count+' Whale'+(m.whale_count>1?'s':'')+' '+fmtUSD(m.total_whale_capital||0)]);
   if(m.depth_ratio!=null){
     const imb=Math.max(m.depth_ratio,1/m.depth_ratio);
     if(imb>=1.5){
@@ -293,9 +293,9 @@ function badges(m){
     out.push(['momentum'+(dir==='down'?' down':''), (dir==='up'?'📈':'📉')+' '+(m.price_change_24h>0?'+':'')+m.price_change_24h+'%']);
   }
   if(m.days_until_expiry!=null&&m.days_until_expiry<=3)
-    out.push(['decay','⏱ '+(m.days_until_expiry===0?'Today':m.days_until_expiry+'d')]);
+    out.push(['decay','Expires '+(m.days_until_expiry===0?'today':m.days_until_expiry+'d')]);
   if(m.volume>=1e6)
-    out.push(['volume','💰 '+fmtUSD(m.volume)]);
+    out.push(['volume',fmtUSD(m.volume)+' vol']);
   if(m.category&&m.category!=='other')
     out.push(['cat',m.category]);
   return out;

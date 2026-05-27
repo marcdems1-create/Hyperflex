@@ -526,7 +526,7 @@ async function loadSportsFlexScore(userId) {
     const data = await res.json();
     host.innerHTML = renderSportsTab(data);
   } catch (e) {
-    host.innerHTML = '<div class="empty"><div class="empty-emoji">⚡</div><div class="empty-title">Could not load sports record</div><div class="empty-sub">Try again in a minute.</div></div>';
+    host.innerHTML = '<div class="empty"><div class="empty-title">Could not load sports record</div><div class="empty-sub">Try again in a minute.</div></div>';
   }
 }
 
@@ -568,7 +568,6 @@ function renderSportsTab(d) {
   if (!d.has_score) {
     return `
       <div class="empty" style="padding:40px 20px;text-align:center">
-        <div class="empty-emoji" style="font-size:32px;margin-bottom:12px">🏆</div>
         <div class="empty-title" style="font-size:16px;font-weight:800;margin-bottom:6px">No sports record yet</div>
         <div class="empty-sub" style="font-size:13px;color:var(--text-soft);max-width:360px;margin:0 auto 18px;line-height:1.55">Post a settled sports pick to start your Flex Score for Sports.</div>
         <a href="/picks/new" class="btn btn-gold">Lock your first pick →</a>
@@ -847,7 +846,7 @@ async function load() {
             <span class="side ${sideUp === 'YES' ? 'side-yes' : 'side-no'}">${sideUp}</span>
           </div>`;
         }).join('')}</div>`
-      : `<div class="empty"><div class="empty-emoji">🎯</div><div class="empty-title">No wins yet</div><div class="empty-sub">Keep predicting — every resolved market scores your takes.</div></div>`;
+      : `<div class="empty"><div class="empty-title">No wins yet.</div><div class="empty-sub">Every resolved market scores your takes.</div></div>`;
 
     // Whale-specific data (needed for tier calculation)
     const isWhale = user.is_whale || false;
@@ -1348,7 +1347,7 @@ async function load() {
     loadSocialPredictions(userId);
   } catch (err) {
     console.error(err);
-    page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
+    page.innerHTML = `<div class="error-state"><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
   }
 }
 
@@ -2022,7 +2021,7 @@ async function loadTrophyCard(userId) {
 function shareTrophyOnX() {
   const b = window._trophyData;
   if (!b) return;
-  const text = `My best prediction call:\n\n"${b.question}"\n\nCalled ${b.side} → ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
+  const text = `${b.side} — "${(b.question||'').substring(0,100)}"\n\n${b.multiplier}× payout. Verified on HYPERFLEX.\n\nhyperflex.network/m/${window._profileUserId}`;
   window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
 }
 
@@ -2098,8 +2097,8 @@ async function loadSocialPredictions(profileUserId) {
         <a href="/discuss/${p.market_slug || ''}" style="font-size:13px;font-weight:600;color:var(--text);text-decoration:none;line-height:1.3;display:block">${p.market_title || ''}</a>
         ${p.thesis ? `<div class="social-pred-thesis">${p.thesis.replace(/</g,'&lt;')}</div>` : ''}
         <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--muted)">
-          <span>👍 ${p.reaction_count || 0}</span>
-          <span>💬 ${p.comment_count || 0}</span>
+          <span>↑ ${p.reaction_count || 0}</span>
+          <span>↩ ${p.comment_count || 0}</span>
         </div>
       </div>`;
     }).join('');
