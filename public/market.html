@@ -383,11 +383,20 @@ canvas{display:block;width:100%!important}
       </div>
       <h1 class="mkt-title" id="mktTitle">Loading...</h1>
 
+      <!-- AI Summary — injected by loadAiSummary() -->
+      <div id="mktAiSummary" style="display:none;margin:8px 0 14px;padding:10px 14px;border-radius:8px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.15);font-family:var(--sans);font-size:13px;color:rgba(240,240,245,0.75);line-height:1.5">
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;color:#4d9fff;text-transform:uppercase;margin-right:8px">AI</span><span id="mktAiSummaryText"></span>
+      </div>
+
       <div id="marketActions" style="display:flex;align-items:center;gap:8px;margin:8px 0 12px;flex-wrap:wrap">
         <button id="alertBellBtn" onclick="openAlertModal()" style="display:none;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:600;transition:all .15s;min-height:40px" onmouseover="this.style.borderColor='#f59e0b';this.style.background='rgba(245,158,11,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,0.03)'">
           🔔 <span id="alertBellLabel">Set Alert</span>
         </button>
         <div id="activeAlertsBadge" style="display:none;font-family:var(--sans);font-size:11px;color:#f59e0b;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2)"></div>
+        <button id="shareOnXBtn" onclick="shareMarketOnX()" style="display:none;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:rgba(240,240,245,0.7);cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:600;transition:all .15s;min-height:40px" onmouseover="this.style.borderColor='rgba(255,255,255,0.25)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(240,240,245,0.7)'">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.74l7.73-8.835L1.254 2.25H8.08l4.262 5.632 5.9-5.632Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Share
+        </button>
       </div>
 
       <!-- Stats -->
@@ -903,6 +912,10 @@ async function loadMarket() {
     document.title = (_market._displayTitle || _market.question || 'Market') + ' | HYPERFLEX';
     loadTopHolders(_market);
     loadWhaleFlow(slug);
+    loadAiSummary(slug);
+    // Show Share on X button once market is loaded
+    var shareBtn = document.getElementById('shareOnXBtn');
+    if (shareBtn) shareBtn.style.display = 'flex';
     // Load FLEX points if logged in
     try {
       var hfToken = localStorage.getItem('hf_token');
@@ -1512,6 +1525,32 @@ function switchOutcome(index) {
   // Update sidebar position + labels for new active outcome
   updateSidebarPosition();
   updateOutcomeLabels();
+}
+
+// ── AI Summary ──────────────────────────────────────────────────────────────
+async function loadAiSummary(marketSlug) {
+  try {
+    var r = await fetch('/api/market-summary/' + encodeURIComponent(marketSlug));
+    if (!r.ok) return;
+    var d = await r.json();
+    var text = d.summary || d.text || '';
+    if (!text) return;
+    var el = document.getElementById('mktAiSummaryText');
+    var wrap = document.getElementById('mktAiSummary');
+    if (el && wrap) { el.textContent = text; wrap.style.display = 'block'; }
+  } catch (e) { /* non-critical */ }
+}
+
+// ── Share on X ──────────────────────────────────────────────────────────────
+function shareMarketOnX() {
+  var title = (_market && (_market._displayTitle || _market.question)) || document.title;
+  var prices = _market && _market.outcomePrices;
+  if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = null; } }
+  var yesCents = prices && prices[0] ? Math.round(parseFloat(prices[0]) * 100) : null;
+  var priceStr = yesCents != null ? ' (' + yesCents + '¢ YES)' : '';
+  var url = window.location.href.split('?')[0];
+  var tweet = title + priceStr + '\n\nVia @hyperflex_net — prediction market intelligence\n' + url;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweet), '_blank', 'width=600,height=400,noopener');
 }
 
 // ── AI Market Intelligence ───────────────────────────────────────────────────

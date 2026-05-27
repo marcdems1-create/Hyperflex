@@ -10125,6 +10125,10 @@ app.get('/copy-trading', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'copy-trading.html'));
 });
 
+app.get('/onboarding', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'onboarding.html'));
+});
+
 // Signup page
 // Public discovery page
 app.get('/discover', (req, res) => {
