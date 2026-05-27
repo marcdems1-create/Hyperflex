@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HYPERFLEX — Get Started</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0e0e15;--card:#14141e;--border:#1e1e2a;
+    --text:#f0f0f5;--soft:#8888a0;--muted:#555568;
+    --gold:#c9920d;--green:#00e68a;--blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;
+    --sans:'Inter',-apple-system,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+
+  /* ── Layout ── */
+  .ob-wrap{width:100%;max-width:480px;position:relative}
+  .ob-skip{position:fixed;top:20px;right:20px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;padding:8px 12px;border-radius:8px;transition:color .15s;text-decoration:none;z-index:10}
+  .ob-skip:hover{color:var(--text)}
+
+  /* ── Progress dots ── */
+  .ob-dots{display:flex;gap:8px;justify-content:center;margin-bottom:40px}
+  .ob-dot{width:6px;height:6px;border-radius:50%;background:var(--border);transition:all .25s}
+  .ob-dot.active{background:var(--green);width:20px;border-radius:3px}
+  .ob-dot.done{background:var(--green);opacity:.4}
+
+  /* ── Screen ── */
+  .ob-screen{display:none;animation:fadeUp .3s ease}
+  .ob-screen.active{display:block}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  .ob-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--green);text-transform:uppercase;margin-bottom:16px}
+  .ob-headline{font-size:28px;font-weight:800;line-height:1.25;letter-spacing:-.5px;margin-bottom:12px}
+  .ob-sub{font-size:15px;color:rgba(240,240,245,.65);line-height:1.6;margin-bottom:32px}
+
+  /* ── Screen 1: animated probability bar ── */
+  .ob-demo{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:32px}
+  .ob-demo-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .ob-demo-event{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
+  .ob-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .ob-bar-track{flex:1;height:12px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden}
+  .ob-bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),#00c97a);transition:width 1.2s cubic-bezier(.34,1.56,.64,1)}
+  .ob-bar-pct{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green);min-width:44px;text-align:right}
+  .ob-bar-change{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:4px;text-align:right;opacity:0;transition:opacity .4s}
+  .ob-bar-change.visible{opacity:1}
+  .ob-news-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);border-radius:20px;padding:4px 12px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:12px}
+
+  /* ── Screen 2: three cards ── */
+  .ob-cards{display:flex;flex-direction:column;gap:10px;margin-bottom:32px}
+  .ob-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;display:flex;align-items:flex-start;gap:14px;transition:border-color .15s}
+  .ob-card-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
+  .ob-card-title{font-size:14px;font-weight:700;margin-bottom:4px}
+  .ob-card-desc{font-size:13px;color:rgba(240,240,245,.6);line-height:1.5}
+
+  /* ── Screen 3: topic chips ── */
+  .ob-topics{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:32px}
+  .ob-topic{padding:10px 18px;border-radius:24px;border:1px solid var(--border);background:rgba(255,255,255,0.03);font-family:var(--sans);font-size:13px;font-weight:600;color:rgba(240,240,245,.7);cursor:pointer;transition:all .15s;user-select:none}
+  .ob-topic:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+  .ob-topic.selected{border-color:var(--green);background:rgba(0,230,138,0.1);color:var(--green)}
+  .ob-topic-note{font-size:12px;color:var(--muted);margin-bottom:24px}
+
+  /* ── CTA button ── */
+  .ob-cta{width:100%;padding:16px;border-radius:12px;border:none;background:var(--green);color:#0a0a0f;font-family:var(--sans);font-size:15px;font-weight:800;cursor:pointer;transition:all .15s;letter-spacing:-.2px}
+  .ob-cta:hover{background:#00ffaa;transform:translateY(-1px)}
+  .ob-cta:active{transform:translateY(0)}
+  .ob-cta:disabled{opacity:.5;cursor:not-allowed;transform:none}
+</style>
+</head>
+<body>
+
+<button class="ob-skip" onclick="finishOnboarding('/')">Skip intro →</button>
+
+<div class="ob-wrap">
+  <div class="ob-dots">
+    <div class="ob-dot active" id="dot0"></div>
+    <div class="ob-dot" id="dot1"></div>
+    <div class="ob-dot" id="dot2"></div>
+  </div>
+
+  <!-- Screen 1 -->
+  <div class="ob-screen active" id="screen0">
+    <div class="ob-label">01 / 03</div>
+    <h1 class="ob-headline">Prediction markets tell you what's actually going to happen</h1>
+    <p class="ob-sub">Real money is bet on outcomes. That makes the probabilities more accurate than polls, pundits, or news.</p>
+
+    <div class="ob-demo">
+      <div class="ob-demo-label">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 1.6s infinite"></span>
+        LIVE MARKET
+      </div>
+      <div class="ob-demo-event">Will the Fed cut rates in September?</div>
+      <div class="ob-bar-row">
+        <div class="ob-bar-track"><div class="ob-bar-fill" id="demoBar" style="width:40%"></div></div>
+        <div class="ob-bar-pct" id="demoPct">40%</div>
+      </div>
+      <div class="ob-bar-change" id="demoChange">+33% after FOMC statement</div>
+      <div class="ob-news-tag" id="demoNewsTag" style="display:none">Breaking news →</div>
+    </div>
+
+    <button class="ob-cta" onclick="goTo(1)">Got it →</button>
+  </div>
+
+  <!-- Screen 2 -->
+  <div class="ob-screen" id="screen1">
+    <div class="ob-label">02 / 03</div>
+    <h1 class="ob-headline">Find edges before the market does</h1>
+    <p class="ob-sub">Three signals give you an advantage: where smart money is flowing, what the data says, and who's been right before.</p>
+
+    <div class="ob-cards">
+      <div class="ob-card">
+        <div class="ob-card-icon" style="background:rgba(201,146,13,.12)">🐋</div>
+        <div>
+          <div class="ob-card-title">Whale Tracking</div>
+          <div class="ob-card-desc">Top 50 Polymarket traders tracked in real time. When three whales align on a market, that's a signal.</div>
+        </div>
+      </div>
+      <div class="ob-card">
+        <div class="ob-card-icon" style="background:rgba(77,159,255,.1)">◈</div>
+        <div>
+          <div class="ob-card-title">Alpha Signals</div>
+          <div class="ob-card-desc">8-factor edge score across volume, depth, momentum, and whale capital. Ranked every 90 seconds.</div>
+        </div>
+      </div>
+      <div class="ob-card">
+        <div class="ob-card-icon" style="background:rgba(0,230,138,.1)">⤴</div>
+        <div>
+          <div class="ob-card-title">Copy Trading</div>
+          <div class="ob-card-desc">Follow verified sharp traders. Get notified when they move, or auto-mirror their positions.</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="ob-cta" onclick="goTo(2)">Show me →</button>
+  </div>
+
+  <!-- Screen 3 -->
+  <div class="ob-screen" id="screen2">
+    <div class="ob-label">03 / 03</div>
+    <h1 class="ob-headline">What do you care about?</h1>
+    <p class="ob-sub">Pick 1–3 topics. We'll surface the highest-edge markets in those areas first.</p>
+
+    <div class="ob-topics" id="topicGrid">
+      <div class="ob-topic" data-topic="Politics" onclick="toggleTopic(this)">Politics</div>
+      <div class="ob-topic" data-topic="Crypto" onclick="toggleTopic(this)">Crypto</div>
+      <div class="ob-topic" data-topic="Finance" onclick="toggleTopic(this)">Finance</div>
+      <div class="ob-topic" data-topic="Sports" onclick="toggleTopic(this)">Sports</div>
+      <div class="ob-topic" data-topic="AI &amp; Tech" onclick="toggleTopic(this)">AI &amp; Tech</div>
+      <div class="ob-topic" data-topic="Geopolitics" onclick="toggleTopic(this)">Geopolitics</div>
+    </div>
+    <p class="ob-topic-note">Select up to 3. You can change this anytime.</p>
+
+    <button class="ob-cta" id="finishBtn" onclick="finish()">Take me there →</button>
+  </div>
+</div>
+
+<style>
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+
+<script>
+var _screen = 0;
+var _selectedTopics = [];
+
+// Kick off demo animation after a short delay
+setTimeout(function() {
+  var bar = document.getElementById('demoBar');
+  var pct = document.getElementById('demoPct');
+  var change = document.getElementById('demoChange');
+  var newsTag = document.getElementById('demoNewsTag');
+
+  // Phase 1: sit at 40%
+  setTimeout(function() {
+    // Phase 2: animate to 73%
+    if (bar) bar.style.width = '73%';
+    if (pct) pct.textContent = '73%';
+    if (newsTag) newsTag.style.display = 'inline-flex';
+    setTimeout(function() {
+      if (change) change.classList.add('visible');
+    }, 800);
+  }, 1200);
+}, 600);
+
+function goTo(n) {
+  document.getElementById('screen' + _screen).classList.remove('active');
+  // Update dots
+  document.getElementById('dot' + _screen).classList.remove('active');
+  document.getElementById('dot' + _screen).classList.add('done');
+  _screen = n;
+  document.getElementById('screen' + _screen).classList.add('active');
+  document.getElementById('dot' + _screen).classList.remove('done');
+  document.getElementById('dot' + _screen).classList.add('active');
+}
+
+function toggleTopic(el) {
+  var topic = el.getAttribute('data-topic');
+  if (el.classList.contains('selected')) {
+    el.classList.remove('selected');
+    _selectedTopics = _selectedTopics.filter(function(t) { return t !== topic; });
+  } else {
+    if (_selectedTopics.length >= 3) return; // max 3
+    el.classList.add('selected');
+    _selectedTopics.push(topic);
+  }
+}
+
+function finish() {
+  var topics = _selectedTopics;
+  if (topics.length) {
+    try { localStorage.setItem('hfx_topics', JSON.stringify(topics)); } catch(e) {}
+  }
+  var dest = '/explore';
+  if (topics.length) dest += '?topic=' + encodeURIComponent(topics[0]);
+  finishOnboarding(dest);
+}
+
+function finishOnboarding(dest) {
+  try { localStorage.setItem('hfx_onboarded', '1'); } catch(e) {}
+  window.location.href = dest || '/explore';
+}
+</script>
+</body>
+</html>

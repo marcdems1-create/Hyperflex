@@ -22,7 +22,12 @@
     var p = location.pathname || '/';
     if (p !== '/' && p !== '/index.html') return;
     var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-    if (t) location.replace('/feed');
+    if (t) { location.replace('/feed'); return; }
+    // First-visit onboarding — only on root, not logged-in users
+    if (!localStorage.getItem('hfx_onboarded') && location.search.indexOf('skip_onboarding') === -1) {
+      location.replace('/onboarding');
+      return;
+    }
   } catch (e) {}
 })();
 </script>
