@@ -20360,6 +20360,26 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
         `"${shortQ}"`,
         null, null
       );
+
+      // "Your take is trending" \u2014 fires once when agrees cross 5, 10, 25
+      if (reaction === 'agree') {
+        const updated = await dbQuery('SELECT agree_count FROM takes WHERE id = $1', [takeId]).catch(() => []);
+        const agreeCount = updated[0]?.agree_count || 0;
+        const THRESHOLDS = [5, 10, 25];
+        for (const threshold of THRESHOLDS) {
+          // Was below threshold before this agree, now at or above it
+          if (agreeCount === threshold) {
+            const shortQT = (take.question || '').substring(0, 60);
+            pushNotification(
+              take.user_id, 'take_viral',
+              `Take trending \u2014 ${agreeCount} agree.`,
+              `"${shortQT}"`,
+              takeId, null
+            ).catch(() => {});
+            break;
+          }
+        }
+      }
     }
 
     // Return updated counts
