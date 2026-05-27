@@ -2768,9 +2768,7 @@ async function loadTopPredictors() {
       el.innerHTML = `
         <div class="predictors-wrap">
           <div style="text-align:center;padding:60px 20px;color:var(--muted)">
-            <div style="font-size:36px;margin-bottom:14px">🏆</div>
-            <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">Leaderboard loading...</div>
-            <div style="font-size:13px;line-height:1.6">Top Polymarket traders will appear here shortly.</div>
+            <div style="font-size:13px;line-height:1.6">Loading leaderboard…</div>
           </div>
         </div>`;
       return;
@@ -2785,13 +2783,13 @@ async function loadTopPredictors() {
 
     const header = `
       <div class="predictors-header">
-        <div class="predictors-header-title">🏆 Top Traders</div>
+        <div class="predictors-header-title">Top Traders</div>
         <div class="predictors-header-sub">Polymarket · Last 30 days</div>
       </div>`;
 
     const rows = sorted.map((r, i) => {
       const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
+      const medal = '#' + (i + 1);
       let dname = r.display_name || r.userName || r.name || '';
       if (dname && /^0x[0-9a-fA-F]{6,}/.test(dname)) dname = _whaleNickname(dname);
       if (!dname && r.user_id && String(r.user_id).startsWith('hl_')) {
