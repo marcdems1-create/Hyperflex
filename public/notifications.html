@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notifications — HYPERFLEX</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#0e0e15;--paper-2:#12121c;--ink:#f0f0f5;--muted:#8888a0;
+  --border:#1e1e2a;--gold:#c9920d;--green:#00e68a;--red:#ff4d6a;
+  --blue:#4d9fff;--purple:#a855f7;--amber:#f59e0b;
+  --sans:'Inter',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100vh}
+#nav-root{}
+.page{max-width:680px;margin:0 auto;padding:80px 16px 60px}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+.mark-all-btn{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);border:none;background:none;cursor:pointer;padding:6px 0;transition:color .15s}
+.mark-all-btn:hover{color:var(--ink)}
+.notif-list{display:flex;flex-direction:column;gap:2px}
+.notif-item{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:10px;background:var(--paper-2);border:1px solid var(--border);cursor:pointer;transition:border-color .15s;text-decoration:none;color:inherit}
+.notif-item:hover{border-color:rgba(255,255,255,0.12)}
+.notif-item.unread{border-left:3px solid var(--blue);background:rgba(77,159,255,0.04)}
+.notif-item.unread.type-tier_upgrade{border-left-color:var(--green)}
+.notif-item.unread.type-take_correct{border-left-color:var(--green)}
+.notif-item.unread.type-take_incorrect{border-left-color:var(--red)}
+.notif-item.unread.type-whale_alert{border-left-color:var(--purple)}
+.notif-item.unread.type-new_follower{border-left-color:var(--purple)}
+.notif-item.unread.type-market_resolving{border-left-color:var(--amber)}
+.notif-item.unread.type-streak_warning{border-left-color:var(--amber)}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0;margin-top:6px}
+.notif-item:not(.unread) .notif-dot{background:transparent}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:3px;line-height:1.3}
+.notif-item:not(.unread) .notif-title{color:var(--muted);font-weight:500}
+.notif-sub{font-size:12px;color:var(--muted);line-height:1.4}
+.notif-time{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0;margin-top:4px}
+.empty{padding:60px 0;text-align:center;color:var(--muted);font-size:14px}
+.loading{padding:60px 0;text-align:center;color:var(--muted);font-size:13px}
+.tab-row{display:flex;gap:4px;margin-bottom:20px}
+.tab-btn{font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;transition:all .15s}
+.tab-btn.active{background:rgba(255,255,255,0.06);color:var(--ink);border-color:rgba(255,255,255,0.12)}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Notifications</div>
+    <button class="mark-all-btn" onclick="markAllRead()">Mark all read</button>
+  </div>
+  <div class="tab-row">
+    <button class="tab-btn active" id="tabAll" onclick="switchTab('all')">All</button>
+    <button class="tab-btn" id="tabUnread" onclick="switchTab('unread')">Unread</button>
+  </div>
+  <div class="notif-list" id="notifList">
+    <div class="loading">Loading…</div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script>
+var _tok = localStorage.getItem('hf_token') ||
+           localStorage.getItem('hf_creator_token') ||
+           localStorage.getItem('hf_member_token');
+var _mode = 'all';
+var _data = [];
+
+var _typeHref = {
+  market_resolving: function(n) {
+    var slug = n.community_slug && n.community_slug.startsWith('market:') ? n.community_slug.slice(7) : null;
+    return slug ? '/market/' + slug : '/feed';
+  },
+  tier_upgrade:   function() { return '/predictors'; },
+  new_follower:   function(n) { return n.actor_id ? '/m/' + n.actor_id : '/predictors'; },
+  take_viral:     function(n) { return n.market_id ? '/takes/' + n.market_id : '/feed'; },
+  take_reaction:  function(n) { return n.market_id ? '/takes/' + n.market_id : '/feed'; },
+  take_correct:   function(n) { return n.market_id ? '/takes/' + n.market_id : '/feed'; },
+  take_incorrect: function() { return '/feed'; },
+  whale_alert:    function() { return '/alpha-live'; },
+  streak_warning: function() { return '/feed'; },
+  challenge_won:  function() { return '/challenges'; },
+  agent_signal:   function() { return '/alpha-live'; },
+};
+
+function hrefFor(n) {
+  var fn = _typeHref[n.type];
+  return fn ? fn(n) : '/feed';
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var diff = Date.now() - new Date(iso).getTime();
+  var min = Math.floor(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return min + 'm ago';
+  var h = Math.floor(min / 60);
+  if (h < 24) return h + 'h ago';
+  var d = Math.floor(h / 24);
+  if (d < 7) return d + 'd ago';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function esc(s) { return (s||'').replace(/[&<>"]/g, function(c) { return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]); }); }
+
+function renderList(items) {
+  var el = document.getElementById('notifList');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">' + (_mode === 'unread' ? 'No unread notifications.' : 'No notifications yet.') + '</div>';
+    return;
+  }
+  el.innerHTML = items.map(function(n) {
+    var unread = !n.read;
+    var href = hrefFor(n);
+    var typeClass = n.type ? ' type-' + n.type : '';
+    return '<a class="notif-item' + (unread ? ' unread' : '') + typeClass + '" href="' + esc(href) + '" onclick="markRead(\'' + n.id + '\')">' +
+      '<div class="notif-dot"></div>' +
+      '<div class="notif-body">' +
+        '<div class="notif-title">' + esc(n.title || '') + '</div>' +
+        (n.body ? '<div class="notif-sub">' + esc(n.body) + '</div>' : '') +
+      '</div>' +
+      '<div class="notif-time">' + timeAgo(n.created_at) + '</div>' +
+    '</a>';
+  }).join('');
+}
+
+function load() {
+  if (!_tok) {
+    document.getElementById('notifList').innerHTML = '<div class="empty">Sign in to see notifications.</div>';
+    return;
+  }
+  fetch('/api/notifications?limit=50' + (_mode === 'unread' ? '&unread=true' : ''), {
+    headers: { Authorization: 'Bearer ' + _tok }
+  })
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(d) {
+    _data = (d && d.notifications) || [];
+    renderList(_data);
+  })
+  .catch(function() {
+    document.getElementById('notifList').innerHTML = '<div class="empty">Could not load notifications.</div>';
+  });
+}
+
+function switchTab(mode) {
+  _mode = mode;
+  document.getElementById('tabAll').classList.toggle('active', mode === 'all');
+  document.getElementById('tabUnread').classList.toggle('active', mode === 'unread');
+  load();
+}
+
+function markRead(id) {
+  if (!_tok) return;
+  fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + _tok, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: id })
+  }).catch(function() {});
+  // Update badge in nav
+  var badge = document.getElementById('navNotifBadge');
+  if (badge) {
+    var cur = parseInt(badge.textContent) || 0;
+    if (cur <= 1) badge.style.display = 'none';
+    else badge.textContent = String(cur - 1);
+  }
+}
+
+function markAllRead() {
+  if (!_tok) return;
+  fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + _tok, 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }).then(function() { load(); });
+  var badge = document.getElementById('navNotifBadge');
+  if (badge) badge.style.display = 'none';
+}
+
+load();
+</script>
+</body>
+</html>
