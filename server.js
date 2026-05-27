@@ -52793,8 +52793,62 @@ app.get('/api/intelligence', async (req, res) => {
   }
 });
 
+// Grade user takes on Polymarket-native resolutions.
+// Runs every 30 min — fetches recently closed markets from Gamma and
+// calls scoreTakesForMarket so takes.is_correct gets set (and FLEX scores
+// become accurate) without needing a community-platform resolution event.
+async function gradePolymarketTakes() {
+  if (!pool) return;
+  try {
+    // Fetch the 300 most recently resolved markets (last ~7 days of activity).
+    const gRes = await fetch(
+      'https://gamma-api.polymarket.com/markets/keyset?closed=true&order=endDate&ascending=false&limit=300',
+      { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(14000) }
+    );
+    if (!gRes.ok) { console.warn('[takes-grade] Gamma closed fetch:', gRes.status); return; }
+    const markets = await gRes.json();
+    if (!Array.isArray(markets) || !markets.length) return;
+
+    let graded = 0;
+    for (const mkt of markets) {
+      // Determine outcome from outcomePrices array.
+      // outcomePrices is a JSON-encoded string array or already an array.
+      let prices;
+      try {
+        prices = typeof mkt.outcomePrices === 'string'
+          ? JSON.parse(mkt.outcomePrices)
+          : (mkt.outcomePrices || []);
+      } catch (_) { continue; }
+      if (!Array.isArray(prices) || prices.length < 2) continue;
+      const p0 = parseFloat(prices[0]);
+      if (isNaN(p0)) continue;
+      // Only grade when the outcome is decisive (≥95% one side).
+      if (p0 < 0.05) {
+        // outcome[1] resolved — YES on binary markets is outcomes[0]="YES"
+        // The order in Polymarket is [YES_price, NO_price], so:
+        // p0 < 0.05 → YES resolved NO
+      } else if (p0 > 0.95) {
+        // YES resolved YES
+      } else {
+        continue; // not decisive, skip
+      }
+      const outcome = p0 > 0.95 ? 'YES' : 'NO';
+      const slug = mkt.slug || null;
+      const question = mkt.question || mkt.title || null;
+      if (!slug && !question) continue;
+
+      await scoreTakesForMarket(question, outcome, slug);
+      graded++;
+    }
+    if (graded > 0) console.log(`[takes-grade] Processed ${graded} resolved markets`);
+  } catch (e) {
+    console.warn('[takes-grade] gradePolymarketTakes error:', e.message);
+  }
+}
+
 // 8. CRONS — all wrapped with safeCron to prevent unhandled rejections
 setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
+setInterval(safeCron('gradePolymarketTakes', gradePolymarketTakes), 30 * 60 * 1000);
 setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
 setInterval(safeCron('updatePlatformMetrics', updatePlatformMetrics), 60 * 60 * 1000);
 
@@ -52806,6 +52860,7 @@ setInterval(safeCron('mentionSyncLlm',  () => mentionSync.llmPass(dbQuery,  { lo
 
 setTimeout(() => {
   resolveSignalOutcomes().catch(e => _logError('boot/resolveSignalOutcomes', e));
+  gradePolymarketTakes().catch(e => _logError('boot/gradePolymarketTakes', e));
   refreshSourceWeights().catch(e => _logError('boot/refreshSourceWeights', e));
   // Add missing columns if they don't exist yet
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS confidence_level TEXT').catch(() => {});
