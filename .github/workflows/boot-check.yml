@@ -1,5 +1,14 @@
 name: Boot check
-on: [push]
+
+# Verifies the server starts and responds to /health within 20s.
+# Catches the class of bugs that took the site down (synchronous ReferenceError
+# during route registration → app.listen() never fires → 502 on Railway).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   boot:
@@ -10,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --omit=dev
@@ -43,6 +53,7 @@ jobs:
           echo "Boot check passed — /health: $HTTP_STATUS"
         env:
           NODE_ENV: production
+          PORT: 3099
           DATABASE_URL: postgresql://fake:fake@localhost/fake
           JWT_SECRET: test-secret-at-least-32-chars-here-xx
           ADMIN_SECRET: test-admin-secret

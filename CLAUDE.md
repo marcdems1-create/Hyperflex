@@ -17,6 +17,16 @@ Multiple Claude instances may work this repo in parallel. Two non-negotiable rul
 1. **No "shipped" claims without a verifiable commit hash.** Every "I shipped X" reply must include the commit hash and confirm `git push` succeeded. If you haven't pushed, you haven't shipped — say "drafted, not pushed" instead. We learned this the hard way mid-Phase 2d.
 2. **Verify before describing.** Before saying what shipped, run `git log origin/<branch> --oneline -1` and quote the hash you see on origin. If your local HEAD ≠ origin, push first.
 
+## ⛔ server.js middleware order rule (boot-crash prevention)
+
+**Never use a function as Express middleware before it is defined.** This is not a style preference — it is a boot-crash rule learned from a production 502 incident (May 27, 2026) where `requireAdminSecret` was used at line 22936 but defined at line 25296. The `ReferenceError` threw synchronously during route registration, aborting execution before `app.listen()` ever fired.
+
+**The rule:** All middleware helper functions (`requireAuth`, `requireAdmin`, `requireAdminSecret`, and any future equivalents) must be declared in a single block near the top of server.js, before any `app.get/post/put/delete` calls.
+
+**Corollary — native module guards:** Any `require()` of a native module (one that needs compiled C bindings — `canvas`, `sharp`, `bcrypt`, `better-sqlite3`, etc.) must be wrapped in try/catch with a no-op fallback. Railway's default Node image does not have libcairo/libpango/etc. A top-level uncaught `require()` failure kills the process before `app.listen()`.
+
+**Boot check CI** (`.github/workflows/boot-check.yml`) catches both of these: it polls `/health` for 15s and fails the build if the server never responds. Every push to `main` runs it.
+
 ## 🛠️ Operating papercuts
 
 - **TablePlus only** for DB queries. Marc's zsh chokes on backslash-prefixed pasted SQL. Always say "in TablePlus" when giving SQL. If TablePlus prefixes a paste with a stray `\`, instruct him to delete it.
