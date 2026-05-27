@@ -20351,15 +20351,11 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
       // Get reactor's name
       const reactorRows = await dbQuery('SELECT display_name FROM users WHERE id = $1', [req.userId]).catch(() => []);
       const reactorName = reactorRows[0]?.display_name || 'Someone';
-      const emoji = reaction === 'agree' ? '\u2191' : '\u2193';
-      const verb = reaction === 'agree' ? 'agreed with' : 'disagreed with';
       const shortQ = (take.question || '').substring(0, 50);
-      pushNotification(
-        take.user_id, 'take_reaction',
-        `${emoji} ${reactorName} ${verb} your take`,
-        `"${shortQ}"`,
-        null, null
-      );
+      const [title, body] = reaction === 'agree'
+        ? [`\u2191 ${reactorName} backed your take.`, `"${shortQ}"`]
+        : [`${reactorName} is betting against you.`, `They took the other side on: "${shortQ}"`];
+      pushNotification(take.user_id, 'take_reaction', title, body, null, null);
 
       // "Your take is trending" \u2014 fires once when agrees cross 5, 10, 25
       if (reaction === 'agree') {
@@ -50917,6 +50913,51 @@ cron.schedule('*/30 * * * *', safeCron('takeAgedWell', async () => {
     fired++;
   }
   if (fired) console.log(`[take-aged-well] fired ${fired} price-movement notifications`);
+}));
+
+// ── Streak-at-risk in-app push (daily 20:00 UTC) ──────────────────────────────
+// Users who have a 2+ week posting streak but haven't posted today get a nudge.
+// Dedupe: only once per user per calendar day (UTC). Complements the email at 18:00.
+const _streakAtRiskFired = new Set(); // key: `${userId}:${date}`
+cron.schedule('0 20 * * *', safeCron('streakAtRiskPush', async () => {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  // Expire yesterday's keys
+  for (const k of _streakAtRiskFired) {
+    if (!k.endsWith(`:${today}`)) _streakAtRiskFired.delete(k);
+  }
+
+  // Users whose last take was before today (UTC) but who have posted in 2+ distinct weeks
+  const rows = await dbQuery(`
+    WITH streakers AS (
+      SELECT user_id,
+             COUNT(DISTINCT DATE_TRUNC('week', created_at)::date) AS weeks_posted,
+             MAX(created_at) AS last_take_at
+      FROM takes
+      WHERE source = 'user'
+        AND created_at > now() - interval '60 days'
+      GROUP BY user_id
+      HAVING COUNT(DISTINCT DATE_TRUNC('week', created_at)::date) >= 2
+    )
+    SELECT s.user_id
+    FROM streakers s
+    WHERE s.last_take_at < DATE_TRUNC('day', now())
+  `).catch(() => []);
+
+  let fired = 0;
+  for (const row of rows) {
+    const key = `${row.user_id}:${today}`;
+    if (_streakAtRiskFired.has(key)) continue;
+    _streakAtRiskFired.add(key);
+    pushNotification(
+      row.user_id,
+      'streak_warning',
+      'Streak at risk.',
+      'No take posted today. Post before midnight UTC to keep it alive.',
+      null, null
+    ).catch(() => {});
+    fired++;
+  }
+  if (fired) console.log(`[streak-at-risk] fired ${fired} in-app nudges`);
 }));
 
 // ── Price Alert Checker (every 2 min) ──
