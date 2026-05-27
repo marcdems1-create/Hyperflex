@@ -10120,6 +10120,11 @@ app.delete('/markets/:id', requireCreator, async (req, res) => {
 // These routes serve the HTML files
 // ════════════════════════════════════════════════════════════
 
+// Copy trading page
+app.get('/copy-trading', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'copy-trading.html'));
+});
+
 // Signup page
 // Public discovery page
 app.get('/discover', (req, res) => {
