@@ -14254,6 +14254,33 @@ app.get('/api/member/:userId', async (req, res) => {
           takeStats.accuracy = resolved > 0 ? Math.round((takeStats.correct / resolved) * 100) : 0;
         }
         recentTakes = recentRows;
+
+        // Consecutive posting weeks — how many weeks in a row this user
+        // has posted at least one take. Used for the "Posted every week, N weeks"
+        // profile chip (voice charter: identity attachment).
+        try {
+          const weekRows = await dbQuery(
+            `SELECT DISTINCT DATE_TRUNC('week', created_at)::date AS week_start
+             FROM takes WHERE user_id = $1 AND source = 'user'
+             ORDER BY week_start DESC LIMIT 52`,
+            [userId]
+          );
+          let postingStreak = 0;
+          if (weekRows.length) {
+            const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+            const thisWeek = new Date(Math.floor(Date.now() / oneWeekMs) * oneWeekMs);
+            let expected = thisWeek;
+            for (const row of weekRows) {
+              const ws = new Date(row.week_start);
+              // Allow current or last week as the start of an active streak
+              if (postingStreak === 0 && Math.abs(ws - expected) > oneWeekMs * 1.5) break;
+              if (postingStreak > 0 && Math.abs(ws - expected) > oneWeekMs * 1.5) break;
+              postingStreak++;
+              expected = new Date(ws - oneWeekMs);
+            }
+          }
+          takeStats.posting_streak_weeks = postingStreak;
+        } catch (e) { takeStats.posting_streak_weeks = 0; }
       } catch (e) { /* takes table may not exist yet */ }
     }
 

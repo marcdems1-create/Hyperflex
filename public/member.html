@@ -1018,6 +1018,11 @@ async function load() {
           </div>
           <div class="hero-badges" style="margin-top:6px">
             ${tierBadge(stats.win_rate, stats.streak)}
+            ${(take_stats && take_stats.posting_streak_weeks >= 4)
+              ? `<span class="badge badge-streak" title="Posted at least one take every week for ${take_stats.posting_streak_weeks} consecutive weeks">Posted every week, ${take_stats.posting_streak_weeks}w</span>`
+              : (take_stats && take_stats.posting_streak_weeks >= 2)
+              ? `<span class="badge" style="background:rgba(77,159,255,0.1);color:var(--blue,#4d9fff);border:1px solid rgba(77,159,255,0.3)" title="${take_stats.posting_streak_weeks} weeks active">${take_stats.posting_streak_weeks}w streak</span>`
+              : ''}
             <span id="sharpBadge" class="badge badge-oracle" style="display:none"></span>
           </div>
         </div>
