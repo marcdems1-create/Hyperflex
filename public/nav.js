@@ -1185,8 +1185,12 @@ window.hfxOpenDeposit = function() {
     take_viral:    { color: '#4d9fff', href: function(n) {
       return n.market_id ? '/takes/' + n.market_id : '/feed';
     }},
-    challenge_won: { color: '#00e68a', href: function() { return '/challenges'; } },
-    agent_signal:  { color: '#f59e0b', href: function() { return '/alpha-live'; } },
+    challenge_won:  { color: '#00e68a', href: function() { return '/challenges'; } },
+    agent_signal:   { color: '#f59e0b', href: function() { return '/alpha-live'; } },
+    streak_warning: { color: '#f59e0b', href: function() { return '/feed'; } },
+    take_reaction:  { color: '#4d9fff', href: function(n) {
+      return n.market_id ? '/takes/' + n.market_id : '/feed';
+    }},
   };
 
   function _poll() {

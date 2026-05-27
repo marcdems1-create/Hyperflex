@@ -20030,6 +20030,11 @@ async function recomputeFlexScore(userId, opts) {
   // Three tiers so we always leave a footprint of having run.
   const realizedTradeCount = (diag && Number.isFinite(diag.realized_trade_count))
     ? diag.realized_trade_count : 0;
+
+  // Read current tier before overwriting so we can fire a tier_upgrade notification.
+  const prevTierRow = await pool.query('SELECT flex_tier FROM users WHERE id = $1', [userId]).catch(() => ({ rows: [] }));
+  const prevTier = (prevTierRow.rows[0] || {}).flex_tier || null;
+
   try {
     const upd = await pool.query(`
       UPDATE users SET
@@ -20057,6 +20062,19 @@ async function recomputeFlexScore(userId, opts) {
       ]
     );
     if (diag) diag.update = { stage: 'full', rowCount: upd.rowCount };
+    // Notify on tier promotion (not demotion, not first-time null→Building).
+    if (prevTier && tier && tier !== prevTier) {
+      const TIER_ORDER = ['Building', 'TRADER', 'PROFITABLE', 'SHARP', 'SHARK', 'WHALE', 'FLEXIN'];
+      const prev_i = TIER_ORDER.indexOf(prevTier);
+      const new_i  = TIER_ORDER.indexOf(tier);
+      if (new_i > prev_i) {
+        pushNotification(userId, 'tier_upgrade',
+          `${tier} tier unlocked.`,
+          `Up from ${prevTier}. FLEX Score now ${result.score}.`,
+          null, null
+        ).catch(() => {});
+      }
+    }
     return { ...result, tier, stats };
   } catch (e) {
     if (diag) diag.errors.push({ stage: 'full_update', message: e.message });
