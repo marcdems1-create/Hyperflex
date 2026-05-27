@@ -50984,6 +50984,87 @@ cron.schedule('0 20 * * *', safeCron('streakAtRiskPush', async () => {
   if (fired) console.log(`[streak-at-risk] fired ${fired} in-app nudges`);
 }));
 
+// ── "Today at stake" morning push (daily 08:00 UTC) ──────────────────────────
+// Users with open (unresolved) takes on markets that close today get a personal
+// "you have N takes resolving today" push. Drives daily open habit.
+// Dedupe: once per user per UTC calendar day.
+const _todayAtStakeFired = new Set(); // key: `${userId}:${date}`
+cron.schedule('0 8 * * *', safeCron('todayAtStake', async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  for (const k of _todayAtStakeFired) {
+    if (!k.endsWith(`:${today}`)) _todayAtStakeFired.delete(k);
+  }
+
+  // Find users who have open takes on markets ending today (UTC)
+  const rows = await dbQuery(`
+    SELECT t.user_id,
+           COUNT(*)::int AS take_count,
+           STRING_AGG(DISTINCT SPLIT_PART(t.question, '?', 1), ' / ' ORDER BY SPLIT_PART(t.question, '?', 1) LIMIT 2) AS sample_qs
+    FROM takes t
+    WHERE t.is_correct IS NULL
+      AND t.source = 'user'
+      AND t.market_slug IN (
+        SELECT DISTINCT market_slug
+        FROM takes
+        WHERE is_correct IS NULL
+          AND market_slug IN (
+            SELECT slug FROM (
+              SELECT slug, end_date FROM (VALUES ${(() => {
+                // Build from screener cache at runtime — proxy via subquery placeholder
+                return '(\'\', NOW())';
+              })()}) AS placeholder(slug, end_date)
+            ) WHERE false
+          )
+      )
+    GROUP BY t.user_id
+  `).catch(() => []);
+  // Fallback: use a direct screener-aware approach
+  // Because the screener cache isn't directly queryable in SQL, we do it in JS.
+  const cacheMarkets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+  const todayStart = new Date(); todayStart.setUTCHours(0,0,0,0);
+  const todayEnd   = new Date(); todayEnd.setUTCHours(23,59,59,999);
+  const resolvingSlugSet = new Set(
+    cacheMarkets
+      .filter(m => {
+        const t = m.end_date ? new Date(m.end_date).getTime() : (m.endDate ? new Date(m.endDate).getTime() : 0);
+        return t >= todayStart.getTime() && t <= todayEnd.getTime();
+      })
+      .map(m => m.slug || m.market_slug)
+      .filter(Boolean)
+  );
+  if (!resolvingSlugSet.size) return;
+
+  const slugList = [...resolvingSlugSet].map((_, i) => `$${i + 1}`).join(',');
+  const slugArr  = [...resolvingSlugSet];
+  const takeRows = await dbQuery(`
+    SELECT user_id, COUNT(*)::int AS cnt,
+           MIN(question) AS sample_q
+    FROM takes
+    WHERE is_correct IS NULL
+      AND source = 'user'
+      AND market_slug = ANY($1::text[])
+    GROUP BY user_id
+  `, [slugArr]).catch(() => []);
+
+  let fired = 0;
+  for (const row of takeRows) {
+    const key = `${row.user_id}:${today}`;
+    if (_todayAtStakeFired.has(key)) continue;
+    _todayAtStakeFired.add(key);
+    const cnt = row.cnt || 1;
+    const sample = (row.sample_q || '').substring(0, 60);
+    pushNotification(
+      row.user_id,
+      'market_resolving',
+      `${cnt} take${cnt > 1 ? 's' : ''} resolving today.`,
+      sample ? `"${sample}"` : 'Check your open positions.',
+      null, null
+    ).catch(() => {});
+    fired++;
+  }
+  if (fired) console.log(`[today-at-stake] fired ${fired} morning pushes`);
+}));
+
 // ── Price Alert Checker (every 2 min) ──
 cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
   // Get current market prices from screener cache
