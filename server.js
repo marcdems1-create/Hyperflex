@@ -12185,6 +12185,7 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
              u.flex_score, u.flex_tier, u.flex_qualifies, u.flex_settled_events,
              u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
              u.prediction_win_rate, u.wallet_verified,
+             u.flex_c_calibration,
              ws.total_volume_usd, ws.closed_positions AS ws_closed_positions
       FROM users u
       LEFT JOIN wallet_scores ws ON ws.user_id = u.id
@@ -12218,6 +12219,7 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
         predictions_resolved: u.predictions_resolved != null ? Number(u.predictions_resolved) : 0,
         total_volume_usd: u.total_volume_usd != null ? Math.round(Number(u.total_volume_usd)) : null,
         closed_positions: u.ws_closed_positions != null ? Number(u.ws_closed_positions) : null,
+        calibration_score: u.flex_c_calibration != null ? Math.round(Number(u.flex_c_calibration) / 25 * 100) : null,
       };
     });
 

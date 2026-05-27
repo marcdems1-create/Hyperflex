@@ -1123,6 +1123,19 @@ async function load() {
           <div class="stat-num" id="statStreak">${stats.streak || 0}<span style="font-size:0.5em;color:var(--muted);margin-left:6px">W</span></div>
           <div class="stat-sub">${(take_stats && take_stats.total) ? take_stats.total + ' takes posted' : 'Predict to start'}</div>
         </div>
+        ${(() => {
+          const cal = stats.flex_components && stats.flex_components.calibration;
+          if (cal == null) return '';
+          const calScore = Math.round(cal / 25 * 100);
+          const calLabel = calScore >= 70 ? 'Sharp' : calScore >= 50 ? 'Solid' : 'Building';
+          const calN = stats.flex_settled_events || 0;
+          const calCls = calScore >= 70 ? 'green' : '';
+          return `<div class="stat ${calCls}" id="statCalibrationCard">
+            <div class="stat-label"><span>Calibration</span><span class="ticker">${calN >= 5 ? 'BRIER SCORE' : 'LOW SAMPLE'}</span></div>
+            <div class="stat-num" id="statCalibration">${calScore}<span style="font-size:0.5em;color:var(--muted);margin-left:4px">/100</span></div>
+            <div class="stat-sub" id="statCalibrationSub">${calN} graded · ${calLabel}</div>
+          </div>`;
+        })()}
         <!-- Open Book: live mark-to-market on currently-open Polymarket
              positions. Real and forward-looking — most profitable Polymarket
              traders close before expiry, so open-book P&L is a meaningful

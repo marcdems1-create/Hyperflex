@@ -382,11 +382,12 @@ a:hover { text-decoration: underline; }
         <th>Streak</th>
         <th>Platform</th>
         <th><span id="sharpScoreHeader" style="cursor:pointer;white-space:nowrap" onclick="openSharpModal()">Whale Score <span style="color:var(--green);font-size:11px">&#9432;</span></span></th>
+        <th style="white-space:nowrap">Calibration</th>
         <th></th>
       </tr>
     </thead>
     <tbody id="lbBody">
-      <tr><td colspan="9"><div class="state-msg">Loading traders...</div></td></tr>
+      <tr><td colspan="10"><div class="state-msg">Loading traders...</div></td></tr>
     </tbody>
   </table>
 </div>
@@ -502,13 +503,13 @@ function _adaptModeRow(r, idx) {
 
 async function loadModeLeaderboard() {
   var body = document.getElementById('lbBody');
-  body.innerHTML = '<tr><td colspan="9"><div class="state-msg">Loading…</div></td></tr>';
+  body.innerHTML = '<tr><td colspan="10"><div class="state-msg">Loading…</div></td></tr>';
   try {
     var r = await fetch('/api/predictors/leaderboard?mode=' + currentMode + '&limit=100');
     var data = r.ok ? await r.json() : [];
     if (!Array.isArray(data) || !data.length) {
       var noun = currentMode === 'flex' ? 'traders with a Flex Score yet' : 'whales ranked yet';
-      body.innerHTML = '<tr><td colspan="9"><div class="state-msg">No ' + noun + '. Check back after the next score rebuild.</div></td></tr>';
+      body.innerHTML = '<tr><td colspan="10"><div class="state-msg">No ' + noun + '. Check back after the next score rebuild.</div></td></tr>';
       document.getElementById('heroStat').textContent = '0 ranked';
       return;
     }
@@ -516,7 +517,7 @@ async function loadModeLeaderboard() {
     document.getElementById('heroStat').textContent = data.length + (currentMode === 'flex' ? ' traders with a verified Flex Score' : ' whales ranked by capital flow');
     renderTable(lbData);
   } catch (e) {
-    body.innerHTML = '<tr><td colspan="9"><div class="state-msg">Could not load. Retry shortly.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="10"><div class="state-msg">Could not load. Retry shortly.</div></td></tr>';
   }
 }
 
@@ -549,19 +550,19 @@ function setCategory(cat){
 }
 async function loadCategoryLeaderboard(cat){
   var body=document.getElementById('lbBody');
-  body.innerHTML='<tr><td colspan="9"><div class="state-msg">Loading '+cat+' specialists...</div></td></tr>';
+  body.innerHTML='<tr><td colspan="10"><div class="state-msg">Loading '+cat+' specialists...</div></td></tr>';
   document.getElementById('podiumSection').style.display='none';
   try{
     var r=await fetch('/api/predictors?category='+cat+'&limit=50');
     var data=r.ok?await r.json():[];
-    if(!data.length){body.innerHTML='<tr><td colspan="9"><div class="state-msg">No '+cat+' specialists found yet. Be the first.</div></td></tr>';return;}
+    if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="state-msg">No '+cat+' specialists found yet. Be the first.</div></td></tr>';return;}
     lbData=data;
     data.forEach(function(r,i){r._displayRank=i+1;r.platforms=r.platforms||['HFX'];r.total_pnl=r.pnl_pts||0;r.volume=r.total_predictions||0});
     var topN=data.slice(0,10);
     document.getElementById('heroStat').textContent=data.length+' '+cat+' specialists ranked';
     renderPodium(topN);
     renderTable(data.slice(10,50));
-  }catch(e){body.innerHTML='<tr><td colspan="9"><div class="state-msg">Could not load. Try again.</div></td></tr>';}
+  }catch(e){body.innerHTML='<tr><td colspan="10"><div class="state-msg">Could not load. Try again.</div></td></tr>';}
 }
 
 // Sharp score modal
@@ -628,7 +629,7 @@ function alphaGradeBadge(wallet){
 
 async function loadLeaderboard(){
   var body=document.getElementById('lbBody');
-  body.innerHTML='<tr><td colspan="9"><div class="state-msg">Loading traders...</div></td></tr>';
+  body.innerHTML='<tr><td colspan="10"><div class="state-msg">Loading traders...</div></td></tr>';
   document.getElementById('podiumSection').style.display='none';
   try{
     var[hfxRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/whale-scores')]);
@@ -647,7 +648,7 @@ async function loadLeaderboard(){
     loadRisingStars();
     loadMyScore();
   }catch(e){
-    body.innerHTML='<tr><td colspan="9"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
+    body.innerHTML='<tr><td colspan="10"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
   }
 }
 
@@ -772,8 +773,8 @@ var _lbMyUserId=(function(){try{var tok=localStorage.getItem('hf_token')||localS
 
 function renderTable(data){
   var body=document.getElementById('lbBody');
-  if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="9"><div class="state-msg">Only top performers shown above</div></td></tr>';return}
-  if(!data.length){body.innerHTML='<tr><td colspan="9"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
+  if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="10"><div class="state-msg">Only top performers shown above</div></td></tr>';return}
+  if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
 
   // Find the logged-in user's index so we can flag rivals
   var myIdx=-1;
@@ -832,6 +833,7 @@ function renderTable(data){
       '<td class="td-streak">'+streakHtml+'</td>'+
       '<td class="td-platform">'+platformHtml+'</td>'+
       '<td class="td-sharp">'+sharpHtml+'</td>'+
+      (function(){var cs=r.calibration_score;if(cs==null)return'<td style="color:var(--muted);font-family:var(--mono);font-size:11px;text-align:center">&mdash;</td>';var cc=cs>=70?'var(--green)':cs>=50?'#4d9fff':'rgba(240,240,245,.45)';return'<td style="text-align:center"><span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+cc+'">'+cs+'</span><span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3)">/100</span></td>';})() +
       '<td class="td-actions">'+
         '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-table">Copy</a>'+
         '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
