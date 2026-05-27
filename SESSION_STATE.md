@@ -49,6 +49,48 @@
 
 ## Chronological log (newest first)
 
+## 2026-05-27 (retention build sprint — notifications, pushes, voice charter, nav bell)
+
+**Shipped (with hashes):**
+- `4c5c76a` — feat(feed): cold-start empty state, suggested predictors + inline follow
+- `6627179` — feat: take_viral push on trending threshold (5/10/25 agrees)
+- `ff5d827` — feat: take aged well — price movement notification
+- `dd20eb5` — fix(explore): voice charter cleanup on leaderboard
+- `90f5026` — fix(passport): voice charter — dry tweet copy, emoji out of share bar
+- `ec0aa15` — fix(take): voice charter — emoji sweep
+- `e2dee7a` — fix: voice charter batch — 4 pages
+- `b17e269` — feat(admin): Mentions tab + 3 endpoints (mention-stats/drafts/publish)
+- `85c0c73` — feat(retention): streak-at-risk push (20:00 UTC) + rival disagree copy
+- `fe9728d` — feat(retention): tier upgrade push + nav toast coverage for all 8 types
+- `875d6e7` — feat(retention): wrong-take resolution push ("Post a counter take") + full notification coverage
+- `ebdaec2` — fix: final emoji sweep (explore/passport/member/alpha-live)
+- `56f9bfd` — feat(nav): notification bell with unread badge + emoji cleanup in nav links
+- `5642e0a` — feat: /notifications page + API ?limit/?unread params + nav bell → /notifications
+- `ace6722` — feat(retention): today-at-stake morning push (08:00 UTC) — takes resolving today
+
+All pushed to `claude/mention-pages-feature-sNd4n`.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+1. **Intelligence accuracy grading bug** — 21,866 signals at 0.4% is a grading bug. Separate workstream, investigate `scoreTakesForMarket` vs `wallet_scores` sharpness pipeline. Do NOT start without understanding root cause first.
+2. **WHALE SCORE label split** (from 2026-05-10 entry) — still queued; Decision #1 locked.
+3. **Surgical FLEX fix** (from 2026-05-10 entry) — still queued; needs LaBradford diag curl.
+4. **Phase 2f mention compose bulk run** — admin UI now has "Run Compose" button hitting `/api/clusterer/compose`. Trigger from admin panel once 3 leaked secrets are rotated.
+5. **3 leaked secrets pending rotation** (CLAUDE.md backlog — must do before Phase 2f bulk ingest).
+
+**Open questions / unverified:**
+- `today-at-stake` cron (ace6722) uses a JS-side slug filter from screener cache — if screener cache is cold at 08:00 UTC, zero fires. Monitor logs for `[today-at-stake]` after first UTC 08:00.
+- Tier upgrade notification reads `prev_tier` before UPDATE — one extra DB read per FLEX recompute. Acceptable if recompute cron is not hitting 1000s of users per cycle; verify if load spikes.
+
+**Notes for next session:**
+- Branch `claude/mention-pages-feature-sNd4n` is 15 commits ahead of main. Needs a merge into main before Railway redeploys pick them up.
+- The `_typeMap` in nav.js now covers: market_resolving, tier_upgrade, new_follower, take_viral, take_reaction, whale_alert, take_correct, take_incorrect, streak_warning, challenge_won, agent_signal. All notification types are toast-covered.
+- `/notifications` page is live at `ace6722`. The mark-read-on-click UX updates the badge count in the nav immediately client-side.
+
+---
+
 ## 2026-05-10 (pool hotfix + homepage scale + rolling banner + flex instrumentation)
 
 **Shipped (with hashes):**
