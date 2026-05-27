@@ -49,6 +49,37 @@
 
 ## Chronological log (newest first)
 
+## 2026-05-27 (grading fix completion + takes scoring + notification routing)
+
+**Shipped (with hashes):**
+- `a48203e` — feat(retention): gradePolymarketTakes cron (every 30 min + boot) — calls scoreTakesForMarket for 300 most recently resolved Gamma markets. Fixes takes.is_correct being null for all Polymarket-native resolutions.
+- `245a0f4` — feat(admin): POST /api/admin/grade-takes-backfill — fetches 1,500 closed markets (3 pages × 500), grades historical backlog. Admin UI "Run Backfill" card in Social tab.
+- `776531a` — fix: pass market slug into take_correct/incorrect pushNotification; notifications.html routes both types to /market/:slug
+- `0f0a966` — fix: intelligence accuracy grading — fetch resolved markets from Gamma API (resolveSignalOutcomes now checks closed markets, not just _screenerCache)
+
+All pushed to `claude/mention-pages-feature-sNd4n`.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+1. **Branch merge to main** — branch is 27 commits ahead of main. Railway won't pick up any of the retention features or grading fixes until merged. Marc triggers merge.
+2. **Run takes grading backfill** — hit POST /api/admin/grade-takes-backfill once after deploy to grade historical takes. Will surface CORRECT/WRONG badges and real take accuracy on member profiles.
+3. **WHALE SCORE label split** — pure UI work (Decision #1 locked). Blocked on surgical FLEX fix until whale-imported users show real FLEX scores.
+4. **Surgical FLEX fix** — blocked on LaBradford diag curl from Marc.
+5. **Phase 2f mention compose bulk run** — Admin "Run Compose" button ready. Blocked on 3 leaked secrets rotation.
+
+**Open questions / unverified:**
+- Intelligence accuracy (resolveSignalOutcomes) now fetches closed markets — but the 45-day expiry for old signals means very old pending signals may still expire without grading. A separate backfill for signal_outcomes (similar to grade-takes-backfill) would help if Marc wants historical accuracy corrected.
+- wallet_scores.take_accuracy updates nightly at 3 AM. Member profiles read takes table directly (no delay). Predictor leaderboard sharpness scores update next nightly run.
+
+**Notes for next session:**
+- After branch merge + Railway deploy, run the takes backfill from /admin → Social tab → "Run Backfill" button.
+- gradePolymarketTakes fires on boot, so first deploy cycle will grade immediately without waiting for the 30-min cron.
+- `wallet_scores` (sharpness_score = predictor leaderboard sort key) has `take_accuracy` field that will populate after nightly 3 AM cron once takes are graded.
+
+---
+
 ## 2026-05-27 (retention build sprint — notifications, pushes, voice charter, nav bell)
 
 **Shipped (with hashes):**
