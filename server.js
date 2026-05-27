@@ -52450,7 +52450,7 @@ async function resolveSignalOutcomes() {
   if (!pool) return;
   try {
     const pending = await dbQuery(
-      "SELECT id, market_question, predicted_side, market_price_at_signal FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, market_url, predicted_side, market_price_at_signal, predicted_at FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 500"
     );
     if (!pending.length) return;
 
@@ -52465,13 +52465,79 @@ async function resolveSignalOutcomes() {
       }
     }
 
-    // Source 2: Whale index cache (has consensus data)
+    // Source 3: Gamma API — recently resolved markets (closed=true). This is the
+    // primary fix for the 0.4% accuracy bug: resolved markets disappear from the
+    // active screener cache, so without this source they can never be graded.
+    // Fetch markets that closed in the last 14 days to catch any pending signals.
+    try {
+      const gUrl = `https://gamma-api.polymarket.com/markets/keyset?closed=true&order=endDate&ascending=false&limit=500`;
+      const gRes = await fetch(gUrl, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        const gMkts = Array.isArray(gData) ? gData : (gData.markets || []);
+        for (const m of gMkts) {
+          // Parse YES price from outcomePrices JSON string — same pattern as _parseYesPrice helper
+          let finalPrice = null;
+          try {
+            const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+            if (Array.isArray(op) && op.length) finalPrice = parseFloat(op[0]);
+          } catch (e) { /* fallthrough */ }
+          // Only use markets with definitive resolution (price ~0 or ~1)
+          if (finalPrice == null || isNaN(finalPrice) || (finalPrice > 0.05 && finalPrice < 0.95)) continue;
+          const q = (m.question || '').toLowerCase().trim();
+          if (q && !priceLookup.has(q)) {
+            priceLookup.set(q, { price: finalPrice, end_date: m.endDate });
+          }
+        }
+        console.log(`[intelligence] Loaded ${gMkts.length} resolved markets from Gamma for grading`);
+      }
+    } catch (e) {
+      console.warn('[intelligence] Gamma resolved-market fetch failed:', e.message);
+    }
     if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
       for (const p of _whaleIndexCache.data.picks) {
         if (p.market && p.current_price != null) {
           priceLookup.set(p.market.toLowerCase().trim(), { price: parseFloat(p.current_price), end_date: null });
         }
       }
+    }
+
+    // Slug-based fallback map: extract slug from market_url for direct Gamma lookup
+    // Build a batch of slugs to fetch from Gamma for unmatched signals.
+    const slugLookup = new Map(); // slug → { price }
+    const slugsToFetch = new Set();
+    for (const sig of pending) {
+      const url = sig.market_url || '';
+      const slugMatch = url.match(/polymarket\.com\/event\/([^/?#]+)/);
+      if (slugMatch) slugsToFetch.add(slugMatch[1]);
+    }
+    if (slugsToFetch.size > 0) {
+      try {
+        const slugArr = [...slugsToFetch].slice(0, 50); // cap to avoid hammering Gamma
+        for (const slug of slugArr) {
+          const r = await fetch(`https://gamma-api.polymarket.com/markets/keyset?slug=${encodeURIComponent(slug)}`, {
+            headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+            signal: AbortSignal.timeout(6000)
+          }).catch(() => null);
+          if (!r || !r.ok) continue;
+          const d = await r.json();
+          const mkts = Array.isArray(d) ? d : (d.markets || []);
+          for (const m of mkts) {
+            let fp = null;
+            try {
+              const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+              if (Array.isArray(op)) fp = parseFloat(op[0]);
+            } catch (e) {}
+            if (fp != null && !isNaN(fp) && (fp <= 0.05 || fp >= 0.95)) {
+              slugLookup.set(slug, { price: fp });
+              if (m.question) priceLookup.set(m.question.toLowerCase().trim(), { price: fp, end_date: m.endDate });
+            }
+          }
+        }
+      } catch (e) { console.warn('[intelligence] slug batch fetch failed:', e.message); }
     }
 
     let resolved = 0;
@@ -52488,6 +52554,11 @@ async function resolveSignalOutcomes() {
         for (const [k, v] of priceLookup) {
           if (k.startsWith(prefix)) { match = v; break; }
         }
+      }
+      // Slug-based fallback
+      if (!match && sig.market_url) {
+        const slugM = (sig.market_url || '').match(/polymarket\.com\/event\/([^/?#]+)/);
+        if (slugM) match = slugLookup.get(slugM[1]) || null;
       }
 
       if (!match) {
