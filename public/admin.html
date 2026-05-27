@@ -1348,6 +1348,16 @@
         </div>
         <div id="recentTakesList" style="font-size:12px;color:var(--dim)">Click Load to see takes</div>
       </div>
+
+      <!-- Takes grading backfill -->
+      <div class="analytics-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div class="card-title">Takes Grading Backfill</div>
+          <button onclick="runTakesBackfill(this)" style="font-size:10px;background:rgba(0,230,138,0.12);color:var(--green);border:none;border-radius:4px;padding:4px 10px;cursor:pointer">Run Backfill</button>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Grades unscored takes against the 1,500 most recently resolved Polymarket markets. Safe to run multiple times.</div>
+        <div id="takesBackfillResult" style="font-size:12px;color:var(--dim)"></div>
+      </div>
     </div>
 
     <!-- Promotions tab -->
@@ -3318,6 +3328,26 @@ async function deleteTake(takeId) {
       if (el) el.remove();
     }
   } catch(e) { alert(e.message); }
+}
+
+async function runTakesBackfill(btn) {
+  var out = document.getElementById('takesBackfillResult');
+  if (btn) btn.disabled = true;
+  if (out) out.innerHTML = '<span style="color:var(--dim)">Running… (may take 30-60s)</span>';
+  try {
+    var r = await fetch('/api/admin/grade-takes-backfill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: getSecret() })
+    });
+    var d = await r.json();
+    if (out) out.innerHTML = d.ok
+      ? '<span style="color:var(--green)">Done. ' + d.pagesRead + ' pages read, ' + d.processed + ' markets processed.</span>'
+      : '<span style="color:var(--red)">Error: ' + (d.error || 'unknown') + '</span>';
+  } catch (e) {
+    if (out) out.innerHTML = '<span style="color:var(--red)">Request failed: ' + e.message + '</span>';
+  }
+  if (btn) btn.disabled = false;
 }
 
 async function loadRecentTakes() {

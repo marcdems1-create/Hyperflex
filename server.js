@@ -25151,6 +25151,43 @@ app.post('/api/admin/mention-publish', requireAdmin, async (req, res) => {
   }
 });
 
+// One-shot backfill: grade all takes whose market resolved on Polymarket.
+// Fetches multiple pages of closed markets from Gamma (up to ~1500 markets)
+// so old ungraded takes from months ago get CORRECT/WRONG badges.
+// Idempotent — scoreTakesForMarket only touches rows where is_correct IS NULL.
+app.post('/api/admin/grade-takes-backfill', requireAdmin, async (req, res) => {
+  let processed = 0, pagesRead = 0, errors = 0;
+  const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+  try {
+    // Fetch 3 pages × 500 = 1500 most recently resolved markets (~3-4 months)
+    const pages = [
+      'https://gamma-api.polymarket.com/markets/keyset?closed=true&order=endDate&ascending=false&limit=500',
+      'https://gamma-api.polymarket.com/markets/keyset?closed=true&order=endDate&ascending=false&limit=500&offset=500',
+      'https://gamma-api.polymarket.com/markets/keyset?closed=true&order=endDate&ascending=false&limit=500&offset=1000',
+    ];
+    for (const url of pages) {
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) { errors++; continue; }
+      const markets = await r.json();
+      if (!Array.isArray(markets)) continue;
+      pagesRead++;
+      for (const mkt of markets) {
+        let prices;
+        try { prices = typeof mkt.outcomePrices === 'string' ? JSON.parse(mkt.outcomePrices) : (mkt.outcomePrices || []); } catch (_) { continue; }
+        if (!Array.isArray(prices) || prices.length < 2) continue;
+        const p0 = parseFloat(prices[0]);
+        if (isNaN(p0) || (p0 >= 0.05 && p0 <= 0.95)) continue;
+        const outcome = p0 > 0.95 ? 'YES' : 'NO';
+        await scoreTakesForMarket(mkt.question || mkt.title || null, outcome, mkt.slug || null);
+        processed++;
+      }
+    }
+    res.json({ ok: true, pagesRead, processed, errors });
+  } catch (e) {
+    res.status(500).json({ error: e.message, pagesRead, processed });
+  }
+});
+
 // was we stored the EOA but Polymarket positions live on the Safe proxy.
 app.get('/api/admin/polymarket-health', requireAdmin, async (req, res) => {
   // Build the query in two fallbacks: preferred query uses polymarket_proxy
