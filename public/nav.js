@@ -257,6 +257,10 @@
       '.nav-signin:hover{color:#f0f0f5;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}' +
       '.nav-cta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:700;color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff);text-decoration:none;padding:6px 14px;border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}' +
+      /* Notification bell */
+      '.nav-notif-btn{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;color:#8888a0;text-decoration:none;transition:all .15s;flex-shrink:0}' +
+      '.nav-notif-btn:hover{background:rgba(255,255,255,0.06);color:#f0f0f5}' +
+      '.nav-notif-badge{position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#ff4d6a;color:#fff;font-family:"JetBrains Mono",monospace;font-size:9px;font-weight:700;line-height:16px;text-align:center;pointer-events:none}' +
       /* Connect Wallet button */
       '.nav-wallet-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;background:rgba(168,85,247,0.08);cursor:pointer;transition:all .15s;white-space:nowrap}' +
       '.nav-wallet-btn:hover{border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.14)}' +
@@ -348,8 +352,8 @@
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
-    { href: '/terminal', label: '🖥 Terminal', gold: true },
-    { href: '/alpha', label: '⚡ Alpha', gold: true },
+    { href: '/terminal', label: 'Terminal', gold: true },
+    { href: '/alpha', label: 'Alpha', gold: true },
     { href: '/signals', label: 'Signals' },
     { href: '/screener', label: 'Screener' },
     { href: '/whales', label: 'Market Intel' },
@@ -399,17 +403,17 @@
   };
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
-    { href: '/challenges', label: '⚔ Challenges', gold: true },
-    { href: '/incentives', label: '💸 Incentives', gold: true },
-    { href: '/brief', label: '🧠 AI Brief', gold: true },
-    { href: '/high-prob', label: '🎯 99% Bets', gold: true },
-    { href: '/odds', label: '🎲 Odds' },
+    { href: '/challenges', label: 'Challenges', gold: true },
+    { href: '/incentives', label: 'Incentives', gold: true },
+    { href: '/brief', label: 'AI Brief', gold: true },
+    { href: '/high-prob', label: '99% Bets', gold: true },
+    { href: '/odds', label: 'Odds' },
     { sep: true },
-    { href: '/data', label: '📈 Data' },
-    { href: '/ecosystem', label: '🌐 Ecosystem' },
-    { href: '/features', label: '✨ Features' },
-    { href: '/partners', label: '🤝 Partners' },
-    { href: '/api-docs', label: '⚙️ API' }
+    { href: '/data', label: 'Data' },
+    { href: '/ecosystem', label: 'Ecosystem' },
+    { href: '/features', label: 'Features' },
+    { href: '/partners', label: 'Partners' },
+    { href: '/api-docs', label: 'API' }
   ];
   // Combined for search index
   var links = primaryLinks.concat(moreLinks.filter(function(l){return !l.sep}));
@@ -449,7 +453,7 @@
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
       }).join('') +
-      (isLoggedIn ? '<a href="#" onclick="event.preventDefault();_goToMyProfile()" class="nav-link' + (path.indexOf('/m/') === 0 ? ' active' : '') + '">👤 Profile</a>' : '') +
+      (isLoggedIn ? '<a href="#" onclick="event.preventDefault();_goToMyProfile()" class="nav-link' + (path.indexOf('/m/') === 0 ? ' active' : '') + '">Profile</a>' : '') +
       '<div class="nav-more-wrap">' +
         '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More">' +
           '<svg viewBox="0 0 24 24" style="width:18px;height:18px"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>' +
@@ -470,6 +474,12 @@
       '<span>Search</span>' +
       '<kbd>' + (navigator.platform.indexOf('Mac') > -1 ? '⌘' : 'Ctrl') + 'K</kbd>' +
     '</div>' +
+    (isLoggedIn
+      ? '<a href="/feed" class="nav-notif-btn" id="navNotifBtn" title="Notifications">' +
+          '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' +
+          '<span class="nav-notif-badge" id="navNotifBadge" style="display:none">0</span>' +
+        '</a>'
+      : '') +
     '<div class="nav-auth">' +
       '<button class="nav-wallet-btn" id="navWalletBtn" title="Connect Wallet">' +
         '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
@@ -495,10 +505,10 @@
   (function() {
     var allLinks = [];
     // Tier 1 — Your Stuff (logged-in only)
-    allLinks.push({ href: '#', label: '🔗 Connect Wallet', id: 'navMobileWalletLink', gold: true });
+    allLinks.push({ href: '#', label: 'Connect Wallet', id: 'navMobileWalletLink', gold: true });
     if (isLoggedIn) {
-      allLinks.push({ href: '#', label: '👤 My Profile', gold: true, onclick: '_goToMyProfile()' });
-      allLinks.push({ href: '#', label: '🛂 Prediction Passport', gold: true, onclick: '_goToMyPassport()' });
+      allLinks.push({ href: '#', label: 'My Profile', gold: true, onclick: '_goToMyProfile()' });
+      allLinks.push({ href: '#', label: 'Prediction Passport', gold: true, onclick: '_goToMyPassport()' });
     }
     allLinks.push({ sep: true });
     // Tier 2 — Find Alpha (the primary alpha sources)
@@ -1209,6 +1219,19 @@ window.hfxOpenDeposit = function() {
     .then(function(d) {
       if (!d) return;
       var notifs = (d.notifications || []).filter(function(n) { return !n.read; });
+
+      // Update nav bell badge with unread count
+      var badge = document.getElementById('navNotifBadge');
+      if (badge) {
+        var count = notifs.length;
+        if (count > 0) {
+          badge.textContent = count > 9 ? '9+' : String(count);
+          badge.style.display = 'block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+
       if (!notifs.length) return;
 
       // Newest first; skip if already shown this session
