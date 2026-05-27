@@ -2491,6 +2491,64 @@ function showFeedToast(msg, kind) {
   setTimeout(function(){ if (el.parentNode) el.remove(); }, 4200);
 }
 
+// ── Suggested predictors for empty feed cold-start ──
+function _loadSuggestedPredictors() {
+  var el = document.getElementById('suggestedPredictors');
+  if (!el) return;
+  fetch('/api/predictors/leaderboard?mode=flex&limit=6')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var preds = (Array.isArray(d) ? d : (d && (d.predictors || d.users || []))).slice(0, 6);
+      if (!preds.length) { el.style.display = 'none'; return; }
+      el.innerHTML =
+        '<div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px">Suggested Predictors</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+        preds.map(function(p) {
+          var name = esc(p.display_name || p.username || 'Predictor');
+          var tier = p.flex_tier || p.tier || '';
+          var score = p.flex_score != null ? Number(p.flex_score) : null;
+          var scoreStr = score != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">FLEX ' + score + '</span>' : '';
+          var tierColor = tier === 'Oracle' ? 'var(--gold,#c9920d)' : tier === 'Sharp' ? 'var(--green,#00e68a)' : 'var(--text-dim)';
+          var tierStr = tier ? '<span style="font-size:10px;font-weight:700;color:' + tierColor + ';text-transform:uppercase;letter-spacing:0.1em">' + esc(tier) + '</span>' : '';
+          var profileHref = '/m/' + encodeURIComponent(p.id || p.user_id || '');
+          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface,rgba(255,255,255,0.03));border:1px solid var(--border,rgba(255,255,255,0.08));border-radius:10px">' +
+            '<a href="' + profileHref + '" style="flex:1;min-width:0;text-decoration:none;color:inherit">' +
+              '<div style="font-size:13px;font-weight:700;color:var(--text)">' + name + '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;margin-top:3px">' + tierStr + scoreStr + '</div>' +
+            '</a>' +
+            '<button onclick="_followFromFeed(\'' + esc(p.id || p.user_id || '') + '\',this)" style="flex-shrink:0;padding:6px 14px;border-radius:8px;border:1px solid rgba(168,85,247,0.4);background:rgba(168,85,247,0.08);color:var(--purple,#a855f7);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .15s">Follow</button>' +
+          '</div>';
+        }).join('') +
+        '</div>' +
+        '<div style="margin-top:12px;text-align:center"><a href="/predictors" style="font-size:12px;color:var(--text-dim);text-decoration:none">All predictors →</a></div>';
+    })
+    .catch(function() { if (el) el.style.display = 'none'; });
+}
+
+function _followFromFeed(userId, btn) {
+  if (!token) { window.location.href = '/creator/login'; return; }
+  if (!userId || !btn) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/api/predictors/' + encodeURIComponent(userId) + '/follow', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token }
+  })
+  .then(function(r) { return r.ok ? r.json() : Promise.reject(r); })
+  .then(function(d) {
+    if (d.following) {
+      btn.textContent = 'Following';
+      btn.style.borderColor = 'rgba(0,230,138,0.4)';
+      btn.style.background = 'rgba(0,230,138,0.08)';
+      btn.style.color = 'var(--green,#00e68a)';
+    } else {
+      btn.textContent = 'Follow';
+      btn.disabled = false;
+    }
+  })
+  .catch(function() { btn.disabled = false; btn.textContent = 'Follow'; });
+}
+
 // ── Manual composer ──
 function openManualComposer() {
   if (!token) { window.location.href = '/creator/login'; return; }
@@ -2883,17 +2941,17 @@ function renderFeed(noFollowsYet) {
   var container = document.getElementById('feedContainer');
   if (!feedData.length) {
     var isFollowing = currentTab === 'following';
+    var emptyMsg = isFollowing
+      ? 'Follow traders to see their predictions here.'
+      : 'No predictions yet. Post first or follow someone worth tracking.';
     container.innerHTML =
       '<div class="feed-empty">' +
-        '<div class="feed-empty-icon">' + (isFollowing ? '👀' : '🔥') + '</div>' +
-        '<div class="feed-empty-title">' + (isFollowing ? 'Your feed is empty' : 'No trending predictions yet') + '</div>' +
-        '<div class="feed-empty-sub">' +
-          (isFollowing
-            ? 'Follow traders on the <a href="/predictors">Predictors</a> page to see their predictions here. Or post your own!'
-            : 'Be the first to share a prediction and start the conversation.') +
-        '</div>' +
+        '<div class="feed-empty-title">' + (isFollowing ? 'Feed empty.' : 'Nothing yet.') + '</div>' +
+        '<div class="feed-empty-sub">' + emptyMsg + '</div>' +
         '<button class="feed-empty-btn" onclick="openManualComposer()">Post a Prediction</button>' +
-      '</div>';
+      '</div>' +
+      '<div id="suggestedPredictors" style="margin-top:24px"></div>';
+    _loadSuggestedPredictors();
     return;
   }
 
