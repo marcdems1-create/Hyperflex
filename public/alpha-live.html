@@ -215,12 +215,16 @@
     <div class="controls">
       <button class="ctrl active" id="btn10" onclick="switchN(10)">Top 10</button>
       <button class="ctrl" id="btn20" onclick="switchN(20)">Top 20</button>
+      <button class="ctrl" id="btnWatch" onclick="switchToWatching()">Watching</button>
       <button class="ctrl" onclick="load(currentN)">↻ Refresh</button>
     </div>
   </div>
 
   <!-- Anomaly alerts bar -->
   <div id="anomaly-bar" style="display:none;margin-bottom:16px"></div>
+
+  <!-- Watching panel (hidden by default) -->
+  <div id="watching-panel" style="display:none;margin-bottom:20px"></div>
 
   <div class="edge-grid" id="grid">
     <div class="loading">Loading live alpha…</div>
@@ -316,7 +320,9 @@ function bdRow(label,val,max,cls){
   '</div>';
 }
 
+var _lastData=null;
 function render(data){
+  _lastData=data;
   const markets=data.markets||[];
   const g=document.getElementById('grid');
 
@@ -437,13 +443,6 @@ function render(data){
   }).join('');
 }
 
-function switchN(n){
-  currentN=n;
-  document.getElementById('btn10').className='ctrl'+(n===10?' active':'');
-  document.getElementById('btn20').className='ctrl'+(n===20?' active':'');
-  load(n);
-}
-
 async function load(n){
   currentN=n||currentN;
   try{
@@ -524,6 +523,85 @@ function _showWatchToast(msg){
   t._tid=setTimeout(function(){t.classList.remove('show');},3200);
 }
 
+// ── Watching tab ──
+var _watchingMode=false;
+function switchToWatching(){
+  _watchingMode=true;
+  document.getElementById('btn10').className='ctrl';
+  document.getElementById('btn20').className='ctrl';
+  document.getElementById('btnWatch').className='ctrl active';
+  document.getElementById('grid').style.display='none';
+  document.getElementById('watching-panel').style.display='block';
+  loadWatching();
+}
+function switchN(n){
+  _watchingMode=false;
+  document.getElementById('watching-panel').style.display='none';
+  document.getElementById('grid').style.display='';
+  currentN=n;
+  document.getElementById('btn10').className='ctrl'+(n===10?' active':'');
+  document.getElementById('btn20').className='ctrl'+(n===20?' active':'');
+  document.getElementById('btnWatch').className='ctrl';
+  load(n);
+}
+function loadWatching(){
+  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  var panel=document.getElementById('watching-panel');
+  if(!tok){
+    panel.innerHTML='<div class="loading">Sign in to see your watched markets.</div>';
+    return;
+  }
+  panel.innerHTML='<div class="loading">Loading watched markets…</div>';
+  fetch('/api/price-alerts',{headers:{Authorization:'Bearer '+tok}})
+  .then(function(r){return r.ok?r.json():null;})
+  .then(function(d){
+    var alerts=(d&&d.alerts)||[];
+    var active=alerts.filter(function(a){return !a.triggered;});
+    if(!active.length){
+      panel.innerHTML='<div class="loading">No watched markets. Hit Watch on any edge card to get alerts.</div>';
+      return;
+    }
+    // Cross-reference screener cache for live price
+    var priceMap={};
+    if(_lastData&&_lastData.markets){
+      _lastData.markets.forEach(function(m){if(m.condition_id||m.conditionId)priceMap[(m.condition_id||m.conditionId).toLowerCase()]=m.yes_price||0.5;});
+    }
+    panel.innerHTML='<div style="margin-bottom:10px;font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.1em;">'+active.length+' watched</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px">'+
+    active.map(function(a){
+      var cid=(a.condition_id||'').toLowerCase();
+      var livePrice=priceMap[cid]||null;
+      var livePct=livePrice!=null?Math.round(livePrice*100):null;
+      var threshPct=Math.round((a.threshold||0.5)*100);
+      var dirLabel=a.direction==='above'?'↑ rises above':'↓ drops below';
+      var shortQ=(a.question||a.slug||'Unknown market');
+      if(shortQ.length>90)shortQ=shortQ.slice(0,87)+'…';
+      var mktLink=a.slug?'/market/'+a.slug:'#';
+      var liveStr=livePct!=null?'<span style="font-family:var(--mono);color:var(--ink);font-weight:700">'+livePct+'¢</span> now · ':'';
+      return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper-2);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:200px">'+
+          '<a href="'+mktLink+'" style="font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;line-height:1.3;display:block;margin-bottom:4px">'+escAttr(shortQ)+'</a>'+
+          '<span style="font-size:11px;color:var(--soft)">'+liveStr+'Alert: '+dirLabel+' '+threshPct+'¢</span>'+
+        '</div>'+
+        '<button onclick="removeWatch(\''+escAttr(a.id)+'\',\''+escAttr(a.condition_id||'')+'\',this)" style="flex-shrink:0;padding:5px 10px;border-radius:6px;border:1px solid rgba(255,77,106,0.3);background:rgba(255,77,106,0.06);color:var(--red);font-family:var(--sans);font-size:11px;font-weight:600;cursor:pointer">Remove</button>'+
+      '</div>';
+    }).join('')+
+    '</div>';
+  })
+  .catch(function(){panel.innerHTML='<div class="loading">Could not load watched markets.</div>';});
+}
+function removeWatch(alertId,condId,btn){
+  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  if(!tok)return;
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  fetch('/api/price-alerts/'+encodeURIComponent(alertId),{method:'DELETE',headers:{Authorization:'Bearer '+tok}})
+  .then(function(){
+    if(condId)localStorage.removeItem('hfx_watching_'+condId);
+    loadWatching();
+    _showWatchToast('Alert removed.');
+  })
+  .catch(function(){if(btn){btn.disabled=false;btn.textContent='Remove';}});
+}
 // ── Anomaly detection bar ──
 var _anomalyIcons={volume_spike:'📊',price_velocity:'⚡',whale_cluster:'🐋',correlation_break:'⚖️'};
 
