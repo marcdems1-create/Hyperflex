@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Top Whales · Top Traders — HYPERFLEX Leaderboard</title>
-<meta name="description" content="Polymarket's biggest capital-flow whales (Whale Score) and most calibrated traders (Flex Score), ranked on one page. Two distinct leaderboards, one source of truth."/>
+<meta name="description" content="Polymarket's sharpest forecasters, most profitable traders, and biggest whales — three ranked leaderboards on one page."/>
 <link rel="canonical" href="https://hyperflex.network/predictors"/>
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
@@ -17,268 +17,205 @@
 <meta name="twitter:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
 <meta name="twitter:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  "name": "Top Whales · Top Traders — HYPERFLEX Leaderboard",
-  "description": "Two-mode Polymarket leaderboard: Whale Score (capital-flow) and Flex Score (verified accuracy).",
-  "url": "https://hyperflex.network/predictors",
-  "itemListElement": []
-}
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --paper: #0a0a0f; --surface: #111118; --card: #16161f; --card-hover: #1a1a24;
-  --border: #1e1e2a; --border-hover: #2a2a38;
+  --paper: #0a0a0f; --surface: #111118; --card: #16161f; --card-hover: #1c1c26;
+  --border: #1e1e2a; --border-h: #2a2a3a;
   --text: #e8e6f0; --soft: #a0a0b4; --muted: #6b6880; --dim: #4a4760;
-  --green: #00e68a; --green-dim: rgba(0,230,138,0.12);
-  --red: #ff4d6a; --red-dim: rgba(255,77,106,0.12);
-  --blue: #4d9fff; --blue-dim: rgba(77,159,255,0.12);
-  --purple: #a855f7; --purple-dim: rgba(168,85,247,0.12);
-  --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.12);
+  --green: #00e68a; --green-dim: rgba(0,230,138,0.1);
+  --red: #ff4d6a; --red-dim: rgba(255,77,106,0.1);
+  --blue: #4d9fff; --blue-dim: rgba(77,159,255,0.1);
+  --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.1);
   --gold: #c9920d;
-  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --sans: 'Inter', -apple-system, sans-serif;
   --mono: 'JetBrains Mono', monospace;
-  --radius: 12px;
+  --r: 12px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { font-family: var(--sans); background: var(--paper); color: var(--text); min-height: 100vh; overflow-x: hidden; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 a { color: var(--blue); text-decoration: none; }
-a:hover { text-decoration: underline; }
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--paper); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* HERO */
-.hero { position: relative; z-index: 1; padding: 100px 24px 40px; text-align: center; background: linear-gradient(180deg, rgba(0,230,138,0.04) 0%, transparent 60%); }
+.hero { padding: 100px 24px 36px; text-align: center; background: linear-gradient(180deg, rgba(0,230,138,0.04) 0%, transparent 60%); }
 .hero-inner { max-width: 640px; margin: 0 auto; }
 .hero-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-dim); padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(0,230,138,0.15); margin-bottom: 20px; letter-spacing: 0.5px; }
-.hero h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; line-height: 1.15; letter-spacing: -0.03em; color: var(--text); margin-bottom: 12px; }
-.hero h1 span { background: linear-gradient(135deg, var(--green), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.hero-sub { font-size: clamp(13px, 1.6vw, 15px); color: var(--soft); line-height: 1.6; max-width: 480px; margin: 0 auto 20px; }
+.hero h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 10px; }
+.hero h1 em { font-style: normal; background: linear-gradient(135deg, var(--green), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.hero-sub { font-size: 14px; color: var(--soft); line-height: 1.6; max-width: 480px; margin: 0 auto 18px; }
 .hero-stat { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; color: var(--soft); background: var(--surface); border: 1px solid var(--border); padding: 8px 20px; border-radius: 20px; }
 .hero-stat strong { color: var(--text); }
 
-/* PODIUM — TOP 10 CAROUSEL */
-.podium-section { position: relative; z-index: 1; max-width: 1200px; margin: 40px auto 0; padding: 0 20px; }
-.podium-label { text-align: center; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 20px; }
-.podium-grid { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding: 16px 4px 20px; scrollbar-width: none; }
-.podium-grid::-webkit-scrollbar { display: none; }
-.podium-grid .podium-card { scroll-snap-align: start; min-width: 195px; max-width: 215px; flex-shrink: 0; }
-.podium-card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 16px 20px; text-align: center; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; overflow: hidden; }
-.podium-card:hover { border-color: var(--border-hover); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+/* TOP CALL HERO */
+.top-call-wrap { max-width: 900px; margin: 0 auto 0; padding: 0 24px; }
+.top-call-card { background: var(--card); border: 1px solid rgba(245,158,11,0.25); border-radius: 14px; padding: 22px 24px; position: relative; overflow: hidden; }
+.top-call-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, transparent 50%); pointer-events: none; }
+.top-call-kicker { font-family: var(--mono); font-size: 9px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: var(--amber); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.top-call-kicker::after { content: ''; flex: 1; height: 1px; background: rgba(245,158,11,0.15); }
+.top-call-body { display: flex; align-items: flex-start; gap: 16px; }
+.top-call-avatar { width: 40px; height: 40px; border-radius: 10px; background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.3); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--amber); flex-shrink: 0; }
+.top-call-info { flex: 1; min-width: 0; }
+.top-call-who { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+.top-call-who strong { color: var(--amber); }
+.top-call-q { font-size: 15px; font-weight: 700; line-height: 1.4; margin-bottom: 10px; }
+.top-call-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.top-call-side { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; }
+.top-call-side.yes { background: rgba(0,230,138,0.12); color: var(--green); border: 1px solid rgba(0,230,138,0.2); }
+.top-call-side.no { background: rgba(255,77,106,0.12); color: var(--red); border: 1px solid rgba(255,77,106,0.2); }
+.top-call-profit { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--green); }
+.top-call-entry { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.top-call-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; align-self: center; }
+.btn-sm { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--soft); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; transition: all .15s; white-space: nowrap; }
+.btn-sm:hover { color: var(--text); border-color: var(--border-h); }
+.btn-sm.gold { border-color: rgba(201,146,13,.35); color: var(--gold); background: rgba(201,146,13,.07); }
+.btn-sm.gold:hover { background: rgba(201,146,13,.14); }
 
-/* #1 — green glow */
-.podium-card.podium-1 { background: linear-gradient(180deg, rgba(0,230,138,0.06) 0%, var(--card) 50%); border-color: rgba(0,230,138,0.3); box-shadow: 0 0 24px rgba(0,230,138,0.08); transform: translateY(-8px); padding: 26px 16px 22px; }
-.podium-card.podium-1:hover { transform: translateY(-12px); box-shadow: 0 0 36px rgba(0,230,138,0.15); border-color: rgba(0,230,138,0.5); }
-/* #2 — silver/blue tint */
-.podium-card.podium-2 { border-color: rgba(77,159,255,0.25); box-shadow: 0 0 16px rgba(77,159,255,0.06); }
-.podium-card.podium-2:hover { border-color: rgba(77,159,255,0.4); box-shadow: 0 0 24px rgba(77,159,255,0.1); }
-/* #3 — amber tint */
-.podium-card.podium-3 { border-color: rgba(245,158,11,0.25); box-shadow: 0 0 16px rgba(245,158,11,0.06); }
-.podium-card.podium-3:hover { border-color: rgba(245,158,11,0.4); box-shadow: 0 0 24px rgba(245,158,11,0.1); }
+/* THREE TABS */
+.lb-tabs-section { max-width: 900px; margin: 28px auto 0; padding: 0 24px; }
+.lb-tabs-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.lb-tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.lb-tab { background: transparent; border: none; padding: 10px 18px; border-radius: 7px; cursor: pointer; color: var(--muted); font-family: var(--sans); font-size: 13px; font-weight: 600; transition: all .15s; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.lb-tab:hover:not(.active) { color: var(--text); }
+.lb-tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.lb-tab-label { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.lb-tab-sub { font-size: 10px; font-weight: 500; color: var(--dim); }
+.lb-tab.active .lb-tab-sub { color: var(--gold); }
+.lb-toolbar { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.search-input { flex: 1; min-width: 140px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; transition: border-color .15s; }
+.search-input::placeholder { color: var(--dim); }
+.search-input:focus { border-color: rgba(77,159,255,.35); }
+.copy-top3-btn { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 9px 16px; border-radius: 8px; border: 1px solid rgba(0,230,138,.3); background: rgba(0,230,138,.07); color: var(--green); text-decoration: none; white-space: nowrap; transition: all .15s; }
+.copy-top3-btn:hover { background: rgba(0,230,138,.14); }
 
-.podium-rank-badge { font-size: 22px; margin-bottom: 6px; }
-.podium-1 .podium-rank-badge { font-size: 26px; filter: drop-shadow(0 0 8px rgba(0,230,138,0.4)); }
-.podium-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 18px; font-weight: 700; margin: 0 auto 10px; position: relative; z-index: 1; background: var(--surface); border: 2px solid var(--border); color: var(--soft); }
-.podium-1 .podium-avatar { width: 60px; height: 60px; font-size: 22px; background: var(--green-dim); border-color: var(--green); color: var(--green); box-shadow: 0 0 20px rgba(0,230,138,0.15); }
-.podium-2 .podium-avatar { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
-.podium-3 .podium-avatar { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
-.podium-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.podium-1 .podium-name { font-size: 16px; }
-.podium-pnl { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--green); margin-bottom: 4px; }
-.podium-1 .podium-pnl { font-size: 22px; }
-.podium-pnl.negative { color: var(--red); }
-.podium-roi { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 10px; }
-.podium-meta { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.podium-meta-item { font-size: 11px; color: var(--muted); }
-.podium-meta-item strong { color: var(--soft); }
-.podium-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
-.podium-link { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--soft); text-decoration: none; padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; transition: all 0.2s; }
-.podium-link:hover { border-color: var(--border-hover); color: var(--text); text-decoration: none; }
-.copy-trades-btn { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--paper); background: var(--green); text-decoration: none; padding: 7px 16px; border-radius: 20px; transition: all 0.15s; position: relative; z-index: 1; white-space: nowrap; border: none; cursor: pointer; }
-.copy-trades-btn:hover { background: #00ff99; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,230,138,0.3); text-decoration: none; }
-.copy-trades-table { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--paper); background: var(--green); text-decoration: none; padding: 5px 12px; border-radius: 8px; transition: all 0.15s; white-space: nowrap; border: none; cursor: pointer; }
-.copy-trades-table:hover { background: #00ff99; box-shadow: 0 2px 8px rgba(0,230,138,0.25); text-decoration: none; }
+/* LEADERBOARD CARDS */
+.lb-cards-section { max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+.lb-cards { display: flex; flex-direction: column; gap: 8px; }
+.lb-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: border-color .12s, background .12s; text-decoration: none; color: inherit; }
+.lb-card:hover { border-color: var(--border-h); background: var(--card-hover); text-decoration: none; }
+.lb-card.me { border-color: rgba(201,146,13,.3); background: rgba(201,146,13,.04); }
+.lb-card.me:hover { background: rgba(201,146,13,.08); }
+.lb-rank { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--dim); min-width: 44px; text-align: right; flex-shrink: 0; line-height: 1; }
+.lb-rank.r1 { color: #c9920d; font-size: 26px; }
+.lb-rank.r2 { color: #94a3b8; font-size: 24px; }
+.lb-rank.r3 { color: #b08050; font-size: 23px; }
+.lb-avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 15px; font-weight: 700; flex-shrink: 0; border: 2px solid transparent; }
+.lb-avatar.tier-sharp { background: rgba(0,230,138,.1); color: var(--green); border-color: rgba(0,230,138,.25); }
+.lb-avatar.tier-solid { background: rgba(77,159,255,.1); color: var(--blue); border-color: rgba(77,159,255,.2); }
+.lb-avatar.tier-whale { background: rgba(201,146,13,.12); color: var(--gold); border-color: rgba(201,146,13,.3); }
+.lb-avatar.tier-default { background: var(--surface); color: var(--soft); border-color: var(--border); }
+.lb-middle { flex: 1; min-width: 0; }
+.lb-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.lb-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.lb-badge { font-family: var(--mono); font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
+.lb-badge.sharp { background: rgba(0,230,138,.12); color: var(--green); border: 1px solid rgba(0,230,138,.2); }
+.lb-badge.solid { background: rgba(77,159,255,.12); color: var(--blue); border: 1px solid rgba(77,159,255,.2); }
+.lb-badge.building { background: rgba(106,104,128,.12); color: var(--muted); border: 1px solid rgba(106,104,128,.2); }
+.lb-badge.whale { background: rgba(201,146,13,.14); color: var(--gold); border: 1px solid rgba(201,146,13,.25); }
+.lb-badge.me { background: rgba(201,146,13,.14); color: var(--gold); border: 1px solid rgba(201,146,13,.25); }
+.lb-badge.rival { background: rgba(255,77,106,.1); color: var(--red); border: 1px solid rgba(255,77,106,.2); }
+.lb-metric { font-family: var(--mono); font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 5px; }
+.lb-metric.pos { color: var(--green); }
+.lb-metric.neg { color: var(--red); }
+.lb-metric.blue { color: var(--blue); }
+.lb-metric.gold { color: var(--gold); }
+.lb-secondary { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+.lb-secondary span { white-space: nowrap; }
+.lb-bar { height: 3px; background: rgba(255,255,255,.07); border-radius: 2px; overflow: hidden; max-width: 200px; }
+.lb-bar-fill { height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+.lb-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.lb-actions { display: flex; gap: 6px; align-items: center; }
+.act-copy { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 6px 12px; border-radius: 7px; border: none; background: var(--green); color: #0a0a0f; cursor: pointer; text-decoration: none; transition: opacity .15s; white-space: nowrap; display: inline-flex; align-items: center; }
+.act-copy:hover { opacity: .85; text-decoration: none; }
+.act-follow { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border); background: transparent; color: var(--soft); cursor: pointer; transition: all .15s; white-space: nowrap; }
+.act-follow:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+.act-follow.following { border-color: rgba(0,230,138,.3); color: var(--green); background: var(--green-dim); }
+.act-profile { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; }
+.act-profile:hover { color: var(--text); border-color: var(--border-h); }
+.poly-link { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 6px 10px; border-radius: 7px; border: 1px solid rgba(77,159,255,.2); background: rgba(77,159,255,.07); color: var(--blue); text-decoration: none; white-space: nowrap; }
+.poly-link:hover { background: rgba(77,159,255,.14); }
 
 /* RISING STARS */
-.rising-section { position: relative; z-index: 1; max-width: 1200px; margin: 40px auto 0; padding: 0 20px; }
+.rising-section { max-width: 900px; margin: 0 auto 40px; padding: 0 24px; }
 .rising-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.rising-title { font-size: 16px; font-weight: 700; color: var(--text); }
-.rising-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 3px 10px; background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; color: var(--amber); letter-spacing: 0.5px; }
-.rising-grid { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.rising-title { font-size: 15px; font-weight: 700; }
+.rising-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 3px 10px; background: var(--amber-dim); border: 1px solid rgba(245,158,11,.2); border-radius: 12px; color: var(--amber); }
+.rising-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
 .rising-grid::-webkit-scrollbar { display: none; }
-.rising-card { flex: 0 0 190px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 16px; transition: border-color 0.2s, box-shadow 0.2s; }
-.rising-card:hover { border-color: var(--border-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
-.rising-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--purple-dim); border: 2px solid rgba(168,85,247,0.3); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--purple); margin-bottom: 10px; }
-.rising-name { font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rising-streak { font-family: var(--mono); font-size: 11px; color: var(--amber); margin-bottom: 8px; }
+.rising-card { flex: 0 0 175px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; transition: border-color .15s; }
+.rising-card:hover { border-color: var(--border-h); }
+.rising-avatar { width: 38px; height: 38px; border-radius: 50%; background: rgba(168,85,247,.1); border: 2px solid rgba(168,85,247,.25); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: #a855f7; margin-bottom: 10px; }
+.rising-name { font-weight: 700; font-size: 13px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rising-streak { font-family: var(--mono); font-size: 11px; color: var(--amber); margin-bottom: 6px; }
 .rising-winrate { font-family: var(--mono); font-size: 12px; color: var(--green); margin-bottom: 10px; }
-.rising-follow { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--soft); cursor: pointer; transition: all 0.15s; width: 100%; }
+.rising-follow { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--soft); cursor: pointer; transition: all .15s; width: 100%; }
 .rising-follow:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
 
-/* CATEGORY TABS + FILTER BAR */
-.controls-section { position: relative; z-index: 1; max-width: 1100px; margin: 36px auto 0; padding: 0 24px; }
-.cat-tab-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin-bottom: 16px; }
-.cat-tab-row::-webkit-scrollbar { display: none; }
-.cat-tab { font-size: 12px; font-weight: 600; padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-.cat-tab:hover { color: var(--text); border-color: var(--border-hover); }
-.cat-tab.active { background: var(--green-dim); border-color: rgba(0,230,138,0.3); color: var(--green); }
-.filter-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-.filter-group { display: flex; gap: 6px; }
-.filter-pill { font-size: 12px; font-weight: 600; padding: 6px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; }
-.filter-pill:hover { color: var(--text); border-color: var(--border-hover); }
-.filter-pill.active { background: rgba(77,159,255,0.1); border-color: rgba(77,159,255,0.3); color: var(--blue); }
-
-/* RANKINGS TABLE */
-.rankings-section { position: relative; z-index: 1; max-width: 1100px; margin: 20px auto 0; padding: 0 24px 40px; }
-.lb-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-.lb-table thead th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.lb-table thead th:first-child { width: 50px; text-align: center; }
-.lb-table tbody tr { transition: background 0.15s; cursor: pointer; }
-.lb-table tbody tr:hover { background: rgba(255,255,255,0.02); }
-.lb-table tbody td { padding: 14px; border-bottom: 1px solid rgba(30,30,42,0.5); vertical-align: middle; font-size: 13px; }
-.lb-table tbody td:first-child { text-align: center; }
-.lb-table tbody tr.rank-top10 td { font-size: 14px; }
-.lb-table tbody tr.rank-top10 .trader-name { font-size: 15px; }
-.lb-table tbody tr.rank-top10 .pnl-val { font-size: 14px; }
-/* Logged-in user row */
-.lb-table tbody tr.lb-me td { background: rgba(201,146,13,.06) !important; }
-.lb-table tbody tr.lb-me { box-shadow: inset 0 0 0 1px rgba(201,146,13,.25); }
-.lb-table tbody tr.lb-me:hover td { background: rgba(201,146,13,.10) !important; }
-.trader-avatar-me { border-color: rgba(201,146,13,.5) !important; color: #c9920d !important; }
-/* Rival rows */
-.lb-table tbody tr.lb-rival td { background: rgba(255,77,106,.03) !important; }
-.lb-table tbody tr.lb-rival { border-left: 2px solid rgba(255,77,106,.25); }
-.rank-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--dim); }
-.trader-cell { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
-.trader-cell:hover { text-decoration: none; }
-.trader-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--soft); flex-shrink: 0; }
-.trader-name { font-weight: 700; color: var(--text); font-size: 14px; }
-.trader-cell:hover .trader-name { color: var(--green); }
-.pnl-val { font-family: var(--mono); font-weight: 700; font-size: 13px; }
-.pnl-pos { color: var(--green); }
-.pnl-neg { color: var(--red); }
-.vol-val { font-family: var(--mono); font-size: 13px; color: var(--soft); }
-.roi-val { font-family: var(--mono); font-size: 12px; font-weight: 700; }
-.roi-pos { color: var(--green); }
-.roi-neg { color: var(--red); }
-.roi-neutral { color: var(--dim); }
-.streak-badge { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--muted); }
-.streak-hot { color: var(--amber); }
-.platform-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.3px; display: inline-block; }
-.pp-poly { background: var(--blue-dim); color: var(--blue); }
-.pp-hl { background: var(--green-dim); color: var(--green); }
-.pp-hfx { background: var(--purple-dim); color: var(--purple); }
-.pp-kalshi { background: var(--amber-dim); color: var(--amber); }
-.pp-manifold { background: var(--purple-dim); color: var(--purple); }
-.follow-btn { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--soft); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-.follow-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
-.follow-btn.following { background: var(--green-dim); border-color: rgba(0,230,138,0.3); color: var(--green); }
-.track-record-link { font-size: 11px; font-family: var(--mono); font-weight: 600; color: var(--blue); border: 1px solid rgba(77,159,255,0.2); border-radius: 8px; padding: 4px 10px; text-decoration: none; background: var(--blue-dim); margin-right: 6px; white-space: nowrap; }
-.track-record-link:hover { border-color: rgba(77,159,255,0.4); text-decoration: none; }
-
-/* HALL OF FAME */
-.hof-section { position: relative; z-index: 1; max-width: 1100px; margin: 24px auto 0; padding: 0 24px 40px; }
-.hof-title { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 16px; text-align: center; }
-.hof-title span { color: var(--amber); }
-.hof-grid { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; justify-content: center; }
-.hof-grid::-webkit-scrollbar { height: 3px; }
-.hof-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-.hof-card { flex: 0 0 195px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 16px; text-align: center; transition: border-color 0.2s; }
-.hof-card:hover { border-color: var(--border-hover); }
-.hof-rank { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--amber); margin-bottom: 8px; }
-.hof-name { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hof-pnl { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--green); margin-bottom: 4px; }
-.hof-vol { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-
 /* SHARP SCORE MODAL */
-.ss-modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 20px; }
+.ss-modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.7); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 20px; }
 .ss-modal-overlay.open { display: flex; }
 .ss-modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 480px; width: 100%; position: relative; }
-.ss-modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: color 0.15s; }
+.ss-modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: color .15s; }
 .ss-modal-close:hover { color: var(--text); }
-.ss-modal h3 { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 16px; }
+.ss-modal h3 { font-size: 20px; font-weight: 800; margin-bottom: 16px; }
 .ss-formula { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; font-family: var(--mono); font-size: 12px; color: var(--soft); line-height: 2; }
-.ss-formula span.label { color: var(--green); }
 .ss-tip { display: flex; gap: 10px; margin-bottom: 12px; font-size: 13px; color: var(--soft); }
 .ss-tip-icon { color: var(--green); flex-shrink: 0; }
 
 /* SHARE CARD MODAL */
-.share-modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 20px; }
+.share-modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.7); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 20px; }
 .share-modal-overlay.open { display: flex; }
 .share-modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; max-width: 460px; width: 100%; position: relative; text-align: center; }
 .share-modal canvas { border-radius: 10px; max-width: 100%; }
 .share-modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
-.share-btn { font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: all 0.15s; text-decoration: none; border: none; }
+.share-btn { font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: all .15s; text-decoration: none; border: none; }
 .share-btn-x { background: #000; color: #fff; border: 1px solid #333; }
-.share-btn-x:hover { background: #111; }
 .share-btn-dl { background: var(--green); color: var(--paper); }
-.share-btn-dl:hover { opacity: 0.9; }
 .share-btn-cancel { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-.share-btn-cancel:hover { color: var(--text); }
 
-/* STICKY BOTTOM BAR */
-.sticky-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; background: rgba(10,10,15,0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: center; gap: 20px; font-size: 13px; transform: translateY(100%); transition: transform 0.3s; }
+/* STICKY BAR */
+.sticky-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; background: rgba(10,10,15,.95); backdrop-filter: blur(12px); border-top: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: center; gap: 20px; font-size: 13px; transform: translateY(100%); transition: transform .3s; }
 .sticky-bar.visible { transform: translateY(0); }
-.sticky-bar .bar-stat { color: var(--muted); }
-.sticky-bar .bar-stat strong { color: var(--text); }
-.sticky-bar .bar-link { color: var(--green); text-decoration: none; font-weight: 600; font-size: 12px; }
-.sticky-bar .bar-link:hover { text-decoration: underline; }
+.bar-stat { color: var(--muted); }
+.bar-stat strong { color: var(--text); }
+.bar-link { color: var(--green); text-decoration: none; font-weight: 600; font-size: 12px; }
 
 /* LOADING */
 .state-msg { text-align: center; padding: 60px 20px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+.shimmer { background: linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.07) 50%,rgba(255,255,255,.04) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 12px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.skeleton { height: 90px; margin-bottom: 8px; }
 
 /* MOBILE */
 @media (max-width: 768px) {
-  body { overflow-x: hidden; }
-  input, textarea, select { font-size: 16px !important; }
   .hero { padding: 90px 16px 28px; }
-  .hero h1 { font-size: 26px; }
-  .podium-section { padding: 0 12px; }
-  .podium-grid .podium-card { min-width: 220px; }
-  .podium-card.podium-1 { transform: none; }
-  .podium-card.podium-1:hover { transform: translateY(-4px); }
-  .controls-section { padding: 0 16px; }
-  .filter-bar { flex-direction: column; align-items: flex-start; }
-  .filter-group { flex-wrap: wrap; }
-  .rankings-section { padding: 0 12px 120px; }
-  .lb-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .lb-table thead { display: none; }
-  .lb-table tbody { display: block; }
-  .lb-table tbody tr { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 16px 12px; border-bottom: 1px solid var(--border); align-items: center; }
-  .lb-table tbody td { border-bottom: none; padding: 0; font-size: 12px; }
-  .lb-table tbody td:first-child { width: 30px; }
-  .lb-table tbody td.td-trader { flex: 1; min-width: 120px; }
-  .lb-table tbody td.td-actions { margin-left: auto; display: flex; gap: 8px; }
-  .lb-table tbody td.td-vol, .lb-table tbody td.td-roi, .lb-table tbody td.td-streak, .lb-table tbody td.td-platform { display: none; }
-  .mobile-stats { display: flex; gap: 12px; width: 100%; padding-top: 6px; }
-  .mobile-stat { font-size: 11px; color: var(--muted); }
-  .mobile-stat strong { color: var(--text); }
-  .filter-pill, .cat-tab, .follow-btn, .rising-follow, .copy-trades-table, .copy-trades-btn { min-height: 44px; display: inline-flex; align-items: center; }
-  .hof-section { padding: 0 16px 24px; }
-  .hof-grid { gap: 12px; justify-content: flex-start; }
-  .hof-card { flex: 0 0 160px; }
-  .rising-section { padding: 0 12px; }
-  .sticky-bar { padding: 12px 16px; gap: 14px; font-size: 12px; }
+  .lb-tabs-section, .lb-cards-section, .rising-section, .top-call-wrap { padding-left: 12px; padding-right: 12px; }
+  .lb-tabs { flex-wrap: wrap; }
+  .lb-tab { padding: 8px 12px; }
+  .lb-tab-label { font-size: 10px; }
+  .lb-toolbar { flex-wrap: wrap; }
+  .lb-card { flex-wrap: wrap; gap: 10px; }
+  .lb-right { width: 100%; justify-content: flex-end; margin-top: 4px; }
+  .lb-metric { font-size: 17px; }
+  .lb-name { max-width: 160px; }
+  .top-call-body { flex-wrap: wrap; }
+  .top-call-actions { margin-left: 0; width: 100%; }
+  .act-copy, .act-follow, .act-profile, .poly-link, .btn-sm { min-height: 40px; }
+  .sticky-bar { padding: 12px 16px; gap: 12px; font-size: 12px; }
 }
-@media (min-width: 769px) { .mobile-stats { display: none; } }
 @media (max-width: 480px) {
-  .hero { padding: 80px 12px 20px; }
-  .hero h1 { font-size: 22px; }
-  .filter-group { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
-  .filter-group::-webkit-scrollbar { display: none; }
-  .filter-pill, .cat-tab { flex-shrink: 0; }
+  .lb-tabs-row { flex-direction: column; align-items: stretch; }
+  .lb-toolbar { flex-direction: column; align-items: stretch; }
+  .search-input, .copy-top3-btn { width: 100%; text-align: center; justify-content: center; }
 }
 </style>
 </head>
 <body>
 
-<!-- NAV -->
 <div id="nav-root"></div>
 <script src="/nav.js?v=22"></script>
 
@@ -286,48 +223,68 @@ a:hover { text-decoration: underline; }
 <section class="hero">
   <div class="hero-inner">
     <div class="hero-badge">LEADERBOARD</div>
-    <h1>Top <span id="heroModeLabel">Whales</span></h1>
-    <p class="hero-sub" id="heroSub">Polymarket's biggest capital-flow accounts, ranked by Whale Score. Switch to <a href="#" onclick="event.preventDefault();setMode('flex')" style="color:var(--green);text-decoration:underline">Flex Score</a> for verified prediction accuracy.</p>
+    <h1>The <em>sharpest</em> traders<br>in prediction markets</h1>
+    <p class="hero-sub">Three lenses: statistical accuracy, realized P&L, and raw capital deployed. Pick your signal.</p>
     <div class="hero-stat" id="heroStat">Loading…</div>
   </div>
 </section>
 
-<!-- MODE TABS — WHALE SCORE vs FLEX SCORE. Decision #1 Option C split.
-     Whale Score (default) is the capital-flow heuristic (flex_score_90d).
-     Flex Score is the calibration-driven trader rating (flex_score). -->
-<div class="mode-tabs-wrap">
-  <div class="mode-tabs-inner">
-    <button type="button" class="mode-tab active" data-mode="whale" onclick="setMode('whale')">
-      <span class="mode-tab-label">WHALE SCORE</span>
-      <span class="mode-tab-sub">capital flow</span>
-    </button>
-    <button type="button" class="mode-tab" data-mode="flex" onclick="setMode('flex')">
-      <span class="mode-tab-label">FLEX SCORE</span>
-      <span class="mode-tab-sub">verified accuracy</span>
-    </button>
+<!-- TOP CALL OF THE WEEK -->
+<div class="top-call-wrap" id="topCallWrap" style="display:none">
+  <div class="top-call-card">
+    <div class="top-call-kicker">Top call this week</div>
+    <div class="top-call-body">
+      <div class="top-call-avatar" id="tcAvatar">?</div>
+      <div class="top-call-info">
+        <div class="top-call-who">called <span id="tcSide" class="top-call-side yes">YES</span> on <strong id="tcName">—</strong></div>
+        <div class="top-call-q" id="tcQuestion">—</div>
+        <div class="top-call-meta">
+          <span class="top-call-profit" id="tcProfit">—</span>
+          <span class="top-call-entry" id="tcEntry">—</span>
+        </div>
+      </div>
+      <div class="top-call-actions">
+        <a class="btn-sm" id="tcMarketLink" href="#">View call</a>
+        <a class="btn-sm gold" id="tcFollowLink" href="#">Follow</a>
+      </div>
+    </div>
   </div>
 </div>
-<style>
-  .mode-tabs-wrap { max-width:1100px; margin:0 auto 18px; padding:0 24px; }
-  .mode-tabs-inner { display:inline-flex; gap:4px; background:var(--surface-2,#181820); border:1px solid var(--border,rgba(255,255,255,0.07)); border-radius:10px; padding:4px; }
-  .mode-tab { background:transparent; border:0; padding:10px 18px; border-radius:7px; cursor:pointer; color:var(--dim,#8b8a9a); font-family:'Inter',sans-serif; transition:all .15s; display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; }
-  .mode-tab:hover:not(.active) { color:var(--text,#f0f0f5); }
-  .mode-tab.active { background:var(--surface,#22222e); color:var(--text,#f0f0f5); }
-  .mode-tab-label { font-family:'JetBrains Mono','Space Mono',monospace; font-size:12px; font-weight:800; letter-spacing:0.08em; }
-  .mode-tab-sub   { font-family:'Inter',sans-serif; font-size:10px; font-weight:500; color:var(--dim,#8b8a9a); letter-spacing:0.02em; }
-  .mode-tab.active .mode-tab-sub { color:var(--gold,#c9920d); }
-  @media(max-width:600px) {
-    .mode-tab { padding:8px 12px; }
-    .mode-tab-label { font-size:11px; }
-    .mode-tab-sub { font-size:9px; }
-  }
-</style>
 
-<!-- PODIUM — TOP 10 -->
-<section class="podium-section" id="podiumSection" style="display:none;">
-  <div class="podium-label">Top Performers</div>
-  <div class="podium-grid" id="podiumGrid"></div>
-</section>
+<!-- THREE TABS + TOOLBAR -->
+<div class="lb-tabs-section">
+  <div class="lb-tabs-row">
+    <div class="lb-tabs">
+      <button type="button" class="lb-tab active" data-tab="sharpest" onclick="setTab('sharpest')">
+        <span class="lb-tab-label">SHARPEST</span>
+        <span class="lb-tab-sub">calibration score</span>
+      </button>
+      <button type="button" class="lb-tab" data-tab="profitable" onclick="setTab('profitable')">
+        <span class="lb-tab-label">MOST PROFITABLE</span>
+        <span class="lb-tab-sub">realized P&amp;L</span>
+      </button>
+      <button type="button" class="lb-tab" data-tab="whales" onclick="setTab('whales')">
+        <span class="lb-tab-label">BIGGEST WHALES</span>
+        <span class="lb-tab-sub">volume deployed</span>
+      </button>
+    </div>
+    <div class="lb-toolbar">
+      <input type="text" class="search-input" id="traderSearch" placeholder="Search traders…" oninput="onSearch(this.value)">
+      <a href="/copy-trading" class="copy-top3-btn" onclick="return handleCopyTop3(event)">Copy Top 3 ↗</a>
+    </div>
+  </div>
+</div>
+
+<!-- CARD LIST -->
+<div class="lb-cards-section">
+  <div class="lb-cards" id="lbCards">
+    <div class="skeleton shimmer"></div>
+    <div class="skeleton shimmer"></div>
+    <div class="skeleton shimmer"></div>
+    <div class="skeleton shimmer"></div>
+    <div class="skeleton shimmer"></div>
+  </div>
+</div>
 
 <!-- RISING STARS -->
 <section class="rising-section" id="risingSection" style="display:none">
@@ -338,82 +295,19 @@ a:hover { text-decoration: underline; }
   <div class="rising-grid" id="risingGrid"></div>
 </section>
 
-<!-- CATEGORY TABS + FILTER BAR -->
-<div class="controls-section">
-  <div class="cat-tab-row">
-    <button class="cat-tab active" data-cat="all" onclick="setCategory('all')">All Traders</button>
-    <button class="cat-tab" data-cat="crypto" onclick="setCategory('crypto')">Crypto</button>
-    <button class="cat-tab" data-cat="sports" onclick="setCategory('sports')">Sports</button>
-    <button class="cat-tab" data-cat="politics" onclick="setCategory('politics')">Politics</button>
-    <button class="cat-tab" data-cat="finance" onclick="setCategory('finance')">Finance</button>
-    <button class="cat-tab" data-cat="entertainment" onclick="setCategory('entertainment')">Entertainment</button>
-  </div>
-  <div class="filter-bar">
-    <div class="filter-group" id="periodFilters">
-      <button class="filter-pill" data-period="7d" onclick="setPeriod('7d')">7D</button>
-      <button class="filter-pill active" data-period="30d" onclick="setPeriod('30d')">30D</button>
-      <button class="filter-pill" data-period="all" onclick="setPeriod('all')">All Time</button>
-    </div>
-    <div class="filter-group" id="platformFilters">
-      <button class="filter-pill active" data-platform="all" onclick="setPlatform('all')">All</button>
-      <button class="filter-pill" data-platform="POLY" onclick="setPlatform('POLY')">Polymarket</button>
-    </div>
-  </div>
-</div>
-
-<!-- RANK MOVEMENT BANNER (shown by renderTable when rank changed since last visit) -->
-<div id="rankMoveBanner" style="display:none;max-width:1200px;margin:0 auto 16px;padding:0 20px;opacity:1;transition:opacity .4s;">
-  <div style="background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:12px;">
-    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;" id="rankMoveMsg"></span>
-    <a href="/m/" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(240,240,245,.4);text-decoration:none;margin-left:auto;white-space:nowrap;" id="rankMoveProfileLink">View profile →</a>
-  </div>
-</div>
-
-<!-- RANKINGS TABLE -->
-<div class="rankings-section">
-  <table class="lb-table" id="lbTable">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Trader</th>
-        <th>P&amp;L</th>
-        <th>Volume</th>
-        <th>ROI</th>
-        <th>Streak</th>
-        <th>Platform</th>
-        <th><span id="sharpScoreHeader" style="cursor:pointer;white-space:nowrap" onclick="openSharpModal()">Whale Score <span style="color:var(--green);font-size:11px">&#9432;</span></span></th>
-        <th style="white-space:nowrap">Calibration</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody id="lbBody">
-      <tr><td colspan="10"><div class="state-msg">Loading traders...</div></td></tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- HALL OF FAME -->
-<section class="hof-section" id="hofSection" style="display:none;">
-  <div class="hof-title"><span>&#127942;</span> All-Time Legends</div>
-  <div class="hof-grid" id="hofGrid"></div>
-</section>
-
 <!-- SHARP SCORE MODAL -->
 <div class="ss-modal-overlay" id="ssModalOverlay" onclick="if(event.target===this)closeSharpModal()">
   <div class="ss-modal">
     <button class="ss-modal-close" onclick="closeSharpModal()">&times;</button>
-    <h3>Whale Score vs. Flex Score</h3>
-    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Two different questions about Polymarket traders. Both 0-100. Both updated daily. Different inputs, different uses.</p>
+    <h3>How scores work</h3>
+    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Three different lenses on Polymarket traders. All data updated daily.</p>
     <div class="ss-formula">
-      <div><span class="label" style="color:var(--purple,#a855f7)">WHALE SCORE</span> &nbsp;&rarr; capital-flow heuristic. Reads PnL + position size + leaderboard rank. Answers <em>"how big is this account's footprint?"</em></div>
-      <div style="margin-top:10px"><span class="label" style="color:var(--green,#00e68a)">FLEX SCORE</span> &nbsp;&rarr; verified-accuracy rating. Reads win rate + ROI on a log curve + calibration + consistency. Answers <em>"how often is this trader right per dollar staked?"</em></div>
+      <div><span style="color:var(--green)">SHARPEST</span> &nbsp;&rarr; Calibration score (0-100). Derived from Brier scoring — how well-calibrated your confidence is across all resolved predictions.</div>
+      <div style="margin-top:10px"><span style="color:var(--gold)">MOST PROFITABLE</span> &nbsp;&rarr; Realized P&amp;L. Actual USDC made or lost on closed Polymarket positions.</div>
+      <div style="margin-top:10px"><span style="color:var(--blue)">BIGGEST WHALES</span> &nbsp;&rarr; Total volume deployed. Tracks footprint, not accuracy. Capital ≠ skill.</div>
     </div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#128202;</span><span><b>Whale Score</b> stays high while the wallet keeps deploying capital — it tracks footprint, not accuracy. Losing big still counts as big.</span></div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#127919;</span><span><b>Flex Score</b> requires &ge;5 settled events to surface. Below that, the wallet is "Building" — no public ranking until the sample is real.</span></div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>A wallet can be a top-rank Whale and a bottom-rank Flex at the same time. Capital ≠ skill. That's the whole point of splitting them.</span></div>
-    <div style="margin-top:20px;text-align:center">
-      <a href="/creator/login#signup" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;transition:all .15s;display:inline-block" onmouseover="this.style.background='rgba(0,230,138,0.1)'" onmouseout="this.style.background='transparent'">Get your Flex Score &rarr;</a>
-    </div>
+    <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>A top-10 whale can rank last on Sharpest. That divergence is the signal — it's where the edge hides.</span></div>
+    <div style="margin-top:20px;text-align:center"><a href="/creator/login#signup" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;display:inline-block">Get your Flex Score &rarr;</a></div>
   </div>
 </div>
 
@@ -430,586 +324,470 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
-<!-- STICKY BOTTOM BAR -->
+<!-- STICKY BAR -->
 <div class="sticky-bar" id="stickyBar">
   <span id="barContent">Connect your wallet to appear on the leaderboard</span>
   <a href="/creator/signup" class="bar-link">Get started &rarr;</a>
 </div>
 
 <script>
-var currentPeriod='30d';
-var currentPlatform='all';
-var currentCategory='all';
-var currentMode='whale';   // 'whale' (flex_score_90d) or 'flex' (flex_score). Decision #1 Option C.
-var lbData=[];
-var allTimeData=null;
-var _mySharpData=null;
+// ── State ──────────────────────────────────────────────────────────────────
+var currentTab = 'sharpest';
+var _rawFlex   = [];   // raw /api/predictors/leaderboard?mode=flex results
+var _rawWhale  = [];   // raw /api/predictors/leaderboard?mode=whale results
+var _rendered  = [];   // cards currently shown (after sort + filter)
+var _mySharpData = null;
+var _searchQ = '';
 
-// Mode tab switching. Hides legacy sections (podium/rising/hof/category
-// tabs/filter bar) since those are positions-based and unrelated to the
-// new flex_score / flex_score_90d split. Show them only on classic view.
-function setMode(mode) {
-  if (mode !== 'flex' && mode !== 'whale') mode = 'whale';
-  currentMode = mode;
-  document.querySelectorAll('.mode-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.mode === mode); });
-  var label = mode === 'flex' ? 'Traders' : 'Whales';
-  document.getElementById('heroModeLabel').textContent = label;
-  var sub = mode === 'flex'
-    ? 'Polymarket traders ranked by verified prediction accuracy (Flex Score). Switch to <a href="#" onclick="event.preventDefault();setMode(\'whale\')" style="color:var(--green);text-decoration:underline">Whale Score</a> for capital-flow ranking.'
-    : 'Polymarket\'s biggest capital-flow accounts, ranked by Whale Score. Switch to <a href="#" onclick="event.preventDefault();setMode(\'flex\')" style="color:var(--green);text-decoration:underline">Flex Score</a> for verified prediction accuracy.';
-  document.getElementById('heroSub').innerHTML = sub;
-  var header = document.getElementById('sharpScoreHeader');
-  if (header) header.innerHTML = (mode === 'flex' ? 'Flex Score' : 'Whale Score') + ' <span style="color:var(--green);font-size:11px">&#9432;</span>';
-  // Hide the positions-based legacy sections when in mode-aware view.
-  ['podiumSection','risingSection','hofSection'].forEach(function(id){ var el = document.getElementById(id); if (el) el.style.display='none'; });
-  var controls = document.querySelector('.controls-section');
-  if (controls) controls.style.display = 'none';
-  loadModeLeaderboard();
-}
-
-// Adapter: takes the new /api/predictors/leaderboard?mode=X response and
-// shapes it into the row format the existing renderTable expects. Maps
-// `score` -> `sharp_score` so the table column (now relabeled) renders
-// the right number; fills the legacy-only columns (PnL, Volume, ROI,
-// Streak) defensively from whatever is available.
-function _adaptModeRow(r, idx) {
-  var displayPnl = r.whale_pnl != null ? r.whale_pnl : 0;
-  // Volume: prefer wallet_scores.total_volume_usd (actual USD traded), then
-  // fall back to predictions_resolved (event count) or whale_pnl magnitude.
-  var displayVol = r.total_volume_usd != null ? r.total_volume_usd
-                 : r.closed_positions  != null ? r.closed_positions
-                 : r.predictions_resolved > 0  ? r.predictions_resolved
-                 : (r.whale_pnl != null ? Math.abs(r.whale_pnl) * 3 : 0);
-  return {
-    user_id: r.user_id,
-    display_name: r.display_name || 'Trader',
-    wallet: null,
-    address: r.polymarket_address || null,
-    polymarket_address: r.polymarket_address || null,
-    total_pnl: displayPnl,
-    volume: displayVol,
-    win_streak: r.win_streak || 0,
-    sharp_score: r.score != null ? Math.round(Number(r.score)) : null,
-    flex_score: r.flex_score,
-    whale_score: r.whale_score,
-    is_whale: r.is_whale,
-    whale_rank: r.whale_rank,
-    win_rate: r.win_rate,
-    platforms: r.polymarket_address ? ['POLY'] : ['HFX'],
-    rank: idx + 1,
-    _displayRank: idx + 1,
-  };
-}
-
-async function loadModeLeaderboard() {
-  var body = document.getElementById('lbBody');
-  body.innerHTML = '<tr><td colspan="10"><div class="state-msg">Loading…</div></td></tr>';
+var _lbMyUserId = (function() {
   try {
-    var r = await fetch('/api/predictors/leaderboard?mode=' + currentMode + '&limit=100');
-    var data = r.ok ? await r.json() : [];
-    if (!Array.isArray(data) || !data.length) {
-      var noun = currentMode === 'flex' ? 'traders with a Flex Score yet' : 'whales ranked yet';
-      body.innerHTML = '<tr><td colspan="10"><div class="state-msg">No ' + noun + '. Check back after the next score rebuild.</div></td></tr>';
-      document.getElementById('heroStat').textContent = '0 ranked';
-      return;
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+    if (!tok) return null;
+    var p = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return p.userId || p.sub || p.id || null;
+  } catch (e) { return null; }
+})();
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function formatMoney(n){ var a=Math.abs(n); if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M'; if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K'; return'$'+a.toLocaleString(); }
+function formatPnl(n){ return(n>=0?'+':'-')+formatMoney(n); }
+function whaleNickname(addr){ var s=String(addr); return s.length>10?s.slice(0,6)+'…'+s.slice(-4):s||'Trader'; }
+
+function profileUrl(r) {
+  var addr = r.polymarket_address || r.address || r.wallet || '';
+  if (/^0x[0-9a-fA-F]{10,}$/i.test(addr)) return '/trader/' + encodeURIComponent(addr);
+  if (r.user_id && String(r.user_id).length > 8 && !/^0x/i.test(r.user_id)) return '/m/' + encodeURIComponent(r.user_id);
+  return '#';
+}
+
+function resolveName(r) {
+  var d = r.display_name || '';
+  if (d && /^0x[0-9a-fA-F]{6,}/.test(d)) return whaleNickname(d);
+  if (!d && r.user_id && String(r.user_id).startsWith('hl_')) return whaleNickname(String(r.user_id).replace('hl_', ''));
+  return d || whaleNickname(r.polymarket_address || r.user_id || '') || 'Trader';
+}
+
+// win_rate from leaderboard is 0-1 fraction; from old /api/predictors it's 0-100
+function normalizeWR(r) {
+  var wr = r.win_rate;
+  if (wr == null) return null;
+  wr = Number(wr);
+  if (wr > 1) return wr / 100; // already percent
+  return wr;
+}
+
+// ── Tab data helpers ───────────────────────────────────────────────────────
+function tabData() {
+  if (currentTab === 'sharpest') {
+    return _rawFlex
+      .filter(function(r){ return r.calibration_score != null; })
+      .sort(function(a,b){ return (b.calibration_score||0)-(a.calibration_score||0); });
+  }
+  if (currentTab === 'profitable') {
+    return _rawWhale
+      .filter(function(r){ return r.whale_pnl != null; })
+      .sort(function(a,b){ return (b.whale_pnl||0)-(a.whale_pnl||0); });
+  }
+  // whales — sort by volume then whale_rank
+  return _rawWhale
+    .sort(function(a,b){
+      var av = a.total_volume_usd||0, bv = b.total_volume_usd||0;
+      if (bv !== av) return bv - av;
+      var ar = a.whale_rank != null ? a.whale_rank : 9999;
+      var br = b.whale_rank != null ? b.whale_rank : 9999;
+      return ar - br;
+    });
+}
+
+function filterBySearch(data) {
+  if (!_searchQ) return data;
+  var q = _searchQ.toLowerCase();
+  return data.filter(function(r) {
+    var n = resolveName(r).toLowerCase();
+    return n.includes(q) || (r.username && r.username.toLowerCase().includes(q));
+  });
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.lb-tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  var labels = { sharpest: 'best-calibrated traders', profitable: 'most profitable traders', whales: 'biggest capital deployers' };
+  document.getElementById('heroStat').textContent = 'Loading…';
+  renderCards();
+}
+
+function onSearch(val) {
+  _searchQ = val.trim();
+  renderCards();
+}
+
+// ── Copy Top 3 ─────────────────────────────────────────────────────────────
+function handleCopyTop3(e) {
+  var top3 = filterBySearch(tabData()).slice(0, 3);
+  if (!top3.length) return true;
+  var ids = top3.map(function(r){ return r.polymarket_address || r.user_id || ''; }).filter(Boolean).join(',');
+  window.location.href = '/copy-trading' + (ids ? '?preset=' + encodeURIComponent(ids) : '');
+  e.preventDefault();
+  return false;
+}
+
+// ── Render cards ───────────────────────────────────────────────────────────
+function renderCards() {
+  var data = filterBySearch(tabData());
+  _rendered = data;
+  var el = document.getElementById('lbCards');
+
+  var heroText = {
+    sharpest: data.length + ' traders with a calibration score',
+    profitable: data.length + ' whale accounts ranked by P&L',
+    whales: data.length + ' whales ranked by volume',
+  }[currentTab] || data.length + ' traders';
+  document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> ' +
+    { sharpest: 'traders with calibration data', profitable: 'whales ranked by P&L', whales: 'whales ranked by volume' }[currentTab];
+
+  if (!data.length) {
+    el.innerHTML = '<div class="state-msg">No traders found' + (_searchQ ? ' matching "' + escHtml(_searchQ) + '"' : '') + '.</div>';
+    return;
+  }
+
+  var myIdx = -1;
+  if (_lbMyUserId) {
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].user_id === _lbMyUserId) { myIdx = i; break; }
     }
-    lbData = data.map(_adaptModeRow);
-    document.getElementById('heroStat').textContent = data.length + (currentMode === 'flex' ? ' traders with a verified Flex Score' : ' whales ranked by capital flow');
-    renderTable(lbData);
+  }
+
+  el.innerHTML = data.slice(0, 100).map(function(r, idx) {
+    var rank = idx + 1;
+    var name = resolveName(r);
+    var initial = name.charAt(0).toUpperCase();
+    var url = profileUrl(r);
+    var isMe = (_lbMyUserId && r.user_id === _lbMyUserId);
+    var isRival = (!isMe && myIdx >= 0 && Math.abs(idx - myIdx) <= 2 && idx !== myIdx);
+    var rankCls = rank===1?'r1':rank===2?'r2':rank===3?'r3':'';
+
+    // Avatar tier
+    var tierCls = 'tier-default';
+    if (currentTab === 'sharpest') {
+      var cs = r.calibration_score || 0;
+      tierCls = cs >= 70 ? 'tier-sharp' : cs >= 50 ? 'tier-solid' : 'tier-default';
+    } else if (currentTab === 'profitable') {
+      tierCls = (r.whale_pnl||0) > 50000 ? 'tier-whale' : (r.whale_pnl||0) > 10000 ? 'tier-sharp' : 'tier-solid';
+    } else {
+      tierCls = r.is_whale ? 'tier-whale' : 'tier-default';
+    }
+
+    // Badge
+    var badge = '';
+    if (isMe) {
+      badge = '<span class="lb-badge me">YOU</span>';
+    } else if (isRival) {
+      var dir = idx < myIdx ? '↑' : '↓';
+      badge = '<span class="lb-badge rival">RIVAL ' + dir + '</span>';
+    } else if (currentTab === 'sharpest') {
+      var cs2 = r.calibration_score || 0;
+      var bl = cs2 >= 70 ? 'sharp' : cs2 >= 50 ? 'solid' : 'building';
+      var bt = cs2 >= 70 ? 'SHARP' : cs2 >= 50 ? 'SOLID' : 'BUILDING';
+      badge = '<span class="lb-badge ' + bl + '">' + bt + '</span>';
+    } else if (currentTab === 'profitable') {
+      var pnl = r.whale_pnl || 0;
+      var bt2 = pnl > 100000 ? 'WHALE' : pnl > 50000 ? 'SHARK' : pnl > 10000 ? 'SHARP' : 'PROFITABLE';
+      var bl2 = pnl > 50000 ? 'whale' : pnl > 10000 ? 'sharp' : 'solid';
+      badge = '<span class="lb-badge ' + bl2 + '">' + bt2 + '</span>';
+    } else if (r.whale_rank) {
+      badge = '<span class="lb-badge whale">RANK #' + r.whale_rank + '</span>';
+    }
+
+    // Metric + secondary per tab
+    var metricHtml = '', secondaryHtml = '', barHtml = '';
+    var wr = normalizeWR(r);
+    var wrPct = wr != null ? Math.round(wr * 100) : null;
+    var barFill = wrPct != null ? '<div class="lb-bar"><div class="lb-bar-fill" style="width:' + Math.min(wrPct, 100) + '%;background:' + (wrPct >= 60 ? 'var(--green)' : wrPct >= 45 ? 'var(--blue)' : 'var(--muted)') + '"></div></div>' : '';
+
+    if (currentTab === 'sharpest') {
+      var cs3 = r.calibration_score != null ? r.calibration_score : '—';
+      var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
+      metricHtml = '<div class="lb-metric ' + cc + '">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span></div>';
+      var parts = [];
+      if (wrPct != null) parts.push(wrPct + '% win rate');
+      var n = r.predictions_resolved || r.flex_settled_events;
+      if (n) parts.push(n + ' graded');
+      if (r.flex_score != null) parts.push('Flex ' + r.flex_score);
+      secondaryHtml = '<div class="lb-secondary">' + parts.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
+      barHtml = barFill;
+    } else if (currentTab === 'profitable') {
+      var pnl2 = r.whale_pnl || 0;
+      var pnlCls = pnl2 >= 0 ? 'pos' : 'neg';
+      metricHtml = '<div class="lb-metric ' + pnlCls + '">' + formatPnl(pnl2) + '</div>';
+      var vol = r.total_volume_usd;
+      var parts2 = [];
+      if (vol) parts2.push('Vol ' + formatMoney(vol));
+      if (vol && vol > 0) parts2.push('ROI ' + (pnl2 >= 0 ? '+' : '') + (pnl2 / vol * 100).toFixed(1) + '%');
+      if (wrPct != null) parts2.push(wrPct + '% win rate');
+      secondaryHtml = '<div class="lb-secondary">' + parts2.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
+      barHtml = barFill;
+    } else {
+      var vol2 = r.total_volume_usd || 0;
+      metricHtml = '<div class="lb-metric blue">' + formatMoney(vol2) + '</div>';
+      var pnl3 = r.whale_pnl;
+      var parts3 = [];
+      if (pnl3 != null) parts3.push('P&L ' + formatPnl(pnl3));
+      if (r.whale_rank) parts3.push('Poly rank #' + r.whale_rank);
+      if (wrPct != null) parts3.push(wrPct + '% win rate');
+      secondaryHtml = '<div class="lb-secondary">' + parts3.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
+      barHtml = barFill;
+    }
+
+    // Actions
+    var uid = escHtml(r.user_id || '');
+    var addr = r.polymarket_address || '';
+    var actionsHtml = '<div class="lb-actions">';
+    actionsHtml += '<a href="/copy-trading" class="act-copy" onclick="event.stopPropagation()">Copy</a>';
+    if (uid) actionsHtml += '<button class="act-follow" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>';
+    actionsHtml += '<a href="'+escHtml(url)+'" class="act-profile" onclick="event.stopPropagation()">Profile →</a>';
+    if (addr && currentTab === 'whales') {
+      actionsHtml += '<a href="https://polymarket.com/profile/'+escHtml(addr)+'" target="_blank" rel="noopener" class="poly-link" onclick="event.stopPropagation()">Poly ↗</a>';
+    }
+    actionsHtml += '</div>';
+
+    return '<a class="lb-card' + (isMe ? ' me' : '') + (rank === 1 ? ' rank-1' : '') + '" href="' + escHtml(url) + '"' + (isMe ? ' id="myLbRow"' : '') + '>' +
+      '<div class="lb-rank ' + rankCls + '">' + rank + '</div>' +
+      '<div class="lb-avatar ' + tierCls + '">' + initial + '</div>' +
+      '<div class="lb-middle">' +
+        '<div class="lb-name-row"><span class="lb-name">' + escHtml(name) + '</span>' + badge + '</div>' +
+        metricHtml + secondaryHtml + barHtml +
+      '</div>' +
+      '<div class="lb-right">' + actionsHtml + '</div>' +
+    '</a>';
+  }).join('');
+
+  // Scroll to own row
+  if (myIdx >= 0) {
+    setTimeout(function() {
+      var el2 = document.getElementById('myLbRow');
+      if (el2) el2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 400);
+  }
+
+  // Mark follow states
+  _followedSet.forEach(function(uid) {
+    var btn = document.getElementById('follow-' + uid);
+    if (btn) { btn.textContent = 'Following'; btn.classList.add('following'); }
+  });
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    var [flexRes, whaleRes] = await Promise.all([
+      fetch('/api/predictors/leaderboard?mode=flex&limit=100'),
+      fetch('/api/predictors/leaderboard?mode=whale&limit=100'),
+    ]);
+    _rawFlex  = flexRes.ok  ? await flexRes.json()  : [];
+    _rawWhale = whaleRes.ok ? await whaleRes.json() : [];
+    if (!Array.isArray(_rawFlex))  _rawFlex  = [];
+    if (!Array.isArray(_rawWhale)) _rawWhale = [];
+    renderCards();
+    loadFollowStates();
+    loadMyScore();
+    showStickyBar();
+    loadRisingStars();
   } catch (e) {
-    body.innerHTML = '<tr><td colspan="10"><div class="state-msg">Could not load. Retry shortly.</div></td></tr>';
+    document.getElementById('lbCards').innerHTML = '<div class="state-msg">Could not load. Retry shortly.</div>';
   }
 }
 
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function formatMoney(n){var a=Math.abs(n);if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M';if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K';return'$'+a.toLocaleString()}
-function formatPnl(n){return(n>=0?'+':'-')+formatMoney(n)}
-
-function whaleNickname(address){
-  var s=String(address);
-  if(s.length>10)return s.slice(0,6)+'...'+s.slice(-4);
-  return s||'Trader';
+async function loadTopCall() {
+  try {
+    var r = await fetch('/api/predictors/top-call-week');
+    var d = await r.json();
+    if (!d.call) return;
+    var c = d.call;
+    var name = escHtml(c.display_name || 'Trader');
+    document.getElementById('tcAvatar').textContent = name.charAt(0);
+    document.getElementById('tcName').textContent = escHtml(c.display_name || 'Trader');
+    document.getElementById('tcFollowLink').href = c.profile_url || '#';
+    document.getElementById('tcFollowLink').textContent = 'Follow @' + escHtml(c.username || c.display_name || 'trader');
+    var sideEl = document.getElementById('tcSide');
+    sideEl.textContent = c.side;
+    sideEl.className = 'top-call-side ' + (c.side === 'YES' ? 'yes' : 'no');
+    document.getElementById('tcQuestion').textContent = c.question || '';
+    document.getElementById('tcProfit').textContent = c.profit_usdc != null ? '+$' + c.profit_usdc.toLocaleString(undefined,{maximumFractionDigits:0}) : '';
+    var entryStr = c.entry_cents != null ? 'entered at ' + c.entry_cents + '¢' : '';
+    var roiStr = c.roi_pct != null ? ' · +' + c.roi_pct + '%' : '';
+    document.getElementById('tcEntry').textContent = entryStr + roiStr;
+    var mktHref = c.market_slug ? '/market/' + encodeURIComponent(c.market_slug) : c.profile_url || '#';
+    document.getElementById('tcMarketLink').href = mktHref;
+    document.getElementById('topCallWrap').style.display = '';
+  } catch (e) {}
 }
 
-function setPeriod(period){
-  currentPeriod=period;
-  document.querySelectorAll('#periodFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.period===period)});
-  loadLeaderboard();
-}
-function setPlatform(platform){
-  currentPlatform=platform;
-  document.querySelectorAll('#platformFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.platform===platform)});
-  renderAll();
-}
-function setCategory(cat){
-  currentCategory=cat;
-  document.querySelectorAll('.cat-tab').forEach(function(t){t.classList.toggle('active',t.dataset.cat===cat)});
-  var catLabels={all:'Prediction Market Leaderboard — Top Polymarket Traders Ranked',crypto:'Best Crypto Prediction Market Traders',sports:'Best Sports Prediction Market Traders',politics:'Best Politics Prediction Market Traders',finance:'Best Finance Prediction Market Traders',entertainment:'Best Entertainment Prediction Market Traders'};
-  document.title=(catLabels[cat]||catLabels['all'])+' | HYPERFLEX';
-  if(cat==='all'){renderAll();}else{loadCategoryLeaderboard(cat);}
-}
-async function loadCategoryLeaderboard(cat){
-  var body=document.getElementById('lbBody');
-  body.innerHTML='<tr><td colspan="10"><div class="state-msg">Loading '+cat+' specialists...</div></td></tr>';
-  document.getElementById('podiumSection').style.display='none';
-  try{
-    var r=await fetch('/api/predictors?category='+cat+'&limit=50');
-    var data=r.ok?await r.json():[];
-    if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="state-msg">No '+cat+' specialists found yet. Be the first.</div></td></tr>';return;}
-    lbData=data;
-    data.forEach(function(r,i){r._displayRank=i+1;r.platforms=r.platforms||['HFX'];r.total_pnl=r.pnl_pts||0;r.volume=r.total_predictions||0});
-    var topN=data.slice(0,10);
-    document.getElementById('heroStat').textContent=data.length+' '+cat+' specialists ranked';
-    renderPodium(topN);
-    renderTable(data.slice(10,50));
-  }catch(e){body.innerHTML='<tr><td colspan="10"><div class="state-msg">Could not load. Try again.</div></td></tr>';}
+// ── Rising stars ───────────────────────────────────────────────────────────
+async function loadRisingStars() {
+  try {
+    var r = await fetch('/api/predictors?filter=rising&limit=8');
+    if (!r.ok) return;
+    var data = await r.json();
+    if (!data || !data.length) return;
+    var section = document.getElementById('risingSection');
+    var grid = document.getElementById('risingGrid');
+    section.style.display = '';
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+    grid.innerHTML = data.map(function(r) {
+      var name = r.display_name || 'Trader';
+      var initial = name.charAt(0).toUpperCase();
+      var streak = r.win_streak || r.streak || 0;
+      var wr = Math.round(r.win_rate || 0);
+      var uid = r.user_id || '';
+      return '<div class="rising-card">' +
+        '<div class="rising-avatar">' + initial + '</div>' +
+        '<div class="rising-name">' + escHtml(name) + '</div>' +
+        '<div class="rising-streak">' + streak + ' win streak</div>' +
+        '<div class="rising-winrate">' + wr + '% win rate</div>' +
+        (token ? '<button class="rising-follow" id="rfollow-'+escHtml(uid)+'" onclick="toggleFollow(\''+escHtml(uid)+'\',this)">Follow</button>' : '<a href="/creator/login" class="rising-follow" style="display:block;text-align:center;text-decoration:none">Follow</a>') +
+      '</div>';
+    }).join('');
+  } catch (e) {}
 }
 
-// Sharp score modal
-function openSharpModal(){document.getElementById('ssModalOverlay').classList.add('open')}
-function closeSharpModal(){document.getElementById('ssModalOverlay').classList.remove('open')}
+// ── Score card + share ──────────────────────────────────────────────────────
+async function loadMyScore() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+  if (!token) return;
+  try {
+    var r = await fetch('/api/predictors/me/score', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    _mySharpData = await r.json();
+    var bar = document.getElementById('stickyBar');
+    if (_mySharpData && _mySharpData.sharp_score && !bar.querySelector('.share-score-btn')) {
+      var btn = document.createElement('button');
+      btn.className = 'share-score-btn';
+      btn.style.cssText = 'font-family:var(--mono);font-size:11px;font-weight:600;padding:6px 16px;border-radius:8px;border:1px solid rgba(0,230,138,0.3);background:rgba(0,230,138,0.1);color:var(--green);cursor:pointer';
+      btn.textContent = 'Share score (' + _mySharpData.sharp_score + ')';
+      btn.onclick = function() { openShareScore(_mySharpData); };
+      bar.appendChild(btn);
+    }
+  } catch (e) {}
+}
 
-// Share score card
-function openShareScore(data){
-  _mySharpData=data;
-  var canvas=document.getElementById('shareScoreCanvas');
-  var ctx=canvas.getContext('2d');
-  var W=canvas.width,H=canvas.height;
+function openSharpModal() { document.getElementById('ssModalOverlay').classList.add('open'); }
+function closeSharpModal() { document.getElementById('ssModalOverlay').classList.remove('open'); }
+
+function openShareScore(data) {
+  _mySharpData = data;
+  var canvas = document.getElementById('shareScoreCanvas');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
-  // Background
-  var bg=ctx.createLinearGradient(0,0,W,H);
-  bg.addColorStop(0,'#0a0a0f');bg.addColorStop(1,'#16161f');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-  // Border
-  ctx.strokeStyle='rgba(0,230,138,0.3)';ctx.lineWidth=1.5;ctx.strokeRect(1,1,W-2,H-2);
-  // Top glow
-  var glow=ctx.createLinearGradient(0,0,0,60);
-  glow.addColorStop(0,'rgba(0,230,138,0.06)');glow.addColorStop(1,'rgba(0,230,138,0)');
-  ctx.fillStyle=glow;ctx.fillRect(0,0,W,60);
-  // HYPERFLEX watermark
-  ctx.font='700 11px "Courier New",monospace';ctx.fillStyle='rgba(0,230,138,0.4)';ctx.fillText('HYPERFLEX',W-90,18);
-  // Sharp score big number
-  var score=data.sharp_score||0;
-  ctx.font='800 56px "Courier New",monospace';
-  ctx.fillStyle=score>=70?'#00e68a':score>=40?'#4d9fff':'#ff4d6a';
-  ctx.fillText(score,32,90);
-  ctx.font='700 13px "Courier New",monospace';ctx.fillStyle='#6b6880';ctx.fillText('SHARP SCORE',32,110);
-  // Percentile
-  var pct=score>=90?'Top 1%':score>=80?'Top 5%':score>=70?'Top 10%':score>=50?'Top 25%':'Top 50%';
-  ctx.font='700 13px "Courier New",monospace';ctx.fillStyle='#00e68a';ctx.fillText(pct+' of all predictors',32,140);
-  // Stats row
-  ctx.font='700 12px "Courier New",monospace';ctx.fillStyle='#4a4760';
-  ctx.fillText('WIN RATE',32,168);ctx.fillText('PREDICTIONS',160,168);ctx.fillText('STREAK',300,168);
-  ctx.font='700 14px "Courier New",monospace';ctx.fillStyle='#e8e6f0';
+  var bg = ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#0a0a0f'); bg.addColorStop(1,'#16161f');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = 'rgba(0,230,138,0.3)'; ctx.lineWidth = 1.5; ctx.strokeRect(1,1,W-2,H-2);
+  ctx.font = '700 11px "Courier New",monospace'; ctx.fillStyle = 'rgba(0,230,138,0.4)'; ctx.fillText('HYPERFLEX', W-90, 18);
+  var score = data.sharp_score || 0;
+  ctx.font = '800 56px "Courier New",monospace';
+  ctx.fillStyle = score>=70?'#00e68a':score>=40?'#4d9fff':'#ff4d6a';
+  ctx.fillText(score, 32, 90);
+  ctx.font = '700 13px "Courier New",monospace'; ctx.fillStyle = '#6b6880'; ctx.fillText('SHARP SCORE', 32, 110);
+  var pct = score>=90?'Top 1%':score>=80?'Top 5%':score>=70?'Top 10%':score>=50?'Top 25%':'Top 50%';
+  ctx.font = '700 13px "Courier New",monospace'; ctx.fillStyle = '#00e68a'; ctx.fillText(pct + ' of all predictors', 32, 140);
+  ctx.font = '700 12px "Courier New",monospace'; ctx.fillStyle = '#4a4760';
+  ctx.fillText('WIN RATE',32,168); ctx.fillText('PREDICTIONS',160,168); ctx.fillText('STREAK',300,168);
+  ctx.font = '700 14px "Courier New",monospace'; ctx.fillStyle = '#e8e6f0';
   ctx.fillText(Math.round((data.win_rate||0)*100)+'%',32,186);
   ctx.fillText(data.total_predictions||0,160,186);
   ctx.fillText((data.win_streak||0)+'W',300,186);
-  // Footer
-  ctx.font='11px "Courier New",monospace';ctx.fillStyle='rgba(0,230,138,0.3)';
-  ctx.fillText('hyperflex.network/predictors',32,207);
-  // Tweet btn
-  var name=data.display_name||'I';
-  var tweet=name+' scored '+score+' on the HYPERFLEX Sharp Score — '+pct+' of prediction market traders.\n\nCheck the full leaderboard:\nhyperflex.network/predictors';
-  document.getElementById('shareScoreTweetBtn').href='https://twitter.com/intent/tweet?text='+encodeURIComponent(tweet);
+  ctx.font = '11px "Courier New",monospace'; ctx.fillStyle = 'rgba(0,230,138,0.3)'; ctx.fillText('hyperflex.network/predictors',32,207);
+  var tweet = (data.display_name||'I') + ' scored ' + score + ' on the HYPERFLEX Sharp Score — ' + pct + ' of prediction market traders.\n\nhyperflex.network/predictors';
+  document.getElementById('shareScoreTweetBtn').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweet);
   document.getElementById('shareModalOverlay').classList.add('open');
 }
-function closeShareModal(){document.getElementById('shareModalOverlay').classList.remove('open')}
-function downloadShareScore(){
-  var canvas=document.getElementById('shareScoreCanvas');
-  var a=document.createElement('a');a.download='my-sharp-score.png';a.href=canvas.toDataURL('image/png');a.click();
+function closeShareModal() { document.getElementById('shareModalOverlay').classList.remove('open'); }
+function downloadShareScore() {
+  var a = document.createElement('a');
+  a.download = 'my-sharp-score.png';
+  a.href = document.getElementById('shareScoreCanvas').toDataURL('image/png');
+  a.click();
 }
 
-var _alphaScores={};
-function alphaGradeBadge(wallet){
-  var s=_alphaScores[wallet];if(!s)return'';
-  var colors={'A+':'#00e68a','A':'#00e68a','B':'#4d9fff','C':'#f59e0b','D':'#ff4d6a'};
-  var c=colors[s.grade]||'#6b6880';
-  return' <span title="HFX Alpha '+s.score+'/99" style="display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:'+c+'18;color:'+c+';border:1px solid '+c+'33;margin-left:4px;vertical-align:middle">'+s.grade+' '+s.score+'</span>';
+// ── Follow ──────────────────────────────────────────────────────────────────
+var _followedSet = new Set();
+
+async function loadFollowStates() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+  if (!token) return;
+  try {
+    var r = await fetch('/api/predictors/following/list', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    var d = await r.json();
+    (d.following || []).forEach(function(f) { _followedSet.add(f); });
+    _followedSet.forEach(function(uid) {
+      var btn = document.getElementById('follow-' + uid);
+      if (btn) { btn.textContent = 'Following'; btn.classList.add('following'); }
+    });
+  } catch (e) {}
 }
 
-async function loadLeaderboard(){
-  var body=document.getElementById('lbBody');
-  body.innerHTML='<tr><td colspan="10"><div class="state-msg">Loading traders...</div></td></tr>';
-  document.getElementById('podiumSection').style.display='none';
-  try{
-    var[hfxRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/whale-scores')]);
-    if(alphaRes.status==='fulfilled'&&alphaRes.value.ok){try{var ad=await alphaRes.value.json();_alphaScores=ad.scores||{}}catch(e){}}
-    var hfxData=[];
-    if(hfxRes.status==='fulfilled'&&hfxRes.value.ok)hfxData=await hfxRes.value.json();
-    var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
-    merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
-    merged.sort(function(a,b){var aSS=a.sharp_score||0;var bSS=b.sharp_score||0;if(bSS!==aSS)return bSS-aSS;return(b.total_pnl||0)-(a.total_pnl||0)});
-    merged.forEach(function(r,i){r.rank=i+1});
-    lbData=merged;
-    if(!allTimeData&&currentPeriod!=='all'){
-      fetch('/api/leaderboard?period=all').then(function(r){return r.ok?r.json():[]}).then(function(d){allTimeData=Array.isArray(d)?d:[];renderHallOfFame()}).catch(function(){});
-    }else if(currentPeriod==='all'){allTimeData=merged}
-    renderAll();
-    loadRisingStars();
-    loadMyScore();
-  }catch(e){
-    body.innerHTML='<tr><td colspan="10"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
-  }
+async function toggleFollow(userId, btn) {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+  if (!token) { window.location.href = '/creator/login'; return; }
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/predictors/' + userId + '/follow', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    var d = await r.json();
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.classList.toggle('following', d.following);
+    if (d.following) _followedSet.add(userId); else _followedSet.delete(userId);
+  } catch (e) {} finally { btn.disabled = false; }
 }
 
-async function loadRisingStars(){
-  try{
-    var r=await fetch('/api/predictors?filter=rising&limit=8');
-    if(!r.ok)return;
-    var data=await r.json();
-    if(!data||!data.length)return;
-    var section=document.getElementById('risingSection');
-    var grid=document.getElementById('risingGrid');
-    section.style.display='';
-    var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
-    grid.innerHTML=data.map(function(r){
-      var name=r.display_name||'Trader';
-      var initial=name.charAt(0).toUpperCase();
-      var streak=r.win_streak||r.streak||0;
-      // win_rate from /api/predictors is already 0-100 integer, not a decimal.
-      var wr=Math.round(r.win_rate||0);
-      var uid=r.user_id||'';
-      return'<div class="rising-card">'+
-        '<div class="rising-avatar">'+initial+'</div>'+
-        '<div class="rising-name">'+escHtml(name)+'</div>'+
-        '<div class="rising-streak">'+streak+' win streak</div>'+
-        '<div class="rising-winrate">'+wr+'% win rate</div>'+
-        (token?'<button class="rising-follow" id="rfollow-'+escHtml(uid)+'" onclick="toggleFollow(\''+escHtml(uid)+'\',this)">Follow</button>':'<a href="/creator/login" class="rising-follow" style="display:block;text-align:center;text-decoration:none">Follow</a>')+
-      '</div>';
-    }).join('');
-  }catch(e){}
-}
+// ── Sticky bar ──────────────────────────────────────────────────────────────
+function showStickyBar() {
+  var bar = document.getElementById('stickyBar');
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) { setTimeout(function(){ bar.classList.add('visible'); }, 800); return; }
+  bar.style.background = 'linear-gradient(135deg,rgba(201,146,13,0.12),rgba(14,14,21,0.95))';
+  bar.style.borderTop = '1px solid rgba(201,146,13,0.3)';
 
-async function loadMyScore(){
-  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
-  if(!token)return;
-  try{
-    var r=await fetch('/api/predictors/me/score',{headers:{Authorization:'Bearer '+token}});
-    if(!r.ok)return;
-    _mySharpData=await r.json();
-    var bar=document.getElementById('stickyBar');
-    var existing=bar.querySelector('.share-score-btn');
-    if(!existing&&_mySharpData&&_mySharpData.sharp_score){
-      var btn=document.createElement('button');
-      btn.className='share-score-btn';
-      btn.style.cssText='font-family:var(--mono);font-size:11px;font-weight:600;padding:6px 16px;border-radius:8px;border:1px solid rgba(0,230,138,0.3);background:rgba(0,230,138,0.1);color:var(--green);cursor:pointer';
-      btn.textContent='Share my score ('+_mySharpData.sharp_score+')';
-      btn.onclick=function(){openShareScore(_mySharpData)};
-      bar.appendChild(btn);
-    }
-  }catch(e){}
-}
+  var userId = null;
+  try { var p = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); userId = p.userId||p.id||p.sub; } catch(e) {}
 
-function getFilteredData(){
-  if(currentPlatform==='all')return lbData;
-  return lbData.filter(function(r){return r.platforms&&r.platforms.includes(currentPlatform)});
-}
-
-function renderAll(){
-  var data=getFilteredData();
-  data.forEach(function(r,i){r._displayRank=i+1});
-  var totalCapital=data.reduce(function(s,r){
-    return s+(r.volume||Math.abs(r.total_pnl||0));
-  },0);
-  document.getElementById('heroStat').innerHTML='<strong>'+formatMoney(totalCapital)+'</strong> tracked across <strong>'+data.length+'</strong> traders';
-  // Only profitable traders in Top Performers — use server _profitable flag or compute client-side
-  var profitable=data.filter(function(r){
-    if(typeof r._profitable==='boolean')return r._profitable;
-    var pnl=r.total_pnl!=null?r.total_pnl:(r.pnl!=null?r.pnl:0);
-    var vol=r.volume!=null&&r.volume>0?r.volume:(r.account_value||1);
-    var roi=vol>0?(pnl/vol)*100:0;
-    return pnl>0&&roi>=1;
-  });
-  renderPodium(profitable.slice(0,10));
-  var tableData=data.filter(function(r){return profitable.indexOf(r)===-1}).slice(0,40);
-  renderTable(profitable.slice(10).concat(tableData));
-  renderHallOfFame();
-  showStickyBar();
-}
-
-function renderPodium(topN){
-  var section=document.getElementById('podiumSection');
-  var grid=document.getElementById('podiumGrid');
-  if(!topN.length){section.style.display='none';return}
-  section.style.display='';
-  var medals=['&#129351;','&#129352;','&#129353;','4','5','6','7','8','9','10'];
-  grid.innerHTML=topN.map(function(r,idx){
-    var dname=r.display_name||r.userName||r.name||'';
-    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
-    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
-    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
-    var initial=dname.charAt(0).toUpperCase();
-    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
-    var vol=r.volume||r.account_value||r.accountValue||0;
-    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
-    var pnlClass=pnl>=0?'':' negative';
-    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(dname||r.display_name||'');})();
-    var platformHtml=(r.platforms||[]).map(function(p){
-      var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
-      return'<span class="platform-pill '+cls+'">'+p+'</span>';
-    }).join(' ');
-    var cardClass=idx===0?'podium-1':idx===1?'podium-2':idx===2?'podium-3':'';
-    var rankBadge=idx<3?medals[idx]:'<span style="font-family:var(--mono);font-size:13px;font-weight:800;color:var(--dim)">#'+medals[idx]+'</span>';
-    return'<div class="podium-card '+cardClass+'">'+
-      '<div class="podium-rank-badge">'+rankBadge+'</div>'+
-      '<div class="podium-avatar">'+initial+'</div>'+
-      '<div class="podium-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</div>'+
-      '<div class="podium-pnl'+pnlClass+'">'+formatPnl(pnl)+'</div>'+
-      '<div class="podium-roi" style="color:'+(parseFloat(roi)>20?'#c9920d':parseFloat(roi)>10?'#22c55e':parseFloat(roi)>0?'#10b981':'#ef4444')+'">ROI '+(pnl>=0?'+':'')+roi+'%</div>'+
-      '<div class="podium-meta">'+platformHtml+
-        '<span class="podium-meta-item">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
-      '</div>'+
-      '<div class="podium-actions">'+
-        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-btn">&#x1F4CB; Copy Trades</a>'+
-        '<button class="follow-btn" id="follow-'+escHtml(r.user_id||r.wallet||'')+'" onclick="event.stopPropagation();toggleFollow(\''+escHtml(r.user_id||r.wallet||'')+'\',this)" style="font-size:11px;padding:5px 14px;border-radius:6px;border:1px solid rgba(201,146,13,0.3);background:none;color:#c9920d;cursor:pointer;font-weight:600">Follow</button>'+
-        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="podium-link">Profile</a>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-}
-
-// Resolve logged-in userId for row highlighting
-var _lbMyUserId=(function(){try{var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');if(!tok)return null;var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return p.userId||p.sub||p.id||null;}catch(e){return null;}})();
-
-function renderTable(data){
-  var body=document.getElementById('lbBody');
-  if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="10"><div class="state-msg">Only top performers shown above</div></td></tr>';return}
-  if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
-
-  // Find the logged-in user's index so we can flag rivals
-  var myIdx=-1;
-  if(_lbMyUserId){
-    for(var _i=0;_i<data.length;_i++){
-      if(data[_i].user_id===_lbMyUserId){myIdx=_i;break;}
-    }
-  }
-
-  body.innerHTML=data.map(function(r,idx){
-    var rank=r._displayRank||(idx+4);
-    var dname=r.display_name||r.userName||r.name||'';
-    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
-    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
-    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
-    var initial=dname.charAt(0).toUpperCase();
-    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
-    var vol=r.volume||r.account_value||r.accountValue||0;
-    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
-    var pnlStr=formatPnl(pnl);
-    var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
-    var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
-    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(dname||r.display_name||'');})();
-    var uid=escHtml(r.user_id||'');
-    var streak=r.win_streak||0;
-    var streakHtml=streak>=5?'<span class="streak-badge streak-hot">'+streak+'W</span>':streak>0?'<span class="streak-badge">'+streak+'W</span>':'<span class="streak-badge">&mdash;</span>';
-    var platformHtml=(r.platforms||[]).map(function(p){
-      var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
-      return'<span class="platform-pill '+cls+'">'+p+'</span>';
-    }).join(' ');
-    var isTop10=rank<=10;
-    var isMe=(_lbMyUserId&&r.user_id===_lbMyUserId);
-    var isRival=(!isMe&&myIdx>=0&&(idx===myIdx-1||idx===myIdx+1||idx===myIdx-2||idx===myIdx+2));
-    var rivalDir=(!isMe&&myIdx>=0)?(idx<myIdx?'above':'below'):'';
-    var trClass=(isTop10?' rank-top10':'')+(isMe?' lb-me':'')+(isRival?' lb-rival':'');
-    var sharpScore=r.sharp_score||0;
-    var sharpColor=sharpScore>=70?'var(--green)':sharpScore>=40?'var(--blue)':'var(--muted)';
-    var sharpHtml=sharpScore?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+sharpColor+'">'+sharpScore+'</span>':'<span style="color:var(--muted);font-family:var(--mono);font-size:11px">&mdash;</span>';
-    var rivalBadge=isRival?'<span style="font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:10px;background:rgba(255,77,106,.12);color:#ff4d6a;border:1px solid rgba(255,77,106,.25);margin-left:6px;text-transform:uppercase;">RIVAL'+(rivalDir==='above'?' ↑':' ↓')+'</span>':'';
-    var meBadge=isMe?'<span style="font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:10px;background:rgba(201,146,13,.14);color:#c9920d;border:1px solid rgba(201,146,13,.3);margin-left:6px;text-transform:uppercase;">YOU</span>':'';
-    return'<tr class="'+trClass+'"'+(isMe?' id="myLbRow"':'')+' onclick="window.location=\''+profileUrl+'\'">'+
-      '<td><span class="rank-num">'+rank+'</span></td>'+
-      '<td class="td-trader">'+
-        '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
-          '<div class="trader-avatar'+(isMe?' trader-avatar-me':'')+'">'+initial+'</div>'+
-          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+meBadge+rivalBadge+'</span>'+
-        '</a>'+
-        '<div class="mobile-stats">'+
-          '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
-          '<span class="mobile-stat">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
-        '</div>'+
-      '</td>'+
-      '<td class="td-pnl"><span class="pnl-val '+pnlCls+'">'+pnlStr+'</span></td>'+
-      '<td class="td-vol"><span class="vol-val">'+formatMoney(vol)+'</span></td>'+
-      '<td class="td-roi"><span class="roi-val '+roiCls+'" style="color:'+(parseFloat(roi)>20?'#c9920d':parseFloat(roi)>10?'#22c55e':parseFloat(roi)>0?'#10b981':'#ef4444')+';font-weight:700">'+(pnl>=0?'+':'')+roi+'%</span></td>'+
-      '<td class="td-streak">'+streakHtml+'</td>'+
-      '<td class="td-platform">'+platformHtml+'</td>'+
-      '<td class="td-sharp">'+sharpHtml+'</td>'+
-      (function(){var cs=r.calibration_score;if(cs==null)return'<td style="color:var(--muted);font-family:var(--mono);font-size:11px;text-align:center">&mdash;</td>';var cc=cs>=70?'var(--green)':cs>=50?'#4d9fff':'rgba(240,240,245,.45)';return'<td style="text-align:center"><span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+cc+'">'+cs+'</span><span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3)">/100</span></td>';})() +
-      '<td class="td-actions">'+
-        '<a href="'+profileUrl+'" onclick="event.stopPropagation()" class="copy-trades-table">Copy</a>'+
-        '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
-      '</td>'+
-    '</tr>';
-  }).join('');
-
-  // Scroll logged-in user's row into view (once, with slight delay for paint)
-  if(myIdx>=0){
-    setTimeout(function(){
-      var myRow=document.getElementById('myLbRow');
-      if(myRow) myRow.scrollIntoView({behavior:'smooth',block:'center'});
-    }, 400);
-    // Rank movement: compare current rank to last-visited rank
-    var currentRank = data[myIdx]._displayRank || (myIdx + 4);
-    var _rankKey = 'hfx_lb_last_rank_' + _lbMyUserId;
-    var lastRank = parseInt(localStorage.getItem(_rankKey) || '0');
-    if (lastRank > 0 && lastRank !== currentRank) {
-      var moved = lastRank - currentRank; // positive = moved up
-      var banner = document.getElementById('rankMoveBanner');
-      var msg = document.getElementById('rankMoveMsg');
-      if (banner && msg) {
-        if (moved > 0) {
-          msg.innerHTML = 'Up <strong>' + moved + '</strong> spot' + (moved > 1 ? 's' : '') + ' since last visit. Now ranked <strong>#' + currentRank + '</strong>.';
-          banner.style.borderColor = 'rgba(0,230,138,.3)';
-          banner.style.color = '#00e68a';
-        } else {
-          var dropped = Math.abs(moved);
-          var rivalRow = data[myIdx - 1]; // person now above you
-          var rivalName = rivalRow ? (rivalRow.display_name || 'someone') : 'someone';
-          msg.innerHTML = 'Down <strong>' + dropped + '</strong> spot' + (dropped > 1 ? 's' : '') + '. ' + rivalName.replace(/</g,'&lt;').slice(0,20) + ' passed you.';
-          banner.style.borderColor = 'rgba(255,77,106,.3)';
-          banner.style.color = '#ff4d6a';
-        }
-        banner.style.display = 'flex';
-        setTimeout(function(){ banner.style.opacity='0'; setTimeout(function(){ banner.style.display='none'; }, 400); }, 8000);
-      }
-    }
-    localStorage.setItem(_rankKey, String(currentRank));
-    // Update profile link
-    var rpl = document.getElementById('rankMoveProfileLink');
-    if (rpl && _lbMyUserId) rpl.href = '/m/' + _lbMyUserId;
-  }
-}
-
-function renderHallOfFame(){
-  var section=document.getElementById('hofSection');
-  var grid=document.getElementById('hofGrid');
-  var data=allTimeData||lbData;
-  if(!data.length){section.style.display='none';return}
-  section.style.display='';
-  // Only show profitable legends
-  var legends=data.filter(function(r){return(r.total_pnl||0)>0}).slice(0,5);
-  if(!legends.length){section.style.display='none';return}
-  grid.innerHTML=legends.map(function(r,i){
-    var vol=r.volume||r.account_value||0;
-    var profileUrl=(function(){var w=r.wallet||r.address||'';if(/^0x[0-9a-fA-F]{10,}$/i.test(w))return'/trader/'+encodeURIComponent(w);if(r.user_id&&String(r.user_id).startsWith('hl_'))return'/trader/'+encodeURIComponent(String(r.user_id).replace('hl_',''));if(r.user_id&&String(r.user_id).length>8&&!/^0x/i.test(r.user_id))return'/m/'+encodeURIComponent(r.user_id);return'/p/'+encodeURIComponent(r.display_name||'');})();
-    return'<a href="'+profileUrl+'" class="hof-card" style="text-decoration:none;cursor:pointer">'+
-      '<div class="hof-rank">#'+(i+1)+'</div>'+
-      '<div class="hof-name">'+escHtml(r.display_name)+'</div>'+
-      '<div class="hof-pnl">'+formatPnl(r.total_pnl||0)+'</div>'+
-      '<div class="hof-vol">Vol '+formatMoney(vol)+'</div>'+
-    '</a>';
-  }).join('');
-}
-
-function showStickyBar(){
-  var bar=document.getElementById('stickyBar');
-  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
-  if(!token){setTimeout(function(){bar.classList.add('visible')},800);return}
-
-  // Decode user ID from JWT
-  var userId=null;
-  try{var payload=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));userId=payload.userId||payload.id||payload.sub}catch(e){}
-
-  // Style the bar gold for signed-in users
-  bar.style.background='linear-gradient(135deg,rgba(201,146,13,0.12),rgba(14,14,21,0.95))';
-  bar.style.borderTop='1px solid rgba(201,146,13,0.3)';
-
-  // Fetch user's connected wallet, then match against leaderboard
-  fetch('/api/user/wallets',{headers:{Authorization:'Bearer '+token}})
-    .then(function(r){return r.ok?r.json():{}})
-    .then(function(w){
-      var userWallet=(w.polymarket_address||'').toLowerCase();
-      var userEntry=null;var userRank=null;
-      if(lbData.length){
-        for(var i=0;i<lbData.length;i++){
-          var match=false;
-          if(userId&&(lbData[i].user_id===userId))match=true;
-          if(userWallet&&lbData[i].wallet&&lbData[i].wallet.toLowerCase()===userWallet)match=true;
-          if(match){userEntry=lbData[i];userRank=i+1;break}
+  fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } })
+    .then(function(r){ return r.ok ? r.json() : {}; })
+    .then(function(w) {
+      var entry = null;
+      if (userId) {
+        var all = _rawFlex.concat(_rawWhale);
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].user_id === userId) { entry = all[i]; break; }
         }
       }
-      if(userEntry){
-        var pnl=userEntry.total_pnl||0;
-        var vol=userEntry.volume||0;
-        var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
-        var pnlColor=pnl>=0?'#00e68a':'#ff4d6a';
-        document.getElementById('barContent').innerHTML=
-          '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">🏆 #'+userRank+'</span>'+
-          '<span class="bar-stat" style="color:var(--ink);font-weight:700">'+escHtml(userEntry.display_name||'You')+'</span>'+
-          '<span class="bar-stat" style="color:'+pnlColor+';font-weight:700">'+formatPnl(pnl)+'</span>'+
-          '<span class="bar-stat">ROI <strong style="color:'+pnlColor+'">'+(pnl>=0?'+':'')+roi+'%</strong></span>'+
-          '<span class="bar-stat">Sharp <strong style="color:#c9920d">'+(userEntry.sharp_score||0)+'</strong></span>';
-        bar.querySelector('.bar-link').href='/creator/dashboard';
-        bar.querySelector('.bar-link').textContent='Dashboard →';
-      }else{
-        // No leaderboard match — show HFX stats
-        fetch('/api/predictors/me/score',{headers:{Authorization:'Bearer '+token}})
-          .then(function(r){return r.ok?r.json():null})
-          .then(function(d){
-            if(d&&d.sharp_score){
-              document.getElementById('barContent').innerHTML=
-                '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Sharp: '+d.sharp_score+'</span>'+
-                '<span class="bar-stat" style="color:var(--soft)">'+Math.round(d.win_rate*100)+'% win rate · '+d.total_predictions+' predictions</span>';
-            }else{
-              document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
-            }
-          }).catch(function(){
-            document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
-          });
-        bar.querySelector('.bar-link').href='/creator/dashboard';
-        bar.querySelector('.bar-link').textContent='Go to Dashboard';
+      if (entry) {
+        var pnl = entry.whale_pnl || 0;
+        var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+        document.getElementById('barContent').innerHTML =
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Your record</span>' +
+          (entry.calibration_score != null ? '<span class="bar-stat">Calibration <strong>' + entry.calibration_score + '/100</strong></span>' : '') +
+          (pnl !== 0 ? '<span class="bar-stat" style="color:' + pnlColor + ';font-weight:700">' + formatPnl(pnl) + '</span>' : '');
+        bar.querySelector('.bar-link').href = '/m/' + (userId || '');
+        bar.querySelector('.bar-link').textContent = 'View profile →';
+      } else {
+        document.getElementById('barContent').innerHTML = '<span class="bar-stat" style="color:#c9920d">Get your calibration score — start trading on Polymarket</span>';
+        bar.querySelector('.bar-link').href = '/creator/dashboard';
+        bar.querySelector('.bar-link').textContent = 'Dashboard →';
       }
-    }).catch(function(){
-      document.getElementById('barContent').innerHTML='<span class="bar-stat" style="color:#c9920d">Start trading to see your rank here</span>';
-    });
-  setTimeout(function(){bar.classList.add('visible')},800);
+    }).catch(function(){});
+  setTimeout(function(){ bar.classList.add('visible'); }, 800);
 }
 
-var _followedSet=new Set();
-
-async function loadFollowStates(){
-  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
-  if(!token)return;
-  try{
-    var r=await fetch('/api/predictors/following/list',{headers:{Authorization:'Bearer '+token}});
-    if(!r.ok)return;
-    var d=await r.json();
-    (d.following||[]).forEach(function(f){_followedSet.add(f)});
-    _followedSet.forEach(function(uid){
-      var btn=document.getElementById('follow-'+uid);
-      if(btn){btn.textContent='Following';btn.classList.add('following')}
-    });
-  }catch(e){}
-}
-
-async function toggleFollow(userId,btn){
-  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
-  if(!token){alert('Sign in to follow predictors');return}
-  btn.disabled=true;
-  try{
-    var r=await fetch('/api/predictors/'+userId+'/follow',{method:'POST',headers:{Authorization:'Bearer '+token}});
-    if(!r.ok){var err=await r.json().catch(function(){return{}});throw new Error(err.error||'Failed')}
-    var d=await r.json();
-    btn.textContent=d.following?'Following':'Follow';
-    btn.classList.toggle('following',d.following);
-    if(d.following)_followedSet.add(userId);else _followedSet.delete(userId);
-  }catch(e){console.warn('[follow]',e)}finally{btn.disabled=false}
-}
-
-// Boot in mode-aware view (default WHALE). The legacy
-// positions-based loadLeaderboard() is reachable only by URL hash
-// (#classic) so we can ship the split without losing the old view
-// for spot-checks. Default user lands on the canonical Whale Score
-// leaderboard.
-if (location.hash === '#classic') {
-  loadLeaderboard();
-} else {
-  // Honor ?mode=flex or ?mode=whale URL param so external links can
-  // deep-link a specific tab.
-  var qsParams = new URLSearchParams(location.search);
-  var initialMode = qsParams.get('mode') === 'flex' ? 'flex' : 'whale';
-  setMode(initialMode);
-}
-loadFollowStates();
+// ── Boot ────────────────────────────────────────────────────────────────────
+loadAll();
+loadTopCall();
 </script>
 <script src="/hfx-engage.js" defer></script>
 </body>

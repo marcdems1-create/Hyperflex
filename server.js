@@ -12154,6 +12154,50 @@ app.get('/rewards', (req, res) => res.redirect(302, '/'));
 //
 // The legacy /api/predictors endpoint (positions-based, computed
 // sharp_score) is unchanged — it powers older surfaces. This route is
+// GET /api/predictors/top-call-week — best resolved take from the past 7 days
+// (highest absolute profit). Public. Powers the Top Call hero on /predictors.
+app.get('/api/predictors/top-call-week', async (req, res) => {
+  if (!pool) return res.json({ call: null });
+  try {
+    const rows = await dbQuery(`
+      SELECT t.id, t.question, t.side, t.entry_price, t.resolved_at,
+             t.maker_amount, t.taker_amount, t.market_slug,
+             u.id AS user_id, u.display_name, u.username
+      FROM takes t
+      JOIN users u ON t.user_id = u.id
+      WHERE t.is_correct = true
+        AND t.resolved_at > NOW() - INTERVAL '7 days'
+        AND t.source = 'user'
+        AND COALESCE(t.maker_amount, 0) > 0
+      ORDER BY (COALESCE(t.taker_amount,0) - COALESCE(t.maker_amount,0)) DESC NULLS LAST
+      LIMIT 1
+    `);
+    if (!rows[0]) return res.json({ call: null });
+    const r = rows[0];
+    const profit = (parseFloat(r.taker_amount) || 0) - (parseFloat(r.maker_amount) || 0);
+    const roi = r.maker_amount > 0 ? Math.round(profit / r.maker_amount * 100) : null;
+    const entryCents = r.entry_price != null ? Math.round(parseFloat(r.entry_price) * 100) : null;
+    res.json({
+      call: {
+        take_id: r.id,
+        question: r.question,
+        side: (r.side || '').toUpperCase(),
+        entry_cents: entryCents,
+        market_slug: r.market_slug,
+        resolved_at: r.resolved_at,
+        profit_usdc: Math.round(profit * 100) / 100,
+        roi_pct: roi,
+        user_id: r.user_id,
+        display_name: r.display_name,
+        username: r.username,
+        profile_url: '/m/' + r.user_id,
+      }
+    });
+  } catch (err) {
+    res.json({ call: null });
+  }
+});
+
 // the canonical source for the new /predictors page tabs.
 const _predictorsLbCache = { ts: { flex: 0, whale: 0 }, data: { flex: null, whale: null } };
 app.get('/api/predictors/leaderboard', async (req, res) => {
