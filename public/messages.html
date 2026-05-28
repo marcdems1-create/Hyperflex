@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Messages — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0e15;--surface:#111118;--card:#14141e;--border:rgba(255,255,255,.07);
+  --text:#f0f0f5;--soft:rgba(240,240,245,.6);--muted:rgba(240,240,245,.32);
+  --green:#00e68a;--blue:#4d9fff;--gold:#c9920d;--red:#ff4d6a;
+  --sans:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;overflow:hidden}
+
+/* NAV */
+nav{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:center;padding:0 20px;gap:16px;background:rgba(14,14,21,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+.nav-logo{font-size:20px;font-weight:900;color:#fff;text-decoration:none;letter-spacing:-.03em;}
+.nav-links{display:flex;gap:2px;flex:1;}
+.nav-link{font-size:13px;font-weight:500;color:var(--soft);text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .12s,background .12s;}
+.nav-link:hover{color:var(--text);background:rgba(255,255,255,.05);}
+.nav-link.active{color:var(--text);background:rgba(255,255,255,.07);}
+.nav-auth{display:flex;gap:8px;align-items:center;}
+.nav-btn{font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px;text-decoration:none;cursor:pointer;border:none;transition:all .12s;}
+.nav-btn-ghost{background:transparent;color:var(--soft);border:1px solid var(--border);}
+.nav-btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.2);}
+.nav-btn-primary{background:var(--green);color:#0a0a0f;}
+.nav-btn-primary:hover{background:#00ffaa;}
+
+/* LAYOUT */
+.msg-layout{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 56px);}
+@media(max-width:640px){
+  .msg-layout{grid-template-columns:1fr;}
+  .msg-thread-panel{display:none;}
+  .msg-thread-panel.active{display:flex;}
+  .msg-convo-panel.hidden{display:none;}
+}
+
+/* CONVO LIST */
+.msg-convo-panel{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.msg-convo-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.msg-convo-title{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+.msg-convo-list{flex:1;overflow-y:auto;}
+.msg-convo-item{display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);transition:background .1s;}
+.msg-convo-item:hover{background:rgba(255,255,255,.04);}
+.msg-convo-item.active{background:rgba(77,159,255,.08);border-left:2px solid var(--blue);}
+.msg-convo-avatar{width:40px;height:40px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;}
+.msg-convo-avatar img{width:100%;height:100%;object-fit:cover;}
+.msg-convo-body{flex:1;min-width:0;}
+.msg-convo-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.msg-convo-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.msg-convo-meta{text-align:right;flex-shrink:0;}
+.msg-convo-time{font-size:11px;color:var(--muted);}
+.msg-unread-badge{background:var(--blue);color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;margin-top:4px;display:inline-block;}
+.msg-convo-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;}
+
+/* THREAD PANEL */
+.msg-thread-panel{display:flex;flex-direction:column;overflow:hidden;}
+.msg-thread-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.msg-thread-back{display:none;background:none;border:none;color:var(--soft);cursor:pointer;font-size:20px;padding:2px 8px 2px 0;}
+@media(max-width:640px){.msg-thread-back{display:block;}}
+.msg-thread-avatar{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted);overflow:hidden;flex-shrink:0;}
+.msg-thread-avatar img{width:100%;height:100%;object-fit:cover;}
+.msg-thread-name{font-size:15px;font-weight:700;}
+.msg-thread-handle{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px;}
+.msg-thread-link{font-size:11px;color:var(--blue);text-decoration:none;margin-left:auto;}
+.msg-thread-link:hover{text-decoration:underline;}
+
+/* MESSAGES */
+.msg-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:8px;}
+.msg-empty-thread{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;}
+.msg-day-label{text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;margin:8px 0;}
+.msg-bubble-row{display:flex;gap:8px;align-items:flex-end;}
+.msg-bubble-row.mine{flex-direction:row-reverse;}
+.msg-bubble-avatar{width:28px;height:28px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;}
+.msg-bubble-avatar img{width:100%;height:100%;object-fit:cover;}
+.msg-bubble{max-width:72%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word;}
+.msg-bubble.theirs{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;}
+.msg-bubble.mine{background:var(--blue);color:#fff;border-bottom-right-radius:4px;}
+.msg-time{font-size:10px;color:var(--muted);margin-top:4px;text-align:right;}
+.msg-time.theirs{text-align:left;}
+
+/* COMPOSE */
+.msg-compose{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;}
+.msg-compose-input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--text);font-family:var(--sans);font-size:14px;resize:none;outline:none;min-height:42px;max-height:120px;overflow-y:auto;transition:border-color .12s;}
+.msg-compose-input:focus{border-color:rgba(77,159,255,.4);}
+.msg-compose-input[placeholder]:empty:before{content:attr(placeholder);color:var(--muted);}
+.msg-send-btn{background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;transition:all .12s;}
+.msg-send-btn:hover{background:#6aafff;}
+.msg-send-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* NO SELECTION */
+.msg-no-selection{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:8px;}
+.msg-no-selection svg{opacity:.25;}
+
+/* AUTH GATE */
+.msg-auth-gate{display:flex;flex-direction:column;align-items:center;justify-content:center;height:calc(100vh - 56px);gap:16px;color:var(--soft);}
+</style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="/">HYPERFLEX</a>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Home</a>
+    <a class="nav-link" href="/feed">Feed</a>
+    <a class="nav-link" href="/alpha-live">Alpha</a>
+    <a class="nav-link active" href="/messages">Messages</a>
+  </div>
+  <div class="nav-auth" id="navAuth"></div>
+</nav>
+
+<div id="authGate" class="msg-auth-gate" style="display:none">
+  <div style="font-size:28px;font-weight:800">Messages</div>
+  <div style="font-size:14px;color:var(--muted)">Sign in to send and receive messages.</div>
+  <a href="/creator/login" class="nav-btn nav-btn-primary" style="margin-top:8px">Sign in →</a>
+</div>
+
+<div id="appShell" style="display:none">
+<div class="msg-layout">
+  <!-- Conversation list -->
+  <div class="msg-convo-panel" id="convoPanel">
+    <div class="msg-convo-header">
+      <span class="msg-convo-title">Messages</span>
+    </div>
+    <div class="msg-convo-list" id="convoList">
+      <div class="msg-convo-empty">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Thread view -->
+  <div class="msg-thread-panel" id="threadPanel">
+    <div class="msg-no-selection" id="noSelection">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <div>Select a conversation</div>
+    </div>
+    <div id="activeThread" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="msg-thread-header">
+        <button class="msg-thread-back" onclick="backToList()">←</button>
+        <div class="msg-thread-avatar" id="threadAvatar"></div>
+        <div>
+          <div class="msg-thread-name" id="threadName"></div>
+          <div class="msg-thread-handle" id="threadHandle"></div>
+        </div>
+        <a class="msg-thread-link" id="threadProfileLink" href="#">View profile →</a>
+      </div>
+      <div class="msg-messages" id="msgList"></div>
+      <div class="msg-compose">
+        <div class="msg-compose-input" id="composeInput" contenteditable="true" placeholder="Message…" onkeydown="handleComposeKey(event)"></div>
+        <button class="msg-send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+var _token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+var _myUserId = null;
+var _myProfile = null;
+var _convos = [];
+var _activeConvoId = null;
+var _activeOther = null;
+var _pollTimer = null;
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function ago(iso) {
+  if (!iso) return '';
+  var d = new Date(iso), now = Date.now(), diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function dayLabel(iso) {
+  var d = new Date(iso), now = new Date();
+  var today = now.toDateString(), yesterday = new Date(now-86400000).toDateString();
+  if (d.toDateString() === today) return 'Today';
+  if (d.toDateString() === yesterday) return 'Yesterday';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function avatarHtml(user, size) {
+  var s = size || 40;
+  var cls = 'msg-convo-avatar';
+  var seed = esc((user.display_name||user.username||'?')[0].toUpperCase());
+  if (user.avatar_url) {
+    return '<div class="'+cls+'" style="width:'+s+'px;height:'+s+'px"><img src="'+esc(user.avatar_url)+'" onerror="this.parentNode.textContent=\''+seed+'\'" loading="lazy"></div>';
+  }
+  if (user.polymarket_address) {
+    var addr = String(user.polymarket_address).toLowerCase();
+    return '<div class="'+cls+'" style="width:'+s+'px;height:'+s+'px"><img src="/api/img-proxy?url='+encodeURIComponent('https://polymarket.com/profile-images/'+addr+'.jpg')+'" onerror="this.parentNode.textContent=\''+seed+'\'" loading="lazy"></div>';
+  }
+  return '<div class="'+cls+'" style="width:'+s+'px;height:'+s+'px">'+seed+'</div>';
+}
+
+async function init() {
+  if (!_token) {
+    document.getElementById('authGate').style.display = 'flex';
+    return;
+  }
+  // Get own profile
+  try {
+    var r = await fetch('/api/me', { headers: { Authorization: 'Bearer '+_token } });
+    if (!r.ok) throw new Error('auth');
+    var d = await r.json();
+    _myUserId = d.id || d.user_id;
+    _myProfile = d;
+    document.getElementById('appShell').style.display = '';
+    renderNav(d);
+    await loadConvos();
+    // Check for ?with= param — start or open a convo
+    var params = new URLSearchParams(location.search);
+    var withId = params.get('with');
+    if (withId) openOrStartConvo(withId);
+  } catch(e) {
+    document.getElementById('authGate').style.display = 'flex';
+  }
+}
+
+function renderNav(profile) {
+  var el = document.getElementById('navAuth');
+  el.innerHTML = '<a href="/m/'+encodeURIComponent(_myUserId)+'" class="nav-btn nav-btn-ghost" style="text-decoration:none">'+esc(profile.display_name||profile.username||'Profile')+'</a>';
+}
+
+async function loadConvos() {
+  var r = await fetch('/api/messages/conversations', { headers: { Authorization: 'Bearer '+_token } });
+  var d = await r.json();
+  _convos = d.conversations || [];
+  renderConvoList();
+}
+
+function renderConvoList() {
+  var el = document.getElementById('convoList');
+  if (!_convos.length) {
+    el.innerHTML = '<div class="msg-convo-empty">No conversations yet.<br>Message a trader from their profile.</div>';
+    return;
+  }
+  el.innerHTML = _convos.map(function(c) {
+    var other = c.other_user;
+    var isActive = c.id === _activeConvoId;
+    var preview = c.last_body ? (c.last_sender_id === _myUserId ? 'You: ' : '') + c.last_body.slice(0,60) : 'No messages yet';
+    var unreadHtml = c.unread_count > 0 ? '<div class="msg-unread-badge">'+c.unread_count+'</div>' : '';
+    return '<div class="msg-convo-item'+(isActive?' active':'')+'" onclick="openConvo(\''+esc(c.id)+'\')">'+
+      avatarHtml(other, 40)+
+      '<div class="msg-convo-body">'+
+        '<div class="msg-convo-name">'+esc(other.display_name||'Trader')+'</div>'+
+        '<div class="msg-convo-preview">'+esc(preview)+'</div>'+
+      '</div>'+
+      '<div class="msg-convo-meta">'+
+        '<div class="msg-convo-time">'+ago(c.last_message_at)+'</div>'+
+        unreadHtml+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+async function openConvo(convId) {
+  _activeConvoId = convId;
+  var convo = _convos.find(function(c){ return c.id === convId; });
+  if (!convo) return;
+  _activeOther = convo.other_user;
+  renderConvoList();
+  showThread(convo.other_user);
+  await loadMessages(convId);
+  clearInterval(_pollTimer);
+  _pollTimer = setInterval(function(){ pollMessages(); }, 5000);
+  // Mobile: hide list, show thread
+  document.getElementById('convoPanel').classList.add('hidden');
+  document.getElementById('threadPanel').classList.add('active');
+}
+
+function showThread(other) {
+  document.getElementById('noSelection').style.display = 'none';
+  var thread = document.getElementById('activeThread');
+  thread.style.display = 'flex';
+  // Avatar
+  var avatarEl = document.getElementById('threadAvatar');
+  if (other.avatar_url) {
+    avatarEl.innerHTML = '<img src="'+esc(other.avatar_url)+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\''+esc((other.display_name||'?')[0].toUpperCase())+'\'">';
+  } else if (other.polymarket_address) {
+    var addr = String(other.polymarket_address).toLowerCase();
+    avatarEl.innerHTML = '<img src="/api/img-proxy?url='+encodeURIComponent('https://polymarket.com/profile-images/'+addr+'.jpg')+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\''+esc((other.display_name||'?')[0].toUpperCase())+'\'">';
+  } else {
+    avatarEl.textContent = (other.display_name||'?')[0].toUpperCase();
+  }
+  document.getElementById('threadName').textContent = other.display_name || 'Trader';
+  document.getElementById('threadHandle').textContent = other.username ? '@'+other.username : '';
+  document.getElementById('threadProfileLink').href = '/m/'+encodeURIComponent(other.id);
+}
+
+async function loadMessages(convId) {
+  var r = await fetch('/api/messages/conversations/'+convId, { headers: { Authorization: 'Bearer '+_token } });
+  var d = await r.json();
+  renderMessages(d.messages || []);
+  // Update unread count in convo list
+  var convo = _convos.find(function(c){ return c.id === convId; });
+  if (convo) { convo.unread_count = 0; renderConvoList(); }
+}
+
+var _lastMsgId = null;
+function renderMessages(msgs) {
+  var el = document.getElementById('msgList');
+  if (!msgs.length) {
+    el.innerHTML = '<div class="msg-empty-thread" style="color:var(--muted);text-align:center;padding:20px">Send the first message.</div>';
+    return;
+  }
+  var html = '', lastDay = '';
+  msgs.forEach(function(m) {
+    var d = dayLabel(m.created_at);
+    if (d !== lastDay) {
+      html += '<div class="msg-day-label">'+esc(d)+'</div>';
+      lastDay = d;
+    }
+    var isMine = m.sender_id === _myUserId;
+    var avatarSrc = isMine ? (_myProfile && _myProfile.avatar_url) : (_activeOther && _activeOther.avatar_url);
+    var avatarAddr = isMine ? null : (_activeOther && _activeOther.polymarket_address);
+    var initials = isMine ? ((_myProfile && (_myProfile.display_name||_myProfile.username)||'?')[0].toUpperCase()) : ((_activeOther && (_activeOther.display_name||'?'))[0].toUpperCase());
+    var avatarHtmlStr = '';
+    if (avatarSrc) {
+      avatarHtmlStr = '<div class="msg-bubble-avatar"><img src="'+esc(avatarSrc)+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\''+initials+'\'"></div>';
+    } else if (avatarAddr) {
+      avatarHtmlStr = '<div class="msg-bubble-avatar"><img src="/api/img-proxy?url='+encodeURIComponent('https://polymarket.com/profile-images/'+avatarAddr.toLowerCase()+'.jpg')+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\''+initials+'\'"></div>';
+    } else {
+      avatarHtmlStr = '<div class="msg-bubble-avatar">'+initials+'</div>';
+    }
+    var t = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    html += '<div class="msg-bubble-row'+(isMine?' mine':'')+'">'+
+      avatarHtmlStr+
+      '<div>'+
+        '<div class="msg-bubble '+(isMine?'mine':'theirs')+'">'+esc(m.body)+'</div>'+
+        '<div class="msg-time '+(isMine?'mine':'theirs')+'">'+t+'</div>'+
+      '</div>'+
+    '</div>';
+  });
+  el.innerHTML = html;
+  _lastMsgId = msgs[msgs.length-1]?.id || null;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function pollMessages() {
+  if (!_activeConvoId) return;
+  try {
+    var r = await fetch('/api/messages/conversations/'+_activeConvoId, { headers: { Authorization: 'Bearer '+_token } });
+    var d = await r.json();
+    var msgs = d.messages || [];
+    var lastId = msgs[msgs.length-1]?.id;
+    if (lastId && lastId !== _lastMsgId) {
+      renderMessages(msgs);
+      // Refresh convo list for updated preview
+      await loadConvos();
+      renderConvoList();
+    }
+  } catch(e) {}
+}
+
+function handleComposeKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+async function sendMessage() {
+  var input = document.getElementById('composeInput');
+  var body = input.innerText.trim();
+  if (!body || !_activeConvoId) return;
+  var btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  input.contentEditable = 'false';
+  try {
+    var r = await fetch('/api/messages/conversations/'+_activeConvoId, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: body })
+    });
+    if (!r.ok) throw new Error('send failed');
+    input.innerText = '';
+    await loadMessages(_activeConvoId);
+    await loadConvos();
+  } catch(e) {
+    // Silently re-enable — don't lose the message
+  } finally {
+    btn.disabled = false;
+    input.contentEditable = 'true';
+    input.focus();
+  }
+}
+
+async function openOrStartConvo(otherUserId) {
+  try {
+    var r = await fetch('/api/messages/conversations', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ other_user_id: otherUserId })
+    });
+    var d = await r.json();
+    if (d.conversation_id) {
+      await loadConvos();
+      openConvo(d.conversation_id);
+    }
+  } catch(e) {}
+}
+
+function backToList() {
+  clearInterval(_pollTimer);
+  _activeConvoId = null;
+  document.getElementById('convoPanel').classList.remove('hidden');
+  document.getElementById('threadPanel').classList.remove('active');
+}
+
+init();
+</script>
+</body>
+</html>

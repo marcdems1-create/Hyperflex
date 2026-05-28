@@ -350,7 +350,8 @@
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/mentions', label: 'Mentions' }
+    { href: '/mentions', label: 'Mentions' },
+    { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
   // Profile navigation helper — resolves canonical URL client-side via
@@ -438,11 +439,13 @@
   nav.innerHTML =
     '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
-      primaryLinks.map(function(l) {
+      primaryLinks.filter(function(l){ return !l.authOnly || isLoggedIn; }).map(function(l) {
         var isActive = path === l.href;
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
-        return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
+        var label = l.label;
+        if (l.msgBadge) label += '<span id="navMsgBadge" style="display:none;background:#4d9fff;color:#fff;font-family:var(--mono,monospace);font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:5px;vertical-align:middle"></span>';
+        return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + label + '</a>';
       }).join('') +
       (isLoggedIn ? '<a href="#" onclick="event.preventDefault();_goToMyProfile()" class="nav-link' + (path.indexOf('/m/') === 0 ? ' active' : '') + '">👤 Profile</a>' : '') +
       '<div class="nav-more-wrap">' +
@@ -485,6 +488,23 @@
     document.body.insertBefore(nav, document.body.firstChild);
   }
 
+  // ── Unread messages badge ──
+  if (isLoggedIn) {
+    (function pollUnread() {
+      var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+      if (!tok) return;
+      fetch('/api/messages/unread-count', { headers: { Authorization: 'Bearer ' + tok } })
+        .then(function(r){ return r.ok ? r.json() : { count: 0 }; })
+        .then(function(d) {
+          var badge = document.getElementById('navMsgBadge');
+          if (!badge) return;
+          if (d.count > 0) { badge.textContent = d.count > 9 ? '9+' : d.count; badge.style.display = 'inline'; }
+          else { badge.style.display = 'none'; }
+        }).catch(function(){});
+      setTimeout(pollUnread, 30000); // re-check every 30s
+    })();
+  }
+
   // ── Mobile hamburger menu ──
   // Order matches the priority tiers: Your Stuff → Find Alpha → Discover → Research → Meta
   (function() {
@@ -497,7 +517,7 @@
     }
     allLinks.push({ sep: true });
     // Tier 2 — Find Alpha (the primary alpha sources)
-    allLinks = allLinks.concat(primaryLinks);
+    allLinks = allLinks.concat(primaryLinks.filter(function(l){ return !l.authOnly || isLoggedIn; }));
     allLinks.push({ sep: true });
     var dropdownLinks = moreLinks;
     allLinks = allLinks.concat(dropdownLinks);

@@ -369,6 +369,10 @@ function shareProfile() {
   });
 }
 
+function openMessage(profileUserId) {
+  window.location.href = '/messages?with=' + encodeURIComponent(profileUserId);
+}
+
 // Minimal info modal — no deps, no CSS class pollution. Used by the ⓘ
 // buttons next to Flex Score and FLEX Points in the stats grid so visitors
 // actually understand what the gold and purple numbers mean.
@@ -1044,6 +1048,7 @@ async function load() {
             ${!isOwner ? `<button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>` : ''}
             ${!isOwner ? `<button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">Copy</button>` : ''}
             ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">Challenge</button>` : ''}
+            ${!isOwner ? `<button class="btn btn-ghost" onclick="openMessage('${userId}')">Message</button>` : ''}
             <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isOwner ? 'My prediction track record on HYPERFLEX' : 'Tracking ' + (user.username ? '@'+user.username : user.display_name) + ' on HYPERFLEX'}\\n\\nhyperflex.network/m/${userId}'),'_blank')">Share on X</button>
             <a href="/passport/${userId}" class="btn btn-gold">Passport →</a>
           </div>

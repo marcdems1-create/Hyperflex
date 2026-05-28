@@ -12132,6 +12132,8 @@ app.get('/api/trader/:address/profile', async (req, res) => {
   }
 });
 
+// GET /messages — direct messaging inbox
+app.get('/messages', (req, res) => res.sendFile(path.join(__dirname, 'public', 'messages.html')));
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 // GET /dogs — contrarian-signal dog cards (dog-card-v1). See
@@ -20960,6 +20962,165 @@ app.delete('/api/takes/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[takes] delete error:', err.message);
     res.status(500).json({ error: 'Failed to delete take' });
+  }
+});
+
+// ── DIRECT MESSAGES (messaging-v1) ──────────────────────────────────────────
+// Schema lives in auto-migration block above (dm_conversations, dm_messages, dm_reads).
+// Five endpoints: list convos, get messages, start convo, send message, unread count.
+
+// GET /api/messages/unread-count — badge count for nav
+app.get('/api/messages/unread-count', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const rows = await dbQuery(`
+      SELECT COUNT(*)::int AS cnt
+        FROM dm_messages m
+        JOIN dm_conversations c ON c.id = m.conversation_id
+       WHERE (c.user1_id = $1 OR c.user2_id = $1)
+         AND m.sender_id != $1
+         AND m.created_at > COALESCE(
+               (SELECT last_read_at FROM dm_reads WHERE conversation_id = c.id AND user_id = $1),
+               '1970-01-01'::timestamptz
+             )
+    `, [uid]);
+    res.json({ count: rows[0]?.cnt || 0 });
+  } catch (err) {
+    res.json({ count: 0 });
+  }
+});
+
+// GET /api/messages/conversations — list conversations with last message + unread
+app.get('/api/messages/conversations', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const rows = await dbQuery(`
+      SELECT c.id,
+             c.user1_id, c.user2_id,
+             c.created_at,
+             lm.body        AS last_body,
+             lm.sender_id   AS last_sender_id,
+             lm.created_at  AS last_message_at,
+             (SELECT COUNT(*)::int
+                FROM dm_messages m2
+               WHERE m2.conversation_id = c.id
+                 AND m2.sender_id != $1
+                 AND m2.created_at > COALESCE(
+                       (SELECT last_read_at FROM dm_reads dr WHERE dr.conversation_id = c.id AND dr.user_id = $1),
+                       '1970-01-01'::timestamptz)) AS unread_count
+        FROM dm_conversations c
+   LEFT JOIN LATERAL (
+          SELECT body, sender_id, created_at
+            FROM dm_messages
+           WHERE conversation_id = c.id
+        ORDER BY created_at DESC LIMIT 1
+        ) lm ON true
+       WHERE c.user1_id = $1 OR c.user2_id = $1
+    ORDER BY COALESCE(lm.created_at, c.created_at) DESC
+       LIMIT 50
+    `, [uid]);
+
+    // Enrich with other-user profile
+    const otherIds = rows.map(r => r.user1_id === uid ? r.user2_id : r.user1_id);
+    let profiles = {};
+    if (otherIds.length) {
+      const prows = await dbQuery(
+        'SELECT id, display_name, username, avatar_url, polymarket_address FROM users WHERE id = ANY($1)',
+        [otherIds]
+      );
+      for (const p of prows) profiles[p.id] = p;
+    }
+    const convos = rows.map(r => {
+      const otherId = r.user1_id === uid ? r.user2_id : r.user1_id;
+      const other = profiles[otherId] || {};
+      return {
+        id: r.id,
+        other_user: { id: otherId, display_name: other.display_name || 'Trader', username: other.username || null, avatar_url: other.avatar_url || null, polymarket_address: other.polymarket_address || null },
+        last_body: r.last_body || null,
+        last_sender_id: r.last_sender_id || null,
+        last_message_at: r.last_message_at || r.created_at,
+        unread_count: r.unread_count || 0,
+      };
+    });
+    res.json({ conversations: convos });
+  } catch (err) {
+    console.error('[dm] conversations error:', err.message);
+    res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// GET /api/messages/conversations/:id — messages in conversation
+app.get('/api/messages/conversations/:id', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const convId = req.params.id;
+    // Verify membership
+    const cv = await dbQuery('SELECT * FROM dm_conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)', [convId, uid]);
+    if (!cv.length) return res.status(404).json({ error: 'Conversation not found' });
+    const msgs = await dbQuery(
+      'SELECT id, sender_id, body, created_at FROM dm_messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT 200',
+      [convId]
+    );
+    // Mark as read
+    await dbQuery(`
+      INSERT INTO dm_reads (conversation_id, user_id, last_read_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (conversation_id, user_id) DO UPDATE SET last_read_at = NOW()
+    `, [convId, uid]).catch(() => {});
+    res.json({ messages: msgs, conversation_id: convId });
+  } catch (err) {
+    console.error('[dm] messages error:', err.message);
+    res.status(500).json({ error: 'Failed to load messages' });
+  }
+});
+
+// POST /api/messages/conversations — start or get existing conversation with another user
+app.post('/api/messages/conversations', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const { other_user_id } = req.body || {};
+    if (!other_user_id) return res.status(400).json({ error: 'other_user_id required' });
+    if (other_user_id === uid) return res.status(400).json({ error: 'Cannot message yourself' });
+    // Canonical ordering: alphabetical by user_id to prevent duplicates
+    const [u1, u2] = [uid, other_user_id].sort();
+    const existing = await dbQuery('SELECT id FROM dm_conversations WHERE user1_id = $1 AND user2_id = $2', [u1, u2]);
+    if (existing.length) return res.json({ conversation_id: existing[0].id, created: false });
+    const ins = await dbQuery(
+      'INSERT INTO dm_conversations (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
+      [u1, u2]
+    );
+    res.json({ conversation_id: ins[0].id, created: true });
+  } catch (err) {
+    console.error('[dm] start convo error:', err.message);
+    res.status(500).json({ error: 'Failed to start conversation' });
+  }
+});
+
+// POST /api/messages/conversations/:id — send a message
+app.post('/api/messages/conversations/:id', requireAuth, async (req, res) => {
+  try {
+    const uid = req.userId;
+    const convId = req.params.id;
+    const body = (req.body?.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Message body required' });
+    if (body.length > 2000) return res.status(400).json({ error: 'Message too long (max 2000 chars)' });
+    // Verify membership
+    const cv = await dbQuery('SELECT id FROM dm_conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)', [convId, uid]);
+    if (!cv.length) return res.status(403).json({ error: 'Not a participant' });
+    const ins = await dbQuery(
+      'INSERT INTO dm_messages (conversation_id, sender_id, body) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [convId, uid, body]
+    );
+    // Update sender's read timestamp
+    await dbQuery(`
+      INSERT INTO dm_reads (conversation_id, user_id, last_read_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (conversation_id, user_id) DO UPDATE SET last_read_at = NOW()
+    `, [convId, uid]).catch(() => {});
+    res.json({ message_id: ins[0].id, created_at: ins[0].created_at });
+  } catch (err) {
+    console.error('[dm] send error:', err.message);
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
@@ -53719,6 +53880,31 @@ if (pool) {
           'hawkish','dovish','neutral',
           'escalatory','deescalatory','ambiguous','insufficient_signal'
         )
+      )`).catch(() => {});
+
+      // Messaging-v1 schema (PR #94 — landing here since that branch was never merged)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS dm_conversations (
+        id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user1_id     TEXT NOT NULL,
+        user2_id     TEXT NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user1_id, user2_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_dm_conversations_user1 ON dm_conversations(user1_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_dm_conversations_user2 ON dm_conversations(user2_id)`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS dm_messages (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
+        sender_id       TEXT NOT NULL,
+        body            TEXT NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_dm_messages_conv ON dm_messages(conversation_id, created_at DESC)`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS dm_reads (
+        conversation_id TEXT NOT NULL,
+        user_id         TEXT NOT NULL,
+        last_read_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (conversation_id, user_id)
       )`).catch(() => {});
 
       // Username NULL backfill — derive from display_name (slug-ified) or
