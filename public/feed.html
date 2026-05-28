@@ -899,6 +899,9 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 0 6px rgba(0,230,138,.5);
 }
 .tac-meta { font-size: 10px; color: var(--text-faint); flex-shrink: 0; margin-top: 2px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.tac-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.12; pointer-events: none; border-radius: inherit; z-index: 0; }
+.trending-alpha-card { position: relative; overflow: hidden; }
+.tac-icon, .tac-body, .tac-meta { position: relative; z-index: 1; }
 
 /* Show on desktop — hide on the same widths where mobile-alpha-strip takes over */
 @media (min-width: 1200px) {
@@ -3058,6 +3061,7 @@ function renderTrendingAlpha(items) {
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
     var href = it.market_slug ? '/market/' + encodeURIComponent(it.market_slug) : '#';
+    var tacImg = it.image ? '<img class="tac-thumb" src="/api/img-proxy?url=' + encodeURIComponent(it.image) + '" alt="" loading="lazy" onerror="this.remove()">' : '';
     if (it.type === 'whale_entry') {
       var sideColor = it.side === 'YES' ? '#00e68a' : '#ff4d6a';
       var priceStr = it.current_price_pct != null ? it.current_price_pct + '¢' : '';
@@ -3066,6 +3070,7 @@ function renderTrendingAlpha(items) {
         + (priceStr ? ' at ' + priceStr : '')
         + (it.size_display ? ' · <strong>' + esc(it.size_display) + '</strong>' : '');
       html += '<a class="trending-alpha-card whale" href="' + esc(href) + '">'
+        + tacImg
         + '<div class="tac-icon">🐋</div>'
         + '<div class="tac-body">'
           + '<div class="tac-headline">' + headline + '</div>'
@@ -3078,6 +3083,7 @@ function renderTrendingAlpha(items) {
       var edgeColor = it.edge_score >= 8 ? '#ff4d6a' : it.edge_score >= 6 ? '#00e68a' : 'var(--gold)';
       var yesStr = it.yes_price_pct != null ? it.yes_price_pct + '¢ YES' : '';
       html += '<a class="trending-alpha-card edge" href="' + esc(href) + '">'
+        + tacImg
         + '<div class="tac-icon">⚡</div>'
         + '<div class="tac-body">'
           + '<div class="tac-headline">Sharp edge detected: <span style="color:' + edgeColor + ';font-weight:700">Edge ' + (it.edge_score || 0).toFixed(1) + '</span>'
@@ -4721,7 +4727,7 @@ function _predAvatarHtml(p, opts) {
     inner = '<img src="' + esc(p.avatar_url) + '" alt="" data-seed="' + seed + '" onerror="_imgFallback(this)" loading="lazy">';
   } else if (p.polymarket_address) {
     var addr = String(p.polymarket_address).toLowerCase();
-    inner = '<img src="https://polymarket.com/profile-images/' + addr + '.jpg" alt="" data-seed="' + seed + '" onerror="_imgFallback(this)" loading="lazy">';
+    inner = '<img src="/api/img-proxy?url=' + encodeURIComponent('https://polymarket.com/profile-images/' + addr + '.jpg') + '" alt="" data-seed="' + seed + '" onerror="_imgFallback(this)" loading="lazy">';
   } else {
     inner = '<span class="pred-initials">' + seed + '</span>';
   }
