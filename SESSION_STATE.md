@@ -49,6 +49,31 @@
 
 ## Chronological log (newest first)
 
+## 2026-05-28 (WHALE SCORE split + messaging-v1 + onboarding fix + username backfill)
+
+**Shipped (with hashes):**
+- `cad7f72`: WHALE SCORE label split (Decision #1 Option C) — predictors.html tabs renamed SHARPEST→FLEX SCORE, BIGGEST WHALES→WHALE SCORE; whales tab now sorts/displays `flex_score_90d` (purple accent); feed.html hero card "Top Predictor" → "Top Whale"; onboarding trigger moved from dead code in explore.html to working home.html redirect; Copy Link button removed from member.html
+- `4d20d43`: username NULL backfill in auto-migration — derives from display_name (slugified) or email prefix, idempotent
+- `a3ad1f0`: messaging-v1 full build — schema (dm_conversations + dm_messages + dm_reads), 5 endpoints (/api/messages/*), public/messages.html two-panel UI (?with= param auto-opens convo), Message button on member.html profiles, Messages nav link (auth-only) + 30s unread badge in nav.js
+
+**Open PRs (not yet merged):**
+- PR #102: rolling hero banner v1 (commit `2a0a25f`) — awaiting Marc's visual verify on `/feed` + `/`
+- PR #103: SESSION_STATE.md 2026-05-10 ledger (commit `30ba19c`)
+
+**Active blockers:**
+- **Surgical FLEX fix** still blocked on Marc's curl on `/api/admin/flex/rebuild` for LaBradford. Diag triplet `(rt_rows_returned, rt_dedup_keyset_size, rt_contributed.rtCount)` names the fix.
+
+**Queued (priority order):**
+1. **Surgical FLEX fix** — blocked on curl result. Branch TBD once diag names the cause.
+2. **dog-card-v1** — spec is at `docs/specs/dog-card-v1.md`. Backend + page already shipped (per grep). Verify `/dogs` renders correctly and the feed showcase section works; may just need a visual spot-check.
+3. **Passport ↔ main profile reconciliation** — 5-whale divergence query to confirm field discrepancies, then `lib/profile-stats.js` shared aggregator.
+4. **messaging-v1 polish** — shipped bare-bones. Potential follow-ups: notifications for new messages, mobile nav badge in hamburger menu, mark-read on focus.
+
+**Notes for next session:**
+- First action: check if `/dogs` page renders correctly (dog-cards backend was already built).
+- Second action: if Marc has the FLEX rebuild curl result, run the diag and ship the surgical fix.
+- Messages nav link is auth-only — logged-out users won't see it. Unread badge polls `/api/messages/unread-count` every 30s from nav.js.
+
 ## 2026-05-10 (pool hotfix + homepage scale + rolling banner + flex instrumentation)
 
 **Shipped (with hashes):**
