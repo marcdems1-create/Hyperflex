@@ -13526,16 +13526,27 @@ app.get('/api/feed/trending', (req, res) => {
     });
   }
 
-  // Source 2: screener edge signals — edge_score > 6, top 10
+  // Source 2: screener edge signals — edge_score > 6, yes_price >= 0.03,
+  // max 1 card per event_slug (dedup sub-markets from same event)
   const screenerData = (_screenerCache && _screenerCache.data) || [];
+  const seenEventSlugs = new Set();
   const edgeItems = screenerData
-    .filter(m => (m.edge_score || 0) > 6)
-    .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
-    .slice(0, 10);
+    .filter(m => {
+      if ((m.edge_score || 0) <= 6) return false;
+      const yp = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
+      if (yp != null && yp < 0.03) return false; // untraded / essentially 0¢
+      return true;
+    })
+    .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
 
   for (const m of edgeItems) {
     if (items.length >= 15) break;
-    const yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+    // Dedup: derive event slug as slug up to first numeric segment or full slug
+    const eventSlug = (m.event_slug) || (m.slug || '').replace(/-\d+$/, '') || m.slug || '';
+    if (eventSlug && seenEventSlugs.has(eventSlug)) continue;
+    if (eventSlug) seenEventSlugs.add(eventSlug);
+    const yesRaw = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
+    const yesPct = yesRaw != null ? Math.round(yesRaw * 100) : null;
     items.push({
       type: 'edge_signal',
       market_title: m.question || m.market || '',
@@ -13543,6 +13554,7 @@ app.get('/api/feed/trending', (req, res) => {
       edge_score: m.edge_score || 0,
       yes_price_pct: yesPct,
       volume: m.volume_24h || 0,
+      image: m.image || m.market_image || null,
       ts: m.last_updated || new Date().toISOString(),
     });
   }
