@@ -386,17 +386,18 @@ function tabData() {
   }
   if (currentTab === 'profitable') {
     return _rawWhale
-      .filter(function(r){ return r.whale_pnl != null; })
+      .filter(function(r){ return r.whale_pnl != null && r.whale_pnl !== 0; })
       .sort(function(a,b){ return (b.whale_pnl||0)-(a.whale_pnl||0); });
   }
-  // whales — sort by volume then whale_rank
+  // whales — sort by whale_rank first (lower = bigger) then volume, then flex score
   return _rawWhale
     .sort(function(a,b){
-      var av = a.total_volume_usd||0, bv = b.total_volume_usd||0;
-      if (bv !== av) return bv - av;
       var ar = a.whale_rank != null ? a.whale_rank : 9999;
       var br = b.whale_rank != null ? b.whale_rank : 9999;
-      return ar - br;
+      if (ar !== br) return ar - br;
+      var av = a.total_volume_usd||0, bv = b.total_volume_usd||0;
+      if (bv !== av) return bv - av;
+      return (b.score||0)-(a.score||0);
     });
 }
 
@@ -520,19 +521,20 @@ function renderCards() {
       secondaryHtml = '<div class="lb-secondary">' + parts.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     } else if (currentTab === 'profitable') {
-      var pnl2 = r.whale_pnl || 0;
+      var pnl2 = r.whale_pnl != null ? r.whale_pnl : 0;
       var pnlCls = pnl2 >= 0 ? 'pos' : 'neg';
       metricHtml = '<div class="lb-metric ' + pnlCls + '">' + formatPnl(pnl2) + '</div>';
       var vol = r.total_volume_usd;
       var parts2 = [];
-      if (vol) parts2.push('Vol ' + formatMoney(vol));
-      if (vol && vol > 0) parts2.push('ROI ' + (pnl2 >= 0 ? '+' : '') + (pnl2 / vol * 100).toFixed(1) + '%');
+      if (vol > 0) parts2.push('Vol ' + formatMoney(vol));
+      if (vol > 0 && pnl2 !== 0) parts2.push('ROI ' + (pnl2 >= 0 ? '+' : '') + (pnl2 / vol * 100).toFixed(1) + '%');
       if (wrPct != null) parts2.push(wrPct + '% win rate');
       secondaryHtml = '<div class="lb-secondary">' + parts2.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     } else {
       var vol2 = r.total_volume_usd || 0;
-      metricHtml = '<div class="lb-metric blue">' + formatMoney(vol2) + '</div>';
+      var volDisplay = vol2 > 0 ? formatMoney(vol2) : (r.whale_rank ? 'Rank #' + r.whale_rank : '—');
+      metricHtml = '<div class="lb-metric blue">' + volDisplay + '</div>';
       var pnl3 = r.whale_pnl;
       var parts3 = [];
       if (pnl3 != null) parts3.push('P&L ' + formatPnl(pnl3));
