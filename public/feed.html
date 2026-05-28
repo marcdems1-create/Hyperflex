@@ -4821,9 +4821,11 @@ async function loadTopPredictors() {
     }));
   }
   try {
-    var items = await fetchPredictors(true);
-    if (!items.length) items = await fetchPredictors(false);
-    if (!items.length) items = await fetchWhaleFallback();
+    var items = await fetchWhaleFallback();
+    if (!items.length) {
+      items = await fetchPredictors(true);
+      items = items.filter(function(u){ return u.polymarket_address && u.pnl_pts != null; });
+    }
     // Sort: flex_score_90d first, then sharp_score, then pnl_pts
     items.sort(function(a, b) {
       var aF = a.flex_score_90d != null ? a.flex_score_90d : null;
