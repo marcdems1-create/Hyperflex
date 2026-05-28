@@ -35958,24 +35958,21 @@ async function _buildAlphaListInner(opts = {}) {
       // Liquid markets with whale activity should always beat noise markets.
       const edgeWhale = Math.min(35, wCount * 7);                                         // 3 whales=21, 5=35
       const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0;
-      // Volume tier — progressive, max 30 (fits Marc's UI bar):
+      // Volume tier — max 15 (was 30). Big markets get a floor, not a ceiling.
       const edgeVolume =
-        volume >= 10000000 ? 30 :
-        volume >= 5000000 ? 25 :
-        volume >= 1000000 ? 20 :
-        volume >= 500000 ? 15 :
-        volume >= 250000 ? 12 :
-        volume >= 100000 ? 10 :
-        volume >= 50000 ? 6 :
-        volume >= 10000 ? 3 :
-        volume >= 1000 ? 1 : 0;
-      // Mega bonus — surfaces popular mega-markets (Bitcoin, Trump, Fed) even when
-      // they have no whale concentration. $5M+ = +5, $10M+ = +10, $25M+ = +15.
-      // Lives in its own component slot so it doesn't overflow Marc's volume bar.
+        volume >= 10000000 ? 15 :
+        volume >= 5000000  ? 12 :
+        volume >= 1000000  ? 9  :
+        volume >= 500000   ? 7  :
+        volume >= 250000   ? 5  :
+        volume >= 100000   ? 3  :
+        volume >= 50000    ? 2  :
+        volume >= 10000    ? 1  : 0;
+      // Mega bonus — max 5 (was 15). Just enough to surface mega-markets.
       const edgeMega =
-        volume >= 25000000 ? 15 :
-        volume >= 10000000 ? 10 :
-        volume >= 5000000 ? 5 : 0;
+        volume >= 25000000 ? 5 :
+        volume >= 10000000 ? 3 :
+        volume >= 5000000  ? 1 : 0;
       // News impact: markets mentioned in current high-signal headlines.
       // Base +8 for any match, +4 for multiple mentions, +3 for non-neutral sentiment.
       // Capped at 15 so it can't dominate the score on a single headline.
@@ -35995,13 +35992,14 @@ async function _buildAlphaListInner(opts = {}) {
       let edgeWhaleVelocity = 0;
       const velocityInfo = velocityByMarket.size > 0 ? velocityByMarket.get(qLower) : null;
       if (velocityInfo) {
-        edgeWhaleVelocity = 6;
-        if (velocityInfo.count >= 2) edgeWhaleVelocity += 4;
+        edgeWhaleVelocity = 10;                                    // base (was 6)
+        if (velocityInfo.count >= 2) edgeWhaleVelocity += 6;      // was 4
         const minutesAgo = Math.round((Date.now() - velocityInfo.mostRecentMs) / 60000);
-        if (minutesAgo <= 10) edgeWhaleVelocity += 3;
+        if (minutesAgo <= 5)  edgeWhaleVelocity += 6;             // new: < 5 min is very hot
+        else if (minutesAgo <= 10) edgeWhaleVelocity += 4;        // was 3
         if (velocityInfo.topPnl >= 5000000) edgeWhaleVelocity += 3;
         if (velocityInfo.totalCapital >= 50000) edgeWhaleVelocity += 2;
-        edgeWhaleVelocity = Math.min(16, edgeWhaleVelocity);
+        edgeWhaleVelocity = Math.min(25, edgeWhaleVelocity);
       }
       // Volume spike: current 24h volume vs 7-day baseline. A market doing
       // 10× its normal volume = something breaking right now. Only fires when
@@ -36021,7 +36019,11 @@ async function _buildAlphaListInner(opts = {}) {
       }
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
-      const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
+      // Momentum: reward RECENT moves on illiquid markets (price hasn't caught up).
+      // On liquid markets, momentum = edge already captured; penalize by capping low.
+      const edgeMomentum = liquid
+        ? Math.min(5, Math.abs(pChange || 0) * 0.5)   // was 15, liquid markets cap at 5
+        : Math.min(8, Math.abs(pChange || 0) * 1.0);  // illiquid momentum is real signal
       const edgeExpiry = liquid && daysUntilExpiry != null
         ? (daysUntilExpiry <= 3 ? 8 : daysUntilExpiry <= 7 ? 5 : daysUntilExpiry <= 30 ? 2 : 0)
         : 0;
@@ -36088,7 +36090,26 @@ async function _buildAlphaListInner(opts = {}) {
         }
       }
 
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike + edgeBinanceDivergence + edgeBinanceVolSurge));
+      // Consensus quality: whale consensus + volume spike = very high conviction signal
+      // Both firing together means smart money AND unusual activity simultaneously
+      const edgeConsensus = (wCount >= 3 && edgeVolumeSpike >= 5) ? 10 : 0;
+
+      const edgeScore = Math.min(99, Math.round(
+        edgeWhale +
+        edgeCapital +
+        edgeMomentum +
+        edgeVolume +
+        edgeMega +
+        edgeExpiry +
+        edgeDivergence +
+        edgeDecay +
+        edgeNews +
+        edgeWhaleVelocity +
+        edgeVolumeSpike +
+        edgeBinanceDivergence +
+        edgeBinanceVolSurge +
+        edgeConsensus
+      ));
 
       // ── Trade ROI ──
       let trade = null;
@@ -36326,7 +36347,8 @@ async function _buildAlphaListInner(opts = {}) {
           decay: Math.round(edgeDecay),
           arb: 0, // populated by post-loop arb pass if applicable
           binance_divergence: Math.round(edgeBinanceDivergence),
-          binance_vol_surge: Math.round(edgeBinanceVolSurge)
+          binance_vol_surge: Math.round(edgeBinanceVolSurge),
+          consensus: Math.round(edgeConsensus)
         },
         volume_spike_ratio: volumeSpikeRatio, // current 24h / 7-day average, or null
         news_headline: newsInfo ? newsInfo.headline : null,
