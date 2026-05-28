@@ -15908,6 +15908,8 @@ app.get('/mentions', async (req, res) => {
   }
 });
 
+app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
+
 // GET /mentions/archive — permanent URL for the 87-event posture
 // archive. Today serves identical content to /mentions; when PR 2 of
 // the mention-pages rescope (claude/mentions-words-rebuild-v1) ships
