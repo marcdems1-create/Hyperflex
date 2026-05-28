@@ -256,16 +256,16 @@ a { color: var(--blue); text-decoration: none; }
   <div class="lb-tabs-row">
     <div class="lb-tabs">
       <button type="button" class="lb-tab active" data-tab="sharpest" onclick="setTab('sharpest')">
-        <span class="lb-tab-label">SHARPEST</span>
-        <span class="lb-tab-sub">calibration score</span>
+        <span class="lb-tab-label">FLEX SCORE</span>
+        <span class="lb-tab-sub">demonstrated ROI</span>
       </button>
       <button type="button" class="lb-tab" data-tab="profitable" onclick="setTab('profitable')">
         <span class="lb-tab-label">MOST PROFITABLE</span>
         <span class="lb-tab-sub">realized P&amp;L</span>
       </button>
       <button type="button" class="lb-tab" data-tab="whales" onclick="setTab('whales')">
-        <span class="lb-tab-label">BIGGEST WHALES</span>
-        <span class="lb-tab-sub">volume deployed</span>
+        <span class="lb-tab-label">WHALE SCORE</span>
+        <span class="lb-tab-sub">capital-weighted signal</span>
       </button>
     </div>
     <div class="lb-toolbar">
@@ -389,15 +389,16 @@ function tabData() {
       .filter(function(r){ return r.whale_pnl != null && r.whale_pnl !== 0; })
       .sort(function(a,b){ return (b.whale_pnl||0)-(a.whale_pnl||0); });
   }
-  // whales — sort by whale_rank first (lower = bigger) then volume, then flex score
+  // whales — sort by flex_score_90d (WHALE SCORE) first, then whale_rank, then volume
   return _rawWhale
     .sort(function(a,b){
+      var aw = a.flex_score_90d != null ? a.flex_score_90d : -1;
+      var bw = b.flex_score_90d != null ? b.flex_score_90d : -1;
+      if (bw !== aw) return bw - aw;
       var ar = a.whale_rank != null ? a.whale_rank : 9999;
       var br = b.whale_rank != null ? b.whale_rank : 9999;
       if (ar !== br) return ar - br;
-      var av = a.total_volume_usd||0, bv = b.total_volume_usd||0;
-      if (bv !== av) return bv - av;
-      return (b.score||0)-(a.score||0);
+      return (b.total_volume_usd||0)-(a.total_volume_usd||0);
     });
 }
 
@@ -416,7 +417,7 @@ function setTab(tab) {
   document.querySelectorAll('.lb-tab').forEach(function(t) {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
-  var labels = { sharpest: 'best-calibrated traders', profitable: 'most profitable traders', whales: 'biggest capital deployers' };
+  var labels = { sharpest: 'ranked by FLEX SCORE', profitable: 'most profitable traders', whales: 'ranked by WHALE SCORE' };
   document.getElementById('heroStat').textContent = 'Loading…';
   renderCards();
 }
@@ -442,13 +443,8 @@ function renderCards() {
   _rendered = data;
   var el = document.getElementById('lbCards');
 
-  var heroText = {
-    sharpest: data.length + ' traders with a calibration score',
-    profitable: data.length + ' whale accounts ranked by P&L',
-    whales: data.length + ' whales ranked by volume',
-  }[currentTab] || data.length + ' traders';
   document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> ' +
-    { sharpest: 'traders with calibration data', profitable: 'whales ranked by P&L', whales: 'whales ranked by volume' }[currentTab];
+    { sharpest: 'traders ranked by FLEX SCORE', profitable: 'whales ranked by P&L', whales: 'whales ranked by WHALE SCORE' }[currentTab];
 
   if (!data.length) {
     el.innerHTML = '<div class="state-msg">No traders found' + (_searchQ ? ' matching "' + escHtml(_searchQ) + '"' : '') + '.</div>';
@@ -532,14 +528,15 @@ function renderCards() {
       secondaryHtml = '<div class="lb-secondary">' + parts2.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     } else {
+      var ws = r.flex_score_90d != null ? r.flex_score_90d : null;
+      var wsDisplay = ws != null ? (ws + '<span style="font-size:.55em;opacity:.5">/100</span>') : (r.whale_rank ? 'Rank #' + r.whale_rank : '—');
+      metricHtml = '<div class="lb-metric" style="color:#a855f7">' + wsDisplay + '</div>';
       var vol2 = r.total_volume_usd || 0;
-      var volDisplay = vol2 > 0 ? formatMoney(vol2) : (r.whale_rank ? 'Rank #' + r.whale_rank : '—');
-      metricHtml = '<div class="lb-metric blue">' + volDisplay + '</div>';
       var pnl3 = r.whale_pnl;
       var parts3 = [];
       if (pnl3 != null) parts3.push('P&L ' + formatPnl(pnl3));
+      if (vol2 > 0) parts3.push('Vol ' + formatMoney(vol2));
       if (r.whale_rank) parts3.push('Poly rank #' + r.whale_rank);
-      if (wrPct != null) parts3.push(wrPct + '% win rate');
       secondaryHtml = '<div class="lb-secondary">' + parts3.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     }
@@ -774,12 +771,12 @@ function showStickyBar() {
         var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
         document.getElementById('barContent').innerHTML =
           '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Your record</span>' +
-          (entry.calibration_score != null ? '<span class="bar-stat">Calibration <strong>' + entry.calibration_score + '/100</strong></span>' : '') +
+          (entry.calibration_score != null ? '<span class="bar-stat">FLEX SCORE <strong>' + entry.calibration_score + '/100</strong></span>' : '') +
           (pnl !== 0 ? '<span class="bar-stat" style="color:' + pnlColor + ';font-weight:700">' + formatPnl(pnl) + '</span>' : '');
         bar.querySelector('.bar-link').href = '/m/' + (userId || '');
         bar.querySelector('.bar-link').textContent = 'View profile →';
       } else {
-        document.getElementById('barContent').innerHTML = '<span class="bar-stat" style="color:#c9920d">Get your calibration score — start trading on Polymarket</span>';
+        document.getElementById('barContent').innerHTML = '<span class="bar-stat" style="color:#c9920d">Get your FLEX SCORE — start trading on Polymarket</span>';
         bar.querySelector('.bar-link').href = '/creator/dashboard';
         bar.querySelector('.bar-link').textContent = 'Dashboard →';
       }

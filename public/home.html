@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+(function(){try{
+  if(location.search.indexOf('skip_onboarding')!==-1)return;
+  var t=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');
+  if(t){location.replace('/feed');return;}
+  if(!localStorage.getItem('hfx_onboarded')){location.replace('/onboarding');return;}
+}catch(e){}})();
+</script>
 <title>HYPERFLEX — Prediction Markets</title>
 <meta name="description" content="Track whale moves, follow sharp predictors, trade on Polymarket.">
 <link rel="icon" href="/favicon.ico">

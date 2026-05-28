@@ -4752,7 +4752,7 @@ function renderPredictorHero(p) {
   var pnlCls = pnlPts == null ? '' : (pnlPts >= 0 ? 'up' : 'down');
 
   return '<a class="pred-hero" href="' + href + '">' +
-    '<div class="pred-hero-label">Top Predictor · #1</div>' +
+    '<div class="pred-hero-label">Top Whale · #1</div>' +
     '<div class="pred-hero-body">' +
       _predAvatarHtml(p, { big: true }) +
       '<div class="pred-hero-meta">' +
@@ -4774,13 +4774,12 @@ function renderPredictorHero(p) {
         '<div class="pred-hero-stat-val ' + pnlCls + '">' + pnlStr + '</div>' +
       '</div>' +
       '<div class="pred-hero-stat">' +
-        '<div class="pred-hero-stat-label">Flex Score <span class="flex-info-icon" onclick="event.preventDefault();event.stopPropagation();document.getElementById(\'flexInfoTip\').classList.toggle(\'show\')" title="What is Flex Score?">ⓘ</span></div>' +
+        '<div class="pred-hero-stat-label">Whale Score</div>' +
         (flex != null
-          ? '<div class="pred-hero-stat-val pred-flex-gold">' + flex + '<span style="font-size:9px;opacity:.6">/100</span></div>'
+          ? '<div class="pred-hero-stat-val" style="color:#a855f7">' + flex + '<span style="font-size:9px;opacity:.6">/100</span></div>'
           : '<div class="pred-hero-stat-val" style="color:var(--text-faint)">—</div>') +
       '</div>' +
     '</div>' +
-    '<div id="flexInfoTip" class="flex-info-tip">Flex Score ranks traders 0–100 on P&L, win rate, volume, consistency, and CLV across Polymarket. 25+ settled positions required. Higher = sharper.</div>' +
   '</a>';
 }
 

@@ -3,31 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!--
-  Logged-in users land in the product (the feed), not the marketing
-  page. Auth lives in localStorage so the server can't route us —
-  do the redirect inline before anything else parses. location.replace
-  keeps the history clean.
-  Only fires on the bare root "/". When the user navigates to /explore
-  directly (from the nav link or bookmarks) we show the landing page
-  regardless of auth — that URL is the canonical way to view the
-  marketing surface while signed in. Skip with ?home=1 too for
-  screenshots / marketing previews on "/".
--->
 <script>
 (function() {
   try {
     if (location.search.indexOf('home=1') !== -1) return;
-    // Only intercept the root path. /explore stays on explore.
-    var p = location.pathname || '/';
-    if (p !== '/' && p !== '/index.html') return;
     var t = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
     if (t) { location.replace('/feed'); return; }
-    // First-visit onboarding — only on root, not logged-in users
-    if (!localStorage.getItem('hfx_onboarded') && location.search.indexOf('skip_onboarding') === -1) {
-      location.replace('/onboarding');
-      return;
-    }
   } catch (e) {}
 })();
 </script>

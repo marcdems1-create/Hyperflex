@@ -1044,7 +1044,6 @@ async function load() {
             ${!isOwner ? `<button id="followBtn" class="btn btn-primary" onclick="toggleFollow()">Follow</button>` : ''}
             ${!isOwner ? `<button id="copyTradeBtn" class="btn btn-purple" onclick="toggleCopyTrade()">Copy</button>` : ''}
             ${!isOwner ? `<button class="btn btn-challenge" onclick="openChallenge()">Challenge</button>` : ''}
-            <button id="shareBtn" class="btn btn-ghost" onclick="shareProfile()">Copy link</button>
             <button class="btn btn-ghost" onclick="window.open('https://x.com/intent/tweet?text='+encodeURIComponent('${isOwner ? 'My prediction track record on HYPERFLEX' : 'Tracking ' + (user.username ? '@'+user.username : user.display_name) + ' on HYPERFLEX'}\\n\\nhyperflex.network/m/${userId}'),'_blank')">Share on X</button>
             <a href="/passport/${userId}" class="btn btn-gold">Passport →</a>
           </div>
