@@ -1455,30 +1455,29 @@ a:hover { text-decoration: underline; }
 @media (max-width: 640px) {
   html, body { overflow-x: hidden; }
 
-  /* Layout — tighter gutters, respect safe areas */
+  /* Layout — full bleed, no side padding */
   .layout {
-    padding: calc(72px + var(--hfx-safe-top)) var(--hfx-s-3) calc(var(--hfx-s-7) + var(--hfx-safe-bottom));
+    padding: 0 0 calc(80px + env(safe-area-inset-bottom));
     max-width: 100%;
   }
+  .feed-col { border-left: none; border-right: none; }
 
-  /* Feed header — title on row 1, tabs full-width row below for easy thumb reach */
+  /* Feed header — sticky, tighter, tabs full-width row 2 */
   .feed-header {
+    top: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: var(--hfx-s-3);
-    margin-bottom: var(--hfx-s-4);
+    gap: 8px;
+    padding: 12px 16px 8px;
+    margin-bottom: 0;
   }
-  .feed-title { font-size: var(--hfx-fs-2xl); letter-spacing: -0.02em; line-height: 1.1; }
-  .tabs {
-    width: 100%;
-    padding: 4px;
-    border-radius: var(--hfx-r-md);
-  }
+  .feed-title { font-size: 20px; letter-spacing: -0.02em; line-height: 1.1; }
+  .tabs { width: 100%; padding: 3px; border-radius: 8px; }
   .tab {
     flex: 1;
-    padding: var(--hfx-s-2) var(--hfx-s-3);
-    font-size: var(--hfx-fs-xs);
-    min-height: var(--hfx-touch-min);
+    padding: 8px 4px;
+    font-size: 11px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1527,22 +1526,37 @@ a:hover { text-decoration: underline; }
     border-radius: var(--hfx-r-md);
   }
 
-  /* Feed cards — prediction + tweet */
+  /* Cards — Twitter-style: full-bleed, separator lines not floating cards */
   .pred-card, .tweet-card {
-    padding: var(--hfx-s-4);
-    margin-bottom: var(--hfx-s-3);
-    border-radius: var(--hfx-r-lg);
+    padding: 14px 16px;
+    margin-bottom: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    background: transparent;
   }
-  .pred-avatar, .tweet-avatar { width: 40px; height: 40px; font-size: 15px; }
-  .pred-author, .tweet-name { font-size: var(--hfx-fs-sm); }
-  .pred-market, .tweet-body { font-size: var(--hfx-fs-md); line-height: 1.5; }
-  .pred-thesis { font-size: var(--hfx-fs-sm); line-height: 1.6; padding-left: var(--hfx-s-3); }
-  .pred-follow-btn {
-    min-height: 36px;
-    padding: 0 var(--hfx-s-3);
-    font-size: var(--hfx-fs-xs);
-    border-radius: 999px;
-  }
+  .pred-card:hover, .tweet-card:hover { background: rgba(255,255,255,0.02); }
+  .pred-avatar, .tweet-avatar { width: 44px; height: 44px; font-size: 16px; border-radius: 50%; }
+  .pred-head { gap: 12px; margin-bottom: 6px; }
+  .pred-author-row { gap: 6px; flex-wrap: nowrap; }
+  .pred-author, .tweet-name { font-size: 15px; font-weight: 700; }
+  .pred-time { font-size: 13px; }
+  .pred-market, .tweet-body { font-size: 15px; line-height: 1.45; margin-bottom: 8px; }
+  .pred-thesis { font-size: 15px; line-height: 1.6; padding-left: 0; margin-bottom: 10px; }
+  .pred-badges { gap: 5px; margin-bottom: 8px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pred-badges::-webkit-scrollbar { display: none; }
+  /* Footer — spaced out for thumb reach, time hidden (redundant at mobile) */
+  .pred-foot { padding-top: 12px; gap: 0; justify-content: space-between; }
+  .pred-foot-time { display: none; }
+  .pred-foot button { min-height: 36px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px !important; padding: 6px 10px !important; border-radius: 999px !important; }
+  .pred-follow-btn { min-height: 36px; padding: 0 14px; font-size: 12px; border-radius: 999px; }
+  /* Market hero card */
+  .mkt-hero { padding: 12px 14px 14px; border-radius: 12px; margin-bottom: 10px; }
+  .mkt-hero-q { font-size: 15px; margin-bottom: 10px; }
+  .mkt-hero-pill { padding: 10px 12px; flex: 1; }
+  .mkt-hero-pill-odds { font-size: 18px; }
 
   /* Modals — true bottom sheet with drag handle + safe-area inset */
   .overlay {
@@ -1636,10 +1650,11 @@ a:hover { text-decoration: underline; }
   }
 }
 
-/* Narrow phones ≤400px — trim 2 things that still feel tight */
+/* Narrow phones ≤400px */
 @media (max-width: 400px) {
-  .layout { padding-left: var(--hfx-s-2); padding-right: var(--hfx-s-2); }
-  .pred-card, .tweet-card { padding: var(--hfx-s-3); }
+  .pred-card, .tweet-card { padding: 12px 14px; }
+  .pred-author, .tweet-name { font-size: 14px; }
+  .pred-market, .pred-thesis, .tweet-body { font-size: 14px; }
 }
 </style>
 </head>
