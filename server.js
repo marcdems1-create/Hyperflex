@@ -13498,6 +13498,58 @@ app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) =>
   }
 });
 
+// GET /api/feed/trending — whale entries + edge signals for the Trending tab
+app.get('/api/feed/trending', (req, res) => {
+  const items = [];
+
+  // Source 1: whale trade stream — opened/increased positions ≥$10k, last 24h
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const e of _whaleTradeStream) {
+    if (items.length >= 5) break;
+    if ((e.action !== 'opened' && e.action !== 'increased')) continue;
+    if ((e.size || 0) < 10000) continue;
+    const ts = e.ts ? new Date(e.ts).getTime() : 0;
+    if (ts && ts < cutoff) break; // stream is newest-first
+    const pricePct = e.price != null ? Math.round(e.price * 100) : null;
+    items.push({
+      type: 'whale_entry',
+      display: e.trader_name || 'A historically profitable whale',
+      wallet_short: e.id ? e.id.split('_')[1] : '',
+      market_title: e.question || '',
+      market_slug: e.slug || '',
+      side: e.side || 'YES',
+      current_price_pct: pricePct,
+      size_usd: e.size || 0,
+      size_display: e.size_display || '',
+      action: e.action,
+      ts: e.ts || new Date().toISOString(),
+    });
+  }
+
+  // Source 2: screener edge signals — edge_score > 6, top 10
+  const screenerData = (_screenerCache && _screenerCache.data) || [];
+  const edgeItems = screenerData
+    .filter(m => (m.edge_score || 0) > 6)
+    .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+    .slice(0, 10);
+
+  for (const m of edgeItems) {
+    if (items.length >= 15) break;
+    const yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+    items.push({
+      type: 'edge_signal',
+      market_title: m.question || m.market || '',
+      market_slug: m.slug || '',
+      edge_score: m.edge_score || 0,
+      yes_price_pct: yesPct,
+      volume: m.volume_24h || 0,
+      ts: m.last_updated || new Date().toISOString(),
+    });
+  }
+
+  res.json(items);
+});
+
 // Following feed — activity from people you follow
 app.get('/api/feed/following', requireAuth, async (req, res) => {
   const userId = req.user.id;

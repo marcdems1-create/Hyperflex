@@ -861,6 +861,45 @@ a:hover { text-decoration: underline; }
 .feed-edge-strip .arrow { color: var(--text-faint); }
 .feed-edge-strip .roi   { color: #f59e0b; font-weight: 800; margin-left: auto; }
 
+/* ── Trending Alpha Rail ── */
+.trending-alpha-rail { border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 0; }
+.trending-alpha-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.14em; color: var(--text-dim); text-transform: uppercase;
+}
+.trending-alpha-dot { width: 6px; height: 6px; border-radius: 50%; background: #00e68a; box-shadow: 0 0 8px rgba(0,230,138,.7); animation: pulse 1.4s infinite; flex-shrink: 0; }
+.trending-alpha-card {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  text-decoration: none; color: inherit;
+  transition: background .12s;
+}
+.trending-alpha-card:hover { background: rgba(255,255,255,0.025); text-decoration: none; }
+.trending-alpha-card.whale { border-left: 2px solid rgba(0,230,138,0.4); }
+.trending-alpha-card.edge  { border-left: 2px solid rgba(201,146,13,0.4); }
+.tac-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.tac-body { flex: 1; min-width: 0; }
+.tac-headline { font-size: 13px; line-height: 1.45; color: var(--text); margin-bottom: 3px; }
+.tac-market {
+  font-size: 11px; color: var(--text-faint); line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tac-vol { font-size: 10px; color: var(--text-faint); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.tac-price-bar {
+  position: relative; height: 3px; background: rgba(255,255,255,0.08);
+  border-radius: 2px; margin-top: 6px;
+}
+.tac-price-dot {
+  position: absolute; top: -2px; width: 7px; height: 7px;
+  border-radius: 50%; background: #00e68a;
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(0,230,138,.5);
+}
+.tac-meta { font-size: 10px; color: var(--text-faint); flex-shrink: 0; margin-top: 2px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+
 /* Show on desktop — hide on the same widths where mobile-alpha-strip takes over */
 @media (min-width: 1200px) {
   .feed-alpha-row { display: block; }
@@ -2697,14 +2736,22 @@ async function loadFeed(append) {
     }
   }
 
-  // Trending: merge social trending + influencer posts
+  // Trending: whale entries + edge signals from /api/feed/trending,
+  // then merge social trending + influencer posts below
   if (currentTab === 'trending') {
     try {
-      var trendRes = fetch(API + '/api/social/feed/trending?limit=15', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]}}).catch(function(){return {posts:[]}});
-      var infRes = fetch(API + '/api/influencer-feed?limit=10', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]}}).catch(function(){return {posts:[]}});
-      var results = await Promise.all([trendRes, infRes]);
-      var trendItems = (results[0].posts || results[0].predictions || []).map(normalisePost);
-      var infItems = (results[1].posts || []).map(normaliseInfluencer);
+      var alphaRes  = fetch(API + '/api/feed/trending').then(function(r){return r.ok?r.json():[];}).catch(function(){return [];});
+      var trendRes  = fetch(API + '/api/social/feed/trending?limit=15', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]};}).catch(function(){return {posts:[]};});
+      var infRes    = fetch(API + '/api/influencer-feed?limit=10', { headers: authHeaders() }).then(function(r){return r.ok?r.json():{posts:[]};}).catch(function(){return {posts:[]};});
+      var results   = await Promise.all([alphaRes, trendRes, infRes]);
+      var alphaItems = Array.isArray(results[0]) ? results[0] : [];
+      var trendItems = (results[1].posts || results[1].predictions || []).map(normalisePost);
+      var infItems   = (results[2].posts || []).map(normaliseInfluencer);
+
+      // Render alpha rail at top of trending, then social below
+      var container = document.getElementById('feedContainer');
+      var alphaHtml = alphaItems.length ? renderTrendingAlpha(alphaItems) : '';
+
       var merged = [];
       var ti = 0, ii = 0;
       while (ti < trendItems.length || ii < infItems.length) {
@@ -2715,9 +2762,11 @@ async function loadFeed(append) {
       if (!append) feedData = merged; else feedData = feedData.concat(merged);
       nextCursor = null;
       renderFeed(false);
+      // Prepend alpha rail above the social cards
+      if (alphaHtml) container.insertAdjacentHTML('afterbegin', alphaHtml);
       document.getElementById('loadMoreBtn').style.display = 'none';
     } catch(e) {
-      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔥</div><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Check back soon for trending predictions and influencer posts.</div></div>';
+      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-title">Nothing trending yet</div><div class="feed-empty-sub">Check back soon.</div></div>';
     }
     return;
   }
@@ -2987,6 +3036,62 @@ function rebalanceFeedByMarket(items, marketRatio) {
     pos++;
   }
   return out;
+}
+
+function renderTrendingAlpha(items) {
+  function _tAgo(iso) {
+    if (!iso) return '';
+    var ms = Date.now() - new Date(iso).getTime();
+    var m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+    if (h > 0) return h + 'h ago';
+    if (m > 0) return m + 'm ago';
+    return 'just now';
+  }
+  function _fmtVol(v) {
+    v = Number(v || 0);
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M vol';
+    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K vol';
+    return '';
+  }
+  var html = '<div class="trending-alpha-rail">'
+    + '<div class="trending-alpha-head"><span class="trending-alpha-dot"></span>HOT ALPHA</div>';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var href = it.market_slug ? '/market/' + encodeURIComponent(it.market_slug) : '#';
+    if (it.type === 'whale_entry') {
+      var sideColor = it.side === 'YES' ? '#00e68a' : '#ff4d6a';
+      var priceStr = it.current_price_pct != null ? it.current_price_pct + '¢' : '';
+      var headline = esc(it.display) + ' just entered '
+        + '<span style="color:' + sideColor + ';font-weight:700">' + esc(it.side) + '</span>'
+        + (priceStr ? ' at ' + priceStr : '')
+        + (it.size_display ? ' · <strong>' + esc(it.size_display) + '</strong>' : '');
+      html += '<a class="trending-alpha-card whale" href="' + esc(href) + '">'
+        + '<div class="tac-icon">🐋</div>'
+        + '<div class="tac-body">'
+          + '<div class="tac-headline">' + headline + '</div>'
+          + '<div class="tac-market">' + esc(it.market_title || '') + '</div>'
+          + (priceStr ? '<div class="tac-price-bar"><span class="tac-price-dot" style="left:' + Math.min(Math.max(it.current_price_pct || 50, 2), 98) + '%"></span></div>' : '')
+        + '</div>'
+        + '<div class="tac-meta">' + _tAgo(it.ts) + '</div>'
+        + '</a>';
+    } else if (it.type === 'edge_signal') {
+      var edgeColor = it.edge_score >= 8 ? '#ff4d6a' : it.edge_score >= 6 ? '#00e68a' : 'var(--gold)';
+      var yesStr = it.yes_price_pct != null ? it.yes_price_pct + '¢ YES' : '';
+      html += '<a class="trending-alpha-card edge" href="' + esc(href) + '">'
+        + '<div class="tac-icon">⚡</div>'
+        + '<div class="tac-body">'
+          + '<div class="tac-headline">Sharp edge detected: <span style="color:' + edgeColor + ';font-weight:700">Edge ' + (it.edge_score || 0).toFixed(1) + '</span>'
+            + (yesStr ? ' · ' + yesStr : '')
+          + '</div>'
+          + '<div class="tac-market">' + esc(it.market_title || '') + '</div>'
+          + (it.volume ? '<div class="tac-vol">' + _fmtVol(it.volume) + '</div>' : '')
+        + '</div>'
+        + '<div class="tac-meta">' + _tAgo(it.ts) + '</div>'
+        + '</a>';
+    }
+  }
+  html += '</div>';
+  return html;
 }
 
 function renderFeed(noFollowsYet) {
