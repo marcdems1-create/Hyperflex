@@ -53721,6 +53721,15 @@ if (pool) {
         )
       )`).catch(() => {});
 
+      // Username NULL backfill — derive from display_name (slug-ified) or
+      // email prefix for accounts that have neither. One-time, idempotent.
+      await dbQuery(`
+        UPDATE users
+           SET username = LOWER(REGEXP_REPLACE(COALESCE(display_name, SPLIT_PART(email, '@', 1), 'trader'), '[^a-z0-9_]', '', 'gi'))
+         WHERE username IS NULL
+           AND (display_name IS NOT NULL OR email IS NOT NULL)
+      `).catch(() => {});
+
       // Migration #48 — polymarket_v2_trades (V2 trade observability)
       await dbQuery(`CREATE TABLE IF NOT EXISTS polymarket_v2_trades (
         id             BIGSERIAL PRIMARY KEY,
