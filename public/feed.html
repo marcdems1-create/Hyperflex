@@ -4585,21 +4585,25 @@ function _alphaDropCtaClick() {
 // accounts. Gives us both the visual rail and a marketing cohort
 // (admin endpoint /api/admin/verified-predictors exposes the full list
 // with contact info for outreach).
+function _imgFallback(img) {
+  var seed = img.getAttribute('data-seed') || '?';
+  img.parentNode.innerHTML = '<span class="pred-initials">' + seed + '</span>';
+}
+
 function _predAvatarHtml(p, opts) {
   opts = opts || {};
   var cls = opts.big ? 'pred-hero-avatar' : 'pred-rank-avatar';
   var innerCls = opts.big ? 'pred-hero-avatar-inner' : 'pred-rank-avatar-inner';
   var verifyHtml = (opts.big && p.wallet_verified) ? '<span class="pred-hero-verify" title="Verified wallet">✓</span>' : '';
+  var seed = esc((p.display_name || p.username || '?')[0].toUpperCase());
   var inner;
   if (p.avatar_url) {
-    inner = '<img src="' + esc(p.avatar_url) + '" alt="" onerror="this.parentNode.innerHTML=\'<span>\'+(this.getAttribute(\'data-seed\')||\'?\').toUpperCase()+\'</span>\'" data-seed="' + esc((p.display_name||'?')[0]) + '">';
+    inner = '<img src="' + esc(p.avatar_url) + '" alt="" data-seed="' + seed + '" onerror="_imgFallback(this)" loading="lazy">';
   } else if (p.polymarket_address) {
     var addr = String(p.polymarket_address).toLowerCase();
-    var seed = esc((p.display_name || p.username || '?')[0].toUpperCase());
-    inner = '<img src="https://polymarket.com/profile-images/' + addr + '.jpg" alt="" onerror="this.parentNode.innerHTML=\'<span class=\\\"pred-initials\\\">\'+' + JSON.stringify(seed) + '+\'</span>\'" loading="lazy">';
+    inner = '<img src="https://polymarket.com/profile-images/' + addr + '.jpg" alt="" data-seed="' + seed + '" onerror="_imgFallback(this)" loading="lazy">';
   } else {
-    var seed2 = esc((p.display_name || '?')[0].toUpperCase());
-    inner = '<span class="pred-initials">' + seed2 + '</span>';
+    inner = '<span class="pred-initials">' + seed + '</span>';
   }
   return '<div class="' + cls + '"><div class="' + innerCls + '">' + inner + '</div>' + verifyHtml + '</div>';
 }
