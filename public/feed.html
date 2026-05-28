@@ -571,6 +571,12 @@ a:hover { text-decoration: underline; }
 }
 .pred-rank-flex.up   { color: #00e68a; }
 .pred-rank-flex.down { color: #ff4d6a; }
+.pred-initials { display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:rgba(240,240,245,.7); }
+.pred-flex-gold { color:#ffb800 !important; font-weight:800; text-shadow:0 0 12px rgba(255,184,0,.35); }
+.flex-info-icon { font-size:10px; color:rgba(240,240,245,.35); cursor:pointer; margin-left:4px; vertical-align:middle; transition:color .12s; }
+.flex-info-icon:hover { color:#ffb800; }
+.flex-info-tip { display:none; font-size:10px; color:rgba(240,240,245,.65); line-height:1.6; padding:10px 12px; background:rgba(255,184,0,.08); border:1px solid rgba(255,184,0,.2); margin:8px 0 0; border-radius:4px; }
+.flex-info-tip.show { display:block; }
 
 /* Whale Moves strip — third rhythm on the right rail. Big-size
    positions held by top-50 Polymarket traders. Reads as a live
@@ -4581,16 +4587,20 @@ function _alphaDropCtaClick() {
 // with contact info for outreach).
 function _predAvatarHtml(p, opts) {
   opts = opts || {};
-  var inner;
-  if (p.avatar_url) {
-    inner = '<img src="' + esc(p.avatar_url) + '" alt="">';
-  } else {
-    var seed = (p.display_name || '?')[0] || '?';
-    inner = esc(seed.toUpperCase());
-  }
   var cls = opts.big ? 'pred-hero-avatar' : 'pred-rank-avatar';
   var innerCls = opts.big ? 'pred-hero-avatar-inner' : 'pred-rank-avatar-inner';
   var verifyHtml = (opts.big && p.wallet_verified) ? '<span class="pred-hero-verify" title="Verified wallet">✓</span>' : '';
+  var inner;
+  if (p.avatar_url) {
+    inner = '<img src="' + esc(p.avatar_url) + '" alt="" onerror="this.parentNode.innerHTML=\'<span>\'+(this.getAttribute(\'data-seed\')||\'?\').toUpperCase()+\'</span>\'" data-seed="' + esc((p.display_name||'?')[0]) + '">';
+  } else if (p.polymarket_address) {
+    var addr = String(p.polymarket_address).toLowerCase();
+    var seed = esc((p.display_name || p.username || '?')[0].toUpperCase());
+    inner = '<img src="https://polymarket.com/profile-images/' + addr + '.jpg" alt="" onerror="this.parentNode.innerHTML=\'<span class=\\\"pred-initials\\\">\'+' + JSON.stringify(seed) + '+\'</span>\'" loading="lazy">';
+  } else {
+    var seed2 = esc((p.display_name || '?')[0].toUpperCase());
+    inner = '<span class="pred-initials">' + seed2 + '</span>';
+  }
   return '<div class="' + cls + '"><div class="' + innerCls + '">' + inner + '</div>' + verifyHtml + '</div>';
 }
 
@@ -4633,7 +4643,14 @@ function renderPredictorHero(p) {
         '<div class="pred-hero-stat-label">PnL</div>' +
         '<div class="pred-hero-stat-val ' + pnlCls + '">' + pnlStr + '</div>' +
       '</div>' +
+      '<div class="pred-hero-stat">' +
+        '<div class="pred-hero-stat-label">Flex Score <span class="flex-info-icon" onclick="event.preventDefault();event.stopPropagation();document.getElementById(\'flexInfoTip\').classList.toggle(\'show\')" title="What is Flex Score?">ⓘ</span></div>' +
+        (flex != null
+          ? '<div class="pred-hero-stat-val pred-flex-gold">' + flex + '<span style="font-size:9px;opacity:.6">/100</span></div>'
+          : '<div class="pred-hero-stat-val" style="color:var(--text-faint)">—</div>') +
+      '</div>' +
     '</div>' +
+    '<div id="flexInfoTip" class="flex-info-tip">Flex Score ranks traders 0–100 on P&L, win rate, volume, consistency, and CLV across Polymarket. 25+ settled positions required. Higher = sharper.</div>' +
   '</a>';
 }
 
