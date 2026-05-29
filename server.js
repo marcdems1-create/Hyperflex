@@ -13531,25 +13531,30 @@ app.get('/api/feed/trending', (req, res) => {
     });
   }
 
-  // Source 2: screener edge signals — edge_score > 6, yes_price >= 0.03,
-  // max 1 card per event_slug (dedup sub-markets from same event)
+  // Source 2: screener edge signals ranked by edge_score × vol_24h
+  // (high edge + high 24h volume = hottest opportunity)
   const screenerData = (_screenerCache && _screenerCache.data) || [];
   const seenEventSlugs = new Set();
+  const seenSlugs = new Set();
   const edgeItems = screenerData
     .filter(m => {
       if ((m.edge_score || 0) <= 6) return false;
       const yp = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-      if (yp != null && yp < 0.03) return false; // untraded / essentially 0¢
+      if (yp != null && yp < 0.03) return false;
       return true;
     })
-    .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
+    .sort((a, b) => {
+      const scoreA = (a.edge_score || 0) * (a.volume_24h || 0);
+      const scoreB = (b.edge_score || 0) * (b.volume_24h || 0);
+      return scoreB - scoreA;
+    });
 
   for (const m of edgeItems) {
     if (items.length >= 10) break;
-    // Dedup: derive event slug as slug up to first numeric segment or full slug
     const eventSlug = (m.event_slug) || (m.slug || '').replace(/-\d+$/, '') || m.slug || '';
     if (eventSlug && seenEventSlugs.has(eventSlug)) continue;
     if (eventSlug) seenEventSlugs.add(eventSlug);
+    if (m.slug) seenSlugs.add(m.slug);
     const yesRaw = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
     const yesPct = yesRaw != null ? Math.round(yesRaw * 100) : null;
     items.push({
@@ -13562,6 +13567,36 @@ app.get('/api/feed/trending', (req, res) => {
       image: m.image || m.market_image || null,
       ts: m.last_updated || new Date().toISOString(),
     });
+  }
+
+  // Source 3: top 10 markets by 24h volume from screener cache (most active right now)
+  // Merge with edge signals, dedup by slug, fill remaining slots up to 15 total.
+  if (screenerData.length) {
+    const hot24h = screenerData
+      .filter(m => {
+        if (!m.slug || seenSlugs.has(m.slug)) return false;
+        const yp = m.yes_price != null ? m.yes_price : null;
+        if (yp != null && yp < 0.03) return false;
+        return (m.volume_24h || 0) > 0;
+      })
+      .sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0))
+      .slice(0, 10);
+    for (const m of hot24h) {
+      if (items.length >= 15) break;
+      seenSlugs.add(m.slug);
+      const yesRaw = m.yes_price != null ? m.yes_price : null;
+      const yesPct = yesRaw != null ? Math.round(yesRaw * 100) : null;
+      items.push({
+        type: 'hot_24h',
+        market_title: m.question || m.market || '',
+        market_slug: m.slug || '',
+        edge_score: m.edge_score || 0,
+        yes_price_pct: yesPct,
+        volume: m.volume_24h || 0,
+        image: m.image || m.market_image || null,
+        ts: m.last_updated || new Date().toISOString(),
+      });
+    }
   }
 
   res.json(items);
