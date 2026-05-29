@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weekly Challenge — HYPERFLEX</title>
+<meta name="description" content="5 markets. 7 days. One winner. Make your calls on this week's biggest prediction markets.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #0e0e15;
+  --card: #141420;
+  --card-hover: #1a1a28;
+  --border: #1e1e2a;
+  --text: #f0f0f5;
+  --muted: #8888a0;
+  --soft: #b0b0c0;
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --blue: #4d9fff;
+  --gold: #c9920d;
+  --purple: #a855f7;
+  --amber: #f59e0b;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); scroll-behavior: smooth; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+a { color: var(--blue); text-decoration: none; }
+
+/* ── HERO ── */
+.ch-hero {
+  padding: 48px 24px 32px;
+  border-bottom: 1px solid var(--border);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.ch-hero-kicker {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 12px;
+}
+.ch-hero h1 {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+  line-height: 1.05;
+  margin-bottom: 10px;
+}
+.ch-hero h1 em { font-style: normal; color: var(--green); }
+.ch-hero-sub {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.ch-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.ch-meta-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ch-meta-stat .n {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ch-meta-stat .l {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+.ch-countdown {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--amber);
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.2);
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+/* ── LAYOUT ── */
+.ch-body {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 32px;
+}
+@media (max-width: 800px) {
+  .ch-body { grid-template-columns: 1fr; }
+  .ch-hero h1 { font-size: 28px; }
+}
+
+/* ── MARKETS COLUMN ── */
+.ch-section-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.market-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 12px;
+  transition: border-color .15s;
+}
+.market-card.selected-yes { border-color: rgba(0,230,138,.4); background: rgba(0,230,138,.04); }
+.market-card.selected-no  { border-color: rgba(255,77,106,.4); background: rgba(255,77,106,.04); }
+
+.mc-topic {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mc-question {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.mc-price-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.mc-price { font-weight: 700; font-size: 16px; }
+.mc-price.pos { color: var(--green); }
+.mc-price.neg { color: var(--red); }
+.mc-change { font-size: 11px; color: var(--muted); }
+.mc-change.pos { color: var(--green); }
+.mc-change.neg { color: var(--red); }
+
+.mc-pick-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.mc-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  letter-spacing: .06em;
+}
+.mc-btn:hover { border-color: var(--soft); color: var(--text); }
+.mc-btn.yes.active { background: rgba(0,230,138,.12); border-color: var(--green); color: var(--green); }
+.mc-btn.no.active  { background: rgba(255,77,106,.12); border-color: var(--red); color: var(--red); }
+
+.mc-reasoning {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 8px 12px;
+  resize: none;
+  height: 52px;
+  outline: none;
+  transition: border-color .15s;
+}
+.mc-reasoning:focus { border-color: var(--blue); }
+.mc-reasoning::placeholder { color: var(--muted); }
+
+/* Submitted state */
+.mc-your-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.mc-your-pick.winning { background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); }
+.mc-your-pick.losing  { background: rgba(255,77,106,.08); border: 1px solid rgba(255,77,106,.2); }
+.mc-your-pick.neutral { background: rgba(255,255,255,.04); border: 1px solid var(--border); }
+.mc-pick-side { font-weight: 700; }
+.mc-pick-side.yes { color: var(--green); }
+.mc-pick-side.no  { color: var(--red); }
+.mc-pick-status { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+
+/* Submit button */
+.ch-submit {
+  width: 100%;
+  padding: 16px;
+  background: var(--green);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .08em;
+  transition: opacity .15s;
+  margin-top: 8px;
+}
+.ch-submit:hover { opacity: .88; }
+.ch-submit:disabled { opacity: .4; cursor: default; }
+
+/* Score summary bar (after submit) */
+.score-bar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.score-bar .score-num {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.score-bar .score-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.score-bar .rank-chip {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(201,146,13,.12);
+  color: var(--gold);
+  border: 1px solid rgba(201,146,13,.25);
+}
+
+/* ── LEADERBOARD COLUMN ── */
+.lb-wrap {
+  position: sticky;
+  top: 24px;
+}
+.lb-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lb-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lb-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lb-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-row.top1 { background: rgba(201,146,13,.06); }
+.lb-row.top2 { background: rgba(168,85,247,.04); }
+.lb-row.top3 { background: rgba(77,159,255,.04); }
+.lb-rank {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  width: 24px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.lb-rank.r1 { color: var(--gold); }
+.lb-rank.r2 { color: var(--purple); }
+.lb-rank.r3 { color: var(--blue); }
+.lb-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--card-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.lb-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.lb-score {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.lb-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── STATES ── */
+.ch-no-challenge {
+  max-width: 600px;
+  margin: 80px auto;
+  text-align: center;
+  padding: 0 24px;
+}
+.ch-no-challenge h2 { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+.ch-no-challenge p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* ── RESULTS / WINNER CARD ── */
+.winner-card {
+  background: linear-gradient(135deg, rgba(201,146,13,.12), rgba(168,85,247,.08));
+  border: 1px solid rgba(201,146,13,.3);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.winner-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.winner-name { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.winner-score {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: .06em;
+  transition: opacity .12s;
+}
+.share-btn:hover { opacity: .88; color: #000; }
+
+/* ── LOADING ── */
+.ch-loading {
+  text-align: center;
+  padding: 80px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── AUTH GATE ── */
+.auth-gate {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  margin-top: 16px;
+}
+.auth-gate p { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.auth-gate a {
+  display: inline-block;
+  padding: 10px 24px;
+  background: var(--green);
+  color: #000;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: .06em;
+}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
+
+<div id="chMain">
+  <div class="ch-loading">Loading challenge…</div>
+</div>
+
+<script>
+var _challenge = null;
+var _userPicks = null;
+var _leaderboard = [];
+var _participantCount = 0;
+var _isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token'));
+var _token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+var _picks = {}; // slug → {side, reasoning}
+var _countdownTimer = null;
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtCountdown(endDate) {
+  var ms = new Date(endDate) - Date.now();
+  if (ms <= 0) return 'Ended';
+  var d = Math.floor(ms / 86400000);
+  var h = Math.floor((ms % 86400000) / 3600000);
+  var m = Math.floor((ms % 3600000) / 60000);
+  if (d > 0) return d + 'd ' + h + 'h remaining';
+  if (h > 0) return h + 'h ' + m + 'm remaining';
+  return m + 'm remaining';
+}
+
+function weekLabel(start, end) {
+  var opts = { month: 'short', day: 'numeric' };
+  return new Date(start).toLocaleDateString(undefined, opts) + ' – ' + new Date(end).toLocaleDateString(undefined, opts);
+}
+
+function pickStatus(pick, market) {
+  if (!pick) return null;
+  var current = market.current_price || market.yes_price_at_open || 50;
+  var entry = pick.yes_price_at_pick || market.yes_price_at_open || 50;
+  var diff = current - entry;
+  if (pick.side === 'YES') return diff > 2 ? 'winning' : diff < -2 ? 'losing' : 'neutral';
+  if (pick.side === 'NO') return diff < -2 ? 'winning' : diff > 2 ? 'losing' : 'neutral';
+  return 'neutral';
+}
+
+function renderMarkets() {
+  var ch = _challenge;
+  var markets = ch.markets || [];
+  var submitted = !!_userPicks;
+
+  var html = '<div class="ch-section-title">' + markets.length + ' MARKETS THIS WEEK</div>';
+
+  markets.forEach(function(m) {
+    var userPick = _userPicks ? (_userPicks.picks || []).find(function(p) { return p.slug === m.slug; }) : null;
+    var pendingPick = _picks[m.slug];
+    var isYes = (submitted ? (userPick && userPick.side === 'YES') : (pendingPick && pendingPick.side === 'YES'));
+    var isNo  = (submitted ? (userPick && userPick.side === 'NO')  : (pendingPick && pendingPick.side === 'NO'));
+    var cardCls = 'market-card' + (isYes ? ' selected-yes' : isNo ? ' selected-no' : '');
+    var priceColor = m.current_price > m.yes_price_at_open ? 'pos' : m.current_price < m.yes_price_at_open ? 'neg' : '';
+    var changeDiff = m.price_change || 0;
+    var changeStr = changeDiff === 0 ? '' : (changeDiff > 0 ? '+' : '') + changeDiff + '¢';
+    var changeCls = changeDiff > 0 ? 'pos' : changeDiff < 0 ? 'neg' : '';
+
+    html += '<div class="' + cardCls + '">';
+    html += '<div class="mc-topic">' + esc(m.topic || 'Market') + '</div>';
+    html += '<div class="mc-question">' + esc(m.question) + '</div>';
+    html += '<div class="mc-price-row">';
+    html += '<span class="mc-price ' + priceColor + '">' + (m.current_price || m.yes_price_at_open) + '¢ YES</span>';
+    if (changeStr) html += '<span class="mc-change ' + changeCls + '">' + changeStr + ' since open</span>';
+    html += '</div>';
+
+    if (!submitted) {
+      html += '<div class="mc-pick-row">';
+      html += '<button class="mc-btn yes' + (isYes ? ' active' : '') + '" onclick="setPick(\'' + m.slug + '\',\'YES\')">YES — Going up</button>';
+      html += '<button class="mc-btn no' + (isNo ? ' active' : '') + '" onclick="setPick(\'' + m.slug + '\',\'NO\')">NO — Going down</button>';
+      html += '</div>';
+      html += '<textarea class="mc-reasoning" placeholder="Your reasoning (optional, 280 chars)" maxlength="280" id="reason_' + m.slug + '" oninput="setPick(\'' + m.slug + '\',null,this.value)">' + esc(pendingPick ? pendingPick.reasoning || '' : '') + '</textarea>';
+    } else if (userPick) {
+      var status = pickStatus(userPick, m);
+      var statusLabel = status === 'winning' ? 'WINNING' : status === 'losing' ? 'LOSING' : 'CLOSE';
+      html += '<div class="mc-your-pick ' + (status || 'neutral') + '">';
+      html += '<span class="mc-pick-side ' + userPick.side.toLowerCase() + '">' + userPick.side + '</span>';
+      html += ' at ' + (userPick.yes_price_at_pick || m.yes_price_at_open) + '¢ → now ' + m.current_price + '¢';
+      html += '<span class="mc-pick-status">' + statusLabel + '</span>';
+      html += '</div>';
+      if (userPick.reasoning) {
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">"' + esc(userPick.reasoning) + '"</div>';
+      }
+    } else {
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px">No pick on this market</div>';
+    }
+
+    html += '</div>';
+  });
+
+  return html;
+}
+
+function renderLeaderboard() {
+  var rows = _leaderboard;
+  var html = '';
+  html += '<div class="lb-card">';
+  html += '<div class="lb-header"><span class="lb-title">Live Leaderboard</span><span class="lb-count">' + _participantCount + ' participants</span></div>';
+
+  if (!rows.length) {
+    html += '<div class="lb-empty">No picks yet.<br>Be the first.</div>';
+  } else {
+    rows.forEach(function(r, i) {
+      var rank = i + 1;
+      var rankCls = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : '';
+      var rowCls = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : '';
+      var name = r.display_name || r.username || 'Predictor';
+      var initials = name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
+      html += '<div class="lb-row ' + rowCls + '">';
+      html += '<div class="lb-rank ' + rankCls + '">#' + rank + '</div>';
+      html += '<div class="lb-avatar">' + esc(initials) + '</div>';
+      html += '<div class="lb-name">' + esc(name) + '</div>';
+      html += '<div class="lb-score">+' + Math.round(r.score || 0) + '</div>';
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function render() {
+  var ch = _challenge;
+  if (!ch) {
+    document.getElementById('chMain').innerHTML =
+      '<div class="ch-no-challenge"><h2>No active challenge</h2><p>The next challenge drops Monday 9am ET. Check back soon.</p></div>';
+    return;
+  }
+
+  var submitted = !!_userPicks;
+  var resolved = ch.status === 'resolved';
+
+  // Score bar (if submitted)
+  var scoreBarHtml = '';
+  if (submitted) {
+    var totalScore = 0;
+    var picks = _userPicks.picks || [];
+    var ch_markets = ch.markets || [];
+    picks.forEach(function(p) {
+      var market = ch_markets.find(function(m) { return m.slug === p.slug; });
+      if (!market) return;
+      var current = market.current_price || market.yes_price_at_open || 50;
+      var entry = p.yes_price_at_pick || market.yes_price_at_open || 50;
+      var diff = current - entry;
+      if (p.side === 'YES' && diff > 0) totalScore += diff;
+      else if (p.side === 'NO' && diff < 0) totalScore += Math.abs(diff);
+    });
+    var myRank = _userPicks.rank;
+    scoreBarHtml = '<div class="score-bar">';
+    scoreBarHtml += '<div><div class="score-num">+' + Math.round(totalScore) + '</div><div class="score-label">implied score</div></div>';
+    if (myRank) scoreBarHtml += '<div class="rank-chip">Rank #' + myRank + ' of ' + _participantCount + '</div>';
+    scoreBarHtml += '</div>';
+  }
+
+  // Winner card (if resolved)
+  var winnerHtml = '';
+  if (resolved && _leaderboard.length) {
+    var winner = _leaderboard[0];
+    var wName = winner.display_name || winner.username || 'Predictor';
+    var tweetText = encodeURIComponent('I ranked #' + (winner.rank || 1) + ' on the HYPERFLEX Weekly Challenge with a score of +' + Math.round(winner.score || 0) + '. hyperflex.network/challenge');
+    winnerHtml = '<div class="winner-card">';
+    winnerHtml += '<div class="winner-label">This Week\'s Winner</div>';
+    winnerHtml += '<div class="winner-name">' + esc(wName) + '</div>';
+    winnerHtml += '<div class="winner-score">Score: +' + Math.round(winner.score || 0) + '</div>';
+    winnerHtml += '<a class="share-btn" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">Share on X</a>';
+    winnerHtml += '</div>';
+  }
+
+  // Auth gate
+  var actionHtml = '';
+  if (!submitted && !resolved) {
+    if (!_isLoggedIn) {
+      actionHtml = '<div class="auth-gate"><p>Sign in to submit your picks and join the leaderboard.</p><a href="/creator/login?return=/challenge">Sign In / Sign Up</a></div>';
+    } else {
+      actionHtml = '<button class="ch-submit" id="chSubmitBtn" onclick="submitPicks()">Submit My Picks →</button>';
+    }
+  }
+
+  var html = '';
+
+  // Hero
+  html += '<div class="ch-hero">';
+  html += '<div class="ch-hero-kicker">◎ HYPERFLEX WEEKLY CHALLENGE</div>';
+  html += '<h1>5 markets. 7 days. <em>One winner.</em></h1>';
+  html += '<div class="ch-hero-sub">' + weekLabel(ch.week_start, ch.week_end) + ' · ' + (resolved ? 'Resolved' : 'Active') + '</div>';
+  html += '<div class="ch-meta-row">';
+  html += '<div class="ch-meta-stat"><div class="n" id="chCountdown">—</div><div class="l">Remaining</div></div>';
+  html += '<div class="ch-meta-stat"><div class="n">' + _participantCount + '</div><div class="l">Participants</div></div>';
+  html += '<div class="ch-meta-stat"><div class="n">' + (ch.markets || []).length + '</div><div class="l">Markets</div></div>';
+  html += '</div></div>';
+
+  // Body
+  html += '<div class="ch-body">';
+
+  // Left column
+  html += '<div>';
+  if (winnerHtml) html += winnerHtml;
+  if (scoreBarHtml) html += scoreBarHtml;
+  html += renderMarkets();
+  html += actionHtml;
+  html += '</div>';
+
+  // Right column
+  html += '<div class="lb-wrap">';
+  html += renderLeaderboard();
+
+  // My picks summary (if submitted)
+  if (submitted) {
+    html += '<div style="margin-top:16px">';
+    html += '<div class="ch-section-title" style="margin-bottom:12px">Share Your Result</div>';
+    var picks2 = _userPicks.picks || [];
+    var myName = (localStorage.getItem('hf_display_name') || 'my');
+    var scoreSummary = scoreBarHtml ? '+' + Math.round(totalScore || 0) : '';
+    var tweet = encodeURIComponent('My picks this week on HYPERFLEX Weekly Challenge. ' + scoreSummary + '\nhyperflex.network/challenge');
+    html += '<a class="share-btn" style="width:100%;justify-content:center" href="https://x.com/intent/tweet?text=' + tweet + '" target="_blank">Share on X</a>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '</div>';
+
+  document.getElementById('chMain').innerHTML = html;
+
+  // Start countdown
+  if (_countdownTimer) clearInterval(_countdownTimer);
+  _countdownTimer = setInterval(function() {
+    var el = document.getElementById('chCountdown');
+    if (el) el.textContent = fmtCountdown(ch.week_end);
+  }, 1000);
+  var el0 = document.getElementById('chCountdown');
+  if (el0) el0.textContent = fmtCountdown(ch.week_end);
+}
+
+function setPick(slug, side, reasoning) {
+  if (!_picks[slug]) _picks[slug] = { side: null, reasoning: '' };
+  if (side !== null) _picks[slug].side = side;
+  if (reasoning !== undefined) _picks[slug].reasoning = reasoning;
+  // Re-render just the card buttons (lightweight)
+  var markets = _challenge ? _challenge.markets || [] : [];
+  markets.forEach(function(m) {
+    if (m.slug !== slug) return;
+    var card = document.querySelector('[data-slug="' + slug + '"]') || null;
+    // Re-style the yes/no buttons directly
+    var yesBtn = document.querySelector('#mc_yes_' + slug);
+    var noBtn = document.querySelector('#mc_no_' + slug);
+    if (yesBtn) yesBtn.className = 'mc-btn yes' + (_picks[slug].side === 'YES' ? ' active' : '');
+    if (noBtn)  noBtn.className  = 'mc-btn no'  + (_picks[slug].side === 'NO'  ? ' active' : '');
+  });
+  // Full re-render to apply card highlight
+  if (side !== null) render();
+}
+
+async function submitPicks() {
+  if (!_challenge) return;
+  var picks = [];
+  (_challenge.markets || []).forEach(function(m) {
+    var p = _picks[m.slug];
+    if (p && p.side) {
+      picks.push({ slug: m.slug, side: p.side, reasoning: p.reasoning || '' });
+    }
+  });
+  if (picks.length === 0) {
+    alert('Make at least one pick before submitting.');
+    return;
+  }
+
+  var btn = document.getElementById('chSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+
+  try {
+    var resp = await fetch('/api/challenge/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+      body: JSON.stringify({ challenge_id: _challenge.id, picks: picks }),
+    });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed to submit');
+
+    // Re-load to get server-side enriched picks
+    await loadChallenge();
+  } catch (e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit My Picks →'; }
+  }
+}
+
+async function loadChallenge() {
+  try {
+    var headers = {};
+    if (_token) headers['Authorization'] = 'Bearer ' + _token;
+    var resp = await fetch('/api/challenge/current', { headers: headers });
+    var data = await resp.json();
+    _challenge = data.challenge;
+    _userPicks = data.userPicks;
+    _leaderboard = data.leaderboard || [];
+    _participantCount = data.participantCount || 0;
+    render();
+  } catch (e) {
+    document.getElementById('chMain').innerHTML =
+      '<div class="ch-loading">Failed to load challenge. <a href="/challenge">Reload</a></div>';
+  }
+}
+
+// Boot
+loadChallenge();
+
+// Refresh every 30 seconds for live price updates
+setInterval(loadChallenge, 30000);
+</script>
+</body>
+</html>
