@@ -21132,64 +21132,70 @@ app.post('/api/messages/conversations/:id', requireAuth, async (req, res) => {
 // GET /api/challenge/current — active challenge + user picks + leaderboard
 app.get('/api/challenge/current', async function(req, res) {
   try {
-    const challengeRes = await dbQuery(
+    const result = await pool.query(
       "SELECT * FROM weekly_challenges WHERE status = 'active' ORDER BY week_start DESC LIMIT 1"
     );
-    if (!challengeRes.rows.length) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
 
-    const ch = challengeRes.rows[0];
-    const markets = Array.isArray(ch.markets) ? ch.markets : JSON.parse(ch.markets || '[]');
+    if (!result.rows.length) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
 
-    // Leaderboard top 20
-    const lbRes = await dbQuery(
-      `SELECT cp.score, cp.rank, cp.picks, cp.created_at,
-              u.username, u.display_name, u.avatar_url, u.calibration_score
-       FROM challenge_picks cp
-       JOIN users u ON cp.user_id::text = u.id::text
-       WHERE cp.challenge_id = $1 AND cp.completed = true
-       ORDER BY cp.score DESC LIMIT 20`,
-      [ch.id]
-    );
+    const ch = result.rows[0];
 
-    // User's picks if authed
-    let userPicks = null;
-    const rawToken = (req.headers.authorization || '').replace('Bearer ', '').trim();
-    if (rawToken) {
-      try {
-        const decoded = jwt.verify(rawToken, process.env.JWT_SECRET);
-        const uid = decoded.userId || decoded.id;
-        const pickRes = await dbQuery(
-          'SELECT * FROM challenge_picks WHERE challenge_id = $1 AND user_id = $2',
-          [ch.id, uid]
-        );
-        userPicks = pickRes.rows[0] || null;
-        if (userPicks && !Array.isArray(userPicks.picks)) {
-          userPicks.picks = JSON.parse(userPicks.picks || '[]');
-        }
-      } catch (_) {}
-    }
+    // Parse markets — JSONB may come back as string or object
+    const markets = typeof ch.markets === 'string'
+      ? JSON.parse(ch.markets)
+      : (ch.markets || []);
 
-    // Live prices from screener cache
-    const screenerData = (_screenerCache && _screenerCache.data) || [];
-    const enrichedMarkets = markets.map(function(m) {
-      const screener = screenerData.find(function(s) { return s.slug === m.slug; });
-      const currentPrice = screener
-        ? Math.round((screener.yes_price || 0.5) * 100)
-        : m.yes_price_at_open;
+    // Guard screener cache
+    const screenerData = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+
+    // Live price each market
+    const liveMarkets = markets.map(function(m) {
+      const live = screenerData.find(function(s) { return s.slug === m.slug; });
+      const currentPrice = live ? Math.round((live.yes_price || 0.5) * 100) : m.yes_price_at_open;
       return Object.assign({}, m, {
         current_price: currentPrice,
         price_change: currentPrice - (m.yes_price_at_open || 50),
       });
     });
 
+    // Leaderboard top 20
+    const lb = await pool.query(
+      `SELECT cp.rank, cp.score, cp.picks, u.username, u.display_name, u.avatar_url
+       FROM challenge_picks cp
+       JOIN users u ON cp.user_id = u.id
+       WHERE cp.challenge_id = $1 AND cp.completed = true
+       ORDER BY cp.score DESC LIMIT 20`,
+      [ch.id]
+    );
+    const leaderboard = lb.rows || [];
+
+    // User picks if authed
+    let userPicks = null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const uid = decoded.userId || decoded.id;
+        const up = await pool.query(
+          'SELECT * FROM challenge_picks WHERE challenge_id = $1 AND user_id = $2',
+          [ch.id, uid]
+        );
+        userPicks = up.rows[0] || null;
+        if (userPicks && typeof userPicks.picks === 'string') {
+          userPicks.picks = JSON.parse(userPicks.picks);
+        }
+      } catch (_) {}
+    }
+
     res.json({
-      challenge: Object.assign({}, ch, { markets: enrichedMarkets }),
-      leaderboard: lbRes.rows,
+      challenge: Object.assign({}, ch, { markets: liveMarkets }),
+      leaderboard: leaderboard,
       userPicks: userPicks,
-      participantCount: lbRes.rows.length,
+      participantCount: leaderboard.length,
     });
   } catch (e) {
-    console.error('[challenge/current]', e.message);
+    console.error('[challenge/current]', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 });
