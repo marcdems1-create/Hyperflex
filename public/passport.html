@@ -200,16 +200,34 @@ async function load() {
                       : null;
     var primarySample = (hfxWinPct != null && s.settled_predictions >= 5) ? s.settled_predictions : allSettled;
 
-    var flexScore = s.flex_score_alltime != null ? s.flex_score_alltime : s.flex_score_90d;
+    // FLEX SCORE — calibration path per Decision #1 Option C.
+    // Use s.flex_score (the cron-written value) as primary; fall back to
+    // flex_score_alltime when the 25-event gate hasn't been passed yet.
+    // Never fall back to flex_score_90d (WHALE SCORE) — separate signal.
+    var flexScore = s.flex_score != null ? s.flex_score : s.flex_score_alltime;
 
-    // Tier — same ladder, but driven by the chosen primary win-rate.
-    var tier, tierIcon, tierColor;
-    if (primaryWinPct == null) { tier = 'NEWCOMER'; tierIcon = '🆕'; tierColor = '#a0a0aa'; }
-    else if (primaryWinPct >= 70 && primarySample >= 10) { tier = 'ORACLE';     tierIcon = '🎯'; tierColor = '#c9920d'; }
-    else if (primaryWinPct >= 60 && primarySample >= 5)  { tier = 'SHARP';      tierIcon = '🎯'; tierColor = '#00e68a'; }
-    else if (primaryWinPct >= 50 && primarySample >= 5)  { tier = 'SOLID';      tierIcon = '📊'; tierColor = '#4d9fff'; }
-    else if (primarySample >= 3)                          { tier = 'SPECULATOR'; tierIcon = '🎲'; tierColor = '#a0a0aa'; }
-    else                                                  { tier = 'NEWCOMER';   tierIcon = '🆕'; tierColor = '#a0a0aa'; }
+    // Tier — same thresholds as lib/flex-score.js tierForScore().
+    // Prefer DB-written s.flex_tier (set by 4:30 AM cron) to avoid divergence.
+    // Fall back to score-derived ladder only when DB value is missing.
+    var tier, tierColor;
+    var dbTier = s.flex_tier || null;
+    if (dbTier && dbTier !== 'Unranked') {
+      tier = dbTier.toUpperCase();
+    } else if (flexScore != null) {
+      tier = flexScore >= 80 ? 'ORACLE' : flexScore >= 65 ? 'SHARP' : flexScore >= 50 ? 'SOLID' : 'SPECULATOR';
+    } else if (primaryWinPct != null) {
+      tier = primaryWinPct >= 70 && primarySample >= 10 ? 'ORACLE'
+           : primaryWinPct >= 60 && primarySample >= 5  ? 'SHARP'
+           : primaryWinPct >= 50 && primarySample >= 5  ? 'SOLID'
+           : primarySample >= 3                          ? 'SPECULATOR'
+           : 'NEWCOMER';
+    } else {
+      tier = 'NEWCOMER';
+    }
+    tierColor = tier === 'ORACLE' ? '#c9920d'
+              : tier === 'SHARP'  ? '#00e68a'
+              : tier === 'SOLID'  ? '#4d9fff'
+              : '#a0a0aa';
 
     // OG tags
     document.title = u.display_name + ' — Prediction Passport | HYPERFLEX';
@@ -239,11 +257,11 @@ async function load() {
 
     var tweetText = encodeURIComponent(
       'My verified prediction track record:\n\n' +
-      '🎯 ' + tier + ' tier\n' +
-      (primaryWinPct != null ? '📊 ' + primaryWinPct + '% accuracy across ' + primarySample + ' predictions\n' : '') +
-      (allPnL ? '💰 ' + fmtPnL(allPnL) + ' lifetime P&L\n' : '') +
-      (flexScore != null ? '⚡ Flex Score: ' + flexScore + '/100\n' : '') +
-      '\nVerify it yourself 👇\n' + passportUrl
+      tier + ' tier\n' +
+      (primaryWinPct != null ? primaryWinPct + '% accuracy across ' + primarySample + ' predictions\n' : '') +
+      (allPnL ? fmtPnL(allPnL) + ' lifetime P&L\n' : '') +
+      (flexScore != null ? 'Flex Score: ' + flexScore + '/100\n' : '') +
+      '\nVerify it yourself:\n' + passportUrl
     );
 
     // Tier card body — primary win % when we have data, else a copy block
@@ -293,13 +311,13 @@ async function load() {
     if (pnlTile) statTiles.push(pnlTile);
     if (openTile) statTiles.push(openTile);
     statTiles.push('<div class="passport-stat"><div class="passport-stat-value">' + (s.followers || 0) + '</div><div class="passport-stat-label">Followers</div></div>');
-    if (s.streak > 0) statTiles.push('<div class="passport-stat"><div class="passport-stat-value" style="color:#ff8c00">🔥' + s.streak + '</div><div class="passport-stat-label">Streak</div></div>');
+    if (s.streak > 0) statTiles.push('<div class="passport-stat"><div class="passport-stat-value" style="color:#ff8c00">' + s.streak + '</div><div class="passport-stat-label">Streak</div></div>');
 
     el.innerHTML =
-      '<div class="passport-badge">🛂 Prediction Passport</div>' +
+      '<div class="passport-badge">Prediction Passport</div>' +
 
       '<div class="passport-identity">' +
-        '<div class="passport-avatar" style="background:' + avatarBg + ';color:' + tierColor + '">' + (u.is_whale ? '🐋' : initials) + '</div>' +
+        '<div class="passport-avatar" style="background:' + avatarBg + ';color:' + tierColor + '">' + initials + '</div>' +
         '<div>' +
           '<div class="passport-name">' + (u.display_name || 'Anonymous') + '</div>' +
           (u.username ? '<div class="passport-handle">@' + u.username + '</div>' : '') +
@@ -309,7 +327,6 @@ async function load() {
       '</div>' +
 
       '<div class="tier-card" style="--tier-color:' + tierColor + '">' +
-        '<div class="tier-icon">' + tierIcon + '</div>' +
         '<div class="tier-label" style="color:' + tierColor + '">' + tier + '</div>' +
         tierBody +
       '</div>' +
@@ -327,8 +344,8 @@ async function load() {
       '</div>' +
 
       '<div class="share-bar">' +
-        '<a class="share-btn primary" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">🐦 Share on X</a>' +
-        '<button class="share-btn" onclick="navigator.clipboard.writeText(\'' + passportUrl + '\');this.textContent=\'✓ Copied!\';setTimeout(()=>this.textContent=\'📋 Copy Link\',2000)">📋 Copy Link</button>' +
+        '<a class="share-btn primary" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">Share on X</a>' +
+        '<button class="share-btn" onclick="navigator.clipboard.writeText(\'' + passportUrl + '\');this.textContent=\'✓ Copied!\';setTimeout(()=>this.textContent=\'Copy Link\',2000)">Copy Link</button>' +
         '<a class="share-btn" href="' + profileUrl + '">View Full Profile →</a>' +
       '</div>' +
 
