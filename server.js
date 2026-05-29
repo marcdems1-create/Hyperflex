@@ -32398,7 +32398,8 @@ async function fetchWhalePositions() {
               const usdAmount = parseFloat(evt.size || 0);
               const sharePrice = parseFloat(evt.price || 0);
               const shareCount = sharePrice > 0 ? usdAmount / sharePrice : usdAmount;
-              if (usdAmount > 0 && sharePrice > 0 && sharePrice < 1 && outcomeId) {
+              if (usdAmount > 0 && sharePrice > 0 && sharePrice < 1 && outcomeId &&
+                  !(evt.closed || evt.resolved)) {
                 await dbQuery(
                   `INSERT INTO bet_feed (user_id, market_id, market_title, market_slug, outcome_id, outcome_label, side, price, size, usd_amount, order_id)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -38067,6 +38068,31 @@ app.get('/api/terminal/stream-stats', requireAdmin, (req, res) => {
 // the public surface.
 const _betFeedListeners = new Set();
 function _betFeedFanout(row) {
+  // Filter 1: minimum trade size — skip noise below $500
+  const usd = Number(row.usd_amount || 0);
+  if (usd < 500) {
+    console.log('[trade-popup] skipped: size too small', usd.toFixed(0), row.market_slug);
+    return;
+  }
+
+  // Filter 2: skip resolved/closed markets using screener cache lookup
+  const slug = row.market_slug || '';
+  if (slug && _screenerCache && Array.isArray(_screenerCache.data)) {
+    const cached = _screenerCache.data.find(m => (m.slug || m.market_slug) === slug);
+    if (cached) {
+      if (cached.closed || cached.resolved) {
+        console.log('[trade-popup] skipped: resolved', slug);
+        return;
+      }
+      // Filter 3: minimum market volume — skip illiquid / niche markets (<$100k)
+      const vol = Number(cached.volume_24h || cached.volume || 0);
+      if (vol < 100000) {
+        console.log('[trade-popup] skipped: low volume', vol.toFixed(0), slug);
+        return;
+      }
+    }
+  }
+
   // Best-effort fanout. A buggy listener can't poison the loop because
   // each send is wrapped — failed writes mean a dead client whose close
   // handler will deregister it on its own.
