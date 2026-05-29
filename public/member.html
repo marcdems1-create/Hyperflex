@@ -307,6 +307,9 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .sfs-edu-foot{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 
 .sfs-ctas{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px}
+.cal-score-wrap { position: relative; display: inline-block; cursor: help; }
+.cal-tooltip { display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #1a1a22; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; padding: 10px 14px; font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.7); width: 240px; white-space: normal; z-index: 100; line-height: 1.6; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }
+.cal-score-wrap:hover .cal-tooltip { display: block; }
 </style>
 <script src="/utils.js"></script>
 </head>
@@ -1061,7 +1064,7 @@ async function load() {
 
         <div class="flex-score">
           <div class="flex-label">Flex Score</div>
-          <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
+          <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}"><span class="cal-score-wrap">${flexScoreFmt}<span class="denom">/100</span><span class="cal-tooltip">Brier-based accuracy score. 100 = perfect forecaster.<br>Global average: 52. Above 70 = genuinely sharp.<br>Based on ${stats.settled_predictions || 0} resolved predictions.</span></span></div>
           <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? ((stats.settled_predictions || 0) + ' settled · ' + Math.max(0, 25 - (stats.settled_predictions || 0)) + ' to score') : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
           <!-- Whale Score badge — capital-flow heuristic. Decision #1
                Option C: distinct from Flex Score, conditionally rendered.

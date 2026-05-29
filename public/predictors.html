@@ -212,6 +212,9 @@ a { color: var(--blue); text-decoration: none; }
   .lb-toolbar { flex-direction: column; align-items: stretch; }
   .search-input, .copy-top3-btn { width: 100%; text-align: center; justify-content: center; }
 }
+.cal-score-wrap { position: relative; display: inline-block; cursor: help; }
+.cal-tooltip { display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #1a1a22; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; padding: 10px 14px; font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.7); width: 240px; white-space: normal; z-index: 100; line-height: 1.6; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }
+.cal-score-wrap:hover .cal-tooltip { display: block; }
 </style>
 </head>
 <body>
@@ -508,7 +511,7 @@ function renderCards() {
     if (currentTab === 'sharpest') {
       var cs3 = r.calibration_score != null ? r.calibration_score : '—';
       var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
-      metricHtml = '<div class="lb-metric ' + cc + '">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span></div>';
+      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">Brier-based accuracy score. 100 = perfect forecaster.<br>Global average: 52. Above 70 = genuinely sharp.<br>Based on ' + (r.predictions_resolved || r.flex_settled_events || '?') + ' resolved predictions.</span></span></div>';
       var parts = [];
       if (wrPct != null) parts.push(wrPct + '% win rate');
       var n = r.predictions_resolved || r.flex_settled_events;
