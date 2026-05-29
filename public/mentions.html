@@ -147,6 +147,7 @@ a{color:inherit;text-decoration:none}
 .la-card-type{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
 .la-card-type.whale{color:#00e68a}
 .la-card-type.edge{color:var(--gold)}
+.la-card-type.volume{color:#4d9fff}
 .la-card-title{font-size:14px;font-weight:600;line-height:1.35;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .la-price-bar{position:relative;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:2px}
 .la-price-dot{position:absolute;top:-3px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px rgba(0,212,255,.5);transform:translateX(-50%)}
@@ -1279,29 +1280,33 @@ load();
         + '</div>';
     }
     var typeLabel, typeClass, priceHtml = '', metaHtml = '';
-    if (it.type === 'whale_entry') {
+    var yp = it.yes_price_pct != null ? it.yes_price_pct : it.current_price_pct;
+    var priceColor = yp != null ? (yp > 60 ? '#00e68a' : yp < 40 ? '#ff4d6a' : '#f0f0f5') : '#f0f0f5';
+    var vol24 = it.volume_24h || it.volume || 0;
+    if (it.type === 'whale' || it.type === 'whale_entry') {
       typeClass = 'whale';
-      var sideColor = it.side === 'YES' ? '#00e68a' : '#ff4d6a';
-      typeLabel = '🐋 WHALE ENTRY';
-      var pct = it.current_price_pct || 50;
-      priceHtml = '<div class="la-price-bar"><div class="la-price-dot" style="left:' + Math.min(Math.max(pct, 2), 98) + '%;background:' + sideColor + '"></div></div>';
-      metaHtml = (it.size_display ? '<strong>' + esc(it.size_display) + '</strong> ' : '') + esc(it.side) + (it.current_price_pct != null ? ' · ' + it.current_price_pct + '¢' : '');
-    } else {
+      typeLabel = '🐋 WHALE';
+      if (it.whale_name) typeLabel += ' · ' + it.whale_name.split(' ')[0];
+    } else if (it.type === 'edge' || it.type === 'edge_signal') {
       typeClass = 'edge';
-      typeLabel = '⚡ EDGE ' + (it.edge_score || 0).toFixed(1);
-      var yp = it.yes_price_pct;
-      if (yp != null) {
-        priceHtml = '<div class="la-price-bar"><div class="la-price-dot" style="left:' + Math.min(Math.max(yp, 2), 98) + '%"></div></div>';
-      }
-      metaHtml = (yp != null ? 'YES ' + yp + '¢' : '') + (it.volume ? ' · ' + fmtVol(it.volume) : '');
+      typeLabel = '⚡ EDGE' + (it.edge_score ? ' ' + Number(it.edge_score).toFixed(1) : '');
+    } else {
+      typeClass = 'volume';
+      typeLabel = '🔥 VOLUME';
     }
+    if (yp != null) {
+      priceHtml = '<div class="la-price-bar"><div class="la-price-dot" style="left:' + Math.min(Math.max(yp, 2), 98) + '%;background:' + priceColor + '"></div></div>';
+    }
+    var priceStr = yp != null ? '<span style="color:' + priceColor + ';font-weight:700">YES ' + yp + '¢</span>' : '';
+    var volStr = vol24 >= 1000 ? fmtVol(vol24) : '';
+    metaHtml = [priceStr, volStr].filter(Boolean).join(' · ');
     return '<a class="la-card" href="' + esc(href) + '">'
       + imgHtml
       + '<div class="la-card-type ' + typeClass + '">' + typeLabel + '</div>'
       + '<div class="la-card-title">' + esc(it.market_title || '') + '</div>'
       + priceHtml
       + '<div class="la-card-foot">'
-      +   '<div class="la-card-meta">' + esc(metaHtml) + (it.ts ? ' · ' + tAgo(it.ts) : '') + '</div>'
+      +   '<div class="la-card-meta">' + metaHtml + '</div>'
       +   '<div class="la-card-cta">VIEW MARKET →</div>'
       + '</div>'
       + '</a>';
