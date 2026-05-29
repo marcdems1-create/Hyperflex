@@ -1094,6 +1094,7 @@ function fmtVol(v){v=Number(v||0);if(v>=1e9)return'$'+(v/1e9).toFixed(1)+'B';if(
 function fmtClose(s){if(!s)return null;var ms=new Date(s).getTime()-Date.now();if(ms<=0)return'Closing soon';var d=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000);if(d>30){var dt=new Date(s);return'Closes '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});}return d>0?'Closes in '+d+'d '+h+'h':'Closes in '+h+'h';}
 function topPrice(m){var p=m.outcomePrices;if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){return null;}}if(!Array.isArray(p))return null;return Math.max.apply(null,p.map(function(x){return parseFloat(x)||0;}));}
 function getImg(m){return m.image||m.event_image_url||m.icon||m.imageUrl||null;}
+function proxyImg(url){if(!url)return '';return '/api/img-proxy?url='+encodeURIComponent(url);}
 function getYesPrice(m){return m.yes_price!=null?Number(m.yes_price):topPrice(m);}
 function pColor(p){return p>=0.65?'var(--green)':p<=0.35?'var(--red)':'#fff';}
 function getSlug(m){return m.slug||m.event_slug||'';}
@@ -1120,7 +1121,7 @@ function buildCard(m, rank, pillClass, pillLabel){
   var price  = getYesPrice(m);
   var pct    = price!=null?Math.round(price*100):null;
   var col    = price!=null?pColor(price):'#fff';
-  var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
+  var bgStyle= img?'background-image:url('+proxyImg(img)+');':'background:#1e1e28;';
   var rankHtml = rank?'<div class="mcard-rank">'+rank+'</div>':'';
   var endDate = m.end_date||m.endDate||m.end_date_iso||null;
   var endMs   = endDate ? new Date(endDate).getTime() : null;
@@ -1173,7 +1174,7 @@ function buildWide(m, category){
   var price  = getYesPrice(m);
   var pct    = price!=null?Math.round(price*100):null;
   var col    = price!=null?pColor(price):'#fff';
-  var bgStyle= img?'background-image:url('+img+');':'background:#1e1e28;';
+  var bgStyle= img?'background-image:url('+proxyImg(img)+');':'background:#1e1e28;';
   return '<a class="wcard" href="'+href+'" data-slug="'+esc(slug)+'">'
     +'<div class="wcard-bg" style="'+bgStyle+'"></div>'
     +'<div class="wcard-grad"></div>'
@@ -1237,7 +1238,7 @@ function renderHero(m){
   document.getElementById('hero-no').href  = href+'?side=NO';
   document.getElementById('hero-more').href= href;
   var bg = document.getElementById('hero-bg');
-  bg.style.backgroundImage = img ? 'url('+JSON.stringify(img)+')' : '';
+  bg.style.backgroundImage = img ? 'url('+JSON.stringify(proxyImg(img))+')' : '';
 }
 function setHeroIdx(i){
   heroIdx=i;
@@ -1274,7 +1275,7 @@ function patchImages(container){
         var img = ev.image || ev.icon
           || (Array.isArray(ev.markets)&&ev.markets[0]&&(ev.markets[0].image||ev.markets[0].icon))
           || null;
-        if(img) bg.style.backgroundImage='url('+JSON.stringify(img)+')';
+        if(img) bg.style.backgroundImage='url('+JSON.stringify(proxyImg(img))+')';
       }).catch(function(){});
   });
 }
@@ -1707,7 +1708,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       var vf=vol>=1e6?'$'+(vol/1e6).toFixed(1)+'M vol':vol>=1e3?'$'+Math.round(vol/1e3)+'K vol':'';
       var p=evtPct(ev);
       return '<a class="search-result" href="/market/'+slug+'">'
-        +(img?'<img class="search-result-img" src="'+img+'" alt="" loading="lazy">':'<div class="search-result-img"></div>')
+        +(img?'<img class="search-result-img" src="'+proxyImg(img)+'" alt="" loading="lazy">':'<div class="search-result-img"></div>')
         +'<div class="search-result-body"><div class="search-result-q">'+q+'</div>'+(vf?'<div class="search-result-meta">'+vf+'</div>':'')+'</div>'
         +(p!=null?'<div class="search-result-price" style="color:'+col(p)+';">'+p+'¢</div>':'')
         +'</a>';
