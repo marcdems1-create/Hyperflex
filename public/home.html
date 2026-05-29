@@ -360,7 +360,10 @@ footer{
   .mcard{width:180px;height:260px;}
   .wcard{width:300px;height:190px;}
   footer{padding:20px 16px;}
+  .home-value-strip{font-size:10px;padding:6px 16px;}
 }
+.home-value-strip{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 24px;background:rgba(0,230,138,.04);border-bottom:1px solid rgba(0,230,138,.08);font-family:var(--mono);font-size:11px;color:rgba(0,230,138,.6);letter-spacing:.04em}
+.hvs-dot{font-size:8px;animation:pulse 2s infinite}
 </style>
 </head>
 <body>
@@ -456,6 +459,37 @@ footer{
       }
     }catch(e){}
   }
+})();
+</script>
+
+<!-- ── VALUE PROP STRIP ── -->
+<div class="home-value-strip" id="homeValueStrip">
+  <span class="hvs-dot">●</span>
+  <span id="homeValueText"></span>
+</div>
+<script>
+(function() {
+  var VALUE_PROPS = [
+    '50 whale wallets tracked · When they align, markets move within 48 hours',
+    'Edge scores combine 13 independent signals into one actionable number',
+    'Calibration scores verify who actually knows what they\'re doing',
+    'Copy top performers automatically · One click, same trade, same market',
+    'Price alerts fire the moment a market crosses your threshold',
+  ];
+  var el = document.getElementById('homeValueText');
+  if (!el) return;
+  var i = 0;
+  function rotate() {
+    el.style.opacity = 0;
+    setTimeout(function() {
+      el.textContent = VALUE_PROPS[i % VALUE_PROPS.length];
+      el.style.opacity = 1;
+      i++;
+    }, 300);
+  }
+  el.style.transition = 'opacity 0.3s';
+  rotate();
+  setInterval(rotate, 8000);
 })();
 </script>
 
