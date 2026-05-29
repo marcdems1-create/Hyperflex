@@ -843,11 +843,11 @@ var _sortedEventMarkets = null; // sorted mapping for multi-outcome events
 var _userPositions = {}; // tokenId → { size, avgPrice, side } from Polymarket data API
 
 function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
+function fmtCap(n) { if (n >= 1e6) return '$' + (Number(n/1e6)).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (Number(n/1e3)).toFixed(1) + 'K'; return '$' + Number(n)).toFixed(0); }
 function fmtNum(n) { return Math.round(n).toLocaleString(); }
 function truncAddr(a) { if (!a || a.length < 12) return a || '—'; return a.substring(0, 8) + '...' + a.slice(-4); }
 // Format price as cents — 1 decimal for <10¢ (matches Polymarket: "0.4¢", "7.0¢", "36¢")
-function fmtCents(p) { var c = p * 100; if (c < 10) return c.toFixed(1); return Math.round(c).toString(); }
+function fmtCents(p) { var c = p * 100; if (c < 10) return Number(c)).toFixed(1); return Math.round(c).toString(); }
 
 // Get slug from URL
 var slug = window.location.pathname.split('/market/')[1] || '';
@@ -1175,13 +1175,13 @@ function renderOutcomes(m) {
         var cMatched = findPositionForOutcome(crow.name, crow.idx, _claimedPositionAssets);
         if (cMatched && cMatched.size > 0) {
           if (cMatched._matchedAsset) _claimedPositionAssets[cMatched._matchedAsset] = true;
-          var cAvgC = (cMatched.avgPrice * 100).toFixed(1);
+          var cAvgC = (Number(cMatched.avgPrice * 100)).toFixed(1);
           var cSide = (cMatched.side || 'Yes').toUpperCase();
           var cSideColor = cSide === 'YES' ? '#00e68a' : '#ff4d6a';
           var cBadgeClass = cSide === 'YES' ? 'position-badge-yes' : 'position-badge-no';
           cPosBadge = '<div class="position-badge ' + cBadgeClass + '" title="Your ' + cSide + ' position">' +
             '<span style="color:' + cSideColor + ';font-weight:700">' + cSide + '</span> ' +
-            '<span class="pos-shares">' + cMatched.size.toFixed(1) + ' shares</span>' +
+            '<span class="pos-shares">' + Number(cMatched.size)).toFixed(1) + ' shares</span>' +
             '</div>';
         }
       }
@@ -1227,13 +1227,13 @@ function renderOutcomes(m) {
       if (matchedPos && matchedPos.size > 0) {
         // Mark this position's asset as claimed so it won't match another row
         if (matchedPos._matchedAsset) _claimedPositionAssets[matchedPos._matchedAsset] = true;
-        var avgC = (matchedPos.avgPrice * 100).toFixed(1);
+        var avgC = (Number(matchedPos.avgPrice * 100)).toFixed(1);
         var posSide = (matchedPos.side || 'Yes').toUpperCase();
         var posSideColor = posSide === 'YES' ? '#00e68a' : '#ff4d6a';
         var posBadgeClass = posSide === 'YES' ? 'position-badge-yes' : 'position-badge-no';
         posBadge = '<div class="position-badge ' + posBadgeClass + '" title="Your ' + posSide + ' position">' +
           '<span style="color:' + posSideColor + ';font-weight:700">' + posSide + '</span> ' +
-          '<span class="pos-shares">' + matchedPos.size.toFixed(1) + ' shares</span> ' +
+          '<span class="pos-shares">' + Number(matchedPos.size)).toFixed(1) + ' shares</span> ' +
           '<span class="pos-sep">\u00b7</span> ' +
           '<span class="pos-price">' + avgC + '\u00a2</span>' +
           '</div>';
@@ -1568,7 +1568,7 @@ async function loadWhaleFlow(marketSlug) {
 
     // Summary
     var totalCap = data.total_whale_capital || 0;
-    var capStr = totalCap >= 1e6 ? '$' + (totalCap/1e6).toFixed(1) + 'M' : '$' + Math.round(totalCap/1000) + 'K';
+    var capStr = totalCap >= 1e6 ? '$' + (Number(totalCap/1e6)).toFixed(1) + 'M' : '$' + Math.round(totalCap/1000) + 'K';
     document.getElementById('whaleFlowSummary').textContent = data.whale_count + ' whales · ' + capStr + ' total capital';
     // Show whale alert banner above market title when significant whale activity
     if (data.whale_count >= 2) {
@@ -1592,7 +1592,7 @@ async function loadWhaleFlow(marketSlug) {
     var html = '';
     data.flows.forEach(function(f) {
       var sideColor = f.side === 'YES' ? 'var(--green)' : 'var(--red)';
-      var sizeStr = f.size >= 1e6 ? '$' + (f.size/1e6).toFixed(1) + 'M' : f.size >= 1000 ? '$' + Math.round(f.size/1000) + 'K' : '$' + Math.round(f.size);
+      var sizeStr = f.size >= 1e6 ? '$' + (Number(f.size/1e6)).toFixed(1) + 'M' : f.size >= 1000 ? '$' + Math.round(f.size/1000) + 'K' : '$' + Math.round(f.size);
       var pnlStr = '';
       if (f.pnl != null) {
         var pnlAbs = Math.abs(f.pnl);
@@ -1895,9 +1895,9 @@ function renderOrderbook() {
   function buildRow(entry, colorClass) {
     var price = parseFloat(entry.price);
     var size = parseFloat(entry.size);
-    var total = (price * size / 100).toFixed(2);
+    var total = (Number(price * size / 100)).toFixed(2);
     return '<div class="mkt-ob-row">' +
-      '<span class="' + colorClass + '">' + price.toFixed(2) + '¢</span>' +
+      '<span class="' + colorClass + '">' + Number(price)).toFixed(2) + '¢</span>' +
       '<span class="mkt-ob-size">' + Math.round(size).toLocaleString() + '</span>' +
       '<span class="mkt-ob-total">$' + parseFloat(total).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span>' +
       '</div>';
@@ -2029,8 +2029,8 @@ function updateSellBalanceBadge() {
     badge.style.borderColor = 'rgba(245,166,35,0.3)';
     badge.style.color = 'var(--text)';
     badge.innerHTML =
-      '<span>You own <strong style="color:var(--gold)">' + owned.toFixed(2) + ' shares</strong>' +
-        ' <span style="color:var(--text-faint)">(~$' + marketValue.toFixed(2) + ' at this price)</span></span>' +
+      '<span>You own <strong style="color:var(--gold)">' + Number(owned)).toFixed(2) + ' shares</strong>' +
+        ' <span style="color:var(--text-faint)">(Number(~$' + Number(marketValue)).toFixed(2) + ' at this price)</span></span>' +
       '<button type="button" onclick="setMaxShares()" style="background:var(--gold);color:#000;border:0;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">Sell all</button>';
   }
 }
@@ -2170,7 +2170,7 @@ async function setSellPct(pct) {
     // scale that — keeps the old behavior when the pre-fill path worked.
     var maxUsd = parseFloat(input.value || 0);
     if (!(maxUsd > 0)) return;
-    input.value = ((maxUsd * pct) / 100).toFixed(2);
+    input.value = (Number((maxUsd * pct) / 100)).toFixed(2);
     if (pct < 100) _pendingMaxShares = null;
     updateTradeCalc();
     return;
@@ -2178,7 +2178,7 @@ async function setSellPct(pct) {
   var priceCents = parseFloat(document.getElementById('tradePrice').value) || 0;
   var shares = (maxShares * pct) / 100;
   var usd = shares * priceCents / 100;
-  input.value = usd > 0 ? usd.toFixed(2) : '0';
+  input.value = usd > 0 ? Number(usd)).toFixed(2) : '0';
   // On <100% sells, clear the latch so executeTrade re-derives shares
   // from the partial USD amount rather than stamping the full position.
   // On 100%, keep the latch so we sell the EXACT share count (no dust).
@@ -2269,7 +2269,7 @@ function adjustSharesBy(delta) {
   var input = document.getElementById('tradeAmount');
   if (!input) return;
   var cur = parseFloat(input.value) || 0;
-  input.value = Math.max(0, (cur + delta)).toFixed(1);
+  input.value = Number(Math.max(0, (cur + delta))).toFixed(1);
   updateTradeCalc();
 }
 
@@ -2354,9 +2354,9 @@ async function setMaxShares() {
   // submit and eat a confusing CLOB 400. This is the "stuck with dust"
   // scenario after a partial sell.
   if (maxShares > 0 && maxUsd > 0 && maxUsd < 1) {
-    input.value = maxUsd.toFixed(2);
+    input.value = Number(maxUsd)).toFixed(2);
     showTradeStatus(
-      'Position is $' + maxUsd.toFixed(2) + ' — below Polymarket\'s $1 minimum order. ' +
+      'Position is $' + Number(maxUsd)).toFixed(2) + ' — below Polymarket\'s $1 minimum order. ' +
       'You can\'t fully close until the price moves (need ~' +
       Math.ceil((1 / maxShares) * 100) + '\u00a2 for $1 total).',
       'error'
@@ -2373,7 +2373,7 @@ async function setMaxShares() {
   _pendingMaxShares = maxShares > 0 ? maxShares : null;
 
   // Display the real USD value (2 decimals) — no more flooring away fractions.
-  input.value = maxUsd > 0 ? maxUsd.toFixed(2) : '0';
+  input.value = maxUsd > 0 ? Number(maxUsd)).toFixed(2) : '0';
   updateTradeCalc();
 }
 
@@ -2402,15 +2402,15 @@ function updateTradeCalc() {
   var priceFrac = price / 100;
   var shares = priceFrac > 0 ? amount / priceFrac : 0;
 
-  document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
-  document.getElementById('summaryShares').textContent = shares.toFixed(2);
+  document.getElementById('summaryPrice').textContent = Number(price)).toFixed(2) + '¢';
+  document.getElementById('summaryShares').textContent = Number(shares)).toFixed(2);
 
   if (_tradeMode === 'sell') {
     // Sell: you get USD = shares × price
-    document.getElementById('summaryPayout').textContent = '$' + amount.toFixed(2);
+    document.getElementById('summaryPayout').textContent = '$' + Number(amount)).toFixed(2);
   } else {
     // Buy: potential payout = shares (each pays $1 if wins)
-    document.getElementById('summaryPayout').textContent = '$' + shares.toFixed(2);
+    document.getElementById('summaryPayout').textContent = '$' + Number(shares)).toFixed(2);
   }
   // Also refresh the sell-balance badge on any calc update (covers typing into
   // the price field directly, price-preset buttons, outcome switches, etc).
@@ -2578,7 +2578,7 @@ function _depositModalFrame(state) {
     return '<div style="background:var(--paper,#0e0e0c);border:1px solid rgba(0,230,138,0.4);border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
       '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#00e68a;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
       '<div style="margin-top:14px;font-family:var(--sans);font-size:14px;font-weight:700;color:#00e68a">Check MetaMask → sign the transfer</div>' +
-      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Sending $' + (state.amount || 0).toFixed(2) + ' USDC to your trading wallet</div>' +
+      '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">Sending $' + (Number(state.amount || 0)).toFixed(2) + ' USDC to your trading wallet</div>' +
     '</div>';
   }
 
@@ -2594,8 +2594,8 @@ function _depositModalFrame(state) {
   if (state.success) {
     return '<div style="background:var(--paper,#0e0e0c);border:1px solid #00e68a;border-radius:14px;padding:28px;max-width:440px;width:100%;font-family:var(--sans);color:var(--text);text-align:center">' +
       '<div style="font-size:48px;margin-bottom:8px">✅</div>' +
-      '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (state.amount || 0).toFixed(2) + ' USDC</div>' +
-      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px">New trading balance: <strong style="color:var(--text)">$' + (state.newProxyBalance || 0).toFixed(2) + '</strong></div>' +
+      '<div style="font-size:18px;font-weight:800;color:#00e68a;margin-bottom:4px">Deposited $' + (Number(state.amount || 0)).toFixed(2) + ' USDC</div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px">New trading balance: <strong style="color:var(--text)">$' + (Number(state.newProxyBalance || 0)).toFixed(2) + '</strong></div>' +
       (state.txHash ? '<div style="margin-bottom:18px"><a href="https://polygonscan.com/tx/' + state.txHash + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue,#4d9fff);text-decoration:none">View tx on Polygonscan ↗</a></div>' : '') +
       '<button onclick="closeDepositModal()" style="background:#00e68a;color:#0a0a0f;border:none;padding:12px 32px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:800;cursor:pointer;min-height:44px">Close</button>' +
     '</div>';
@@ -2635,12 +2635,12 @@ function _depositModalFrame(state) {
     '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">' +
       '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px">' +
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🦊 MetaMask (source)</div>' +
-        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (hasEoaUsdc ? 'var(--text)' : 'var(--red,#ff4d6a)') + '">$' + eoaBal.toFixed(2) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (hasEoaUsdc ? 'var(--text)' : 'var(--red,#ff4d6a)') + '">$' + Number(eoaBal)).toFixed(2) + '</div>' +
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.eoa ? state.eoa.slice(0,6) + '…' + state.eoa.slice(-4) : '') + '</div>' +
       '</div>' +
       '<div style="flex:1;min-width:180px;padding:12px 14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.2);border-radius:8px">' +
         '<div style="font-family:var(--mono);font-size:10px;color:#00e68a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">📊 Trading Wallet</div>' +
-        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)">$' + proxyBal.toFixed(2) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--text)">$' + Number(proxyBal)).toFixed(2) + '</div>' +
         '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + (state.proxy ? state.proxy.slice(0,6) + '…' + state.proxy.slice(-4) : '') + '</div>' +
       '</div>' +
     '</div>' +
@@ -2665,7 +2665,7 @@ function _depositModalFrame(state) {
         // same-chain swap (Polygon → Polygon, native USDC → USDC.e).
         ((state.proxyNative || 0) >= 0.01
           ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;margin-bottom:10px">' +
-              '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gold,#c9920d);margin-bottom:4px">⚠ $' + (state.proxyNative || 0).toFixed(2) + ' native USDC in your trading wallet</div>' +
+              '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gold,#c9920d);margin-bottom:4px">⚠ $' + (Number(state.proxyNative || 0)).toFixed(2) + ' native USDC in your trading wallet</div>' +
               '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px">Native USDC can\'t be traded on Polymarket directly. Swap it to USDC.e to make it tradeable.</div>' +
               '<a href="https://jumper.exchange/?fromChain=137&fromToken=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359&toChain=137&toToken=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' +
                 (state.proxy ? '&toAddress=' + state.proxy : '') +
@@ -2687,7 +2687,7 @@ function _depositModalFrame(state) {
       (hasEoaUsdc
         ? // Has USDC.e → show input + action
           ((eoaNative || 0) >= 0.01
-            ? '<div style="padding:8px 12px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.2);border-radius:6px;margin-bottom:10px;font-family:var(--mono);font-size:10px;color:var(--blue,#4d9fff);line-height:1.5">You also have <strong>$' + (eoaNative || 0).toFixed(2) + '</strong> native USDC — <button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="background:none;border:none;color:var(--blue,#4d9fff);text-decoration:underline;cursor:pointer;padding:0;font:inherit">swap it to USDC.e</button> to use it for trading.</div>'
+            ? '<div style="padding:8px 12px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.2);border-radius:6px;margin-bottom:10px;font-family:var(--mono);font-size:10px;color:var(--blue,#4d9fff);line-height:1.5">You also have <strong>$' + (Number(eoaNative || 0)).toFixed(2) + '</strong> native USDC — <button onclick="window._depositModalTab=\'bridge\';refreshDepositModal()" style="background:none;border:none;color:var(--blue,#4d9fff);text-decoration:underline;cursor:pointer;padding:0;font:inherit">swap it to USDC.e</button> to use it for trading.</div>'
             : '') +
           '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Amount to deposit (USDC.e)</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
@@ -2695,7 +2695,7 @@ function _depositModalFrame(state) {
               '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:15px;color:var(--muted)">$</span>' +
               '<input type="number" id="depositAmount" placeholder="0.00" step="0.01" min="0.01" max="' + eoaUsdceOnly + '" style="width:100%;background:var(--cream,#1a1917);border:1px solid var(--border);border-radius:6px;padding:12px 12px 12px 26px;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"/>' +
             '</div>' +
-            '<button onclick="document.getElementById(\'depositAmount\').value=' + eoaUsdceOnly.toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
+            '<button onclick="document.getElementById(\'depositAmount\').value=' + Number(eoaUsdceOnly)).toFixed(2) + '" style="background:rgba(0,230,138,0.1);border:1px solid rgba(0,230,138,0.3);color:#00e68a;padding:10px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;min-height:44px">MAX</button>' +
           '</div>' +
 
           (!hasGas ? '<div style="padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;margin-bottom:14px;font-family:var(--mono);font-size:10px;color:var(--gold,#c9920d);line-height:1.5">⚠ Your MetaMask has no MATIC/POL for gas. You need ~$0.01 in POL to submit the transfer. <a href="https://wallet.polygon.technology/" target="_blank" rel="noopener" style="color:#00e68a">Get POL →</a></div>' : '') +
@@ -2711,7 +2711,7 @@ function _depositModalFrame(state) {
           // think "No USDC" means they're literally empty.
           ((eoaNative || 0) >= 0.01
             ? '<div style="padding:14px 16px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.25);border-radius:10px;margin-bottom:14px">' +
-                '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--blue,#4d9fff);margin-bottom:6px">$' + (eoaNative || 0).toFixed(2) + ' native USDC detected</div>' +
+                '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--blue,#4d9fff);margin-bottom:6px">$' + (Number(eoaNative || 0)).toFixed(2) + ' native USDC detected</div>' +
                 '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">Polymarket trades USDC.e specifically. Use <strong style="color:var(--text)">Bridge & Swap</strong> below to convert your native USDC → USDC.e in one step.</div>' +
               '</div>'
             : '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.25);border-radius:10px;margin-bottom:14px">' +
@@ -2783,7 +2783,7 @@ async function executeDeposit() {
     var usdc = new ethers.Contract(usdcAddress, abi, signer);
 
     // USDC has 6 decimals — amount * 1e6
-    var amountWei = ethers.parseUnits(amount.toFixed(6), 6);
+    var amountWei = ethers.parseUnits(Number(amount)).toFixed(6), 6);
 
     var tx = await usdc.transfer(proxy, amountWei);
     console.log('[deposit] Transfer tx sent:', tx.hash);
@@ -2864,7 +2864,7 @@ async function fetchTradeBalance() {
         balance = usdcTotal + pusdNum;
         window._walletBalancePUSD  = pusdNum;
         window._walletBalanceMATIC = Number(aData?.balances?.matic) || 0;
-        console.log('[balance debug] Alchemy balance:', balance.toFixed(2), '(usdc_total', usdcTotal.toFixed(2), '+ pusd', pusdNum.toFixed(2), ')');
+        console.log(Number('[balance debug] Alchemy balance:', Number(balance)).toFixed(2), '(Number(usdc_total', Number(usdcTotal)).toFixed(2), '+ pusd', Number(pusdNum)).toFixed(2), ')');
       }
     }
   } catch (e) {
@@ -2906,8 +2906,8 @@ async function fetchTradeBalance() {
   if (balance !== null) {
     var el = document.getElementById('tradeBalance');
     if (el) {
-      el.textContent = 'Balance $' + balance.toFixed(2);
-      console.log('[balance debug] Updated UI with:', balance.toFixed(2));
+      el.textContent = 'Balance $' + Number(balance)).toFixed(2);
+      console.log(Number('[balance debug] Updated UI with:', Number(balance)).toFixed(2));
     }
   }
 }
@@ -3023,16 +3023,16 @@ function updateSidebarPosition() {
   var label = outcomeName || posSide;
   if (label.length > 15) label = label.substring(0, 13) + '..';
   var sideColor = posSide === 'NO' ? 'var(--red)' : 'var(--green)';
-  var avgCents = (pos.avgPrice * 100).toFixed(1);
-  var cost = (pos.size * pos.avgPrice).toFixed(2);
-  var currentVal = (pos.size * pos.currentPrice).toFixed(2);
-  var pnl = pos.cashPnl !== undefined && pos.cashPnl !== 0 ? pos.cashPnl.toFixed(2) : (currentVal - cost).toFixed(2);
+  var avgCents = (Number(pos.avgPrice * 100)).toFixed(1);
+  var cost = (Number(pos.size * pos.avgPrice)).toFixed(2);
+  var currentVal = (Number(pos.size * pos.currentPrice)).toFixed(2);
+  var pnl = pos.cashPnl !== undefined && pos.cashPnl !== 0 ? Number(pos.cashPnl)).toFixed(2) : (Number(currentVal - cost)).toFixed(2);
   var pnlSign = pnl >= 0 ? '+' : '';
   var pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
 
   details.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-      '<span style="font-weight:700;color:' + sideColor + '"><span style="font-size:11px;padding:2px 5px;border-radius:3px;background:' + (posSide === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(0,230,138,0.12)') + ';margin-right:4px">' + posSide + '</span>' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
+      '<span style="font-weight:700;color:' + sideColor + '"><span style="font-size:11px;padding:2px 5px;border-radius:3px;background:' + (posSide === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(0,230,138,0.12)') + ';margin-right:4px">' + posSide + '</span>' + escH(label) + ' \u00b7 ' + Number(pos.size)).toFixed(1) + ' shares</span>' +
       '<span style="color:var(--dim)">avg ' + avgCents + '\u00a2</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:11px">' +
@@ -3115,8 +3115,8 @@ function renderTradePositionsPanel() {
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
     '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:#00e68a">\u2705 YOUR POSITION' + (rows.length > 1 ? 'S' : '') + '</div>' +
-    '<div style="font-family:var(--mono);font-size:11px;color:var(--soft)">Value <strong style="color:var(--text)">$' + totalValue.toFixed(2) + '</strong>' +
-      (Math.abs(totalPnl) > 0.01 ? ' \u00b7 <span style="color:' + pnlColor + '">' + pnlSign + '$' + totalPnl.toFixed(2) + '</span>' : '') +
+    '<div style="font-family:var(--mono);font-size:11px;color:var(--soft)">Value <strong style="color:var(--text)">$' + Number(totalValue)).toFixed(2) + '</strong>' +
+      (Math.abs(totalPnl) > 0.01 ? ' \u00b7 <span style="color:' + pnlColor + '">' + pnlSign + '$' + Number(totalPnl)).toFixed(2) + '</span>' : '') +
     '</div>' +
     '</div>';
 
@@ -3124,7 +3124,7 @@ function renderTradePositionsPanel() {
     var r = rows[k];
     var sideColor = r.side === 'YES' ? '#00e68a' : '#ff4d6a';
     var sideBg = r.side === 'YES' ? 'rgba(0,230,138,0.14)' : 'rgba(255,77,106,0.14)';
-    var avgCents = ((r.avgPrice || 0) * 100).toFixed(1);
+    var avgCents = (Number((r.avgPrice || 0) * 100)).toFixed(1);
     var outLabel = r.outcomeName || '';
     if (outLabel.length > 22) outLabel = outLabel.slice(0, 20) + '\u2026';
     html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0' +
@@ -3132,7 +3132,7 @@ function renderTradePositionsPanel() {
       '<span style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.05em;color:' + sideColor + ';background:' + sideBg + ';padding:3px 7px;border-radius:4px;flex-shrink:0">' + r.side + '</span>' +
       '<div style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
         escH(outLabel) +
-        '<div style="font-size:10px;color:var(--soft);margin-top:1px">' + r.size.toFixed(1) + ' shares \u00b7 avg ' + avgCents + '\u00a2</div>' +
+        '<div style="font-size:10px;color:var(--soft);margin-top:1px">' + Number(r.size)).toFixed(1) + ' shares \u00b7 avg ' + avgCents + '\u00a2</div>' +
       '</div>' +
       '<button onclick="sellPositionRow(' + r.outcomeIdx + ',' + r.sideIdx + ',' + r.size + ')" ' +
         'style="background:#ff4d6a;border:0;color:#fff;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.04em;padding:7px 14px;border-radius:6px;cursor:pointer;min-height:34px;flex-shrink:0;transition:filter .15s" ' +
@@ -3196,7 +3196,7 @@ function sellPositionRow(outcomeIdx, sideIdx, shareCount) {
       var priceCents = parseFloat(document.getElementById('tradePrice').value) || 0;
       var usd = shareCount * priceCents / 100;
       var input = document.getElementById('tradeAmount');
-      if (input) input.value = usd > 0 ? usd.toFixed(2) : '0';
+      if (input) input.value = usd > 0 ? Number(usd)).toFixed(2) : '0';
       // Tell executeTrade to use this exact share count instead of
       // re-deriving from amount/price (avoids flooring dust).
       _pendingMaxShares = shareCount;
@@ -4721,9 +4721,9 @@ async function checkTradingSetup() {
       }
     }
     if (formattedBal !== null) {
-      if (balVal) balVal.textContent = '$' + formattedBal.toFixed(2);
+      if (balVal) balVal.textContent = '$' + Number(formattedBal)).toFixed(2);
       var headerBal = document.getElementById('tradeBalance');
-      if (headerBal) headerBal.textContent = 'Balance: $' + formattedBal.toFixed(2);
+      if (headerBal) headerBal.textContent = 'Balance: $' + Number(formattedBal)).toFixed(2);
     }
   }
 }
@@ -5287,7 +5287,7 @@ async function runFullSetup() {
     try {
       var proxyBal = await fetchUsdcBalance(proxyAddr);
       if (proxyBal != null && proxyBal > 0) {
-        console.log('[setup] Deploy check returned false but proxy has $' + proxyBal.toFixed(2) + ' — must be deployed');
+        console.log(Number('[setup] Deploy check returned false but proxy has $' + Number(proxyBal)).toFixed(2) + ' — must be deployed');
         deployed = true;
       }
     } catch (e) {}
@@ -5598,7 +5598,7 @@ async function executeTrade() {
     if (proxyForBal) {
       var proxyBal = await fetchUsdcBalance(proxyForBal);
       if (proxyBal != null && proxyBal < amount) {
-        showTradeStatus('Need $' + amount.toFixed(2) + ' but your trading wallet only has $' + proxyBal.toFixed(2) + '. Opening deposit flow…', 'error');
+        showTradeStatus(Number('Need $' + Number(amount)).toFixed(2) + ' but your trading wallet only has $' + Number(proxyBal)).toFixed(2) + '. Opening deposit flow…', 'error');
         setTimeout(openDepositModal, 500);
         return;
       }
@@ -5679,7 +5679,7 @@ async function executeTrade() {
 
     // Round price to tick size (e.g., 0.33 with tick 0.01 stays 0.33; 0.333 with tick 0.01 becomes 0.33)
     var clobPrice = Math.round(price / 100 / tickSize) * tickSize;
-    clobPrice = parseFloat(clobPrice.toFixed(4)); // avoid floating-point drift
+    clobPrice = parseFloat(Number(clobPrice)).toFixed(4)); // avoid floating-point drift
     if (clobPrice <= 0 || clobPrice >= 1) {
       showTradeStatus('Price must be 1–99¢', 'error');
       cta.disabled = false; updateCtaButton();
@@ -5729,7 +5729,7 @@ async function executeTrade() {
       }
       if (shares > ownedShares + 0.0001) {  // tiny epsilon for rounding
         showTradeError('Selling more shares than you own.', [
-          'You hold ' + ownedShares.toFixed(2) + ' shares on this side; this order is for ' + shares.toFixed(2) + '.',
+          'You hold ' + Number(ownedShares)).toFixed(2) + ' shares on this side; this order is for ' + Number(shares)).toFixed(2) + '.',
           'Tap the MAX button to autofill your full holding, or reduce the amount below.',
           'Amount in USDC = (shares you want to sell) × limit price.'
         ]);
@@ -5917,7 +5917,7 @@ async function executeTrade() {
           }
           if (fillPrice == null) {
             var totalDepth = levels.reduce(function(s, l) { return s + parseFloat(l.size); }, 0);
-            showTradeStatus('Not enough ' + (clobSide === 'SELL' ? 'bid' : 'ask') + ' liquidity (available: ' + totalDepth.toFixed(1) + ') — try a smaller amount or use a Limit order', 'error');
+            showTradeStatus('Not enough ' + (clobSide === 'SELL' ? 'bid' : 'ask') + ' liquidity (Number(available: ' + Number(totalDepth)).toFixed(1) + ') — try a smaller amount or use a Limit order', 'error');
             cta.disabled = false; updateCtaButton();
             return;
           }
@@ -5932,9 +5932,9 @@ async function executeTrade() {
           }
           if (bumped <= 0) bumped = tickSize;
           if (bumped >= 1) bumped = 1 - tickSize;
-          var newClobPrice = parseFloat(bumped.toFixed(roundConfig.price));
+          var newClobPrice = parseFloat(Number(bumped)).toFixed(roundConfig.price));
           if (newClobPrice !== clobPrice) {
-            console.log('[trade] Book walk: fill @ ' + (fillPrice * 100).toFixed(1) + '¢ → limit ' + (newClobPrice * 100).toFixed(1) + '¢ (1 tick slippage)');
+            console.log(Number('[trade] Book walk: fill @ ' + (fillPrice * 100)).toFixed(1) + '¢ → limit ' + (Number(newClobPrice * 100)).toFixed(1) + '¢ (1 tick slippage)');
             clobPrice = newClobPrice;
             // Do NOT recalculate shares here — keep the original share count
             // that the book walk validated. Only the limit price changes.
@@ -5973,7 +5973,7 @@ async function executeTrade() {
           var curve = (feeRateBpsNum / 10000) * rawPrice * (1 - rawPrice);
           var feeBuffer = Math.max(curve + 0.005, 0.03); // 3% floor
           v2BuyAmount = amount * (1 - feeBuffer);
-          console.log('[trade-v2] BUY fee headroom: input=$' + amount.toFixed(4) + ' buffer=' + (feeBuffer * 100).toFixed(2) + '% adjusted=$' + v2BuyAmount.toFixed(4) + ' (feeRateBps=' + feeRateBpsNum + ' p=' + rawPrice + ')');
+          console.log(Number('[trade-v2] BUY fee headroom: input=$' + Number(amount)).toFixed(4) + ' buffer=' + (Number(feeBuffer * 100)).toFixed(2) + '% adjusted=$' + Number(v2BuyAmount)).toFixed(4) + ' (feeRateBps=' + feeRateBpsNum + ' p=' + rawPrice + ')');
         }
         rawMakerAmt = roundDown(v2BuyAmount, 2);
         rawTakerAmt = roundDown(v2BuyAmount / rawPrice, 4);
@@ -6506,8 +6506,8 @@ async function executeTrade() {
 
     // Step 5: SUCCESS — confetti + confirmation + position
     fireConfetti();
-    var payout = shares.toFixed(2);
-    showTradeStatus('\u2705 Order placed! ' + sideLabel + ' ' + shares.toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
+    var payout = Number(shares)).toFixed(2);
+    showTradeStatus(Number('\u2705 Order placed! ' + sideLabel + ' ' + Number(shares)).toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
     console.log('[trade] Order success:', data);
 
     // Phase 2: ping the live bet feed. Fire-and-forget \u2014 never block the
@@ -6585,7 +6585,7 @@ async function executeTrade() {
       if (_market) renderOutcomes(_market);
       updateSidebarPosition();
       try { renderTradePositionsPanel(); } catch (e) {}
-      console.log('[trade] Local position injected for', sideLabel, shares.toFixed(1), 'shares @', price + '¢');
+      console.log(Number('[trade] Local position injected for', sideLabel, Number(shares)).toFixed(1), 'shares @', price + '¢');
     } catch (posErr) {
       console.log('[trade] Could not inject local position:', posErr.message);
     }
@@ -6707,16 +6707,16 @@ function showTradePosition(side, shares, price, cost, payout) {
   if (!el || !details) return;
 
   var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
-  var profit = (parseFloat(payout) - cost).toFixed(2);
+  var profit = (Number(parseFloat(payout) - cost)).toFixed(2);
   var profitSign = profit >= 0 ? '+' : '';
 
   details.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-      '<span style="font-weight:700;color:' + sideColor + '">' + side + ' \u00b7 ' + shares.toFixed(1) + ' shares</span>' +
+      '<span style="font-weight:700;color:' + sideColor + '">' + side + ' \u00b7 ' + Number(shares)).toFixed(1) + ' shares</span>' +
       '<span style="color:var(--dim)">@ ' + price + '\u00a2</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:11px">' +
-      '<span>Cost: $' + cost.toFixed(2) + '</span>' +
+      '<span>Cost: $' + Number(cost)).toFixed(2) + '</span>' +
       '<span>Payout if ' + side + ': <strong style="color:var(--green)">$' + payout + '</strong></span>' +
     '</div>';
 
@@ -7106,7 +7106,7 @@ function applyAlphaPrefill() {
       var input = document.getElementById('tradeAmount');
       if (input) {
         // Mirror flow uses decimal sizes (e.g. $17.83) — keep 2 decimals
-        input.value = from === 'mirror' ? size.toFixed(2) : Math.round(size);
+        input.value = from === 'mirror' ? Number(size)).toFixed(2) : Math.round(size);
         updateTradeCalc();
       }
     }
@@ -7176,7 +7176,7 @@ function updateStopPreview() {
   var pnlPct = cost > 0 ? Math.round((pnl / cost) * 100) : 0;
   var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
   el.innerHTML = 'Entry: <strong>' + entryCents + '¢</strong> · Trigger: <strong>' + triggerCents + '¢</strong> · ' +
-    shares.toFixed(1) + ' shares → <span style="color:' + pnlColor + ';font-weight:700">' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + ' (' + (pnl >= 0 ? '+' : '') + pnlPct + '%)</span>';
+    Number(shares)).toFixed(1) + ' shares → <span style="color:' + pnlColor + ';font-weight:700">' + (pnl >= 0 ? '+' : '') + '$' + Number(pnl)).toFixed(2) + ' (' + (pnl >= 0 ? '+' : '') + pnlPct + '%)</span>';
 }
 
 function getCurrentPosition() {
@@ -7204,7 +7204,7 @@ function showStopPanel() {
   panel.style.display = 'block';
   // Pre-fill shares with full position
   var sharesInput = document.getElementById('stopShares');
-  if (sharesInput && !sharesInput.value) sharesInput.placeholder = pos.size.toFixed(1) + ' (all)';
+  if (sharesInput && !sharesInput.value) sharesInput.placeholder = Number(pos.size)).toFixed(1) + ' (all)';
   loadUserStops();
   updateStopPreview();
 }
@@ -7287,7 +7287,7 @@ function renderActiveStops() {
       '<span style="font-size:14px">' + icon + '</span>' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-family:var(--mono);font-size:11px;color:var(--text)">' + (isSL ? 'Stop-Loss' : 'Take-Profit') + ' at <strong style="color:' + color + '">' + trigCents + '¢</strong></div>' +
-        '<div style="font-family:var(--mono);font-size:10px;color:var(--soft)">' + parseFloat(o.shares).toFixed(1) + ' shares · ' + o.side + '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--soft)">' + parseFloat(Number(o.shares)).toFixed(1) + ' shares · ' + o.side + '</div>' +
       '</div>' +
       statusBadge +
       '<button onclick="cancelStop(\'' + o.id + '\')" style="background:none;border:none;color:var(--soft);cursor:pointer;font-size:14px;padding:4px" title="Cancel">✕</button>' +
@@ -7437,7 +7437,7 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
   var userInitiated = !!(opts && opts.userInitiated);
 
   // This is a SELL order to close the position
-  showTradeStatus('Executing stop order — selling ' + shares.toFixed(1) + ' shares...', 'info');
+  showTradeStatus(Number('Executing stop order — selling ' + Number(shares)).toFixed(1) + ' shares...', 'info');
 
   try {
     var apiKey = localStorage.getItem('poly_api_key');
@@ -7557,9 +7557,9 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
 
     // Build a SELL LIMIT order at trigger price (GTC)
     var rawPrice = Math.round(triggerPrice / tickSize) * tickSize;
-    var price = parseFloat(rawPrice.toFixed(2));
-    var rawMakerAmt = parseFloat((shares * price).toFixed(4));
-    var rawTakerAmt = parseFloat(shares.toFixed(4));
+    var price = parseFloat(Number(rawPrice)).toFixed(2));
+    var rawMakerAmt = parseFloat(Number((shares * price)).toFixed(4));
+    var rawTakerAmt = parseFloat(Number(shares)).toFixed(4));
 
     var salt = Math.floor(Math.random() * 9007199254740991);
     var exchange = isNegRisk ? '0xC5d563A36AE78145C45a50134d48A1215220f80a' : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
@@ -7633,7 +7633,7 @@ async function executeStopSell(stopId, tokenId, shares, triggerPrice, opts) {
     var clobData = await clobRes.json();
 
     if (clobRes.ok && !clobData.error) {
-      showTradeStatus('🛑 Stop order executed! Sold ' + shares.toFixed(1) + ' shares at ~' + Math.round(price * 100) + '¢', 'success');
+      showTradeStatus(Number('🛑 Stop order executed! Sold ' + Number(shares)).toFixed(1) + ' shares at ~' + Math.round(price * 100) + '¢', 'success');
       // Report execution to server
       var hfToken = localStorage.getItem('hf_token');
       fetch('/api/stops/' + stopId + '/executed', {
@@ -7762,7 +7762,7 @@ function _bfRowHtml(b) {
   var side  = String(b.side || '').toUpperCase();
   var sideCls = side === 'YES' ? 'yes' : 'no';
   var price = b.price != null ? Math.round(parseFloat(b.price) * 100) + '¢' : '—';
-  var amt   = b.usd_amount != null ? '$' + parseFloat(b.usd_amount).toFixed(parseFloat(b.usd_amount) >= 100 ? 0 : 2) : '—';
+  var amt   = b.usd_amount != null ? '$' + parseFloat(Number(b.usd_amount)).toFixed(parseFloat(b.usd_amount) >= 100 ? 0 : 2) : '—';
   var marketHref = b.market_slug ? '/market/' + encodeURIComponent(b.market_slug) : '#';
   var profileHref = b.user_id ? '/m/' + encodeURIComponent(b.user_id) : '#';
   var marketLabel = _bfEsc(b.outcome_label || b.market_title || 'Market');
@@ -8647,9 +8647,9 @@ async function loadPaperBalance() {
     var r = await fetch('/api/paper/balance', { headers: { Authorization: 'Bearer ' + _paperToken } });
     if (!r.ok) return;
     var d = await r.json();
-    var bal = parseFloat(d.balance || 0).toFixed(2);
+    var bal = parseFloat(Number(d.balance || 0)).toFixed(2);
     var pnl = parseFloat(d.pnl || 0);
-    var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+    var pnlStr = (pnl >= 0 ? '+' : '') + Number(pnl)).toFixed(2);
     var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
     el.innerHTML = 'Balance: <strong style="color:#c9920d">$' + bal + '</strong>' +
       (d.trades > 0 ? ' · PnL: <strong style="color:' + pnlColor + '">' + pnlStr + '</strong>' : '');
@@ -8684,8 +8684,8 @@ async function submitPaperTrade() {
     });
     var d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Trade failed');
-    var shares = parseFloat(d.shares || 0).toFixed(2);
-    var newBal = parseFloat(d.new_balance || 0).toFixed(2);
+    var shares = parseFloat(Number(d.shares || 0)).toFixed(2);
+    var newBal = parseFloat(Number(d.new_balance || 0)).toFixed(2);
     if (statusEl) {
       statusEl.style.color = '#00e68a';
       statusEl.textContent = 'Paper trade placed: ' + shares + ' ' + _paperSide.toUpperCase() + ' shares · Balance: $' + newBal;

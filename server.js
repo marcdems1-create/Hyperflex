@@ -142,6 +142,7 @@ const polymarket = require('./lib/polymarket'); // initialized below once _nodeF
 const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
+const alphaEngine = require('./lib/alpha-engine');
 const { createWeeklyChallenge, scoreAndResolveChallenge } = require('./lib/challenge-engine');
 const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
@@ -868,10 +869,22 @@ mentionsHeatmap.init({
   getWhaleCache:    () => _whaleWatchCache,
 });
 
+// Wire alpha engine (scoring engine for /api/feed/trending + LIVE ALPHA cards)
+alphaEngine.init({
+  getWhaleCache:    () => _whaleWatchCache,
+  getScreenerCache: () => _screenerCache,
+  fetch:            _nodeFetch,
+});
+
 // Refresh data engine every 90 seconds (matches existing screener cadence)
 setInterval(() => {
   dataEngine.refreshAll().catch(e => _logError('data-engine/cron', e));
 }, 90 * 1000);
+
+// Alpha engine refresh every 2 min
+setInterval(() => {
+  alphaEngine.refresh().catch(e => console.error('[alpha-engine] cron error:', e.message));
+}, 120_000);
 
 // Initial warm-up after 10s (let other services boot first)
 setTimeout(() => {
@@ -13601,162 +13614,31 @@ function _computeSignals(market) {
   return signals;
 }
 
-// GET /api/feed/trending — viral engagement scoring, 3-source with fallback guarantee
-app.get('/api/feed/trending', async (req, res) => {
-  try {
-    const seenSlugs = new Set();
-    const candidates = [];
-
-    // Viral engagement score — mirrors lib/mentions-heatmap.js _scoreMarket
-    function _viralScore(m) {
-      const price    = Math.max(0.01, Math.min(0.99, m.yes_price || 0.5));
-      const vol24    = Number(m.volume_24h)  || 0;
-      const volTotal = Number(m.volume_total || m.volume) || 0;
-      if (m.closed || m.resolved)         return 0;
-      if (volTotal < 25000)               return 0;
-      if (vol24   < 200)                  return 0;
-      if (price < 0.02 || price > 0.98)   return 0;
-      const controversy = 1 - Math.abs(price - 0.5) * 2;
-      const momentum    = vol24 / Math.max(volTotal, 1);
-      const viralScore  = vol24 * (0.5 + controversy) * (1 + momentum * 3);
-      const whaleBoost  = (m._whaleCount || 0) > 0 ? 1.5 : 1;
-      const edgeBoost   = (m._edgeScore  || 0) > 5 ? 1 + ((m._edgeScore - 5) * 0.15) : 1;
-      return viralScore * whaleBoost * edgeBoost;
-    }
-
-    // Build whale count and edge score lookup maps
-    const whaleCounts = new Map();
-    const whaleData = (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales))
-      ? _whaleWatchCache.data.whales : [];
-    for (const whale of whaleData) {
-      for (const pos of (whale.positions || [])) {
-        if ((pos.size || 0) < 5000) continue;
-        const slug = pos.slug || pos.market_slug || '';
-        if (slug) whaleCounts.set(slug, (whaleCounts.get(slug) || 0) + 1);
-      }
-    }
-    const edgeScores = new Map();
-    const screenerAll = (_screenerCache && _screenerCache.data) || [];
-    for (const m of screenerAll) {
-      const slug = m.slug || m.market_slug;
-      if (slug && m.edge_score) edgeScores.set(slug, m.edge_score);
-    }
-
-    function _enrichAndPush(slug, question, yesPriceRaw, vol24, volTotal, image, closed, resolved) {
-      if (!slug || seenSlugs.has(slug)) return;
-      const yes_price = yesPriceRaw != null ? Number(yesPriceRaw) : null;
-      const candidate = {
-        market_slug:   slug,
-        market_title:  question || '',
-        yes_price,
-        yes_price_pct: yes_price != null ? Math.round(yes_price * 100) : null,
-        volume_24h:    vol24,
-        volume_total:  volTotal,
-        image:         image || null,
-        closed:        closed || false,
-        resolved:      resolved || false,
-        _whaleCount:   whaleCounts.get(slug) || 0,
-        _edgeScore:    edgeScores.get(slug)  || 0,
-      };
-      const score = _viralScore(candidate);
-      if (score === 0) return;
-      candidate.score = score;
-      candidate.type  = candidate._whaleCount > 0 ? 'whale' : (candidate._edgeScore > 5 ? 'edge' : 'hot');
-      candidate.whale_count = candidate._whaleCount;
-      candidate.edge_score  = candidate._edgeScore;
-      seenSlugs.add(slug);
-      candidates.push(candidate);
-    }
-
-    // Source A: Gamma API top 50 by 24h volume
-    let gammaOk = false;
-    try {
-      const gRes = await fetch(
-        'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume_24h&ascending=false&limit=50',
-        { headers: { 'User-Agent': 'hyperflex/1.0' }, signal: AbortSignal.timeout(7000) }
-      );
-      if (gRes.ok) {
-        const gData = await gRes.json();
-        for (const m of (Array.isArray(gData) ? gData : [])) {
-          let price = null;
-          try {
-            const op = m.outcomePrices;
-            const arr = typeof op === 'string' ? JSON.parse(op) : op;
-            if (Array.isArray(arr) && arr.length > 0) price = Number(arr[0]);
-          } catch (_) {}
-          if (price == null && m.bestBid != null) price = Number(m.bestBid);
-          const vol24   = Number(m.volume_24h || m.volumeNum24hr || 0);
-          const volTotal = Number(m.volume || m.volumeNum || 0);
-          _enrichAndPush(m.slug || '', m.question || '', price, vol24, volTotal, m.image, m.closed, m.resolved);
-        }
-        gammaOk = candidates.length > 0;
-      }
-    } catch (e) {
-      console.error('[feed/trending] gamma fetch error:', e.message);
-    }
-
-    // Source B: screener cache (fallback + supplement)
-    for (const m of screenerAll) {
-      const slug  = m.slug || m.market_slug || '';
-      const p     = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-      const vol24 = Number(m.volume_24h || 0);
-      const volT  = Number(m.volume || m.volume_total || 0);
-      _enrichAndPush(slug, m.question || m.market || '', p, vol24, volT, m.image || m.market_image, m.closed, m.resolved);
-    }
-
-    // Fallback: if still empty, relax filters and return top screener markets by vol_24h
-    if (candidates.length < 5 && screenerAll.length > 0) {
-      const fallback = screenerAll
-        .filter(m => !m.closed && !m.resolved && Number(m.volume_24h || 0) > 0)
-        .sort((a, b) => Number(b.volume_24h || 0) - Number(a.volume_24h || 0))
-        .slice(0, 10);
-      for (const m of fallback) {
-        const slug = m.slug || m.market_slug || '';
-        if (!slug || seenSlugs.has(slug)) continue;
-        const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-        seenSlugs.add(slug);
-        candidates.push({
-          market_slug:   slug,
-          market_title:  m.question || m.market || '',
-          yes_price:     p,
-          yes_price_pct: p != null ? Math.round(p * 100) : null,
-          volume_24h:    Number(m.volume_24h || 0),
-          volume_total:  Number(m.volume || m.volume_total || 0),
-          image:         m.image || m.market_image || null,
-          score:         Number(m.volume_24h || 0),
-          type:          'hot',
-          whale_count:   0,
-          edge_score:    m.edge_score || 0,
-        });
-      }
-    }
-
-    // Sort: whale first, then by score desc; diversity cap 2 per event slug
-    candidates.sort((a, b) => {
-      if (a.type === 'whale' && b.type !== 'whale') return -1;
-      if (b.type === 'whale' && a.type !== 'whale') return  1;
-      return (b.score || 0) - (a.score || 0);
-    });
-
-    const seenEvents = new Map();
-    const diverse = candidates.filter(c => {
-      const key = c.event_slug || c.market_slug || '';
-      const cnt = seenEvents.get(key) || 0;
-      if (cnt >= 2) return false;
-      seenEvents.set(key, cnt + 1);
-      return true;
-    });
-
-    // Enrich each result with signal metadata
-    const enriched = diverse.slice(0, 15).map(c => {
-      const sigs = _computeSignals(c);
-      return Object.assign({}, c, { signals: sigs, badge: sigs.badge, why: sigs.why });
-    });
-    res.json(enriched);
-  } catch (err) {
-    console.error('[feed/trending]', err.message);
-    res.json([]);
+// GET /api/feed/trending — served from alpha engine (pre-scored, pre-enriched)
+app.get('/api/feed/trending', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 15, 30);
+  const markets = alphaEngine.getHotMarkets(limit);
+  if (!markets.length) {
+    // Fallback to screener cache if engine hasn't warmed yet
+    const fallback = ((_screenerCache && _screenerCache.data) || [])
+      .filter(m => !m.closed && !m.resolved && Number(m.volume_24h || 0) > 200)
+      .sort((a, b) => Number(b.volume_24h || 0) - Number(a.volume_24h || 0))
+      .slice(0, limit)
+      .map(m => ({
+        market_slug:   m.slug || m.market_slug || '',
+        question:      m.question || m.market || '',
+        image:         m.image || m.market_image || null,
+        yes_price:     m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : 0.5),
+        yes_price_pct: m.yes_price != null ? Math.round(m.yes_price * 100) : (m.yes_pct || 50),
+        volume_24h:    Number(m.volume_24h || 0),
+        volume_total:  Number(m.volume || m.volume_total || 0),
+        score:         Number(m.volume_24h || 0),
+        badge:         'HOT', badge_icon: '🔥', badge_color: '#f97316',
+        why:           [`$${alphaEngine.fmtVol(m.volume_24h)} traded in last 24h`],
+      }));
+    return res.json(fallback);
   }
+  res.json(markets);
 });
 
 // Following feed — activity from people you follow
@@ -38243,6 +38125,14 @@ app.get('/api/terminal/stream-stats', requireAdmin, (req, res) => {
 // the public surface.
 const _betFeedListeners = new Set();
 function _betFeedFanout(row) {
+  // Popup quality filters — only broadcast signals worth surfacing
+  if ((row.usd_amount || row.size || 0) < 1000) return;
+  if ((row.price || 0.5) < 0.04 || (row.price || 0.5) > 0.96) return;
+  const slug = row.market_slug || '';
+  if (slug) {
+    const market = alphaEngine.getHotMarkets(30).find(m => m.market_slug === slug);
+    if (!market || (market.volume_total || 0) < 500000) return;
+  }
   // Best-effort fanout. A buggy listener can't poison the loop because
   // each send is wrapped — failed writes mean a dead client whose close
   // handler will deregister it on its own.
@@ -58426,6 +58316,7 @@ app.listen(PORT, () => {
       ['market-movers', async () => { const r = await fetch(`http://localhost:${PORT}/api/market-movers`); if (!r.ok) throw new Error(r.status); }],
       ['whale-flow', async () => { const r = await fetch(`http://localhost:${PORT}/api/whale-flow`); if (!r.ok) throw new Error(r.status); }],
       ['screener', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener`); if (!r.ok) throw new Error(r.status); }],
+      ['alpha-engine', async () => { await alphaEngine.refresh(); }],
       ['narratives', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener/narratives`); if (!r.ok) throw new Error(r.status); }],
       ['fear-greed', async () => { const r = await fetch(`http://localhost:${PORT}/api/fear-greed`); if (!r.ok) throw new Error(r.status); }],
     ];
@@ -58451,6 +58342,8 @@ app.listen(PORT, () => {
       console.log('[boot] ✓ live-stream connecting to Polymarket WS');
       // Record price baseline for 24h change calculation
       liveStream.onTrade(tick => { if (tick && tick.asset && tick.price != null) _recordPrice(tick.asset, tick.price); });
+      // Feed live trades into alpha engine (price velocity + large-trade invalidation)
+      liveStream.onTrade(tick => alphaEngine.recordTrade(tick));
       // Attach stop-order monitor to live stream ticks
       loadActiveStops().then(() => initStopOrderMonitor()).catch(e => console.warn('[boot] stop-order init failed:', e.message));
     } catch (e) {

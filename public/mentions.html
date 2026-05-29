@@ -522,10 +522,19 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     <div id="upcoming-events-list"></div>
   </section>
 
-  <section class="live-alpha-section" id="live-alpha-section">
-    <div class="live-alpha-head"><span class="live-alpha-dot"></span>LIVE ALPHA</div>
-    <div class="alpha-grid" id="la-grid"><div class="la-empty">Loading…</div></div>
+  <section id="alpha-section" style="display:none;margin:40px 0 0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:#00d4ff;box-shadow:0 0 8px #00d4ff;display:inline-block;animation:pulse 1.5s infinite;"></span>
+      <span style="font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:#00d4ff;text-transform:uppercase;font-weight:700;">Live Alpha</span>
+    </div>
+    <div id="alpha-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;"></div>
   </section>
+  <style>
+    .alpha-card:hover{transform:translateY(-4px)!important;border-color:rgba(255,255,255,.18)!important;}
+    .alpha-card-hero{grid-column:1/-1!important;}
+    @media(max-width:768px){#alpha-grid{grid-template-columns:1fr!important;}}
+    @media(min-width:769px) and (max-width:1024px){#alpha-grid{grid-template-columns:1fr 1fr!important;}}
+  </style>
 
   <footer>HYPERFLEX · receipts on what was said</footer>
 </main>
@@ -1237,117 +1246,93 @@ async function load() {
 
 load();
 
-// ── LIVE ALPHA section ──
-(function () {
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function tAgo(iso) {
-    if (!iso) return '';
-    var ms = Date.now() - new Date(iso).getTime();
-    var m = Math.floor(ms / 60000), h = Math.floor(m / 60);
-    if (h > 0) return h + 'h ago';
-    if (m > 0) return m + 'm ago';
-    return 'just now';
-  }
-  function fmtVol(v) {
-    v = Number(v || 0);
-    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
-    return '';
-  }
-  function imgUrl(raw) {
-    if (!raw) return '';
-    return '/api/img-proxy?url=' + encodeURIComponent(raw);
-  }
+// ── LIVE ALPHA section — powered by alpha engine ──
+async function loadAlpha() {
+  try {
+    var res = await fetch('/api/feed/trending?limit=9', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    var markets = await res.json();
+    if (!markets || !markets.length) return;
 
-  var BADGE_META = {
-    WHALE_IN:     { bg:'#00d4ff', icon:'🐋', label:'WHALE IN' },
-    CLOSING_SOON: { bg:'#f59e0b', icon:'⏱', label:'CLOSING SOON' },
-    PRICE_CRASH:  { bg:'#ef4444', icon:'📉', label:'PRICE CRASH' },
-    VOLUME_SPIKE: { bg:'#8b5cf6', icon:'🔥', label:'VOLUME SPIKE' },
-    SHARP_EDGE:   { bg:'#10b981', icon:'⚡', label:'SHARP EDGE' },
-    LIVE_TRADE:   { bg:'#00d4ff', icon:'🌊', label:'LIVE TRADE' },
-    HOT:          { bg:'#f97316', icon:'🔥', label:'HOT' },
-  };
+    var grid = document.getElementById('alpha-grid');
+    var section = document.getElementById('alpha-section');
+    if (!grid || !section) return;
 
-  function buildCard(it) {
-    var href = it.market_slug ? '/market/' + encodeURIComponent(it.market_slug) : '#';
-    var yp = it.yes_price_pct != null ? it.yes_price_pct : (it.yes_price != null ? Math.round(it.yes_price * 100) : null);
-    var priceColor = yp != null ? (yp >= 60 ? '#22c55e' : yp <= 40 ? '#ef4444' : '#ffffff') : '#ffffff';
-    var vol24 = it.volume_24h || 0;
-    var badge = (it.badge && BADGE_META[it.badge]) ? it.badge : 'HOT';
-    var bm = BADGE_META[badge];
-    var why = Array.isArray(it.why) ? it.why : [];
-    var title = (it.market_title || it.question || '').slice(0, 80);
-
-    // Badge
-    var badgeHtml = '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:10px;font-family:\'JetBrains Mono\',monospace;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:' + esc(bm.bg) + ';color:#000;">'
-      + bm.icon + ' ' + bm.label + '</span>';
-
-    // WHY bullets
-    var whyHtml = '';
-    if (why.length > 0) {
-      whyHtml = '<div style="margin-bottom:14px;">'
-        + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;">Why this is hot</div>'
-        + why.map(function(b) {
-            return '<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">'
-              + '<span style="color:#00d4ff;font-size:10px;margin-top:1px;flex-shrink:0;">▸</span>'
-              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(255,255,255,.75);line-height:1.4;">' + esc(b) + '</span>'
-              + '</div>';
-          }).join('')
-        + '</div>';
+    function fmtVol(v) {
+      v = Number(v || 0);
+      if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+      if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+      return '$' + Math.round(v);
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
     }
 
-    // Price bar
-    var priceBarHtml = '';
-    if (yp != null) {
-      priceBarHtml = '<div style="margin-bottom:14px;">'
-        + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">'
-        + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:28px;font-weight:700;color:' + priceColor + ';">' + yp + '¢</span>'
-        + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(255,255,255,.5);">YES · ' + fmtVol(vol24) + ' 24h</span>'
-        + '</div>'
-        + '<div style="height:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;">'
-        + '<div style="height:100%;width:' + Math.min(Math.max(yp, 1), 99) + '%;background:' + priceColor + ';border-radius:2px;"></div>'
-        + '</div>'
-        + '</div>';
-    }
+    grid.innerHTML = markets.map(function(m, i) {
+      var imgUrl = m.image ? '/api/img-proxy?url=' + encodeURIComponent(m.image) : '';
+      var yp = m.yes_price_pct != null ? m.yes_price_pct : (m.yes_price != null ? Math.round(m.yes_price * 100) : 50);
+      var priceColor = yp >= 60 ? '#22c55e' : yp <= 40 ? '#ef4444' : '#ffffff';
+      var vol24hFmt = fmtVol(m.volume_24h);
+      var badgeColor = m.badge_color || '#f97316';
+      var badgeIcon  = m.badge_icon  || '🔥';
+      var badgeName  = m.badge       || 'HOT';
+      var why = Array.isArray(m.why) ? m.why : [];
+      var title = esc((m.question || '').length > 80 ? (m.question || '').slice(0, 80) + '…' : (m.question || ''));
+      var titleSize = i === 0 ? '22px' : '16px';
+      var priceSize = i === 0 ? '32px' : '22px';
+      var minH = i === 0 ? '380px' : '260px';
+      var heroClass = i === 0 ? ' alpha-card-hero' : '';
 
-    // Full card
-    return '<a class="alpha-card" href="' + esc(href) + '">'
-      // Full-bleed image
-      + (it.image ? '<img src="' + esc(imgUrl(it.image)) + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.3) saturate(1.2);z-index:0;" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
-      // Gradient overlay
-      + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1) 0%,rgba(0,0,0,.5) 40%,rgba(0,0,0,.92) 100%);z-index:1;"></div>'
-      // Content
-      + '<div style="position:relative;z-index:2;padding:20px;display:flex;flex-direction:column;height:100%;min-height:inherit;box-sizing:border-box;">'
-      // Badge (push content down with margin-bottom:auto on top section)
-      +   '<div style="margin-bottom:auto;padding-bottom:16px;">' + badgeHtml + '</div>'
-      // Bottom block
-      +   '<div>'
-      +     '<div class="ac-title" style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:12px;text-shadow:0 2px 8px rgba(0,0,0,.8);">' + esc(title) + '</div>'
-      +     whyHtml
-      +     priceBarHtml
-      +     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
-      +       '<div style="padding:10px;background:rgba(34,197,94,.85);border-radius:8px;text-align:center;font-weight:700;font-size:12px;letter-spacing:.06em;color:#000;">YES — TRADE</div>'
-      +       '<div style="padding:10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:8px;text-align:center;font-weight:700;font-size:12px;letter-spacing:.06em;color:#ef4444;">NO — SHORT</div>'
-      +     '</div>'
-      +   '</div>'
-      + '</div>'
-      + '</a>';
+      var whyHtml = why.map(function(b) {
+        return '<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">'
+          + '<span style="color:#00d4ff;font-size:10px;flex-shrink:0;margin-top:2px;">▸</span>'
+          + '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:rgba(255,255,255,.78);line-height:1.5;">' + esc(b) + '</span>'
+          + '</div>';
+      }).join('');
+
+      return '<a href="/market/' + esc(m.market_slug || '') + '" class="alpha-card' + heroClass + '" style="'
+        + 'position:relative;display:flex;flex-direction:column;border-radius:16px;'
+        + 'overflow:hidden;min-height:' + minH + ';text-decoration:none;'
+        + 'color:#fff;background:#111110;border:1px solid rgba(255,255,255,.08);'
+        + 'transition:transform .2s ease,border-color .2s ease;cursor:pointer;">'
+        + (imgUrl ? '<img src="' + imgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.28) saturate(1.3);z-index:0;" onerror="this.style.display=\'none\'" loading="lazy">' : '')
+        + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.45) 40%,rgba(0,0,0,0.94) 100%);z-index:1;"></div>'
+        + '<div style="position:relative;z-index:2;padding:18px;display:flex;flex-direction:column;height:100%;justify-content:space-between;">'
+        +   '<div>'
+        +     '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:10px;font-family:\'Space Mono\',monospace;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:' + esc(badgeColor) + ';color:#000;">'
+        +       badgeIcon + ' ' + esc(badgeName)
+        +     '</span>'
+        +   '</div>'
+        +   '<div>'
+        +     '<div style="font-family:\'Syne\',sans-serif;font-size:' + titleSize + ';font-weight:800;line-height:1.2;margin-bottom:12px;text-shadow:0 2px 12px rgba(0,0,0,.9);">' + title + '</div>'
+        +   (why.length ? '<div style="margin-bottom:12px;">'
+        +     '<div style="font-family:\'Space Mono\',monospace;font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.45);margin-bottom:6px;text-transform:uppercase;">Why this is hot</div>'
+        +     whyHtml
+        +   '</div>' : '')
+        +   '<div style="margin-bottom:12px;">'
+        +     '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px;">'
+        +       '<span style="font-family:\'Space Mono\',monospace;font-size:' + priceSize + ';font-weight:700;color:' + priceColor + ';">' + yp + '¢</span>'
+        +       '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:rgba(255,255,255,.45);">YES · ' + vol24hFmt + ' 24h</span>'
+        +     '</div>'
+        +     '<div style="height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;">'
+        +       '<div style="height:100%;width:' + yp + '%;background:' + priceColor + ';border-radius:2px;transition:width .4s;"></div>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+        +     '<div style="padding:10px;background:rgba(34,197,94,.8);border-radius:8px;text-align:center;font-family:\'Syne\',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;color:#000;">YES — TRADE</div>'
+        +     '<div style="padding:10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;text-align:center;font-family:\'Syne\',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;color:#ef4444;">NO — SHORT</div>'
+        +   '</div>'
+        + '</div></div></a>';
+    }).join('');
+
+    section.style.display = 'block';
+  } catch (e) {
+    console.warn('[alpha] loadAlpha error:', e.message);
   }
-
-  fetch('/api/feed/trending')
-    .then(function(r) { return r.ok ? r.json() : []; })
-    .then(function(items) {
-      var grid = document.getElementById('la-grid');
-      if (!grid) return;
-      if (!items || !items.length) { grid.innerHTML = '<div class="la-empty">No live alpha right now. Check back soon.</div>'; return; }
-      grid.innerHTML = items.map(buildCard).join('');
-    })
-    .catch(function() {
-      var grid = document.getElementById('la-grid');
-      if (grid) grid.innerHTML = '<div class="la-empty">Could not load signals.</div>';
-    });
-})();
+}
+document.addEventListener('DOMContentLoaded', loadAlpha);
 </script>
 <script src="/hfx-engage.js" defer></script>
 </body>
