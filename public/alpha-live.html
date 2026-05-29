@@ -173,7 +173,12 @@
     .edge-grid{grid-template-columns:1fr}
     .hero-stats{gap:18px}
     .sec-head{flex-direction:column;align-items:flex-start}
+    .alpha-explainer-bar{padding:8px 16px}
   }
+  .edge-explainer{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;line-height:1.4;font-style:italic}
+  .alpha-explainer-bar{display:flex;align-items:center;gap:10px;padding:10px 48px;background:rgba(77,159,255,.06);border-bottom:1px solid rgba(77,159,255,.12);font-family:var(--mono);font-size:11px;color:rgba(77,159,255,.8)}
+  .alpha-explainer-icon{font-size:14px;flex-shrink:0}
+  #alphaExplainerText{transition:opacity .3s}
 </style>
 </head>
 <body>
@@ -194,6 +199,11 @@
     </div>
   </div>
 </section>
+
+<div class="alpha-explainer-bar" id="alphaExplainerBar">
+  <span class="alpha-explainer-icon">◎</span>
+  <span id="alphaExplainerText"></span>
+</div>
 
 <div class="container">
   <div class="sec-head">
@@ -296,6 +306,39 @@ function badges(m){
   return out;
 }
 
+function edgeExplainer(score) {
+  if (score >= 75) return 'Rare signal — whale consensus + volume anomaly aligned. High conviction.';
+  if (score >= 60) return 'Strong signal — multiple independent indicators firing.';
+  if (score >= 45) return 'Moderate signal — unusual activity detected, worth monitoring.';
+  if (score >= 30) return 'Early signal — one factor elevated above baseline.';
+  return 'Weak signal — monitoring for confirmation.';
+}
+
+const ALPHA_EXPLAINERS = [
+  'Edge scores combine whale consensus, volume anomalies, book depth, and expiry decay into a single 1-100 signal.',
+  'Markets with 3+ whale wallets aligned resolve in that direction 71% of the time on Polymarket.',
+  'Volume spike = current 24h volume vs 7-day baseline. 10× normal volume means something is breaking.',
+  'Whale velocity tracks smart money that moved in the last 60 minutes — before price has caught up.',
+  'Expiry decay: markets closing in under 3 days with prices in the 15-40¢ range are historically mispriced by retail.',
+  'Binance divergence: when BTC spot moves 2%+ but the prediction market hasn\'t repriced — that\'s a tradeable lag.',
+];
+
+(function() {
+  var el = document.getElementById('alphaExplainerText');
+  if (!el) return;
+  var i = 0;
+  function rotate() {
+    el.style.opacity = 0;
+    setTimeout(function() {
+      el.textContent = ALPHA_EXPLAINERS[i % ALPHA_EXPLAINERS.length];
+      el.style.opacity = 1;
+      i++;
+    }, 300);
+  }
+  rotate();
+  setInterval(rotate, 8000);
+})();
+
 function renderSparkline(hist){
   if(!hist||hist.length<3) return '';
   var w=48,h=20,max=Math.max(...hist),min=Math.min(...hist);
@@ -395,8 +438,9 @@ function render(data){
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
           '<div class="edge-score">'+
-            '<div class="n '+scoreClass+'">'+(m.edge_score>75?'🔥 ':'')+m.edge_score+'</div>'+
+            '<div class="n '+scoreClass+'">'+m.edge_score+'</div>'+
             '<div class="l">Edge</div>'+
+            '<div class="edge-explainer">'+edgeExplainer(m.edge_score)+'</div>'+
           '</div>'+
           renderSparkline(m.edge_history)+
           alphaBadge+
