@@ -862,6 +862,12 @@ anomalyEngine.init({
   getDataEngine: () => dataEngine
 });
 
+// Wire heatmap cache getters now that caches are declared
+mentionsHeatmap.init({
+  getScreenerCache: () => _screenerCache,
+  getWhaleCache:    () => _whaleWatchCache,
+});
+
 // Refresh data engine every 90 seconds (matches existing screener cadence)
 setInterval(() => {
   dataEngine.refreshAll().catch(e => _logError('data-engine/cron', e));
@@ -13503,125 +13509,153 @@ app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) =>
   }
 });
 
-// GET /api/feed/trending — 3-source rebuild: Gamma vol + whale positions + edge signals
+// GET /api/feed/trending — viral engagement scoring, 3-source with fallback guarantee
 app.get('/api/feed/trending', async (req, res) => {
   try {
     const seenSlugs = new Set();
     const candidates = [];
 
-    function _controversy(p) {
-      if (p == null) return 0.1;
-      return 1 - Math.abs(p - 0.5) * 2;
-    }
-    function _trendScore(vol24, p) {
-      return (vol24 || 0) * (_controversy(p) + 0.1);
+    // Viral engagement score — mirrors lib/mentions-heatmap.js _scoreMarket
+    function _viralScore(m) {
+      const price    = Math.max(0.01, Math.min(0.99, m.yes_price || 0.5));
+      const vol24    = Number(m.volume_24h)  || 0;
+      const volTotal = Number(m.volume_total || m.volume) || 0;
+      if (m.closed || m.resolved)         return 0;
+      if (volTotal < 25000)               return 0;
+      if (vol24   < 200)                  return 0;
+      if (price < 0.02 || price > 0.98)   return 0;
+      const controversy = 1 - Math.abs(price - 0.5) * 2;
+      const momentum    = vol24 / Math.max(volTotal, 1);
+      const viralScore  = vol24 * (0.5 + controversy) * (1 + momentum * 3);
+      const whaleBoost  = (m._whaleCount || 0) > 0 ? 1.5 : 1;
+      const edgeBoost   = (m._edgeScore  || 0) > 5 ? 1 + ((m._edgeScore - 5) * 0.15) : 1;
+      return viralScore * whaleBoost * edgeBoost;
     }
 
-    // Source A: Gamma markets by 24h volume
+    // Build whale count and edge score lookup maps
+    const whaleCounts = new Map();
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales))
+      ? _whaleWatchCache.data.whales : [];
+    for (const whale of whaleData) {
+      for (const pos of (whale.positions || [])) {
+        if ((pos.size || 0) < 5000) continue;
+        const slug = pos.slug || pos.market_slug || '';
+        if (slug) whaleCounts.set(slug, (whaleCounts.get(slug) || 0) + 1);
+      }
+    }
+    const edgeScores = new Map();
+    const screenerAll = (_screenerCache && _screenerCache.data) || [];
+    for (const m of screenerAll) {
+      const slug = m.slug || m.market_slug;
+      if (slug && m.edge_score) edgeScores.set(slug, m.edge_score);
+    }
+
+    function _enrichAndPush(slug, question, yesPriceRaw, vol24, volTotal, image, closed, resolved) {
+      if (!slug || seenSlugs.has(slug)) return;
+      const yes_price = yesPriceRaw != null ? Number(yesPriceRaw) : null;
+      const candidate = {
+        market_slug:   slug,
+        market_title:  question || '',
+        yes_price,
+        yes_price_pct: yes_price != null ? Math.round(yes_price * 100) : null,
+        volume_24h:    vol24,
+        volume_total:  volTotal,
+        image:         image || null,
+        closed:        closed || false,
+        resolved:      resolved || false,
+        _whaleCount:   whaleCounts.get(slug) || 0,
+        _edgeScore:    edgeScores.get(slug)  || 0,
+      };
+      const score = _viralScore(candidate);
+      if (score === 0) return;
+      candidate.score = score;
+      candidate.type  = candidate._whaleCount > 0 ? 'whale' : (candidate._edgeScore > 5 ? 'edge' : 'hot');
+      candidate.whale_count = candidate._whaleCount;
+      candidate.edge_score  = candidate._edgeScore;
+      seenSlugs.add(slug);
+      candidates.push(candidate);
+    }
+
+    // Source A: Gamma API top 50 by 24h volume
+    let gammaOk = false;
     try {
       const gRes = await fetch(
-        'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume_24h&ascending=false&limit=20',
-        { headers: { 'User-Agent': 'hyperflex/1.0' }, signal: AbortSignal.timeout(6000) }
+        'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume_24h&ascending=false&limit=50',
+        { headers: { 'User-Agent': 'hyperflex/1.0' }, signal: AbortSignal.timeout(7000) }
       );
       if (gRes.ok) {
         const gData = await gRes.json();
         for (const m of (Array.isArray(gData) ? gData : [])) {
-          const vol24 = Number(m.volume_24h || m.volumeNum24hr || 0);
-          if (vol24 < 5000) continue;
-          const p = m.bestBid != null ? Number(m.bestBid) : (m.outcomePrices ? Number(JSON.parse(m.outcomePrices)[0]) : null);
-          if (p != null && (p < 0.05 || p > 0.95)) continue;
-          const slug = m.slug || m.market_slug || '';
-          if (!slug || seenSlugs.has(slug)) continue;
-          seenSlugs.add(slug);
-          candidates.push({
-            type: 'volume',
-            market_title: m.question || '',
-            market_slug: slug,
-            yes_price: p,
-            yes_price_pct: p != null ? Math.round(p * 100) : null,
-            volume_24h: vol24,
-            image: m.image || null,
-            _score: _trendScore(vol24, p),
-          });
+          let price = null;
+          try {
+            const op = m.outcomePrices;
+            const arr = typeof op === 'string' ? JSON.parse(op) : op;
+            if (Array.isArray(arr) && arr.length > 0) price = Number(arr[0]);
+          } catch (_) {}
+          if (price == null && m.bestBid != null) price = Number(m.bestBid);
+          const vol24   = Number(m.volume_24h || m.volumeNum24hr || 0);
+          const volTotal = Number(m.volume || m.volumeNum || 0);
+          _enrichAndPush(m.slug || '', m.question || '', price, vol24, volTotal, m.image, m.closed, m.resolved);
         }
+        gammaOk = candidates.length > 0;
       }
     } catch (e) {
       console.error('[feed/trending] gamma fetch error:', e.message);
     }
 
-    // Source B: whale positions from cache
-    const whaleData = (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales))
-      ? _whaleWatchCache.data.whales : [];
-    for (const whale of whaleData) {
-      for (const pos of (whale.positions || [])) {
-        if ((pos.size || 0) < 10000) continue;
-        const slug = pos.slug || pos.market_slug || '';
+    // Source B: screener cache (fallback + supplement)
+    for (const m of screenerAll) {
+      const slug  = m.slug || m.market_slug || '';
+      const p     = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
+      const vol24 = Number(m.volume_24h || 0);
+      const volT  = Number(m.volume || m.volume_total || 0);
+      _enrichAndPush(slug, m.question || m.market || '', p, vol24, volT, m.image || m.market_image, m.closed, m.resolved);
+    }
+
+    // Fallback: if still empty, relax filters and return top screener markets by vol_24h
+    if (candidates.length < 5 && screenerAll.length > 0) {
+      const fallback = screenerAll
+        .filter(m => !m.closed && !m.resolved && Number(m.volume_24h || 0) > 0)
+        .sort((a, b) => Number(b.volume_24h || 0) - Number(a.volume_24h || 0))
+        .slice(0, 10);
+      for (const m of fallback) {
+        const slug = m.slug || m.market_slug || '';
         if (!slug || seenSlugs.has(slug)) continue;
-        // look up enriched data from screener cache
-        const screenerData = (_screenerCache && _screenerCache.data) || [];
-        const enriched = screenerData.find(m => (m.slug || m.market_slug) === slug);
-        if (enriched && (enriched.closed || enriched.resolved)) continue;
-        const p = pos.price != null ? Number(pos.price) : (enriched ? enriched.yes_price : null);
-        if (p != null && (p < 0.05 || p > 0.95)) continue;
-        const vol24 = enriched ? Number(enriched.volume_24h || 0) : 0;
+        const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
         seenSlugs.add(slug);
         candidates.push({
-          type: 'whale',
-          market_title: pos.question || (enriched && enriched.question) || '',
-          market_slug: slug,
-          yes_price: p,
+          market_slug:   slug,
+          market_title:  m.question || m.market || '',
+          yes_price:     p,
           yes_price_pct: p != null ? Math.round(p * 100) : null,
-          volume_24h: vol24,
-          image: (enriched && (enriched.image || enriched.market_image)) || null,
-          whale_name: whale.name || whale.trader_name || null,
-          size_usd: pos.size || 0,
-          _score: _trendScore(vol24, p),
+          volume_24h:    Number(m.volume_24h || 0),
+          volume_total:  Number(m.volume || m.volume_total || 0),
+          image:         m.image || m.market_image || null,
+          score:         Number(m.volume_24h || 0),
+          type:          'hot',
+          whale_count:   0,
+          edge_score:    m.edge_score || 0,
         });
       }
     }
 
-    // Source C: screener edge signals (edge_score > 6, vol_24h > 5000)
-    const screenerData = (_screenerCache && _screenerCache.data) || [];
-    const edgeSorted = screenerData
-      .filter(m => {
-        if ((m.edge_score || 0) <= 6) return false;
-        const vol24 = Number(m.volume_24h || 0);
-        if (vol24 < 5000) return false;
-        const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-        if (p != null && (p < 0.05 || p > 0.95)) return false;
-        if (m.closed || m.resolved) return false;
-        return true;
-      })
-      .sort((a, b) => ((b.edge_score || 0) * Number(b.volume_24h || 0)) - ((a.edge_score || 0) * Number(a.volume_24h || 0)));
-
-    for (const m of edgeSorted) {
-      const slug = m.slug || m.market_slug || '';
-      if (!slug || seenSlugs.has(slug)) continue;
-      seenSlugs.add(slug);
-      const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-      const vol24 = Number(m.volume_24h || 0);
-      candidates.push({
-        type: 'edge',
-        market_title: m.question || m.market || '',
-        market_slug: slug,
-        edge_score: m.edge_score || 0,
-        yes_price: p,
-        yes_price_pct: p != null ? Math.round(p * 100) : null,
-        volume_24h: vol24,
-        image: m.image || m.market_image || null,
-        _score: _trendScore(vol24, p),
-      });
-    }
-
-    // Sort: whale first, then by _score desc; cap at 15
-    const TYPE_ORDER = { whale: 0, edge: 1, volume: 2 };
+    // Sort: whale first, then by score desc; diversity cap 2 per event slug
     candidates.sort((a, b) => {
-      const tDiff = (TYPE_ORDER[a.type] || 2) - (TYPE_ORDER[b.type] || 2);
-      if (tDiff !== 0) return tDiff;
-      return b._score - a._score;
+      if (a.type === 'whale' && b.type !== 'whale') return -1;
+      if (b.type === 'whale' && a.type !== 'whale') return  1;
+      return (b.score || 0) - (a.score || 0);
     });
 
-    res.json(candidates.slice(0, 15));
+    const seenEvents = new Map();
+    const diverse = candidates.filter(c => {
+      const key = c.event_slug || c.market_slug || '';
+      const cnt = seenEvents.get(key) || 0;
+      if (cnt >= 2) return false;
+      seenEvents.set(key, cnt + 1);
+      return true;
+    });
+
+    res.json(diverse.slice(0, 15));
   } catch (err) {
     console.error('[feed/trending]', err.message);
     res.json([]);
