@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-05-29 (passport reconciliation)
+
+**Shipped (with hashes):**
+- `938d7ba`: passport.html — fix score source (flex_score not flex_score_90d/alltime), tier from s.flex_tier then lib/flex-score.js thresholds, strip all decorative emoji (streak 🔥, badge 🛂, avatar 🐋, tweet text 🎯📊💰⚡👇, share buttons 🐦📋), remove tierIcon undefined reference
+
+**Active blockers:**
+- **Surgical FLEX fix** still blocked on Marc's curl on `/api/admin/flex/rebuild` for LaBradford.
+
+**Queued (priority order):**
+1. **Surgical FLEX fix** — blocked on curl result.
+2. **dog-card-v1 verification** — backend + page already shipped; visual spot-check of `/dogs` and feed showcase section.
+3. **messaging-v1 polish** — shipped bare-bones; optional: notifications, mark-read on focus.
+
+**Open questions / unverified:**
+- PR #102 (rolling hero banner) and PR #103 (SESSION_STATE ledger) still await Marc's visual verify.
+
+**Notes for next session:**
+- Passport reconciliation complete. All 4 items from Decision #1 queue are shipped.
+- Next pick is Marc's — either unblock FLEX fix (curl result) or verify dog-cards visually.
+
 ## 2026-05-28 (WHALE SCORE split + messaging-v1 + onboarding fix + username backfill)
 
 **Shipped (with hashes):**
