@@ -13545,7 +13545,7 @@ app.get('/api/feed/trending', (req, res) => {
     .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
 
   for (const m of edgeItems) {
-    if (items.length >= 15) break;
+    if (items.length >= 10) break;
     // Dedup: derive event slug as slug up to first numeric segment or full slug
     const eventSlug = (m.event_slug) || (m.slug || '').replace(/-\d+$/, '') || m.slug || '';
     if (eventSlug && seenEventSlugs.has(eventSlug)) continue;
