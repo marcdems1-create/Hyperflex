@@ -13509,6 +13509,98 @@ app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) =>
   }
 });
 
+// Compute signal metadata for a trending market card
+function _computeSignals(market) {
+  const signals = {};
+
+  // Whale signals — look up by conditionId or slug
+  const whales = (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales))
+    ? _whaleWatchCache.data.whales : [];
+  const matchedWhales = whales.filter(w =>
+    (w.positions || []).some(p =>
+      (market.conditionId && p.conditionId === market.conditionId) ||
+      (market.market_slug && (p.slug === market.market_slug || p.market_slug === market.market_slug))
+      ? (p.size || p.size_usd || 0) > 5000 : false
+    )
+  );
+  signals.whale_count = matchedWhales.length;
+  if (matchedWhales.length > 0) {
+    const getPos = w => (w.positions || []).find(p =>
+      (market.conditionId && p.conditionId === market.conditionId) ||
+      (market.market_slug && (p.slug === market.market_slug || p.market_slug === market.market_slug))
+    );
+    const sides = matchedWhales.map(w => {
+      const pos = getPos(w);
+      return (pos && (pos.outcome || pos.side || 'YES')).toUpperCase() === 'NO' ? 'NO' : 'YES';
+    });
+    signals.whale_side = sides.filter(s => s === 'YES').length >= sides.length / 2 ? 'YES' : 'NO';
+    const prices = matchedWhales.map(w => { const pos = getPos(w); return pos ? (pos.avgPrice || pos.avg_price || pos.price || 0.5) : 0.5; });
+    signals.whale_entry_price = Math.round(prices.reduce((s, p) => s + p, 0) / prices.length * 100);
+  }
+
+  // Time urgency
+  const daysToClose = market.end_date
+    ? (new Date(market.end_date) - Date.now()) / 86400000
+    : 999;
+  signals.days_to_close = Math.round(daysToClose * 10) / 10;
+
+  // Volume spike — compare 24h to 30-day avg daily
+  const dailyAvg = (market.volume_total || 0) / 30;
+  signals.volume_spike = dailyAvg > 0
+    ? Math.round((market.volume_24h / dailyAvg) * 10) / 10
+    : 1;
+
+  // Price change vs 24h-ago baseline from live stream
+  const hist = market.conditionId ? _priceHistory.get(market.conditionId) : null;
+  const currentPrice = market.yes_price != null ? market.yes_price : (market.yes_price_pct != null ? market.yes_price_pct / 100 : null);
+  signals.price_change_24h = (hist && currentPrice != null)
+    ? Math.round((currentPrice - hist.price) * 100)
+    : null;
+
+  // Edge score
+  signals.edge_score = market._edgeScore || market.edge_score || null;
+
+  // Badge — priority order
+  if (market._recentLargeTrade) {
+    signals.badge = 'LIVE_TRADE';
+  } else if (signals.whale_count >= 2) {
+    signals.badge = 'WHALE_IN';
+  } else if (signals.days_to_close > 0 && signals.days_to_close < 1) {
+    signals.badge = 'CLOSING_SOON';
+  } else if (signals.price_change_24h != null && Math.abs(signals.price_change_24h) >= 15) {
+    signals.badge = 'PRICE_CRASH';
+  } else if (signals.volume_spike >= 5) {
+    signals.badge = 'VOLUME_SPIKE';
+  } else if (signals.edge_score >= 7) {
+    signals.badge = 'SHARP_EDGE';
+  } else {
+    signals.badge = 'HOT';
+  }
+
+  // WHY bullets
+  const why = [];
+  if (signals.whale_count >= 1) {
+    why.push(`${signals.whale_count} tracked whale${signals.whale_count > 1 ? 's' : ''} positioned ${signals.whale_side} at ${signals.whale_entry_price}¢`);
+  }
+  if (signals.price_change_24h != null && Math.abs(signals.price_change_24h) >= 10) {
+    why.push(`Price ${signals.price_change_24h > 0 ? 'surged' : 'dropped'} ${Math.abs(signals.price_change_24h)}¢ today — market repricing fast`);
+  }
+  if (signals.days_to_close > 0 && signals.days_to_close < 1) {
+    why.push(`Closes in ${Math.round(signals.days_to_close * 24)} hours — last chance to position`);
+  } else if (signals.days_to_close > 0 && signals.days_to_close < 7) {
+    why.push(`Closes in ${Math.round(signals.days_to_close)} day${Math.round(signals.days_to_close) !== 1 ? 's' : ''}`);
+  }
+  if (signals.volume_spike >= 3) {
+    why.push(`Volume ${signals.volume_spike}x above daily average`);
+  }
+  if (signals.edge_score >= 7) {
+    why.push(`Sharp consensus edge: ${Number(signals.edge_score).toFixed(1)}`);
+  }
+  signals.why = why.slice(0, 3);
+
+  return signals;
+}
+
 // GET /api/feed/trending — viral engagement scoring, 3-source with fallback guarantee
 app.get('/api/feed/trending', async (req, res) => {
   try {
@@ -13655,7 +13747,12 @@ app.get('/api/feed/trending', async (req, res) => {
       return true;
     });
 
-    res.json(diverse.slice(0, 15));
+    // Enrich each result with signal metadata
+    const enriched = diverse.slice(0, 15).map(c => {
+      const sigs = _computeSignals(c);
+      return Object.assign({}, c, { signals: sigs, badge: sigs.badge, why: sigs.why });
+    });
+    res.json(enriched);
   } catch (err) {
     console.error('[feed/trending]', err.message);
     res.json([]);
@@ -32003,6 +32100,25 @@ app.get('/api/markets/search', async (req, res) => {
 let _whaleWatchCache = null;
 let _whalePositionSnapshot = new Map(); // wallet → positions array
 let _whaleTradeStream = []; // max 100 items, newest first
+
+// 24h price snapshot: conditionId/asset → price at first-seen, expires after 24h
+const _priceHistory = new Map(); // key → { price, ts }
+function _recordPrice(assetId, price) {
+  if (!assetId || price == null) return;
+  const now = Date.now();
+  const existing = _priceHistory.get(assetId);
+  // Only record the FIRST price seen in each 24h window (gives us 24h-ago baseline)
+  if (!existing || (now - existing.ts) > 24 * 60 * 60 * 1000) {
+    _priceHistory.set(assetId, { price: Number(price), ts: now });
+  }
+}
+// Purge entries older than 25h once an hour
+setInterval(() => {
+  const cutoff = Date.now() - 25 * 60 * 60 * 1000;
+  for (const [k, v] of _priceHistory) {
+    if (v.ts < cutoff) _priceHistory.delete(k);
+  }
+}, 60 * 60 * 1000);
 
 function diffWhalePositions(oldPositions, newPositions, trader) {
   const changes = [];
@@ -58333,6 +58449,8 @@ app.listen(PORT, () => {
     try {
       liveStream.start();
       console.log('[boot] ✓ live-stream connecting to Polymarket WS');
+      // Record price baseline for 24h change calculation
+      liveStream.onTrade(tick => { if (tick && tick.asset && tick.price != null) _recordPrice(tick.asset, tick.price); });
       // Attach stop-order monitor to live stream ticks
       loadActiveStops().then(() => initStopOrderMonitor()).catch(e => console.warn('[boot] stop-order init failed:', e.message));
     } catch (e) {

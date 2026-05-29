@@ -137,26 +137,14 @@ a{color:inherit;text-decoration:none}
 .live-alpha-section{margin:32px 0 0}
 .live-alpha-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:0.2em;color:var(--muted);text-transform:uppercase}
 .live-alpha-dot{width:7px;height:7px;border-radius:50%;background:#00e68a;box-shadow:0 0 10px rgba(0,230,138,.7);animation:pulse 1.5s infinite;flex-shrink:0}
-.la-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-.la-card{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:12px;background:rgba(255,255,255,.02);border:1px solid var(--line);text-decoration:none;color:inherit;transition:border-color .15s,background .15s;overflow:hidden;position:relative}
-.la-card:hover{border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.03);text-decoration:none}
-.la-card-img{width:100%;height:100px;object-fit:cover;border-radius:8px;display:block;background:var(--panel)}
-.la-card-img-wrap{position:relative;border-radius:8px;overflow:hidden;height:100px;background:var(--panel);flex-shrink:0}
-.la-card-img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-.la-card-img-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.2),rgba(0,0,0,.55))}
-.la-card-type{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
-.la-card-type.whale{color:#00e68a}
-.la-card-type.edge{color:var(--gold)}
-.la-card-type.volume{color:#4d9fff}
-.la-card-title{font-size:14px;font-weight:600;line-height:1.35;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.la-price-bar{position:relative;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:2px}
-.la-price-dot{position:absolute;top:-3px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px rgba(0,212,255,.5);transform:translateX(-50%)}
-.la-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:auto}
-.la-card-meta{font-family:var(--mono);font-size:9px;color:var(--muted)}
-.la-card-cta{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--cyan);padding:4px 10px;border:1px solid rgba(0,212,255,.3);border-radius:5px;transition:background .12s}
-.la-card:hover .la-card-cta{background:rgba(0,212,255,.08)}
 .la-empty{font-family:var(--mono);font-size:11px;color:var(--muted);padding:24px 0}
-@media(max-width:640px){.la-grid{grid-template-columns:1fr;gap:10px}}
+/* Alpha grid — movie-poster cards */
+.alpha-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:0}
+.alpha-grid .alpha-card:first-child{grid-column:1/-1;min-height:360px}
+.alpha-grid .alpha-card:first-child .ac-title{font-size:26px!important}
+.alpha-card{position:relative;display:block;border-radius:16px;overflow:hidden;min-height:280px;text-decoration:none;color:#fff;background:#111110;border:1px solid rgba(255,255,255,.08);transition:transform .2s,border-color .2s}
+.alpha-card:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.2);text-decoration:none}
+@media(max-width:640px){.alpha-grid{grid-template-columns:1fr}.alpha-grid .alpha-card:first-child{min-height:280px}}
 
 /* ── UPCOMING WORD-MARKET EVENTS (PR 2 — calendar-first rebuild) ── */
 .upcoming-events-list{display:flex;flex-direction:column;gap:8px}
@@ -536,7 +524,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 
   <section class="live-alpha-section" id="live-alpha-section">
     <div class="live-alpha-head"><span class="live-alpha-dot"></span>LIVE ALPHA</div>
-    <div class="la-grid" id="la-grid"><div class="la-empty">Loading…</div></div>
+    <div class="alpha-grid" id="la-grid"><div class="la-empty">Loading…</div></div>
   </section>
 
   <footer>HYPERFLEX · receipts on what was said</footer>
@@ -1270,47 +1258,83 @@ load();
     if (!raw) return '';
     return '/api/img-proxy?url=' + encodeURIComponent(raw);
   }
+
+  var BADGE_META = {
+    WHALE_IN:     { bg:'#00d4ff', icon:'🐋', label:'WHALE IN' },
+    CLOSING_SOON: { bg:'#f59e0b', icon:'⏱', label:'CLOSING SOON' },
+    PRICE_CRASH:  { bg:'#ef4444', icon:'📉', label:'PRICE CRASH' },
+    VOLUME_SPIKE: { bg:'#8b5cf6', icon:'🔥', label:'VOLUME SPIKE' },
+    SHARP_EDGE:   { bg:'#10b981', icon:'⚡', label:'SHARP EDGE' },
+    LIVE_TRADE:   { bg:'#00d4ff', icon:'🌊', label:'LIVE TRADE' },
+    HOT:          { bg:'#f97316', icon:'🔥', label:'HOT' },
+  };
+
   function buildCard(it) {
     var href = it.market_slug ? '/market/' + encodeURIComponent(it.market_slug) : '#';
-    var imgHtml = '';
-    if (it.image) {
-      imgHtml = '<div class="la-card-img-wrap">'
-        + '<img src="' + esc(imgUrl(it.image)) + '" alt="" loading="lazy" onerror="this.parentNode.style.display=\'none\'">'
-        + '<div class="la-card-img-overlay"></div>'
+    var yp = it.yes_price_pct != null ? it.yes_price_pct : (it.yes_price != null ? Math.round(it.yes_price * 100) : null);
+    var priceColor = yp != null ? (yp >= 60 ? '#22c55e' : yp <= 40 ? '#ef4444' : '#ffffff') : '#ffffff';
+    var vol24 = it.volume_24h || 0;
+    var badge = (it.badge && BADGE_META[it.badge]) ? it.badge : 'HOT';
+    var bm = BADGE_META[badge];
+    var why = Array.isArray(it.why) ? it.why : [];
+    var title = (it.market_title || it.question || '').slice(0, 80);
+
+    // Badge
+    var badgeHtml = '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:10px;font-family:\'JetBrains Mono\',monospace;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:' + esc(bm.bg) + ';color:#000;">'
+      + bm.icon + ' ' + bm.label + '</span>';
+
+    // WHY bullets
+    var whyHtml = '';
+    if (why.length > 0) {
+      whyHtml = '<div style="margin-bottom:14px;">'
+        + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;">Why this is hot</div>'
+        + why.map(function(b) {
+            return '<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">'
+              + '<span style="color:#00d4ff;font-size:10px;margin-top:1px;flex-shrink:0;">▸</span>'
+              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(255,255,255,.75);line-height:1.4;">' + esc(b) + '</span>'
+              + '</div>';
+          }).join('')
         + '</div>';
     }
-    var typeLabel, typeClass, priceHtml = '', metaHtml = '';
-    var yp = it.yes_price_pct != null ? it.yes_price_pct : it.current_price_pct;
-    var priceColor = yp != null ? (yp > 60 ? '#00e68a' : yp < 40 ? '#ff4d6a' : '#f0f0f5') : '#f0f0f5';
-    var vol24 = it.volume_24h || it.volume || 0;
-    if (it.type === 'whale' || it.type === 'whale_entry') {
-      typeClass = 'whale';
-      typeLabel = '🐋 WHALE';
-      if (it.whale_name) typeLabel += ' · ' + it.whale_name.split(' ')[0];
-    } else if (it.type === 'edge' || it.type === 'edge_signal') {
-      typeClass = 'edge';
-      typeLabel = '⚡ EDGE' + (it.edge_score ? ' ' + Number(it.edge_score).toFixed(1) : '');
-    } else {
-      typeClass = 'volume';
-      typeLabel = '🔥 VOLUME';
-    }
+
+    // Price bar
+    var priceBarHtml = '';
     if (yp != null) {
-      priceHtml = '<div class="la-price-bar"><div class="la-price-dot" style="left:' + Math.min(Math.max(yp, 2), 98) + '%;background:' + priceColor + '"></div></div>';
+      priceBarHtml = '<div style="margin-bottom:14px;">'
+        + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">'
+        + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:28px;font-weight:700;color:' + priceColor + ';">' + yp + '¢</span>'
+        + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(255,255,255,.5);">YES · ' + fmtVol(vol24) + ' 24h</span>'
+        + '</div>'
+        + '<div style="height:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;">'
+        + '<div style="height:100%;width:' + Math.min(Math.max(yp, 1), 99) + '%;background:' + priceColor + ';border-radius:2px;"></div>'
+        + '</div>'
+        + '</div>';
     }
-    var priceStr = yp != null ? '<span style="color:' + priceColor + ';font-weight:700">YES ' + yp + '¢</span>' : '';
-    var volStr = vol24 >= 1000 ? fmtVol(vol24) : '';
-    metaHtml = [priceStr, volStr].filter(Boolean).join(' · ');
-    return '<a class="la-card" href="' + esc(href) + '">'
-      + imgHtml
-      + '<div class="la-card-type ' + typeClass + '">' + typeLabel + '</div>'
-      + '<div class="la-card-title">' + esc(it.market_title || '') + '</div>'
-      + priceHtml
-      + '<div class="la-card-foot">'
-      +   '<div class="la-card-meta">' + metaHtml + '</div>'
-      +   '<div class="la-card-cta">VIEW MARKET →</div>'
+
+    // Full card
+    return '<a class="alpha-card" href="' + esc(href) + '">'
+      // Full-bleed image
+      + (it.image ? '<img src="' + esc(imgUrl(it.image)) + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.3) saturate(1.2);z-index:0;" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
+      // Gradient overlay
+      + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1) 0%,rgba(0,0,0,.5) 40%,rgba(0,0,0,.92) 100%);z-index:1;"></div>'
+      // Content
+      + '<div style="position:relative;z-index:2;padding:20px;display:flex;flex-direction:column;height:100%;min-height:inherit;box-sizing:border-box;">'
+      // Badge (push content down with margin-bottom:auto on top section)
+      +   '<div style="margin-bottom:auto;padding-bottom:16px;">' + badgeHtml + '</div>'
+      // Bottom block
+      +   '<div>'
+      +     '<div class="ac-title" style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:12px;text-shadow:0 2px 8px rgba(0,0,0,.8);">' + esc(title) + '</div>'
+      +     whyHtml
+      +     priceBarHtml
+      +     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+      +       '<div style="padding:10px;background:rgba(34,197,94,.85);border-radius:8px;text-align:center;font-weight:700;font-size:12px;letter-spacing:.06em;color:#000;">YES — TRADE</div>'
+      +       '<div style="padding:10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:8px;text-align:center;font-weight:700;font-size:12px;letter-spacing:.06em;color:#ef4444;">NO — SHORT</div>'
+      +     '</div>'
+      +   '</div>'
       + '</div>'
       + '</a>';
   }
+
   fetch('/api/feed/trending')
     .then(function(r) { return r.ok ? r.json() : []; })
     .then(function(items) {
