@@ -432,7 +432,8 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
     if (!d || !d.event) { console.warn('[stage] renderStage: missing event', d); return; }
 
     if (d.event.image) {
-      document.getElementById('stage-bg').style.backgroundImage = "url('" + d.event.image + "')";
+      var imgSrc = d.event.image_proxied || d.event.image;
+      document.getElementById('stage-bg').style.backgroundImage = "url('" + imgSrc + "')";
     }
 
     document.getElementById('stage-title').textContent = d.event.title || '';

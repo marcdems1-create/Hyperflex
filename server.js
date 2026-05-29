@@ -34535,13 +34535,15 @@ app.get('/api/mentions-stage', (req, res) => {
   // Use alpha engine's top scored market as the hero
   const top = alphaEngine.getHotMarkets(1)[0];
   if (top) {
+    const rawImage = top.image || null;
     const result = {
       event: {
-        slug:     top.market_slug,
-        title:    top.question,
-        image:    top.image || null,
-        end_date: top.end_date || null,
-        volume:   top.volume_total || 0,
+        slug:          top.market_slug,
+        title:         top.question,
+        image:         rawImage,
+        image_proxied: rawImage ? '/api/img-proxy?url=' + encodeURIComponent(rawImage) : null,
+        end_date:      top.end_date || null,
+        volume:        top.volume_total || 0,
       },
       primary_market: { yes_price_pct: top.yes_price_pct },
       whales: [], stances: [],
@@ -34569,8 +34571,16 @@ app.get('/api/mentions-stage', (req, res) => {
         const hi = Math.max(...prices.map(p => parseFloat(p) || 0));
         if (topPrice === null || hi > topPrice) topPrice = hi;
       }
+      const heroImage = hero.image || hero.icon || null;
       const result = {
-        event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
+        event: {
+          slug:          hero.slug,
+          title:         hero.title,
+          image:         heroImage,
+          image_proxied: heroImage ? '/api/img-proxy?url=' + encodeURIComponent(heroImage) : null,
+          end_date:      hero.endDate,
+          volume:        hero.volume,
+        },
         primary_market: { yes_price_pct: topPrice != null ? Math.round(topPrice * 100) : null },
         whales: [], stances: [],
       };
