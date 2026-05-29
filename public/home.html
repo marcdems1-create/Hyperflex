@@ -317,6 +317,17 @@ nav{
 }
 .wcard-cta:hover{opacity:.85;}
 
+/* ── CHALLENGE TEASER ── */
+.challenge-teaser{display:flex;align-items:center;justify-content:space-between;margin:0 48px 32px;padding:24px 32px;background:linear-gradient(135deg,rgba(0,230,138,.06),rgba(77,159,255,.06));border:1px solid rgba(0,230,138,.15);border-radius:12px;gap:24px;flex-wrap:wrap}
+.ct-label{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--cyan);letter-spacing:.12em;margin-bottom:8px}
+.ct-headline{font-family:var(--display);font-size:22px;font-weight:800;color:var(--text);margin-bottom:4px}
+.ct-sub{font-family:var(--mono);font-size:11px;color:var(--muted);max-width:440px}
+.ct-right{text-align:right;flex-shrink:0}
+.ct-stat{font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:12px}
+.ct-cta{display:inline-block;padding:12px 24px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:12px;font-weight:700;border-radius:6px;text-decoration:none;letter-spacing:.06em;transition:opacity .12s}
+.ct-cta:hover{opacity:.85;color:#000}
+@media(max-width:640px){.challenge-teaser{margin:0 16px 24px;padding:16px 20px}.ct-right{text-align:left}}
+
 /* ── SKELETON ── */
 @keyframes shimmer{0%{opacity:.25}50%{opacity:.45}100%{opacity:.25}}
 .sk{background:rgba(255,255,255,.06);animation:shimmer 1.8s infinite;}
@@ -904,6 +915,19 @@ footer{
         <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
       </div>
       <button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>
+    </div>
+  </div>
+
+  <!-- WEEKLY CHALLENGE TEASER -->
+  <div class="challenge-teaser" id="challengeTeaser" style="display:none">
+    <div class="ct-left">
+      <div class="ct-label">◎ WEEKLY CHALLENGE</div>
+      <div class="ct-headline">5 markets. 7 days. One winner.</div>
+      <div class="ct-sub" id="ctSub">Loading this week's markets…</div>
+    </div>
+    <div class="ct-right">
+      <div class="ct-stat" id="ctParticipants">— participants</div>
+      <a href="/challenge" class="ct-cta">Make Your Picks →</a>
     </div>
   </div>
 
@@ -1908,6 +1932,30 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = document.getElementById('rowArch');
     if (el) el.innerHTML = '<div style="padding:20px;color:rgba(240,240,245,.3);font-size:12px;">Couldn\'t load markets.</div>';
   });
+})();
+</script>
+
+<!-- ── CHALLENGE TEASER FETCH ── -->
+<script>
+(function() {
+  fetch('/api/challenge/current')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.challenge) return;
+      var teaser = document.getElementById('challengeTeaser');
+      if (!teaser) return;
+      var markets = data.challenge.markets || [];
+      var sub = document.getElementById('ctSub');
+      if (sub && markets.length) {
+        sub.textContent = markets.slice(0, 3).map(function(m) {
+          return m.question.length > 42 ? m.question.slice(0, 42) + '…' : m.question;
+        }).join(' · ');
+      }
+      var cnt = document.getElementById('ctParticipants');
+      if (cnt) cnt.textContent = (data.participantCount || 0) + ' participants this week';
+      teaser.style.display = '';
+    })
+    .catch(function() {});
 })();
 </script>
 </body>

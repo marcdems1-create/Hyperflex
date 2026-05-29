@@ -349,6 +349,7 @@
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
+    { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/mentions', label: 'Mentions' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
