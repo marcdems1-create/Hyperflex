@@ -13503,68 +13503,129 @@ app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) =>
   }
 });
 
-// GET /api/feed/trending — whale entries + edge signals for the Trending tab
-app.get('/api/feed/trending', (req, res) => {
-  const items = [];
+// GET /api/feed/trending — 3-source rebuild: Gamma vol + whale positions + edge signals
+app.get('/api/feed/trending', async (req, res) => {
+  try {
+    const seenSlugs = new Set();
+    const candidates = [];
 
-  // Source 1: whale trade stream — opened/increased positions ≥$10k, last 24h
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  for (const e of _whaleTradeStream) {
-    if (items.length >= 5) break;
-    if ((e.action !== 'opened' && e.action !== 'increased')) continue;
-    if ((e.size || 0) < 10000) continue;
-    const ts = e.ts ? new Date(e.ts).getTime() : 0;
-    if (ts && ts < cutoff) break; // stream is newest-first
-    const pricePct = e.price != null ? Math.round(e.price * 100) : null;
-    items.push({
-      type: 'whale_entry',
-      display: e.trader_name || 'A historically profitable whale',
-      wallet_short: e.id ? e.id.split('_')[1] : '',
-      market_title: e.question || '',
-      market_slug: e.slug || '',
-      side: e.side || 'YES',
-      current_price_pct: pricePct,
-      size_usd: e.size || 0,
-      size_display: e.size_display || '',
-      action: e.action,
-      ts: e.ts || new Date().toISOString(),
+    function _controversy(p) {
+      if (p == null) return 0.1;
+      return 1 - Math.abs(p - 0.5) * 2;
+    }
+    function _trendScore(vol24, p) {
+      return (vol24 || 0) * (_controversy(p) + 0.1);
+    }
+
+    // Source A: Gamma markets by 24h volume
+    try {
+      const gRes = await fetch(
+        'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume_24h&ascending=false&limit=20',
+        { headers: { 'User-Agent': 'hyperflex/1.0' }, signal: AbortSignal.timeout(6000) }
+      );
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        for (const m of (Array.isArray(gData) ? gData : [])) {
+          const vol24 = Number(m.volume_24h || m.volumeNum24hr || 0);
+          if (vol24 < 5000) continue;
+          const p = m.bestBid != null ? Number(m.bestBid) : (m.outcomePrices ? Number(JSON.parse(m.outcomePrices)[0]) : null);
+          if (p != null && (p < 0.05 || p > 0.95)) continue;
+          const slug = m.slug || m.market_slug || '';
+          if (!slug || seenSlugs.has(slug)) continue;
+          seenSlugs.add(slug);
+          candidates.push({
+            type: 'volume',
+            market_title: m.question || '',
+            market_slug: slug,
+            yes_price: p,
+            yes_price_pct: p != null ? Math.round(p * 100) : null,
+            volume_24h: vol24,
+            image: m.image || null,
+            _score: _trendScore(vol24, p),
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[feed/trending] gamma fetch error:', e.message);
+    }
+
+    // Source B: whale positions from cache
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales))
+      ? _whaleWatchCache.data.whales : [];
+    for (const whale of whaleData) {
+      for (const pos of (whale.positions || [])) {
+        if ((pos.size || 0) < 10000) continue;
+        const slug = pos.slug || pos.market_slug || '';
+        if (!slug || seenSlugs.has(slug)) continue;
+        // look up enriched data from screener cache
+        const screenerData = (_screenerCache && _screenerCache.data) || [];
+        const enriched = screenerData.find(m => (m.slug || m.market_slug) === slug);
+        if (enriched && (enriched.closed || enriched.resolved)) continue;
+        const p = pos.price != null ? Number(pos.price) : (enriched ? enriched.yes_price : null);
+        if (p != null && (p < 0.05 || p > 0.95)) continue;
+        const vol24 = enriched ? Number(enriched.volume_24h || 0) : 0;
+        seenSlugs.add(slug);
+        candidates.push({
+          type: 'whale',
+          market_title: pos.question || (enriched && enriched.question) || '',
+          market_slug: slug,
+          yes_price: p,
+          yes_price_pct: p != null ? Math.round(p * 100) : null,
+          volume_24h: vol24,
+          image: (enriched && (enriched.image || enriched.market_image)) || null,
+          whale_name: whale.name || whale.trader_name || null,
+          size_usd: pos.size || 0,
+          _score: _trendScore(vol24, p),
+        });
+      }
+    }
+
+    // Source C: screener edge signals (edge_score > 6, vol_24h > 5000)
+    const screenerData = (_screenerCache && _screenerCache.data) || [];
+    const edgeSorted = screenerData
+      .filter(m => {
+        if ((m.edge_score || 0) <= 6) return false;
+        const vol24 = Number(m.volume_24h || 0);
+        if (vol24 < 5000) return false;
+        const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
+        if (p != null && (p < 0.05 || p > 0.95)) return false;
+        if (m.closed || m.resolved) return false;
+        return true;
+      })
+      .sort((a, b) => ((b.edge_score || 0) * Number(b.volume_24h || 0)) - ((a.edge_score || 0) * Number(a.volume_24h || 0)));
+
+    for (const m of edgeSorted) {
+      const slug = m.slug || m.market_slug || '';
+      if (!slug || seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+      const p = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
+      const vol24 = Number(m.volume_24h || 0);
+      candidates.push({
+        type: 'edge',
+        market_title: m.question || m.market || '',
+        market_slug: slug,
+        edge_score: m.edge_score || 0,
+        yes_price: p,
+        yes_price_pct: p != null ? Math.round(p * 100) : null,
+        volume_24h: vol24,
+        image: m.image || m.market_image || null,
+        _score: _trendScore(vol24, p),
+      });
+    }
+
+    // Sort: whale first, then by _score desc; cap at 15
+    const TYPE_ORDER = { whale: 0, edge: 1, volume: 2 };
+    candidates.sort((a, b) => {
+      const tDiff = (TYPE_ORDER[a.type] || 2) - (TYPE_ORDER[b.type] || 2);
+      if (tDiff !== 0) return tDiff;
+      return b._score - a._score;
     });
+
+    res.json(candidates.slice(0, 15));
+  } catch (err) {
+    console.error('[feed/trending]', err.message);
+    res.json([]);
   }
-
-  // Source 2: screener edge signals — edge_score > 6, yes_price >= 0.03,
-  // max 1 card per event_slug (dedup sub-markets from same event)
-  const screenerData = (_screenerCache && _screenerCache.data) || [];
-  const seenEventSlugs = new Set();
-  const edgeItems = screenerData
-    .filter(m => {
-      if ((m.edge_score || 0) <= 6) return false;
-      const yp = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-      if (yp != null && yp < 0.03) return false; // untraded / essentially 0¢
-      return true;
-    })
-    .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0));
-
-  for (const m of edgeItems) {
-    if (items.length >= 15) break;
-    // Dedup: derive event slug as slug up to first numeric segment or full slug
-    const eventSlug = (m.event_slug) || (m.slug || '').replace(/-\d+$/, '') || m.slug || '';
-    if (eventSlug && seenEventSlugs.has(eventSlug)) continue;
-    if (eventSlug) seenEventSlugs.add(eventSlug);
-    const yesRaw = m.yes_price != null ? m.yes_price : (m.yes_pct != null ? m.yes_pct / 100 : null);
-    const yesPct = yesRaw != null ? Math.round(yesRaw * 100) : null;
-    items.push({
-      type: 'edge_signal',
-      market_title: m.question || m.market || '',
-      market_slug: m.slug || '',
-      edge_score: m.edge_score || 0,
-      yes_price_pct: yesPct,
-      volume: m.volume_24h || 0,
-      image: m.image || m.market_image || null,
-      ts: m.last_updated || new Date().toISOString(),
-    });
-  }
-
-  res.json(items);
 });
 
 // Following feed — activity from people you follow
