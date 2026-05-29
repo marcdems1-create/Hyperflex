@@ -142,6 +142,7 @@ const polymarket = require('./lib/polymarket'); // initialized below once _nodeF
 const polymarketProxy = require('./lib/polymarket-proxy');
 const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
+const { createWeeklyChallenge, scoreAndResolveChallenge } = require('./lib/challenge-engine');
 const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
 const mentionSync = require('./lib/mention-sync');
@@ -12134,6 +12135,8 @@ app.get('/api/trader/:address/profile', async (req, res) => {
 
 // GET /messages — direct messaging inbox
 app.get('/messages', (req, res) => res.sendFile(path.join(__dirname, 'public', 'messages.html')));
+// GET /challenge — weekly challenge page
+app.get('/challenge', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenge.html')));
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 // GET /dogs — contrarian-signal dog cards (dog-card-v1). See
@@ -21124,6 +21127,140 @@ app.post('/api/messages/conversations/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── WEEKLY CHALLENGE ─────────────────────────────────────────────────────────
+
+// GET /api/challenge/current — active challenge + user picks + leaderboard
+app.get('/api/challenge/current', async function(req, res) {
+  try {
+    const challengeRes = await dbQuery(
+      "SELECT * FROM weekly_challenges WHERE status = 'active' ORDER BY week_start DESC LIMIT 1"
+    );
+    if (!challengeRes.rows.length) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
+
+    const ch = challengeRes.rows[0];
+    const markets = Array.isArray(ch.markets) ? ch.markets : JSON.parse(ch.markets || '[]');
+
+    // Leaderboard top 20
+    const lbRes = await dbQuery(
+      `SELECT cp.score, cp.rank, cp.picks, cp.created_at,
+              u.username, u.display_name, u.avatar_url, u.calibration_score
+       FROM challenge_picks cp
+       JOIN users u ON cp.user_id::text = u.id::text
+       WHERE cp.challenge_id = $1 AND cp.completed = true
+       ORDER BY cp.score DESC LIMIT 20`,
+      [ch.id]
+    );
+
+    // User's picks if authed
+    let userPicks = null;
+    const rawToken = (req.headers.authorization || '').replace('Bearer ', '').trim();
+    if (rawToken) {
+      try {
+        const decoded = jwt.verify(rawToken, process.env.JWT_SECRET);
+        const uid = decoded.userId || decoded.id;
+        const pickRes = await dbQuery(
+          'SELECT * FROM challenge_picks WHERE challenge_id = $1 AND user_id = $2',
+          [ch.id, uid]
+        );
+        userPicks = pickRes.rows[0] || null;
+        if (userPicks && !Array.isArray(userPicks.picks)) {
+          userPicks.picks = JSON.parse(userPicks.picks || '[]');
+        }
+      } catch (_) {}
+    }
+
+    // Live prices from screener cache
+    const screenerData = (_screenerCache && _screenerCache.data) || [];
+    const enrichedMarkets = markets.map(function(m) {
+      const screener = screenerData.find(function(s) { return s.slug === m.slug; });
+      const currentPrice = screener
+        ? Math.round((screener.yes_price || 0.5) * 100)
+        : m.yes_price_at_open;
+      return Object.assign({}, m, {
+        current_price: currentPrice,
+        price_change: currentPrice - (m.yes_price_at_open || 50),
+      });
+    });
+
+    res.json({
+      challenge: Object.assign({}, ch, { markets: enrichedMarkets }),
+      leaderboard: lbRes.rows,
+      userPicks: userPicks,
+      participantCount: lbRes.rows.length,
+    });
+  } catch (e) {
+    console.error('[challenge/current]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/challenge/picks — submit picks (auth required)
+app.post('/api/challenge/picks', requireAuth, async function(req, res) {
+  try {
+    const { challenge_id, picks } = req.body;
+    if (!Array.isArray(picks) || picks.length === 0) {
+      return res.status(400).json({ error: 'picks required' });
+    }
+
+    const challengeRes = await dbQuery(
+      "SELECT * FROM weekly_challenges WHERE id = $1 AND status = 'active'",
+      [challenge_id]
+    );
+    if (!challengeRes.rows.length) return res.status(404).json({ error: 'Challenge not found or not active' });
+
+    const ch = challengeRes.rows[0];
+    const markets = Array.isArray(ch.markets) ? ch.markets : JSON.parse(ch.markets || '[]');
+    const validSlugs = new Set(markets.map(function(m) { return m.slug; }));
+
+    const enrichedPicks = picks.map(function(p) {
+      if (!validSlugs.has(p.slug)) throw new Error('Invalid market: ' + p.slug);
+      if (!['YES', 'NO'].includes(p.side)) throw new Error('side must be YES or NO');
+      const market = markets.find(function(m) { return m.slug === p.slug; });
+      return {
+        slug: p.slug,
+        side: p.side,
+        reasoning: String(p.reasoning || '').slice(0, 280),
+        yes_price_at_pick: market ? market.yes_price_at_open : 50,
+      };
+    });
+
+    await dbQuery(
+      `INSERT INTO challenge_picks (challenge_id, user_id, picks, completed)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT (challenge_id, user_id) DO UPDATE SET picks = $3, completed = true`,
+      [challenge_id, req.userId, JSON.stringify(enrichedPicks)]
+    );
+
+    res.json({ ok: true, picks: enrichedPicks });
+  } catch (e) {
+    console.error('[challenge/picks]', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// GET /api/challenge/leaderboard — full ranked leaderboard
+app.get('/api/challenge/leaderboard', async function(req, res) {
+  try {
+    const challengeRes = await dbQuery(
+      "SELECT * FROM weekly_challenges WHERE status IN ('active','resolved') ORDER BY week_start DESC LIMIT 1"
+    );
+    if (!challengeRes.rows.length) return res.json({ leaderboard: [] });
+
+    const lbRes = await dbQuery(
+      `SELECT cp.rank, cp.score, cp.picks, cp.created_at,
+              u.username, u.display_name, u.avatar_url, u.calibration_score
+       FROM challenge_picks cp
+       JOIN users u ON cp.user_id::text = u.id::text
+       WHERE cp.challenge_id = $1 AND cp.completed = true
+       ORDER BY cp.score DESC`,
+      [challengeRes.rows[0].id]
+    );
+    res.json({ leaderboard: lbRes.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TAKE COMMENTS ───────────────────────────────────────────────────────────
 
 // Ensure table
@@ -23442,6 +23579,72 @@ async function sendWeeklyRecapEmails() {
 }
 // Sunday 19:00 UTC — lands in inboxes before Monday open
 cron.schedule('0 19 * * 0', () => { sendWeeklyRecapEmails().catch(e => console.error('[weekly-recap cron]', e.message)); });
+
+// ── WEEKLY CHALLENGE CRONS ────────────────────────────────────────────────────
+// Monday 9am ET = 14:00 UTC — create new challenge
+cron.schedule('0 14 * * 1', async function() {
+  console.log('[challenge] Monday cron — creating weekly challenge');
+  try {
+    await createWeeklyChallenge(dbQuery);
+  } catch (e) {
+    console.error('[challenge] Monday cron failed:', e.message);
+  }
+});
+
+// Friday 5pm ET = 22:00 UTC — score, crown winner, create next challenge
+cron.schedule('0 22 * * 5', async function() {
+  console.log('[challenge] Friday cron — scoring challenge');
+  try {
+    const screenerData = (_screenerCache && _screenerCache.data) || [];
+    const resolved = await scoreAndResolveChallenge(dbQuery, screenerData);
+    if (!resolved) return;
+
+    // Get winner and send email
+    const winner = await dbQuery(
+      `SELECT cp.score, cp.picks, u.username, u.email, u.display_name
+       FROM challenge_picks cp
+       JOIN users u ON cp.user_id::text = u.id::text
+       WHERE cp.challenge_id = $1 ORDER BY cp.score DESC LIMIT 1`,
+      [resolved.id]
+    );
+    if (winner.rows.length && winner.rows[0].email) {
+      const w = winner.rows[0];
+      const name = w.display_name || w.username || 'Predictor';
+      await sendResendEmail({
+        to: w.email,
+        subject: 'You won this week\'s HYPERFLEX Challenge',
+        html: `<p>${name} — you topped the leaderboard with a score of ${w.score}.</p><p>Your profile is now featured on hyperflex.network for the next 7 days.</p><p><a href="https://hyperflex.network/challenge">See the results</a></p>`,
+        text: `${name} — you topped the leaderboard with a score of ${w.score}. Your profile is now featured on hyperflex.network for the next 7 days. hyperflex.network/challenge`,
+      }).catch(() => {});
+      console.log('[challenge] Winner email sent to', w.email, 'score:', w.score);
+    }
+
+    // Create next week's challenge immediately
+    await createWeeklyChallenge(dbQuery);
+    console.log('[challenge] Scored + created next week');
+  } catch (e) {
+    console.error('[challenge] Friday cron failed:', e.message);
+  }
+});
+
+// Boot — ensure active challenge exists (20s delay, after screener has a chance to populate)
+setTimeout(async function() {
+  try {
+    await createWeeklyChallenge(dbQuery);
+  } catch (e) {
+    console.warn('[challenge] Boot challenge creation failed:', e.message);
+  }
+}, 20000);
+
+// POST /api/admin/challenge/create — manual trigger
+app.post('/api/admin/challenge/create', requireAdminSecret, async function(req, res) {
+  try {
+    const ch = await createWeeklyChallenge(dbQuery);
+    res.json({ ok: true, challenge: ch });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // POST /api/admin/weekly-recap/send — manual trigger for testing
 app.post('/api/admin/weekly-recap/send', requireAdminSecret, (req, res) => {
@@ -54298,6 +54501,29 @@ if (pool) {
         reaction TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
+
+      // Weekly Challenge schema (weekly_challenges + challenge_picks)
+      await dbQuery(`CREATE TABLE IF NOT EXISTS weekly_challenges (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        week_start TIMESTAMPTZ NOT NULL,
+        week_end   TIMESTAMPTZ NOT NULL,
+        markets    JSONB NOT NULL,
+        status     TEXT DEFAULT 'active' CHECK (status IN ('upcoming','active','resolved')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_weekly_challenges_status ON weekly_challenges(status, week_start DESC)`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS challenge_picks (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        challenge_id UUID REFERENCES weekly_challenges(id) ON DELETE CASCADE,
+        user_id      TEXT NOT NULL,
+        picks        JSONB NOT NULL,
+        score        NUMERIC DEFAULT 0,
+        rank         INTEGER,
+        completed    BOOLEAN DEFAULT false,
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(challenge_id, user_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_challenge_picks_lb ON challenge_picks(challenge_id, score DESC)`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
