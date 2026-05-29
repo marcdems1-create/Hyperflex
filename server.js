@@ -34528,55 +34528,59 @@ let _stageCache = null;
 let _stageCacheAt = 0;
 const STAGE_TTL = 2 * 60 * 1000;
 
-app.get('/api/mentions-stage', async (req, res) => {
-  try {
-    if (_stageCache && Date.now() - _stageCacheAt < STAGE_TTL) {
-      return res.json(_stageCache);
-    }
-    const url = 'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=10';
-    const ctrl = new AbortController();
-    const fetchTimeout = setTimeout(() => ctrl.abort(), 8000);
-    let resp;
-    try {
-      resp = await _nodeFetch(url, { signal: ctrl.signal });
-    } finally {
-      clearTimeout(fetchTimeout);
-    }
-    if (!resp.ok) {
-      console.error('[mentions-stage] Gamma HTTP', resp.status);
-      return res.status(503).json({ error: 'Gamma unavailable', status: resp.status });
-    }
-    const events = await resp.json();
-    if (!Array.isArray(events) || !events.length) {
-      console.error('[mentions-stage] Gamma returned empty events array');
-      return res.status(503).json({ error: 'No events' });
-    }
-    const hero = events[0];
-    const markets = Array.isArray(hero.markets) ? hero.markets : [];
-    // Scan every active market's outcomePrices (may be JSON string or array)
-    // and find the single highest outcome probability across the whole event.
-    let topPrice = null;
-    for (const m of markets) {
-      if (m.closed) continue;
-      let prices = m.outcomePrices;
-      if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) { continue; } }
-      if (!Array.isArray(prices)) continue;
-      const hi = Math.max(...prices.map(p => parseFloat(p) || 0));
-      if (topPrice === null || hi > topPrice) topPrice = hi;
-    }
-    const yesPricePct = topPrice != null ? Math.round(topPrice * 100) : null;
+app.get('/api/mentions-stage', (req, res) => {
+  if (_stageCache && Date.now() - _stageCacheAt < STAGE_TTL) {
+    return res.json(_stageCache);
+  }
+  // Use alpha engine's top scored market as the hero
+  const top = alphaEngine.getHotMarkets(1)[0];
+  if (top) {
     const result = {
-      event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
-      primary_market: { yes_price_pct: yesPricePct },
+      event: {
+        slug:     top.market_slug,
+        title:    top.question,
+        image:    top.image || null,
+        end_date: top.end_date || null,
+        volume:   top.volume_total || 0,
+      },
+      primary_market: { yes_price_pct: top.yes_price_pct },
       whales: [], stances: [],
     };
-    console.log('[mentions-stage] hero:', hero.slug, '| title:', (hero.title||'').slice(0,50), '| image:', !!(hero.image||hero.icon), '| price:', yesPricePct);
+    console.log('[mentions-stage] alpha-engine hero:', top.market_slug, '| score:', Number(top.score || 0).toFixed(0));
     _stageCache = result; _stageCacheAt = Date.now();
-    res.json(result);
-  } catch (e) {
-    console.error('[mentions-stage]', e.message);
-    res.status(500).json({ error: 'Stage unavailable', detail: e.message });
+    return res.json(result);
   }
+  // Fallback: Gamma events API (alpha engine not warm yet)
+  (async () => {
+    try {
+      const url = 'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=10';
+      const resp = await _nodeFetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) return res.status(503).json({ error: 'Gamma unavailable' });
+      const events = await resp.json();
+      if (!Array.isArray(events) || !events.length) return res.status(503).json({ error: 'No events' });
+      const hero = events[0];
+      const markets = Array.isArray(hero.markets) ? hero.markets : [];
+      let topPrice = null;
+      for (const m of markets) {
+        if (m.closed) continue;
+        let prices = m.outcomePrices;
+        if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) { continue; } }
+        if (!Array.isArray(prices)) continue;
+        const hi = Math.max(...prices.map(p => parseFloat(p) || 0));
+        if (topPrice === null || hi > topPrice) topPrice = hi;
+      }
+      const result = {
+        event: { slug: hero.slug, title: hero.title, image: hero.image || hero.icon || null, end_date: hero.endDate, volume: hero.volume },
+        primary_market: { yes_price_pct: topPrice != null ? Math.round(topPrice * 100) : null },
+        whales: [], stances: [],
+      };
+      _stageCache = result; _stageCacheAt = Date.now();
+      res.json(result);
+    } catch (e) {
+      console.error('[mentions-stage]', e.message);
+      res.status(500).json({ error: 'Stage unavailable', detail: e.message });
+    }
+  })();
 });
 
 // GET /api/mentions-crowd?condition_ids=<csv>
