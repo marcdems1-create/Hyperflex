@@ -319,6 +319,15 @@ function renderMobileCard() {
 
   if (_mIdx >= _markets.length) {
     wrap.style.display = 'none';
+    if (_markets.length === 0) {
+      // No markets today — show a helpful state, not "all done"
+      done.style.display = 'flex';
+      var doneTitle = done.querySelector('.mobile-done-title');
+      var doneSub = document.getElementById('doneSub');
+      if (doneTitle) doneTitle.textContent = 'No picks today.';
+      if (doneSub) doneSub.textContent = 'Check back later — markets update throughout the day.';
+      return;
+    }
     done.style.display = 'flex';
     var sr = document.getElementById('streakRecord');
     if (sr) document.getElementById('doneSub').textContent = sr.textContent || 'Results pending resolution.';
@@ -384,31 +393,49 @@ document.addEventListener('touchend', function(e) {
   }
 }, { passive: true });
 
-// Load
-fetch(API + '/api/daily/markets', { headers: authHeaders() })
-  .then(function(r) { return r.ok ? r.json() : { markets: [], user_picks: {}, streak: null }; })
-  .then(function(d) {
-    _picks = d.user_picks || {};
-    _markets = d.markets || [];
-    renderMarkets(_markets, _picks);
-    if (d.streak) renderStreak(d.streak);
-    // Find first unpicked market for mobile start position
-    _mIdx = 0;
-    for (var i = 0; i < _markets.length; i++) {
-      if (_picks[_markets[i].slug]) _mIdx = i + 1; else break;
-    }
-    if (isMobile()) renderMobileCard();
-    var pickedCount = Object.keys(_picks).length;
-    var total = (d.markets || []).length;
-    if (pickedCount > 0 && total > 0) {
-      var rb = document.getElementById('recordBar');
-      rb.style.display = 'block';
-      rb.textContent = pickedCount + ' of ' + total + ' picks made today.';
-    }
-  })
-  .catch(function() {
-    document.getElementById('markets').innerHTML = '<div class="empty">Couldn\'t load today\'s markets. Try again shortly.</div>';
-  });
+// Load with timeout guard
+(function() {
+  var ctrl = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, 7000);
+  fetch(API + '/api/daily/markets', { headers: authHeaders(), signal: ctrl.signal })
+    .then(function(r) {
+      clearTimeout(timer);
+      return r.ok ? r.json() : { markets: [], user_picks: {}, streak: null };
+    })
+    .then(function(d) {
+      _picks = d.user_picks || {};
+      _markets = d.markets || [];
+      renderMarkets(_markets, _picks);
+      if (d.streak) renderStreak(d.streak);
+      // Find first unpicked market for mobile.
+      // Only advance past markets that have an actual pick TODAY — user_picks
+      // is already scoped to today by the server, but guard with a slug check.
+      var slugSet = {};
+      _markets.forEach(function(m) { slugSet[m.slug] = true; });
+      _mIdx = 0;
+      for (var i = 0; i < _markets.length; i++) {
+        var slug = _markets[i].slug;
+        if (slugSet[slug] && _picks[slug]) { _mIdx = i + 1; } else { break; }
+      }
+      if (isMobile()) renderMobileCard();
+      var pickedCount = 0;
+      _markets.forEach(function(m) { if (_picks[m.slug]) pickedCount++; });
+      if (pickedCount > 0 && _markets.length > 0) {
+        var rb = document.getElementById('recordBar');
+        rb.style.display = 'block';
+        rb.textContent = pickedCount + ' of ' + _markets.length + ' picks made today.';
+      }
+    })
+    .catch(function(e) {
+      clearTimeout(timer);
+      var errMsg = e.name === 'AbortError' ? 'Request timed out.' : 'Couldn\'t load today\'s markets.';
+      document.getElementById('markets').innerHTML = '<div class="empty" onclick="location.reload()" style="cursor:pointer">' + errMsg + ' Tap to retry.</div>';
+      if (isMobile()) {
+        var wrap = document.getElementById('mobileCardWrap');
+        if (wrap) wrap.innerHTML = '<div style="padding:40px 20px;text-align:center;color:rgba(240,240,245,.4);font-size:14px;" onclick="location.reload()">Couldn\'t load markets. Tap to retry.</div>';
+      }
+    });
+})();
 </script>
 </body>
 </html>

@@ -22494,11 +22494,11 @@ app.get('/api/daily/markets', optionalAuth, async (req, res) => {
     const eligible = screener.filter(m => {
       if (m.closed || m.resolved) return false;
       const price = m.yes_price || 0.5;
-      if (price < 0.2 || price > 0.8) return false;
-      if (Number(m.volume_24h || 0) < 10000) return false;
+      if (price < 0.15 || price > 0.85) return false;
+      if (Number(m.volume_24h || 0) < 5000) return false;
       if (!m.end_date) return false;
       const daysLeft = (new Date(m.end_date) - Date.now()) / 86400_000;
-      return daysLeft >= 0 && daysLeft <= 1;
+      return daysLeft >= 0 && daysLeft <= 3;
     });
 
     // Sort by volume desc, take top 3
@@ -22549,6 +22549,18 @@ app.get('/api/daily/markets', optionalAuth, async (req, res) => {
     console.error('[daily/markets]', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET /api/daily/picks/today — today's picks for the authed user
+app.get('/api/daily/picks/today', requireAuth, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = await dbQuery(
+      'SELECT market_slug, side, was_correct, created_at FROM user_daily_picks WHERE user_id = $1 AND pick_date = $2',
+      [req.user.id, today]
+    ).catch(() => []);
+    res.json({ picks: rows, date: today });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/daily/pick — { market_slug, side }
