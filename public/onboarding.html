@@ -74,7 +74,7 @@
 </head>
 <body>
 
-<button class="ob-skip" onclick="finishOnboarding('/')">Skip intro →</button>
+<button class="ob-skip" onclick="finishOnboarding('/?skip_onboarding=1')">Skip intro →</button>
 
 <div class="ob-wrap">
   <div class="ob-dots">
@@ -211,15 +211,11 @@ function toggleTopic(el) {
 
 function finish() {
   var topics = _selectedTopics;
-  if (topics.length) {
-    try { localStorage.setItem('hfx_topics', JSON.stringify(topics)); } catch(e) {}
-  }
-  var dest = '/explore';
-  if (topics.length) dest += '?topic=' + encodeURIComponent(topics[0]);
-  // Save to server if logged in
+  // Always save to localStorage
+  try { localStorage.setItem('hfx_topics', JSON.stringify(topics)); } catch(e) {}
+  // POST to server only if logged in
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (token && topics.length) {
-    // map display names to canonical keys
+  if (token) {
     var MAP = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
     var keys = topics.map(function(t){return MAP[t]||t.toLowerCase();});
     fetch('/api/user/topics', {
@@ -228,12 +224,12 @@ function finish() {
       body:JSON.stringify({topics:keys})
     }).catch(function(){});
   }
-  finishOnboarding(dest);
+  finishOnboarding('/?skip_onboarding=1');
 }
 
 function finishOnboarding(dest) {
   try { localStorage.setItem('hfx_onboarded', '1'); } catch(e) {}
-  window.location.href = dest || '/explore';
+  window.location.href = dest || '/?skip_onboarding=1';
 }
 </script>
 </body>

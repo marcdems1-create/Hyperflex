@@ -7,8 +7,25 @@
 (function(){try{
   if(location.search.indexOf('skip_onboarding')!==-1)return;
   var t=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');
-  if(t){location.replace('/feed');return;}
-  if(!localStorage.getItem('hfx_onboarded')){location.replace('/onboarding');return;}
+  // Already onboarded locally — stay on page (logged in OR anonymous)
+  if(localStorage.getItem('hfx_onboarded'))return;
+  // Logged-in but no local flag — check server in case they onboarded on another device
+  if(t){
+    fetch('/api/user/topics',{headers:{Authorization:'Bearer '+t}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        if(d&&d.onboarded){
+          localStorage.setItem('hfx_onboarded','1');
+          if(d.topics&&d.topics.length)localStorage.setItem('hfx_topics',JSON.stringify(d.topics));
+        } else {
+          location.replace('/onboarding');
+        }
+      })
+      .catch(function(){location.replace('/onboarding');});
+    return;
+  }
+  // Anonymous + not onboarded — send to onboarding
+  location.replace('/onboarding');
 }catch(e){}})();
 </script>
 <title>HYPERFLEX — Prediction Markets</title>
