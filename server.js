@@ -2754,20 +2754,30 @@ app.get('/api/notifications', async (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: 'Auth required' });
+    const unreadOnly = req.query.unread_only === 'true';
     let data;
     if (pool) {
-      data = await dbQuery('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [userId]);
+      if (unreadOnly) {
+        const rows = await dbQuery('SELECT COUNT(*)::int AS cnt FROM notifications WHERE user_id=$1 AND read=false', [userId]).catch(() => [{ cnt: 0 }]);
+        return res.json({ unread: rows[0]?.cnt || 0 });
+      }
+      data = await dbQuery('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [userId]);
     } else {
+      if (unreadOnly) {
+        const { count } = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('read', false);
+        return res.json({ unread: count || 0 });
+      }
       const { data: d, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(30);
+        .limit(50);
       if (error) throw error;
       data = d;
     }
-    res.json({ notifications: data || [] });
+    const unread = (data || []).filter(n => !n.read).length;
+    res.json({ notifications: data || [], unread });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -12158,6 +12168,7 @@ app.get('/messages', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/challenge', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenge.html')));
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+app.get('/notifications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'notifications.html')));
 // GET /dogs — contrarian-signal dog cards (dog-card-v1). See
 // docs/specs/dog-card-v1.md.
 app.get('/dogs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dogs.html')));

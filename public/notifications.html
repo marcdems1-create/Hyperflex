@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications — HYPERFLEX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e15;
+      --surface: #111118;
+      --border: rgba(255,255,255,.07);
+      --border-hover: rgba(255,255,255,.14);
+      --ink: #f0f0f5;
+      --muted: rgba(240,240,245,.35);
+      --cyan: #4d9fff;
+      --red: #ff4d6a;
+      --green: #00e68a;
+      --gold: #c9920d;
+      --sans: 'Inter', -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    #nav-root { position: sticky; top: 0; z-index: 100; }
+
+    .page-wrap {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 16px 80px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .mark-read-btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--cyan);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px 0;
+      opacity: .8;
+      transition: opacity .12s;
+    }
+    .mark-read-btn:hover { opacity: 1; }
+
+    .notif-list { display: flex; flex-direction: column; gap: 2px; }
+
+    .notif-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      color: var(--ink);
+      transition: border-color .12s, background .12s;
+      position: relative;
+    }
+    .notif-item:hover { border-color: var(--border-hover); background: #17171f; }
+    .notif-item.unread {
+      border-left: 2px solid var(--cyan);
+      background: rgba(77,159,255,.04);
+    }
+    .notif-item.unread:hover { background: rgba(77,159,255,.07); }
+
+    .notif-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,.04);
+      border-radius: 50%;
+      border: 1px solid var(--border);
+    }
+
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 2px;
+      line-height: 1.3;
+    }
+    .notif-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .notif-time {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: rgba(240,240,245,.22);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .unread-dot {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--cyan);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 64px 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .auth-state {
+      text-align: center;
+      padding: 64px 16px;
+    }
+    .auth-state p {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .auth-state a {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: #0a0a0f;
+      background: linear-gradient(135deg, #00e68a, #4d9fff);
+      text-decoration: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .skel {
+      height: 64px;
+      background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  </style>
+</head>
+<body>
+<div id="nav-root"></div>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div class="page-title">Notifications</div>
+    <button class="mark-read-btn" id="markAllBtn" style="display:none" onclick="markAllRead()">Mark all read</button>
+  </div>
+
+  <div id="notifContainer">
+    <div class="loading-state" id="loadingState">
+      <div class="skel"></div>
+      <div class="skel"></div>
+      <div class="skel"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script>
+(function() {
+  var TOKEN = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token') || '';
+
+  if (!TOKEN) {
+    document.getElementById('notifContainer').innerHTML =
+      '<div class="auth-state"><p>Sign in to see your notifications.</p><a href="/creator/login">Sign in</a></div>';
+    return;
+  }
+
+  var TYPE_ICONS = {
+    win: '✓',
+    take_correct: '✓',
+    take_incorrect: '—',
+    reaction: '◈',
+    follow: '◎',
+    new_follower: '◎',
+    challenge: '⚔',
+    challenge_won: '⚔',
+    challenge_accepted: '⚔',
+    whale: '◉',
+    alert: '!',
+    message: '◫',
+  };
+
+  function relTime(iso) {
+    var d = new Date(iso);
+    var diff = Date.now() - d.getTime();
+    var m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'min ago';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    var days = Math.floor(h / 24);
+    if (days < 7) return days + 'd ago';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function renderNotif(n) {
+    var icon = TYPE_ICONS[n.type] || '●';
+    var isUnread = !n.read;
+    var url = n.url || '#';
+    var unreadDot = isUnread ? '<div class="unread-dot"></div>' : '';
+    return '<a class="notif-item' + (isUnread ? ' unread' : '') + '" href="' + escHtml(url) + '" data-id="' + escHtml(n.id) + '" onclick="handleClick(event,\'' + escHtml(n.id) + '\',\'' + escHtml(url) + '\')">' +
+      '<div class="notif-icon">' + icon + '</div>' +
+      '<div class="notif-body">' +
+        '<div class="notif-title">' + escHtml(n.title) + '</div>' +
+        (n.body ? '<div class="notif-text">' + escHtml(n.body) + '</div>' : '') +
+      '</div>' +
+      '<div class="notif-time">' + relTime(n.created_at) + '</div>' +
+      unreadDot +
+    '</a>';
+  }
+
+  function load() {
+    fetch('/api/notifications', { headers: { Authorization: 'Bearer ' + TOKEN } })
+      .then(function(r) { return r.ok ? r.json() : { notifications: [] }; })
+      .then(function(d) {
+        var notifs = d.notifications || [];
+        var container = document.getElementById('notifContainer');
+        if (!notifs.length) {
+          container.innerHTML = '<div class="empty-state">Nothing yet. Make some picks.</div>';
+          return;
+        }
+        var unread = notifs.filter(function(n){ return !n.read; }).length;
+        if (unread > 0) document.getElementById('markAllBtn').style.display = '';
+        container.innerHTML = '<div class="notif-list">' + notifs.map(renderNotif).join('') + '</div>';
+      })
+      .catch(function() {
+        document.getElementById('notifContainer').innerHTML =
+          '<div class="empty-state">Could not load. Retry shortly.</div>';
+      });
+  }
+
+  window.handleClick = function(e, id, url) {
+    e.preventDefault();
+    // Mark as read
+    fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id })
+    }).catch(function(){});
+    // Remove unread dot + style
+    var el = document.querySelector('[data-id="' + id + '"]');
+    if (el) { el.classList.remove('unread'); var dot = el.querySelector('.unread-dot'); if (dot) dot.remove(); }
+    // Navigate
+    if (url && url !== '#') setTimeout(function(){ window.location.href = url; }, 80);
+  };
+
+  window.markAllRead = function() {
+    fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    }).then(function() {
+      document.querySelectorAll('.notif-item.unread').forEach(function(el) {
+        el.classList.remove('unread');
+        var dot = el.querySelector('.unread-dot');
+        if (dot) dot.remove();
+      });
+      document.getElementById('markAllBtn').style.display = 'none';
+      // Clear nav badge
+      var badge = document.getElementById('bellBadge');
+      if (badge) badge.style.display = 'none';
+    }).catch(function(){});
+  };
+
+  load();
+})();
+</script>
+</body>
+</html>

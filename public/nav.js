@@ -266,6 +266,10 @@
       '.nav-wallet-btn.connected:hover{border-color:rgba(0,230,138,0.5);background:rgba(0,230,138,0.14)}' +
       '.nav-wallet-btn.connected svg{stroke:#00e68a}' +
       '.nav-wallet-btn.connected span{color:#00e68a}' +
+      /* Notification bell */
+      '.nav-bell{position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;color:rgba(255,255,255,.4);text-decoration:none;transition:color .12s,background .12s;flex-shrink:0}' +
+      '.nav-bell:hover{color:#f0f0f5;background:rgba(255,255,255,.05)}' +
+      '.bell-badge{position:absolute;top:3px;right:3px;background:#ff4d6a;color:#fff;font-family:"JetBrains Mono",monospace;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1}' +
       /* Mobile menu base styles (hidden on all screens by default) */
       '.nav-hamburger{display:none}' +
       '.nav-mobile-menu{display:none;position:fixed;inset:0;z-index:9998;background:rgba(10,10,15,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);flex-direction:column;overflow-y:auto;padding:0}' +
@@ -470,6 +474,7 @@
       '<kbd>' + (navigator.platform.indexOf('Mac') > -1 ? '⌘' : 'Ctrl') + 'K</kbd>' +
     '</div>' +
     '<div class="nav-auth">' +
+      (isLoggedIn ? '<a href="/notifications" class="nav-bell" id="navBell" title="Notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bell-badge" id="bellBadge" style="display:none">0</span></a>' : '') +
       '<button class="nav-wallet-btn" id="navWalletBtn" title="Connect Wallet">' +
         '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
         '<span id="navWalletLabel">Connect</span>' +
@@ -503,6 +508,22 @@
           else { badge.style.display = 'none'; }
         }).catch(function(){});
       setTimeout(pollUnread, 30000); // re-check every 30s
+    })();
+
+    // ── Notification bell badge polling ──
+    (function pollNotifications() {
+      var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+      if (!tok) return;
+      fetch('/api/notifications?unread_only=true', { headers: { Authorization: 'Bearer ' + tok } })
+        .then(function(r){ return r.ok ? r.json() : { unread: 0 }; })
+        .then(function(d) {
+          var badge = document.getElementById('bellBadge');
+          if (!badge) return;
+          var n = d.unread || 0;
+          if (n > 0) { badge.textContent = n > 9 ? '9+' : n; badge.style.display = 'flex'; }
+          else { badge.style.display = 'none'; }
+        }).catch(function(){});
+      setTimeout(pollNotifications, 60000); // re-check every 60s
     })();
   }
 
