@@ -13641,6 +13641,81 @@ app.get('/api/feed/trending', (req, res) => {
   res.json(markets);
 });
 
+// Social feed — takes from users you follow (takes table, Railway Postgres)
+app.get('/api/feed/social', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.json({ items: [], empty: true, reason: 'no_db' });
+    const followRows = await dbQuery(
+      'SELECT following_id FROM predictor_follows WHERE follower_id = $1',
+      [req.userId || req.user.id]
+    );
+    const followedIds = followRows.map(r => r.following_id);
+    if (!followedIds.length) return res.json({ items: [], empty: true, reason: 'no_follows' });
+
+    const takesRows = await dbQuery(
+      `SELECT
+         t.id, t.market_slug, t.question, t.side, t.thesis, t.created_at,
+         t.is_correct,
+         u.username, u.display_name, u.avatar_url, u.flex_score
+       FROM takes t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.user_id = ANY($1) AND t.source = 'user'
+       ORDER BY t.created_at DESC LIMIT 50`,
+      [followedIds]
+    );
+
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : (Array.isArray(_screenerCache) ? _screenerCache : []);
+    const items = takesRows.map(t => {
+      const live = screenerData.find(s => s.slug === t.market_slug || s.market_slug === t.market_slug);
+      const currentPct = live ? Math.round((live.yes_price || 0.5) * 100) : null;
+      return {
+        type: 'take',
+        id: t.id,
+        market_slug: t.market_slug,
+        question: t.question,
+        side: t.side,
+        thesis: t.thesis,
+        created_at: t.created_at,
+        is_correct: t.is_correct,
+        current_price_pct: currentPct,
+        username: t.username,
+        display_name: t.display_name,
+        avatar_url: t.avatar_url,
+        flex_score: t.flex_score,
+      };
+    });
+
+    res.json({ items });
+  } catch(e) {
+    console.error('[feed/social]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Sharp of the Week — most recent correct user take in the last 7 days
+app.get('/api/sharp-of-week', async (req, res) => {
+  try {
+    if (!pool) return res.json({ sharp: null });
+    const rows = await dbQuery(
+      `SELECT
+         t.market_slug, t.question, t.side, t.created_at,
+         u.username, u.display_name, u.avatar_url, u.flex_score
+       FROM takes t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.is_correct = true
+         AND t.created_at > NOW() - INTERVAL '7 days'
+         AND t.source = 'user'
+       ORDER BY t.created_at DESC
+       LIMIT 1`
+    );
+    if (!rows.length) return res.json({ sharp: null });
+    res.json({ sharp: rows[0] });
+  } catch(e) {
+    console.error('[sharp-of-week]', e.message);
+    res.json({ sharp: null });
+  }
+});
+
 // Following feed — activity from people you follow
 app.get('/api/feed/following', requireAuth, async (req, res) => {
   const userId = req.user.id;

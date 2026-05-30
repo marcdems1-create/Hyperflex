@@ -1814,6 +1814,7 @@ a:hover { text-decoration: underline; }
     <div class="tabs">
       <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
       <button class="tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
+      <button class="tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
     </div>
   </div>
 
@@ -2774,6 +2775,51 @@ async function loadFeed(append) {
     return;
   }
 
+  // Following tab: shows takes from users you follow
+  if (currentTab === 'following') {
+    try {
+      var sfRes = await fetch(API + '/api/feed/social', { headers: authHeaders() });
+      var sfData = sfRes.ok ? await sfRes.json() : { items: [], empty: true };
+      var container = document.getElementById('feedContainer');
+      if (!sfRes.ok || sfData.empty || !sfData.items || !sfData.items.length) {
+        container.innerHTML = '<div class="feed-empty"><div class="feed-empty-title">Not following anyone yet.</div><div class="feed-empty-sub"><a href="/predictors" style="color:#4d9fff">Browse top predictors →</a></div></div>';
+      } else {
+        container.innerHTML = sfData.items.map(function(item) {
+          var name = item.display_name || item.username || '?';
+          var initial = name.charAt(0).toUpperCase();
+          var ago = item.created_at ? timeAgo(item.created_at) : '';
+          var sideClass = (item.side || '').toUpperCase() === 'NO' ? 'sfi-side-no' : 'sfi-side-yes';
+          var pnlStr = '';
+          if (item.current_price_pct != null && item.side) {
+            var delta = item.side.toUpperCase() === 'NO'
+              ? (50 - item.current_price_pct)
+              : (item.current_price_pct - 50);
+            var sign = delta >= 0 ? '+' : '';
+            var cls = delta >= 0 ? 'sfi-pnl-win' : 'sfi-pnl-loss';
+            pnlStr = '<span class="' + cls + '">' + sign + delta + '¢</span>';
+          }
+          return '<div class="social-feed-item">'
+            + '<div class="sfi-header">'
+              + '<div class="sfi-avatar">' + initial + '</div>'
+              + '<div><div class="sfi-name">@' + (item.username || name) + '</div>'
+              + '<div class="sfi-meta">' + ago + (item.flex_score ? ' · FLEX ' + Math.round(item.flex_score) : '') + '</div></div>'
+            + '</div>'
+            + '<div class="sfi-pick">'
+              + '<span class="' + sideClass + '">' + (item.side || 'YES') + '</span>'
+              + '<span class="sfi-question">' + (item.question || item.market_slug) + '</span>'
+              + pnlStr
+            + '</div>'
+            + (item.thesis ? '<div style="font-size:13px;color:rgba(240,240,245,.5);margin-top:8px;font-family:var(--sans);">' + item.thesis.slice(0, 200) + '</div>' : '')
+          + '</div>';
+        }).join('');
+      }
+    } catch(e) {
+      document.getElementById('feedContainer').innerHTML = '<div class="feed-empty"><div class="feed-empty-title">Couldn\'t load following feed.</div></div>';
+    }
+    document.getElementById('loadMoreBtn').style.display = 'none';
+    return;
+  }
+
   // For You: includes followed users (server-side boost)
   var url;
   {
@@ -3647,6 +3693,7 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
+  document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
   var hds = document.getElementById('hotDebatesStrip');
   if (hds) hds.style.display = tab === 'trending' ? '' : 'none';
   if (tab === 'trending') loadHotDebates();
