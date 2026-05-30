@@ -179,6 +179,15 @@
   .alpha-explainer-bar{display:flex;align-items:center;gap:10px;padding:10px 48px;background:rgba(77,159,255,.06);border-bottom:1px solid rgba(77,159,255,.12);font-family:var(--mono);font-size:11px;color:rgba(77,159,255,.8)}
   .alpha-explainer-icon{font-size:14px;flex-shrink:0}
   #alphaExplainerText{transition:opacity .3s}
+
+  /* ── Mobile alpha layout ── */
+  @media(max-width:768px){
+    .edge-grid{display:flex!important;flex-direction:column;gap:12px;padding:0 12px 12px;}
+    .edge-card{width:100%!important;min-width:unset!important;}
+    .edge-card .trade-btn, .edge-card a[href*="market"]{width:100%;min-height:48px;font-size:14px;box-sizing:border-box;}
+    .edge-score .n{font-size:42px;}
+    .alpha-explainer-bar{padding:10px 16px;}
+  }
 </style>
 </head>
 <body>

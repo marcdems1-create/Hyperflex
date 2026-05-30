@@ -66,6 +66,92 @@
   /* Empty states */
   .empty { padding: 60px 48px; text-align: center; font-family: var(--sans); color: var(--muted); }
   .loading { padding: 60px 48px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .12em; }
+
+  /* ── Mobile swipe interface ── */
+  @media(max-width:768px){
+    .hero { display: none; }
+    .streak-bar { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .streak-chip { padding: 6px 12px; }
+    .streak-num { font-size: 18px; }
+    .markets { display: none; }
+    .record-bar { display: none !important; }
+
+    /* Mobile card stack */
+    .mobile-card-wrap {
+      display: flex; flex-direction: column;
+      height: calc(100vh - 130px); /* account for nav + streak bar */
+      padding: 0;
+    }
+    .mobile-progress {
+      display: flex; gap: 6px; padding: 12px 16px 8px;
+    }
+    .mp-dot {
+      flex: 1; height: 3px; border-radius: 2px;
+      background: rgba(255,255,255,.1); transition: background .3s;
+    }
+    .mp-dot.done { background: #00e68a; }
+    .mp-dot.active { background: rgba(0,230,138,.5); }
+    .mobile-card {
+      flex: 1; display: flex; flex-direction: column;
+      background: var(--surface); margin: 0 12px;
+      border-radius: 16px; border: 1px solid var(--border);
+      overflow: hidden; transition: transform .2s, opacity .2s;
+    }
+    .mc-q-wrap {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; padding: 28px 24px;
+    }
+    .mc-num {
+      font-family: var(--mono); font-size: 9px; font-weight: 700;
+      letter-spacing: .2em; color: var(--muted); margin-bottom: 16px;
+    }
+    .mc-q {
+      font-family: var(--sans); font-size: 22px; font-weight: 800;
+      color: var(--ink); line-height: 1.35; margin-bottom: 16px;
+    }
+    .mc-meta {
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      display: flex; gap: 16px;
+    }
+    .mc-price { color: #00e68a; font-weight: 700; }
+    .mc-swipe-hint {
+      font-family: var(--mono); font-size: 10px; color: rgba(255,255,255,.2);
+      text-align: center; padding: 8px; letter-spacing: .12em;
+    }
+    .mc-btns {
+      display: flex; gap: 0; border-top: 1px solid var(--border);
+    }
+    .mc-btn-yes {
+      flex: 1; padding: 20px; font-family: var(--mono); font-size: 14px;
+      font-weight: 700; letter-spacing: .08em; cursor: pointer;
+      border: none; background: rgba(0,230,138,.08); color: #00e68a;
+      border-right: 1px solid var(--border); transition: background .12s;
+      min-height: 64px; -webkit-tap-highlight-color: transparent;
+    }
+    .mc-btn-yes:active, .mc-btn-yes.picked { background: rgba(0,230,138,.22); }
+    .mc-btn-no {
+      flex: 1; padding: 20px; font-family: var(--mono); font-size: 14px;
+      font-weight: 700; letter-spacing: .08em; cursor: pointer;
+      border: none; background: rgba(255,77,106,.08); color: #ff4d6a;
+      transition: background .12s; min-height: 64px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mc-btn-no:active, .mc-btn-no.picked { background: rgba(255,77,106,.22); }
+    .mobile-done {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: calc(100vh - 130px);
+      padding: 32px; text-align: center; gap: 16px;
+    }
+    .done-emoji { font-size: 48px; }
+    .done-title { font-family: var(--sans); font-size: 24px; font-weight: 800; color: var(--ink); }
+    .done-sub { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .done-share {
+      margin-top: 8px; background: #00e68a; color: #000; border: none;
+      padding: 14px 32px; border-radius: 8px; font-family: var(--mono);
+      font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: .06em;
+    }
+  }
+  @media(min-width:769px){ .mobile-card-wrap, .mobile-done { display: none !important; } }
 </style>
 </head>
 <body>
@@ -102,6 +188,19 @@
 </div>
 
 <div class="record-bar" id="recordBar" style="display:none"></div>
+
+<!-- Mobile swipe interface -->
+<div class="mobile-card-wrap" id="mobileCardWrap" style="display:none">
+  <div class="mobile-progress" id="mobileProgress"></div>
+  <div class="mobile-card" id="mobileCard"></div>
+  <div class="mc-swipe-hint">Swipe right = YES · Swipe left = NO</div>
+</div>
+<div class="mobile-done" id="mobileDone" style="display:none">
+  <div class="done-emoji">🔥</div>
+  <div class="done-title">All 3 picked.</div>
+  <div class="done-sub" id="doneSub">Streak updated.</div>
+  <button class="done-share" onclick="sharePicks()">Share picks →</button>
+</div>
 
 <script>
 var API = window.location.origin;
@@ -187,7 +286,7 @@ function pick(slug, side, btn) {
       card.className = side === 'YES' ? 'mkt-card picked' : 'mkt-card picked-no';
       var btns = card.querySelectorAll('button');
       btns.forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
+      if (btn) btn.classList.add('active');
       var existing = card.querySelector('.mkt-picked-label');
       if (!existing) {
         var lbl = document.createElement('div');
@@ -200,13 +299,105 @@ function pick(slug, side, btn) {
   }).catch(function() {});
 }
 
+// ── Mobile swipe interface ──
+var _markets = [], _mIdx = 0, _isMobile = window.innerWidth <= 768;
+
+function isMobile() { return window.innerWidth <= 768; }
+
+function renderMobileCard() {
+  var wrap = document.getElementById('mobileCardWrap');
+  var done = document.getElementById('mobileDone');
+  if (!isMobile()) return;
+  wrap.style.display = 'flex';
+
+  // Progress dots
+  var prog = document.getElementById('mobileProgress');
+  prog.innerHTML = _markets.map(function(m, i) {
+    var cls = i < _mIdx ? 'mp-dot done' : i === _mIdx ? 'mp-dot active' : 'mp-dot';
+    return '<div class="' + cls + '"></div>';
+  }).join('');
+
+  if (_mIdx >= _markets.length) {
+    wrap.style.display = 'none';
+    done.style.display = 'flex';
+    var sr = document.getElementById('streakRecord');
+    if (sr) document.getElementById('doneSub').textContent = sr.textContent || 'Results pending resolution.';
+    return;
+  }
+
+  var m = _markets[_mIdx];
+  var pick = _picks[m.slug];
+  var card = document.getElementById('mobileCard');
+  card.innerHTML = '<div class="mc-q-wrap">'
+    + '<div class="mc-num">PICK ' + (_mIdx+1) + ' OF ' + _markets.length + '</div>'
+    + '<div class="mc-q">' + (m.question || m.slug) + '</div>'
+    + '<div class="mc-meta">'
+      + '<span class="mc-price">' + m.yes_price_pct + '¢ YES</span>'
+      + '<span>' + timeUntil(m.end_date) + '</span>'
+    + '</div>'
+    + '</div>'
+    + '<div class="mc-btns">'
+      + '<button class="mc-btn-yes' + (pick && pick.side === 'YES' ? ' picked' : '') + '" onclick="mobilePick(\'' + m.slug + '\',\'YES\')">'
+        + (pick && pick.side === 'YES' ? '✓ YES' : 'YES — BUY')
+      + '</button>'
+      + '<button class="mc-btn-no' + (pick && pick.side === 'NO' ? ' picked' : '') + '" onclick="mobilePick(\'' + m.slug + '\',\'NO\')">'
+        + (pick && pick.side === 'NO' ? '✓ NO' : 'NO — FADE')
+      + '</button>'
+    + '</div>';
+}
+
+function mobilePick(slug, side) {
+  if (!_token) {
+    if (confirm('Sign in to track picks and build a streak.')) window.location = '/creator/login?next=' + encodeURIComponent('/daily');
+    return;
+  }
+  // Optimistic update
+  _picks[slug] = { side: side };
+  var card = document.getElementById('mobileCard');
+  // Animate off
+  card.style.transform = side === 'YES' ? 'translateX(60px) rotate(4deg)' : 'translateX(-60px) rotate(-4deg)';
+  card.style.opacity = '0';
+  setTimeout(function() {
+    card.style.transform = '';
+    card.style.opacity = '';
+    _mIdx++;
+    renderMobileCard();
+  }, 220);
+  // POST pick
+  pick(slug, side, null);
+}
+
+function sharePicks() {
+  var text = 'Made my daily picks on HYPERFLEX — ' + _markets.length + ' markets closing today. hyperflex.network/daily';
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+}
+
+// Swipe detection
+var _swipeStartX = 0;
+document.addEventListener('touchstart', function(e) { _swipeStartX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', function(e) {
+  if (!isMobile() || _mIdx >= _markets.length) return;
+  var diff = e.changedTouches[0].clientX - _swipeStartX;
+  if (Math.abs(diff) > 60) {
+    var m = _markets[_mIdx];
+    if (m) mobilePick(m.slug, diff > 0 ? 'YES' : 'NO');
+  }
+}, { passive: true });
+
 // Load
 fetch(API + '/api/daily/markets', { headers: authHeaders() })
   .then(function(r) { return r.ok ? r.json() : { markets: [], user_picks: {}, streak: null }; })
   .then(function(d) {
     _picks = d.user_picks || {};
-    renderMarkets(d.markets || [], _picks);
+    _markets = d.markets || [];
+    renderMarkets(_markets, _picks);
     if (d.streak) renderStreak(d.streak);
+    // Find first unpicked market for mobile start position
+    _mIdx = 0;
+    for (var i = 0; i < _markets.length; i++) {
+      if (_picks[_markets[i].slug]) _mIdx = i + 1; else break;
+    }
+    if (isMobile()) renderMobileCard();
     var pickedCount = Object.keys(_picks).length;
     var total = (d.markets || []).length;
     if (pickedCount > 0 && total > 0) {

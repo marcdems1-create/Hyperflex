@@ -375,6 +375,39 @@ footer{
 }
 .home-value-strip{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 24px;background:rgba(0,230,138,.04);border-bottom:1px solid rgba(0,230,138,.08);font-family:var(--mono);font-size:11px;color:rgba(0,230,138,.6);letter-spacing:.04em}
 .hvs-dot{font-size:8px;animation:pulse 2s infinite}
+
+/* ── Mobile-first overrides ─────────────────────────────────────── */
+.mobile-daily-prompt{display:none;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(0,230,138,.05);border-bottom:1px solid rgba(0,230,138,.12);gap:12px;-webkit-tap-highlight-color:transparent;}
+.mdp-left{display:flex;align-items:center;gap:10px;}
+.mdp-fire{font-size:20px;line-height:1;}
+.mdp-title{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--ink);}
+.mdp-sub{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.mdp-cta{font-family:var(--mono);font-size:12px;font-weight:700;color:#000;background:#00e68a;padding:10px 18px;border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0;}
+@media(max-width:768px){
+  #hero{height:50vh;min-height:280px;max-height:440px;}
+  #ticker{display:none;}
+  .home-topics{display:none;}
+  .mobile-daily-prompt{display:flex;}
+  .challenge-teaser{margin:12px 16px;padding:16px;flex-direction:column;gap:12px;}
+  .ct-right{width:100%;text-align:left;}
+  .ct-cta{width:100%;text-align:center;display:block;padding:14px;font-size:13px;}
+  .row-scroll{gap:10px;padding:0 16px 12px;}
+  .mcard{width:calc(50vw - 26px);min-width:140px;height:200px;}
+  .mcard-q{font-size:12px;-webkit-line-clamp:3;}
+  .mcard-yes-pct,.mcard-no-pct{font-size:11px;padding:6px 8px;min-height:32px;display:flex;align-items:center;justify-content:center;}
+  .row-section{margin-bottom:20px;}
+  .row-label{padding:0 16px;font-size:11px;}
+  .row-arrow{display:none;}
+  .sharp-week{margin:12px 16px;padding:16px;}
+  .sw-body{flex-direction:column;gap:12px;}
+  .sw-follow{align-self:flex-start;}
+  .skeleton-card{border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03);padding:12px;border:1px solid rgba(255,255,255,.08);}
+  .skel{background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px;margin-bottom:8px;}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .skel-img{height:100px;border-radius:6px;}
+  .skel-line{height:12px;}
+  .skel-pills{height:28px;}
+}
 </style>
 </head>
 <body>
@@ -523,6 +556,18 @@ footer{
     </div>
   </div>
   <div class="hero-dots" id="heroDots"></div>
+</div>
+
+<!-- ── MOBILE DAILY PICKS PROMPT ── -->
+<div class="mobile-daily-prompt" id="mobileDailyPrompt">
+  <div class="mdp-left">
+    <span class="mdp-fire">🔥</span>
+    <div>
+      <div class="mdp-title">Today's Picks</div>
+      <div class="mdp-sub" id="mdpSub">3 markets closing today</div>
+    </div>
+  </div>
+  <a href="/daily" class="mdp-cta">Pick →</a>
 </div>
 
 <!-- ── TICKER ── -->
@@ -1895,6 +1940,11 @@ document.addEventListener('DOMContentLoaded', function() {
   var arcKey = tag.toLowerCase();
   var cats = catMap[arcKey] || ['crypto','economics','politics'];
 
+  // Show skeletons while loading (mobile)
+  if (window.showSkeletons) {
+    ['rowHot','rowWhale','rowSignals'].forEach(function(id) { window.showSkeletons(id, 4); });
+  }
+
   // Fetch markets and score them
   fetch('/api/screener?limit=80').then(function(r){ return r.json(); }).then(function(data) {
     var mkts = Array.isArray(data) ? data : (data.markets || data.data || []);
@@ -1956,6 +2006,21 @@ document.addEventListener('DOMContentLoaded', function() {
       teaser.style.display = '';
     })
     .catch(function() {});
+})();
+
+// Mobile daily picks prompt
+(function() {
+  var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+  var headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+  fetch('/api/daily/markets', { headers: headers })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (!d || !d.markets || !d.markets.length) return;
+      var sub = document.getElementById('mdpSub');
+      if (sub && d.streak && d.streak.current_streak > 0) {
+        sub.textContent = d.streak.current_streak + ' day streak — keep it going';
+      }
+    }).catch(function() {});
 })();
 </script>
 </body>

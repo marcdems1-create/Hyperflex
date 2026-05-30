@@ -919,6 +919,12 @@ a:hover { text-decoration: underline; }
 /* Narrow-screen hide — keep feed + right sidebar working before dropping left */
 @media (max-width: 1200px) { .left-col { display: none; } }
 @media (max-width: 1000px) { .sidebar-col { display: none; } .layout { max-width: 600px; } }
+@media (max-width: 768px) {
+  .left-col { display: none; }
+  .feed-header { position: sticky; top: 0; background: rgba(13,13,16,.96); backdrop-filter: blur(12px); z-index: 10; }
+  .pred-card { border-radius: 0; border-left: none; border-right: none; }
+  .pred-foot button, .pred-foot a { min-height: 40px; }
+}
 
 /* ── Tabs ── */
 .feed-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 0; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 64px; background: rgba(13,13,16,0.85); backdrop-filter: blur(12px); z-index: 10; }

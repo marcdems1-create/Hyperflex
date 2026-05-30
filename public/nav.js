@@ -1127,3 +1127,99 @@ window.hfxOpenDeposit = function() {
   }
   tryOpen();
 };
+
+// ── Skeleton loading utility ─────────────────────────────────────────────────
+window.showSkeletons = function(containerId, count, type) {
+  var container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
+  if (!container) return;
+  type = type || 'card';
+  var SKEL_CSS = '.skeleton-card{border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03);padding:12px;border:1px solid rgba(255,255,255,.08);margin-bottom:12px;}'
+    + '.skel{background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 75%);background-size:200% 100%;animation:hfx-shimmer 1.5s infinite;border-radius:4px;margin-bottom:8px;}'
+    + '.skel-img{height:110px;border-radius:6px;}'
+    + '.skel-line{height:13px;}'
+    + '.skel-pills{height:30px;}'
+    + '@keyframes hfx-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}';
+  if (!document.getElementById('hfx-skel-style')) {
+    var s = document.createElement('style');
+    s.id = 'hfx-skel-style';
+    s.textContent = SKEL_CSS;
+    document.head.appendChild(s);
+  }
+  container.innerHTML = Array(count || 3).fill(null).map(function() {
+    return '<div class="skeleton-card">'
+      + '<div class="skel skel-img"></div>'
+      + '<div class="skel skel-line" style="width:80%"></div>'
+      + '<div class="skel skel-line" style="width:60%"></div>'
+      + '<div class="skel skel-pills"></div>'
+    + '</div>';
+  }).join('');
+};
+
+// ── Bottom navigation bar (mobile) ──────────────────────────────────────────
+(function initBottomNav() {
+  var BOTTOM_NAV_CSS = [
+    '.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:64px;',
+    'background:rgba(14,14,21,.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);',
+    'border-top:1px solid rgba(255,255,255,.08);z-index:500;',
+    'padding-bottom:env(safe-area-inset-bottom);align-items:center;justify-content:space-around;}',
+    '.bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;',
+    'padding:6px 12px;min-width:44px;min-height:44px;justify-content:center;',
+    'border-radius:8px;transition:background .12s;-webkit-tap-highlight-color:transparent;}',
+    '.bn-icon{font-size:18px;line-height:1;display:block;}',
+    '.bn-label{font-family:var(--mono,monospace);font-size:9px;letter-spacing:.06em;',
+    'color:rgba(255,255,255,.35);text-transform:uppercase;display:block;}',
+    '.bn-item.active .bn-label{color:#00e68a;}',
+    '.bn-item.active .bn-icon{filter:brightness(1.6);}',
+    '.bn-item:active{background:rgba(255,255,255,.06);}',
+    '@media(max-width:768px){',
+    '.bottom-nav{display:flex;}',
+    '.nav-hamburger{display:none!important;}',
+    '.nav-links{display:none!important;}',
+    '}',
+  ].join('');
+
+  var styleEl = document.createElement('style');
+  styleEl.textContent = BOTTOM_NAV_CSS;
+  document.head.appendChild(styleEl);
+
+  function build() {
+    if (document.getElementById('hfx-bottom-nav')) return;
+    var path = window.location.pathname;
+    var items = [
+      { label: 'Home',    icon: '⌂',  href: '/' },
+      { label: 'Feed',    icon: '◈',  href: '/feed' },
+      { label: 'Daily',   icon: '🔥', href: '/daily' },
+      { label: 'Alpha',   icon: '⚡', href: '/alpha-live' },
+      { label: 'Profile', icon: '◎',  href: null }, // resolved at runtime
+    ];
+
+    // Resolve profile link
+    var uid = localStorage.getItem('hf_user_id') || localStorage.getItem('hfx_user_id') || '';
+    var uname = localStorage.getItem('hf_username') || localStorage.getItem('hfx_username') || '';
+    items[4].href = uid ? ('/m/' + uid) : (uname ? ('/@' + uname) : '/creator/login');
+
+    var nav = document.createElement('nav');
+    nav.className = 'bottom-nav';
+    nav.id = 'hfx-bottom-nav';
+    nav.setAttribute('aria-label', 'Main navigation');
+    nav.innerHTML = items.map(function(item) {
+      var isActive = (item.href === '/' ? path === '/' : path.startsWith(item.href));
+      return '<a href="' + item.href + '" class="bn-item' + (isActive ? ' active' : '') + '" aria-label="' + item.label + '">'
+        + '<span class="bn-icon">' + item.icon + '</span>'
+        + '<span class="bn-label">' + item.label + '</span>'
+        + '</a>';
+    }).join('');
+
+    document.body.appendChild(nav);
+    // Ensure content doesn't hide behind the bar
+    if (!document.body.style.paddingBottom) {
+      document.body.style.paddingBottom = '72px';
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', build);
+  } else {
+    build();
+  }
+})();
