@@ -577,6 +577,13 @@ footer{
   </div>
 </div>
 
+<!-- ── EDIT TOPICS BAR (returning users) ── -->
+<div id="editTopicsBar" style="display:none;align-items:center;gap:10px;padding:10px 48px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(201,146,13,.04);">
+  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,146,13,.6);">Your Markets:</span>
+  <span id="etbTopics" style="font-size:12px;color:rgba(240,240,245,.5);flex:1;"></span>
+  <button onclick="openEditTopics()" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#c9920d;background:transparent;border:1px solid rgba(201,146,13,.3);border-radius:6px;padding:4px 12px;cursor:pointer;">Edit →</button>
+</div>
+
 <!-- ── TOPIC CHIPS ── -->
 <div class="home-topics" id="homeTopics">
   <a class="home-chip" href="/explore">All Markets</a>
@@ -1982,6 +1989,170 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = document.getElementById('rowArch');
     if (el) el.innerHTML = '<div style="padding:20px;color:rgba(240,240,245,.3);font-size:12px;">Couldn\'t load markets.</div>';
   });
+})();
+</script>
+
+<!-- ── TOPIC PERSONALIZATION + EDIT BAR ── -->
+<script>
+(function() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  var localTopics = [];
+  try { localTopics = JSON.parse(localStorage.getItem('hfx_topics') || '[]'); } catch(e) {}
+
+  function renderTopicBar(topics) {
+    var bar = document.getElementById('editTopicsBar');
+    if (!bar) return;
+    bar.style.display = 'flex';
+    var labelsEl = document.getElementById('etbTopics');
+    if (labelsEl && topics.length) labelsEl.textContent = topics.join(', ');
+  }
+
+  function buildForYouRow(topics) {
+    if (!topics || !topics.length) return;
+    var wrap = document.getElementById('rowsWrap');
+    if (!wrap) return;
+    // Don't add if archetype row already injected (it fills the slot)
+    if (document.getElementById('archetypeRow')) return;
+
+    var section = document.createElement('div');
+    section.id = 'forYouRow';
+    section.style.cssText = 'margin-bottom:8px;';
+    section.innerHTML = [
+      '<div class="row-section" style="border-left:2px solid #c9920d;padding-left:12px;">',
+        '<div class="row-head">',
+          '<span class="row-title" style="color:#c9920d">For You</span>',
+          '<span class="row-tag" style="background:rgba(201,146,13,.08);color:#c9920d;border:1px solid rgba(201,146,13,.2);">YOUR TOPICS</span>',
+          '<a class="row-see-all" href="#" onclick="openEditTopics();return false;" style="color:rgba(201,146,13,.5);">Edit →</a>',
+        '</div>',
+        '<div class="row-wrap">',
+          '<button class="row-arrow row-arrow-left" onclick="scrollRow(this,-1)" aria-label="Scroll left"><div class="arrow-icon">‹</div></button>',
+          '<div class="row-scroll" id="rowForYou">',
+            '<div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>',
+          '</div>',
+          '<button class="row-arrow row-arrow-right" onclick="scrollRow(this,1)" aria-label="Scroll right"><div class="arrow-icon">›</div></button>',
+        '</div>',
+      '</div>',
+    ].join('');
+    wrap.insertBefore(section, wrap.firstChild);
+
+    // Topic → question keywords map
+    var TOPIC_KW = {
+      crypto:    ['bitcoin','btc','eth','ethereum','crypto','solana','defi','token','coin','blockchain','polymarket'],
+      politics:  ['president','election','congress','senate','vote','biden','trump','party','democrat','republican','poll'],
+      finance:   ['fed','rate','inflation','stock','market','gdp','economy','recession','interest','dollar','bond'],
+      sports:    ['nba','nfl','nhl','mlb','soccer','football','basketball','baseball','super bowl','world cup','championship'],
+      tech:      ['ai','artificial intelligence','openai','google','microsoft','apple','elon','tesla','nvidia','tech'],
+      science:   ['nasa','space','climate','covid','disease','drug','fda','vaccine'],
+      entertainment: ['oscars','grammy','nfl draft','celebrity','box office','movie','tv'],
+      world:     ['war','ukraine','russia','china','middle east','nato','israel','iran','nuclear','treaty'],
+    };
+
+    fetch('/api/screener?limit=80').then(function(r){ return r.json(); }).then(function(data) {
+      var mkts = Array.isArray(data) ? data : (data.markets || data.data || []);
+      var kws = [];
+      topics.forEach(function(t) { var k = TOPIC_KW[t]; if (k) kws = kws.concat(k); });
+      var scored = mkts.filter(function(m) {
+        var q = (m.question || '').toLowerCase();
+        return kws.some(function(k) { return q.indexOf(k) !== -1; });
+      }).sort(function(a, b) {
+        return ((b.edge_score||0)+(b.whale_count||0)*4) - ((a.edge_score||0)+(a.whale_count||0)*4);
+      }).slice(0, 12);
+
+      if (!scored.length) scored = mkts.slice(0, 8);
+      var el = document.getElementById('rowForYou');
+      if (!el) return;
+      el.innerHTML = scored.map(function(m) {
+        if (typeof buildCard === 'function') return buildCard(m, null, 'mcard-pill-foryou', 'FOR YOU');
+        var yp = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+        var vol = m.volume24hr || m.volume || 0;
+        return '<a href="/market/'+(m.slug||'')+'" style="display:flex;flex-direction:column;justify-content:space-between;min-width:200px;max-width:220px;height:140px;background:#111118;border:1px solid rgba(201,146,13,.2);border-radius:10px;padding:12px;text-decoration:none;color:#f0f0f5;flex-shrink:0;">'
+          +'<div style="font-size:12px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">'+(m.question||'').slice(0,100)+'</div>'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">'
+            +(yp!=null?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:#c9920d">'+yp+'¢</span>':'')
+            +(m.edge_score?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(201,146,13,.5);">⚡'+m.edge_score+'</span>':'')
+          +'</div>'
+        +'</a>';
+      }).join('');
+    }).catch(function(){});
+  }
+
+  window.openEditTopics = function() {
+    // Redirect to onboarding page in re-edit mode, or show inline picker
+    var picked = [];
+    try { picked = JSON.parse(localStorage.getItem('hfx_topics') || '[]'); } catch(e) {}
+    var OPTS = ['Politics','Crypto','Finance','Sports','AI & Tech','Geopolitics'];
+    var html = '<div id="editTopicsModal" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">'
+      +'<div style="background:#111118;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:24px;width:100%;max-width:400px;">'
+      +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:rgba(240,240,245,.4);margin-bottom:16px;">Edit Markets</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">'
+      +OPTS.map(function(t){ var sel = picked.indexOf(t)!==-1; return '<button onclick="etToggle(this,\''+t+'\')" style="padding:8px 16px;border-radius:20px;border:1px solid '+(sel?'#c9920d':'rgba(255,255,255,.12)')+';background:'+(sel?'rgba(201,146,13,.12)':'transparent')+';color:'+(sel?'#c9920d':'rgba(240,240,245,.6)')+';font-size:13px;cursor:pointer;">'+t+'</button>'; }).join('')
+      +'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
+      +'<button onclick="document.getElementById(\'editTopicsModal\').remove()" style="padding:9px 18px;background:transparent;border:1px solid rgba(255,255,255,.1);color:rgba(240,240,245,.5);border-radius:8px;cursor:pointer;font-size:13px;">Cancel</button>'
+      +'<button onclick="etSave()" style="padding:9px 18px;background:#c9920d;border:none;color:#000;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">Save</button>'
+      +'</div>'
+      +'</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+
+  window.etToggle = function(btn, topic) {
+    var picked = [];
+    try { picked = JSON.parse(localStorage.getItem('hfx_topics') || '[]'); } catch(e) {}
+    if (picked.indexOf(topic) !== -1) {
+      picked = picked.filter(function(t){return t!==topic;});
+      btn.style.borderColor = 'rgba(255,255,255,.12)'; btn.style.background = 'transparent'; btn.style.color = 'rgba(240,240,245,.6)';
+    } else {
+      if (picked.length >= 3) return;
+      picked.push(topic);
+      btn.style.borderColor = '#c9920d'; btn.style.background = 'rgba(201,146,13,.12)'; btn.style.color = '#c9920d';
+    }
+    try { localStorage.setItem('hfx_topics', JSON.stringify(picked)); } catch(e) {}
+  };
+
+  window.etSave = function() {
+    var picked = [];
+    try { picked = JSON.parse(localStorage.getItem('hfx_topics') || '[]'); } catch(e) {}
+    var MAP = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
+    var keys = picked.map(function(t){return MAP[t]||t.toLowerCase();});
+    var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    if (tok && keys.length) {
+      fetch('/api/user/topics', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({topics:keys})}).catch(function(){});
+    }
+    var m = document.getElementById('editTopicsModal');
+    if (m) m.remove();
+    location.reload();
+  };
+
+  // Load from server if logged in, else use localStorage
+  if (token) {
+    fetch('/api/user/topics', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d) {
+        var serverTopics = (d && d.topics && d.topics.length) ? d.topics : null;
+        // Sync server → localStorage display names (reverse map)
+        var RMAP = {politics:'Politics',crypto:'Crypto',finance:'Finance',sports:'Sports',tech:'AI & Tech',world:'Geopolitics'};
+        if (serverTopics) {
+          var displayTopics = serverTopics.map(function(k){ return RMAP[k]||k; });
+          try { localStorage.setItem('hfx_topics', JSON.stringify(displayTopics)); } catch(e) {}
+          buildForYouRow(serverTopics);
+          renderTopicBar(displayTopics);
+        } else if (localTopics.length) {
+          var MAP2 = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
+          buildForYouRow(localTopics.map(function(t){return MAP2[t]||t.toLowerCase();}));
+          renderTopicBar(localTopics);
+        }
+      }).catch(function() {
+        if (localTopics.length) {
+          var MAP3 = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
+          buildForYouRow(localTopics.map(function(t){return MAP3[t]||t.toLowerCase();}));
+          renderTopicBar(localTopics);
+        }
+      });
+  } else if (localTopics.length) {
+    var MAP4 = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
+    buildForYouRow(localTopics.map(function(t){return MAP4[t]||t.toLowerCase();}));
+    renderTopicBar(localTopics);
+  }
 })();
 </script>
 

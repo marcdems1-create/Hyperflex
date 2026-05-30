@@ -216,6 +216,18 @@ function finish() {
   }
   var dest = '/explore';
   if (topics.length) dest += '?topic=' + encodeURIComponent(topics[0]);
+  // Save to server if logged in
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (token && topics.length) {
+    // map display names to canonical keys
+    var MAP = {'Politics':'politics','Crypto':'crypto','Finance':'finance','Sports':'sports','AI & Tech':'tech','Geopolitics':'world'};
+    var keys = topics.map(function(t){return MAP[t]||t.toLowerCase();});
+    fetch('/api/user/topics', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body:JSON.stringify({topics:keys})
+    }).catch(function(){});
+  }
   finishOnboarding(dest);
 }
 

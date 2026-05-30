@@ -29426,6 +29426,36 @@ app.get('/api/user/archetype', requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// GET /api/user/topics — fetch saved topic preferences
+app.get('/api/user/topics', requireAuth, async (req, res) => {
+  try {
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS topic_preferences TEXT[] DEFAULT \'{}\'').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN DEFAULT false').catch(() => {});
+    const rows = await dbQuery('SELECT topic_preferences, onboarded FROM users WHERE id = $1', [req.user.id]);
+    const row = rows[0] || {};
+    res.json({ topics: row.topic_preferences || [], onboarded: row.onboarded || false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/user/topics — save topic preferences
+app.post('/api/user/topics', requireAuth, async (req, res) => {
+  try {
+    const { topics } = req.body || {};
+    if (!Array.isArray(topics)) return res.status(400).json({ error: 'topics must be array' });
+    const valid = ['crypto', 'politics', 'sports', 'finance', 'tech', 'science', 'entertainment', 'world'];
+    const filtered = topics.filter(t => valid.includes(t)).slice(0, 8);
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS topic_preferences TEXT[] DEFAULT \'{}\'').catch(() => {});
+    await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN DEFAULT false').catch(() => {});
+    await dbQuery('UPDATE users SET topic_preferences = $1, onboarded = true WHERE id = $2', [filtered, req.user.id]);
+    res.json({ ok: true, topics: filtered });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // PUT /api/user/change-password
 // Works for both members and creators (all in users table).
 // Requires current password + new password (min 8 chars).
