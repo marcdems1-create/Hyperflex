@@ -392,11 +392,11 @@ function tabData() {
       .filter(function(r){ return r.whale_pnl != null && r.whale_pnl !== 0; })
       .sort(function(a,b){ return (b.whale_pnl||0)-(a.whale_pnl||0); });
   }
-  // whales — sort by flex_score_90d (WHALE SCORE) first, then whale_rank, then volume
+  // whales — sort by whale_score (WHALE SCORE) first, then whale_rank, then volume
   return _rawWhale
     .sort(function(a,b){
-      var aw = a.flex_score_90d != null ? a.flex_score_90d : -1;
-      var bw = b.flex_score_90d != null ? b.flex_score_90d : -1;
+      var aw = a.whale_score != null ? a.whale_score : -1;
+      var bw = b.whale_score != null ? b.whale_score : -1;
       if (bw !== aw) return bw - aw;
       var ar = a.whale_rank != null ? a.whale_rank : 9999;
       var br = b.whale_rank != null ? b.whale_rank : 9999;
@@ -531,7 +531,7 @@ function renderCards() {
       secondaryHtml = '<div class="lb-secondary">' + parts2.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     } else {
-      var ws = r.flex_score_90d != null ? r.flex_score_90d : null;
+      var ws = r.whale_score != null ? r.whale_score : null;
       var wsDisplay = ws != null ? (ws + '<span style="font-size:.55em;opacity:.5">/100</span>') : (r.whale_rank ? 'Rank #' + r.whale_rank : '—');
       metricHtml = '<div class="lb-metric" style="color:#a855f7">' + wsDisplay + '</div>';
       var vol2 = r.total_volume_usd || 0;
