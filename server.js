@@ -4043,7 +4043,7 @@ async function resolveFinishedGames() {
         // fire without new plumbing.
         try {
           await dbQuery(
-            `INSERT INTO notifications (user_id, type, title, body, link)
+            `INSERT INTO notifications (user_id, type, title, body, url)
              VALUES ($1, $2, $3, $4, $5)`,
             [p.user_id, 'pick_' + result.status,
              result.status === 'win'  ? 'Your pick hit ✓' :
@@ -12258,11 +12258,10 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
     const order = mode === 'flex' ? 'u.flex_score DESC NULLS LAST, u.prediction_win_rate DESC NULLS LAST'
                                   : 'u.flex_score_90d DESC NULLS LAST, COALESCE(u.whale_pnl, 0) DESC';
 
-    // Sole filter: user must have a non-null value on the active column.
-    // Drops the long tail of users who've never been scored — no whales
-    // on the FLEX tab, no flexers without whale-flow data on the WHALE
-    // tab. Predictable, clean.
-    const rows = await dbQuery(`
+    // Primary: users with scored flex/whale columns. Fall back to positions-derived
+    // stats when those columns haven't been populated yet (new deployments, no
+    // scoring cron run).
+    let rows = await dbQuery(`
       SELECT u.id, u.display_name, u.username, u.polymarket_address,
              u.is_whale, u.whale_rank, u.whale_pnl,
              u.flex_score, u.flex_tier, u.flex_qualifies, u.flex_settled_events,
@@ -12276,6 +12275,45 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
       ORDER BY ${order}
       LIMIT $1`, [limit]);
 
+    // Fallback: derive leaderboard from positions when scored columns are empty
+    if (!rows || rows.length === 0) {
+      const posRows = await dbQuery(`
+        SELECT p.user_id, COUNT(*) AS total, SUM(CASE WHEN p.won THEN 1 ELSE 0 END) AS wins,
+               SUM(CASE WHEN p.won THEN COALESCE(p.potential_payout,0)-COALESCE(p.amount,0) ELSE -COALESCE(p.amount,0) END) AS pnl,
+               SUM(p.amount) AS volume,
+               u.display_name, u.username, u.polymarket_address,
+               u.is_whale, u.whale_rank, u.whale_pnl, u.wallet_verified
+        FROM positions p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.settled = true
+        GROUP BY p.user_id, u.display_name, u.username, u.polymarket_address,
+                 u.is_whale, u.whale_rank, u.whale_pnl, u.wallet_verified
+        HAVING COUNT(*) >= 3
+        ORDER BY wins::float / NULLIF(COUNT(*),0) DESC
+        LIMIT $1`, [limit]);
+      rows = (posRows || []).map(r => {
+        const total = Number(r.total) || 0;
+        const wins  = Number(r.wins)  || 0;
+        const wr    = total > 0 ? wins / total : 0;
+        const vol   = Number(r.volume) || 0;
+        const pnl   = Number(r.pnl)   || 0;
+        const vol_bonus = Math.min(20, Math.floor(total * 0.5));
+        const computed_flex = Math.min(99, Math.round(wr * 80 + vol_bonus + (pnl > 0 ? 15 : 0)));
+        return {
+          id: r.user_id, display_name: r.display_name, username: r.username,
+          polymarket_address: r.polymarket_address,
+          is_whale: r.is_whale, whale_rank: r.whale_rank, whale_pnl: r.whale_pnl,
+          wallet_verified: r.wallet_verified,
+          flex_score: computed_flex, flex_tier: wr >= 0.6 ? 'SHARP' : wr >= 0.5 ? 'SOLID' : 'BUILDING',
+          flex_qualifies: total >= 5, flex_settled_events: total,
+          flex_score_90d: mode === 'whale' ? computed_flex : null,
+          predictions_resolved: total, prediction_win_rate: wr,
+          flex_c_calibration: Math.round(wr * 25), // reverse-map to raw scale
+          total_volume_usd: vol, ws_closed_positions: total,
+        };
+      });
+    }
+
     const result = (rows || []).map(u => {
       const score = mode === 'flex'
         ? (u.flex_score != null ? Number(u.flex_score) : null)
@@ -12288,8 +12326,6 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
         wallet_verified: !!u.wallet_verified,
         score,
         score_field: col,
-        // Both scores returned for client transparency so a card can
-        // render the secondary score as muted context if it wants to.
         flex_score: u.flex_score != null ? Number(u.flex_score) : null,
         flex_tier: u.flex_tier || null,
         flex_qualifies: u.flex_qualifies === true,
@@ -13649,6 +13685,7 @@ app.get('/api/feed/trending', (req, res) => {
       }));
     return res.json(fallback);
   }
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
   res.json(markets);
 });
 
@@ -37589,6 +37626,7 @@ async function _buildAlphaListInner(opts = {}) {
 app.get('/api/screener', async (req, res) => {
   try {
     const markets = await buildAlphaList();
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.json(filterScreenerResults(markets, req.query));
   } catch (err) {
     console.error('[screener]', err.message);

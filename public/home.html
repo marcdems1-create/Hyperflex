@@ -2210,6 +2210,26 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }).catch(function() {});
 })();
+
+// Prefetch market page on hover (200ms dwell)
+(function() {
+  var _pTimer, _prefetched = {};
+  document.addEventListener('mouseover', function(e) {
+    var card = e.target && e.target.closest && e.target.closest('[data-slug]');
+    if (!card) return;
+    clearTimeout(_pTimer);
+    _pTimer = setTimeout(function() {
+      var slug = card.dataset.slug;
+      if (slug && !_prefetched[slug]) {
+        _prefetched[slug] = 1;
+        var link = document.createElement('link');
+        link.rel = 'prefetch'; link.href = '/market/' + slug;
+        document.head.appendChild(link);
+      }
+    }, 200);
+  });
+  document.addEventListener('mouseout', function() { clearTimeout(_pTimer); });
+})();
 </script>
 </body>
 </html>

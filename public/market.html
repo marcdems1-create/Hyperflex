@@ -440,6 +440,22 @@ canvas{display:block;width:100%!important}
         <div id="priceChart" style="height:260px;width:100%"></div>
       </div>
 
+      <!-- Smart Money Consensus bar — populated by loadWhaleFlow() -->
+      <div id="smartMoneyBar" style="display:none;background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(240,240,245,.3);margin-bottom:10px;">Smart Money</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.45);width:76px;flex-shrink:0;">Whales</span>
+          <div style="flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;"><div id="smWhaleBar" style="height:100%;background:#4d9fff;border-radius:3px;width:0%;transition:width .4s;"></div></div>
+          <span id="smWhalePct" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#4d9fff;width:52px;text-align:right;flex-shrink:0;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.45);width:76px;flex-shrink:0;">Market</span>
+          <div style="flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;"><div id="smRetailBar" style="height:100%;background:rgba(240,240,245,.18);border-radius:3px;width:0%;transition:width .4s;"></div></div>
+          <span id="smRetailPct" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.35);width:52px;text-align:right;flex-shrink:0;"></span>
+        </div>
+        <div id="smGap" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.4);"></div>
+      </div>
+
       <!-- Description -->
       <div class="mkt-desc" id="mktDescSection">
         <h3>📋 Rules</h3>
@@ -1581,6 +1597,36 @@ async function loadWhaleFlow(marketSlug) {
         wab.style.display = 'flex';
       }
     }
+
+    // Smart Money consensus bar
+    (function() {
+      var smBar = document.getElementById('smartMoneyBar');
+      if (!smBar) return;
+      // Compute whale YES% from flows
+      var yesCap = 0, noCap = 0;
+      (data.flows || []).forEach(function(f) {
+        if (f.side === 'YES') yesCap += (f.size || 0);
+        else noCap += (f.size || 0);
+      });
+      var total = yesCap + noCap;
+      if (total < 1) return;
+      var whalePct = Math.round(yesCap / total * 100);
+      // Market price as proxy for retail consensus
+      var marketYesPct = _market && _market.yes_price != null ? Math.round(_market.yes_price * 100) : null;
+      document.getElementById('smWhaleBar').style.width = whalePct + '%';
+      document.getElementById('smWhalePct').textContent = 'YES ' + whalePct + '%';
+      if (marketYesPct != null) {
+        document.getElementById('smRetailBar').style.width = marketYesPct + '%';
+        document.getElementById('smRetailPct').textContent = 'YES ' + marketYesPct + '%';
+        var gap = whalePct - marketYesPct;
+        var gapEl = document.getElementById('smGap');
+        if (Math.abs(gap) >= 5) {
+          gapEl.textContent = 'GAP: ' + (gap > 0 ? '+' : '') + gap + '% — Whales ' + (gap > 0 ? 'more bullish' : 'more bearish') + ' than market';
+          gapEl.style.color = gap > 0 ? '#00e68a' : '#ff4d6a';
+        }
+      }
+      smBar.style.display = '';
+    })();
 
     var sentEl = document.getElementById('whaleFlowSentiment');
     var sent = data.net_sentiment || 'NEUTRAL';
