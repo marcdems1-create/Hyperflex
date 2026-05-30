@@ -384,8 +384,8 @@ function normalizeWR(r) {
 function tabData() {
   if (currentTab === 'sharpest') {
     return _rawFlex
-      .filter(function(r){ return r.calibration_score != null; })
-      .sort(function(a,b){ return (b.calibration_score||0)-(a.calibration_score||0); });
+      .filter(function(r){ return r.flex_score != null || r.calibration_score != null; })
+      .sort(function(a,b){ return (b.flex_score||b.calibration_score||0)-(a.flex_score||a.calibration_score||0); });
   }
   if (currentTab === 'profitable') {
     return _rawWhale
@@ -446,8 +446,8 @@ function renderCards() {
   _rendered = data;
   var el = document.getElementById('lbCards');
 
-  document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> ' +
-    { sharpest: 'traders ranked by FLEX SCORE', profitable: 'whales ranked by P&L', whales: 'whales ranked by WHALE SCORE' }[currentTab];
+  var tabLabels = { sharpest: 'traders ranked by FLEX SCORE', profitable: 'whales ranked by P&L', whales: 'whales ranked by WHALE SCORE' };
+  document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> ' + (tabLabels[currentTab] || 'traders');
 
   if (!data.length) {
     el.innerHTML = '<div class="state-msg">No traders found' + (_searchQ ? ' matching "' + escHtml(_searchQ) + '"' : '') + '.</div>';
@@ -473,7 +473,7 @@ function renderCards() {
     // Avatar tier
     var tierCls = 'tier-default';
     if (currentTab === 'sharpest') {
-      var cs = r.calibration_score || 0;
+      var cs = r.flex_score || r.calibration_score || 0;
       tierCls = cs >= 70 ? 'tier-sharp' : cs >= 50 ? 'tier-solid' : 'tier-default';
     } else if (currentTab === 'profitable') {
       tierCls = (r.whale_pnl||0) > 50000 ? 'tier-whale' : (r.whale_pnl||0) > 10000 ? 'tier-sharp' : 'tier-solid';
@@ -489,7 +489,7 @@ function renderCards() {
       var dir = idx < myIdx ? '↑' : '↓';
       badge = '<span class="lb-badge rival">RIVAL ' + dir + '</span>';
     } else if (currentTab === 'sharpest') {
-      var cs2 = r.calibration_score || 0;
+      var cs2 = r.flex_score || r.calibration_score || 0;
       var bl = cs2 >= 70 ? 'sharp' : cs2 >= 50 ? 'solid' : 'building';
       var bt = cs2 >= 70 ? 'SHARP' : cs2 >= 50 ? 'SOLID' : 'BUILDING';
       badge = '<span class="lb-badge ' + bl + '">' + bt + '</span>';
@@ -509,14 +509,16 @@ function renderCards() {
     var barFill = wrPct != null ? '<div class="lb-bar"><div class="lb-bar-fill" style="width:' + Math.min(wrPct, 100) + '%;background:' + (wrPct >= 60 ? 'var(--green)' : wrPct >= 45 ? 'var(--blue)' : 'var(--muted)') + '"></div></div>' : '';
 
     if (currentTab === 'sharpest') {
-      var cs3 = r.calibration_score != null ? r.calibration_score : '—';
+      var flexVal = r.flex_score != null ? r.flex_score : (r.calibration_score != null ? r.calibration_score : null);
+      var cs3 = flexVal != null ? flexVal : '—';
       var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
-      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">Brier-based accuracy score. 100 = perfect forecaster.<br>Global average: 52. Above 70 = genuinely sharp.<br>Based on ' + (r.predictions_resolved || r.flex_settled_events || '?') + ' resolved predictions.</span></span></div>';
+      var settledN = r.predictions_resolved || r.flex_settled_events || '?';
+      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">FLEX Score — composite of accuracy, ROI, volume, and recency. 100 = top of leaderboard.<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
       var parts = [];
       if (wrPct != null) parts.push(wrPct + '% win rate');
       var n = r.predictions_resolved || r.flex_settled_events;
       if (n) parts.push(n + ' graded');
-      if (r.flex_score != null) parts.push('Flex ' + r.flex_score);
+      if (r.flex_tier) parts.push(r.flex_tier);
       secondaryHtml = '<div class="lb-secondary">' + parts.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
       barHtml = barFill;
     } else if (currentTab === 'profitable') {
