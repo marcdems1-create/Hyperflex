@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Picks — HYPERFLEX</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e0e15; --surface: #111118; --surface2: #16161f;
+    --border: rgba(255,255,255,.08); --ink: #f0f0f5;
+    --muted: rgba(240,240,245,.4); --green: #00e68a; --red: #ff4d6a;
+    --gold: #c9920d; --mono: 'JetBrains Mono', monospace; --sans: 'Inter', sans-serif;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; }
+
+  /* Nav */
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 48px; border-bottom: 1px solid var(--border); }
+  .nav-logo { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--ink); text-decoration: none; letter-spacing: .08em; }
+  .nav-links { display: flex; gap: 24px; align-items: center; }
+  .nav-links a { font-family: var(--mono); font-size: 11px; color: var(--muted); text-decoration: none; letter-spacing: .08em; transition: color .12s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--ink); }
+  @media(max-width:600px){ .nav { padding: 14px 20px; } .nav-links { gap: 16px; } }
+
+  /* Header */
+  .hero { padding: 48px 48px 32px; max-width: 680px; }
+  .hero-label { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .2em; color: var(--gold); margin-bottom: 12px; }
+  .hero-title { font-family: var(--sans); font-size: 28px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
+  .hero-sub { font-family: var(--sans); font-size: 14px; color: var(--muted); }
+  @media(max-width:600px){ .hero { padding: 28px 20px 20px; } .hero-title { font-size: 22px; } }
+
+  /* Streak bar */
+  .streak-bar { display: flex; align-items: center; gap: 16px; padding: 16px 48px; border-bottom: 1px solid var(--border); }
+  .streak-chip { display: flex; align-items: center; gap: 8px; background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.3); border-radius: 8px; padding: 8px 16px; }
+  .streak-fire { font-size: 20px; }
+  .streak-num { font-family: var(--mono); font-size: 22px; font-weight: 700; color: #f97316; }
+  .streak-label { font-family: var(--mono); font-size: 10px; color: rgba(249,115,22,.7); letter-spacing: .12em; }
+  .streak-record { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  @media(max-width:600px){ .streak-bar { padding: 12px 20px; flex-wrap: wrap; } }
+
+  /* Market cards */
+  .markets { padding: 24px 48px; display: flex; flex-direction: column; gap: 16px; max-width: 680px; }
+  .mkt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; transition: border-color .12s; }
+  .mkt-card.picked { border-color: rgba(0,230,138,.3); }
+  .mkt-card.picked-no { border-color: rgba(255,77,106,.3); }
+  .mkt-num { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .18em; margin-bottom: 10px; }
+  .mkt-q { font-family: var(--sans); font-size: 17px; font-weight: 700; color: var(--ink); line-height: 1.4; margin-bottom: 12px; }
+  .mkt-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 20px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .mkt-price-yes { color: var(--green); font-weight: 700; }
+  .mkt-actions { display: flex; gap: 12px; }
+  .btn-yes { flex: 1; padding: 14px; border-radius: 8px; border: 1px solid rgba(0,230,138,.4); background: rgba(0,230,138,.08); color: var(--green); font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; transition: all .12s; letter-spacing: .08em; }
+  .btn-yes:hover { background: rgba(0,230,138,.18); }
+  .btn-yes.active { background: rgba(0,230,138,.25); border-color: var(--green); box-shadow: 0 0 16px rgba(0,230,138,.2); }
+  .btn-no { flex: 1; padding: 14px; border-radius: 8px; border: 1px solid rgba(255,77,106,.4); background: rgba(255,77,106,.08); color: var(--red); font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; transition: all .12s; letter-spacing: .08em; }
+  .btn-no:hover { background: rgba(255,77,106,.18); }
+  .btn-no.active { background: rgba(255,77,106,.25); border-color: var(--red); box-shadow: 0 0 16px rgba(255,77,106,.2); }
+  .mkt-picked-label { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 12px; text-align: center; }
+  @media(max-width:600px){ .markets { padding: 16px 20px; } }
+
+  /* Record */
+  .record-bar { padding: 16px 48px 40px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .record-bar span { color: var(--ink); }
+  @media(max-width:600px){ .record-bar { padding: 12px 20px 32px; } }
+
+  /* Empty states */
+  .empty { padding: 60px 48px; text-align: center; font-family: var(--sans); color: var(--muted); }
+  .loading { padding: 60px 48px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .12em; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">HYPERFLEX</a>
+  <div class="nav-links">
+    <a href="/feed">Feed</a>
+    <a href="/daily" class="active">Daily</a>
+    <a href="/alpha-live">Alpha</a>
+    <a href="/predictors">Predictors</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-label">DAILY PICKS</div>
+  <div class="hero-title" id="heroTitle">3 markets closing today.</div>
+  <div class="hero-sub">No money. Just your record.</div>
+</div>
+
+<div class="streak-bar" id="streakBar" style="display:none">
+  <div class="streak-chip">
+    <span class="streak-fire">🔥</span>
+    <div>
+      <div class="streak-num" id="streakNum">0</div>
+      <div class="streak-label">DAY STREAK</div>
+    </div>
+  </div>
+  <div class="streak-record" id="streakRecord"></div>
+</div>
+
+<div class="markets" id="markets">
+  <div class="loading">Loading today's markets…</div>
+</div>
+
+<div class="record-bar" id="recordBar" style="display:none"></div>
+
+<script>
+var API = window.location.origin;
+var _token = localStorage.getItem('hfx_token') || localStorage.getItem('token') || localStorage.getItem('jwt') || '';
+var _picks = {};
+
+function authHeaders() {
+  if (!_token) return {};
+  return { 'Authorization': 'Bearer ' + _token };
+}
+
+function timeUntil(dateStr) {
+  if (!dateStr) return '';
+  var ms = new Date(dateStr) - Date.now();
+  if (ms < 0) return 'closed';
+  var h = Math.floor(ms / 3600000);
+  var m = Math.floor((ms % 3600000) / 60000);
+  if (h >= 24) return Math.round(h/24) + 'd left';
+  if (h > 0) return h + 'h ' + m + 'm left';
+  return m + 'm left';
+}
+
+function renderStreak(streak) {
+  if (!streak) return;
+  var bar = document.getElementById('streakBar');
+  bar.style.display = 'flex';
+  document.getElementById('streakNum').textContent = streak.current_streak || 0;
+  var total = streak.total_picks || 0;
+  var correct = streak.total_correct || 0;
+  var pct = total > 0 ? Math.round(correct / total * 100) : 0;
+  document.getElementById('streakRecord').textContent =
+    'Record: ' + correct + 'W / ' + (total - correct) + 'L · ' + pct + '% accuracy';
+  if (streak.current_streak >= 1) {
+    document.getElementById('heroTitle').textContent =
+      'Day ' + streak.current_streak + ' — keep it going.';
+  }
+}
+
+function renderMarkets(markets, userPicks) {
+  var container = document.getElementById('markets');
+  if (!markets || !markets.length) {
+    container.innerHTML = '<div class="empty">No markets closing today match our filters. Check back tomorrow.</div>';
+    return;
+  }
+
+  container.innerHTML = markets.map(function(m, i) {
+    var pick = userPicks[m.slug] || null;
+    var cardClass = pick ? (pick.side === 'YES' ? 'mkt-card picked' : 'mkt-card picked-no') : 'mkt-card';
+    var yesActive = pick && pick.side === 'YES' ? ' active' : '';
+    var noActive = pick && pick.side === 'NO' ? ' active' : '';
+    return '<div class="' + cardClass + '" id="card-' + m.slug + '">'
+      + '<div class="mkt-num">MARKET ' + (i+1) + ' OF ' + markets.length + '</div>'
+      + '<div class="mkt-q">' + (m.question || m.slug) + '</div>'
+      + '<div class="mkt-meta">'
+        + '<span class="mkt-price-yes">' + m.yes_price_pct + '¢ YES</span>'
+        + '<span>' + timeUntil(m.end_date) + '</span>'
+      + '</div>'
+      + '<div class="mkt-actions">'
+        + '<button class="btn-yes' + yesActive + '" onclick="pick(\'' + m.slug + '\',\'YES\',this)">YES — BUY</button>'
+        + '<button class="btn-no' + noActive + '" onclick="pick(\'' + m.slug + '\',\'NO\',this)">NO — FADE</button>'
+      + '</div>'
+      + (pick ? '<div class="mkt-picked-label">Picked ' + pick.side + ' · Resolves ' + timeUntil(m.end_date) + '</div>' : '')
+    + '</div>';
+  }).join('');
+}
+
+function pick(slug, side, btn) {
+  if (!_token) {
+    var loginUrl = '/creator/login?next=' + encodeURIComponent('/daily');
+    if (confirm('Sign in to track your picks and build a streak.')) window.location = loginUrl;
+    return;
+  }
+  fetch(API + '/api/daily/pick', {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+    body: JSON.stringify({ market_slug: slug, side: side }),
+  }).then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(d) {
+    if (!d) return;
+    _picks[slug] = { side: side };
+    var card = document.getElementById('card-' + slug);
+    if (card) {
+      card.className = side === 'YES' ? 'mkt-card picked' : 'mkt-card picked-no';
+      var btns = card.querySelectorAll('button');
+      btns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      var existing = card.querySelector('.mkt-picked-label');
+      if (!existing) {
+        var lbl = document.createElement('div');
+        lbl.className = 'mkt-picked-label';
+        lbl.textContent = 'Picked ' + side;
+        card.appendChild(lbl);
+      }
+    }
+    if (d.streak) renderStreak(d.streak);
+  }).catch(function() {});
+}
+
+// Load
+fetch(API + '/api/daily/markets', { headers: authHeaders() })
+  .then(function(r) { return r.ok ? r.json() : { markets: [], user_picks: {}, streak: null }; })
+  .then(function(d) {
+    _picks = d.user_picks || {};
+    renderMarkets(d.markets || [], _picks);
+    if (d.streak) renderStreak(d.streak);
+    var pickedCount = Object.keys(_picks).length;
+    var total = (d.markets || []).length;
+    if (pickedCount > 0 && total > 0) {
+      var rb = document.getElementById('recordBar');
+      rb.style.display = 'block';
+      rb.textContent = pickedCount + ' of ' + total + ' picks made today.';
+    }
+  })
+  .catch(function() {
+    document.getElementById('markets').innerHTML = '<div class="empty">Couldn\'t load today\'s markets. Try again shortly.</div>';
+  });
+</script>
+</body>
+</html>

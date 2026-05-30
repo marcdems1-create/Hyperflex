@@ -1979,6 +1979,13 @@ nav {
       </div>
     </div>
 
+    <!-- Daily Picks teaser -->
+    <div id="dailyTeaser" style="display:none;margin-bottom:16px;padding:14px 18px;background:linear-gradient(135deg,rgba(249,115,22,.07),rgba(249,115,22,.02));border:1px solid rgba(249,115,22,.25);border-radius:10px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:22px;line-height:1;">🔥</span>
+      <span id="dtText" style="flex:1;font-family:var(--sans);font-size:13px;color:rgba(240,240,245,.75);">3 markets closing today — make your picks</span>
+      <a href="/daily" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#f97316;text-decoration:none;border:1px solid rgba(249,115,22,.35);padding:6px 14px;border-radius:6px;white-space:nowrap;transition:background .12s;" onmouseover="this.style.background='rgba(249,115,22,.1)'" onmouseout="this.style.background=''">Pick Now →</a>
+    </div>
+
     <!-- ═══ FLEX FEED ═══ -->
     <div class="takes-section" id="takes-section">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0">
@@ -4033,6 +4040,21 @@ fetch('/api/sharp-of-week')
     el.style.display = 'block';
   })
   .catch(function(){});
+
+// Daily teaser
+fetch('/api/daily/markets')
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(d) {
+    if (!d || !d.markets || !d.markets.length) return;
+    var teaser = document.getElementById('dailyTeaser');
+    var txtEl = document.getElementById('dtText');
+    if (!teaser) return;
+    var streak = d.streak;
+    if (streak && streak.current_streak > 0) {
+      if (txtEl) txtEl.textContent = streak.current_streak + ' day streak — keep it going';
+    }
+    teaser.style.display = 'flex';
+  }).catch(function(){});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TAKES FEED — social prediction layer

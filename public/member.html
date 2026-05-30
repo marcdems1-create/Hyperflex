@@ -355,6 +355,33 @@ async function _resolveProfileUserId() {
 
 // timeAgo + getInitials defined in utils.js
 
+function renderTopicAccuracy(topicAcc) {
+  if (!topicAcc || !Object.keys(topicAcc).length) return '';
+  const entries = Object.entries(topicAcc)
+    .filter(([, v]) => v.total >= 3)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 5);
+  if (!entries.length) return '';
+  return '<div style="margin-bottom:18px;padding:16px;background:rgba(255,255,255,.02);border-radius:8px;border:1px solid rgba(255,255,255,.06)">'
+    + '<div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--muted);margin-bottom:12px;">ACCURACY BY TOPIC</div>'
+    + entries.map(([topic, v]) => {
+        const pct = Math.round(v.correct / v.total * 100);
+        const barW = pct;
+        const barCol = pct >= 65 ? '#00e68a' : pct >= 50 ? '#4d9fff' : '#ff4d6a';
+        return '<div style="margin-bottom:10px;">'
+          + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="font-family:var(--sans);font-size:12px;color:rgba(240,240,245,.7);">' + topic + '</span>'
+            + '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + barCol + ';">' + pct + '%</span>'
+          + '</div>'
+          + '<div style="height:4px;background:rgba(255,255,255,.07);border-radius:2px;">'
+            + '<div style="height:4px;width:' + barW + '%;background:' + barCol + ';border-radius:2px;transition:width .4s;"></div>'
+          + '</div>'
+          + '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:3px;">' + v.correct + '/' + v.total + '</div>'
+        + '</div>';
+      }).join('')
+  + '</div>';
+}
+
 function tierBadge(winRate, streak) {
   let badges = '';
   if (streak >= 7)       badges += `<span class="badge badge-oracle">${streak} STREAK</span>`;
@@ -1227,6 +1254,7 @@ async function load() {
             <span class="badge" style="background:${take_stats.accuracy >= 60 ? 'rgba(0,230,138,0.12)' : take_stats.accuracy >= 50 ? 'rgba(77,159,255,0.12)' : 'rgba(255,77,106,0.12)'};color:${take_stats.accuracy >= 60 ? 'var(--green)' : take_stats.accuracy >= 50 ? 'var(--blue)' : 'var(--red)'};border-color:transparent">${take_stats.accuracy}% take accuracy</span>
             <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${take_stats.correct || 0}W / ${take_stats.incorrect || 0}L</span>
           </div>` : ''}
+          ${renderTopicAccuracy(take_stats && take_stats.topic_accuracy)}
           ${(recent_takes || []).map(t => {
             const sideUp = (t.side || '').toUpperCase();
             const href = t.market_slug ? '/market/' + t.market_slug : '#';

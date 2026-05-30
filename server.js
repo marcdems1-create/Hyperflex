@@ -14601,6 +14601,34 @@ app.get('/api/member/:userId', async (req, res) => {
           takeStats.accuracy = resolved > 0 ? Math.round((takeStats.correct / resolved) * 100) : 0;
         }
         recentTakes = recentRows;
+        // Topic accuracy from resolved takes
+        const TOPIC_PAT = {
+          'US Politics': /trump|biden|harris|congress|senate|president|election|democrat|republican/i,
+          'Crypto': /bitcoin|btc|ethereum|eth|solana|crypto|defi|token|coin/i,
+          'Sports': /nba|nfl|mlb|nhl|ufc|soccer|football|basketball|finals|championship/i,
+          'Finance': /fed\b|interest|inflation|stock|s&p|oil|gold|economy|tariff/i,
+          'Geopolitics': /war\b|ceasefire|israel|russia|ukraine|nato|china|taiwan|iran/i,
+        };
+        const topicAcc = {};
+        for (const t of recentRows) {
+          if (t.is_correct == null) continue;
+          const q = (t.question || '');
+          let matched = false;
+          for (const [topic, pat] of Object.entries(TOPIC_PAT)) {
+            if (pat.test(q)) {
+              if (!topicAcc[topic]) topicAcc[topic] = { correct: 0, total: 0 };
+              topicAcc[topic].total++;
+              if (t.is_correct) topicAcc[topic].correct++;
+              matched = true; break;
+            }
+          }
+          if (!matched) {
+            if (!topicAcc['Other']) topicAcc['Other'] = { correct: 0, total: 0 };
+            topicAcc['Other'].total++;
+            if (t.is_correct) topicAcc['Other'].correct++;
+          }
+        }
+        takeStats.topic_accuracy = topicAcc;
       } catch (e) { /* takes table may not exist yet */ }
     }
 
@@ -18271,10 +18299,12 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       take_id UUID NOT NULL,
       user_id TEXT NOT NULL,
-      reaction TEXT NOT NULL CHECK (reaction IN ('agree', 'disagree')),
+      reaction TEXT NOT NULL CHECK (reaction IN ('agree', 'disagree', 'fire', 'sharp', 'fade', 'wrong')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(take_id, user_id)
     )`);
+    await dbQuery("ALTER TABLE take_reactions DROP CONSTRAINT IF EXISTS take_reactions_reaction_check").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions ADD CONSTRAINT take_reactions_reaction_check CHECK (reaction IN ('agree','disagree','fire','sharp','fade','wrong'))").catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_created_at ON takes(created_at DESC)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_source ON takes(source)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_market_slug ON takes(market_slug)').catch(() => {});
@@ -20697,8 +20727,9 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
     let takeId = req.params.id || '';
     if (takeId.startsWith('utake_')) takeId = takeId.slice(6);
     const { reaction } = req.body;
-    if (!reaction || !['agree', 'disagree'].includes(reaction)) {
-      return res.status(400).json({ error: 'reaction must be "agree" or "disagree"' });
+    const VALID_REACTIONS = ['agree', 'disagree', 'fire', 'sharp', 'fade', 'wrong'];
+    if (!reaction || !VALID_REACTIONS.includes(reaction)) {
+      return res.status(400).json({ error: 'reaction must be agree, disagree, fire, sharp, fade, or wrong' });
     }
 
     // Check if take exists
@@ -20711,19 +20742,26 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
       'SELECT id, reaction FROM take_reactions WHERE take_id = $1 AND user_id = $2', [takeId, req.userId]
     );
 
+    // Map extended reactions to agree/disagree for legacy count columns
+    const toCountCol = r => ['agree','fire','sharp'].includes(r) ? 'agree_count' : 'disagree_count';
+
     let isNewReaction = false;
     if (existing.length) {
       if (existing[0].reaction === reaction) {
         // Same reaction = toggle off (unreact)
         await dbQuery('DELETE FROM take_reactions WHERE id = $1', [existing[0].id]);
-        const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+        const col = toCountCol(reaction);
         await dbQuery(`UPDATE takes SET ${col} = GREATEST(${col} - 1, 0) WHERE id = $1`, [takeId]);
       } else {
         // Switch reaction
         await dbQuery('UPDATE take_reactions SET reaction = $1 WHERE id = $2', [reaction, existing[0].id]);
-        const oldCol = existing[0].reaction === 'agree' ? 'agree_count' : 'disagree_count';
-        const newCol = reaction === 'agree' ? 'agree_count' : 'disagree_count';
-        await dbQuery(`UPDATE takes SET ${oldCol} = GREATEST(${oldCol} - 1, 0), ${newCol} = ${newCol} + 1 WHERE id = $1`, [takeId]);
+        const oldCol = toCountCol(existing[0].reaction);
+        const newCol = toCountCol(reaction);
+        if (oldCol === newCol) {
+          // Same bucket, just record the type change
+        } else {
+          await dbQuery(`UPDATE takes SET ${oldCol} = GREATEST(${oldCol} - 1, 0), ${newCol} = ${newCol} + 1 WHERE id = $1`, [takeId]);
+        }
         isNewReaction = true;
       }
     } else {
@@ -20732,7 +20770,7 @@ app.post('/api/takes/:id/react', requireAuth, async (req, res) => {
         'INSERT INTO take_reactions (take_id, user_id, reaction) VALUES ($1, $2, $3)',
         [takeId, req.userId, reaction]
       );
-      const col = reaction === 'agree' ? 'agree_count' : 'disagree_count';
+      const col = toCountCol(reaction);
       await dbQuery(`UPDATE takes SET ${col} = ${col} + 1 WHERE id = $1`, [takeId]);
       isNewReaction = true;
     }
@@ -21728,6 +21766,27 @@ app.get('/api/takes/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/takes/:id/reactions — reaction counts + caller's reaction
+app.get('/api/takes/:id/reactions', optionalAuth, async (req, res) => {
+  try {
+    const takeId = (req.params.id || '').replace(/^utake_/, '');
+    const rows = await dbQuery(
+      `SELECT reaction, COUNT(*)::int as count FROM take_reactions WHERE take_id = $1 GROUP BY reaction`,
+      [takeId]
+    );
+    const counts = { fire: 0, sharp: 0, fade: 0, wrong: 0, agree: 0, disagree: 0 };
+    for (const r of rows) counts[r.reaction] = r.count;
+    let myReaction = null;
+    if (req.userId) {
+      const mine = await dbQuery('SELECT reaction FROM take_reactions WHERE take_id = $1 AND user_id = $2', [takeId, req.userId]);
+      if (mine.length) myReaction = mine[0].reaction;
+    }
+    res.json({ counts, my_reaction: myReaction });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/takes/:id/comments
 app.get('/api/takes/:id/comments', async (req, res) => {
   try {
@@ -22358,6 +22417,144 @@ app.post('/api/paper/trade', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // DAILY PICK — one market per day, vote YES/NO, build a streak
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── Daily picks / streaks ─────────────────────────────────────────────────────
+// Ensure streak table
+(async () => {
+  if (!pool) return;
+  await dbQuery(`CREATE TABLE IF NOT EXISTS user_streaks (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    current_streak INTEGER DEFAULT 0,
+    longest_streak INTEGER DEFAULT 0,
+    last_pick_date DATE,
+    total_correct INTEGER DEFAULT 0,
+    total_picks INTEGER DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {});
+  await dbQuery(`ALTER TABLE user_daily_picks ADD COLUMN IF NOT EXISTS was_correct BOOLEAN`).catch(() => {});
+})();
+
+// GET /api/daily/markets — 3 markets closing today, 20-80¢, $10k+ volume
+app.get('/api/daily/markets', optionalAuth, async (req, res) => {
+  try {
+    const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data
+      : (Array.isArray(_screenerCache) ? _screenerCache : []);
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Filter to markets closing within 24h, 20-80¢, $10k+ volume
+    const eligible = screener.filter(m => {
+      if (m.closed || m.resolved) return false;
+      const price = m.yes_price || 0.5;
+      if (price < 0.2 || price > 0.8) return false;
+      if (Number(m.volume_24h || 0) < 10000) return false;
+      if (!m.end_date) return false;
+      const daysLeft = (new Date(m.end_date) - Date.now()) / 86400_000;
+      return daysLeft >= 0 && daysLeft <= 1;
+    });
+
+    // Sort by volume desc, take top 3
+    eligible.sort((a, b) => Number(b.volume_24h || 0) - Number(a.volume_24h || 0));
+    const markets = eligible.slice(0, 3).map(m => ({
+      slug: m.slug || m.market_slug,
+      question: m.question,
+      yes_price_pct: Math.round((m.yes_price || 0.5) * 100),
+      volume_24h: m.volume_24h,
+      end_date: m.end_date,
+    }));
+
+    // If not enough closing today, pull from alpha engine top by urgency
+    if (markets.length < 3) {
+      const alphaMarkets = alphaEngine.getHotMarkets(20).filter(m => {
+        const daysLeft = m.days_to_close != null ? m.days_to_close : 999;
+        return daysLeft <= 3 && daysLeft >= 0 && !markets.find(x => x.slug === m.market_slug);
+      }).slice(0, 3 - markets.length).map(m => ({
+        slug: m.market_slug,
+        question: m.question,
+        yes_price_pct: m.yes_price_pct,
+        volume_24h: m.volume_24h,
+        end_date: m.end_date,
+      }));
+      markets.push(...alphaMarkets);
+    }
+
+    // Attach user's picks if authed
+    let userPicks = {};
+    if (req.userId && markets.length) {
+      const slugs = markets.map(m => m.slug);
+      const picks = await dbQuery(
+        `SELECT market_slug, side, was_correct FROM user_daily_picks WHERE user_id = $1 AND pick_date = $2 AND market_slug = ANY($3)`,
+        [req.userId, today, slugs]
+      ).catch(() => []);
+      for (const p of picks) userPicks[p.market_slug] = { side: p.side, was_correct: p.was_correct };
+    }
+
+    // User streak
+    let streak = null;
+    if (req.userId) {
+      const sr = await dbQuery('SELECT * FROM user_streaks WHERE user_id = $1', [req.userId]).catch(() => []);
+      if (sr.length) streak = sr[0];
+    }
+
+    res.json({ markets, user_picks: userPicks, streak, date: today });
+  } catch(e) {
+    console.error('[daily/markets]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/daily/pick — { market_slug, side }
+app.post('/api/daily/pick', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { market_slug, side } = req.body;
+    if (!market_slug || !['YES', 'NO'].includes(side)) {
+      return res.status(400).json({ error: 'market_slug and side (YES/NO) required' });
+    }
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Get market price for recording
+    const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data
+      : (Array.isArray(_screenerCache) ? _screenerCache : []);
+    const mkt = screener.find(m => (m.slug || m.market_slug) === market_slug);
+    const yesPricePct = mkt ? Math.round((mkt.yes_price || 0.5) * 100) : null;
+    const question = mkt ? mkt.question : market_slug;
+
+    await dbQuery(
+      `INSERT INTO user_daily_picks (user_id, market_slug, pick_date, side)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, market_slug, pick_date) DO UPDATE SET side = EXCLUDED.side`,
+      [req.userId, market_slug, today, side]
+    );
+
+    // Update streak stats
+    const sr = await dbQuery('SELECT * FROM user_streaks WHERE user_id = $1', [req.userId]).catch(() => []);
+    const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+    if (!sr.length) {
+      await dbQuery(
+        `INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_pick_date, total_picks)
+         VALUES ($1, 1, 1, $2, 1)`,
+        [req.userId, today]
+      ).catch(() => {});
+    } else {
+      const s = sr[0];
+      const lastDate = s.last_pick_date ? s.last_pick_date.toISOString?.().slice(0,10) || String(s.last_pick_date).slice(0,10) : null;
+      const isConsecutive = lastDate === yesterday || lastDate === today;
+      const newStreak = lastDate === today ? s.current_streak : (isConsecutive ? s.current_streak + 1 : 1);
+      const newLongest = Math.max(newStreak, s.longest_streak || 0);
+      await dbQuery(
+        `UPDATE user_streaks SET current_streak=$1, longest_streak=$2, last_pick_date=$3, total_picks=total_picks+1, updated_at=NOW() WHERE user_id=$4`,
+        [newStreak, newLongest, today, req.userId]
+      ).catch(() => {});
+    }
+
+    const streakRow = await dbQuery('SELECT * FROM user_streaks WHERE user_id = $1', [req.userId]).catch(() => []);
+    res.json({ ok: true, side, market_slug, streak: streakRow[0] || null });
+  } catch(e) {
+    console.error('[daily/pick]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // GET /api/daily-pick — today's pick (auto-selects from top alpha if not set)
 app.get('/api/daily-pick', optionalAuth, async (req, res) => {
@@ -26160,6 +26357,7 @@ app.get('/health', (req, res) => {
 
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/daily', (req, res) => res.sendFile(path.join(__dirname, 'public', 'daily.html')));
 app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
 app.get('/quiz', (req, res) => {
   // When ?result=THE+SHARP is present, inject OG meta for the share card
@@ -29472,6 +29670,90 @@ async function scanHedgeAlerts() {
 cron.schedule('15,45 * * * *', safeCron('scanHedgeAlerts', scanHedgeAlerts));
 
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
+
+// GET /api/profile/:username/stats — public profile stats for member.html
+app.get('/api/profile/:username/stats', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const userRows = await dbQuery(
+      `SELECT id, username, display_name, avatar_url, flex_score, flex_tier,
+              prediction_win_rate, total_predictions, brier_score,
+              follower_count, following_count
+       FROM users WHERE username = $1 OR id::text = $1`,
+      [req.params.username]
+    );
+    if (!userRows.length) return res.status(404).json({ error: 'not found' });
+    const u = userRows[0];
+
+    const [takesRows, streakRows, followerRows, followingRows] = await Promise.all([
+      dbQuery(
+        `SELECT market_slug, question, side, created_at, is_correct, thesis
+         FROM takes WHERE user_id = $1 AND source = 'user'
+         ORDER BY created_at DESC LIMIT 25`,
+        [u.id]
+      ).catch(() => []),
+      dbQuery('SELECT * FROM user_streaks WHERE user_id = $1', [u.id]).catch(() => []),
+      dbQuery('SELECT COUNT(*)::int as cnt FROM predictor_follows WHERE following_id = $1', [u.id]).catch(() => [{ cnt: u.follower_count || 0 }]),
+      dbQuery('SELECT COUNT(*)::int as cnt FROM predictor_follows WHERE follower_id = $1', [u.id]).catch(() => [{ cnt: u.following_count || 0 }]),
+    ]);
+
+    // Attach live prices to recent takes
+    const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data
+      : (Array.isArray(_screenerCache) ? _screenerCache : []);
+    const recentTakes = takesRows.slice(0, 10).map(t => {
+      const live = screener.find(s => (s.slug || s.market_slug) === t.market_slug);
+      const currentPct = live ? Math.round((live.yes_price || 0.5) * 100) : null;
+      return { ...t, current_price_pct: currentPct };
+    });
+
+    // Topic accuracy from resolved takes
+    const TOPIC_PATTERNS = {
+      'US Politics': /trump|biden|harris|congress|senate|president|election|democrat|republican/i,
+      'Crypto': /bitcoin|btc|ethereum|eth|solana|crypto|defi|token|coin/i,
+      'Sports': /nba|nfl|mlb|nhl|ufc|soccer|football|basketball|finals|championship/i,
+      'Finance': /fed\b|interest|inflation|stock|s&p|oil|gold|economy|tariff/i,
+      'Geopolitics': /war\b|ceasefire|israel|russia|ukraine|nato|china|taiwan|iran/i,
+    };
+    const topicStats = {};
+    for (const t of takesRows) {
+      if (t.is_correct == null) continue;
+      const q = (t.question || '').toLowerCase();
+      let matched = false;
+      for (const [topic, pattern] of Object.entries(TOPIC_PATTERNS)) {
+        if (pattern.test(q)) {
+          if (!topicStats[topic]) topicStats[topic] = { correct: 0, total: 0 };
+          topicStats[topic].total++;
+          if (t.is_correct) topicStats[topic].correct++;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        if (!topicStats['Other']) topicStats['Other'] = { correct: 0, total: 0 };
+        topicStats['Other'].total++;
+        if (t.is_correct) topicStats['Other'].correct++;
+      }
+    }
+
+    res.json({
+      username: u.username,
+      display_name: u.display_name,
+      avatar_url: u.avatar_url,
+      flex_score: u.flex_score,
+      flex_tier: u.flex_tier,
+      win_rate: u.prediction_win_rate,
+      total_picks: u.total_predictions,
+      followers: followerRows[0]?.cnt || 0,
+      following: followingRows[0]?.cnt || 0,
+      recent_takes: recentTakes,
+      topic_accuracy: topicStats,
+      streak: streakRows[0] || null,
+    });
+  } catch(e) {
+    console.error('[profile/stats]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // GET /api/profile/:slug/comments — aggregated market comments for this creator's community
 app.get('/api/profile/:slug/comments', async (req, res) => {
