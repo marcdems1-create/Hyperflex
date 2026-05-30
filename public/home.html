@@ -77,6 +77,11 @@ nav{
 .nav-mobile-menu.open{display:block;}
 .nav-mobile-link{display:block;font-family:var(--sans);font-size:14px;font-weight:500;color:var(--ink2);text-decoration:none;padding:12px 24px;transition:color .12s,background .12s;}
 .nav-mobile-link:hover{color:#fff;background:rgba(255,255,255,.05);}
+.nav-mobile-overlay{display:none;position:fixed;inset:0;z-index:98;background:transparent;}
+.nav-mobile-overlay.open{display:block;}
+.nav-mobile-header{display:flex;justify-content:flex-end;padding:6px 8px 2px;}
+.nav-mobile-close{background:none;border:none;cursor:pointer;padding:6px;color:var(--ink2);display:flex;align-items:center;justify-content:center;border-radius:4px;}
+.nav-mobile-close:hover{color:#fff;background:rgba(255,255,255,.05);}
 @media(max-width:768px){
   .nav-links{display:none;}
   .nav-hamburger{display:flex;}
@@ -430,6 +435,7 @@ footer{
 <body>
 
 <!-- ── NAV ── -->
+<div class="nav-mobile-overlay" id="navMobileOverlay"></div>
 <nav id="mainNav" style="position:sticky;">
   <a class="nav-logo" href="/">HYPERFLEX</a>
   <div class="nav-links" id="navLinks">
@@ -448,6 +454,12 @@ footer{
     </svg>
   </button>
   <div class="nav-mobile-menu" id="navMobileMenu">
+    <div class="nav-mobile-header">
+      <button class="nav-mobile-close" id="navMobileClose" aria-label="Close menu">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 1L15 15M15 1L1 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <a class="nav-mobile-link" href="/">Dashboard</a>
     <a class="nav-mobile-link" href="/alpha">Alpha</a>
     <a class="nav-mobile-link" href="/whales">Whales</a>
     <a class="nav-mobile-link" href="/feed">Feed</a>
@@ -470,9 +482,14 @@ footer{
 (function(){
   var btn = document.getElementById('navHamburger');
   var menu = document.getElementById('navMobileMenu');
+  var overlay = document.getElementById('navMobileOverlay');
+  var closeBtn = document.getElementById('navMobileClose');
+  function closeMenu(){ menu.classList.remove('open'); overlay.classList.remove('open'); }
+  function openMenu(){ menu.classList.add('open'); overlay.classList.add('open'); }
   if (btn && menu) {
-    btn.addEventListener('click', function(e){ e.stopPropagation(); menu.classList.toggle('open'); });
-    document.addEventListener('click', function(){ menu.classList.remove('open'); });
+    btn.addEventListener('click', function(e){ e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
+    if (closeBtn) closeBtn.addEventListener('click', closeMenu);
+    if (overlay) overlay.addEventListener('click', closeMenu);
   }
 })();
 </script>
