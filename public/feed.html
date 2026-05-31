@@ -3762,57 +3762,72 @@ function switchTab(tab) {
 
 var _hotDebatesLoaded = false;
 var _hotDebatesHasData = false;
-function loadHotDebates() {
+async function loadHotDebates() {
   if (_hotDebatesLoaded) {
-    // Data already fetched — just sync strip visibility to current tab state
     var strip = document.getElementById('hotDebatesStrip');
     if (strip) strip.style.display = _hotDebatesHasData ? '' : 'none';
     return;
   }
   _hotDebatesLoaded = true;
-  fetch(API + '/api/feed/trending?limit=6')
-    .then(function(r){ return r.ok ? r.json() : []; })
-    .then(function(markets) {
-      var strip = document.getElementById('hotDebatesStrip');
-      var list  = document.getElementById('hotDebatesList');
-      if (!markets || !markets.length || !list) {
-        _hotDebatesHasData = false;
-        if (strip) strip.style.display = 'none';
-        return;
-      }
-      function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-      list.innerHTML = markets.map(function(m) {
-        var yesPct      = m.yes_price_pct != null ? m.yes_price_pct : Math.round((m.yes_price || 0.5) * 100);
-        var priceColor  = yesPct >= 60 ? '#00e68a' : yesPct <= 40 ? '#ff4d6a' : '#4d9fff';
-        var badge       = _esc(m.badge || 'HOT');
-        var badgeColor  = m.badge_color || '#f97316';
-        var why         = m.why && m.why[0] ? _esc(m.why[0]) : '';
-        var vol         = Number(m.volume_24h || 0);
-        var volStr      = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '';
-        var q           = _esc((m.question || '').slice(0, 90));
-        var href        = m.market_slug ? '/market/' + _esc(m.market_slug) : '#';
-        var edgeStr     = m.edge_score != null ? Number(m.edge_score).toFixed(1) : '';
-        var whaleLine   = m.whale_count ? m.whale_count + (m.whale_count > 1 ? ' whales' : ' whale') : '';
-        return '<a href="' + href + '" style="display:flex;flex-direction:column;background:#111118;border:1px solid rgba(255,255,255,.07);border-left:3px solid ' + badgeColor + ';border-radius:8px;padding:12px 14px;text-decoration:none;color:#f0f0f5;transition:background .12s;min-height:130px;" onmouseover="this.style.background=\'rgba(255,255,255,.03)\'" onmouseout="this.style.background=\'#111118\'">'
-          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-            + '<span style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.12em;color:' + badgeColor + ';">' + badge + '</span>'
-            + (edgeStr ? '<span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.3);">EDGE ' + edgeStr + '</span>' : '')
-          + '</div>'
-          + '<div style="font-size:12px;font-weight:600;color:#f0f0f5;line-height:1.4;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;margin-bottom:8px;">' + q + '</div>'
-          + '<div style="font-family:var(--mono);font-size:20px;font-weight:900;color:' + priceColor + ';line-height:1;margin-bottom:5px;">' + yesPct + '¢</div>'
-          + (why ? '<div style="font-size:10px;color:rgba(240,240,245,.45);line-height:1.35;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + why + '</div>' : '')
-          + '<div style="display:flex;gap:10px;align-items:center;margin-top:auto;">'
-            + (volStr ? '<span style="font-family:var(--mono);font-size:9px;color:rgba(240,240,245,.25);">' + volStr + ' 24h</span>' : '')
-            + (whaleLine ? '<span style="font-family:var(--mono);font-size:9px;color:#00d4ff;">' + whaleLine + '</span>' : '')
-          + '</div>'
-        + '</a>';
-      }).join('');
-      _hotDebatesHasData = true;
-      // Only show strip if user is currently on the Trending tab
-      var onTrending = document.getElementById('tabTrending') && document.getElementById('tabTrending').classList.contains('active');
-      if (strip) strip.style.display = onTrending ? '' : 'none';
-    })
-    .catch(function(){ _hotDebatesHasData = false; });
+  const section = document.getElementById('hotDebatesStrip');
+  const grid = document.getElementById('hotDebatesList');
+  if (!section || !grid) return;
+
+  try {
+    const res = await fetch(API + '/api/feed/trending?limit=6', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const markets = await res.json();
+    if (!markets || !markets.length) return;
+
+    grid.innerHTML = markets.map(m => {
+      const imgUrl = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
+      const yesPct = m.yes_price_pct != null ? m.yes_price_pct : Math.round((m.yes_price || 0.5) * 100);
+      const priceColor = yesPct >= 60 ? '#00e68a' : yesPct <= 40 ? '#ff4d6a' : '#4d9fff';
+      const vol = m.volume_24h >= 1e6 ? '$'+(m.volume_24h/1e6).toFixed(1)+'M'
+                : m.volume_24h >= 1e3 ? '$'+Math.round(m.volume_24h/1e3)+'K'
+                : '$'+Math.round(m.volume_24h||0);
+      const whyBullet = (m.why && m.why[0]) || '';
+      const badge = (m.badge || 'HOT').replace(/</g,'&lt;');
+      const badgeColor = m.badge_color || '#f97316';
+      const q = (m.question || '').slice(0, 70);
+      const qEsc = q.replace(/</g,'&lt;');
+      const hasMore = (m.question || '').length > 70;
+
+      return `<a href="/market/${m.market_slug}" style="
+        position:relative;display:flex;flex-direction:column;border-radius:12px;
+        overflow:hidden;min-height:200px;text-decoration:none;color:#fff;
+        background:#111118;border:1px solid rgba(255,255,255,.08);
+        transition:transform .15s ease;cursor:pointer;">
+        ${imgUrl ? `<img src="${imgUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.25) saturate(1.2);z-index:0;" onerror="this.style.display='none'" loading="lazy">` : ''}
+        <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0) 0%,rgba(0,0,0,0.9) 100%);z-index:1;"></div>
+        <div style="position:relative;z-index:2;padding:14px;display:flex;flex-direction:column;height:100%;justify-content:space-between;">
+          <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;background:${badgeColor};color:#000;width:fit-content;">
+            ${badge}
+          </span>
+          <div>
+            <div style="font-family:var(--sans);font-size:14px;font-weight:700;line-height:1.3;margin-bottom:8px;">
+              ${qEsc}${hasMore ? '…' : ''}
+            </div>
+            ${whyBullet ? `<div style="font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.6);margin-bottom:8px;">▸ ${whyBullet.replace(/</g,'&lt;')}</div>` : ''}
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-family:var(--mono);font-size:18px;font-weight:700;color:${priceColor};">${yesPct}¢</span>
+              <span style="font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.4);">${vol} 24h</span>
+            </div>
+            <div style="height:2px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:6px;overflow:hidden;">
+              <div style="height:100%;width:${yesPct}%;background:${priceColor};border-radius:2px;"></div>
+            </div>
+          </div>
+        </div>
+      </a>`;
+    }).join('');
+
+    _hotDebatesHasData = true;
+    const onTrending = document.getElementById('tabTrending') && document.getElementById('tabTrending').classList.contains('active');
+    section.style.display = onTrending ? '' : 'none';
+  } catch(e) {
+    console.warn('[hot-debates]', e.message);
+    _hotDebatesHasData = false;
+  }
 }
 
 // ── Sidebar ──
