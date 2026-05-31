@@ -25267,7 +25267,12 @@ app.get('/api/influencer-feed', async (req, res) => {
     const marketSlug = req.query.market_slug || null;
     let rows = [];
     if (pool) {
-      const conditions = ['p.published_at IS NOT NULL'];
+      const conditions = [
+        'p.published_at IS NOT NULL',
+        'p.market_slug IS NOT NULL',
+        "p.market_question IS NOT NULL AND TRIM(p.market_question) <> ''",
+        "NOT (p.platform = 'reddit' AND i.handle ILIKE ANY(ARRAY['nba','nfl','nhl','mlb','nba2k','wallstreetbets','sportsbook','fantasyfootball','cfb','collegebasketball','soccer']))",
+      ];
       const params = [];
       if (platform)   { params.push(platform);   conditions.push(`p.platform=$${params.length}`); }
       if (marketSlug) { params.push(marketSlug); conditions.push(`p.market_slug=$${params.length}`); }

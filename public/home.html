@@ -1077,7 +1077,7 @@ footer{
   <!-- INFLUENCER TAKES — external voices from X/Reddit on live markets -->
   <div class="row-section" id="influencerTakesSection" style="display:none">
     <div class="row-head">
-      <span class="row-title">Sharp Takes on X</span>
+      <span class="row-title">COMMUNITY TAKES</span>
       <span class="row-tag" style="background:rgba(168,85,247,.1);color:#a855f7;border:1px solid rgba(168,85,247,.22);">EXTERNAL</span>
       <a class="row-see-all" href="/feed?tab=trending" style="color:#a855f7;">Full feed →</a>
     </div>
@@ -1619,8 +1619,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       .then(function(r){return r.ok?r.json():null;})
       .then(function(d){
         var posts = (d && d.posts) || [];
-        // Filter to posts that have actual content + market match
-        posts = posts.filter(function(p){ return p.content_text && p.content_text.length > 20; });
+        // Require: actual content + linked market + not a generic sports handle
+        var genericSports = ['nba','nfl','nhl','mlb','wallstreetbets','sportsbook','fantasyfootball'];
+        posts = posts.filter(function(p){
+          if (!p.content_text || p.content_text.length < 20) return false;
+          if (!p.market_slug) return false;
+          var handle = (p.influencer_handle || p.handle || '').toLowerCase();
+          if (p.platform === 'reddit' && genericSports.indexOf(handle) !== -1) return false;
+          return true;
+        });
         if (posts.length < 2) return;
         var rowEl = document.getElementById('rowInfluencer');
         if (!rowEl) return;
