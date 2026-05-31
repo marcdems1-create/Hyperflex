@@ -1853,7 +1853,7 @@ a:hover { text-decoration: underline; }
     <div class="tabs">
       <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
       <button class="tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
-      <button class="tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
+      <button class="tab" id="tabFollowing" onclick="switchTab('following')" style="display:none">Following</button>
     </div>
   </div>
 
@@ -2195,8 +2195,10 @@ a:hover { text-decoration: underline; }
 
 <script>
 var API = window.location.origin;
-var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token') || '';
 var currentTab = 'foryou';
+// Show Following tab only when authenticated
+if (token) { var _ftEl = document.getElementById('tabFollowing'); if (_ftEl) _ftEl.style.display = ''; }
 var nextCursor = null;
 var feedData = [];
 
@@ -3750,6 +3752,11 @@ async function toggleFollow(userId, btn) {
 
 // ── Tabs ──
 function switchTab(tab) {
+  // Following tab requires auth — redirect to login if not authenticated
+  if (tab === 'following' && !token) {
+    window.location.href = '/creator/login?next=' + encodeURIComponent('/feed');
+    return;
+  }
   currentTab = tab;
   document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
