@@ -524,9 +524,18 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
   </section>
 
   <section id="alpha-section" style="display:none;margin:40px 0 0">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-      <span style="width:8px;height:8px;border-radius:50%;background:#00d4ff;box-shadow:0 0 8px #00d4ff;display:inline-block;animation:pulse 1.5s infinite;"></span>
-      <span style="font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:#00d4ff;text-transform:uppercase;font-weight:700;">Live Alpha</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#00d4ff;box-shadow:0 0 8px #00d4ff;display:inline-block;animation:pulse 1.4s infinite;"></span>
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:#00d4ff;text-transform:uppercase;font-weight:700;">Live Alpha</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.45);line-height:1.6;max-width:560px;">
+          Markets ranked by whale positioning, price momentum, and sharp edge signals — not just volume.
+          🐋 = tracked whale in position · ⚡ = sharp consensus edge · ⏱ = closing soon · 📉 = price moved hard today.
+        </div>
+      </div>
+      <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.4);text-decoration:none;letter-spacing:.1em;white-space:nowrap;">VIEW ALL ALPHA →</a>
     </div>
     <div id="alpha-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;"></div>
   </section>
