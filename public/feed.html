@@ -2196,8 +2196,19 @@ a:hover { text-decoration: underline; }
 <script>
 var API = window.location.origin;
 var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token') || '';
+// Validate token isn't expired before using it
+if (token) {
+  try {
+    var _tp = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    if (_tp.exp && _tp.exp * 1000 < Date.now()) {
+      // Expired — clear all token keys so downstream auth checks also see logged-out state
+      ['hf_token','hf_creator_token','hf_member_token'].forEach(function(k){ localStorage.removeItem(k); });
+      token = '';
+    }
+  } catch (_) {}
+}
 var currentTab = 'foryou';
-// Show Following tab only when authenticated
+// Show Following tab only when authenticated with a valid token
 if (token) { var _ftEl = document.getElementById('tabFollowing'); if (_ftEl) _ftEl.style.display = ''; }
 var nextCursor = null;
 var feedData = [];

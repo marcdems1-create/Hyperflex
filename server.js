@@ -35841,6 +35841,30 @@ app.get('/api/markets/:slug', (req, res) => {
 // a public probe target. Add ?verbose=1 to include eventMarkets counts.
 //   GET /api/_smoke/polymarket?secret=...
 //   GET /api/_smoke/polymarket?secret=...&verbose=1
+// Whale-alpha join diagnostic: shows sample conditionIds from both whale cache and hot markets
+app.get('/api/_smoke/whale-join', (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (adminSecret && req.query.secret !== adminSecret) return res.status(403).json({ error: 'Forbidden' });
+  const wc = _whaleWatchCache;
+  const hotMarkets = alphaEngine.getHotMarkets(10);
+  const whalePositions = (wc && wc.data && Array.isArray(wc.data.whales)) ? wc.data.whales : [];
+  const whaleSample = whalePositions.slice(0, 5).map(p => ({
+    cid: p.conditionId || p.condition_id || null,
+    size: p.size, price: p.current_price, side: p.outcome || p.side
+  }));
+  const marketSample = hotMarkets.slice(0, 5).map(m => ({
+    cid: m.conditionId, slug: m.market_slug, whale_count: m.whale_count
+  }));
+  res.json({
+    whale_cache_age_s: wc ? Math.round((Date.now() - wc.ts) / 1000) : null,
+    whale_positions_total: whalePositions.length,
+    whale_sample: whaleSample,
+    hot_markets_total: hotMarkets.length,
+    market_sample: marketSample,
+    any_matches: hotMarkets.some(m => (m.whale_count || 0) > 0),
+  });
+});
+
 app.get('/api/_smoke/polymarket', async (req, res) => {
   const adminSecret = process.env.ADMIN_SECRET;
   if (adminSecret && req.query.secret !== adminSecret) {

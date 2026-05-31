@@ -1430,7 +1430,7 @@ async function load() {
       <div id="challengeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px">
         <div onclick="event.stopPropagation()" style="background:linear-gradient(180deg,#16161f,#0e0e17);border:1px solid var(--border-strong);border-radius:20px;padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg),0 0 120px -40px rgba(255,77,106,0.3)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div style="font-family:var(--display);font-size:24px;letter-spacing:0.06em;color:var(--ink)">CHALLENGE ${user.display_name.toUpperCase()}</div>
+            <div style="font-family:var(--display);font-size:24px;letter-spacing:0.06em;color:var(--ink)">CHALLENGE ${(user.display_name || 'TRADER').toUpperCase()}</div>
             <button onclick="closeChallenge()" style="color:var(--muted);font-size:22px;line-height:1;padding:4px 8px">×</button>
           </div>
           <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
