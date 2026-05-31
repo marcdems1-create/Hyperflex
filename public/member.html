@@ -821,15 +821,36 @@ async function load() {
       page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Profile data missing</div><div class="error-sub">User <code style="font-family:'Space Mono',monospace;font-size:12px;color:var(--gold)">${userId}</code> resolved from the handle but the profile record is empty. <br>This is usually a stale-row issue — contact support.</div></div>`;
       return;
     }
-    if (!res.ok) throw new Error('API error');
+    if (!res.ok) {
+      let errMsg = 'API error ' + res.status;
+      try { const e = await res.json(); if (e && e.error) errMsg = e.error; } catch (_) {}
+      console.error('[member] /api/member failed:', errMsg, 'userId=', userId);
+      throw new Error(errMsg);
+    }
     const data = await res.json();
-    const { user, stats, communities, recent_wins, take_stats, recent_takes, polymarket_stats, recent_trades } = data;
+    // Defensive: if the API returns something unexpected (empty body, error shape),
+    // fall back to empty objects so the render doesn't crash with "Cannot read
+    // properties of undefined".
+    const user            = data.user            || {};
+    const stats           = data.stats           || {};
+    const communities     = data.communities     || [];
+    const recent_wins     = data.recent_wins     || [];
+    const take_stats      = data.take_stats      || {};
+    const recent_takes    = data.recent_takes    || [];
+    const polymarket_stats = data.polymarket_stats || null;
+    const recent_trades   = data.recent_trades   || [];
+
+    if (!user.id) {
+      console.error('[member] API returned no user object for userId=', userId, data);
+      page.innerHTML = `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Profile not found</div><div class="error-sub">This profile doesn't exist or has been removed. <br><a href="/predictors" style="color:var(--gold)">Browse the leaderboard →</a></div></div>`;
+      return;
+    }
 
     // Surface the merged user+stats payload for renderFlexScoreCard and
     // the WHALE SCORE badge — both read window._profilePayload. Was only
     // populated for /@handle URLs before; /m/:userId visitors silently
     // missed the FLEX hero render and Whale badge.
-    window._profilePayload = Object.assign({}, user || {}, stats || {});
+    window._profilePayload = Object.assign({}, user, stats);
     const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
     const pTrades = recent_trades || [];
 
@@ -1452,8 +1473,8 @@ async function load() {
     showOwnerTools(userId, user.wallet_verified);
     loadSocialPredictions(userId);
   } catch (err) {
-    console.error(err);
-    page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
+    console.error('[member] load() crash — userId:', userId, '— error:', err && err.message, err);
+    page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.<br><a href="/predictors" style="color:var(--gold);font-size:12px;">← Browse leaderboard</a></div></div>`;
   }
 }
 
