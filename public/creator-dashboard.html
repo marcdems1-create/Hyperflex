@@ -1432,6 +1432,9 @@ body.plan-premium .main {
   z-index: 50;
   min-height: 60px;
 }
+/* Logo in topbar: visible on mobile (sidebar hidden), hidden on desktop (sidebar shows it) */
+.topbar-logo { display: none; }
+@media (max-width: 900px) { .topbar-logo { display: flex; } }
 .topbar-title {
   font-family: 'Inter', sans-serif;
   font-size: 22px;
@@ -4934,6 +4937,13 @@ window.hfxOpenDeposit = function() {
       <button class="hamburger" onclick="toggleSidebar()" aria-label="Open menu">
         <span></span><span></span><span></span>
       </button>
+      <a href="/" class="topbar-logo" style="text-decoration:none;display:flex;align-items:center;gap:7px;flex-shrink:0;" title="HYPERFLEX home">
+        <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
+          <path d="M14 2L24 8V20L14 26L4 20V8L14 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+          <path d="M14 7L19 10V16L14 19L9 16V10L14 7Z" fill="#c9920d" opacity="0.6"/>
+        </svg>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.06em;color:#f0f0f5;">HYPERFLEX</span>
+      </a>
       <div class="topbar-title" id="topbarTitle">Overview</div>
       <button class="btn-primary topbar-primary-cta" onclick="openPostTakeFlow()">📢 Post Take</button>
       <div class="topbar-actions">
