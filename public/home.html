@@ -513,6 +513,7 @@ footer{
       var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
       var uid=p.userId||p.sub||p.id;
       if(uid){
+        window._hfxUser = uid;
         var a=document.createElement('a');
         a.className='nav-link';
         a.href='/m/'+uid;
@@ -1499,8 +1500,11 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     }).catch(function(){});
   }, 500);
 
-  /* Following takes — latest takes from people user follows */
+  /* Following takes — latest takes from people user follows (auth-gated) */
   setTimeout(function(){
+    // Require a valid decoded session — not just a raw token string.
+    // window._hfxUser is set by the nav init IIFE only when the JWT decodes cleanly.
+    if(!window._hfxUser) return;
     var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
     if(!tok) return;
     fetch('/api/takes/feed?mode=following&limit=8', {headers:{'Authorization':'Bearer '+tok}})
@@ -1511,7 +1515,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         var rowEl=document.getElementById('rowFollowing');
         if(!rowEl) return;
         function timeAgo(ts){var diff=Date.now()-new Date(ts).getTime();var m=Math.round(diff/60000);return m<60?m+'m ago':Math.round(m/60)+'h ago';}
-        rowEl.innerHTML=takes.map(function(t){
+        var cards=takes.map(function(t){
           var side=(t.side||'YES').toUpperCase();
           var sideColor=side==='YES'?'#00e68a':'#ff4d6a';
           var q=(t.question||'').slice(0,80);
@@ -1533,8 +1537,11 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
               +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
             +'</div>'
           +'</a>';
-        }).join('');
-        document.getElementById('followingTakesSection').style.display='';
+        });
+        rowEl.innerHTML=cards.join('');
+        var sectionEl=document.getElementById('followingTakesSection');
+        if(!cards.length){sectionEl.style.display='none';return;}
+        sectionEl.style.display='';
       }).catch(function(){});
   }, 300);
 
