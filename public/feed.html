@@ -1857,6 +1857,14 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
+  <!-- MARKET MOVERS STRIP — horizontal scroll, biggest price changes in last hour -->
+  <div id="moversStrip" style="margin-bottom:14px;display:none;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(240,240,245,.4);text-transform:uppercase;">Market Movers</span>
+    </div>
+    <div id="moversScroller" style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
+  </div>
+
   <!-- Mobile Hot Alpha strip — horizontal scroll, visible when the
        left rail hides (<1200px). Same data source as the desktop
        rail, different visual rhythm: swipeable cards. -->
@@ -5216,5 +5224,30 @@ function showWinCard(data) {
 </div>
 <script src="/hfx-engage.js" defer></script>
 <script>document.addEventListener('DOMContentLoaded',function(){if(window.HFX&&window.HFX.checkResolvedTakes)window.HFX.checkResolvedTakes();loadHotDebates();});</script>
+<script>
+// ── MARKET MOVERS STRIP ──
+(function(){
+  fetch('/api/market-movers')
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.movers||!d.movers.length)return;
+      var scroller=document.getElementById('moversScroller');
+      var strip=document.getElementById('moversStrip');
+      if(!scroller||!strip)return;
+      var html=d.movers.slice(0,12).map(function(m){
+        var chg=m.change_pct||0;
+        var sign=chg>=0?'+':'';
+        var col=chg>=0?'#00e68a':'#ff4d6a';
+        var q=(m.question||'').length>42?(m.question||'').slice(0,42)+'…':m.question||'';
+        return '<a href="'+(m.url||'#')+'" style="flex-shrink:0;display:block;background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:8px 12px;text-decoration:none;min-width:160px;max-width:200px;transition:border-color .12s;" onmouseover="this.style.borderColor=\'rgba(255,255,255,.18)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,.07)\'">'
+          +'<div style="font-family:var(--mono,monospace);font-size:11px;font-weight:700;color:'+col+';margin-bottom:4px;">'+sign+chg.toFixed(1)+'pt</div>'
+          +'<div style="font-size:11px;font-weight:500;color:rgba(240,240,245,.75);line-height:1.3;">'+q+'</div>'
+          +'</a>';
+      }).join('');
+      scroller.innerHTML=html;
+      strip.style.display='';
+    }).catch(function(){});
+})();
+</script>
 </body>
 </html>
