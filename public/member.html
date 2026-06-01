@@ -1124,6 +1124,11 @@ async function load() {
             <span class="whale-badge-num" id="whaleScoreNum">—</span>
             <span class="whale-badge-meta" id="whaleScoreMeta"></span>
           </div>
+          <div id="hfxCompositeBadge" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(77,159,255,.07);border:1px solid rgba(77,159,255,.22);display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.18em;color:#4d9fff;text-transform:uppercase;">HFX Score</span>
+            <span id="hfxCompositeNum" style="font-family:var(--mono);font-size:18px;font-weight:800;color:#b3d4ff;letter-spacing:-.01em;font-variant-numeric:tabular-nums;">—</span>
+            <span id="hfxCompositeMeta" style="font-family:var(--mono);font-size:9px;color:#4d9fff;opacity:.75;"></span>
+          </div>
         </div>
       </section>
 
@@ -1495,7 +1500,24 @@ async function load() {
       `<div class="error-state"><div class="error-icon">🔍</div><div class="error-msg">Handle not found</div><div class="error-sub">${msg}</div></div>`;
     return;
   }
-  load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); renderFlexScoreCard(); });
+  load().then(loadFollowStatus).then(showCreatorDashPill).then(() => { stripEditName(); enrichFromLivePolymarket(); renderFlexScoreCard(); loadHfxComposite(); });
+
+  function loadHfxComposite() {
+    const uid = window._profileUserId;
+    if (!uid) return;
+    fetch('/api/member/' + uid + '/hfx-score')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d || d.composite == null) return;
+        const badge = document.getElementById('hfxCompositeBadge');
+        const num = document.getElementById('hfxCompositeNum');
+        const meta = document.getElementById('hfxCompositeMeta');
+        if (!badge || !num) return;
+        num.textContent = d.composite;
+        if (meta) meta.textContent = d.predictions + ' picks · cal/' + d.components.calibration + ' win/' + d.components.correct_picks;
+        badge.style.display = 'flex';
+      }).catch(() => {});
+  }
 })();
 
 // Defensive: a stray "Edit Name" button has been showing up on some

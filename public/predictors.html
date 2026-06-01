@@ -513,7 +513,16 @@ function renderCards() {
       var cs3 = flexVal != null ? flexVal : '—';
       var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
       var settledN = r.predictions_resolved || r.flex_settled_events || '?';
+      // HFX composite: calibration 40% + win rate 20% + consistency proxy 20% + flex tier 20%
+      var hfxCal = r.calibration_score != null ? Number(r.calibration_score) : (flexVal != null ? flexVal * 0.7 : 0);
+      var hfxWin = wrPct != null ? wrPct : 0;
+      var hfxConsistency = Math.min(100, (Number(r.predictions_resolved || r.flex_settled_events || 0) / 50) * 100);
+      var tierMap = { 'FLEXIN': 100, 'WHALE': 90, 'SHARK': 80, 'SHARP': 70, 'PROFITABLE': 60, 'TRADER': 50, 'BUILDING': 30 };
+      var hfxTierScore = r.flex_tier && tierMap[r.flex_tier] ? tierMap[r.flex_tier] : (flexVal != null ? Math.min(100, flexVal) : 0);
+      var hfxComposite = Math.round(hfxCal * 0.4 + hfxWin * 0.2 + hfxConsistency * 0.2 + hfxTierScore * 0.2);
+      var hfxStr = (r.calibration_score != null || flexVal != null) ? hfxComposite : '—';
       metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">FLEX Score — composite of accuracy, ROI, volume, and recency. 100 = top of leaderboard.<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
+      if (hfxStr !== '—') metricHtml += '<div style="font-family:var(--mono);font-size:10px;color:#4d9fff;margin-top:2px;"><span style="opacity:.6">HFX</span> ' + hfxStr + '</div>';
       var parts = [];
       if (wrPct != null) parts.push(wrPct + '% win rate');
       var n = r.predictions_resolved || r.flex_settled_events;
