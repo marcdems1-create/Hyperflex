@@ -26422,6 +26422,7 @@ app.get('/health', (req, res) => {
 
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/portfolio', (req, res) => res.sendFile(path.join(__dirname, 'public', 'portfolio.html')));
 app.get('/daily', (req, res) => res.sendFile(path.join(__dirname, 'public', 'daily.html')));
 app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
 app.get('/quiz', (req, res) => {
@@ -43431,6 +43432,158 @@ app.get('/api/market-movers', async (req, res) => {
     console.error('[market-movers]', err.message);
     if (_marketMoversCache) return res.json(_marketMoversCache.data);
     res.status(502).json({ error: 'Failed to compute market movers', detail: err.message });
+  }
+});
+
+// ── BEST OPPORTUNITY — single highest-edge market with plain-English "why" ─
+let _bestOppCache = null;
+app.get('/api/best-opportunity', async (req, res) => {
+  try {
+    if (_bestOppCache && Date.now() - _bestOppCache.ts < 90 * 1000) return res.json(_bestOppCache.data);
+    const markets = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : await buildAlphaList().catch(() => []);
+    if (!markets.length) return res.status(503).json({ error: 'Screener not ready' });
+    const top = [...markets].sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))[0];
+    if (!top) return res.status(503).json({ error: 'No markets available' });
+    // Build plain-English why string from edge_components
+    const ec = top.edge_components || {};
+    const whys = [];
+    if ((ec.whales || 0) >= 15) whys.push(`${top.whale_count || '2+'}` + ' tracked whales positioned' + (top.whale_side ? ` ${top.whale_side}` : ''));
+    if ((ec.depth || 0) >= 8) whys.push(`orderbook ${top.depth_side === 'bid' ? 'buy' : 'sell'} pressure ${Math.round((top.depth_ratio || 1) * 10) / 10}×`);
+    if ((ec.momentum || 0) >= 8) whys.push(`${(top.price_change_24h || 0) > 0 ? '+' : ''}${Math.round(top.price_change_24h || 0)}pt move in 24h`);
+    if ((ec.volume || 0) >= 15) whys.push(`$${top.volume_24h >= 1e6 ? (top.volume_24h / 1e6).toFixed(1) + 'M' : Math.round((top.volume_24h || 0) / 1000) + 'k'} 24h volume`);
+    if ((ec.divergence || 0) >= 6) whys.push(`price diverges from crowd consensus`);
+    if ((ec.decay || 0) >= 8) whys.push(`resolves within 3 days`);
+    const why = whys.length ? whys.slice(0, 2).join(', ') + '.' : 'Top edge score across all active markets.';
+    const result = {
+      question: top.question || top.title || '',
+      slug: top.slug || null,
+      edge_score: Math.round(top.edge_score || 0),
+      yes_price: top.yes_price != null ? Math.round(top.yes_price * 100) : null,
+      no_price: top.yes_price != null ? Math.round((1 - top.yes_price) * 100) : null,
+      why,
+      url: top.slug ? `/market/${top.slug}` : null,
+      updated_at: new Date().toISOString(),
+    };
+    _bestOppCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[best-opportunity]', err.message);
+    res.status(502).json({ error: 'Failed', detail: err.message });
+  }
+});
+
+// ── USER PORTFOLIO — open positions with live P&L ──────────────────────────
+app.get('/api/portfolio', requireCreator, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Fetch analytics (includes Polymarket open positions + P&L)
+    const analyticsUrl = `http://localhost:${process.env.PORT || 3000}/api/predictors/${userId}/analytics`;
+    let analyticsData = null;
+    try {
+      const r = await fetch(analyticsUrl, { headers: { Authorization: req.headers.authorization } });
+      if (r.ok) analyticsData = await r.json();
+    } catch (_) {}
+    // Also fetch member profile for polymarket data
+    const memberUrl = `http://localhost:${process.env.PORT || 3000}/api/member/${userId}`;
+    let memberData = null;
+    try {
+      const r = await fetch(memberUrl, { headers: { Authorization: req.headers.authorization } });
+      if (r.ok) memberData = await r.json();
+    } catch (_) {}
+    const polyData = memberData && memberData.polymarket ? memberData.polymarket : null;
+    const openPositions = polyData && polyData.open_positions ? polyData.open_positions : [];
+    // Enrich positions with live screener prices
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const positions = openPositions.map(p => {
+      const match = screenerData.find(s => (p.condition_id && (s.conditionId === p.condition_id || s.condition_id === p.condition_id)) || (p.slug && s.slug === p.slug));
+      const live_price = match ? (p.side === 'NO' ? (1 - (match.yes_price || 0.5)) : (match.yes_price || 0.5)) : p.cur_price;
+      const entry_price_dec = p.avg_price || 0;
+      const live_price_dec = live_price || p.cur_price || entry_price_dec;
+      const shares = p.size || 0;
+      const entry_value = shares * entry_price_dec;
+      const current_value = shares * live_price_dec;
+      const pnl = current_value - entry_value;
+      return {
+        question: p.question || '',
+        slug: p.slug || match && match.slug || null,
+        condition_id: p.condition_id || '',
+        side: p.side || 'YES',
+        shares,
+        avg_price: Math.round(entry_price_dec * 100),
+        cur_price: Math.round(live_price_dec * 100),
+        entry_value: Math.round(entry_value * 100) / 100,
+        current_value: Math.round(current_value * 100) / 100,
+        pnl: Math.round(pnl * 100) / 100,
+        pnl_pct: entry_value > 0 ? Math.round(pnl / entry_value * 1000) / 10 : 0,
+        market_url: p.market_url || (p.slug ? `/market/${p.slug}` : null),
+      };
+    });
+    const total_value = positions.reduce((s, p) => s + p.current_value, 0);
+    const total_invested = positions.reduce((s, p) => s + p.entry_value, 0);
+    const total_pnl = positions.reduce((s, p) => s + p.pnl, 0);
+    const total_pnl_pct = total_invested > 0 ? Math.round(total_pnl / total_invested * 1000) / 10 : 0;
+    const realized_pnl = polyData ? (polyData.realized_pnl || 0) : 0;
+    res.json({ positions, total_value: Math.round(total_value * 100) / 100, total_invested: Math.round(total_invested * 100) / 100, total_pnl: Math.round(total_pnl * 100) / 100, total_pnl_pct, realized_pnl: Math.round(realized_pnl * 100) / 100 });
+  } catch (err) {
+    console.error('[portfolio]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── HFX COMPOSITE SCORE — calibration 40% + correct picks 20% + streak 20% + challenge 20% ──
+async function computeHfxComposite(userId) {
+  try {
+    if (!pool) return null;
+    // Calibration
+    const userRows = await dbQuery(
+      'SELECT flex_c_calibration, prediction_win_rate, predictions_resolved FROM users WHERE id = $1',
+      [userId]
+    ).catch(() => []);
+    const u = userRows[0];
+    if (!u) return null;
+    const calRaw = u.flex_c_calibration != null ? Number(u.flex_c_calibration) : null;
+    const calScore = calRaw != null ? Math.min(100, (calRaw / 25) * 100) : 0;
+    const winRate = u.prediction_win_rate != null ? Number(u.prediction_win_rate) * 100 : 0;
+    // Streak — count recent consecutive correct takes/predictions
+    let streak = 0;
+    try {
+      const streakRows = await dbQuery(
+        `SELECT is_correct FROM takes WHERE user_id = $1 AND is_correct IS NOT NULL ORDER BY created_at DESC LIMIT 20`,
+        [userId]
+      );
+      for (const r of streakRows) {
+        if (r.is_correct) streak++;
+        else break;
+      }
+    } catch (_) {}
+    const streakScore = Math.min(100, streak * 10); // 10 correct in a row = 100
+    // Challenge performance
+    let challengeScore = 0;
+    try {
+      const chalRows = await dbQuery(
+        `SELECT COUNT(*) FILTER (WHERE winner_id = $1) AS wins, COUNT(*) AS total
+         FROM challenges WHERE status = 'resolved' AND (challenger_id = $1 OR challenged_id = $1)`,
+        [userId]
+      );
+      const ch = chalRows[0];
+      if (ch && Number(ch.total) >= 1) {
+        challengeScore = Math.round((Number(ch.wins) / Number(ch.total)) * 100);
+      }
+    } catch (_) {}
+    const composite = Math.round(calScore * 0.4 + winRate * 0.2 + streakScore * 0.2 + challengeScore * 0.2);
+    return { composite, components: { calibration: Math.round(calScore), correct_picks: Math.round(winRate), streak: streakScore, challenge: challengeScore }, predictions: Number(u.predictions_resolved) || 0 };
+  } catch (_) {
+    return null;
+  }
+}
+
+app.get('/api/member/:userId/hfx-score', async (req, res) => {
+  try {
+    const result = await computeHfxComposite(req.params.userId);
+    if (!result) return res.status(404).json({ error: 'Not enough data' });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

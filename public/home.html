@@ -519,6 +519,11 @@ footer{
         a.href='/m/'+uid;
         a.textContent='Profile';
         document.getElementById('navLinks').appendChild(a);
+        var pf=document.createElement('a');
+        pf.className='nav-link';
+        pf.href='/portfolio';
+        pf.textContent='Portfolio';
+        document.getElementById('navLinks').appendChild(pf);
       }
     }catch(e){}
   }
@@ -999,6 +1004,23 @@ footer{
     <div class="ct-right">
       <div class="ct-stat" id="ctParticipants">— participants</div>
       <a href="/challenge" class="ct-cta">Make Your Picks →</a>
+    </div>
+  </div>
+
+  <!-- BEST OPPORTUNITY -->
+  <div id="bestOppWrap" style="margin-bottom:20px;display:none;">
+    <div id="bestOppCard" style="background:rgba(0,230,138,.05);border:1px solid rgba(0,230,138,.25);border-radius:12px;padding:16px 20px;position:relative;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--green);text-transform:uppercase;">◉ Best Opportunity</span>
+        <span id="bestOppScore" style="font-family:var(--mono);font-size:10px;font-weight:700;color:#000;background:var(--green);border-radius:4px;padding:2px 7px;"></span>
+      </div>
+      <div id="bestOppQ" style="font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);line-height:1.4;margin-bottom:6px;max-width:680px;"></div>
+      <div id="bestOppWhy" style="font-family:var(--mono);font-size:11px;color:rgba(0,230,138,.75);margin-bottom:14px;"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div id="bestOppYes" style="font-family:var(--mono);font-size:12px;font-weight:700;background:rgba(0,230,138,.1);border:1px solid rgba(0,230,138,.25);border-radius:6px;padding:4px 10px;"></div>
+        <div id="bestOppNo" style="font-family:var(--mono);font-size:12px;font-weight:700;background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:4px 10px;"></div>
+        <a id="bestOppCta" href="#" style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,.35);border-radius:6px;padding:6px 14px;white-space:nowrap;transition:background .12s;" onmouseover="this.style.background='rgba(0,230,138,.08)'" onmouseout="this.style.background='transparent'">Trade this →</a>
+      </div>
     </div>
   </div>
 
@@ -2224,6 +2246,25 @@ document.addEventListener('DOMContentLoaded', function() {
         sub.textContent = d.streak.current_streak + ' day streak — keep it going';
       }
     }).catch(function() {});
+})();
+
+// ── BEST OPPORTUNITY CARD ──
+(function(){
+  fetch('/api/best-opportunity')
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.question)return;
+      var wrap=document.getElementById('bestOppWrap');
+      if(!wrap)return;
+      document.getElementById('bestOppScore').textContent='EDGE '+d.edge_score;
+      document.getElementById('bestOppQ').textContent=d.question;
+      document.getElementById('bestOppWhy').textContent=d.why||'';
+      if(d.yes_price!=null){document.getElementById('bestOppYes').textContent='YES '+d.yes_price+'¢';}
+      if(d.no_price!=null){document.getElementById('bestOppNo').textContent='NO '+d.no_price+'¢';}
+      var cta=document.getElementById('bestOppCta');
+      if(d.url)cta.href=d.url;
+      wrap.style.display='';
+    }).catch(function(){});
 })();
 
 // Prefetch market page on hover (200ms dwell)
