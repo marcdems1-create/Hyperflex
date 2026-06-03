@@ -26532,6 +26532,19 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
     }
   });
 
+  // GET /brag/:username/challenge — challenge winner card
+  app.get('/brag/:username/challenge', async (req, res) => {
+    const { username } = req.params;
+    const rank = parseInt(req.query.rank) || 1;
+    const score = parseFloat(req.query.score) || 0;
+    const correct = parseInt(req.query.correct) || 0;
+    const total = parseInt(req.query.total) || 5;
+    const weekLabel = req.query.week || '';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    return res.send(generateChallengeCard({ username, rank, score, correct, total, weekLabel }));
+  });
+
   // GET /api/brag-image/call — SVG OG image for call cards
   app.get('/api/brag-image/call', (req, res) => {
     const { q = '', side = 'YES', entry = '0', cur = '0', pnl = '0', user = '' } = req.query;

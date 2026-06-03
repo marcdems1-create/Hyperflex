@@ -790,6 +790,12 @@ canvas{display:block;width:100%!important}
           <div id="positionDetails" style="font-family:var(--mono);font-size:12px;color:var(--text)"></div>
         </div>
 
+        <!-- Brag strip — appears when position is up 20+ pts -->
+        <div id="positionBrag" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(0,230,138,.06);border:1px solid rgba(0,230,138,.2);border-radius:8px;display:none;">
+          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:#00e68a;margin-bottom:5px;text-transform:uppercase;" id="pbGain"></div>
+          <a id="pbShare" href="#" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#000;background:#00e68a;border-radius:5px;padding:6px 14px;text-decoration:none;display:inline-block;margin-top:4px;">Share this call →</a>
+        </div>
+
         <!-- Stop-Loss / Take-Profit Panel -->
         <div id="stopOrderPanel" style="display:none;margin-top:10px;padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.15);border-radius:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -3039,6 +3045,8 @@ async function fetchUserPositions() {
     try { renderTradePositionsPanel(); } catch (e) { console.warn('[positions-panel]', e); }
     // Refresh the SELL-mode balance badge now that we know holdings
     try { updateSellBalanceBadge(); } catch (e) {}
+    // Show brag strip if any position is up 20+ pts
+    try { renderBragStrip(); } catch (e) {}
 
   } catch (e) {
     console.log('[positions] Error fetching:', e.message);
@@ -3046,6 +3054,36 @@ async function fetchUserPositions() {
 }
 
 // Show position in sidebar for currently selected outcome
+function renderBragStrip() {
+  var bragEl = document.getElementById('positionBrag');
+  var gainEl = document.getElementById('pbGain');
+  var shareEl = document.getElementById('pbShare');
+  if (!bragEl || !gainEl || !shareEl) return;
+  // Find best position across all held outcomes
+  var bestGain = 0, bestPos = null;
+  for (var tid in _userPositions) {
+    var pos = _userPositions[tid];
+    if (!pos || !pos.size || pos.size < 0.01) continue;
+    var entry = parseFloat(pos.avgPrice || 0);
+    var cur = parseFloat(pos.currentPrice || pos.curPrice || 0);
+    if (!cur && _market) {
+      // Try to read from market data
+      var mkt = _sortedEventMarkets && _sortedEventMarkets.find(function(m) { return (m.clobTokenIds||[]).map(function(id){return String(id).toLowerCase();}).indexOf(tid.toLowerCase()) !== -1; });
+      cur = mkt ? (pos.side && pos.side.toLowerCase() === 'no' ? parseFloat(mkt.no_price || 0) : parseFloat(mkt.yes_price || 0)) : 0;
+    }
+    var gain = Math.round((cur - entry) * 100);
+    if (gain >= 20 && gain > bestGain) { bestGain = gain; bestPos = pos; }
+  }
+  if (!bestPos) { bragEl.style.display = 'none'; return; }
+  var slug = (window.location.pathname.split('/market/')[1] || '').split('?')[0].split('#')[0];
+  var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+  var uname = '';
+  try { var dec = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); uname = dec.username || ''; } catch(e) {}
+  gainEl.textContent = 'POSITION UP +' + bestGain + '¢ — BRAG-WORTHY';
+  shareEl.href = uname ? ('/brag/' + encodeURIComponent(uname) + '/call/' + slug) : '#';
+  bragEl.style.display = '';
+}
+
 function updateSidebarPosition() {
   var posEl = document.getElementById('tradePosition');
   var details = document.getElementById('positionDetails');

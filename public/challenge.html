@@ -606,18 +606,31 @@ function render() {
     scoreBarHtml += '</div>';
   }
 
-  // Winner card (if resolved)
+  // Winner card (if resolved) — enhanced brag cards for top 3
   var winnerHtml = '';
   if (resolved && _leaderboard.length) {
     var winner = _leaderboard[0];
     var wName = winner.display_name || winner.username || 'Predictor';
-    var tweetText = encodeURIComponent('I ranked #' + (winner.rank || 1) + ' on the HYPERFLEX Weekly Challenge with a score of +' + Math.round(winner.score || 0) + '. hyperflex.network/challenge');
+    var wHandle = winner.username || null;
+    var correct = winner.correct_count || winner.correct || 0;
+    var total = (ch && ch.markets ? ch.markets.length : 5);
+    var score = Math.round(winner.score || 0);
+    var tweetText = encodeURIComponent('#1 this week on HYPERFLEX Challenge — ' + correct + '/' + total + ' markets called correctly. +' + score + ' points.\nhyperflex.network/challenge');
+    var bragUrl = wHandle ? ('/api/brag-image/challenge?rank=1&user=' + encodeURIComponent(wHandle) + '&score=' + score + '&correct=' + correct + '&total=' + total) : null;
     winnerHtml = '<div class="winner-card">';
     winnerHtml += '<div class="winner-label">This Week\'s Winner</div>';
     winnerHtml += '<div class="winner-name">' + esc(wName) + '</div>';
-    winnerHtml += '<div class="winner-score">Score: +' + Math.round(winner.score || 0) + '</div>';
-    winnerHtml += '<a class="share-btn" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank">Share on X</a>';
-    winnerHtml += '</div>';
+    winnerHtml += '<div class="winner-score">' + correct + '/' + total + ' correct · +' + score + ' pts</div>';
+    winnerHtml += '<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">';
+    winnerHtml += '<a class="share-btn" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 1200 1227" fill="currentColor"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.163 519.284Z"/></svg> Post on X</a>';
+    if (wHandle) winnerHtml += '<a class="share-btn" href="/brag/' + encodeURIComponent(wHandle) + '/challenge?rank=1&score=' + score + '&correct=' + correct + '&total=' + total + '" target="_blank" style="background:rgba(201,146,13,.15);color:#c9920d;border-color:rgba(201,146,13,.3);">Share card →</a>';
+    winnerHtml += '</div></div>';
+
+    // Also show top 3 if current user is in there — find my rank
+    var myRankEntry = _leaderboard.find(function(e) { return e.is_me; });
+    if (myRankEntry && myRankEntry.rank && myRankEntry.rank <= 3 && !resolved) {
+      // Will be shown in leaderboard row — no extra card needed
+    }
   }
 
   // Auth gate

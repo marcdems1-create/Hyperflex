@@ -803,11 +803,17 @@ function showResult(isNew){
 
   document.getElementById('rSocial').innerHTML='<strong>'+A.rarity+' of traders</strong> share your archetype.';
 
+  // Build brag card URL for this archetype
+  var tok2 = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+  var uname2 = '';
+  try { var dec2 = JSON.parse(atob(tok2.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); uname2 = dec2.username || ''; } catch(e2) {}
+  var bragCardUrl = uname2 ? ('/brag/' + encodeURIComponent(uname2) + '/archetype?type=' + encodeURIComponent((A.tag||'').toLowerCase()) + '&color=' + encodeURIComponent(A.color||'') + '&tagline=' + encodeURIComponent(A.tagline||A.share||'')) : null;
   document.getElementById('rActs').innerHTML=
-    '<button class="btn-share" onclick="shareIt()">'+
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.26 5.636zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>'+
-      'Share archetype'+
+    '<button class="btn-share" onclick="shareIt()" style="font-size:13px;padding:12px 22px;">'+
+      '<svg width="14" height="14" viewBox="0 0 1200 1227" fill="currentColor"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.163 519.284Z"/></svg>'+
+      'Post on X'+
     '</button>'+
+    (bragCardUrl ? '<a class="btn-share" href="' + bragCardUrl + '" target="_blank" style="font-size:13px;padding:12px 22px;background:rgba(255,255,255,.08);color:var(--ink,#f0f0f5);border:1px solid rgba(255,255,255,.15);text-decoration:none;">Share card →</a>' : '') +
     '<a class="btn-feed" href="/feed" style="background:'+A.color+';color:#000;">Go to feed &rarr;</a>'+
     '<button class="btn-redo" onclick="redo()">Retake</button>';
 
