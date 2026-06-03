@@ -26683,7 +26683,8 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
         });
       }
 
-      wins.sort((a, b) => b.gain_pts - a.gain_pts);
+      // Primary: gain_pts desc. Tie-break: boldest call (lowest entry) first.
+      wins.sort((a, b) => b.gain_pts - a.gain_pts || a.entry_price - b.entry_price);
       const top = wins.slice(0, 20);
 
       if (isDebug) return res.json({ ..._debugMeta, win_count: wins.length, top_20: top });
