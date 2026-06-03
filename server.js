@@ -1346,7 +1346,6 @@ const clustererBlurb = require('./lib/clusterer/blurb');
 const clustererCompose = require('./lib/clusterer/compose');
 const clustererComposeGeneric = require('./lib/clusterer/compose-generic');
 const signalAgent = require('./lib/signal-agent');
-const clvEngine = require('./lib/clv-engine');
 
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
