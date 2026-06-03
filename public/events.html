@@ -150,16 +150,8 @@ a:hover { text-decoration: underline; }
 </head>
 <body>
 
-<nav class="topbar">
-  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/" class="nav-link">Home</a>
-    <a href="/feed" class="nav-link">Feed</a>
-    <a href="/alpha" class="nav-link">Alpha</a>
-    <a href="/events" class="nav-link active">Events</a>
-    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
 <script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="hero">

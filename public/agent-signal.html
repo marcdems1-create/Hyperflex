@@ -86,14 +86,8 @@ a { color:var(--gold); text-decoration:none; }
 </style>
 </head>
 <body>
-<nav class="topbar">
-  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/agent/performance" class="nav-link">Agent Performance</a>
-    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
 <script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="container">

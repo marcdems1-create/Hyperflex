@@ -57,18 +57,8 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 </style>
 </head>
 <body>
-<nav class="nav">
-  <a href="/" class="nav-logo">HYPERFLEX</a>
-  <div class="nav-links">
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/" class="nav-link">Explore</a>
-    <a href="/odds" class="nav-link">Odds</a>
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/agent" class="nav-link active" style="color:#c9920d">Agent</a>
-    <a href="/api-docs" class="nav-link">API</a>
-    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
 <script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="container">
