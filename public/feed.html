@@ -1867,6 +1867,7 @@ a:hover { text-decoration: underline; }
       <button class="tab active" id="tabForyou" onclick="switchTab('foryou')">For You</button>
       <button class="tab" id="tabTrending" onclick="switchTab('trending')">Trending</button>
       <button class="tab" id="tabFollowing" onclick="switchTab('following')" style="display:none">Following</button>
+      <button class="tab" id="tabWins" onclick="switchTab('wins')">Wins</button>
     </div>
   </div>
 
@@ -3793,9 +3794,11 @@ function switchTab(tab) {
   document.getElementById('tabForyou').classList.toggle('active', tab === 'foryou');
   document.getElementById('tabTrending').classList.toggle('active', tab === 'trending');
   document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
+  document.getElementById('tabWins').classList.toggle('active', tab === 'wins');
   var hds = document.getElementById('hotDebatesStrip');
   if (hds) hds.style.display = (tab === 'trending' && _hotDebatesHasData) ? '' : 'none';
   if (tab === 'trending') loadHotDebates();
+  if (tab === 'wins') { loadWinsTab(); return; }
   loadFeed(false);
 }
 
@@ -5238,6 +5241,55 @@ function showWinCard(data) {
 <script src="/hfx-engage.js" defer></script>
 <script>document.addEventListener('DOMContentLoaded',function(){if(window.HFX&&window.HFX.checkResolvedTakes)window.HFX.checkResolvedTakes();loadHotDebates();});</script>
 <script>
+// ── WINS TAB ──
+var _winsLoaded = false;
+function loadWinsTab() {
+  var container = document.getElementById('feedContainer');
+  if (!container) return;
+  if (_winsLoaded) return; // already rendered
+  container.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:var(--mono,monospace);font-size:12px;color:rgba(240,240,245,.35);">Loading wins…</div>';
+  fetch('/api/brag/wins')
+    .then(function(r) { return r.ok ? r.json() : { wins: [] }; })
+    .then(function(d) {
+      var wins = d.wins || [];
+      if (!wins.length) {
+        container.innerHTML = '<div style="text-align:center;padding:60px 20px;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">No wins yet this week.</div><div style="font-family:var(--mono,monospace);font-size:12px;color:rgba(240,240,245,.4);">Correct calls appear here when markets resolve.</div></div>';
+        return;
+      }
+      var html = '<div style="margin-bottom:12px;font-family:var(--mono,monospace);font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(240,240,245,.35);text-transform:uppercase;">Top calls · last 7 days</div>';
+      html += wins.map(function(w) {
+        var gainSign = w.gain_pts >= 0 ? '+' : '';
+        var gainCol = w.gain_pts >= 0 ? '#00e68a' : '#ff4d6a';
+        var sideCol = w.side === 'YES' ? '#00e68a' : '#ff4d6a';
+        var cal = w.calibration != null ? ('<span style="font-family:var(--mono,monospace);font-size:9px;color:rgba(240,240,245,.4);margin-left:6px;">CAL ' + w.calibration + '</span>') : '';
+        var shareBtn = w.share_url ? ('<a href="' + w.share_url + '" style="font-family:var(--mono,monospace);font-size:10px;font-weight:700;color:#00e68a;border:1px solid rgba(0,230,138,.25);border-radius:5px;padding:5px 10px;text-decoration:none;white-space:nowrap;flex-shrink:0;" target="_blank">Share →</a>') : '';
+        var avatar = w.avatar_url ? ('<img src="' + w.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">') : ('<div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.07);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:rgba(240,240,245,.5);">' + (w.display_name||'?').charAt(0).toUpperCase() + '</div>');
+        var mktUrl = w.market_slug ? '/market/' + w.market_slug : '#';
+        return '<div style="background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:8px;">' +
+          '<div style="display:flex;align-items:flex-start;gap:10px;">' +
+          avatar +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">' +
+          '<span style="font-weight:600;font-size:13px;">' + (w.display_name||'Predictor') + '</span>' + cal +
+          '</div>' +
+          '<div style="font-size:13px;font-weight:500;color:rgba(240,240,245,.85);line-height:1.4;margin-bottom:8px;">' +
+          '<a href="' + mktUrl + '" style="color:inherit;text-decoration:none;">' + (w.question||'').slice(0,90) + (w.question&&w.question.length>90?'…':'') + '</a>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+          '<span style="font-family:var(--mono,monospace);font-size:11px;color:' + sideCol + ';font-weight:700;">' + (w.side||'YES') + '</span>' +
+          '<span style="font-family:var(--mono,monospace);font-size:11px;color:rgba(240,240,245,.4);">' + (w.entry_price||0) + '¢ entry</span>' +
+          '<span style="font-family:var(--mono,monospace);font-size:11px;font-weight:700;color:' + gainCol + ';">' + gainSign + w.gain_pts + 'pt</span>' +
+          (w.agree_count > 0 ? '<span style="font-family:var(--mono,monospace);font-size:10px;color:rgba(240,240,245,.3);">' + w.agree_count + ' agreed</span>' : '') +
+          '</div></div>' + shareBtn + '</div></div>';
+      }).join('');
+      container.innerHTML = html;
+      _winsLoaded = true;
+    })
+    .catch(function() {
+      container.innerHTML = '<div style="text-align:center;padding:40px;font-family:var(--mono,monospace);font-size:12px;color:rgba(240,240,245,.35);">Could not load wins.</div>';
+    });
+}
+
 // ── BRAG MOMENT DETECTION ──
 (function(){
   var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
