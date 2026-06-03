@@ -26597,15 +26597,14 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
                u.username, u.flex_c_calibration
         FROM takes t
         LEFT JOIN users u ON u.id = t.user_id
-        WHERE t.source = 'user'
-          AND t.entry_price IS NOT NULL
+        WHERE t.entry_price IS NOT NULL
           AND t.entry_price > 0
           AND (
             t.is_correct = true
             OR (t.is_correct IS NULL AND t.created_at >= NOW() - INTERVAL '30 days')
           )
         ORDER BY t.created_at DESC
-        LIMIT 200
+        LIMIT 400
       `).catch(e => { console.error('[brag/wins query]', e.message); return []; });
 
       const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
@@ -26650,11 +26649,8 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           gainPts = Math.round((curPrice - entry) * 100);
           if (gainPts < 10) continue; // only show meaningful open gains
         } else {
-          // Open take with no live screener match (market below volume threshold).
-          // Still show it if the entry was contrarian (≤40¢) — these are the most
-          // interesting calls even without a confirmed current price.
-          if (entry > 0.40) continue; // skip near-50/50 takes with no price confirmation
-          curPrice = entry; // can't compute gain — show as neutral
+          // Open take with no live screener match — show it with gainPts=0
+          curPrice = entry;
           gainPts = 0;
         }
 
