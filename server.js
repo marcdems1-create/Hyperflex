@@ -26425,6 +26425,240 @@ app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed
 app.get('/portfolio', (req, res) => res.sendFile(path.join(__dirname, 'public', 'portfolio.html')));
 app.get('/daily', (req, res) => res.sendFile(path.join(__dirname, 'public', 'daily.html')));
 app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
+app.get('/daily', (req, res) => res.sendFile(path.join(__dirname, 'public', 'daily.html')));
+app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
+
+// ── BRAG ENGINE — shareable call/streak/archetype cards ───────────────────
+(function() {
+  const { generateCallCard, generateStreakCard, generateArchetypeCard, generateChallengeCard,
+          generateCallSvg, generateStreakSvg, generateChallengeSvg } = require('./lib/brag-card');
+
+  // GET /brag/:username/call/:slug — "You called it early"
+  app.get('/brag/:username/call/:slug', async (req, res) => {
+    const { username, slug } = req.params;
+    try {
+      // Resolve user
+      let user = null;
+      if (pool) {
+        const rows = await dbQuery(
+          `SELECT id, display_name, username, flex_score_alltime, flex_c_calibration FROM users WHERE username = $1 OR display_name ILIKE $1 LIMIT 1`,
+          [username]
+        ).catch(() => []);
+        user = rows[0] || null;
+      }
+      // Find take for this market
+      let take = null;
+      if (user && pool) {
+        const rows = await dbQuery(
+          `SELECT side, entry_price, question FROM takes WHERE user_id = $1 AND market_slug = $2 AND source = 'user' ORDER BY created_at DESC LIMIT 1`,
+          [user.id, slug]
+        ).catch(() => []);
+        take = rows[0] || null;
+      }
+      // Get live price from screener
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+      const mkt = screenerData.find(m => m.slug === slug);
+      const entryPrice = take && take.entry_price ? Math.round(parseFloat(take.entry_price) * 100) : null;
+      const currentPrice = mkt ? Math.round((mkt.yes_price || 0.5) * 100) : null;
+      const question = (take && take.question) || (mkt && mkt.question) || slug;
+      const side = (take && take.side) || 'YES';
+      const gain = (entryPrice != null && currentPrice != null) ? currentPrice - entryPrice : 0;
+      const whaleCount = mkt ? (mkt.whale_count || 0) : 0;
+      const pnl = gain * 10; // rough estimate: assume 10 shares
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.send(generateCallCard({
+        username, question, side,
+        entryPrice: entryPrice || 0,
+        currentPrice: currentPrice || 0,
+        pnl, whaleCount, slug,
+        shareUrl: `https://hyperflex.network/brag/${encodeURIComponent(username)}/call/${slug}`,
+      }));
+    } catch (err) {
+      console.error('[brag/call]', err.message);
+      res.redirect(`/market/${slug}`);
+    }
+  });
+
+  // GET /brag/:username/streak — streak milestone
+  app.get('/brag/:username/streak', async (req, res) => {
+    const { username } = req.params;
+    try {
+      let streak = parseInt(req.query.streak) || 0;
+      let calibration = parseInt(req.query.cal) || 0;
+      if (pool && !streak) {
+        const rows = await dbQuery(
+          `SELECT u.flex_c_calibration,
+            (SELECT COUNT(*) FROM (
+              SELECT is_correct FROM takes WHERE user_id = u.id AND is_correct IS NOT NULL ORDER BY created_at DESC LIMIT 50
+            ) sub WHERE sub.is_correct = true) AS streak
+           FROM users u WHERE u.username = $1 OR u.display_name ILIKE $1 LIMIT 1`,
+          [username]
+        ).catch(() => []);
+        if (rows[0]) {
+          streak = Number(rows[0].streak) || 0;
+          calibration = rows[0].flex_c_calibration ? Math.round(Number(rows[0].flex_c_calibration) / 25 * 100) : 0;
+        }
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.send(generateStreakCard({ username, streak, calibration }));
+    } catch (err) {
+      res.redirect('/');
+    }
+  });
+
+  // GET /brag/:username/archetype — quiz result card
+  app.get('/brag/:username/archetype', async (req, res) => {
+    const { username } = req.params;
+    try {
+      let archetype = req.query.type || '';
+      let color = req.query.color || '#c9920d';
+      let tagline = req.query.tagline || '';
+      if (pool && !archetype) {
+        const rows = await dbQuery(
+          `SELECT archetype, archetype_color FROM creator_settings WHERE display_name ILIKE $1 OR id IN (SELECT id FROM users WHERE username = $1 LIMIT 1) LIMIT 1`,
+          [username]
+        ).catch(() => []);
+        if (rows[0]) { archetype = rows[0].archetype || ''; color = rows[0].archetype_color || color; }
+      }
+      if (!archetype) archetype = 'PREDICTOR';
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(generateArchetypeCard({ username, archetype, color, tagline: tagline || 'I don\'t have opinions. I have models.' }));
+    } catch (err) {
+      res.redirect('/quiz');
+    }
+  });
+
+  // GET /api/brag-image/call — SVG OG image for call cards
+  app.get('/api/brag-image/call', (req, res) => {
+    const { q = '', side = 'YES', entry = '0', cur = '0', pnl = '0', user = '' } = req.query;
+    const svg = generateCallSvg({
+      question: decodeURIComponent(q),
+      side: side.toUpperCase(),
+      entryPrice: parseInt(entry),
+      currentPrice: parseInt(cur),
+      pnl: parseFloat(pnl),
+      username: decodeURIComponent(user),
+    });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(svg);
+  });
+
+  // GET /api/brag-image/streak — SVG OG image for streak cards
+  app.get('/api/brag-image/streak', (req, res) => {
+    const { user = '', streak = '0', cal = '0' } = req.query;
+    const svg = generateStreakSvg({ username: decodeURIComponent(user), streak: parseInt(streak), calibration: parseInt(cal) });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(svg);
+  });
+
+  // GET /api/brag-image/challenge — SVG OG image for challenge winner cards
+  app.get('/api/brag-image/challenge', (req, res) => {
+    const { rank = '1', user = '', score = '0', correct = '0', total = '5' } = req.query;
+    const svg = generateChallengeSvg({ rank: parseInt(rank), username: decodeURIComponent(user), score: parseFloat(score), correct: parseInt(correct), total: parseInt(total) });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(svg);
+  });
+
+  // GET /api/brag/wins — top correct calls in last 7 days (for Wins tab)
+  let _bragWinsCache = null;
+  app.get('/api/brag/wins', async (req, res) => {
+    try {
+      if (_bragWinsCache && Date.now() - _bragWinsCache.ts < 5 * 60 * 1000) return res.json(_bragWinsCache.data);
+      if (!pool) return res.json({ wins: [] });
+      const rows = await dbQuery(`
+        SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.question, t.side, t.entry_price,
+               t.market_slug, t.created_at, t.agree_count,
+               u.username, u.flex_score_alltime, u.flex_c_calibration
+        FROM takes t
+        LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.is_correct = true
+          AND t.resolved_at >= NOW() - INTERVAL '7 days'
+          AND t.entry_price IS NOT NULL
+          AND t.source = 'user'
+        ORDER BY t.entry_price ASC, t.resolved_at DESC
+        LIMIT 50
+      `).catch(() => []);
+
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+
+      const wins = rows.map(r => {
+        const entry = parseFloat(r.entry_price || 0);
+        const mkt = screenerData.find(m => m.slug === r.market_slug);
+        const curPrice = mkt ? (r.side === 'YES' ? (mkt.yes_price || 0.5) : (1 - (mkt.yes_price || 0.5))) : 1;
+        const gain = curPrice - entry; // decimal
+        const gainPts = Math.round(gain * 100);
+        const cal = r.flex_c_calibration ? Math.round(Number(r.flex_c_calibration) / 25 * 100) : null;
+        return {
+          take_id: r.id,
+          user_id: r.user_id,
+          username: r.username || null,
+          display_name: r.display_name || 'Predictor',
+          avatar_url: r.avatar_url || null,
+          question: r.question || '',
+          side: r.side || 'YES',
+          entry_price: Math.round(entry * 100),
+          cur_price: Math.round(curPrice * 100),
+          gain_pts: gainPts,
+          market_slug: r.market_slug,
+          created_at: r.created_at,
+          agree_count: r.agree_count || 0,
+          calibration: cal,
+          share_url: r.username ? `/brag/${encodeURIComponent(r.username)}/call/${r.market_slug}` : null,
+        };
+      }).sort((a, b) => b.gain_pts - a.gain_pts).slice(0, 20);
+
+      const data = { wins, updated_at: new Date().toISOString() };
+      _bragWinsCache = { ts: Date.now(), data };
+      res.json(data);
+    } catch (err) {
+      console.error('[brag/wins]', err.message);
+      res.json({ wins: [] });
+    }
+  });
+
+  // GET /api/brag/moments/:userId — check if user has any brag-worthy moments
+  // (positions moved 20+ pts in their favor since entry)
+  app.get('/api/brag/moments/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      if (!pool) return res.json({ moments: [] });
+      const rows = await dbQuery(
+        `SELECT side, entry_price, market_slug, question FROM takes WHERE user_id = $1 AND is_correct IS NULL AND source = 'user' AND entry_price IS NOT NULL ORDER BY created_at DESC LIMIT 30`,
+        [userId]
+      ).catch(() => []);
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+      const moments = [];
+      for (const r of rows) {
+        const mkt = screenerData.find(m => m.slug === r.market_slug);
+        if (!mkt) continue;
+        const entry = parseFloat(r.entry_price);
+        const cur = r.side === 'YES' ? (mkt.yes_price || 0.5) : (1 - (mkt.yes_price || 0.5));
+        const gain = Math.round((cur - entry) * 100);
+        if (gain >= 20) {
+          moments.push({
+            slug: r.market_slug,
+            question: r.question || mkt.question || '',
+            side: r.side,
+            entry_price: Math.round(entry * 100),
+            current_price: Math.round(cur * 100),
+            gain,
+          });
+        }
+      }
+      res.json({ moments: moments.slice(0, 3) });
+    } catch (err) {
+      res.json({ moments: [] });
+    }
+  });
+})();
+
 app.get('/quiz', (req, res) => {
   // When ?result=THE+SHARP is present, inject OG meta for the share card
   const result = (req.query.result || '').trim().toLowerCase();
