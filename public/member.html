@@ -315,15 +315,8 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 </head>
 <body>
 <div class="grain"></div>
-<nav>
-  <a href="/" class="nav-logo">HYPER<span class="x">FLEX</span></a>
-  <div style="display:flex;align-items:center;gap:10px">
-    <a href="/predictors" class="nav-back">Predictors</a>
-    <a href="/" class="nav-back">Explore</a>
-    <a id="creatorDashPill" href="/creator/dashboard" class="btn btn-gold" style="display:none">Dashboard</a>
-    <a href="javascript:history.back()" class="nav-back">← Back</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
 <div class="page" id="page">
   <div class="loading">Loading profile...</div>
 </div>

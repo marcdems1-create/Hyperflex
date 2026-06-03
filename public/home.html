@@ -430,105 +430,8 @@ footer{
 </head>
 <body>
 
-<!-- ── NAV ── -->
-<nav id="mainNav" style="position:sticky;">
-  <a class="nav-logo" href="/">HYPERFLEX</a>
-  <div class="nav-links" id="navLinks">
-    <a class="nav-link" href="/alpha">Alpha</a>
-    <a class="nav-link" href="/whales">Whales</a>
-    <a class="nav-link" href="/feed">Feed</a>
-    <a class="nav-link" href="/predictors">Leaderboard</a>
-    <a class="nav-link" href="/mentions">Mentions</a>
-    <a class="nav-link" href="/signals">Signals</a>
-  </div>
-  <button class="nav-hamburger" id="navHamburger" aria-label="Menu">
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <rect y="4" width="20" height="2" rx="1" fill="currentColor"/>
-      <rect y="9" width="20" height="2" rx="1" fill="currentColor"/>
-      <rect y="14" width="20" height="2" rx="1" fill="currentColor"/>
-    </svg>
-  </button>
-  <div class="nav-mobile-menu" id="navMobileMenu">
-    <a class="nav-mobile-link" href="/alpha">Alpha</a>
-    <a class="nav-mobile-link" href="/whales">Whales</a>
-    <a class="nav-mobile-link" href="/feed">Feed</a>
-    <a class="nav-mobile-link" href="/predictors">Leaderboard</a>
-    <a class="nav-mobile-link" href="/mentions">Mentions</a>
-    <a class="nav-mobile-link" href="/signals">Signals</a>
-  </div>
-  <div class="nav-search" id="navSearch">
-    <input type="text" id="searchInput" placeholder="Search markets…" autocomplete="off" spellcheck="false">
-    <div class="search-dropdown" id="searchDropdown"></div>
-  </div>
-  <div class="nav-right">
-    <div class="nav-live"><span class="live-dot"></span><span>LIVE</span></div>
-    <div id="navActivityPulse" style="display:none;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;color:rgba(240,240,245,.4);padding:4px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.07);white-space:nowrap;"></div>
-    <a class="btn-dashboard" id="navDashBtn" href="/creator/dashboard" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:5px;padding:7px 14px;text-decoration:none;transition:background .12s;">Dashboard</a>
-    <a class="btn-connect" id="navConnectBtn" href="/creator/login">Connect Wallet</a>
-  </div>
-</nav>
-<script>
-(function(){
-  var btn = document.getElementById('navHamburger');
-  var menu = document.getElementById('navMobileMenu');
-  if (btn && menu) {
-    btn.addEventListener('click', function(e){ e.stopPropagation(); menu.classList.toggle('open'); });
-    document.addEventListener('click', function(){ menu.classList.remove('open'); });
-  }
-})();
-</script>
-<script>
-// Live activity pulse — shows takes posted in last hour in nav
-(function(){
-  function _updateActivityPulse(){
-    fetch('/api/data/stats').then(function(r){return r.ok?r.json():null;}).then(function(d){
-      if(!d) return;
-      var el=document.getElementById('navActivityPulse');
-      if(!el) return;
-      var tph=d.takes_last_hour||0;
-      var preds=d.active_predictors_24h||0;
-      if(tph>=1){
-        el.textContent=tph+' take'+(tph===1?'':'s')+' this hour';
-        el.style.display='';
-      } else if(preds>=1){
-        el.textContent=preds+' active today';
-        el.style.display='';
-      }
-    }).catch(function(){});
-  }
-  setTimeout(_updateActivityPulse, 1500);
-  setInterval(_updateActivityPulse, 120000);
-})();
-</script>
-<script>
-(function(){
-  var tok=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
-  if(tok){
-    var db=document.getElementById('navDashBtn');
-    var co=document.getElementById('navConnectBtn');
-    if(db)db.style.display='';
-    if(co)co.style.display='none';
-    // Append Profile link to nav-links when logged in
-    try{
-      var p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-      var uid=p.userId||p.sub||p.id;
-      if(uid){
-        window._hfxUser = uid;
-        var a=document.createElement('a');
-        a.className='nav-link';
-        a.href='/m/'+uid;
-        a.textContent='Profile';
-        document.getElementById('navLinks').appendChild(a);
-        var pf=document.createElement('a');
-        pf.className='nav-link';
-        pf.href='/portfolio';
-        pf.textContent='Portfolio';
-        document.getElementById('navLinks').appendChild(pf);
-      }
-    }catch(e){}
-  }
-})();
-</script>
+<div id="nav-root"></div>
+<script src="/nav.js?v=23"></script>
 
 <!-- ── VALUE PROP STRIP ── -->
 <div class="home-value-strip" id="homeValueStrip">
@@ -1192,9 +1095,10 @@ function pColor(p){return p>=0.65?'var(--green)':p<=0.35?'var(--red)':'#fff';}
 function getSlug(m){return m.slug||m.event_slug||'';}
 function getTitle(m){return m.question||m.market_question||m.event_title||m.title||'Unknown Market';}
 
-/* ── nav sticky ── */
+/* ── nav sticky scroll class ── */
 window.addEventListener('scroll',function(){
-  document.getElementById('mainNav').classList.toggle('scrolled',window.scrollY>20);
+  var n=document.querySelector('nav');
+  if(n) n.classList.toggle('scrolled',window.scrollY>20);
 },{ passive:true });
 
 /* ── scroll arrows ── */
