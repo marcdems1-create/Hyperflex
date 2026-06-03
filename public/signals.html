@@ -731,6 +731,15 @@ nav{
 
   /* ── render ── */
   function render(){
+    if(!ALL.length) {
+      var fb = document.querySelector('.filters-bar');
+      var sg = document.getElementById('signals-grid');
+      var em = document.getElementById('empty');
+      if(fb) fb.style.display='none';
+      if(sg) sg.style.display='none';
+      if(em) em.style.display='none';
+      return;
+    }
     var list = filtered();
     var grid = document.getElementById('signals-grid');
     var empty = document.getElementById('empty');
@@ -893,16 +902,25 @@ nav{
         var avgClv = Math.round(totalClv / trades.length * 10) / 10;
         if(avgEl) {
           avgEl.textContent = (avgClv >= 0 ? '+' : '') + avgClv + '¢';
-          avgEl.style.color = avgClv >= 0 ? 'var(--green)' : 'var(--red)';
+          avgEl.style.color = avgClv >= 0 ? '#00ff88' : '#ff2d55';
         }
         var totalCap = trades.reduce(function(a,t){ return a + Number(t.size||0); }, 0);
-        if(capEl) capEl.textContent = fmtSize(totalCap);
+        if(capEl) {
+          capEl.textContent = totalCap>=1e6?'$'+(totalCap/1e6).toFixed(1)+'M':totalCap>=1e3?'$'+(totalCap/1e3).toFixed(0)+'K':'$'+Math.round(totalCap);
+          capEl.style.color = '#00d4ff';
+        }
         var yesCount = trades.filter(function(t){ return (t.side||'').toUpperCase()==='YES'; }).length;
-        var noCount  = trades.length - yesCount;
-        if(splitEl) splitEl.textContent = yesCount + '/' + noCount;
+        if(splitEl) splitEl.textContent = yesCount+'/'+(trades.length-yesCount);
 
         document.getElementById('sharpMoneyGrid').innerHTML = trades.slice(0,6).map(function(t){ return buildAlphaCard(t, false); }).join('');
         document.getElementById('sharpMoneySection').style.display = 'block';
+
+        // Fix 6 — live bar from alpha data
+        var liveBar = document.getElementById('liveBarText');
+        if(liveBar) {
+          var t0 = trades[0];
+          liveBar.textContent = 'SHARP: '+(t0.wallet||'').slice(0,10)+' → '+(t0.side||'').toUpperCase()+' '+(t0.question||'').slice(0,60);
+        }
       }
     } catch(e) {}
     try {
