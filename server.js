@@ -26580,15 +26580,17 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
   });
 
   // GET /api/brag/wins — top calls sorted by gain (resolved wins + open positions up big)
+  // ?debug=1&secret=ADMIN_SECRET returns raw diagnostics without caching
   let _bragWinsCache = null;
   app.get('/api/brag/wins', async (req, res) => {
+    const isDebug = req.query.debug === '1' && req.query.secret === process.env.ADMIN_SECRET;
     try {
-      if (_bragWinsCache && Date.now() - _bragWinsCache.ts < 5 * 60 * 1000) return res.json(_bragWinsCache.data);
-      if (!pool) return res.json({ wins: [] });
+      if (!isDebug && _bragWinsCache && Date.now() - _bragWinsCache.ts < 5 * 60 * 1000) return res.json(_bragWinsCache.data);
+      if (!pool) return res.json({ wins: [], _debug: 'no pool' });
 
       // Two buckets:
-      // 1. Resolved correct takes (is_correct=true) — no time restriction so new platforms aren't empty
-      // 2. Open takes (is_correct IS NULL) with entry_price set — we compute live gain from screener
+      // 1. Resolved correct takes (is_correct=true)
+      // 2. Open takes (is_correct IS NULL) from last 30 days with entry_price set
       const rows = await dbQuery(`
         SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.question, t.side, t.entry_price,
                t.market_slug, t.created_at, t.agree_count, t.is_correct,
@@ -26604,14 +26606,35 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           )
         ORDER BY t.created_at DESC
         LIMIT 200
-      `).catch(() => []);
+      `).catch(e => { console.error('[brag/wins query]', e.message); return []; });
 
       const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
 
+      if (isDebug) {
+        // Return raw diagnostic data without processing
+        return res.json({
+          row_count: rows.length,
+          screener_count: screenerData.length,
+          sample_rows: rows.slice(0, 5).map(r => ({
+            id: r.id, source: r.source, side: r.side,
+            entry_price_raw: r.entry_price, is_correct: r.is_correct,
+            market_slug: r.market_slug, created_at: r.created_at,
+            in_screener: screenerData.some(m => m.slug === r.market_slug),
+          })),
+          entry_price_range: rows.length ? {
+            min: Math.min(...rows.map(r => parseFloat(r.entry_price || 0))),
+            max: Math.max(...rows.map(r => parseFloat(r.entry_price || 0))),
+          } : null,
+        });
+      }
+
       const wins = [];
       for (const r of rows) {
-        const entry = parseFloat(r.entry_price || 0);
-        if (entry <= 0 || entry >= 1) continue; // skip nonsense entries
+        const rawEntry = parseFloat(r.entry_price || 0);
+        if (rawEntry <= 0) continue;
+        // Normalise: entry_price may be stored as decimal (0.08) or cents (8)
+        const entry = rawEntry > 1 ? rawEntry / 100 : rawEntry;
+        if (entry <= 0 || entry >= 1) continue;
 
         const mkt = screenerData.find(m => m.slug === r.market_slug);
         let curPrice, gainPts;
@@ -26627,7 +26650,12 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           gainPts = Math.round((curPrice - entry) * 100);
           if (gainPts < 10) continue; // only show meaningful open gains
         } else {
-          continue; // no price data available — skip
+          // Open take with no live screener match (market below volume threshold).
+          // Still show it if the entry was contrarian (≤40¢) — these are the most
+          // interesting calls even without a confirmed current price.
+          if (entry > 0.40) continue; // skip near-50/50 takes with no price confirmation
+          curPrice = entry; // can't compute gain — show as neutral
+          gainPts = 0;
         }
 
         const cal = r.flex_c_calibration ? Math.round(Number(r.flex_c_calibration) / 25 * 100) : null;
