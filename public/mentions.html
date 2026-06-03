@@ -321,6 +321,30 @@ a{color:inherit;text-decoration:none}
 
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
 
+/* ── INTEL PANEL (screener-enriched cards) ── */
+.mcard.enriched{height:auto;cursor:default}
+.mcard-poster{position:relative;height:300px;overflow:hidden;flex-shrink:0}
+.mcard-intel{padding:11px 12px 12px;background:rgba(7,5,15,.97);border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:7px}
+.intel-hook{font-family:var(--sans);font-size:11px;color:var(--ink-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.intel-row{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.intel-edge{font-family:var(--mono);font-size:10px;font-weight:700;color:#00e68a;padding:2px 7px;border:1px solid rgba(0,230,138,.35);background:rgba(0,230,138,.07);letter-spacing:.06em;flex-shrink:0}
+.intel-whale{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.02em}
+.smart-bar-wrap{display:flex;flex-direction:column;gap:3px}
+.smart-bar-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted-2)}
+.smart-bar-track{height:2px;background:rgba(255,255,255,.07);border-radius:1px;overflow:hidden}
+.smart-bar-fill{height:100%;background:#00e68a;transition:width .4s}
+.smart-bar-fill.bear{background:#FF4D6A}
+.intel-verdict{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.intel-verdict.bull{color:#00e68a}
+.intel-verdict.bear{color:#FF4D6A}
+.intel-verdict.neut{color:var(--muted)}
+.mcard-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:1px}
+.mcard-act{display:block;padding:7px 0;text-align:center;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-decoration:none;transition:background .12s}
+.mcard-act.yes{background:rgba(0,230,138,.08);border:1px solid rgba(0,230,138,.32);color:#00e68a}
+.mcard-act.yes:hover{background:rgba(0,230,138,.18)}
+.mcard-act.no{background:rgba(255,77,106,.06);border:1px solid rgba(255,77,106,.28);color:#FF4D6A}
+.mcard-act.no:hover{background:rgba(255,77,106,.16)}
+
 /* ── POSTER CARDS (Netflix redesign) ── */
 #grid-host{display:flex;gap:12px;overflow-x:auto;padding:4px 0 20px;scrollbar-width:none;}
 #grid-host::-webkit-scrollbar{display:none;}
@@ -375,7 +399,7 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-fa
 <section class="page-intro">
   <div class="page-intro-inner">
     <div class="page-intro-eyebrow">Mentions · market-moving statements</div>
-    <p class="page-intro-sub">Public figures, what they said, how the market reacted.</p>
+    <p class="page-intro-sub">Public figures, what they said, how the market reacted. <span id="mention-stats" style="color:var(--cyan);font-family:var(--mono);font-size:11px;letter-spacing:.04em"></span></p>
   </div>
 </section>
 
@@ -991,28 +1015,122 @@ function stanceBg(stance) {
   return 'linear-gradient(135deg,#0e0e0e 0%,#141414 100%)';
 }
 
+function fmtK(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
+  return '$' + Math.round(n);
+}
+
+function buildHook(sd) {
+  if (!sd) return '';
+  var ec = sd.edge_components || {};
+  var parts = [];
+  var whalePts = ec.whale || ec.whales || 0;
+  var depthPts = ec.depth || 0;
+  var momPts   = ec.momentum || 0;
+  var decayPts = ec.decay || 0;
+  if (whalePts >= 15 && sd.whale_count) {
+    parts.push(sd.whale_count + (sd.whale_count === 1 ? ' whale' : ' whales') + ' in position');
+  }
+  if (depthPts >= 8 && (sd.depth_ratio || 0) >= 1.5) {
+    var side = sd.depth_side === 'ask' ? 'SELL pressure' : 'BUY pressure';
+    parts.push((Math.round((sd.depth_ratio || 0) * 10) / 10) + 'x orderbook ' + side);
+  }
+  if (momPts >= 6) parts.push('momentum signal active');
+  if (decayPts >= 6) parts.push('discount zone · closing soon');
+  if (!parts.length && sd.ai_hook) {
+    var h = String(sd.ai_hook).replace(/\.$/, '');
+    return h.length > 82 ? h.slice(0, 79) + '…' : h;
+  }
+  if (!parts.length) return '';
+  return parts.slice(0, 2).join(' · ');
+}
+
 function renderCard(ev) {
   const cardType  = ev.card_type || 'composed_only';
   const tm        = ev.top_market || null;
   const stance    = (ev.dominant_stance || 'neutral').toLowerCase();
   const speaker   = ev.speaker || '?';
   const monogram  = speaker.charAt(0).toUpperCase();
-  const slugLink  = '/event/' + esc(ev.slug);
+  const sd        = ev._sd || null;
+  const tradeSlug = sd ? (sd.slug || sd.market_slug || '') : '';
+  const slugLink  = tradeSlug ? '/market/' + esc(tradeSlug) : '/event/' + esc(ev.slug);
   const ctaLabel  = (cardType === 'language' || cardType === 'outcome') ? 'TRADE →' : 'VIEW →';
 
-  // Headline: prefer market question, fall back to posture
   const headline = tm ? (tm.question || speaker + "'s posture") : (speaker + "'s posture");
-
-  // Price display
   const pctDisplay = tm && tm.leading_outcome_pct_display != null
     ? tm.leading_outcome_pct_display
     : (tm && tm.leading_outcome_pct != null ? tm.leading_outcome_pct + '¢' : null);
-
-  const vol = tm && tm.volume_display ? tm.volume_display : null;
-
+  const vol  = tm && tm.volume_display ? tm.volume_display : null;
   const meta = [pctDisplay ? pctDisplay + ' YES' : null, vol].filter(Boolean).join(' · ');
-
   const bgStyle = 'background:' + stanceBg(stance) + ';';
+
+  // Intel section — only when screener data is attached
+  var intelHtml = '';
+  if (sd) {
+    var hook       = buildHook(sd);
+    var edgeScore  = Math.round(sd.edge_score || 0);
+    var whaleCnt   = sd.whale_count || 0;
+    var whaleCap   = fmtK(sd.total_whale_capital || 0);
+    var yesPrice   = sd.yes_price != null ? Math.round(sd.yes_price * 100) : null;
+    var depthSide  = sd.depth_side || 'bid';
+    var depthRatio = sd.depth_ratio || 1;
+    var barFill    = yesPrice != null ? yesPrice : 50;
+    var bearBar    = depthSide === 'ask' && depthRatio >= 1.5;
+    var verdictTxt = '';
+    var verdictCls = 'neut';
+    if (depthSide === 'bid' && depthRatio >= 1.5) {
+      verdictTxt = 'SMART MONEY: LONG';
+      verdictCls = 'bull';
+    } else if (depthSide === 'ask' && depthRatio >= 1.5) {
+      verdictTxt = 'SMART MONEY: SHORT';
+      verdictCls = 'bear';
+    } else if (whaleCnt >= 3) {
+      verdictTxt = whaleCnt + ' WHALES WATCHING';
+    }
+    intelHtml = '<div class="mcard-intel">'
+      + (hook ? '<div class="intel-hook">' + esc(hook) + '</div>' : '')
+      + '<div class="intel-row">'
+      +   '<span class="intel-edge">EDGE ' + edgeScore + '</span>'
+      +   (whaleCnt ? '<span class="intel-whale">' + whaleCnt + ' 🐋 · ' + whaleCap + '</span>' : '')
+      + '</div>'
+      + (yesPrice != null
+          ? '<div class="smart-bar-wrap">'
+            + '<div class="smart-bar-labels"><span>NO</span><span>' + barFill + '¢ YES</span></div>'
+            + '<div class="smart-bar-track"><div class="smart-bar-fill' + (bearBar ? ' bear' : '') + '" style="width:' + barFill + '%"></div></div>'
+            + (verdictTxt ? '<div class="intel-verdict ' + verdictCls + '">' + verdictTxt + '</div>' : '')
+            + '</div>'
+          : '')
+      + (tradeSlug
+          ? '<div class="mcard-actions">'
+            + '<a class="mcard-act yes" href="/market/' + esc(tradeSlug) + '?side=YES" onclick="event.stopPropagation()">'
+            +   'YES' + (yesPrice != null ? ' · ' + yesPrice + '¢' : '') + '</a>'
+            + '<a class="mcard-act no" href="/market/' + esc(tradeSlug) + '?side=NO" onclick="event.stopPropagation()">'
+            +   'NO' + (yesPrice != null ? ' · ' + (100 - yesPrice) + '¢' : '') + '</a>'
+            + '</div>'
+          : '')
+      + '</div>';
+  }
+
+  if (sd) {
+    // Enriched: poster in a positioned wrapper + intel below
+    return '<a class="mcard enriched" href="' + slugLink + '" data-ev-slug="' + esc(ev.slug) + '">'
+      + '<div class="mcard-poster">'
+      +   '<div class="mcard-bg" style="' + bgStyle + '"></div>'
+      +   '<div class="mcard-overlay"></div>'
+      +   '<div class="mcard-monogram">' + esc(monogram) + '</div>'
+      +   '<div class="mcard-pill ' + esc(stance) + '">' + esc(stance) + '</div>'
+      +   '<div class="mcard-content">'
+      +     '<div class="mcard-speaker">' + esc(speaker) + '</div>'
+      +     '<div class="mcard-q">' + esc(headline) + '</div>'
+      +     (meta ? '<div class="mcard-meta">' + esc(meta) + '</div>' : '')
+      +   '</div>'
+      + '</div>'
+      + intelHtml
+      + '</a>';
+  }
 
   return `<a class="mcard" href="${slugLink}" data-ev-slug="${esc(ev.slug)}">
     <div class="mcard-bg" style="${bgStyle}"></div>
@@ -1234,6 +1352,38 @@ function startCountdownTicker() {
 }
 startCountdownTicker();
 
+async function enrichWithScreener(events) {
+  try {
+    var res = await fetch('/api/screener?limit=200');
+    if (!res.ok) return;
+    var payload = await res.json();
+    var list = Array.isArray(payload) ? payload : (payload.markets || []);
+    if (!list.length) return;
+
+    var bySlug = {};
+    list.forEach(function(m) {
+      if (m.slug) bySlug[m.slug] = m;
+      if (m.market_slug) bySlug[m.market_slug] = m;
+    });
+
+    var enriched = 0;
+    events.forEach(function(ev) {
+      var slug = ev.top_market && ev.top_market.slug;
+      if (slug && bySlug[slug]) { ev._sd = bySlug[slug]; enriched++; }
+    });
+
+    if (enriched > 0) applyFilters();  // re-render with intel panels
+
+    // Update header stats bar
+    var totalCap = list.reduce(function(s, m) { return s + (Number(m.total_whale_capital) || 0); }, 0);
+    var topEdge  = list.reduce(function(b, m) { return Math.max(b, m.edge_score || 0); }, 0);
+    var el = document.getElementById('mention-stats');
+    if (el) {
+      el.textContent = list.length + ' active · ' + fmtK(totalCap) + ' whale capital · top edge ' + Math.round(topEdge);
+    }
+  } catch(e) { /* screener offline — cards render without intel */ }
+}
+
 async function load() {
   try {
     const res = await fetch('/api/mentions');
@@ -1247,6 +1397,7 @@ async function load() {
     }
     buildFilters();
     applyFilters();
+    enrichWithScreener(STATE.events);  // async enrichment — re-renders when ready
   } catch (e) {
     console.error('[mentions]', e);
     document.getElementById('grid-host').innerHTML =
