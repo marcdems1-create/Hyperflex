@@ -26597,11 +26597,13 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
       const rows = await dbQuery(`
         SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.question, t.side, t.entry_price,
                t.market_slug, t.created_at, t.agree_count, t.is_correct,
-               u.username, u.flex_c_calibration
+               u.username, u.handle, u.flex_c_calibration
         FROM takes t
-        LEFT JOIN users u ON u.id = t.user_id
+        INNER JOIN users u ON u.id = t.user_id
         WHERE t.entry_price IS NOT NULL
           AND t.entry_price > 0
+          AND t.user_id IS NOT NULL
+          AND (u.username IS NOT NULL OR u.handle IS NOT NULL)
           AND (
             t.is_correct = true
             OR (t.is_correct IS NULL AND t.created_at >= NOW() - INTERVAL '30 days')
@@ -26666,7 +26668,7 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
         wins.push({
           take_id: r.id,
           user_id: r.user_id,
-          username: r.username || null,
+          username: r.username || r.handle || null,
           display_name: r.display_name || 'Predictor',
           avatar_url: r.avatar_url || null,
           question: r.question || '',
@@ -26679,7 +26681,10 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           created_at: r.created_at,
           agree_count: r.agree_count || 0,
           calibration: cal,
-          share_url: r.username ? `/brag/${encodeURIComponent(r.username)}/call/${r.market_slug}` : null,
+          profile_url: r.handle ? `/@${r.handle}` : (r.username ? `/m/${r.user_id}` : null),
+          share_url: (r.username || r.handle) && r.market_slug
+            ? `/brag/${encodeURIComponent(r.username || r.handle)}/call/${r.market_slug}`
+            : null,
         });
       }
 

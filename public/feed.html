@@ -5265,12 +5265,15 @@ function loadWinsTab() {
         var shareBtn = w.share_url ? ('<a href="' + w.share_url + '" style="font-family:var(--mono,monospace);font-size:10px;font-weight:700;color:#00e68a;border:1px solid rgba(0,230,138,.25);border-radius:5px;padding:5px 10px;text-decoration:none;white-space:nowrap;flex-shrink:0;" target="_blank">Share →</a>') : '';
         var avatar = w.avatar_url ? ('<img src="' + w.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">') : ('<div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.07);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:rgba(240,240,245,.5);">' + (w.display_name||'?').charAt(0).toUpperCase() + '</div>');
         var mktUrl = w.market_slug ? '/market/' + w.market_slug : '#';
+        var nameEl = w.profile_url
+          ? ('<a href="' + w.profile_url + '" style="font-weight:600;font-size:13px;color:inherit;text-decoration:none;">' + (w.display_name||'Predictor') + '</a>')
+          : ('<span style="font-weight:600;font-size:13px;">' + (w.display_name||'Predictor') + '</span>');
         return '<div style="background:#111118;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:8px;">' +
           '<div style="display:flex;align-items:flex-start;gap:10px;">' +
           avatar +
           '<div style="flex:1;min-width:0;">' +
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">' +
-          '<span style="font-weight:600;font-size:13px;">' + (w.display_name||'Predictor') + '</span>' + cal +
+          nameEl + cal +
           '</div>' +
           '<div style="font-size:13px;font-weight:500;color:rgba(240,240,245,.85);line-height:1.4;margin-bottom:8px;">' +
           '<a href="' + mktUrl + '" style="color:inherit;text-decoration:none;">' + (w.question||'').slice(0,90) + (w.question&&w.question.length>90?'…':'') + '</a>' +
