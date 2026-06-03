@@ -12279,7 +12279,8 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
              u.flex_score_90d, u.flex_score_alltime, u.predictions_resolved,
              u.prediction_win_rate, u.wallet_verified,
              u.flex_c_calibration,
-             ws.total_volume_usd, ws.closed_positions AS ws_closed_positions
+             ws.total_volume_usd, ws.closed_positions AS ws_closed_positions,
+             ws.clv_avg_cents, ws.clv_sample_size, ws.wallet_class
       FROM users u
       LEFT JOIN wallet_scores ws ON ws.user_id = u.id
       WHERE u.${col} IS NOT NULL
@@ -18376,6 +18377,12 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_rank INTEGER').catch(() => {});
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_pnl NUMERIC').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_is_whale ON users(is_whale) WHERE is_whale = true').catch(() => {});
+    // CLV columns on wallet_scores — added with clv-engine
+    await dbQuery(`ALTER TABLE wallet_scores
+      ADD COLUMN IF NOT EXISTS clv_avg_cents NUMERIC,
+      ADD COLUMN IF NOT EXISTS clv_sample_size INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS wallet_class TEXT DEFAULT 'pending',
+      ADD COLUMN IF NOT EXISTS clv_computed_at TIMESTAMPTZ`).catch(() => {});
   } catch (e) { console.warn('[takes] table init:', e.message); }
 })();
 
@@ -37097,6 +37104,38 @@ async function _buildAlphaListInner(opts = {}) {
       }
     }
 
+    // ── FADE wallet index — wallets consistently wrong per CLV engine ────────
+    // Build a Set of lowercase wallet addresses classified as 'fade' so
+    // we can flag markets where they're positioned as contrarian signals.
+    const _fadeWalletSet = new Set();
+    const _fadeWalletSide = {}; // wallet:conditionId → side they're on
+    try {
+      if (pool) {
+        const fadeRows = await pool.query(`
+          SELECT u.polymarket_address FROM wallet_scores ws
+          JOIN users u ON u.id = ws.user_id
+          WHERE ws.wallet_class = 'fade' AND ws.clv_sample_size >= 10
+          LIMIT 200
+        `);
+        for (const r of fadeRows.rows) {
+          if (r.polymarket_address) _fadeWalletSet.add(r.polymarket_address.toLowerCase());
+        }
+      }
+    } catch {}
+
+    // Map conditionId → fade side so each market knows which side fades are on
+    const _fadeByCondId = {};
+    for (const wp of whalePositions) {
+      const wallet = (wp.proxyWallet || wp.trader || '').toLowerCase();
+      if (!_fadeWalletSet.has(wallet)) continue;
+      const cid = wp.conditionId || null;
+      if (!cid) continue;
+      const side = (wp.side || 'YES').toUpperCase() === 'YES' ? 'YES' : 'NO';
+      if (!_fadeByCondId[cid]) _fadeByCondId[cid] = { yes: 0, no: 0, count: 0 };
+      _fadeByCondId[cid][side === 'YES' ? 'yes' : 'no']++;
+      _fadeByCondId[cid].count++;
+    }
+
     // ── Slice top 350 by 24h volume, then force-include any whale-traded markets
     // from positions 350-500 that we'd otherwise miss. This guarantees the engine
     // sees every market where smart money is positioned, regardless of volume rank.
@@ -37739,7 +37778,14 @@ async function _buildAlphaListInner(opts = {}) {
         alpha_edge: alphaEdge,
         trade,
         trade_thesis,
-        ai_hook: aiHook || null
+        ai_hook: aiHook || null,
+        fade_signal: (() => {
+          const fd = _fadeByCondId[conditionId];
+          if (!fd || fd.count === 0) return null;
+          const fadeSide = fd.yes >= fd.no ? 'YES' : 'NO';
+          const contrarianSide = fadeSide === 'YES' ? 'NO' : 'YES';
+          return { fade_side: fadeSide, contrarian_side: contrarianSide, fade_count: fd.count };
+        })()
       });
     }
 

@@ -480,6 +480,12 @@ function render(data){
         '<span class="entry-detail">'+entry+'¢ → '+win+'¢</span>'+
       '</div>'+
       (m.ai_hook?'<div class="hook">'+esc(m.ai_hook)+'</div>':'')+
+      (m.fade_signal ? '<div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;padding:6px 10px;border-radius:4px;background:rgba(245,158,11,.06);border-left:2px solid #f59e0b;">'+
+        '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;color:#f59e0b;">FADE SIGNAL</span>'+
+        '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.6);margin-left:4px;">'+
+          m.fade_signal.fade_count+' known-wrong wallet'+(m.fade_signal.fade_count>1?'s':'')+' on '+m.fade_signal.fade_side+' — contrarian lean: '+m.fade_signal.contrarian_side+
+        '</span>'+
+      '</div>' : '')+
       (m.edge_delta != null && Math.abs(m.edge_delta) >= 1
         ? '<div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;padding:6px 10px;border-radius:4px;background:' +
           (m.edge_delta < 0 ? 'rgba(255,77,106,.06)' : 'rgba(0,230,138,.06)') + ';border-left:2px solid ' +

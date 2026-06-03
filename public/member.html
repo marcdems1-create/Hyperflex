@@ -1826,6 +1826,23 @@ async function loadAnalytics(userId) {
       }
     }
 
+    // CLV class badge — fetched async after main load
+    fetch(`/api/clv/wallet/${encodeURIComponent(userId)}`).then(r => r.ok ? r.json() : null).then(clv => {
+      if (!clv || !clv.wallet_class || clv.wallet_class === 'pending') return;
+      const badgeArea = document.querySelector('.hero-badges');
+      if (!badgeArea) return;
+      const clvColors = { sharp: '#00e68a', good: '#4d9fff', square: 'rgba(240,240,245,.35)', fade: '#ff4d6a' };
+      const clvLabels = { sharp: 'CLV SHARP', good: 'CLV POSITIVE', square: 'CLV NEUTRAL', fade: 'CLV FADE' };
+      const col = clvColors[clv.wallet_class] || 'rgba(240,240,245,.35)';
+      const label = clvLabels[clv.wallet_class] || clv.wallet_class.toUpperCase();
+      const tip = clv.clv_avg_cents != null ? `${clv.clv_avg_cents > 0 ? '+' : ''}${clv.clv_avg_cents}¢ avg CLV · ${clv.clv_sample_size} resolved trades` : '';
+      const chip = document.createElement('span');
+      chip.title = tip;
+      chip.style.cssText = `display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid ${col}55;background:${col}12;color:${col};cursor:default;`;
+      chip.textContent = label;
+      badgeArea.appendChild(chip);
+    }).catch(() => {});
+
     // Calibration chart — bar chart per 10%-probability bucket.
     // Empty state when there's no actual data (bucket total=0 across
     // the board) or the user has too few settled picks to be
