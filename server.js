@@ -1345,6 +1345,7 @@ const clustererBlurb = require('./lib/clusterer/blurb');
 const clustererCompose = require('./lib/clusterer/compose');
 const clustererComposeGeneric = require('./lib/clusterer/compose-generic');
 const signalAgent = require('./lib/signal-agent');
+const clvEngine = require('./lib/clv-engine');
 
 // Mention-pages phase 2b — wire the Fed transcript scraper now that supabase
 // and the word counter are both available. The scraper calls
@@ -1440,6 +1441,9 @@ const anthropic = new Anthropic({
 // the pg pool and the Anthropic client exist. The endpoint guards
 // against a missing API key separately, so this init is unconditional.
 if (pool) clustererJudge.init({ pool, anthropic });
+if (pool) clvEngine.init({ pool });
+setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
+setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 
 // Phase 2e — same wiring for the blurb module.
 if (pool) clustererBlurb.init({ pool, anthropic });
@@ -36435,6 +36439,25 @@ app.get('/api/whale-index', async (req, res) => {
     if (_whaleIndexCache) return res.json(_whaleIndexCache.data);
     res.status(502).json({ error: 'Failed to build whale index', detail: err.message });
   }
+});
+
+app.get('/api/clv/summary', async (req, res) => {
+  const data = await clvEngine.getSummary();
+  res.json({ summary: data });
+});
+app.get('/api/clv/sharp', async (req, res) => {
+  const limit = Math.min(50, parseInt(req.query.limit) || 20);
+  const wallets = await clvEngine.getTopSharp(limit);
+  res.json({ wallets, count: wallets.length });
+});
+app.get('/api/clv/fade', async (req, res) => {
+  const wallets = await clvEngine.getTopFade();
+  res.json({ wallets, count: wallets.length });
+});
+app.get('/api/clv/wallet/:userId', async (req, res) => {
+  const data = await clvEngine.getWalletClass(req.params.userId);
+  if (!data) return res.json({ wallet_class: 'pending', clv_avg_cents: null, clv_sample_size: 0 });
+  res.json(data);
 });
 
 // ════════════════════════════════════════════════════════════
