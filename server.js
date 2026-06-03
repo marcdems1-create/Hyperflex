@@ -26602,8 +26602,14 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
         INNER JOIN users u ON u.id = t.user_id
         WHERE t.entry_price IS NOT NULL
           AND t.entry_price > 0
+          AND t.market_slug IS NOT NULL
           AND t.user_id IS NOT NULL
           AND (u.username IS NOT NULL OR u.handle IS NOT NULL)
+          AND (
+            (t.side = 'YES' AND t.entry_price <= 40)
+            OR (t.side IN ('NO','SELL') AND t.entry_price >= 60)
+            OR t.is_correct = true
+          )
           AND (
             t.is_correct = true
             OR (t.is_correct IS NULL AND t.created_at >= NOW() - INTERVAL '30 days')
@@ -26639,11 +26645,10 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
 
       const wins = [];
       for (const r of rows) {
-        const rawEntry = parseFloat(r.entry_price || 0);
-        if (rawEntry <= 0) continue;
-        // Normalise: entry_price may be stored as decimal (0.08) or cents (8)
-        const entry = rawEntry > 1 ? rawEntry / 100 : rawEntry;
-        if (entry <= 0 || entry >= 1) continue;
+        // entry_price stored as cents (1–99) — divide by 100 to get decimal
+        const entryCents = parseFloat(r.entry_price || 0);
+        if (entryCents <= 0 || entryCents >= 100) continue;
+        const entry = entryCents / 100; // 0.01–0.99
 
         const mkt = screenerData.find(m => m.slug === r.market_slug);
         let curPrice, gainPts;
@@ -26669,7 +26674,7 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           take_id: r.id,
           user_id: r.user_id,
           username: r.username || r.handle || null,
-          display_name: r.display_name || 'Predictor',
+          display_name: r.display_name || r.username || r.handle || 'Predictor',
           avatar_url: r.avatar_url || null,
           question: r.question || '',
           side: r.side || 'YES',
@@ -26681,7 +26686,7 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           created_at: r.created_at,
           agree_count: r.agree_count || 0,
           calibration: cal,
-          profile_url: r.handle ? `/@${r.handle}` : (r.username ? `/m/${r.user_id}` : null),
+          profile_url: r.handle ? `/@${r.handle}` : (r.user_id ? `/m/${r.user_id}` : null),
           share_url: (r.username || r.handle) && r.market_slug
             ? `/brag/${encodeURIComponent(r.username || r.handle)}/call/${r.market_slug}`
             : null,
