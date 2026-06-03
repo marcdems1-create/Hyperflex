@@ -1285,6 +1285,19 @@ a:hover { text-decoration: underline; }
 .load-more-btn { display: block; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: all .15s; font-family: 'Inter', sans-serif; }
 .load-more-btn:hover { border-color: var(--purple-border); color: var(--text); }
 
+/* ── BRAG PROMPT ── */
+.brag-prompt{margin-bottom:16px;animation:bragSlideDown .3s ease;}
+@keyframes bragSlideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.bp-inner{padding:20px 24px;background:linear-gradient(135deg,rgba(0,230,138,.08),rgba(14,14,21,1));border:1px solid rgba(0,230,138,.25);border-radius:12px;}
+.bp-label{font-family:var(--mono,monospace);font-size:10px;font-weight:700;color:#00e68a;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;}
+.bp-question{font-family:'Inter',sans-serif;font-size:15px;font-weight:700;color:var(--text,#f0f0f5);margin-bottom:5px;line-height:1.4;}
+.bp-detail{font-family:var(--mono,monospace);font-size:11px;color:rgba(240,240,245,.45);margin-bottom:16px;}
+.bp-actions{display:flex;gap:12px;align-items:center;}
+.bp-share{font-family:var(--mono,monospace);font-size:12px;font-weight:700;color:#000;background:#00e68a;padding:9px 18px;border-radius:6px;text-decoration:none;transition:opacity .12s;}
+.bp-share:hover{opacity:.85;}
+.bp-dismiss{background:none;border:none;font-family:var(--mono,monospace);font-size:11px;color:rgba(240,240,245,.35);cursor:pointer;padding:0;}
+.bp-dismiss:hover{color:rgba(240,240,245,.6);}
+
 /* ── Alpha Drop modal ── */
 /* Lands on first visit (or when the #1 edge changes). One screen, one signal,
    one primary CTA. Big tabular score, gradient aura keyed to tier, animated
@@ -5225,6 +5238,59 @@ function showWinCard(data) {
 <script src="/hfx-engage.js" defer></script>
 <script>document.addEventListener('DOMContentLoaded',function(){if(window.HFX&&window.HFX.checkResolvedTakes)window.HFX.checkResolvedTakes();loadHotDebates();});</script>
 <script>
+// ── BRAG MOMENT DETECTION ──
+(function(){
+  var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+  if (!tok) return;
+  var uid = null, uname = null;
+  try {
+    var p = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    uid = p.userId || p.sub || p.id;
+    uname = p.username || null;
+  } catch(e) {}
+  if (!uid) return;
+
+  var _shownSlugs = JSON.parse(localStorage.getItem('hfx_brag_shown') || '[]');
+
+  function showBragPrompt(data) {
+    if (!data || !data.slug || !data.gain) return;
+    if (_shownSlugs.indexOf(data.slug) !== -1) return; // already shown this session
+    _shownSlugs.push(data.slug);
+    try { localStorage.setItem('hfx_brag_shown', JSON.stringify(_shownSlugs.slice(-20))); } catch(e) {}
+
+    var el = document.createElement('div');
+    el.className = 'brag-prompt';
+    var shareHref = data.share_url || ('/brag/' + encodeURIComponent(uname || uid) + '/call/' + data.slug);
+    el.innerHTML = '<div class="bp-inner">' +
+      '<div class="bp-label">YOUR POSITION IS UP +' + data.gain + '¢</div>' +
+      '<div class="bp-question">' + (data.question || '').slice(0, 80) + (data.question && data.question.length > 80 ? '…' : '') + '</div>' +
+      '<div class="bp-detail">You said ' + (data.side||'YES') + ' at ' + (data.entry_price||0) + '¢ → now ' + (data.current_price||0) + '¢</div>' +
+      '<div class="bp-actions">' +
+      '<a href="' + shareHref + '" class="bp-share" target="_blank">Share this call →</a>' +
+      '<button class="bp-dismiss" onclick="this.closest(\'.brag-prompt\').remove()">Dismiss</button>' +
+      '</div></div>';
+
+    var feed = document.getElementById('feedContainer');
+    if (feed) feed.prepend(el);
+  }
+
+  // Open SSE stream
+  var sseUrl = '/api/brag/stream?token=' + encodeURIComponent(tok);
+  if (uname) sseUrl += '&username=' + encodeURIComponent(uname);
+  try {
+    var es = new EventSource(sseUrl);
+    es.addEventListener('brag_moment', function(e) {
+      try { showBragPrompt(JSON.parse(e.data)); } catch(ex) {}
+    });
+    es.onerror = function() { try { es.close(); } catch(_) {} };
+    // Also do a one-shot poll on load (in case screener hasn't refreshed yet)
+    fetch('/api/brag/moments/' + uid, { headers: { Authorization: 'Bearer ' + tok } })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d && d.moments) d.moments.forEach(showBragPrompt); })
+      .catch(function() {});
+  } catch(ex) {}
+})();
+
 // ── MARKET MOVERS STRIP ──
 (function(){
   fetch('/api/market-movers')

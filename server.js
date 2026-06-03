@@ -37893,6 +37893,9 @@ async function _buildAlphaListInner(opts = {}) {
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
 
+    // Push brag moments to connected SSE clients (fire-and-forget)
+    _pushBragMoments().catch(() => {});
+
     // Auto-create arenas for top-edge markets (fire-and-forget, non-blocking)
     autoCreateArenas().catch(() => {});
 
@@ -38453,6 +38456,77 @@ let _stopsLoaded = false;
 
 // SSE clients watching for stop triggers: Map<userId, Set<res>>
 const _stopClients = new Map();
+
+// SSE clients watching for brag moments: Map<userId, {res, username, walletAddr}>
+const _bragClients = new Map();
+
+// Push brag moment events when screener refreshes — checks each connected user's open takes
+async function _pushBragMoments() {
+  if (!_bragClients.size || !_screenerCache || !_screenerCache.data) return;
+  const screenerData = _screenerCache.data;
+  for (const [userId, info] of _bragClients) {
+    try {
+      if (!info.res || info.res.writableEnded) { _bragClients.delete(userId); continue; }
+      if (!pool) continue;
+      const rows = await dbQuery(
+        `SELECT side, entry_price, market_slug, question FROM takes WHERE user_id = $1 AND is_correct IS NULL AND source = 'user' AND entry_price IS NOT NULL ORDER BY created_at DESC LIMIT 20`,
+        [userId]
+      ).catch(() => []);
+      for (const r of rows) {
+        const mkt = screenerData.find(m => m.slug === r.market_slug);
+        if (!mkt) continue;
+        const entry = parseFloat(r.entry_price);
+        const cur = r.side === 'YES' ? (mkt.yes_price || 0.5) : (1 - (mkt.yes_price || 0.5));
+        const gain = Math.round((cur - entry) * 100);
+        if (gain >= 20) {
+          const shareUrl = info.username ? `/brag/${encodeURIComponent(info.username)}/call/${r.market_slug}` : null;
+          try {
+            info.res.write('event: brag_moment\n');
+            info.res.write('data: ' + JSON.stringify({
+              slug: r.market_slug, question: r.question || mkt.question || '',
+              side: r.side, entry_price: Math.round(entry * 100),
+              current_price: Math.round(cur * 100), gain, share_url: shareUrl,
+            }) + '\n\n');
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+}
+
+// SSE endpoint: brag moments stream
+app.get('/api/brag/stream', async (req, res) => {
+  let userId = getUserIdFromReq(req);
+  if (!userId && req.query.token) {
+    try { const p = jwt.verify(req.query.token, JWT_SECRET); userId = p.id || null; } catch {}
+  }
+  if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+
+  // Store with username for share URLs
+  let username = req.query.username || null;
+  if (!username && pool) {
+    dbQuery('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId])
+      .then(r => { if (r[0]) username = r[0].username; })
+      .catch(() => {});
+  }
+  _bragClients.set(userId, { res, username });
+
+  const hb = setInterval(() => {
+    try { res.write('event: heartbeat\ndata: {}\n\n'); } catch { clearInterval(hb); }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    _bragClients.delete(userId);
+  });
+});
+
 
 // Auto-migrate stop_orders table on boot — idempotent, matches
 // supabase_migration_stop_orders.sql so the feature works even if the admin
