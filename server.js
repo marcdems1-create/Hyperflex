@@ -26579,36 +26579,59 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
     res.send(svg);
   });
 
-  // GET /api/brag/wins — top correct calls in last 7 days (for Wins tab)
+  // GET /api/brag/wins — top calls sorted by gain (resolved wins + open positions up big)
   let _bragWinsCache = null;
   app.get('/api/brag/wins', async (req, res) => {
     try {
       if (_bragWinsCache && Date.now() - _bragWinsCache.ts < 5 * 60 * 1000) return res.json(_bragWinsCache.data);
       if (!pool) return res.json({ wins: [] });
+
+      // Two buckets:
+      // 1. Resolved correct takes (is_correct=true) — no time restriction so new platforms aren't empty
+      // 2. Open takes (is_correct IS NULL) with entry_price set — we compute live gain from screener
       const rows = await dbQuery(`
         SELECT t.id, t.user_id, t.display_name, t.avatar_url, t.question, t.side, t.entry_price,
-               t.market_slug, t.created_at, t.agree_count,
-               u.username, u.flex_score_alltime, u.flex_c_calibration
+               t.market_slug, t.created_at, t.agree_count, t.is_correct,
+               u.username, u.flex_c_calibration
         FROM takes t
         LEFT JOIN users u ON u.id = t.user_id
-        WHERE t.is_correct = true
-          AND t.resolved_at >= NOW() - INTERVAL '7 days'
+        WHERE t.source = 'user'
           AND t.entry_price IS NOT NULL
-          AND t.source = 'user'
-        ORDER BY t.entry_price ASC, t.resolved_at DESC
-        LIMIT 50
+          AND t.entry_price > 0
+          AND (
+            t.is_correct = true
+            OR (t.is_correct IS NULL AND t.created_at >= NOW() - INTERVAL '30 days')
+          )
+        ORDER BY t.created_at DESC
+        LIMIT 200
       `).catch(() => []);
 
       const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
 
-      const wins = rows.map(r => {
+      const wins = [];
+      for (const r of rows) {
         const entry = parseFloat(r.entry_price || 0);
+        if (entry <= 0 || entry >= 1) continue; // skip nonsense entries
+
         const mkt = screenerData.find(m => m.slug === r.market_slug);
-        const curPrice = mkt ? (r.side === 'YES' ? (mkt.yes_price || 0.5) : (1 - (mkt.yes_price || 0.5))) : 1;
-        const gain = curPrice - entry; // decimal
-        const gainPts = Math.round(gain * 100);
+        let curPrice, gainPts;
+
+        if (r.is_correct === true) {
+          // Resolved correct — market settled at 1.0 for the winning side
+          curPrice = 1.0;
+          gainPts = Math.round((1 - entry) * 100);
+        } else if (mkt) {
+          // Open — use live screener price
+          const livePriceYes = mkt.yes_price || 0.5;
+          curPrice = r.side === 'NO' ? (1 - livePriceYes) : livePriceYes;
+          gainPts = Math.round((curPrice - entry) * 100);
+          if (gainPts < 10) continue; // only show meaningful open gains
+        } else {
+          continue; // no price data available — skip
+        }
+
         const cal = r.flex_c_calibration ? Math.round(Number(r.flex_c_calibration) / 25 * 100) : null;
-        return {
+        wins.push({
           take_id: r.id,
           user_id: r.user_id,
           username: r.username || null,
@@ -26619,20 +26642,24 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
           entry_price: Math.round(entry * 100),
           cur_price: Math.round(curPrice * 100),
           gain_pts: gainPts,
+          is_resolved: r.is_correct === true,
           market_slug: r.market_slug,
           created_at: r.created_at,
           agree_count: r.agree_count || 0,
           calibration: cal,
           share_url: r.username ? `/brag/${encodeURIComponent(r.username)}/call/${r.market_slug}` : null,
-        };
-      }).sort((a, b) => b.gain_pts - a.gain_pts).slice(0, 20);
+        });
+      }
 
-      const data = { wins, updated_at: new Date().toISOString() };
+      wins.sort((a, b) => b.gain_pts - a.gain_pts);
+      const top = wins.slice(0, 20);
+
+      const data = { wins: top, updated_at: new Date().toISOString() };
       _bragWinsCache = { ts: Date.now(), data };
       res.json(data);
     } catch (err) {
       console.error('[brag/wins]', err.message);
-      res.json({ wins: [] });
+      res.json({ wins: [], error: err.message });
     }
   });
 

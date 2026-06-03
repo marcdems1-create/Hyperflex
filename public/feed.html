@@ -5279,6 +5279,7 @@ function loadWinsTab() {
           '<span style="font-family:var(--mono,monospace);font-size:11px;color:' + sideCol + ';font-weight:700;">' + (w.side||'YES') + '</span>' +
           '<span style="font-family:var(--mono,monospace);font-size:11px;color:rgba(240,240,245,.4);">' + (w.entry_price||0) + '¢ entry</span>' +
           '<span style="font-family:var(--mono,monospace);font-size:11px;font-weight:700;color:' + gainCol + ';">' + gainSign + w.gain_pts + 'pt</span>' +
+          (w.is_resolved ? '<span style="font-family:var(--mono,monospace);font-size:9px;color:#00e68a;border:1px solid rgba(0,230,138,.25);border-radius:3px;padding:1px 5px;">CORRECT</span>' : '<span style="font-family:var(--mono,monospace);font-size:9px;color:rgba(240,240,245,.35);border:1px solid rgba(255,255,255,.08);border-radius:3px;padding:1px 5px;">LIVE</span>') +
           (w.agree_count > 0 ? '<span style="font-family:var(--mono,monospace);font-size:10px;color:rgba(240,240,245,.3);">' + w.agree_count + ' agreed</span>' : '') +
           '</div></div>' + shareBtn + '</div></div>';
       }).join('');
