@@ -308,7 +308,7 @@ nav{
 .mcard-yes-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
 .mcard-no-pct{flex:1;padding:7px 10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:5px;font-family:var(--mono);font-size:14px;font-weight:700;color:#ff4d6a;text-align:center;}
 .mcard-no-pct small{font-size:9px;font-weight:400;opacity:.7;display:block;letter-spacing:.08em;}
-.mcard-summary{font-family:var(--mono);font-size:10px;color:rgba(240,240,245,.6);line-height:1.4;margin-top:7px;font-style:italic;}
+.mcard-summary{position:relative;z-index:2;font-family:var(--mono);font-size:10px;color:rgba(240,240,245,.45);line-height:1.3;margin:4px 0 6px;font-style:italic;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* ── WIDE CARD (featured) ── */
 .wcard{
@@ -1429,7 +1429,8 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
 
   /* whale row — sort by volume descending, take 8 from second tier (fallback: first tier) */
   var byVol = primary.slice().sort(function(a,b){return Number(b.volume||0)-Number(a.volume||0);});
-  var whaleMarkets = byVol.length > 8 ? byVol.slice(8,16) : byVol.slice(0,8);
+  var whaleMarkets = byVol.filter(function(m){return Number(m.volume||0)>=100000;}).slice(8,16);
+  if (whaleMarkets.length < 3) whaleMarkets = byVol.filter(function(m){return Number(m.volume||0)>=50000;}).slice(0,8);
   var rowWhale = document.getElementById('rowWhale');
   rowWhale.innerHTML = whaleMarkets.map(function(m){
     return buildCard(m,null,'mcard-pill-whale','WHALE');
@@ -1674,14 +1675,14 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
           var side = (p.predicted_side || '').toUpperCase();
           var sideColor = side === 'YES' ? '#00e68a' : side === 'NO' ? '#ff4d6a' : 'rgba(240,240,245,.4)';
           var matchBadge = side ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:' + sideColor + ';">' + side + '</span>' : '';
-          return '<a href="' + href + '" target="_blank" rel="noopener" style="flex-shrink:0;width:240px;height:280px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.35)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.15)\';this.style.transform=\'\'">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+          return '<a href="' + href + '" target="_blank" rel="noopener" style="flex-shrink:0;width:240px;height:180px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;overflow:hidden;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.35)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.15)\';this.style.transform=\'\'">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
               + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:' + pColor + ';letter-spacing:.12em;">' + pLabel + '</span>'
               + matchBadge
             + '</div>'
-            + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.5);">@' + esc(handle) + '</div>'
-            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.5;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;">"' + esc(snippet) + '"</div>'
-            + (mktQ ? '<div style="font-size:10px;color:rgba(240,240,245,.35);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + esc(mktQ) + '</div>' : '')
+            + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.5);flex-shrink:0;">@' + esc(handle) + '</div>'
+            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">"' + esc(snippet) + '"</div>'
+            + (mktQ ? '<div style="font-size:10px;color:rgba(240,240,245,.35);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0;margin-top:auto;">' + esc(mktQ) + '</div>' : '')
           + '</a>';
         }).join('');
         document.getElementById('influencerTakesSection').style.display = '';
