@@ -540,10 +540,10 @@ body::before {
                   '<div style="font-size:12px;color:var(--dim);margin-bottom:16px">Add your email to get alerts when your predictions resolve.</div>' +
                   '<input id="walletEmailInput" type="email" placeholder="you@example.com" style="width:100%;padding:12px 14px;background:var(--paper,#0a0a0f);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;box-sizing:border-box" onkeydown="if(event.key===\'Enter\')saveWalletEmail()">' +
                   '<button onclick="saveWalletEmail()" style="width:100%;padding:12px;background:var(--gold,#c9920d);color:#000;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:var(--sans);font-size:14px;margin-bottom:8px">Save email</button>' +
-                  '<button onclick="window.location.href=\'/feed\'" style="width:100%;padding:10px;background:transparent;border:none;color:var(--dim);cursor:pointer;font-family:var(--sans);font-size:12px">Skip for now \u2192</button>' +
+                  '<button onclick="window.location.href=_loginNext" style="width:100%;padding:10px;background:transparent;border:none;color:var(--dim);cursor:pointer;font-family:var(--sans);font-size:12px">Skip for now \u2192</button>' +
                 '</div>';
               } else {
-                window.location.href = '/feed';
+                window.location.href = _loginNext;
               }
             } catch(e) {
               console.error('[wallet-auth]', e);
@@ -565,7 +565,7 @@ body::before {
                 body: JSON.stringify({ email: email })
               });
             } catch(e) { /* silent */ }
-            window.location.href = '/creator/dashboard';
+            window.location.href = _loginNext;
           }
           </script>
 
@@ -665,6 +665,13 @@ let mode = 'login'; // 'login' or 'signup'
     return;
   }
   const params = new URLSearchParams(location.search);
+  // Capture return destination — used by all success handlers below
+  const _loginNext = (function() {
+    var n = params.get('next') || sessionStorage.getItem('hfx_return_to') || '';
+    // Strip anything that redirects back into auth pages or is external
+    if (!n || n.startsWith('/creator') || n.startsWith('//') || /^https?:/.test(n)) n = '/';
+    return n;
+  })();
   const err = params.get('error');
   if (err) showError(decodeURIComponent(err).replace(/_/g, ' '));
 

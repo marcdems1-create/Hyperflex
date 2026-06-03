@@ -481,7 +481,7 @@
       '</button>' +
       (isLoggedIn
         ? ''
-        : '<a href="/creator/login" class="nav-signin">Sign in</a>') +
+        : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="nav-signin">Sign in</a>') +
     '</div>' +
     '<button class="nav-hamburger" id="navHamburger">' +
       '<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' +
@@ -566,7 +566,7 @@
       '<div class="nav-mobile-auth">' +
         (isLoggedIn
           ? ''
-          : '<a href="/creator/login" class="mob-signin">Sign in</a>') +
+          : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="mob-signin">Sign in</a>') +
       '</div>';
     document.body.appendChild(mobileMenu);
 
