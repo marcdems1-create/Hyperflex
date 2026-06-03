@@ -26612,14 +26612,15 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
 
       const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
 
+      // debug schema info — collected here, returned after the wins loop
+      let _debugMeta = null;
       if (isDebug) {
-        // Also fetch total takes count + source breakdown for schema diagnosis
         const [totalRes, sourceRes, colRes] = await Promise.all([
           dbQuery('SELECT COUNT(*) FROM takes').catch(() => [{ count: 'err' }]),
           dbQuery("SELECT source, COUNT(*) FROM takes GROUP BY source ORDER BY COUNT(*) DESC").catch(() => []),
           dbQuery("SELECT column_name FROM information_schema.columns WHERE table_name='takes' ORDER BY ordinal_position").catch(() => []),
         ]);
-        return res.json({
+        _debugMeta = {
           total_takes: totalRes[0] && totalRes[0].count,
           by_source: sourceRes.map(r => ({ source: r.source, count: r.count })),
           columns: colRes.map(r => r.column_name).join(', '),
@@ -26631,11 +26632,7 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
             market_slug: r.market_slug, created_at: r.created_at,
             in_screener: screenerData.some(m => m.slug === r.market_slug),
           })),
-          entry_price_range: rows.length ? {
-            min: Math.min(...rows.map(r => parseFloat(r.entry_price || 0))),
-            max: Math.max(...rows.map(r => parseFloat(r.entry_price || 0))),
-          } : null,
-        });
+        };
       }
 
       const wins = [];
@@ -26688,6 +26685,8 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
 
       wins.sort((a, b) => b.gain_pts - a.gain_pts);
       const top = wins.slice(0, 20);
+
+      if (isDebug) return res.json({ ..._debugMeta, win_count: wins.length, top_20: top });
 
       const data = { wins: top, updated_at: new Date().toISOString() };
       _bragWinsCache = { ts: Date.now(), data };
