@@ -1207,11 +1207,11 @@ window.showSkeletons = function(containerId, count, type) {
     if (document.getElementById('hfx-bottom-nav')) return;
     var path = window.location.pathname;
     var items = [
-      { label: 'Home',    icon: '⌂',  href: '/' },
-      { label: 'Feed',    icon: '◈',  href: '/feed' },
-      { label: 'Daily',   icon: '🔥', href: '/daily' },
-      { label: 'Alpha',   icon: '⚡', href: '/alpha-live' },
-      { label: 'Profile', icon: '◎',  href: null }, // resolved at runtime
+      { label: 'Home',     icon: '⌂',  href: '/' },
+      { label: 'Feed',     icon: '◈',  href: '/feed' },
+      { label: 'Alpha',    icon: '⚡', href: '/alpha-live' },
+      { label: 'Mentions', icon: '◎',  href: '/mentions' },
+      { label: 'Profile',  icon: '👤', href: null }, // resolved at runtime
     ];
 
     // Resolve profile link
