@@ -1,35 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HYPERFLEX — Sign In</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — HYPERFLEX</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --ink: #0e0e0c;
-  --paper: #141412;
-  --cream: #1c1c19;
-  --text: #ddd8cc;
+  --bg: #0e0e15;
+  --surface: #16161f;
+  --border: rgba(255,255,255,.08);
+  --ink: #f0f0f5;
+  --muted: rgba(240,240,245,.4);
+  --dim: rgba(240,240,245,.3);
+  --green: #00e68a;
   --gold: #c9920d;
-  --gold-lt: #e0a820;
-  --gold-bright: #f5c842;
-  --border: #2a2a26;
-  --dim: #7a7870;
-  --green: #2d9b5f;
-  --red: #c0392b;
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
+  --red: #ff4d6a;
+  --sans: 'Inter', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --text: #f0f0f5;
+  --paper: #0e0e15;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-::-webkit-scrollbar { display: none; }
+
+* { margin:0; padding:0; box-sizing:border-box; }
 
 body {
-  background: var(--paper);
-  color: var(--text);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--sans);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
   overflow-x: hidden;
 }
 
@@ -37,659 +43,530 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 50%, rgba(0,230,138,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 80% 20%, rgba(77,159,255,.05) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
 }
 
-.page {
+.logo {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  text-decoration: none;
+  color: var(--ink);
+  z-index: 10;
+}
+.logo span { color: var(--green); }
+
+.card {
+  width: 100%;
+  max-width: 420px;
   position: relative;
   z-index: 1;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
 }
 
-/* Header */
-.header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
+/* Social proof */
+.social-proof {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 36px;
 }
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-.logo-hex { width: 32px; height: 32px; }
-.logo-name {
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  color: var(--text);
-}
-.header-tag {
+.sp-stat { text-align: center; }
+.sp-num {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--gold);
-  background: rgba(201,146,13,0.1);
-  border: 1px solid rgba(201,146,13,0.3);
-  padding: 3px 8px;
-  border-radius: 2px;
-  letter-spacing: 0.1em;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  display: block;
+}
+.sp-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
+.sp-divider { width: 1px; height: 28px; background: var(--border); }
 
-/* Main */
-.main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  max-width: 1100px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 80px 24px;
-  gap: 80px;
-  align-items: center;
-}
-
-/* Left pitch */
-.pitch { position: sticky; top: 80px; }
-.pitch-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 32px;
-}
-.pitch-logo svg { width: 40px; height: 40px; }
-.pitch-logo span {
-  font-weight: 800;
-  font-size: 22px;
-  letter-spacing: 0.08em;
-  color: var(--text);
-}
-.pitch-tagline {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--dim);
-  letter-spacing: 0.04em;
+/* Headline */
+.headline {
+  text-align: center;
   margin-bottom: 36px;
 }
-
-.stat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 36px;
-}
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.stat-icon {
-  font-size: 18px;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(201,146,13,0.08);
-  border: 1px solid rgba(201,146,13,0.15);
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.stat-text strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
-}
-.stat-text span {
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.early-access {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--gold);
-  background: rgba(201,146,13,0.08);
-  border: 1px solid rgba(201,146,13,0.2);
-  padding: 10px 14px;
-  border-radius: 6px;
-  display: inline-block;
-  letter-spacing: 0.06em;
-}
-
-/* Form card */
-.form-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.form-header {
-  padding: 24px 28px;
-  border-bottom: 1px solid var(--border);
-}
-.form-header h2 {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.form-header p {
-  font-size: 13px;
-  color: var(--dim);
-}
-
-.form-body { padding: 28px; }
-
-/* OAuth buttons */
-.oauth-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 13px 14px;
-  min-height: 48px;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
+.headline h1 {
+  font-size: clamp(26px, 6vw, 34px);
+  font-weight: 900;
+  letter-spacing: -.03em;
+  line-height: 1.1;
   margin-bottom: 10px;
-  transition: border-color 0.2s;
-  cursor: pointer;
 }
-.oauth-btn:hover { border-color: rgba(201,146,13,0.4); }
-.oauth-btn.primary { background: var(--gold, #f5a623); border-color: transparent; color: #0b0b12; font-weight: 800; }
-.oauth-btn.primary:hover { opacity: .9; border-color: transparent; }
-.oauth-btn.primary svg path { fill: #0b0b12 !important; }
-.auth-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.install-hint { display: none; font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin: -2px 0 10px; line-height: 1.5; }
-.install-hint a { color: var(--gold); text-decoration: none; }
-.install-hint a:hover { text-decoration: underline; }
+.headline h1 span { color: var(--green); }
+.headline p {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .06em;
+}
 
+/* Buttons */
+.btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: transform .12s, opacity .12s, box-shadow .12s;
+  text-decoration: none;
+  letter-spacing: -.01em;
+  position: relative;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+.btn-wallet {
+  background: var(--green);
+  color: #000;
+  box-shadow: 0 4px 24px rgba(0,230,138,.2);
+  margin-bottom: 10px;
+}
+.btn-wallet:hover { box-shadow: 0 6px 32px rgba(0,230,138,.32); }
+
+.btn-google {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.btn-google:hover { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+
+.btn-email-toggle {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  margin-bottom: 28px;
+  font-size: 13px;
+}
+.btn-email-toggle:hover { border-color: rgba(255,255,255,.18); color: var(--ink); transform: none; }
+
+.btn-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
+/* Divider */
 .divider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 .divider-line { flex: 1; height: 1px; background: var(--border); }
 .divider-text {
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
-}
-
-.field { margin-bottom: 20px; }
-.field label {
-  display: block;
-  font-family: var(--mono);
   font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-bottom: 8px;
+  color: var(--muted);
+  letter-spacing: .08em;
 }
-.field input {
-  width: 100%;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 13px 14px;
-  min-height: 48px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.field input:focus { border-color: var(--gold); }
-.field input.error { border-color: var(--red); }
 
-/* Signup-only fields */
-.signup-fields {
-  display: none;
-  overflow: hidden;
-}
-.signup-fields.show { display: block; }
-
-.global-error {
-  padding: 11px 14px;
-  background: rgba(192,57,43,0.1);
-  border: 1px solid rgba(192,57,43,0.3);
-  border-radius: 6px;
-  font-size: 12px;
-  color: #e74c3c;
-  margin-bottom: 20px;
-  display: none;
-  line-height: 1.4;
-}
-.global-error.show { display: block; }
-
-.success-banner {
-  padding: 12px 14px;
-  background: rgba(45,155,95,0.1);
-  border: 1px solid rgba(45,155,95,0.3);
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--green);
-  margin-bottom: 20px;
-  display: none;
-  align-items: center;
-  gap: 8px;
-}
-.success-banner.show { display: flex; }
-
-.btn-submit {
-  width: 100%;
-  padding: 14px;
-  min-height: 48px;
-  background: var(--gold);
-  border: none;
-  border-radius: 6px;
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--ink);
-  cursor: pointer;
-  transition: all 0.2s;
+/* Skip */
+.skip-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  letter-spacing: 0.01em;
-}
-.btn-submit:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-.forgot-link {
-  display: block;
-  text-align: right;
+  width: 100%;
+  padding: 15px;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,.1);
+  border-radius: 12px;
+  color: rgba(255,255,255,.4);
+  font-family: var(--mono);
   font-size: 12px;
-  color: var(--dim);
+  font-weight: 700;
+  letter-spacing: .06em;
+  cursor: pointer;
   text-decoration: none;
-  margin-top: -12px;
-  margin-bottom: 20px;
+  transition: border-color .12s, color .12s, background .12s;
+  margin-bottom: 24px;
 }
-.forgot-link:hover { color: var(--gold); }
+.skip-btn:hover {
+  border-color: rgba(255,255,255,.22);
+  color: rgba(255,255,255,.7);
+  background: rgba(255,255,255,.02);
+}
+.skip-arrow { transition: transform .12s; }
+.skip-btn:hover .skip-arrow { transform: translateX(4px); }
 
-.form-footer {
-  padding: 20px 28px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
+/* Email form */
+.email-panel {
+  display: none;
+  margin-bottom: 10px;
 }
-.toggle-link {
-  font-size: 13px;
-  color: var(--dim);
+.email-panel.open { display: block; }
+
+.form-input {
+  width: 100%;
+  height: 50px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 16px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+  margin-bottom: 8px;
+  transition: border-color .12s;
 }
-.toggle-link a {
-  color: var(--gold);
-  text-decoration: none;
+.form-input:focus { border-color: rgba(255,255,255,.22); }
+.form-input::placeholder { color: var(--muted); }
+.form-input.error { border-color: var(--red); }
+
+.form-row { display: flex; gap: 8px; margin-bottom: 0; }
+
+.btn-submit {
+  width: 100%;
+  height: 50px;
+  background: var(--ink);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  margin-bottom: 10px;
+  transition: opacity .12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
-.toggle-link a:hover { text-decoration: underline; }
+.btn-submit:hover { opacity: .88; }
+.btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+.form-toggle {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.form-toggle a { color: rgba(255,255,255,.5); cursor: pointer; text-decoration: underline; }
+.form-toggle a:hover { color: var(--ink); }
+
+.form-extra {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-bottom: 8px;
+}
+.form-extra a { color: var(--muted); cursor: pointer; text-decoration: none; }
+.form-extra a:hover { color: var(--ink); }
+
+/* Status / error */
+.status-msg {
+  display: none;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.status-msg.error { background: rgba(255,77,106,.1); border: 1px solid rgba(255,77,106,.25); color: #ff6b85; display: block; }
+.status-msg.success { background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); color: var(--green); display: block; }
+
+/* Wallet status inline */
+.wallet-status {
+  display: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 10px;
+  padding: 8px;
+}
+
+/* Email prompt after wallet */
+.email-prompt {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 10px;
+}
+.email-prompt-title {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.email-prompt-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
 
 /* Spinner */
 .spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(14,14,12,0.3);
-  border-top-color: var(--ink);
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0,0,0,.2);
+  border-top-color: #000;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  display: inline-block;
+  animation: spin .6s linear infinite;
+  flex-shrink: 0;
+}
+.spinner-white {
+  border-color: rgba(255,255,255,.2);
+  border-top-color: rgba(255,255,255,.8);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 768px) {
-  .main { grid-template-columns: 1fr; gap: 40px; padding: 40px 16px; }
-  .pitch { display: none; }
-  .form-body { padding: 20px; }
-  .form-footer { padding: 16px 20px; }
+/* Terms */
+.terms {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.terms a { color: rgba(255,255,255,.25); text-decoration: none; }
+.terms a:hover { color: rgba(255,255,255,.5); }
+
+/* Wallet install hint */
+.install-hint {
+  display: none;
+  background: rgba(201,146,13,.08);
+  border: 1px solid rgba(201,146,13,.2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+/* Forgot form */
+.forgot-panel {
+  display: none;
+  margin-bottom: 10px;
+}
+.forgot-panel.open { display: block; }
+.forgot-msg {
+  display: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  body { justify-content: flex-start; padding-top: 72px; }
+  .headline { margin-bottom: 28px; }
+  .social-proof { margin-bottom: 28px; }
 }
 </style>
 </head>
 <body>
-<div class="page">
 
-  <header class="header">
-    <a href="/" class="logo">
-      <svg class="logo-hex" viewBox="0 0 32 32" fill="none">
-        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-      </svg>
-      <span class="logo-name">HYPERFLEX</span>
-    </a>
-    <span class="header-tag">Early Access</span>
-  </header>
+<a href="/" class="logo">HYPER<span>FLEX</span></a>
 
-  <main class="main">
+<div class="card">
 
-    <!-- Left: Branding + Value Props -->
-    <div class="pitch">
-      <div class="pitch-logo">
-        <svg viewBox="0 0 32 32" fill="none">
-          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-        </svg>
-        <span>HYPERFLEX</span>
-      </div>
-      <p class="pitch-tagline">Prediction market intelligence.</p>
-
-      <div class="stat-row">
-        <div class="stat-item">
-          <div class="stat-icon">&#x1F40B;</div>
-          <div class="stat-text">
-            <strong>Track $161M+ in whale positions</strong>
-            <span>Follow the biggest wallets on Polymarket</span>
-          </div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-icon">&#x1F52E;</div>
-          <div class="stat-text">
-            <strong>AI-powered trade signals</strong>
-            <span>Market analysis and opportunity detection driven by real data</span>
-          </div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-icon">&#x1F3C6;</div>
-          <div class="stat-text">
-            <strong>Verified trader leaderboard</strong>
-            <span>Compete on sharp score, prove your edge, build your reputation</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="early-access">Free during Early Access</div>
+  <!-- Social proof -->
+  <div class="social-proof" id="socialProof">
+    <div class="sp-stat">
+      <span class="sp-num" id="spWhales">50</span>
+      <span class="sp-label">Whales tracked</span>
     </div>
-
-    <!-- Right: Auth Form -->
-    <div>
-      <div class="form-card">
-        <div class="form-header">
-          <h2 id="formTitle">Sign in to HYPERFLEX</h2>
-          <p id="formSubtitle">Track whales. Get signals. Prove your edge.</p>
-        </div>
-
-        <div class="form-body">
-          <!-- In-app browser detection -->
-          <div id="inAppWarning" style="display:none;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);border-radius:10px;padding:14px 18px;margin-bottom:16px;text-align:center">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Google sign-in isn't available in this browser</div>
-            <div style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.5">You're in an in-app browser. Copy this link and open it in Chrome or Safari for the best experience.</div>
-            <button onclick="navigator.clipboard.writeText(window.location.href).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy link',2000)})" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">Copy link</button>
-          </div>
-          <!-- Wallet Connect (primary per brief §5 — townsquare is on-chain first) -->
-          <button id="walletConnectBtn" onclick="connectWallet()" class="oauth-btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg>
-            Sign in with Wallet
-          </button>
-          <div id="walletInstallHint" class="install-hint">
-            No wallet detected — <a href="https://metamask.io/download/" target="_blank" rel="noopener">install MetaMask</a> or open this page in your wallet's browser.
-          </div>
-          <div id="walletStatus" style="display:none;text-align:center;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)"></div>
-
-          <div class="auth-divider">or</div>
-
-          <!-- Google OAuth (secondary) -->
-          <a href="/auth/oauth?provider=google" class="oauth-btn" id="googleOauthBtn">
-            <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.08 7.08 0 0 0 2.18-5.05z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.4 4.4 0 0 1-2.7.94 4.43 4.43 0 0 1-4.15-3.06H1.83v2.07A7 7 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.13 10.59a4.33 4.33 0 0 1 0-2.82V5.7H1.83a7 7 0 0 0 0 6.42l2.3-1.78z"/><path fill="#EA4335" d="M8.98 4.58c1.2 0 2.27.41 3.11 1.23l2.33-2.33A6.8 6.8 0 0 0 8.98 1a7 7 0 0 0-6.15 3.56L4.13 5.7a4.35 4.35 0 0 1 4.85-2.12z"/></svg>
-            Continue with Google
-          </a>
-          <script>
-          (function(){
-            var ua = navigator.userAgent;
-            var isInApp = /MetaMask|FBAV|FBAN|Instagram|Twitter|Line\/|wv|WebView/i.test(ua);
-            var hasEthereum = typeof window.ethereum !== 'undefined';
-
-            if (isInApp) {
-              var w = document.getElementById('inAppWarning');
-              var g = document.getElementById('googleOauthBtn');
-              if (w && !hasEthereum) w.style.display = 'block';
-              if (g) g.style.display = 'none';
-            }
-
-            // Wallet button is always visible now (primary per brief §5).
-            // If no ethereum provider is injected, show an install hint under
-            // the button instead of hiding it — users should know HYPERFLEX
-            // is wallet-first even if they haven't installed MetaMask yet.
-            if (!hasEthereum) {
-              var hint = document.getElementById('walletInstallHint');
-              if (hint) hint.style.display = 'block';
-            } else {
-              // Wallet available — hide any in-app warning.
-              var w2 = document.getElementById('inAppWarning');
-              if (w2) w2.style.display = 'none';
-            }
-          })();
-
-          async function connectWallet() {
-            var btn = document.getElementById('walletConnectBtn');
-            var status = document.getElementById('walletStatus');
-            if (!window.ethereum) {
-              // Surface the install hint inline instead of an ugly alert.
-              var hint = document.getElementById('walletInstallHint');
-              if (hint) { hint.style.display = 'block'; hint.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-              return;
-            }
-
-            btn.textContent = 'Connecting...';
-            btn.disabled = true;
-            try {
-              // Request accounts
-              var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-              var address = accounts[0];
-              if (!address) throw new Error('No account selected');
-
-              status.style.display = 'block';
-              status.textContent = 'Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4) + ' — signing...';
-
-              // Sign a message to prove ownership
-              var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
-              var signature = await window.ethereum.request({
-                method: 'personal_sign',
-                params: [message, address]
-              });
-
-              // Send to server for verification + account creation/login
-              var res = await fetch('/auth/wallet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: address, message: message, signature: signature })
-              });
-              var data = await res.json();
-              if (!res.ok) throw new Error(data.error || 'Auth failed');
-
-              // Save token + wallet
-              localStorage.setItem('hf_token', data.token);
-              if (data.user_id) localStorage.setItem('hf_user_id', data.user_id);
-              localStorage.setItem('hf_poly_wallet', address);
-
-              status.textContent = 'Signed in! Redirecting...';
-
-              // If first time (no email), show email prompt
-              if (data.needs_email) {
-                status.style.color = 'var(--text)';
-                status.innerHTML = '<div style="text-align:center;padding:8px 0">' +
-                  '<div style="font-size:24px;margin-bottom:8px">\u2705</div>' +
-                  '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">You\'re in!</div>' +
-                  '<div style="font-size:12px;color:var(--dim);margin-bottom:16px">Add your email to get alerts when your predictions resolve.</div>' +
-                  '<input id="walletEmailInput" type="email" placeholder="you@example.com" style="width:100%;padding:12px 14px;background:var(--paper,#0a0a0f);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;box-sizing:border-box" onkeydown="if(event.key===\'Enter\')saveWalletEmail()">' +
-                  '<button onclick="saveWalletEmail()" style="width:100%;padding:12px;background:var(--gold,#c9920d);color:#000;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:var(--sans);font-size:14px;margin-bottom:8px">Save email</button>' +
-                  '<button onclick="window.location.href=_loginNext" style="width:100%;padding:10px;background:transparent;border:none;color:var(--dim);cursor:pointer;font-family:var(--sans);font-size:12px">Skip for now \u2192</button>' +
-                '</div>';
-              } else {
-                window.location.href = _loginNext;
-              }
-            } catch(e) {
-              console.error('[wallet-auth]', e);
-              btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg> Sign in with Wallet';
-              btn.disabled = false;
-              status.style.display = 'block';
-              status.style.color = '#ef4444';
-              status.textContent = e.message === 'User rejected the request.' ? 'Signature rejected — try again' : e.message;
-            }
-          }
-
-          async function saveWalletEmail() {
-            var email = document.getElementById('walletEmailInput').value.trim();
-            if (!email || !email.includes('@')) { alert('Enter a valid email'); return; }
-            try {
-              await fetch('/api/user/email', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') },
-                body: JSON.stringify({ email: email })
-              });
-            } catch(e) { /* silent */ }
-            window.location.href = _loginNext;
-          }
-          </script>
-
-          <div class="divider">
-            <div class="divider-line"></div>
-            <span class="divider-text">or</span>
-            <div class="divider-line"></div>
-          </div>
-
-        <div id="authFields">
-          <div class="success-banner" id="successBanner">
-            <span>&#10003;</span> <span id="successText">Signed in — redirecting to your dashboard...</span>
-          </div>
-          <div class="global-error" id="globalError"></div>
-
-          <!-- Signup-only: Display Name -->
-          <div class="signup-fields" id="signupFields">
-            <div class="field">
-              <label>Display Name</label>
-              <input type="text" id="displayName" placeholder="Your trader name"
-                     autocomplete="name"/>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>Email</label>
-            <input type="email" id="email" placeholder="you@example.com"
-                   autocomplete="email" autofocus/>
-          </div>
-
-          <div class="field">
-            <label>Password</label>
-            <input type="password" id="password" placeholder="Your password"
-                   autocomplete="current-password"/>
-          </div>
-
-          <!-- Signup-only: Confirm Password -->
-          <div class="signup-fields" id="signupFieldsConfirm">
-            <div class="field">
-              <label>Confirm Password</label>
-              <input type="password" id="passwordConfirm" placeholder="Confirm your password"
-                     autocomplete="new-password"/>
-            </div>
-          </div>
-
-          <a href="#" class="forgot-link" id="forgotLink" onclick="event.preventDefault();showForgotForm()">Forgot password?</a>
-
-          <button class="btn-submit" id="submitBtn" onclick="handleSubmit()">
-            Sign in &rarr;
-          </button>
-        </div>
-        </div><!-- /authFields -->
-
-        <!-- FORGOT PASSWORD FORM -->
-        <div id="forgotForm" style="display:none;padding:0 24px 24px">
-          <p style="font-family:var(--mono);font-size:12px;color:#888;margin-bottom:16px;line-height:1.5">Enter your email and we'll send a reset link.</p>
-          <div class="field">
-            <input type="email" id="forgotEmail" placeholder="Your email" onkeydown="if(event.key==='Enter')sendForgotPassword()"/>
-          </div>
-          <button class="btn-submit" onclick="sendForgotPassword()" style="margin-bottom:12px">Send Reset Link &rarr;</button>
-          <div style="text-align:center">
-            <a href="#" onclick="event.preventDefault();hideForgotForm()" style="font-family:var(--mono);font-size:12px;color:#666;text-decoration:none">&larr; Back to sign in</a>
-          </div>
-          <div id="forgotMsg" style="display:none;margin-top:14px;padding:12px 14px;border-radius:6px;font-family:var(--mono);font-size:12px"></div>
-        </div>
-
-        <div class="form-footer" id="formFooter">
-          <div class="toggle-link" id="toggleText">
-            New here? <a onclick="toggleMode('signup')">Create account &rarr;</a>
-          </div>
-        </div>
-      </div>
+    <div class="sp-divider"></div>
+    <div class="sp-stat">
+      <span class="sp-num">$32M+</span>
+      <span class="sp-label">Capital monitored</span>
     </div>
+    <div class="sp-divider"></div>
+    <div class="sp-stat">
+      <span class="sp-num" id="spAccuracy">71%</span>
+      <span class="sp-label">Whale accuracy</span>
+    </div>
+  </div>
 
-  </main>
+  <!-- Headline -->
+  <div class="headline">
+    <h1>The <span>intelligence layer</span><br>for prediction markets.</h1>
+    <p>WHALE TRACKING · EDGE SIGNALS · COPY TRADING</p>
+  </div>
+
+  <!-- Status messages -->
+  <div class="status-msg" id="globalStatus"></div>
+
+  <!-- Wallet install hint -->
+  <div class="install-hint" id="walletInstallHint">
+    No wallet detected. Install <a href="https://metamask.io" target="_blank" style="color:var(--gold);">MetaMask</a> to connect, or use email below.
+  </div>
+
+  <!-- Wallet status -->
+  <div class="wallet-status" id="walletStatus"></div>
+
+  <!-- Email prompt (after wallet sign-in, needs_email flow) -->
+  <div class="email-prompt" id="emailPromptPanel">
+    <div class="email-prompt-title">You're in.</div>
+    <div class="email-prompt-sub">Add your email to get alerts when your predictions resolve.</div>
+    <input type="email" class="form-input" id="walletEmailInput" placeholder="you@example.com">
+    <button class="btn-submit" onclick="saveWalletEmail()">Save email</button>
+    <button onclick="window.location.href=_loginNext" style="width:100%;padding:10px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:11px;">Skip for now →</button>
+  </div>
+
+  <!-- Primary: Connect Wallet -->
+  <button class="btn btn-wallet" id="btnWallet" onclick="connectWallet()">
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="6" width="20" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
+      <path d="M16 13a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" fill="currentColor"/>
+      <path d="M2 10h20" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    Connect Wallet
+  </button>
+
+  <!-- Google OAuth -->
+  <a href="/auth/oauth?provider=google" class="btn btn-google" id="googleBtn">
+    <svg class="btn-icon" viewBox="0 0 24 24">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    Continue with Google
+  </a>
+
+  <!-- Divider + Email toggle -->
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span class="divider-text">OR</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <button class="btn btn-email-toggle" id="btnEmailToggle" onclick="toggleEmailPanel()">
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="4" width="20" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
+      <path d="m2 7 10 7 10-7" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    Continue with Email
+  </button>
+
+  <!-- Email panel (login + signup) -->
+  <div class="email-panel" id="emailPanel">
+    <!-- Signup-only fields -->
+    <div id="signupFields" style="display:none;">
+      <input type="text" class="form-input" id="displayName" placeholder="Your trader name" autocomplete="name">
+    </div>
+    <input type="email" class="form-input" id="emailInput" placeholder="your@email.com" autocomplete="email">
+    <div style="position:relative;">
+      <input type="password" class="form-input" id="passwordInput" placeholder="Password" autocomplete="current-password" style="margin-bottom:0;">
+    </div>
+    <!-- Signup password confirm -->
+    <div id="passwordConfirmRow" style="display:none;margin-top:8px;">
+      <input type="password" class="form-input" id="passwordConfirm" placeholder="Confirm password" autocomplete="new-password">
+    </div>
+    <div class="form-extra" id="forgotLinkRow" style="margin-top:8px;">
+      <a onclick="openForgot()">Forgot password?</a>
+    </div>
+    <button class="btn-submit" id="emailSubmitBtn" onclick="handleEmailSubmit()">Sign in →</button>
+    <div class="form-toggle" id="emailToggleRow">
+      New here? <a onclick="switchEmailMode('signup')">Create account →</a>
+    </div>
+  </div>
+
+  <!-- Forgot password panel -->
+  <div class="forgot-panel" id="forgotPanel">
+    <input type="email" class="form-input" id="forgotEmailInput" placeholder="your@email.com">
+    <button class="btn-submit" onclick="sendForgotPassword()">Send reset link</button>
+    <div class="form-toggle"><a onclick="closeForgot()">← Back to sign in</a></div>
+    <div class="forgot-msg" id="forgotMsg"></div>
+  </div>
+
+  <!-- Skip — prominent -->
+  <a href="/" class="skip-btn" id="skipBtn">
+    Explore without signing in
+    <span class="skip-arrow">→</span>
+  </a>
+
+  <!-- Terms -->
+  <p class="terms">
+    By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.<br>
+    Prediction markets involve risk. Not financial advice.
+  </p>
+
 </div>
 
 <script>
 const API = window.location.origin;
-let mode = 'login'; // 'login' or 'signup'
+let _emailMode = 'login'; // 'login' | 'signup'
 
-// If already logged in, skip to dashboard; handle OAuth callback token and errors
+// ── Boot: already logged in? ──────────────────────────────────────────
 (function() {
-  const token = localStorage.getItem('hf_token');
-  const user  = localStorage.getItem('hf_user');
+  var token = localStorage.getItem('hf_token');
+  var user  = localStorage.getItem('hf_user');
   if (token && user) {
-    try {
-      const u = JSON.parse(user);
-      if (u && u.id) { window.location.replace('/creator/dashboard'); return; }
-    } catch(e) {}
+    try { var u = JSON.parse(user); if (u && u.id) { window.location.replace('/creator/dashboard'); return; } } catch(e) {}
   }
-  const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
+  // Hash token from OAuth callback
+  var hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
   if (hashToken) {
     localStorage.setItem('hf_token', decodeURIComponent(hashToken));
     localStorage.setItem('hf_creator_token', decodeURIComponent(hashToken));
     window.location.replace('/creator/dashboard');
     return;
   }
-  const params = new URLSearchParams(location.search);
-  // Capture return destination — used by all success handlers below
-  const _loginNext = (function() {
-    var n = params.get('next') || sessionStorage.getItem('hfx_return_to') || '';
-    // Strip anything that redirects back into auth pages or is external
-    if (!n || n.startsWith('/creator') || n.startsWith('//') || /^https?:/.test(n)) n = '/';
-    return n;
-  })();
-  const err = params.get('error');
-  if (err) showError(decodeURIComponent(err).replace(/_/g, ' '));
+})();
 
-  // Handle OAuth callback — user authenticated via Google/X, needs account setup
-  const oauthToken = params.get('oauth_token');
+// ── Return-to destination ─────────────────────────────────────────────
+var _loginNext = (function() {
+  var params = new URLSearchParams(location.search);
+  var n = params.get('next') || params.get('return_to') || sessionStorage.getItem('hfx_return_to') || '';
+  if (!n || n.startsWith('/creator') || n.startsWith('//') || /^https?:/.test(n)) n = '/';
+  return n;
+})();
+
+// Update skip link
+(function() {
+  var skipEl = document.getElementById('skipBtn');
+  if (skipEl) skipEl.href = _loginNext || '/';
+})();
+
+// ── Handle URL params (errors, OAuth callback, mode) ─────────────────
+(function() {
+  var params = new URLSearchParams(location.search);
+  var err = params.get('error');
+  if (err) showStatus(decodeURIComponent(err).replace(/_/g,' '), 'error');
+
+  // OAuth callback — user authenticated, needs account setup
+  var oauthToken = params.get('oauth_token');
   if (oauthToken) {
-    const oauthEmail = params.get('email') || '';
-    const oauthName = params.get('display_name') || '';
-    // Pre-fill signup fields
-    toggleMode('signup');
-    var nameEl = document.getElementById('displayName');
-    var emailEl = document.getElementById('email');
-    if (nameEl && oauthName) nameEl.value = decodeURIComponent(oauthName);
-    if (emailEl && oauthEmail) emailEl.value = decodeURIComponent(oauthEmail);
-    // Auto-complete: create creator_settings for this OAuth user
+    var oauthEmail = params.get('email') || '';
+    var oauthName  = params.get('display_name') || '';
+    // Auto-complete OAuth account
     (async function() {
       try {
-        var slug = (oauthName || 'creator').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 30) || 'creator-' + Date.now().toString(36);
+        var slug = (oauthName || 'creator').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,30) || 'creator-' + Date.now().toString(36);
         var r = await fetch('/api/creator/oauth-complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + decodeURIComponent(oauthToken) },
@@ -700,181 +577,248 @@ let mode = 'login'; // 'login' or 'signup'
           localStorage.setItem('hf_token', data.token);
           localStorage.setItem('hf_creator_token', data.token);
           if (data.user) localStorage.setItem('hf_user', JSON.stringify(data.user));
-          document.getElementById('successBanner').classList.add('show');
-          document.getElementById('successText').textContent = 'Account created via OAuth — redirecting...';
-          setTimeout(function() { window.location.replace('/creator/dashboard'); }, 1000);
+          showStatus('Account created — redirecting…', 'success');
+          setTimeout(function() { window.location.replace('/creator/dashboard'); }, 800);
           return;
         }
-        if (data.error) showError(data.error);
-      } catch(e) { showError('OAuth setup failed: ' + e.message); }
+        if (data.error) showStatus(data.error, 'error');
+      } catch(e) { showStatus('OAuth setup failed: ' + e.message, 'error'); }
     })();
     return;
   }
 
-  // Auto-toggle to signup if #signup in URL
   if (location.hash.includes('signup') || params.get('_mode') === 'signup') {
-    toggleMode('signup');
+    toggleEmailPanel();
+    switchEmailMode('signup');
   }
 })();
 
-function showForgotForm() {
-  document.getElementById('authFields').style.display = 'none';
-  document.getElementById('forgotForm').style.display = '';
-  document.getElementById('formFooter').style.display = 'none';
-  document.getElementById('forgotEmail').focus();
+// ── Live stats ────────────────────────────────────────────────────────
+fetch('/api/data/stats').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if (!d) return;
+  if (d.whale_count) document.getElementById('spWhales').textContent = d.whale_count;
+  if (d.whale_accuracy_pct) document.getElementById('spAccuracy').textContent = Math.round(d.whale_accuracy_pct) + '%';
+}).catch(function(){});
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function showStatus(msg, type) {
+  var el = document.getElementById('globalStatus');
+  el.textContent = msg;
+  el.className = 'status-msg ' + (type || 'error');
 }
-function hideForgotForm() {
-  document.getElementById('forgotForm').style.display = 'none';
-  document.getElementById('authFields').style.display = '';
-  document.getElementById('formFooter').style.display = '';
+function clearStatus() {
+  var el = document.getElementById('globalStatus');
+  el.className = 'status-msg';
 }
-async function sendForgotPassword() {
-  var email = document.getElementById('forgotEmail').value.trim();
-  if (!email) { _showForgotMsg('Please enter your email.', false); return; }
+
+// ── Wallet connect ────────────────────────────────────────────────────
+async function connectWallet() {
+  var btn = document.getElementById('btnWallet');
+  var statusEl = document.getElementById('walletStatus');
+
+  if (!window.ethereum) {
+    document.getElementById('walletInstallHint').style.display = 'block';
+    return;
+  }
+  clearStatus();
+  btn.innerHTML = '<div class="spinner"></div> Connecting…';
+  btn.disabled = true;
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Requesting account access…';
+
   try {
-    await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
-    _showForgotMsg('If that email has an account, a reset link is on its way. Check your inbox.', true);
-  } catch(e) { _showForgotMsg('Something went wrong. Please try again.', false); }
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    var address = accounts[0];
+    if (!address) throw new Error('No account selected');
+
+    statusEl.textContent = 'Connected ' + address.slice(0,6) + '…' + address.slice(-4) + ' — sign to verify…';
+
+    var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
+    var signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+
+    statusEl.textContent = 'Verifying…';
+
+    var res = await fetch('/auth/wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: address, message: message, signature: signature })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Auth failed');
+
+    localStorage.setItem('hf_token', data.token);
+    localStorage.setItem('hf_creator_token', data.token);
+    if (data.user_id) localStorage.setItem('hf_user_id', data.user_id);
+    localStorage.setItem('hf_poly_wallet', address);
+    sessionStorage.removeItem('hfx_return_to');
+
+    statusEl.style.display = 'none';
+    btn.style.display = 'none';
+
+    if (data.needs_email) {
+      document.getElementById('emailPromptPanel').style.display = 'block';
+      document.getElementById('walletEmailInput').focus();
+    } else {
+      showStatus('Signed in — redirecting…', 'success');
+      setTimeout(function() { window.location.href = _loginNext; }, 600);
+    }
+  } catch(e) {
+    btn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="14" rx="3" stroke="currentColor" stroke-width="2"/><path d="M16 13a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" fill="currentColor"/><path d="M2 10h20" stroke="currentColor" stroke-width="2"/></svg> Try again';
+    btn.disabled = false;
+    statusEl.style.display = 'none';
+    showStatus(e.message === 'User rejected the request.' ? 'Signature cancelled — try again.' : e.message, 'error');
+  }
 }
-function _showForgotMsg(text, success) {
-  var el = document.getElementById('forgotMsg');
-  el.style.display = 'block';
-  el.style.background = success ? 'rgba(0,200,100,0.1)' : 'rgba(200,50,50,0.1)';
-  el.style.color = success ? '#00c864' : '#e05252';
-  el.style.border = '1px solid ' + (success ? 'rgba(0,200,100,0.2)' : 'rgba(200,50,50,0.2)');
-  el.textContent = text;
+
+async function saveWalletEmail() {
+  var email = document.getElementById('walletEmailInput').value.trim();
+  if (!email || !email.includes('@')) {
+    document.getElementById('walletEmailInput').classList.add('error');
+    return;
+  }
+  try {
+    await fetch('/api/user/email', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') },
+      body: JSON.stringify({ email: email })
+    });
+  } catch(e) {}
+  window.location.href = _loginNext;
 }
 
-function toggleMode(newMode) {
-  mode = newMode;
-  const signupFields = document.querySelectorAll('.signup-fields');
-  const formTitle = document.getElementById('formTitle');
-  const formSubtitle = document.getElementById('formSubtitle');
-  const submitBtn = document.getElementById('submitBtn');
-  const toggleText = document.getElementById('toggleText');
-  const forgotLink = document.getElementById('forgotLink');
-  const passwordInput = document.getElementById('password');
+// ── Email panel ───────────────────────────────────────────────────────
+function toggleEmailPanel() {
+  var panel = document.getElementById('emailPanel');
+  var btn   = document.getElementById('btnEmailToggle');
+  var isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    btn.style.marginBottom = '28px';
+  } else {
+    panel.classList.add('open');
+    btn.style.marginBottom = '10px';
+    document.getElementById('emailInput').focus();
+  }
+}
 
-  // Clear errors
-  document.getElementById('globalError').classList.remove('show');
-  document.getElementById('successBanner').classList.remove('show');
-
+function switchEmailMode(mode) {
+  _emailMode = mode;
+  var sf = document.getElementById('signupFields');
+  var pcr = document.getElementById('passwordConfirmRow');
+  var fl = document.getElementById('forgotLinkRow');
+  var sb = document.getElementById('emailSubmitBtn');
+  var tr = document.getElementById('emailToggleRow');
+  var pi = document.getElementById('passwordInput');
+  clearStatus();
   if (mode === 'signup') {
-    signupFields.forEach(el => el.classList.add('show'));
-    formTitle.textContent = 'Create your account';
-    formSubtitle.textContent = 'Track whales. Get signals. Prove your edge.';
-    submitBtn.innerHTML = 'Create account &rarr;';
-    toggleText.innerHTML = 'Already have an account? <a onclick="toggleMode(\'login\')">Sign in &rarr;</a>';
-    forgotLink.style.display = 'none';
-    passwordInput.autocomplete = 'new-password';
+    sf.style.display = 'block';
+    pcr.style.display = 'block';
+    fl.style.display = 'none';
+    sb.textContent = 'Create account →';
+    tr.innerHTML = 'Already have an account? <a onclick="switchEmailMode(\'login\')">Sign in →</a>';
+    pi.autocomplete = 'new-password';
     history.replaceState(null, '', '/creator/login#signup');
   } else {
-    signupFields.forEach(el => el.classList.remove('show'));
-    formTitle.textContent = 'Sign in to HYPERFLEX';
-    formSubtitle.textContent = 'Track whales. Get signals. Prove your edge.';
-    submitBtn.innerHTML = 'Sign in &rarr;';
-    toggleText.innerHTML = 'New here? <a onclick="toggleMode(\'signup\')">Create account &rarr;</a>';
-    forgotLink.style.display = '';
-    passwordInput.autocomplete = 'current-password';
+    sf.style.display = 'none';
+    pcr.style.display = 'none';
+    fl.style.display = '';
+    sb.textContent = 'Sign in →';
+    tr.innerHTML = 'New here? <a onclick="switchEmailMode(\'signup\')">Create account →</a>';
+    pi.autocomplete = 'current-password';
     history.replaceState(null, '', '/creator/login');
   }
 }
 
-async function handleSubmit() {
-  const email       = document.getElementById('email').value.trim();
-  const password    = document.getElementById('password').value;
-  const errEl       = document.getElementById('globalError');
-  const btn         = document.getElementById('submitBtn');
+async function handleEmailSubmit() {
+  var email    = document.getElementById('emailInput').value.trim();
+  var password = document.getElementById('passwordInput').value;
+  var btn      = document.getElementById('emailSubmitBtn');
+  clearStatus();
 
-  errEl.classList.remove('show');
-
-  if (mode === 'signup') {
-    const displayName     = document.getElementById('displayName').value.trim();
-    const passwordConfirm = document.getElementById('passwordConfirm').value;
-
-    if (!displayName) { showError('Please enter a display name.'); return; }
-    if (!email)       { showError('Please enter your email.'); return; }
-    if (!password)    { showError('Please enter a password.'); return; }
-    if (password !== passwordConfirm) { showError('Passwords do not match.'); return; }
-    if (password.length < 6) { showError('Password must be at least 6 characters.'); return; }
+  if (_emailMode === 'signup') {
+    var displayName = document.getElementById('displayName').value.trim();
+    var pwConfirm   = document.getElementById('passwordConfirm').value;
+    if (!displayName) { showStatus('Enter a display name.', 'error'); return; }
+    if (!email)       { showStatus('Enter your email.', 'error'); return; }
+    if (!password)    { showStatus('Enter a password.', 'error'); return; }
+    if (password !== pwConfirm) { showStatus('Passwords do not match.', 'error'); return; }
+    if (password.length < 6)   { showStatus('Password must be 6+ characters.', 'error'); return; }
 
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Creating account...';
-
+    btn.innerHTML = '<div class="spinner"></div> Creating account…';
     try {
-      const r = await fetch(`${API}/api/creator/signup`, {
+      var r = await fetch(API + '/api/creator/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, display_name: displayName, slug: displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 30) || 'trader-' + Date.now().toString(36) })
+        body: JSON.stringify({ email, password, display_name: displayName,
+          slug: displayName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,30) || 'trader-' + Date.now().toString(36) })
       });
-      const data = await r.json();
-      if (!r.ok) { showError(data.error || 'Signup failed. Please try again.'); return; }
-
+      var data = await r.json();
+      if (!r.ok) { showStatus(data.error || 'Signup failed.', 'error'); return; }
       localStorage.setItem('hf_token', data.token);
       localStorage.setItem('hf_creator_token', data.token);
       localStorage.setItem('hf_user', JSON.stringify(data.user));
-
-      document.getElementById('successBanner').classList.add('show');
-      document.getElementById('successText').textContent = 'Account created — redirecting to your dashboard...';
-      btn.innerHTML = '&#10003; Account created';
-      setTimeout(() => window.location.replace('/creator/dashboard'), 600);
+      showStatus('Account created — redirecting…', 'success');
+      setTimeout(function() { window.location.replace('/creator/dashboard'); }, 600);
     } catch(e) {
-      showError('Network error — please check your connection and try again.');
+      showStatus('Network error — try again.', 'error');
     } finally {
-      if (btn.innerHTML.includes('Creating')) {
-        btn.disabled = false;
-        btn.innerHTML = 'Create account &rarr;';
-      }
+      if (btn.disabled) { btn.disabled = false; btn.textContent = 'Create account →'; }
     }
 
   } else {
-    // Login mode
-    if (!email || !password) { showError('Please enter your email and password.'); return; }
-
+    if (!email || !password) { showStatus('Enter your email and password.', 'error'); return; }
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Signing in...';
-
+    btn.innerHTML = '<div class="spinner"></div> Signing in…';
     try {
-      const r = await fetch(`${API}/api/creator/login`, {
+      var r = await fetch(API + '/api/creator/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await r.json();
-      if (!r.ok) { showError(data.error || 'Invalid email or password.'); return; }
-
+      var data = await r.json();
+      if (!r.ok) { showStatus(data.error || 'Invalid email or password.', 'error'); return; }
       localStorage.setItem('hf_token', data.token);
       localStorage.setItem('hf_creator_token', data.token);
       localStorage.setItem('hf_user', JSON.stringify(data.user));
-
-      document.getElementById('successBanner').classList.add('show');
-      document.getElementById('successText').textContent = 'Signed in — redirecting to your dashboard...';
-      document.getElementById('globalError').classList.remove('show');
-      btn.innerHTML = '&#10003; Signed in';
-      setTimeout(() => window.location.replace('/creator/dashboard'), 600);
+      showStatus('Signed in — redirecting…', 'success');
+      setTimeout(function() { window.location.replace(_loginNext || '/creator/dashboard'); }, 600);
     } catch(e) {
-      showError('Network error — please check your connection and try again.');
+      showStatus('Network error — try again.', 'error');
     } finally {
-      if (btn.innerHTML.includes('Signing')) {
-        btn.disabled = false;
-        btn.innerHTML = 'Sign in &rarr;';
-      }
+      if (btn.disabled) { btn.disabled = false; btn.textContent = 'Sign in →'; }
     }
   }
 }
 
-function showError(msg) {
-  const el = document.getElementById('globalError');
-  el.textContent = msg;
-  el.classList.add('show');
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = false;
-  btn.innerHTML = mode === 'signup' ? 'Create account &rarr;' : 'Sign in &rarr;';
+// ── Forgot password ───────────────────────────────────────────────────
+function openForgot() {
+  document.getElementById('emailPanel').classList.remove('open');
+  document.getElementById('forgotPanel').classList.add('open');
+}
+function closeForgot() {
+  document.getElementById('forgotPanel').classList.remove('open');
+  document.getElementById('emailPanel').classList.add('open');
+}
+async function sendForgotPassword() {
+  var email = document.getElementById('forgotEmailInput').value.trim();
+  var msgEl = document.getElementById('forgotMsg');
+  if (!email) { msgEl.style.display='block'; msgEl.style.color='var(--red)'; msgEl.textContent='Enter your email.'; return; }
+  try {
+    await fetch('/api/auth/forgot-password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email}) });
+    msgEl.style.display='block'; msgEl.style.color='var(--green)'; msgEl.style.background='rgba(0,230,138,.07)'; msgEl.style.border='1px solid rgba(0,230,138,.2)'; msgEl.style.padding='10px 12px'; msgEl.style.borderRadius='8px';
+    msgEl.textContent = 'If that email has an account, a reset link is on its way.';
+  } catch(e) {
+    msgEl.style.display='block'; msgEl.style.color='var(--red)'; msgEl.textContent='Something went wrong — try again.';
+  }
 }
 
-// Enter key submits
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleSubmit();
+// ── Keyboard shortcuts ────────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('emailPanel').classList.contains('open')) handleEmailSubmit();
+  if (document.getElementById('forgotPanel').classList.contains('open')) sendForgotPassword();
+  if (document.getElementById('walletEmailInput') === document.activeElement) saveWalletEmail();
 });
 </script>
 </body>
