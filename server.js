@@ -36471,6 +36471,54 @@ app.get('/api/clv/wallet/:userId', async (req, res) => {
   res.json(data);
 });
 
+// GET /api/alpha — recent trades by wallets classified sharp/good (positive CLV)
+// Core alpha feed: proven-edge wallets moving now.
+app.get('/api/alpha', async (req, res) => {
+  if (!pool) return res.json({ trades: [] });
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet, wth.question, wth.side, wth.price, wth.size, wth.created_at, wth.slug,
+        ws.clv_avg_cents, ws.clv_sample_size, ws.wallet_class
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE ws.wallet_class IN ('sharp', 'good')
+        AND ws.clv_avg_cents IS NOT NULL
+        AND wth.created_at > NOW() - INTERVAL '72 hours'
+      ORDER BY wth.created_at DESC
+      LIMIT 20
+    `);
+    res.json({ trades: rows });
+  } catch (e) {
+    console.error('[api/alpha]', e.message);
+    res.json({ trades: [] });
+  }
+});
+
+// GET /api/alpha/fade — recent trades by fade-classified wallets (contrarian signals)
+// When a fade wallet moves YES, the edge lean is NO.
+app.get('/api/alpha/fade', async (req, res) => {
+  if (!pool) return res.json({ trades: [] });
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet, wth.question, wth.side, wth.price, wth.size, wth.created_at, wth.slug,
+        ws.clv_avg_cents, ws.clv_sample_size, ws.wallet_class
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE ws.wallet_class = 'fade'
+        AND ws.clv_avg_cents IS NOT NULL
+        AND wth.created_at > NOW() - INTERVAL '72 hours'
+      ORDER BY wth.created_at DESC
+      LIMIT 10
+    `);
+    res.json({ trades: rows });
+  } catch (e) {
+    console.error('[api/alpha/fade]', e.message);
+    res.json({ trades: [] });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // HEDGE PAIRS — algorithmically-detected correlated market pairs
 // Public endpoint, no auth. 10-min cache.

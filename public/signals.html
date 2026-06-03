@@ -540,6 +540,15 @@ nav{
   <button class="filter-btn" data-filter="top">Edge 9–10</button>
 </div>
 
+<!-- SHARP MONEY FEED -->
+<div id="sharp-money-section" style="display:none;margin-bottom:28px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#00e68a;">● SHARP MONEY</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(240,240,245,.35);">Verified edge wallets moving now</span>
+  </div>
+  <div id="sharp-money-grid" style="display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));"></div>
+</div>
+
 <!-- GRID -->
 <div class="signals-wrap">
   <div id="signals-grid">
@@ -786,6 +795,63 @@ nav{
       document.getElementById('empty').style.display='block';
       connectSSE();
     });
+
+  /* ── sharp money feed ── */
+  (function loadSharpMoney() {
+    function _ago(ts) {
+      var diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+      if (diff < 60) return diff + 's ago';
+      if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+      return Math.floor(diff/86400) + 'd ago';
+    }
+    function _fmtSize(n) {
+      if (!n) return '—';
+      n = parseFloat(n);
+      if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
+      if (n >= 1000) return '$' + Math.round(n/1000) + 'k';
+      return '$' + Math.round(n);
+    }
+    function renderSharpCard(t) {
+      var cls = t.wallet_class === 'sharp' ? 'sharp' : 'good';
+      var badgeColor = cls === 'sharp' ? '#00e68a' : '#00d4ff';
+      var badgeBg = cls === 'sharp' ? 'rgba(0,230,138,.12)' : 'rgba(0,212,255,.1)';
+      var badgeBorder = cls === 'sharp' ? 'rgba(0,230,138,.3)' : 'rgba(0,212,255,.25)';
+      var label = cls === 'sharp' ? 'SHARP' : 'GOOD';
+      var side = (t.side || 'YES').toUpperCase();
+      var sideColor = side === 'YES' ? '#00e68a' : '#ff4d6a';
+      var price = t.price != null ? Math.round(parseFloat(t.price) * 100) + '¢' : '—';
+      var clvSign = parseFloat(t.clv_avg_cents) >= 0 ? '+' : '';
+      var href = t.slug ? '/market/' + encodeURIComponent(t.slug) : '#';
+      return '<a href="' + href + '" style="display:block;padding:14px 16px;background:rgba(0,230,138,.03);border:1px solid rgba(0,230,138,.12);border-radius:6px;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor=\'rgba(0,230,138,.3)\'" onmouseout="this.style.borderColor=\'rgba(0,230,138,.12)\'">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(240,240,245,.5);">' + (t.wallet||'').slice(0,8) + '…</span>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:700;letter-spacing:.1em;padding:2px 6px;border-radius:2px;background:' + badgeBg + ';color:' + badgeColor + ';border:1px solid ' + badgeBorder + ';">' + label + '</span>' +
+          '<span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.35);">' + _ago(t.created_at) + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;font-weight:600;color:rgba(240,240,245,.9);line-height:1.4;margin-bottom:10px;">' + (t.question||'—') + '</div>' +
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.45);margin-bottom:10px;">' +
+          'Track record: <span style="color:' + badgeColor + ';">' + clvSign + t.clv_avg_cents + '¢ avg CLV</span> over ' + t.clv_sample_size + ' trades' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:' + sideColor + ';">' + side + '</span>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(240,240,245,.6);">@ ' + price + '</span>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(240,240,245,.45);">' + _fmtSize(t.size) + '</span>' +
+        '</div>' +
+      '</a>';
+    }
+    fetch('/api/alpha')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d || !d.trades || !d.trades.length) return;
+        var section = document.getElementById('sharp-money-section');
+        var grid = document.getElementById('sharp-money-grid');
+        if (!section || !grid) return;
+        grid.innerHTML = d.trades.slice(0, 6).map(renderSharpCard).join('');
+        section.style.display = 'block';
+      })
+      .catch(function() {});
+  })();
 })();
 </script>
 </body>
