@@ -137,6 +137,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
+const clvEngine = require('./lib/clv-engine');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -1453,6 +1454,9 @@ if (pool) clustererCompose.init({ pool, anthropic });
 
 // Signal agent — autonomous whale signal evaluator
 if (pool && anthropic) signalAgent.init({ pool, anthropic });
+if (pool) clvEngine.init({ pool });
+setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
+setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
@@ -34058,6 +34062,10 @@ function computeMarketAlphaScore(market, whaleIndex, eliteScores) {
 // GET /api/whale-consensus — active multi-whale consensus signals
 // Public, no auth. Returns signals where 3+ top whales agree on same position.
 app.get('/api/whale-consensus', async (req, res) => {
+app.get("/api/clv/summary", async (req, res) => { try { const data = await clvEngine.getSummary(); res.json({ summary: data }); } catch(e) { res.json({ summary: [] }); } });
+app.get("/api/clv/sharp", async (req, res) => { try { const limit = Math.min(50, parseInt(req.query.limit)||20); const wallets = await clvEngine.getTopSharp(limit); res.json({ wallets, count: wallets.length }); } catch(e) { res.json({ wallets:[], count:0 }); } });
+app.get("/api/clv/fade", async (req, res) => { try { const wallets = await clvEngine.getTopFade(); res.json({ wallets, count: wallets.length }); } catch(e) { res.json({ wallets:[], count:0 }); } });
+app.get("/api/clv/wallet/:userId", async (req, res) => { try { const data = await clvEngine.getWalletClass(req.params.userId); res.json(data || { wallet_class:"pending", clv_avg_cents:null, clv_sample_size:0 }); } catch(e) { res.json({ wallet_class:"pending" }); } });
   try {
     if (!pool) return res.json({ signals: [], updated_at: new Date().toISOString() });
     const signals = await dbQuery(
