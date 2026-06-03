@@ -11360,7 +11360,10 @@ app.get('/api/user-by-handle/:handle', async (req, res) => {
     if (_validateHandleFormat(handle)) return res.status(404).json({ error: 'invalid handle' });
     let rows;
     try {
-      rows = await dbQuery('SELECT * FROM users WHERE LOWER(handle) = $1 LIMIT 1', [handle]);
+      rows = await dbQuery(
+        'SELECT * FROM users WHERE LOWER(handle) = $1 OR LOWER(username) = $1 LIMIT 1',
+        [handle]
+      );
     } catch (qe) {
       // Surface real DB errors instead of silently pretending the user
       // doesn't exist — helps diagnose schema/connection issues remotely.
@@ -26610,9 +26613,17 @@ app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'are
       const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
 
       if (isDebug) {
-        // Return raw diagnostic data without processing
+        // Also fetch total takes count + source breakdown for schema diagnosis
+        const [totalRes, sourceRes, colRes] = await Promise.all([
+          dbQuery('SELECT COUNT(*) FROM takes').catch(() => [{ count: 'err' }]),
+          dbQuery("SELECT source, COUNT(*) FROM takes GROUP BY source ORDER BY COUNT(*) DESC").catch(() => []),
+          dbQuery("SELECT column_name FROM information_schema.columns WHERE table_name='takes' ORDER BY ordinal_position").catch(() => []),
+        ]);
         return res.json({
-          row_count: rows.length,
+          total_takes: totalRes[0] && totalRes[0].count,
+          by_source: sourceRes.map(r => ({ source: r.source, count: r.count })),
+          columns: colRes.map(r => r.column_name).join(', '),
+          query_row_count: rows.length,
           screener_count: screenerData.length,
           sample_rows: rows.slice(0, 5).map(r => ({
             id: r.id, source: r.source, side: r.side,
