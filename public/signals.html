@@ -645,6 +645,7 @@ nav{
             +'<span class="badge badge-whales">'+whales+' whales</span>'
             +(s.risk_flag ? '<span class="badge badge-risk">'+esc(s.risk_flag)+'</span>' : '')
             +(isNew ? '<span class="badge badge-new">NEW</span>' : '')
+            +(whales >= 5 ? '<span class="badge" style="background:rgba(0,230,138,.12);color:#00e68a;border:1px solid rgba(0,230,138,.25);">HIGH CONVICTION</span>' : whales >= 3 ? '<span class="badge" style="background:rgba(77,159,255,.1);color:#4d9fff;border:1px solid rgba(77,159,255,.2);">MODERATE</span>' : '')
           +'</div>'
           +'<div class="sig-action-text">'+esc(s.headline||'—')+'</div>'
         +'</div>'

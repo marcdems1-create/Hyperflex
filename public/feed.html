@@ -571,6 +571,11 @@ a:hover { text-decoration: underline; }
 }
 .pred-rank-flex.up   { color: #00e68a; }
 .pred-rank-flex.down { color: #ff4d6a; }
+.clv-badge { font-size:7px; font-weight:700; letter-spacing:.1em; padding:2px 6px; border-radius:2px; text-transform:uppercase; }
+.clv-badge.sharp { background:rgba(0,230,138,.15); color:#00e68a; border:1px solid rgba(0,230,138,.3); }
+.clv-badge.good  { background:rgba(0,212,255,.12); color:#00d4ff; border:1px solid rgba(0,212,255,.25); }
+.clv-badge.square{ background:rgba(255,255,255,.06); color:rgba(240,240,245,.4); border:1px solid rgba(255,255,255,.1); }
+.clv-badge.fade  { background:rgba(255,77,106,.12); color:#ff4d6a; border:1px solid rgba(255,77,106,.25); }
 .pred-initials { display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:rgba(240,240,245,.7); }
 .pred-flex-gold { color:#ffb800 !important; font-weight:800; text-shadow:0 0 12px rgba(255,184,0,.35); }
 .flex-info-icon { font-size:10px; color:rgba(240,240,245,.35); cursor:pointer; margin-left:4px; vertical-align:middle; transition:color .12s; }
@@ -4932,7 +4937,7 @@ function renderPredictorHero(p) {
   var pnlStr = pnlPts != null ? (pnlPts >= 0 ? '+' : '') + pnlPts : '—';
   var pnlCls = pnlPts == null ? '' : (pnlPts >= 0 ? 'up' : 'down');
 
-  return '<a class="pred-hero" href="' + href + '">' +
+  return '<a class="pred-hero" href="' + href + '" data-userid="' + esc(p.user_id) + '">' +
     '<div class="pred-hero-label">Top Whale · #1</div>' +
     '<div class="pred-hero-body">' +
       _predAvatarHtml(p, { big: true }) +
@@ -4960,6 +4965,10 @@ function renderPredictorHero(p) {
           ? '<div class="pred-hero-stat-val" style="color:#a855f7">' + flex + '<span style="font-size:9px;opacity:.6">/100</span></div>'
           : '<div class="pred-hero-stat-val" style="color:var(--text-faint)">—</div>') +
       '</div>' +
+      '<div class="pred-hero-stat">' +
+        '<div class="pred-hero-stat-label">CLV</div>' +
+        '<div class="pred-hero-stat-val"><span data-clv-userid="' + esc(p.user_id) + '" style="font-size:10px">—</span></div>' +
+      '</div>' +
     '</div>' +
   '</a>';
 }
@@ -4973,15 +4982,33 @@ function renderPredictorRanks(list) {
     var flex = p.flex_score_90d != null ? p.flex_score_90d : (p.sharp_score != null ? p.sharp_score : null);
     var flexCls = _flexColor(flex);
     var flexHtml = flex != null ? '<span class="pred-rank-flex ' + flexCls + '">' + flex + '</span>' : '<span class="pred-rank-flex" style="color:var(--text-faint)">—</span>';
-    return '<a class="pred-rank-row" href="' + href + '">' +
+    return '<a class="pred-rank-row" href="' + href + '" data-userid="' + esc(p.user_id) + '">' +
       _predAvatarHtml(p, { big: false }) +
       '<div class="pred-rank-info">' +
         '<div class="pred-rank-name">' + name + '</div>' +
         (stat ? '<div class="pred-rank-stat">' + esc(stat) + '</div>' : '') +
       '</div>' +
-      flexHtml +
+      '<span class="pred-rank-clv" data-clv-userid="' + esc(p.user_id) + '">' + flexHtml + '</span>' +
     '</a>';
   }).join('');
+}
+
+function _loadClvBadges(container) {
+  var nodes = container ? container.querySelectorAll('[data-clv-userid]') : [];
+  nodes.forEach(function(el) {
+    var uid = el.getAttribute('data-clv-userid');
+    if (!uid) return;
+    fetch('/api/clv/wallet/' + encodeURIComponent(uid))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(clv) {
+        if (!clv || !clv.wallet_class || clv.wallet_class === 'pending') return;
+        var labels = { sharp: 'SHARP', good: 'GOOD', square: 'SQUARE', fade: 'FADE' };
+        var label = labels[clv.wallet_class];
+        if (!label) return;
+        var tip = clv.clv_avg_cents != null ? (clv.clv_avg_cents > 0 ? '+' : '') + clv.clv_avg_cents + '¢ avg CLV · ' + clv.clv_sample_size + ' trades' : '';
+        el.innerHTML = '<span class="clv-badge ' + clv.wallet_class + '" title="' + tip + '">' + label + '</span>';
+      }).catch(function() {});
+  });
 }
 
 // ── Right rail: Whale Moves ──
@@ -5169,6 +5196,11 @@ async function loadTopPredictors() {
     }
     hero.innerHTML = renderPredictorHero(items[0]);
     ranks.innerHTML = renderPredictorRanks(items.slice(1, 5));
+    // Fire CLV badge fetches for hero + all rank rows
+    var heroEl = document.getElementById('pred-hero');
+    var railEl = document.getElementById('pred-ranks');
+    if (heroEl) _loadClvBadges(heroEl);
+    if (railEl) _loadClvBadges(railEl);
     // Expose for the Your Loop visitor state — anonymized social proof
     // pulls real numbers from the same data the rail just rendered.
     window._predRailData = items;

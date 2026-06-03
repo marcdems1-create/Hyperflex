@@ -1441,9 +1441,6 @@ const anthropic = new Anthropic({
 // the pg pool and the Anthropic client exist. The endpoint guards
 // against a missing API key separately, so this init is unconditional.
 if (pool) clustererJudge.init({ pool, anthropic });
-if (pool) clvEngine.init({ pool });
-setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
-setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 
 // Phase 2e — same wiring for the blurb module.
 if (pool) clustererBlurb.init({ pool, anthropic });
