@@ -138,6 +138,7 @@ const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const clvEngine = require('./lib/clv-engine');
+const inferenceEngine = require('./lib/inference-engine');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -1453,6 +1454,7 @@ if (pool && anthropic) signalAgent.init({ pool, anthropic });
 if (pool) clvEngine.init({ pool });
 setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
 setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
+if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
@@ -36516,6 +36518,18 @@ app.get('/api/alpha/fade', async (req, res) => {
   } catch (e) {
     console.error('[api/alpha/fade]', e.message);
     res.json({ trades: [] });
+  }
+});
+
+app.get('/api/alpha/correlated', async (req, res) => {
+  try {
+    const { wallet, question, side, price, clv_avg_cents } = req.query;
+    if (!question) return res.json({ correlated: [] });
+    const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
+    const correlated = await inferenceEngine.inferCorrelated(trade);
+    res.json({ correlated });
+  } catch(e) {
+    res.json({ correlated: [] });
   }
 });
 

@@ -491,6 +491,13 @@ nav{
 #sharpMoneySection { margin-bottom:0; border-top:1px solid rgba(255,255,255,.06); }
 #fadeRadarSection { margin-bottom:0; border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.06); }
 .filters-bar { margin-top:0; }
+.alpha-correlated { border-top:1px solid rgba(255,255,255,.06); padding-top:10px; margin-top:4px; }
+.alpha-corr-loading { font-size:8px; color:rgba(232,232,240,.25); letter-spacing:.08em; }
+.alpha-corr-label { font-size:7px; font-weight:700; letter-spacing:.18em; color:rgba(0,212,255,.6); text-transform:uppercase; margin-bottom:8px; }
+.alpha-corr-item { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,.04); }
+.alpha-corr-item:last-child { border-bottom:none; margin-bottom:0; }
+.alpha-corr-q { font-size:10px; color:rgba(232,232,240,.7); line-height:1.4; margin-top:3px; }
+.alpha-corr-reason { font-size:9px; color:rgba(232,232,240,.35); font-style:italic; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -873,6 +880,7 @@ nav{
         +'<span class="alpha-size">'+fmtSize(t.size)+'</span>'
       +'</div>'
       +(isFade ? '<div class="alpha-fade-warning">⚠ Contrarian: if they bought '+(sideUpper==='YES'?'YES, edge may be NO':'NO, edge may be YES')+'</div>' : '')
+      +(!isFade ? '<div class="alpha-correlated" id="corr-'+encodeURIComponent((t.wallet||'').slice(0,8)+(t.question||'').slice(0,20))+'"><div class="alpha-corr-loading">↻ finding correlated markets…</div></div>' : '')
     +'</div>';
   }
 
@@ -914,6 +922,36 @@ nav{
 
         document.getElementById('sharpMoneyGrid').innerHTML = trades.slice(0,6).map(function(t){ return buildAlphaCard(t, false); }).join('');
         document.getElementById('sharpMoneySection').style.display = 'block';
+
+        // Fire correlation fetches for top 3 trades only
+        trades.slice(0,3).forEach(function(t) {
+          var corrId = 'corr-' + encodeURIComponent((t.wallet||'').slice(0,8)+(t.question||'').slice(0,20));
+          var params = new URLSearchParams({
+            wallet: t.wallet||'',
+            question: t.question||'',
+            side: t.side||'',
+            price: t.price||0,
+            clv_avg_cents: t.clv_avg_cents||0
+          });
+          fetch('/api/alpha/correlated?' + params)
+            .then(function(r){ return r.json(); })
+            .then(function(d) {
+              var el = document.getElementById(corrId);
+              if (!el) return;
+              var corrs = d.correlated || [];
+              if (!corrs.length) { el.style.display='none'; return; }
+              el.innerHTML = '<div class="alpha-corr-label">CORRELATED PLAYS</div>'
+                + corrs.map(function(c) {
+                  var sideClass = (c.correlated_side||'YES')==='YES' ? 'yes' : 'no';
+                  return '<div class="alpha-corr-item">'
+                    + '<span class="alpha-side '+sideClass+'">'+c.correlated_side+'</span>'
+                    + '<span class="alpha-corr-q">'+(c.question||'').slice(0,80)+'</span>'
+                    + '<div class="alpha-corr-reason">'+(c.reasoning||'')+'</div>'
+                    + '</div>';
+                }).join('');
+            })
+            .catch(function(){ var el=document.getElementById(corrId); if(el) el.style.display='none'; });
+        });
 
         // Fix 6 — live bar from alpha data
         var liveBar = document.getElementById('liveBarText');
