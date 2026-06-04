@@ -36494,7 +36494,7 @@ app.get('/api/alpha', async (req, res) => {
       LIMIT 20
     `);
     rows.forEach(t => signalLedger.record({
-      signal_type: 'sharp_alpha',
+      signal_type: 'sharp_money',
       market_slug: t.slug || null,
       question: t.question,
       called_side: t.side,
