@@ -36671,7 +36671,6 @@ app.get('/api/resolution-bias', async (req, res) => {
       FROM market_snapshots ms
       WHERE ms.snapshot_at > NOW() - INTERVAL '24 hours'
         AND ms.yes_price BETWEEN 0.15 AND 0.50
-        AND ms.yes_price > 0.03 AND ms.yes_price < 0.97
       ORDER BY ms.market_id, ms.snapshot_at DESC
       LIMIT 20
     `);
@@ -36686,7 +36685,7 @@ app.get('/api/resolution-bias', async (req, res) => {
       yes_count: yesCount,
       no_count: noCount,
       total_resolved: total,
-      structural_edge: 'NO bias — markets resolve NO at ' + Math.round(noCount/yesCount) + 'x the rate of YES',
+      structural_edge: 'NO bias — markets resolve NO at ' + Math.round(noCount / Math.max(yesCount, 1)) + 'x the rate of YES',
       by_price_range: byBucket,
       currently_open_in_bias_zone: overpriced
     });
