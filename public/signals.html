@@ -508,6 +508,20 @@ nav{
 .alpha-corr-item:last-child { border-bottom:none; margin-bottom:0; }
 .alpha-corr-q { font-size:10px; color:rgba(232,232,240,.7); line-height:1.4; margin-top:3px; }
 .alpha-corr-reason { font-size:9px; color:rgba(232,232,240,.35); font-style:italic; line-height:1.5; }
+.consensus-card { background:#0a0a0d; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.consensus-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.consensus-count { font-family:'Syne',sans-serif; font-size:22px; font-weight:900; color:#ffb800; line-height:1; }
+.consensus-label { font-size:8px; font-weight:700; letter-spacing:.12em; color:rgba(255,184,0,.6); text-transform:uppercase; }
+.consensus-q { font-size:13px; font-weight:700; color:#e8e8f0; line-height:1.35; }
+.consensus-meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.consensus-strength { font-size:8px; font-weight:700; letter-spacing:.1em; color:#ffb800; }
+.bias-cell { background:#0a0a0d; padding:12px; display:flex; flex-direction:column; gap:4px; }
+.bias-bucket { font-size:8px; font-weight:700; letter-spacing:.1em; color:rgba(232,232,240,.4); text-transform:uppercase; }
+.bias-pct { font-family:'Syne',sans-serif; font-size:16px; font-weight:800; line-height:1; }
+.bias-edge { font-size:7px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-top:2px; }
+.bias-edge.strong-no { color:#ff2d55; }
+.bias-edge.no-edge { color:rgba(255,45,85,.6); }
+.bias-edge.neutral { color:rgba(232,232,240,.3); }
 </style>
 </head>
 <body>
@@ -619,6 +633,21 @@ nav{
     <h2 class="section-title" style="color:#ff2d55;">FADE RADAR</h2>
   </div>
   <div id="fadeRadarGrid" class="alpha-grid"></div>
+</div>
+
+<div id="edgeSection" style="display:none;">
+  <div class="section-head" style="border-top:1px solid rgba(255,255,255,.06);">
+    <div class="section-eyebrow">Pure data signals — no AI required</div>
+    <h2 class="section-title" style="color:#ffb800;">STRUCTURAL EDGE</h2>
+  </div>
+
+  <div id="consensusGrid" class="alpha-grid"></div>
+
+  <div id="biasSection" style="display:none; padding:16px 20px; border-top:1px solid rgba(255,255,255,.06);">
+    <div style="font-size:7px;font-weight:700;letter-spacing:.18em;color:rgba(255,184,0,.5);text-transform:uppercase;margin-bottom:12px;">RESOLUTION BIAS — Historical YES rate by price bucket</div>
+    <div id="biasGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1px;background:rgba(255,255,255,.06);"></div>
+    <div style="font-size:9px;color:rgba(232,232,240,.35);margin-top:10px;font-style:italic;">Based on 177k+ resolved Polymarket markets. Markets in lower price buckets resolve YES far less often than priced.</div>
+  </div>
 </div>
 
 <!-- GRID -->
@@ -1046,8 +1075,57 @@ nav{
     } catch(e) {}
   }
 
+  async function loadEdgeData() {
+    try {
+      var r = await fetch('/api/edge/all');
+      var d = await r.json();
+      var consensus = d.consensus || [];
+      var bias = d.bias || [];
+      var shown = false;
+
+      if (consensus.length) {
+        document.getElementById('consensusGrid').innerHTML = consensus.slice(0,6).map(function(c) {
+          var sideClass = c.consensus_side === 'YES' ? 'yes' : 'no';
+          return '<div class="consensus-card">'
+            + '<div class="consensus-top">'
+              + '<div><div class="consensus-count">' + c.sharp_count + '</div><div class="consensus-label">Sharp wallets</div></div>'
+              + '<span class="alpha-side ' + sideClass + '">' + c.consensus_side + '</span>'
+              + '<span class="alpha-size">$' + (Number(c.total_size||0)>=1000?Math.round(Number(c.total_size)/1000)+'K':Math.round(Number(c.total_size||0))) + '</span>'
+            + '</div>'
+            + '<div class="consensus-q">' + (c.question||'').slice(0,100) + '</div>'
+            + '<div class="consensus-meta">'
+              + '<span class="consensus-strength">Signal strength: ' + c.signal_strength + '/10</span>'
+              + '<span class="alpha-price">Avg entry ' + Math.round((Number(c.avg_entry||0))*100) + '¢</span>'
+              + '<span class="alpha-time">' + ago(c.last_trade) + '</span>'
+            + '</div>'
+          + '</div>';
+        }).join('');
+        shown = true;
+      }
+
+      if (bias.length) {
+        document.getElementById('biasGrid').innerHTML = bias.map(function(b) {
+          var edgeCls = b.edge_direction === 'STRONG_NO_EDGE' ? 'strong-no' : b.edge_direction === 'NO_EDGE' ? 'no-edge' : 'neutral';
+          var edgeLabel = b.edge_direction === 'STRONG_NO_EDGE' ? 'FADE YES' : b.edge_direction === 'NO_EDGE' ? 'NO lean' : 'Neutral';
+          var pctColor = Number(b.yes_pct) < 15 ? '#ff2d55' : Number(b.yes_pct) < 30 ? 'rgba(255,45,85,.7)' : 'rgba(232,232,240,.6)';
+          return '<div class="bias-cell">'
+            + '<div class="bias-bucket">' + b.price_bucket + '</div>'
+            + '<div class="bias-pct" style="color:' + pctColor + '">' + b.yes_pct + '%</div>'
+            + '<div style="font-size:7px;color:rgba(232,232,240,.3);">YES rate</div>'
+            + '<div class="bias-edge ' + edgeCls + '">' + edgeLabel + '</div>'
+          + '</div>';
+        }).join('');
+        document.getElementById('biasSection').style.display = 'block';
+        shown = true;
+      }
+
+      if (shown) document.getElementById('edgeSection').style.display = 'block';
+    } catch(e) {}
+  }
+
   loadAlpha();
   loadTrackRecord();
+  loadEdgeData();
 })();
 </script>
 </body>

@@ -140,6 +140,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const clvEngine = require('./lib/clv-engine');
 const inferenceEngine = require('./lib/inference-engine');
 const signalLedger = require('./lib/signal-ledger');
+const edgeEngine = require('./lib/edge-engine');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -1457,6 +1458,7 @@ setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
 setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
 if (pool) signalLedger.init({ pool });
+if (pool) edgeEngine.init({ pool });
 setInterval(() => signalLedger.resolveAll().catch(() => {}), 60 * 60 * 1000);
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
@@ -36605,9 +36607,46 @@ app.post('/api/signal-history/resolve', async (req, res) => {
   }
 });
 
-// GET /api/resolution-bias — structural edge analysis from historical market resolutions
+// GET /api/edge/* — pure data edge signals (no LLM required)
+app.get('/api/edge/consensus', async (req, res) => {
+  try {
+    const data = await edgeEngine.getSharpConsensus();
+    res.json({ consensus: data, count: data.length });
+  } catch(e) { res.json({ consensus: [], count: 0 }); }
+});
+
+app.get('/api/edge/accumulation', async (req, res) => {
+  try {
+    const data = await edgeEngine.getAccumulationAlerts();
+    res.json({ alerts: data, count: data.length });
+  } catch(e) { res.json({ alerts: [], count: 0 }); }
+});
+
+app.get('/api/edge/bias', async (req, res) => {
+  try {
+    const bias = await edgeEngine.getResolutionBias();
+    const markets = await edgeEngine.getBiasEdgeMarkets();
+    res.json({ bias, bias_markets: markets });
+  } catch(e) { res.json({ bias: [], bias_markets: [] }); }
+});
+
+app.get('/api/edge/all', async (req, res) => {
+  try {
+    const [consensus, accumulation, bias, markets] = await Promise.all([
+      edgeEngine.getSharpConsensus(),
+      edgeEngine.getAccumulationAlerts(),
+      edgeEngine.getResolutionBias(),
+      edgeEngine.getBiasEdgeMarkets()
+    ]);
+    res.json({ consensus, accumulation, bias, bias_markets: markets });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
+// GET /api/resolution-bias — structural edge analysis (delegates to edge-engine)
 app.get('/api/resolution-bias', async (req, res) => {
   try {
+    const bias = await edgeEngine.getResolutionBias();
+    const markets = await edgeEngine.getBiasEdgeMarkets();
     const { rows: overall } = await pool.query(`
       SELECT
         COUNT(*) FILTER (WHERE yes_price >= 0.95) as yes_count,
@@ -36620,65 +36659,9 @@ app.get('/api/resolution-bias', async (req, res) => {
         ORDER BY market_id, snapshot_at DESC
       ) resolved
     `);
-
-    const { rows: byBucket } = await pool.query(`
-      SELECT
-        price_bucket,
-        COUNT(*) as total_markets,
-        COUNT(*) FILTER (WHERE outcome = 'YES') as yes_markets,
-        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'YES') / COUNT(*), 1) as yes_pct
-      FROM (
-        SELECT
-          market_id,
-          CASE
-            WHEN entry_price < 0.1  THEN '0-10c'
-            WHEN entry_price < 0.2  THEN '10-20c'
-            WHEN entry_price < 0.3  THEN '20-30c'
-            WHEN entry_price < 0.4  THEN '30-40c'
-            WHEN entry_price < 0.5  THEN '40-50c'
-            WHEN entry_price < 0.6  THEN '50-60c'
-            WHEN entry_price < 0.7  THEN '60-70c'
-            WHEN entry_price < 0.8  THEN '70-80c'
-            WHEN entry_price < 0.9  THEN '80-90c'
-            ELSE '90-100c'
-          END as price_bucket,
-          CASE WHEN close_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome
-        FROM (
-          SELECT DISTINCT ON (ms.market_id)
-            ms.market_id,
-            first_snap.yes_price as entry_price,
-            ms.yes_price as close_price
-          FROM market_snapshots ms
-          JOIN (
-            SELECT DISTINCT ON (market_id) market_id, yes_price
-            FROM market_snapshots
-            WHERE yes_price > 0.05 AND yes_price < 0.95
-            ORDER BY market_id, snapshot_at ASC
-          ) first_snap ON ms.market_id = first_snap.market_id
-          WHERE ms.yes_price >= 0.95 OR ms.yes_price <= 0.05
-          ORDER BY ms.market_id, ms.snapshot_at DESC
-        ) markets
-      ) bucketed
-      GROUP BY price_bucket
-      ORDER BY price_bucket
-    `);
-
-    const { rows: overpriced } = await pool.query(`
-      SELECT DISTINCT ON (ms.market_id)
-        ms.market_id, ms.question, ms.yes_price,
-        ROUND((ms.yes_price * 100)::numeric, 1) as yes_cents,
-        ROUND((1 - ms.yes_price) * 100::numeric, 1) as no_cents
-      FROM market_snapshots ms
-      WHERE ms.snapshot_at > NOW() - INTERVAL '24 hours'
-        AND ms.yes_price BETWEEN 0.15 AND 0.50
-      ORDER BY ms.market_id, ms.snapshot_at DESC
-      LIMIT 20
-    `);
-
     const total = parseInt(overall[0].total) || 1;
     const yesCount = parseInt(overall[0].yes_count) || 0;
     const noCount = parseInt(overall[0].no_count) || 0;
-
     res.json({
       yes_rate: Math.round(yesCount / total * 100),
       no_rate: Math.round(noCount / total * 100),
@@ -36686,12 +36669,10 @@ app.get('/api/resolution-bias', async (req, res) => {
       no_count: noCount,
       total_resolved: total,
       structural_edge: 'NO bias — markets resolve NO at ' + Math.round(noCount / Math.max(yesCount, 1)) + 'x the rate of YES',
-      by_price_range: byBucket,
-      currently_open_in_bias_zone: overpriced
+      by_price_range: bias,
+      currently_open_in_bias_zone: markets
     });
-  } catch(e) {
-    res.json({ error: e.message });
-  }
+  } catch(e) { res.json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════
