@@ -36524,12 +36524,25 @@ app.get('/api/alpha/fade', async (req, res) => {
 app.get('/api/alpha/correlated', async (req, res) => {
   try {
     const { wallet, question, side, price, clv_avg_cents } = req.query;
-    if (!question) return res.json({ correlated: [] });
+    if (!question) return res.json({ correlated: [], debug: 'no question param' });
+
+    // Check init state
+    const { rows: snapCheck } = await pool.query(
+      'SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97'
+    );
+
     const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
     const correlated = await inferenceEngine.inferCorrelated(trade);
-    res.json({ correlated });
+    res.json({
+      correlated,
+      debug: {
+        snapshots_available: parseInt(snapCheck[0].cnt),
+        question_received: question,
+        inference_engine_has_pool: !!pool,
+      }
+    });
   } catch(e) {
-    res.json({ correlated: [] });
+    res.json({ correlated: [], error: e.message });
   }
 });
 
