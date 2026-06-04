@@ -957,7 +957,40 @@ nav{
         document.getElementById('sharpMoneyGrid').innerHTML = trades.slice(0,6).map(function(t){ return buildAlphaCard(t, false); }).join('');
         document.getElementById('sharpMoneySection').style.display = 'block';
 
-        // Fire correlation fetches for top 3 trades only
+        // Fire async correlation fetches for top 3 trades — poll until results land
+        function _renderCorr(el, corrs) {
+          el.innerHTML = '<div class="alpha-corr-label">CORRELATED PLAYS</div>'
+            + corrs.map(function(c) {
+              var sideClass = (c.correlated_side||'YES')==='YES' ? 'yes' : 'no';
+              return '<div class="alpha-corr-item">'
+                + '<span class="alpha-side '+sideClass+'">'+c.correlated_side+'</span>'
+                + '<span class="alpha-corr-q">'+(c.question||'').slice(0,80)+'</span>'
+                + '<div class="alpha-corr-reason">'+(c.reasoning||'')+'</div>'
+                + '</div>';
+            }).join('');
+        }
+        function _pollCorrelated(params, corrId, attemptsLeft) {
+          if (attemptsLeft <= 0) {
+            var el = document.getElementById(corrId);
+            if (el) el.style.display = 'none';
+            return;
+          }
+          fetch('/api/alpha/correlated?' + params)
+            .then(function(r){ return r.json(); })
+            .then(function(d) {
+              var el = document.getElementById(corrId);
+              if (!el) return;
+              var corrs = d.correlated || [];
+              if (corrs.length > 0) {
+                _renderCorr(el, corrs);
+              } else if (d.status === 'computing' || d.status === 'started') {
+                setTimeout(function(){ _pollCorrelated(params, corrId, attemptsLeft - 1); }, 3000);
+              } else {
+                el.style.display = 'none';
+              }
+            })
+            .catch(function(){ var el=document.getElementById(corrId); if(el) el.style.display='none'; });
+        }
         trades.slice(0,3).forEach(function(t) {
           var corrId = 'corr-' + encodeURIComponent((t.wallet||'').slice(0,8)+(t.question||'').slice(0,20));
           var params = new URLSearchParams({
@@ -967,24 +1000,7 @@ nav{
             price: t.price||0,
             clv_avg_cents: t.clv_avg_cents||0
           });
-          fetch('/api/alpha/correlated?' + params)
-            .then(function(r){ return r.json(); })
-            .then(function(d) {
-              var el = document.getElementById(corrId);
-              if (!el) return;
-              var corrs = d.correlated || [];
-              if (!corrs.length) { el.style.display='none'; return; }
-              el.innerHTML = '<div class="alpha-corr-label">CORRELATED PLAYS</div>'
-                + corrs.map(function(c) {
-                  var sideClass = (c.correlated_side||'YES')==='YES' ? 'yes' : 'no';
-                  return '<div class="alpha-corr-item">'
-                    + '<span class="alpha-side '+sideClass+'">'+c.correlated_side+'</span>'
-                    + '<span class="alpha-corr-q">'+(c.question||'').slice(0,80)+'</span>'
-                    + '<div class="alpha-corr-reason">'+(c.reasoning||'')+'</div>'
-                    + '</div>';
-                }).join('');
-            })
-            .catch(function(){ var el=document.getElementById(corrId); if(el) el.style.display='none'; });
+          _pollCorrelated(params, corrId, 10); // up to 10 polls × 3s = 30s max
         });
 
         // Fix 6 — live bar from alpha data

@@ -36534,27 +36534,49 @@ app.get('/api/alpha/fade', async (req, res) => {
   }
 });
 
+// In-memory cache: question → { correlated, cached_at, computing }
+const _correlatedCache = new Map();
+const CORR_CACHE_TTL = 10 * 60 * 1000; // 10 min
+
+function _fireCorrelatedInBackground(trade) {
+  const key = trade.question;
+  const existing = _correlatedCache.get(key);
+  if (existing && (existing.computing || Date.now() - existing.cached_at < CORR_CACHE_TTL)) return;
+  _correlatedCache.set(key, { correlated: [], computing: true, cached_at: Date.now() });
+  inferenceEngine.inferCorrelated(trade)
+    .then(results => {
+      _correlatedCache.set(key, { correlated: results, computing: false, cached_at: Date.now() });
+      console.log('[correlated-cache] stored', results.length, 'results for:', key.slice(0, 60));
+    })
+    .catch(e => {
+      _correlatedCache.set(key, { correlated: [], computing: false, cached_at: Date.now(), error: e.message });
+    });
+}
+
 app.get('/api/alpha/correlated', async (req, res) => {
   try {
     const { wallet, question, side, price, clv_avg_cents } = req.query;
-    if (!question) return res.json({ correlated: [], debug: 'no question' });
-    const { rows: snapCheck } = await pool.query('SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97');
+    if (!question) return res.json({ correlated: [], status: 'no_question' });
     const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
-    const correlated = await inferenceEngine.inferCorrelated(trade);
+    const cached = _correlatedCache.get(question);
+    if (cached && !cached.computing && cached.correlated.length > 0) {
+      return res.json({ correlated: cached.correlated, status: 'cached', age_s: Math.round((Date.now() - cached.cached_at) / 1000) });
+    }
+    // Fire background inference (no-op if already computing)
+    _fireCorrelatedInBackground(trade);
     const state = inferenceEngine.getState();
     res.json({
-      correlated,
+      correlated: [],
+      status: cached && cached.computing ? 'computing' : 'started',
       debug: {
-        snapshots_available: parseInt(snapCheck[0].cnt),
-        question_received: question,
-        inference_engine_has_pool: state.hasPool,
-        inference_engine_has_anthropic: state.hasAnthropic,
+        has_pool: state.hasPool,
+        has_anthropic: state.hasAnthropic,
         last_error: state.lastError,
         last_raw: state.lastRaw
       }
     });
   } catch(e) {
-    res.json({ correlated: [], error: e.message });
+    res.json({ correlated: [], status: 'error', error: e.message });
   }
 });
 
@@ -36580,6 +36602,73 @@ app.post('/api/signal-history/resolve', async (req, res) => {
     res.json({ ok: true, summary });
   } catch (e) {
     res.json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/resolution-bias — structural edge analysis from historical market resolutions
+// 10:1 NO/YES ratio means YES is systematically overpriced — this surfaces the data
+app.get('/api/resolution-bias', async (req, res) => {
+  if (!pool) return res.json({ error: 'no pool' });
+  try {
+    const [outcomes, byRange, recentBias] = await Promise.all([
+      // Overall YES vs NO resolution counts + avg closing price
+      pool.query(`
+        SELECT
+          CASE WHEN yes_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome,
+          COUNT(*) as count,
+          ROUND(AVG(yes_price)::numeric, 4) as avg_closing_price
+        FROM market_snapshots
+        WHERE yes_price >= 0.95 OR yes_price <= 0.05
+        GROUP BY 1
+        ORDER BY 1
+      `),
+      // Resolution rate by price range — what % of markets priced at 30-40% actually resolve YES?
+      pool.query(`
+        SELECT
+          ROUND(called_price * 10) * 10 as price_bucket,
+          COUNT(*) as total,
+          COUNT(CASE WHEN yes_price >= 0.95 THEN 1 END) as resolved_yes,
+          ROUND(COUNT(CASE WHEN yes_price >= 0.95 THEN 1 END)::numeric / NULLIF(COUNT(*),0) * 100, 1) as yes_pct
+        FROM (
+          SELECT ms_entry.yes_price as called_price, ms_close.yes_price
+          FROM market_snapshots ms_entry
+          JOIN LATERAL (
+            SELECT yes_price FROM market_snapshots ms2
+            WHERE ms2.market_id = ms_entry.market_id
+              AND (ms2.yes_price >= 0.95 OR ms2.yes_price <= 0.05)
+            ORDER BY ms2.snapshot_at DESC LIMIT 1
+          ) ms_close ON true
+          WHERE ms_entry.yes_price BETWEEN 0.10 AND 0.90
+        ) t
+        WHERE called_price IS NOT NULL
+        GROUP BY 1
+        HAVING COUNT(*) >= 50
+        ORDER BY 1
+      `),
+      // Markets currently priced above implied probability given historical resolution rate
+      pool.query(`
+        SELECT DISTINCT ON (market_id) market_id, question, yes_price,
+          ROUND(yes_price * 100) as implied_pct
+        FROM market_snapshots
+        WHERE snapshot_at > NOW() - INTERVAL '24 hours'
+          AND yes_price BETWEEN 0.40 AND 0.80
+        ORDER BY market_id, snapshot_at DESC
+        LIMIT 20
+      `)
+    ]);
+    const outcomeMap = {};
+    outcomes.rows.forEach(r => { outcomeMap[r.outcome] = { count: parseInt(r.count), avg_closing: parseFloat(r.avg_closing_price) }; });
+    const total = (outcomeMap.YES?.count||0) + (outcomeMap.NO?.count||0);
+    res.json({
+      outcomes: outcomeMap,
+      yes_rate: total > 0 ? Math.round((outcomeMap.YES?.count||0) / total * 1000) / 10 : null,
+      no_rate: total > 0 ? Math.round((outcomeMap.NO?.count||0) / total * 1000) / 10 : null,
+      total_resolved: total,
+      by_price_range: byRange.rows,
+      overpriced_candidates: recentBias.rows
+    });
+  } catch(e) {
+    res.json({ error: e.message });
   }
 });
 
