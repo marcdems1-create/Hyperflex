@@ -36531,6 +36531,7 @@ app.get('/api/alpha/correlated', async (req, res) => {
       'SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97'
     );
 
+    const engineState = inferenceEngine.getState();
     const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
     const correlated = await inferenceEngine.inferCorrelated(trade);
     res.json({
@@ -36538,7 +36539,10 @@ app.get('/api/alpha/correlated', async (req, res) => {
       debug: {
         snapshots_available: parseInt(snapCheck[0].cnt),
         question_received: question,
-        inference_engine_has_pool: !!pool,
+        inference_engine_has_pool: engineState.hasPool,
+        inference_engine_has_anthropic: engineState.hasAnthropic,
+        last_error: engineState.lastError,
+        last_raw: engineState.lastRaw,
       }
     });
   } catch(e) {
