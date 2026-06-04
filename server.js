@@ -36606,66 +36606,55 @@ app.post('/api/signal-history/resolve', async (req, res) => {
 });
 
 // GET /api/resolution-bias — structural edge analysis from historical market resolutions
-// 10:1 NO/YES ratio means YES is systematically overpriced — this surfaces the data
 app.get('/api/resolution-bias', async (req, res) => {
   if (!pool) return res.json({ error: 'no pool' });
   try {
-    const [outcomes, byRange, recentBias] = await Promise.all([
-      // Overall YES vs NO resolution counts + avg closing price
-      pool.query(`
-        SELECT
-          CASE WHEN yes_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome,
-          COUNT(*) as count,
-          ROUND(AVG(yes_price)::numeric, 4) as avg_closing_price
-        FROM market_snapshots
-        WHERE yes_price >= 0.95 OR yes_price <= 0.05
-        GROUP BY 1
-        ORDER BY 1
-      `),
-      // Resolution rate by price range — what % of markets priced at 30-40% actually resolve YES?
-      pool.query(`
-        SELECT
-          ROUND(called_price * 10) * 10 as price_bucket,
-          COUNT(*) as total,
-          COUNT(CASE WHEN yes_price >= 0.95 THEN 1 END) as resolved_yes,
-          ROUND(COUNT(CASE WHEN yes_price >= 0.95 THEN 1 END)::numeric / NULLIF(COUNT(*),0) * 100, 1) as yes_pct
-        FROM (
-          SELECT ms_entry.yes_price as called_price, ms_close.yes_price
-          FROM market_snapshots ms_entry
-          JOIN LATERAL (
-            SELECT yes_price FROM market_snapshots ms2
-            WHERE ms2.market_id = ms_entry.market_id
-              AND (ms2.yes_price >= 0.95 OR ms2.yes_price <= 0.05)
-            ORDER BY ms2.snapshot_at DESC LIMIT 1
-          ) ms_close ON true
-          WHERE ms_entry.yes_price BETWEEN 0.10 AND 0.90
-        ) t
-        WHERE called_price IS NOT NULL
-        GROUP BY 1
-        HAVING COUNT(*) >= 50
-        ORDER BY 1
-      `),
-      // Markets currently priced above implied probability given historical resolution rate
-      pool.query(`
-        SELECT DISTINCT ON (market_id) market_id, question, yes_price,
-          ROUND(yes_price * 100) as implied_pct
-        FROM market_snapshots
-        WHERE snapshot_at > NOW() - INTERVAL '24 hours'
-          AND yes_price BETWEEN 0.40 AND 0.80
-        ORDER BY market_id, snapshot_at DESC
-        LIMIT 20
-      `)
-    ]);
+    // Overall YES vs NO resolution counts
+    const { rows: outcomes } = await pool.query(`
+      SELECT
+        CASE WHEN yes_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome,
+        COUNT(*) as count
+      FROM market_snapshots
+      WHERE yes_price >= 0.95 OR yes_price <= 0.05
+      GROUP BY 1
+    `);
+
+    // Price distribution of snapshots that ended YES — where were they trading beforehand?
+    const { rows: yesEntryPrices } = await pool.query(`
+      SELECT
+        width_bucket(yes_price, 0.0, 1.0, 10) as bucket,
+        ROUND(AVG(yes_price)::numeric, 2) as avg_price,
+        COUNT(*) as count
+      FROM market_snapshots
+      WHERE yes_price >= 0.95 OR yes_price <= 0.05
+      GROUP BY 1
+      ORDER BY 1
+    `);
+
+    // Currently open markets in mid-range — candidates for NO fade
+    const { rows: midRange } = await pool.query(`
+      SELECT DISTINCT ON (market_id)
+        market_id, question,
+        ROUND(yes_price::numeric, 2) as yes_price
+      FROM market_snapshots
+      WHERE snapshot_at > NOW() - INTERVAL '24 hours'
+        AND yes_price BETWEEN 0.30 AND 0.70
+      ORDER BY market_id, snapshot_at DESC
+      LIMIT 15
+    `);
+
     const outcomeMap = {};
-    outcomes.rows.forEach(r => { outcomeMap[r.outcome] = { count: parseInt(r.count), avg_closing: parseFloat(r.avg_closing_price) }; });
-    const total = (outcomeMap.YES?.count||0) + (outcomeMap.NO?.count||0);
+    outcomes.forEach(r => { outcomeMap[r.outcome] = parseInt(r.count); });
+    const total = (outcomeMap.YES||0) + (outcomeMap.NO||0);
+
     res.json({
-      outcomes: outcomeMap,
-      yes_rate: total > 0 ? Math.round((outcomeMap.YES?.count||0) / total * 1000) / 10 : null,
-      no_rate: total > 0 ? Math.round((outcomeMap.NO?.count||0) / total * 1000) / 10 : null,
+      yes_count: outcomeMap.YES || 0,
+      no_count: outcomeMap.NO || 0,
+      yes_rate_pct: total > 0 ? Math.round((outcomeMap.YES||0) / total * 1000) / 10 : null,
+      no_rate_pct: total > 0 ? Math.round((outcomeMap.NO||0) / total * 1000) / 10 : null,
       total_resolved: total,
-      by_price_range: byRange.rows,
-      overpriced_candidates: recentBias.rows
+      closing_distribution: yesEntryPrices,
+      mid_range_open: midRange
     });
   } catch(e) {
     res.json({ error: e.message });
