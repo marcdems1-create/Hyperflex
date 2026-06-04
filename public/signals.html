@@ -463,6 +463,23 @@ nav{
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 
+/* ── TRACK RECORD BAR ── */
+.track-record-bar{
+  max-width:1400px;margin:0 auto;
+  padding:0 20px;height:36px;
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+  overflow:hidden;
+}
+.tr-label{
+  font-size:7px;font-weight:700;letter-spacing:.18em;
+  color:var(--gold);text-transform:uppercase;flex-shrink:0;
+}
+.tr-cell{display:flex;align-items:baseline;gap:4px;}
+.tr-val{font-size:11px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;}
+.tr-sub{font-size:8px;color:var(--ink3);letter-spacing:.06em;}
+.tr-sep{width:1px;height:14px;background:var(--border);flex-shrink:0;}
+
 /* ── SCROLL ── */
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
@@ -551,6 +568,20 @@ nav{
       <div class="stat-sub">directional split</div>
     </div>
   </div>
+</div>
+
+<!-- TRACK RECORD BAR -->
+<div class="track-record-bar" id="trackRecordBar" style="display:none">
+  <div class="tr-label">SIGNAL LEDGER</div>
+  <div class="tr-cell"><span class="tr-val" id="trTotal">—</span><span class="tr-sub">logged</span></div>
+  <div class="tr-sep"></div>
+  <div class="tr-cell"><span class="tr-val" id="trResolved">—</span><span class="tr-sub">resolved</span></div>
+  <div class="tr-sep"></div>
+  <div class="tr-cell"><span class="tr-val" id="trHitRate" style="color:var(--green)">—</span><span class="tr-sub">hit rate</span></div>
+  <div class="tr-sep"></div>
+  <div class="tr-cell"><span class="tr-val" id="trAvgClv">—</span><span class="tr-sub">avg CLV</span></div>
+  <div class="tr-sep"></div>
+  <div class="tr-cell"><span class="tr-val" id="trAvgEntry">—</span><span class="tr-sub">avg entry</span></div>
 </div>
 
 <!-- LIVE BAR -->
@@ -972,7 +1003,31 @@ nav{
     } catch(e) {}
   }
 
+  async function loadTrackRecord() {
+    try {
+      var r = await fetch('/api/signal-history?limit=1');
+      var d = await r.json();
+      var s = d.summary || {};
+      var total = parseInt(s.total_calls) || 0;
+      if (!total) return;
+      var resolved = parseInt(s.resolved) || 0;
+      var profitable = parseInt(s.profitable) || 0;
+      var avgClv = parseFloat(s.avg_clv);
+      var avgEntry = parseFloat(s.avg_entry);
+      var hitRate = resolved > 0 ? Math.round((profitable / resolved) * 100) : null;
+      document.getElementById('trTotal').textContent = total;
+      document.getElementById('trResolved').textContent = resolved;
+      document.getElementById('trHitRate').textContent = hitRate !== null ? hitRate + '%' : '—';
+      document.getElementById('trHitRate').style.color = hitRate >= 55 ? 'var(--green)' : hitRate >= 45 ? 'var(--ink)' : 'var(--red)';
+      document.getElementById('trAvgClv').textContent = isNaN(avgClv) ? '—' : (avgClv >= 0 ? '+' : '') + avgClv.toFixed(1) + '¢';
+      document.getElementById('trAvgClv').style.color = avgClv > 0 ? 'var(--green)' : avgClv < 0 ? 'var(--red)' : 'var(--ink)';
+      document.getElementById('trAvgEntry').textContent = isNaN(avgEntry) ? '—' : Math.round(avgEntry * 100) + '¢';
+      document.getElementById('trackRecordBar').style.display = 'flex';
+    } catch(e) {}
+  }
+
   loadAlpha();
+  loadTrackRecord();
 })();
 </script>
 </body>

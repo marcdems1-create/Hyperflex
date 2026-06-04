@@ -139,6 +139,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const clvEngine = require('./lib/clv-engine');
 const inferenceEngine = require('./lib/inference-engine');
+const signalLedger = require('./lib/signal-ledger');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -1455,6 +1456,8 @@ if (pool) clvEngine.init({ pool });
 setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
 setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
+if (pool) signalLedger.init({ pool });
+setInterval(() => signalLedger.resolveAll().catch(() => {}), 60 * 60 * 1000);
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
 // ── CLAUDE BUDGET GATE ─────────────────────────────
@@ -36490,6 +36493,16 @@ app.get('/api/alpha', async (req, res) => {
       ORDER BY wth.created_at DESC
       LIMIT 20
     `);
+    rows.forEach(t => signalLedger.record({
+      signal_type: 'sharp_alpha',
+      market_slug: t.slug || null,
+      question: t.question,
+      called_side: t.side,
+      called_price: t.price,
+      called_at: t.created_at,
+      source_wallet: t.wallet,
+      source_clv: t.clv_avg_cents
+    }).catch(() => {}));
     res.json({ trades: rows });
   } catch (e) {
     console.error('[api/alpha]', e.message);
@@ -36524,29 +36537,49 @@ app.get('/api/alpha/fade', async (req, res) => {
 app.get('/api/alpha/correlated', async (req, res) => {
   try {
     const { wallet, question, side, price, clv_avg_cents } = req.query;
-    if (!question) return res.json({ correlated: [], debug: 'no question param' });
-
-    // Check init state
-    const { rows: snapCheck } = await pool.query(
-      'SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97'
-    );
-
-    const engineState = inferenceEngine.getState();
+    if (!question) return res.json({ correlated: [], debug: 'no question' });
+    const { rows: snapCheck } = await pool.query('SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97');
     const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
     const correlated = await inferenceEngine.inferCorrelated(trade);
+    const state = inferenceEngine.getState();
     res.json({
       correlated,
       debug: {
         snapshots_available: parseInt(snapCheck[0].cnt),
         question_received: question,
-        inference_engine_has_pool: engineState.hasPool,
-        inference_engine_has_anthropic: engineState.hasAnthropic,
-        last_error: engineState.lastError,
-        last_raw: engineState.lastRaw,
+        inference_engine_has_pool: state.hasPool,
+        inference_engine_has_anthropic: state.hasAnthropic,
+        last_error: state.lastError,
+        last_raw: state.lastRaw
       }
     });
   } catch(e) {
     res.json({ correlated: [], error: e.message });
+  }
+});
+
+// GET /api/signal-history — recent recorded signals + summary stats
+app.get('/api/signal-history', async (req, res) => {
+  try {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const [summary, recent] = await Promise.all([
+      signalLedger.getSummary(),
+      signalLedger.getRecent(limit)
+    ]);
+    res.json({ summary, signals: recent, count: recent.length });
+  } catch (e) {
+    res.json({ summary: {}, signals: [], count: 0, error: e.message });
+  }
+});
+
+// POST /api/signal-history/resolve — manually trigger resolution pass
+app.post('/api/signal-history/resolve', async (req, res) => {
+  try {
+    await signalLedger.resolveAll();
+    const summary = await signalLedger.getSummary();
+    res.json({ ok: true, summary });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
   }
 });
 
