@@ -36607,54 +36607,88 @@ app.post('/api/signal-history/resolve', async (req, res) => {
 
 // GET /api/resolution-bias — structural edge analysis from historical market resolutions
 app.get('/api/resolution-bias', async (req, res) => {
-  if (!pool) return res.json({ error: 'no pool' });
   try {
-    // Overall YES vs NO resolution counts
-    const { rows: outcomes } = await pool.query(`
+    const { rows: overall } = await pool.query(`
       SELECT
-        CASE WHEN yes_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome,
-        COUNT(*) as count
-      FROM market_snapshots
-      WHERE yes_price >= 0.95 OR yes_price <= 0.05
-      GROUP BY 1
+        COUNT(*) FILTER (WHERE yes_price >= 0.95) as yes_count,
+        COUNT(*) FILTER (WHERE yes_price <= 0.05) as no_count,
+        COUNT(*) as total
+      FROM (
+        SELECT DISTINCT ON (market_id) market_id, yes_price
+        FROM market_snapshots
+        WHERE yes_price >= 0.95 OR yes_price <= 0.05
+        ORDER BY market_id, snapshot_at DESC
+      ) resolved
     `);
 
-    // Price distribution of snapshots that ended YES — where were they trading beforehand?
-    const { rows: yesEntryPrices } = await pool.query(`
+    const { rows: byBucket } = await pool.query(`
       SELECT
-        width_bucket(yes_price, 0.0, 1.0, 10) as bucket,
-        ROUND(AVG(yes_price)::numeric, 2) as avg_price,
-        COUNT(*) as count
-      FROM market_snapshots
-      WHERE yes_price >= 0.95 OR yes_price <= 0.05
-      GROUP BY 1
-      ORDER BY 1
+        price_bucket,
+        COUNT(*) as total_markets,
+        COUNT(*) FILTER (WHERE outcome = 'YES') as yes_markets,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'YES') / COUNT(*), 1) as yes_pct
+      FROM (
+        SELECT
+          market_id,
+          CASE
+            WHEN entry_price < 0.1  THEN '0-10c'
+            WHEN entry_price < 0.2  THEN '10-20c'
+            WHEN entry_price < 0.3  THEN '20-30c'
+            WHEN entry_price < 0.4  THEN '30-40c'
+            WHEN entry_price < 0.5  THEN '40-50c'
+            WHEN entry_price < 0.6  THEN '50-60c'
+            WHEN entry_price < 0.7  THEN '60-70c'
+            WHEN entry_price < 0.8  THEN '70-80c'
+            WHEN entry_price < 0.9  THEN '80-90c'
+            ELSE '90-100c'
+          END as price_bucket,
+          CASE WHEN close_price >= 0.95 THEN 'YES' ELSE 'NO' END as outcome
+        FROM (
+          SELECT DISTINCT ON (ms.market_id)
+            ms.market_id,
+            first_snap.yes_price as entry_price,
+            ms.yes_price as close_price
+          FROM market_snapshots ms
+          JOIN (
+            SELECT DISTINCT ON (market_id) market_id, yes_price
+            FROM market_snapshots
+            WHERE yes_price > 0.05 AND yes_price < 0.95
+            ORDER BY market_id, snapshot_at ASC
+          ) first_snap ON ms.market_id = first_snap.market_id
+          WHERE ms.yes_price >= 0.95 OR ms.yes_price <= 0.05
+          ORDER BY ms.market_id, ms.snapshot_at DESC
+        ) markets
+      ) bucketed
+      GROUP BY price_bucket
+      ORDER BY price_bucket
     `);
 
-    // Currently open markets in mid-range — candidates for NO fade
-    const { rows: midRange } = await pool.query(`
-      SELECT DISTINCT ON (market_id)
-        market_id, question,
-        ROUND(yes_price::numeric, 2) as yes_price
-      FROM market_snapshots
-      WHERE snapshot_at > NOW() - INTERVAL '24 hours'
-        AND yes_price BETWEEN 0.30 AND 0.70
-      ORDER BY market_id, snapshot_at DESC
-      LIMIT 15
+    const { rows: overpriced } = await pool.query(`
+      SELECT DISTINCT ON (ms.market_id)
+        ms.market_id, ms.question, ms.yes_price,
+        ROUND((ms.yes_price * 100)::numeric, 1) as yes_cents,
+        ROUND((1 - ms.yes_price) * 100::numeric, 1) as no_cents
+      FROM market_snapshots ms
+      WHERE ms.snapshot_at > NOW() - INTERVAL '24 hours'
+        AND ms.yes_price BETWEEN 0.15 AND 0.50
+        AND ms.yes_price > 0.03 AND ms.yes_price < 0.97
+      ORDER BY ms.market_id, ms.snapshot_at DESC
+      LIMIT 20
     `);
 
-    const outcomeMap = {};
-    outcomes.forEach(r => { outcomeMap[r.outcome] = parseInt(r.count); });
-    const total = (outcomeMap.YES||0) + (outcomeMap.NO||0);
+    const total = parseInt(overall[0].total) || 1;
+    const yesCount = parseInt(overall[0].yes_count) || 0;
+    const noCount = parseInt(overall[0].no_count) || 0;
 
     res.json({
-      yes_count: outcomeMap.YES || 0,
-      no_count: outcomeMap.NO || 0,
-      yes_rate_pct: total > 0 ? Math.round((outcomeMap.YES||0) / total * 1000) / 10 : null,
-      no_rate_pct: total > 0 ? Math.round((outcomeMap.NO||0) / total * 1000) / 10 : null,
+      yes_rate: Math.round(yesCount / total * 100),
+      no_rate: Math.round(noCount / total * 100),
+      yes_count: yesCount,
+      no_count: noCount,
       total_resolved: total,
-      closing_distribution: yesEntryPrices,
-      mid_range_open: midRange
+      structural_edge: 'NO bias — markets resolve NO at ' + Math.round(noCount/yesCount) + 'x the rate of YES',
+      by_price_range: byBucket,
+      currently_open_in_bias_zone: overpriced
     });
   } catch(e) {
     res.json({ error: e.message });
