@@ -141,6 +141,7 @@ const clvEngine = require('./lib/clv-engine');
 const inferenceEngine = require('./lib/inference-engine');
 const signalLedger = require('./lib/signal-ledger');
 const edgeEngine = require('./lib/edge-engine');
+const biasCaller = require('./lib/bias-caller');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -1459,6 +1460,7 @@ setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
 if (pool) signalLedger.init({ pool });
 if (pool) edgeEngine.init({ pool });
+if (pool) biasCaller.init({ pool });
 setInterval(() => signalLedger.resolveAll().catch(() => {}), 60 * 60 * 1000);
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
@@ -36640,6 +36642,14 @@ app.get('/api/edge/all', async (req, res) => {
     ]);
     res.json({ consensus, accumulation, bias, bias_markets: markets });
   } catch(e) { res.json({ error: e.message }); }
+});
+
+app.get('/api/edge/bias-calls', async (req, res) => {
+  try {
+    const calls = await biasCaller.getBiasCalls();
+    const record = await biasCaller.getBiasTrackRecord();
+    res.json({ calls, record, count: calls.length });
+  } catch(e) { res.json({ calls: [], record: {}, count: 0 }); }
 });
 
 // GET /api/resolution-bias — structural edge analysis (delegates to edge-engine)

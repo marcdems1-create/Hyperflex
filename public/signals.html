@@ -522,6 +522,16 @@ nav{
 .bias-edge.strong-no { color:#ff2d55; }
 .bias-edge.no-edge { color:rgba(255,45,85,.6); }
 .bias-edge.neutral { color:rgba(232,232,240,.3); }
+.bias-call-card { background:#0a0a0d; padding:16px; display:flex; flex-direction:column; gap:10px; border-left:2px solid #ff2d55; }
+.bias-call-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.bias-multiple { font-family:'Syne',sans-serif; font-size:20px; font-weight:900; color:#ff2d55; line-height:1; }
+.bias-multiple-label { font-size:7px; font-weight:700; letter-spacing:.12em; color:rgba(255,45,85,.6); text-transform:uppercase; }
+.bias-explanation { font-size:10px; color:rgba(232,232,240,.55); line-height:1.7; font-family:'JetBrains Mono',monospace; padding:8px 10px; background:rgba(255,45,85,.04); border:1px solid rgba(255,45,85,.12); }
+.bias-resolved-win { color:#00e68a; font-size:9px; font-weight:700; }
+.bias-resolved-pending { color:rgba(232,232,240,.3); font-size:9px; }
+.tr-record-item { display:flex; flex-direction:column; align-items:center; padding:6px 12px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
+.tr-record-val { font-family:'Syne',sans-serif; font-size:16px; font-weight:800; color:#ffb800; line-height:1; }
+.tr-record-label { font-size:7px; font-weight:700; letter-spacing:.12em; color:rgba(255,184,0,.4); text-transform:uppercase; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -639,6 +649,17 @@ nav{
   <div class="section-head" style="border-top:1px solid rgba(255,255,255,.06);">
     <div class="section-eyebrow">Pure data signals — no AI required</div>
     <h2 class="section-title" style="color:#ffb800;">STRUCTURAL EDGE</h2>
+  </div>
+
+  <div id="biasCalls" style="display:none;">
+    <div style="padding:16px 20px 0; border-bottom:1px solid rgba(255,255,255,.06); margin-bottom:0;">
+      <div class="section-eyebrow" style="color:rgba(255,45,85,.5);">Structural mispricing — pure math, not opinion</div>
+      <div style="display:flex;align-items:center;gap:16px;padding-bottom:14px;flex-wrap:wrap;">
+        <h3 style="font-family:'Syne',sans-serif;font-size:15px;font-weight:900;color:#ff2d55;letter-spacing:-.01em;margin:0;">BIAS EDGE CALLS</h3>
+        <div id="biasTrackRecord" style="display:flex;gap:12px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <div id="biasCallsGrid" class="alpha-grid"></div>
   </div>
 
   <div id="consensusGrid" class="alpha-grid"></div>
@@ -1123,9 +1144,58 @@ nav{
     } catch(e) {}
   }
 
+  async function loadBiasCalls() {
+    try {
+      var r = await fetch('/api/edge/bias-calls');
+      var d = await r.json();
+      var calls = d.calls || [];
+      var record = d.record || {};
+
+      if (!calls.length) return;
+
+      // Track record bar
+      var trEl = document.getElementById('biasTrackRecord');
+      if (trEl && record.total_calls > 0) {
+        trEl.innerHTML = [
+          { val: record.total_calls, label: 'Total calls' },
+          { val: record.resolved || 0, label: 'Resolved' },
+          { val: record.win_rate != null ? record.win_rate + '%' : '—', label: 'Win rate' },
+          { val: record.avg_clv != null ? (record.avg_clv > 0 ? '+' : '') + record.avg_clv + '¢' : '—', label: 'Avg CLV' }
+        ].map(function(item) {
+          return '<div class="tr-record-item"><div class="tr-record-val">' + item.val + '</div><div class="tr-record-label">' + item.label + '</div></div>';
+        }).join('');
+      }
+
+      // Calls grid
+      document.getElementById('biasCallsGrid').innerHTML = calls.slice(0, 6).map(function(c) {
+        var status = c.resolved_outcome
+          ? (c.resolved_outcome === 'NO'
+              ? '<span class="bias-resolved-win">✓ CORRECT — resolved ' + c.resolved_outcome + (c.clv_cents ? ' · +' + c.clv_cents + '¢ CLV' : '') + '</span>'
+              : '<span style="color:#ff2d55;font-size:9px;">✗ Wrong — resolved ' + c.resolved_outcome + '</span>')
+          : '<span class="bias-resolved-pending">Pending resolution</span>';
+
+        return '<div class="bias-call-card">'
+          + '<div class="bias-call-header">'
+            + '<div><div class="bias-multiple">' + c.edge_multiple + 'x</div><div class="bias-multiple-label">Overpriced</div></div>'
+            + '<span class="alpha-side no">BUY NO</span>'
+            + '<span class="alpha-price">' + c.yes_cents + '¢ YES (market price)</span>'
+            + '<span class="alpha-time">' + ago(c.called_at) + '</span>'
+          + '</div>'
+          + '<div class="consensus-q">' + (c.question || '').slice(0, 100) + '</div>'
+          + '<div class="bias-explanation">' + c.explanation + '</div>'
+          + '<div>' + status + '</div>'
+        + '</div>';
+      }).join('');
+
+      document.getElementById('biasCalls').style.display = 'block';
+      document.getElementById('edgeSection').style.display = 'block';
+    } catch(e) {}
+  }
+
   loadAlpha();
   loadTrackRecord();
   loadEdgeData();
+  loadBiasCalls();
 })();
 </script>
 </body>
