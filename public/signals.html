@@ -664,6 +664,22 @@ nav{
 
   <div id="consensusGrid" class="alpha-grid"></div>
 
+  <div id="pvAlerts" style="display:none; border-top:1px solid rgba(255,255,255,.06);">
+    <div style="padding:12px 20px 10px;">
+      <div class="section-eyebrow" style="color:rgba(0,212,255,.5);margin-bottom:4px;">Volume spike, price flat — repricing imminent</div>
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:900;color:#00d4ff;">VOLUME DIVERGENCE</div>
+    </div>
+    <div id="pvGrid" class="alpha-grid"></div>
+  </div>
+
+  <div id="sharpNewSection" style="display:none; border-top:1px solid rgba(255,255,255,.06);">
+    <div style="padding:12px 20px 10px;">
+      <div class="section-eyebrow" style="color:rgba(0,255,136,.5);margin-bottom:4px;">Sharp wallets opening new positions — last 2 hours</div>
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:900;color:#00ff88;">SHARP NEW POSITIONS</div>
+    </div>
+    <div id="sharpNewGrid" class="alpha-grid"></div>
+  </div>
+
   <div id="biasSection" style="display:none; padding:16px 20px; border-top:1px solid rgba(255,255,255,.06);">
     <div style="font-size:7px;font-weight:700;letter-spacing:.18em;color:rgba(255,184,0,.5);text-transform:uppercase;margin-bottom:12px;">RESOLUTION BIAS — Historical YES rate by price bucket</div>
     <div id="biasGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1px;background:rgba(255,255,255,.06);"></div>
@@ -1137,6 +1153,47 @@ nav{
           + '</div>';
         }).join('');
         document.getElementById('biasSection').style.display = 'block';
+        shown = true;
+      }
+
+      // Price-volume divergence
+      var pvAlerts = d.price_volume_alerts || [];
+      if (pvAlerts.length) {
+        document.getElementById('pvGrid').innerHTML = pvAlerts.slice(0,4).map(function(a) {
+          return '<div class="alpha-card">'
+            + '<div class="alpha-card-top"><span class="alpha-wallet">' + (a.market_id||'').slice(0,10) + '</span>'
+            + '<span class="badge badge-whales">VOL ↑' + a.volume_pct_change + '%</span>'
+            + '<span class="alpha-price">price flat ±' + a.price_move_cents + '¢</span></div>'
+            + '<div class="alpha-question">' + (a.question||'').slice(0,100) + '</div>'
+            + '<div class="alpha-record">' + a.signal + '</div>'
+          + '</div>';
+        }).join('');
+        document.getElementById('pvAlerts').style.display = 'block';
+        shown = true;
+      }
+
+      // Sharp new positions
+      var sharpNew = d.sharp_new_positions || [];
+      if (sharpNew.length) {
+        document.getElementById('sharpNewGrid').innerHTML = sharpNew.slice(0,4).map(function(t) {
+          var sideUpper = (t.side||'').toUpperCase();
+          var sideClass = sideUpper === 'YES' ? 'yes' : 'no';
+          return '<div class="alpha-card">'
+            + '<div class="alpha-card-top">'
+            + '<span class="alpha-wallet">' + (t.wallet||'').slice(0,10) + '</span>'
+            + '<span class="alpha-badge sharp">SHARP</span>'
+            + '<span class="alpha-record">+' + t.clv_avg_cents + '¢ CLV</span>'
+            + '<span class="alpha-time">' + ago(t.created_at) + '</span>'
+            + '</div>'
+            + '<div class="alpha-question">' + (t.question||'').slice(0,100) + '</div>'
+            + '<div class="alpha-meta">'
+            + '<span class="alpha-side ' + sideClass + '">' + sideUpper + '</span>'
+            + '<span class="alpha-price">@ ' + Math.round((t.price||0)*100) + '¢</span>'
+            + '<span class="alpha-size">' + (Number(t.size||0)>=1000?'$'+Math.round(Number(t.size)/1000)+'K':'$'+Math.round(Number(t.size||0))) + '</span>'
+            + '</div>'
+          + '</div>';
+        }).join('');
+        document.getElementById('sharpNewSection').style.display = 'block';
         shown = true;
       }
 

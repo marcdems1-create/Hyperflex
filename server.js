@@ -36624,6 +36624,92 @@ app.get('/api/edge/accumulation', async (req, res) => {
   } catch(e) { res.json({ alerts: [], count: 0 }); }
 });
 
+app.get('/api/edge/price-volume', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      WITH recent AS (
+        SELECT
+          market_id, question,
+          yes_price,
+          volume,
+          snapshot_at,
+          LAG(yes_price) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_price,
+          LAG(volume) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_volume
+        FROM market_snapshots
+        WHERE snapshot_at > NOW() - INTERVAL '6 hours'
+      )
+      SELECT
+        market_id,
+        question,
+        yes_price,
+        ROUND((yes_price * 100)::numeric, 1) as yes_cents,
+        volume,
+        prev_volume,
+        ROUND((volume - prev_volume)::numeric, 0) as volume_spike,
+        ROUND(ABS(yes_price - prev_price)::numeric * 100, 2) as price_move_cents,
+        ROUND(((volume - prev_volume) / NULLIF(prev_volume, 0) * 100)::numeric, 1) as volume_pct_change
+      FROM recent
+      WHERE prev_volume IS NOT NULL
+        AND prev_price IS NOT NULL
+        AND volume > prev_volume * 1.5
+        AND ABS(yes_price - prev_price) < 0.03
+        AND yes_price BETWEEN 0.05 AND 0.95
+        AND volume - prev_volume > 5000
+      ORDER BY volume_spike DESC
+      LIMIT 15
+    `);
+    res.json({
+      alerts: rows.map(r => ({
+        ...r,
+        signal: 'Volume up ' + r.volume_pct_change + '% but price flat — repricing imminent',
+        edge_note: 'Sharp money entering without moving price = someone knows something'
+      })),
+      count: rows.length
+    });
+  } catch(e) {
+    console.error('[price-volume]', e.message);
+    res.json({ alerts: [], count: 0, error: e.message });
+  }
+});
+
+app.get('/api/edge/sharp-new', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet,
+        wth.question,
+        wth.side,
+        wth.price,
+        wth.size,
+        wth.slug,
+        wth.created_at,
+        ws.clv_avg_cents,
+        ws.clv_sample_size,
+        ws.wallet_class,
+        COUNT(*) OVER (
+          PARTITION BY wth.wallet, wth.slug
+          ORDER BY wth.created_at
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) as position_trade_number
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE ws.wallet_class = 'sharp'
+        AND ws.clv_avg_cents > 10
+        AND wth.created_at > NOW() - INTERVAL '2 hours'
+        AND wth.size > 1000
+      ORDER BY wth.created_at DESC
+      LIMIT 20
+    `);
+    res.json({
+      trades: rows.filter(r => parseInt(r.position_trade_number) === 1),
+      all_recent: rows,
+      count: rows.length
+    });
+  } catch(e) {
+    res.json({ trades: [], all_recent: [], count: 0 });
+  }
+});
+
 app.get('/api/edge/bias', async (req, res) => {
   try {
     const bias = await edgeEngine.getResolutionBias();
@@ -36640,7 +36726,51 @@ app.get('/api/edge/all', async (req, res) => {
       edgeEngine.getResolutionBias(),
       edgeEngine.getBiasEdgeMarkets()
     ]);
-    res.json({ consensus, accumulation, bias, bias_markets: markets });
+
+    const [pvRows, sharpNew] = await Promise.all([
+      pool.query(`
+        WITH recent AS (
+          SELECT market_id, question, yes_price, volume, snapshot_at,
+            LAG(yes_price) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_price,
+            LAG(volume) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_volume
+          FROM market_snapshots
+          WHERE snapshot_at > NOW() - INTERVAL '6 hours'
+        )
+        SELECT market_id, question, yes_price,
+          ROUND((yes_price*100)::numeric,1) as yes_cents,
+          ROUND(((volume-prev_volume)/NULLIF(prev_volume,0)*100)::numeric,1) as volume_pct_change,
+          ROUND(ABS(yes_price-prev_price)::numeric*100,2) as price_move_cents
+        FROM recent
+        WHERE prev_volume IS NOT NULL AND prev_price IS NOT NULL
+          AND volume > prev_volume * 1.5
+          AND ABS(yes_price - prev_price) < 0.03
+          AND yes_price BETWEEN 0.05 AND 0.95
+          AND volume - prev_volume > 5000
+        ORDER BY volume_pct_change DESC LIMIT 10
+      `),
+      pool.query(`
+        SELECT wth.wallet, wth.question, wth.side, wth.price, wth.size, wth.created_at,
+          ws.clv_avg_cents, ws.wallet_class
+        FROM whale_trade_history wth
+        JOIN wallet_scores ws ON wth.wallet = ws.user_id
+        WHERE ws.wallet_class = 'sharp' AND ws.clv_avg_cents > 10
+          AND wth.created_at > NOW() - INTERVAL '2 hours'
+          AND wth.size > 1000
+        ORDER BY wth.created_at DESC LIMIT 10
+      `)
+    ]);
+
+    res.json({
+      consensus,
+      accumulation,
+      bias,
+      bias_markets: markets,
+      price_volume_alerts: pvRows.rows.map(r => ({
+        ...r,
+        signal: 'Volume up ' + r.volume_pct_change + '% but price flat — repricing imminent'
+      })),
+      sharp_new_positions: sharpNew.rows
+    });
   } catch(e) { res.json({ error: e.message }); }
 });
 
