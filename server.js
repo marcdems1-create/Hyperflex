@@ -42792,6 +42792,217 @@ app.get('/api/admin/backfill-debug', async (req, res) => {
     res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 5) });
   }
 });
+
+// ── Realized-trades nightly backfill cron ───────────────────────────────────
+// Clears the backfill backlog (709 of 851 users with addresses had never
+// been backfilled when this shipped). Runs at 03:00 UTC nightly, processes
+// 200 users with 500ms throttle (~2 min nominal, can stretch to ~15 min if
+// derivePolymarketProxy hits RPC retries — logs start + end so a stalled
+// run is visible in Railway).
+//
+// Schema: adds `last_backfill_at TIMESTAMPTZ` to `users` on first run via
+// ALTER TABLE IF NOT EXISTS. Index on `(last_backfill_at NULLS FIRST)` so
+// the queue scan stays cheap as the table grows.
+//
+// Boot-time: also fires once 60s after boot if >50% of users-with-address
+// have null `last_backfill_at`. Skips silently otherwise.
+//
+// Kill switch: `REALIZED_TRADES_CRON_DISABLED=true` in env.
+//
+// Status: GET /api/admin/realized-trades/cron-status (admin-secret gated).
+
+let _realizedTradesCronStatus = {
+  last_run_started_at: null,
+  last_run_finished_at: null,
+  last_run_source: null,
+  last_run_users_processed: 0,
+  last_run_users_with_imports: 0,
+  last_run_users_failed: 0,
+  last_run_total_imported: 0,
+};
+
+async function _ensureRealizedTradesBackfillSchema() {
+  if (!pool) return;
+  await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_backfill_at TIMESTAMPTZ').catch(() => {});
+  await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_last_backfill ON users(last_backfill_at NULLS FIRST)').catch(() => {});
+}
+
+async function _runRealizedTradesBackfillCycle({ limit = 200, delayMs = 500, source = 'cron' } = {}) {
+  if (!pool) return;
+  await _ensureRealizedTradesBackfillSchema();
+  const startedAt = new Date().toISOString();
+  console.log(`[realized-trades-${source}] start at ${startedAt} (limit=${limit}, delay=${delayMs}ms)`);
+
+  _realizedTradesCronStatus.last_run_started_at = startedAt;
+  _realizedTradesCronStatus.last_run_finished_at = null;
+  _realizedTradesCronStatus.last_run_source = source;
+  _realizedTradesCronStatus.last_run_users_processed = 0;
+  _realizedTradesCronStatus.last_run_users_with_imports = 0;
+  _realizedTradesCronStatus.last_run_users_failed = 0;
+  _realizedTradesCronStatus.last_run_total_imported = 0;
+
+  // Pick users that haven't been backfilled in 24h — null first so the
+  // never-touched backlog drains before we revisit recent ones.
+  let users;
+  try {
+    users = await dbQuery(`
+      SELECT id, polymarket_address
+      FROM users
+      WHERE polymarket_address IS NOT NULL
+        AND polymarket_address != ''
+        AND LENGTH(polymarket_address) >= 42
+        AND (last_backfill_at IS NULL OR last_backfill_at < NOW() - INTERVAL '24 hours')
+      ORDER BY last_backfill_at NULLS FIRST
+      LIMIT $1
+    `, [limit]);
+  } catch (err) {
+    console.error(`[realized-trades-${source}] user fetch failed:`, err.message);
+    _realizedTradesCronStatus.last_run_finished_at = new Date().toISOString();
+    return;
+  }
+
+  let imported = 0, failed = 0, usersWithImports = 0;
+  for (const user of users) {
+    try {
+      const proxy = await ensureProxyStored(user.id, user.polymarket_address);
+      if (proxy) {
+        const stats = await backfillRealizedTrades(user.id, user.polymarket_address, proxy);
+        const got = stats && stats.imported ? stats.imported : 0;
+        imported += got;
+        if (got > 0) usersWithImports++;
+        // Mark complete only on a successful proxy + backfill round-trip.
+        // Failed-derivation users stay null so they retry next cycle
+        // instead of monopolizing future queues — combined with NULLS
+        // FIRST this is self-healing.
+        await dbQuery('UPDATE users SET last_backfill_at = NOW() WHERE id = $1', [user.id])
+          .catch(e => console.warn(`[realized-trades-${source}] last_backfill_at update for ${user.id.slice(0, 8)}:`, e.message));
+      } else {
+        failed++;
+      }
+    } catch (err) {
+      failed++;
+      console.error(`[realized-trades-${source}] user failed`, user.id.slice(0, 8), err.message);
+    }
+    _realizedTradesCronStatus.last_run_users_processed++;
+    _realizedTradesCronStatus.last_run_users_with_imports = usersWithImports;
+    _realizedTradesCronStatus.last_run_users_failed = failed;
+    _realizedTradesCronStatus.last_run_total_imported = imported;
+    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+  }
+
+  const finishedAt = new Date().toISOString();
+  _realizedTradesCronStatus.last_run_finished_at = finishedAt;
+  console.log(`[realized-trades-${source}] done at ${finishedAt}: ${users.length} processed, ${imported} trades imported, ${usersWithImports} users with trades, ${failed} failed`);
+}
+
+cron.schedule('0 3 * * *', async () => {
+  if (process.env.REALIZED_TRADES_CRON_DISABLED === 'true') {
+    console.log('[realized-trades-cron] disabled via env var, skipping');
+    return;
+  }
+  try {
+    await _runRealizedTradesBackfillCycle({ limit: 200, delayMs: 500, source: 'cron' });
+  } catch (err) {
+    console.error('[realized-trades-cron] top-level error:', err.message);
+  }
+}, { timezone: 'UTC' });
+
+// Boot-time first run — fires 60s after process start, only if >50% of
+// users-with-address have never been backfilled. Catches the cold-start
+// case where the cron hasn't run yet but there's a real backlog.
+setTimeout(async () => {
+  if (process.env.REALIZED_TRADES_CRON_DISABLED === 'true') return;
+  if (!pool) return;
+  try {
+    await _ensureRealizedTradesBackfillSchema();
+    const r = await dbQuery(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+        ) AS with_addr,
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+            AND last_backfill_at IS NULL
+        ) AS pending
+      FROM users
+    `);
+    const withAddr = Number(r[0] && r[0].with_addr) || 0;
+    const pending  = Number(r[0] && r[0].pending) || 0;
+    if (withAddr === 0) return;
+    const pct = pending / withAddr;
+    if (pct <= 0.5) {
+      console.log(`[realized-trades-boot] backlog ${pending}/${withAddr} (${(pct*100).toFixed(1)}%) under 50% threshold — skipping initial run`);
+      return;
+    }
+    console.log(`[realized-trades-boot] backlog ${pending}/${withAddr} (${(pct*100).toFixed(1)}%) over 50% — running initial cycle`);
+    await _runRealizedTradesBackfillCycle({ limit: 200, delayMs: 500, source: 'boot' });
+  } catch (err) {
+    console.error('[realized-trades-boot] error:', err.message);
+  }
+}, 60000);
+
+// Status endpoint — combines persisted backlog state with the in-memory
+// last-run snapshot. Mirrors the shape of the seed primer's GET endpoint
+// for consistency.
+app.get('/api/admin/realized-trades/cron-status', async (req, res) => {
+  if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!pool) {
+    return res.json({
+      status: 'no_db',
+      cron_disabled: process.env.REALIZED_TRADES_CRON_DISABLED === 'true',
+      ..._realizedTradesCronStatus,
+    });
+  }
+  try {
+    const r = await dbQuery(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+        ) AS users_with_address,
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+            AND last_backfill_at IS NOT NULL
+        ) AS users_backfilled_ever,
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+            AND last_backfill_at > NOW() - INTERVAL '24 hours'
+        ) AS users_backfilled_24h,
+        COUNT(*) FILTER (
+          WHERE polymarket_address IS NOT NULL
+            AND polymarket_address != ''
+            AND LENGTH(polymarket_address) >= 42
+            AND (last_backfill_at IS NULL OR last_backfill_at < NOW() - INTERVAL '24 hours')
+        ) AS users_pending
+      FROM users
+    `);
+    const trades = await dbQuery('SELECT COUNT(*)::int AS n FROM realized_trades').catch(() => [{ n: 0 }]);
+    const row = r[0] || {};
+    res.json({
+      users_with_address:    Number(row.users_with_address)    || 0,
+      users_backfilled_ever: Number(row.users_backfilled_ever) || 0,
+      users_backfilled_24h:  Number(row.users_backfilled_24h)  || 0,
+      users_pending:         Number(row.users_pending)         || 0,
+      total_realized_trades_in_db: Number(trades[0] && trades[0].n) || 0,
+      cron_disabled: process.env.REALIZED_TRADES_CRON_DISABLED === 'true',
+      ..._realizedTradesCronStatus,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, ..._realizedTradesCronStatus });
+  }
+});
+
 // GET /api/flex-points/user/:userId — public flex points for any user (for profile display)
 app.get('/api/flex-points/user/:userId', async (req, res) => {
   try {
