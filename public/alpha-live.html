@@ -168,6 +168,21 @@
   .footnote{padding:20px 0 60px;font-size:11px;color:var(--soft);border-top:1px solid var(--border);margin-top:20px;text-align:center}
   .footnote em{color:var(--green);font-style:normal}
 
+  /* ── Refresh countdown bar ── */
+  .refresh-countdown-wrap{display:flex;align-items:center;gap:10px;margin-bottom:18px;font-family:var(--mono);font-size:11px;color:var(--soft)}
+  .refresh-countdown-track{flex:1;height:3px;background:var(--paper-3);border-radius:2px;overflow:hidden;max-width:200px}
+  .refresh-countdown-fill{height:100%;background:var(--green);border-radius:2px;transition:width 1s linear;width:100%}
+  .refresh-countdown-text{white-space:nowrap;font-size:10px;color:var(--dim)}
+
+  /* ── Whale alert banner ── */
+  .whale-alert-banner{margin-bottom:16px;padding:10px 16px;background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.25);border-radius:10px;display:none;align-items:center;gap:12px}
+  .whale-alert-banner.show{display:flex}
+  .whale-alert-icon{font-size:20px;flex-shrink:0}
+  .whale-alert-body{flex:1;min-width:0}
+  .whale-alert-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--purple);letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px}
+  .whale-alert-detail{font-size:12px;color:var(--soft);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .whale-alert-score{font-family:var(--mono);font-size:22px;font-weight:900;color:var(--purple);flex-shrink:0}
+
   @media(max-width:600px){
     .hero h1{font-size:32px}
     .edge-grid{grid-template-columns:1fr}
@@ -226,6 +241,22 @@
       <button class="ctrl" id="btn20" onclick="switchN(20)">Top 20</button>
       <button class="ctrl" onclick="load(currentN)">↻ Refresh</button>
     </div>
+  </div>
+
+  <!-- Whale alert banner -->
+  <div class="whale-alert-banner" id="whaleAlertBanner">
+    <div class="whale-alert-icon">🐋</div>
+    <div class="whale-alert-body">
+      <div class="whale-alert-title">Whale Concentration Alert</div>
+      <div class="whale-alert-detail" id="whaleAlertDetail">—</div>
+    </div>
+    <div class="whale-alert-score" id="whaleAlertScore">—</div>
+  </div>
+
+  <!-- Refresh countdown -->
+  <div class="refresh-countdown-wrap">
+    <div class="refresh-countdown-track"><div class="refresh-countdown-fill" id="countdownFill"></div></div>
+    <span class="refresh-countdown-text" id="countdownText">Refreshing in 90s</span>
   </div>
 
   <!-- Anomaly alerts bar -->
@@ -380,6 +411,19 @@ function render(data){
   document.getElementById('updated').textContent='Updated '+timeAgo(data.updated_at);
   document.getElementById('live-dot').textContent='Live · '+timeAgo(data.updated_at);
 
+  // Whale alert banner — show if top market has 3+ whales
+  var alertBanner = document.getElementById('whaleAlertBanner');
+  var alertDetail = document.getElementById('whaleAlertDetail');
+  var alertScore = document.getElementById('whaleAlertScore');
+  var topWhale = markets.find(function(m){return (m.whale_count||0)>=3;});
+  if(topWhale && alertBanner){
+    alertBanner.classList.add('show');
+    if(alertDetail) alertDetail.textContent = topWhale.whale_count+' whale wallets aligned on '+truncate(topWhale.question||'',80);
+    if(alertScore) alertScore.textContent = topWhale.edge_score;
+  } else if(alertBanner){
+    alertBanner.classList.remove('show');
+  }
+
   if(!markets.length){
     g.innerHTML='<div class="loading">No edges right now — markets are quiet. Refreshing in 90s.</div>';
     return;
@@ -531,7 +575,23 @@ async function load(n){
 }
 
 load(10);
-_refreshTimer=setInterval(()=>load(currentN),90000);
+// Countdown timer
+var _countdownSecs = 90;
+var _countdownInterval = null;
+function resetCountdown(){
+  _countdownSecs = 90;
+  if(_countdownInterval) clearInterval(_countdownInterval);
+  _countdownInterval = setInterval(function(){
+    _countdownSecs--;
+    var fill = document.getElementById('countdownFill');
+    var text = document.getElementById('countdownText');
+    if(fill) fill.style.width = Math.max(0,(_countdownSecs/90)*100)+'%';
+    if(text) text.textContent = _countdownSecs > 0 ? 'Refreshing in '+_countdownSecs+'s' : 'Refreshing…';
+    if(_countdownSecs <= 0) resetCountdown();
+  }, 1000);
+}
+resetCountdown();
+_refreshTimer=setInterval(()=>{load(currentN);resetCountdown();},90000);
 
 // ── Anomaly detection bar ──
 var _anomalyIcons={volume_spike:'📊',price_velocity:'⚡',whale_cluster:'🐋',correlation_break:'⚖️'};

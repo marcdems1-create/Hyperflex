@@ -36886,6 +36886,78 @@ app.get('/api/edge/bias-calls', async (req, res) => {
   } catch(e) { res.json({ calls: [], record: {}, count: 0 }); }
 });
 
+// GET /api/platform-stats — aggregate platform stats for landing page hero
+// 30s cache
+let _platformStatsCache = null;
+app.get('/api/platform-stats', async (req, res) => {
+  try {
+    if (_platformStatsCache && Date.now() - _platformStatsCache.ts < 30000) {
+      return res.json(_platformStatsCache.data);
+    }
+    const [snap, whaleTrades, sharpActive, signals] = await Promise.all([
+      pool.query(`SELECT COUNT(DISTINCT market_id) as active_markets FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COALESCE(SUM(size), 0) as total FROM whale_trade_history WHERE created_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COUNT(DISTINCT wth.wallet) as sharp_count FROM whale_trade_history wth JOIN wallet_scores ws ON wth.wallet = ws.user_id WHERE ws.wallet_class IN ('sharp', 'good') AND wth.created_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COUNT(*) as total_calls, COUNT(CASE WHEN resolved_outcome IS NOT NULL THEN 1 END) as resolved, COUNT(CASE WHEN resolved_outcome = called_side THEN 1 END) as correct FROM signal_history WHERE signal_type = 'bias_edge'`)
+    ]);
+    const sc = signals.rows[0];
+    const resolved = parseInt(sc.resolved) || 0;
+    const correct = parseInt(sc.correct) || 0;
+    const data = {
+      active_markets: parseInt(snap.rows[0].active_markets) || 0,
+      whale_capital_24h: Math.round(parseFloat(whaleTrades.rows[0].total) || 0),
+      sharp_wallets_active: parseInt(sharpActive.rows[0].sharp_count) || 0,
+      total_signals: parseInt(sc.total_calls) || 0,
+      signal_win_rate: resolved > 0 ? Math.round(correct / resolved * 100) : null,
+      top_edge_score: (_screenerCache && _screenerCache.length > 0) ? _screenerCache[0].edge_score : null,
+      updated_at: new Date().toISOString()
+    };
+    _platformStatsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch(e) {
+    console.warn('[platform-stats]', e.message);
+    res.json({ active_markets: 0, whale_capital_24h: 0, sharp_wallets_active: 0, total_signals: 0 });
+  }
+});
+
+// GET /api/whale-ticker — last 30 classified whale trades for live ticker strip
+// 30s cache
+let _whaleTickerCache = null;
+app.get('/api/whale-ticker', async (req, res) => {
+  try {
+    if (_whaleTickerCache && Date.now() - _whaleTickerCache.ts < 30000) {
+      return res.json(_whaleTickerCache.data);
+    }
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet,
+        LEFT(wth.wallet, 6) || '…' || RIGHT(wth.wallet, 4) as wallet_short,
+        wth.question,
+        wth.side,
+        wth.price,
+        wth.size,
+        wth.created_at,
+        wth.slug,
+        ws.wallet_class,
+        ws.clv_avg_cents,
+        ws.sharpness_score
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE wth.created_at > NOW() - INTERVAL '12 hours'
+        AND ws.wallet_class IN ('sharp', 'good', 'fade')
+        AND wth.size >= 500
+      ORDER BY wth.created_at DESC
+      LIMIT 30
+    `);
+    const data = { trades: rows, updated_at: new Date().toISOString() };
+    _whaleTickerCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch(e) {
+    console.warn('[whale-ticker]', e.message);
+    res.json({ trades: [] });
+  }
+});
+
 // GET /api/resolution-bias — structural edge analysis (delegates to edge-engine)
 app.get('/api/resolution-bias', async (req, res) => {
   try {
