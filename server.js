@@ -11977,6 +11977,98 @@ app.get('/trader/:address', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'trader.html'));
 });
 
+// GET /api/trader/:wallet — internal CLV/FLEX profile for public trader page
+app.get('/api/trader/:wallet', async (req, res) => {
+  if (!pool) return res.json({ error: 'db unavailable' });
+  const wallet = (req.params.wallet || '').toLowerCase().trim();
+  if (!/^0x[0-9a-f]{40}$/i.test(wallet)) {
+    return res.status(400).json({ error: 'invalid wallet address' });
+  }
+  try {
+    const [profileRows, clvRows, tradeRows, userRows] = await Promise.all([
+      pool.query('SELECT * FROM creator_profiles WHERE LOWER(wallet) = $1 LIMIT 1', [wallet]),
+      pool.query('SELECT clv_avg_cents, clv_sample_size, wallet_class, sharpness_score FROM wallet_scores WHERE LOWER(user_id) = $1 LIMIT 1', [wallet]),
+      pool.query(`
+        SELECT question, side, price, size, slug, created_at, resolved_outcome, is_correct, resolved_at
+        FROM whale_trade_history
+        WHERE LOWER(wallet) = $1
+        ORDER BY created_at DESC
+        LIMIT 100
+      `, [wallet]),
+      pool.query(`
+        SELECT display_name, flex_score_90d, flex_score_alltime, polymarket_address
+        FROM users
+        WHERE LOWER(polymarket_address) = $1
+        LIMIT 1
+      `, [wallet])
+    ]);
+
+    const profile = profileRows.rows[0] || {};
+    const clv = clvRows.rows[0] || {};
+    const user = userRows.rows[0] || {};
+    const trades = tradeRows.rows;
+
+    // Stats from trade history
+    const resolved = trades.filter(t => t.resolved_outcome);
+    const hit = resolved.filter(t => t.is_correct === true).length;
+    const miss = resolved.filter(t => t.is_correct === false).length;
+    const partial = 0; // no partial concept in whale_trade_history
+    const open = trades.filter(t => !t.resolved_outcome).length;
+    const hitRate = resolved.length > 0 ? Math.round(hit / resolved.length * 1000) / 10 : 0;
+
+    // Flex score: prefer users.flex_score_90d, fall back to sharpness_score
+    const flexScore = parseFloat(user.flex_score_90d || clv.sharpness_score || 0);
+
+    res.json({
+      profile: {
+        wallet,
+        display_name: profile.display_name || user.display_name || null,
+        bio: profile.bio || null,
+        twitter_handle: profile.twitter_handle || null,
+        verified_sharp: profile.verified_sharp || false
+      },
+      clv: {
+        classification: (clv.wallet_class || 'pending').toUpperCase(),
+        avg_clv: clv.clv_avg_cents != null ? Math.round(parseFloat(clv.clv_avg_cents) * 100) / 100 : null,
+        sample_size: parseInt(clv.clv_sample_size) || 0
+      },
+      flex_score: Math.round(flexScore * 100) / 100,
+      stats: {
+        total_theses: trades.length,
+        hit,
+        partial,
+        miss,
+        hit_rate: hitRate,
+        open
+      },
+      theses: {
+        resolved: resolved.slice(0, 20).map(t => ({
+          question: t.question,
+          side: t.side,
+          price: t.price,
+          size: t.size,
+          slug: t.slug,
+          resolved_outcome: t.resolved_outcome,
+          is_correct: t.is_correct,
+          resolved_at: t.resolved_at,
+          outcome: t.is_correct ? 'HIT' : 'MISS'
+        })),
+        open: trades.filter(t => !t.resolved_outcome).slice(0, 10).map(t => ({
+          question: t.question,
+          side: t.side,
+          price: t.price,
+          size: t.size,
+          slug: t.slug,
+          created_at: t.created_at
+        }))
+      }
+    });
+  } catch(e) {
+    console.error('[api/trader]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const _traderProfileCache = new Map();
 app.get('/api/trader/:address/profile', async (req, res) => {
   const address = (req.params.address || '').trim();
@@ -18382,6 +18474,18 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_rank INTEGER').catch(() => {});
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_pnl NUMERIC').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_is_whale ON users(is_whale) WHERE is_whale = true').catch(() => {});
+    // creator_profiles — public trader profile metadata
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS creator_profiles (
+        wallet VARCHAR(64) PRIMARY KEY,
+        display_name VARCHAR(64),
+        bio TEXT,
+        twitter_handle VARCHAR(64),
+        verified_sharp BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
     // CLV columns on wallet_scores — added with clv-engine
     await dbQuery(`ALTER TABLE wallet_scores
       ADD COLUMN IF NOT EXISTS clv_avg_cents NUMERIC,
