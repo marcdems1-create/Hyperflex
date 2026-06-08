@@ -14042,7 +14042,9 @@ app.get('/api/feed/theses', async (req, res) => {
         t.agree_count,
         t.disagree_count,
         t.source,
-        t.user_id
+        t.user_id,
+        t.market_slug,
+        t.condition_id
       FROM takes t
       LEFT JOIN users u ON u.id = t.user_id
       LEFT JOIN wallet_scores ws ON ws.user_id = t.user_id
@@ -14053,6 +14055,14 @@ app.get('/api/feed/theses', async (req, res) => {
     params.push(limit);
 
     const rows = await dbQuery(sql, params);
+
+    // Build slug → image_url map from screener cache (no extra API call)
+    const slugImageMap = {};
+    const screenerData = ((_screenerCache && _screenerCache.data) || []);
+    for (const m of screenerData) {
+      const slug = m.slug || m.market_slug;
+      if (slug && (m.image || m.market_image)) slugImageMap[slug] = m.image || m.market_image;
+    }
 
     // Group consecutive takes by the same creator within 24h into bundles.
     // Each bundle has a primary thesis (longest thesis text) + preview of
@@ -14110,7 +14120,9 @@ app.get('/api/feed/theses', async (req, res) => {
         agree_count: p.agree_count || 0,
         disagree_count: p.disagree_count || 0,
         entry_price: p.entry_price,
-        side: p.side
+        side: p.side,
+        image_url: slugImageMap[p.market_slug] || null,
+        like_count: 0
       });
     }
 
@@ -14129,12 +14141,87 @@ app.get('/api/feed/theses', async (req, res) => {
       .slice(0, 3)
       .map(t => ({ thesis_id: t.thesis_id, title: t.title, display_name: t.display_name,
         creator_wallet: t.creator_wallet, markets_count: t.markets_count,
-        clv_classification: t.clv_classification, created_at: t.created_at }));
+        clv_classification: t.clv_classification, created_at: t.created_at,
+        image_url: t.image_url || null }));
 
     res.json({ theses, trending });
   } catch (err) {
     console.error('[/api/feed/theses]', err.message);
     res.status(500).json({ theses: [], trending: [], error: err.message });
+  }
+});
+
+// POST /api/takes/:id/like — toggle like on a take
+app.post('/api/takes/:id/like', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+  try {
+    const takeId = req.params.id;
+    const { user_id = 'anonymous', display_name = 'Anonymous' } = req.body || {};
+    if (!takeId) return res.status(400).json({ error: 'take id required' });
+
+    const existing = await dbQuery(
+      `SELECT id FROM take_reactions WHERE take_id = $1 AND user_id = $2 AND reaction = 'like'`,
+      [takeId, user_id]
+    );
+    let liked;
+    if (existing.length) {
+      await dbQuery('DELETE FROM take_reactions WHERE id = $1', [existing[0].id]);
+      liked = false;
+    } else {
+      await dbQuery(
+        `INSERT INTO take_reactions (take_id, user_id, display_name, reaction, body) VALUES ($1,$2,$3,'like',NULL)`,
+        [takeId, user_id, display_name]
+      );
+      liked = true;
+    }
+    const countRows = await dbQuery(
+      `SELECT COUNT(*)::int AS cnt FROM take_reactions WHERE take_id = $1 AND reaction = 'like'`,
+      [takeId]
+    );
+    res.json({ liked, count: countRows[0]?.cnt || 0 });
+  } catch (e) {
+    console.error('[takes/like]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/takes/:id/comment — post a comment on a take
+app.post('/api/takes/:id/comment', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+  try {
+    const takeId = req.params.id;
+    const { user_id = 'anonymous', display_name = 'Anonymous', body } = req.body || {};
+    if (!takeId) return res.status(400).json({ error: 'take id required' });
+    if (!body || !body.trim()) return res.status(400).json({ error: 'body required' });
+    if (body.length > 500) return res.status(400).json({ error: 'body max 500 chars' });
+
+    const rows = await dbQuery(
+      `INSERT INTO take_reactions (take_id, user_id, display_name, reaction, body)
+       VALUES ($1,$2,$3,NULL,$4) RETURNING id, display_name, body, created_at`,
+      [takeId, user_id, display_name, body.trim()]
+    );
+    res.json({ comment: rows[0] });
+  } catch (e) {
+    console.error('[takes/comment]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/takes/:id/comments — fetch all comments on a take
+app.get('/api/takes/:id/comments', async (req, res) => {
+  if (!pool) return res.json({ comments: [] });
+  try {
+    const takeId = req.params.id;
+    const rows = await dbQuery(
+      `SELECT id, display_name, body, created_at
+       FROM take_reactions WHERE take_id = $1 AND body IS NOT NULL
+       ORDER BY created_at ASC`,
+      [takeId]
+    );
+    res.json({ comments: rows });
+  } catch (e) {
+    console.error('[takes/comments]', e.message);
+    res.status(500).json({ comments: [], error: e.message });
   }
 });
 
@@ -18643,8 +18730,12 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(take_id, user_id)
     )`);
+    // Evolve take_reactions for likes + comments (body, display_name, nullable reaction, drop unique)
+    await dbQuery("ALTER TABLE take_reactions ADD COLUMN IF NOT EXISTS body TEXT").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions ADD COLUMN IF NOT EXISTS display_name TEXT").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions DROP CONSTRAINT IF EXISTS take_reactions_take_id_user_id_key").catch(() => {});
     await dbQuery("ALTER TABLE take_reactions DROP CONSTRAINT IF EXISTS take_reactions_reaction_check").catch(() => {});
-    await dbQuery("ALTER TABLE take_reactions ADD CONSTRAINT take_reactions_reaction_check CHECK (reaction IN ('agree','disagree','fire','sharp','fade','wrong'))").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions ALTER COLUMN reaction DROP NOT NULL").catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_created_at ON takes(created_at DESC)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_source ON takes(source)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_market_slug ON takes(market_slug)').catch(() => {});
