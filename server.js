@@ -825,7 +825,13 @@ polymarket.init({ fetch: _nodeFetch });
 // purely to surface load-time syntax errors early.
 const fedTranscripts = require('./scrapers/fed_transcripts');
 
-// Direct Postgres pool — this is the reliable connection
+// Direct Postgres pool — this is the reliable connection.
+// max: 25 (bumped from 5) to handle production traffic load — Cloudflare
+// metrics showed ~133% traffic growth and dbQuery timeouts cascading
+// across multiple crons (closing-prices, agent-eval, picks, hedge-alerts).
+// Pool of 5 was starving the cron loop. 25 gives headroom for the
+// concurrent cron + request load without exceeding Railway Postgres's
+// connection cap (default 100 on Hobby/Pro plans).
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -20686,22 +20692,23 @@ async function _fetchFlexStats(userId, diag) {
   // any user whose Polymarket history was backfilled from /activity rather
   // than logged through HFX-routed trades.
   //
-  // Without this UNION, _fetchFlexStats returns 0 settled events for any
-  // user whose only trade history is in realized_trades — including the
-  // entire top-50 whale leaderboard (verified by divergence query: 0/5
-  // sampled whales had any rows in polymarket_trades). The 4:30 AM cron
-  // then writes flex_settled_events=0 → flex_qualifies=false → profile
-  // renders "Building · 25 settled to unlock" forever.
+  // realized_trades.user_id is UUID; userId arrives here as TEXT (request
+  // body or cron iteration). Bare comparison auto-casts in some contexts
+  // but not all — explicit ::uuid cast matches the pattern at server.js
+  // :37262, :37372 (regrade aggregate refresh) and is defensive against
+  // type-coercion failures that silently zero out settled_events for the
+  // entire whale population.
   //
   // realized_trades is the FIFO-collapsed rollup; polymarket_trades is
   // the per-event log. Dedup by (condition_id, side) — polymarket_trades
   // wins on collision since it's the granular source. Mirror the dedup
   // logic from /api/member/:userId at server.js:14197-14223.
+  let realizedRows = [];
   let realizedTradeCount = 0;
   try {
-    const realizedRows = await dbQuery(`
+    realizedRows = await dbQuery(`
       SELECT condition_id, side, realized_pnl, entry_cost_usd
-        FROM realized_trades WHERE user_id = $1`, [userId]).catch(e => {
+        FROM realized_trades WHERE user_id = $1::uuid`, [userId]).catch(e => {
           if (diag) diag.errors.push({ stage: 'rt_query', message: e.message });
           return [];
         });
@@ -20758,6 +20765,7 @@ async function _fetchFlexStats(userId, diag) {
   }
   if (diag) diag.poly_stats_after_rt = { ...polyStats };
   if (diag) diag.realized_trade_count = realizedTradeCount;
+  console.log(`[flex/_fetch] user=${String(userId).slice(0, 8)} rt_fetched=${realizedRows.length} pt_has=${polyStats.has_trades} wins=${polyStats.wins} losses=${polyStats.losses}`);
 
   // closed_at probe — when consistency zeroes out for a whale with
   // hundreds of rows, two scenarios both produce weeks_active_90d=0
@@ -21090,7 +21098,11 @@ async function recomputeFlexScore(userId, opts) {
     console.warn('[flex] full update failed, trying fallback:', userId, e.message);
   }
 
-  // Tier 2 fallback: original-schema UPDATE without the aggregate columns
+  // Tier 2 fallback: CASE-guarded UPDATE preserves prediction_* columns when
+  // realized_trades has no rows for this user (rtTotal=0 → CASE is false).
+  const rtTotal = (diag && Number.isFinite(diag.realized_trade_count)) ? diag.realized_trade_count : 0;
+  const rtWinRate = 0;
+  const rtPnl = 0;
   try {
     const upd = await pool.query(`
       UPDATE users SET
@@ -21104,13 +21116,18 @@ async function recomputeFlexScore(userId, opts) {
         flex_c_pnl           = $8,
         flex_c_consistency   = $9,
         flex_c_breadth       = $10,
-        flex_computed_at     = now()
+        flex_computed_at     = now(),
+        realized_trade_count = CASE WHEN $12 > 0 THEN $12 ELSE realized_trade_count END,
+        total_predictions    = CASE WHEN $12 > 0 THEN $12 ELSE total_predictions END,
+        prediction_win_rate  = CASE WHEN $12 > 0 THEN $13 ELSE prediction_win_rate END,
+        prediction_pnl       = CASE WHEN $12 > 0 THEN $14 ELSE prediction_pnl END
       WHERE id = $11`,
       [
         result.score, tier, result.qualifies, result.settled_events, result.raw_win_rate,
         result.components.accuracy, result.components.calibration, result.components.pnl,
         result.components.consistency, result.components.breadth,
         userId,
+        rtTotal, rtWinRate, rtPnl,
       ]
     );
     if (diag) diag.update = { stage: 'fallback_existing', rowCount: upd.rowCount };
