@@ -49,6 +49,31 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-08 (feed signal-first redesign)
+
+**Shipped (with hashes):**
+- `f8bb6c2`: fix(feed/theses) — widen image match, bidirectional fuzzy + slug fallback
+- `605f048`: fix(feed) — 8s AbortController timeout + retry button on NEWS tab; DOMContentLoaded boot guard
+- `33bf83e`: feat(feed) — FULL signal-first redesign: tab renamed SIGNALS, hero card (top market by edge score via `/api/alpha/top?n=1`), live signal stream (up to 10 from `/api/signals`, type-colored), structural edge card ("NO resolves 4x more than YES"), wallet CTA for anonymous users
+- Also in this session (earlier): PRs #178–#184 (cherry-picks from pre-reset branches + feed/theses source filter + take_reactions schema evolution)
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+1. **TAKES tab** — deferred, no human creator content yet; re-enable when there are real takes to surface
+2. **Hyperliquid strip** — no public HL feed endpoint exists server-side; placeholder was omitted rather than faked
+3. **Surgical FLEX fix** — still blocked on Marc's curl result from prior session
+
+**Open questions / unverified:**
+- `/api/signals` and `/api/alpha/top` return 403 from unauthenticated curl — verify both return real data for logged-in users in browser
+- Wallet CTA visibility: shown when `window.__USER__?.id` is falsy — confirm nav.js populates `window.__USER__` correctly for anonymous visitors
+
+**Notes for next session:**
+- Feed is now signal-first. The mantra: "What is sharp money doing right now?" — every surface answers it.
+- Signal type color coding: whale_cluster=blue, new_entry=green, momentum=amber, volume_surge=purple
+- Next lever: auto-refresh signal stream (poll `/api/signals` every 2 min, flash new items) — that's what makes the FOMO loop run
+
 ## 2026-05-29 (passport reconciliation)
 
 **Shipped (with hashes):**
