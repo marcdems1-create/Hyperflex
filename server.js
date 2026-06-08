@@ -13997,7 +13997,7 @@ app.get('/api/feed/theses', async (req, res) => {
     const { category, tier, window: windowDays, sort = 'trending' } = req.query;
     const limit = 50;
 
-    let whereClauses = [`t.thesis IS NOT NULL`, `LENGTH(t.thesis) >= 50`, `(t.source IS NULL OR t.source != 'consensus')`];
+    let whereClauses = [`t.thesis IS NOT NULL`, `LENGTH(t.thesis) >= 50`, `(t.source IS NULL OR t.source NOT IN ('consensus', 'whale'))`];
     let params = [];
     let pi = 1;
 
