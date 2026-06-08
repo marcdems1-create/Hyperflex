@@ -14056,13 +14056,8 @@ app.get('/api/feed/theses', async (req, res) => {
 
     const rows = await dbQuery(sql, params);
 
-    // Build slug → image_url map from screener cache (no extra API call)
-    const slugImageMap = {};
-    const screenerData = ((_screenerCache && _screenerCache.data) || []);
-    for (const m of screenerData) {
-      const slug = m.slug || m.market_slug;
-      if (slug && (m.image || m.market_image)) slugImageMap[slug] = m.image || m.market_image;
-    }
+    // Build question-prefix → image_url lookup from screener cache (no extra API call)
+    const screenerMarkets = ((_screenerCache && _screenerCache.data) || []);
 
     // Group consecutive takes by the same creator within 24h into bundles.
     // Each bundle has a primary thesis (longest thesis text) + preview of
@@ -14121,7 +14116,14 @@ app.get('/api/feed/theses', async (req, res) => {
         disagree_count: p.disagree_count || 0,
         entry_price: p.entry_price,
         side: p.side,
-        image_url: slugImageMap[p.market_slug] || null,
+        image_url: (() => {
+          const firstQ = uniqueQuestions[0] || '';
+          if (!firstQ) return null;
+          const imageMatch = screenerMarkets.find(m =>
+            m.question && m.question.toLowerCase().includes(firstQ.toLowerCase().slice(0, 30))
+          );
+          return imageMatch?.image || imageMatch?.event_image_url || null;
+        })(),
         like_count: 0
       });
     }
