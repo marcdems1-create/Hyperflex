@@ -21242,6 +21242,239 @@ function recomputeSportsFlexForUser(userId) {
 }
 module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
 
+// ── Messaging v1 — 1:1 plain-text DMs ─────────────────────────────────────
+// Schema in supabase_migration_messaging.sql + boot-time auto-migration
+// at the bottom of server.js. Five endpoints, all requireAuth-gated.
+//
+// The message button on profile pages is the v1 entry point — clicking
+// "Message" hits POST /api/conversations with { recipient_user_id }, which
+// either returns the existing 1:1 thread or creates one. UI ships in a
+// follow-up; this PR is schema + API + tests only.
+//
+// Out of scope for v1 (locked, do NOT widen): group chat, attachments,
+// websockets/SSE (polling is the v1 transport), typing indicators,
+// read receipts visible to other party, search, block/report, message
+// editing UX (deleted_at column exists in schema but no endpoint uses it).
+
+// Find or create the canonical 1:1 conversation between two users.
+// Extracted as a module-level helper so the test suite can hit it
+// directly without bringing up the express layer. Also used by the
+// POST /api/conversations endpoint below.
+//
+// Idempotency: given the same two users in any order, returns the same
+// conversation_id. Existing-thread lookup keys on "exactly two
+// participants AND both are these users" — a >2-participant conversation
+// happens to contain user_a and user_b is NOT a 1:1 thread and won't match.
+//
+// `dbClient` is either the default `pool` (production) or a test-supplied
+// pg client / pool with the same `.query()` shape (so tests can use a
+// transaction-bound client for rollback isolation).
+async function findOrCreateOneOnOneConversation(userIdA, userIdB, dbClient) {
+  if (!dbClient) dbClient = pool;
+  if (!dbClient) throw new Error('messaging: no db client');
+  if (!userIdA || !userIdB) throw new Error('messaging: both user ids required');
+  if (userIdA === userIdB) throw new Error('messaging: cannot DM yourself');
+
+  // Existing 1:1 thread lookup.
+  const existing = await dbClient.query(
+    `SELECT c.id
+       FROM conversations c
+      WHERE EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $1)
+        AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $2)
+        AND (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) = 2
+      LIMIT 1`,
+    [userIdA, userIdB]
+  );
+  if (existing.rows && existing.rows.length) {
+    return { id: existing.rows[0].id, created: false };
+  }
+
+  // Create. Two participant inserts after the conversation row — wrapped
+  // in a transaction so we never end up with a conversation that has
+  // 0 or 1 participants if the second insert fails.
+  const conv = await dbClient.query(
+    `INSERT INTO conversations DEFAULT VALUES RETURNING id`
+  );
+  const convId = conv.rows[0].id;
+  await dbClient.query(
+    `INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3)`,
+    [convId, userIdA, userIdB]
+  );
+  return { id: convId, created: true };
+}
+module.exports = Object.assign(module.exports || {}, { findOrCreateOneOnOneConversation });
+
+// GET /api/conversations — list current user's conversations.
+// Returns: [{ id, other_user: {id, display_name, avatar_url}, last_message: {body, sender_id, created_at}, unread, last_message_at }]
+// Sorted by last_message_at desc, capped at 100.
+app.get('/api/conversations', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const rows = await dbQuery(
+      `SELECT c.id,
+              c.last_message_at,
+              cp.last_read_at,
+              (SELECT user_id FROM conversation_participants
+                WHERE conversation_id = c.id AND user_id <> $1 LIMIT 1) AS other_user_id,
+              (SELECT body FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_body,
+              (SELECT sender_id FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_sender,
+              (SELECT created_at FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_created_at,
+              EXISTS (SELECT 1 FROM messages m
+                       WHERE m.conversation_id = c.id
+                         AND m.created_at > cp.last_read_at
+                         AND m.sender_id <> $1
+                         AND m.deleted_at IS NULL) AS unread
+         FROM conversations c
+         JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.user_id = $1
+        ORDER BY c.last_message_at DESC NULLS LAST
+        LIMIT 100`,
+      [req.userId]
+    );
+    // Hydrate other_user display info in one round-trip.
+    const otherIds = [...new Set(rows.map(r => r.other_user_id).filter(Boolean))];
+    let usersById = {};
+    if (otherIds.length) {
+      const userRows = await dbQuery(
+        `SELECT id, display_name, username, avatar_url FROM users WHERE id = ANY($1)`,
+        [otherIds]
+      );
+      for (const u of userRows) usersById[u.id] = u;
+    }
+    res.json({
+      conversations: rows.map(r => ({
+        id: r.id,
+        last_message_at: r.last_message_at,
+        unread: r.unread === true,
+        other_user: usersById[r.other_user_id] || { id: r.other_user_id },
+        last_message: r.last_message_body
+          ? { body: r.last_message_body, sender_id: r.last_message_sender, created_at: r.last_message_created_at }
+          : null,
+      })),
+    });
+  } catch (e) {
+    console.warn('[messaging] list conversations:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations — find-or-create a 1:1 thread.
+// Body: { recipient_user_id }. Returns { id, created }.
+app.post('/api/conversations', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const recipientId = String(req.body && req.body.recipient_user_id || '').trim();
+    if (!recipientId) return res.status(400).json({ error: 'recipient_user_id required' });
+    if (recipientId === req.userId) return res.status(400).json({ error: 'cannot DM yourself' });
+    // Recipient existence check — surface a clean 404 instead of a foreign-key error.
+    const exists = await dbQuery('SELECT 1 FROM users WHERE id = $1', [recipientId]);
+    if (!exists.length) return res.status(404).json({ error: 'recipient not found' });
+    const result = await findOrCreateOneOnOneConversation(req.userId, recipientId);
+    res.json(result);
+  } catch (e) {
+    console.warn('[messaging] create conversation:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/conversations/:id/messages — paginated thread.
+// Query: ?before=<msg_id>&limit=50. Default limit 50, max 100.
+// Order: newest-first within the page (UI reverses for chronological display).
+app.get('/api/conversations/:id/messages', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    // Authorize: current user must be a participant.
+    const member = await dbQuery(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!member.length) return res.status(404).json({ error: 'conversation not found' });
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const before = req.query.before ? String(req.query.before) : null;
+    let rows;
+    if (before) {
+      rows = await dbQuery(
+        `SELECT id, sender_id, body, created_at FROM messages
+          WHERE conversation_id = $1 AND deleted_at IS NULL
+            AND created_at < (SELECT created_at FROM messages WHERE id = $2 AND conversation_id = $1)
+          ORDER BY created_at DESC LIMIT $3`,
+        [convId, before, limit]
+      );
+    } else {
+      rows = await dbQuery(
+        `SELECT id, sender_id, body, created_at FROM messages
+          WHERE conversation_id = $1 AND deleted_at IS NULL
+          ORDER BY created_at DESC LIMIT $2`,
+        [convId, limit]
+      );
+    }
+    res.json({ messages: rows });
+  } catch (e) {
+    console.warn('[messaging] thread fetch:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations/:id/messages — send a message.
+// Body: { body }. 1..2000 chars. Returns the inserted message row.
+// Updates conversations.last_message_at as a side effect so the list
+// endpoint orders correctly.
+app.post('/api/conversations/:id/messages', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    const body = String(req.body && req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'body required' });
+    if (body.length > 2000) return res.status(400).json({ error: 'body too long (max 2000)' });
+    // Authorize: current user must be a participant.
+    const member = await dbQuery(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!member.length) return res.status(404).json({ error: 'conversation not found' });
+    const inserted = await dbQuery(
+      `INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3)
+       RETURNING id, sender_id, body, created_at`,
+      [convId, req.userId, body]
+    );
+    await dbQuery(
+      `UPDATE conversations SET last_message_at = NOW() WHERE id = $1`,
+      [convId]
+    );
+    res.json({ message: inserted[0] });
+  } catch (e) {
+    console.warn('[messaging] send message:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations/:id/read — mark thread read.
+// Sets last_read_at = NOW() for the current user's participant row.
+// The list endpoint computes `unread` by comparing this against
+// messages.created_at (excluding messages the current user sent).
+app.post('/api/conversations/:id/read', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    const result = await pool.query(
+      `UPDATE conversation_participants SET last_read_at = NOW()
+        WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'conversation not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.warn('[messaging] mark read:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
   try {
@@ -56782,6 +57015,32 @@ if (pool) {
       )`).catch(e => console.warn('[boot] prediction_thesis_leg create:', e.message));
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_thesis ON prediction_thesis_leg(thesis_id)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_condition ON prediction_thesis_leg(condition_id) WHERE resolution IS NULL`).catch(() => {});
+
+      // Messaging v1 — see supabase_migration_messaging.sql for the
+      // standalone migration file + scope notes. 1:1 plain-text DMs.
+      // users.id is TEXT, foreign keys match.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS conversations (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_message_at TIMESTAMPTZ
+      )`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS conversation_participants (
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_read_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (conversation_id, user_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_conv_participants_user ON conversation_participants(user_id)`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS messages (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body            TEXT NOT NULL CHECK (length(body) > 0 AND length(body) <= 2000),
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at      TIMESTAMPTZ
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at DESC)`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
