@@ -45196,6 +45196,110 @@ Only include headlines that actually affect a market. Skip irrelevant ones.`
   }
 });
 
+// ── GET /api/news-feed — news headlines paired with closest Polymarket market ──
+// 5-min TTL cache. No LLM — pure token-overlap scoring, fast + free.
+let _newsFeedCache = { ts: 0, data: null };
+const NEWS_FEED_TTL = 5 * 60 * 1000;
+
+function _tokenize(text) {
+  return (text || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !/^(that|this|with|from|will|have|been|they|their|were|when|what|which|also|about|into|over|more|some|than|then|like|just|said|says|after|before|during|would|could|should|there|these|those|other|your|here|does|each|both|such|where|while)$/.test(w));
+}
+
+function _matchHeadlineToMarket(headline, markets) {
+  const hTokens = new Set(_tokenize(headline.title));
+  if (hTokens.size === 0) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const m of markets) {
+    const mTokens = _tokenize(m.question);
+    let overlap = 0;
+    for (const t of hTokens) {
+      if (mTokens.includes(t)) overlap++;
+    }
+    const score = overlap / Math.max(hTokens.size, mTokens.length, 1);
+    if (score > bestScore && overlap >= 2) {
+      bestScore = score;
+      best = m;
+    }
+  }
+
+  return bestScore >= 0.08 ? best : null;
+}
+
+app.get('/api/news-feed', async (req, res) => {
+  try {
+    if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
+      return res.json(_newsFeedCache.data);
+    }
+
+    // Fetch headlines from Google News RSS (multiple topic feeds in parallel)
+    const [top, world, biz, tech, politics, crypto] = await Promise.all([
+      fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 20),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en', 10),
+      fetchRSSFeed('https://news.google.com/rss/search?q=election+president+congress&hl=en-US&gl=US&ceid=US:en', 10),
+      fetchRSSFeed('https://news.google.com/rss/search?q=bitcoin+crypto+ethereum&hl=en-US&gl=US&ceid=US:en', 10),
+    ]);
+
+    // Dedupe by title prefix
+    const seen = new Set();
+    const allHeadlines = [...top, ...world, ...biz, ...tech, ...politics, ...crypto]
+      .filter(h => {
+        const key = h.title.toLowerCase().slice(0, 50);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 40);
+
+    // Get screener markets for matching
+    const markets = (_screenerCache && Array.isArray(_screenerCache.data))
+      ? _screenerCache.data.filter(m => m.question && m.yes_price != null)
+      : [];
+
+    // Pair each headline with best market match
+    const paired = allHeadlines.map(h => {
+      const market = markets.length ? _matchHeadlineToMarket(h, markets) : null;
+      return {
+        headline: h.title,
+        source: h.source || 'Google News',
+        url: h.link || null,
+        publishedAt: null,
+        market: market ? {
+          slug: market.slug,
+          question: market.question,
+          yes_price: market.yes_price,
+          volume: market.volume,
+          end_date: market.end_date,
+          image: market.image || null,
+          event_image_url: market.event_image_url || null,
+          category: market.category || null,
+          edge_score: market.edge_score || 0,
+          whale_count: market.whale_count || 0,
+        } : null
+      };
+    });
+
+    // Prioritize items that have a matched market
+    const withMarket    = paired.filter(p => p.market);
+    const withoutMarket = paired.filter(p => !p.market);
+    const result = { items: [...withMarket, ...withoutMarket].slice(0, 30) };
+
+    _newsFeedCache = { ts: Date.now(), data: result };
+    console.log(`[news-feed] ${withMarket.length}/${paired.length} headlines matched to markets`);
+    res.json(result);
+  } catch (err) {
+    console.error('[news-feed]', err.message);
+    res.json(_newsFeedCache.data || { items: [] });
+  }
+});
+
 // ── NEW MARKETS — recently created on Polymarket ──────────────────────────
 let _newMarketsCache = null;
 
