@@ -45284,6 +45284,99 @@ function _matchHeadlineToMarket(headline, markets) {
   return bestMatch;
 }
 
+// ── Two-stage matching: free keyword pre-filter → cheap Haiku judge ──────────
+// Stage 1 (free) collects up to 5 candidate markets by token overlap — NO
+// auto-pick, deliberately loose (any overlap qualifies). Stage 2 (cheap) asks
+// Haiku which candidate is genuinely related, or none. Per-headline decisions
+// are cached 1h so Haiku runs ~once per headline, not on every 5-min rebuild.
+const _matchCache = new Map(); // headlineText -> { slug, ts }  (slug null = no match)
+const MATCH_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// Bounded-concurrency async map — caps simultaneous in-flight tasks at `limit`.
+async function _mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
+// Stage 1: top-N candidates by overlap. Loose on purpose — Haiku filters.
+function _getCandidateMarkets(headline, markets, limit = 5) {
+  const hSet = new Set(_tokenize(headline.title || headline));
+  if (hSet.size < 1) return [];
+  const scored = [];
+  for (const m of markets) {
+    const qSet = new Set(_tokenize(m.question || m.title || ''));
+    const dSet = new Set(_tokenize(m.description || ''));
+    let qOverlap = 0, dOverlap = 0;
+    for (const t of hSet) {
+      if (qSet.has(t)) qOverlap++;
+      else if (dSet.has(t)) dOverlap++;
+    }
+    const score = qOverlap * 2 + dOverlap;
+    if (score > 0) scored.push({ m, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.m);
+}
+
+// Stage 2: Haiku picks the one genuinely-related market, or none (0).
+async function _haikuPickMarket(headline, candidates) {
+  if (!candidates || candidates.length === 0) return null;
+  const hText = headline.title || headline;
+  const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
+  const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, answer 0.
+
+Headline: "${hText}"
+
+Markets:
+${list}
+
+Answer with ONLY the number (0 if none are related). No explanation.`;
+  try {
+    const resp = await backgroundClaudeCall({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 8,
+      messages: [{ role: 'user', content: prompt }]
+    }, 'news-match');
+    const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
+    const pick = parseInt(text, 10);
+    if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
+    return candidates[pick - 1];
+  } catch (e) {
+    console.error('[news-match] haiku error:', e.message);
+    return null; // fail safe: no match rather than a bad match
+  }
+}
+
+// Resolve a headline to a live market object via the 1h decision cache.
+// Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
+// — keeps price/image fresh even though the match decision is an hour old.
+async function _resolveMatchCached(headline, markets) {
+  const key = headline.title || headline;
+  const cached = _matchCache.get(key);
+  let slug;
+  if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
+    slug = cached.slug;
+  } else {
+    const candidates = _getCandidateMarkets(headline, markets, 5);
+    const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
+    slug = picked ? picked.slug : null;
+    _matchCache.set(key, { slug, ts: Date.now() });
+    console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
+      key.slice(0, 40), '-> pick:', picked ? (picked.question || '').slice(0, 40) : 'NONE');
+  }
+  if (!slug) return null;
+  return markets.find(m => m.slug === slug) || null;
+}
+
 app.get('/api/news-feed', async (req, res) => {
   try {
     if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
@@ -45341,31 +45434,54 @@ app.get('/api/news-feed', async (req, res) => {
     }
     const markets = pool.filter(m => m.question && m.yes_price != null);
 
-    // Pair each headline with best market match
+    // Prune expired decision-cache entries (bounded memory)
+    if (_matchCache.size > 500) {
+      const cutoff = Date.now() - MATCH_CACHE_TTL;
+      for (const [k, v] of _matchCache) if (v.ts < cutoff) _matchCache.delete(k);
+    }
+
+    // AI matching is on by default. Kill switches: NEWS_AI_MATCHING=false
+    // (feature-specific) or the global CLAUDE_BACKGROUND_DISABLED=true; either
+    // falls back to free keyword top-1 matching.
+    const aiMatching = process.env.NEWS_AI_MATCHING !== 'false'
+      && process.env.CLAUDE_BACKGROUND_DISABLED !== 'true'
+      && !!process.env.ANTHROPIC_API_KEY
+      && markets.length > 0;
+
     console.log(`[news-feed] using market pool size: ${markets.length}`);
-    console.log(`[news-feed] matching ${allHeadlines.length} headlines against ${markets.length} markets`);
+    console.log(`[news-feed] matching ${allHeadlines.length} headlines (ai=${aiMatching})`);
     console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
-    const paired = allHeadlines.map(h => {
-      const market = markets.length ? _matchHeadlineToMarket(h, markets) : null;
-      return {
-        headline: h.title,
-        source: h.source || 'Google News',
-        url: h.link || null,
-        publishedAt: h.pubDate ? new Date(h.pubDate).toISOString() : null,
-        market: market ? {
-          slug: market.slug,
-          question: market.question,
-          yes_price: market.yes_price,
-          volume: market.volume,
-          end_date: market.end_date,
-          image: market.image || null,
-          event_image_url: market.event_image_url || null,
-          category: market.category || null,
-          edge_score: market.edge_score || 0,
-          whale_count: market.whale_count || 0,
-        } : null
-      };
+
+    const buildItem = (h, market) => ({
+      headline: h.title,
+      source: h.source || 'Google News',
+      url: h.link || null,
+      publishedAt: h.pubDate ? new Date(h.pubDate).toISOString() : null,
+      market: market ? {
+        slug: market.slug,
+        question: market.question,
+        yes_price: market.yes_price,
+        volume: market.volume,
+        end_date: market.end_date,
+        image: market.image || null,
+        event_image_url: market.event_image_url || null,
+        category: market.category || null,
+        edge_score: market.edge_score || 0,
+        whale_count: market.whale_count || 0,
+      } : null
     });
+
+    let paired;
+    if (aiMatching) {
+      // Two-stage: keyword candidates → Haiku judge, concurrency-capped at 5.
+      paired = await _mapLimit(allHeadlines, 5, async (h) => {
+        const market = await _resolveMatchCached(h, markets);
+        return buildItem(h, market);
+      });
+    } else {
+      // Free keyword fallback (strict gate, top-1).
+      paired = allHeadlines.map(h => buildItem(h, markets.length ? _matchHeadlineToMarket(h, markets) : null));
+    }
 
     // Prioritize items that have a matched market
     const withMarket    = paired.filter(p => p.market);
