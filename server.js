@@ -14125,11 +14125,15 @@ app.get('/api/feed/theses', async (req, res) => {
         entry_price: p.entry_price,
         side: p.side,
         image_url: (() => {
-          const firstQ = uniqueQuestions[0] || '';
-          if (!firstQ) return null;
-          const imageMatch = screenerMarkets.find(m =>
-            m.question && m.question.toLowerCase().includes(firstQ.toLowerCase().slice(0, 30))
-          );
+          const q1 = ((uniqueQuestions[0] || '')).toLowerCase().replace(/[^a-z0-9 ]/g, '').slice(0, 25);
+          let imageMatch = q1.length > 8 ? screenerMarkets.find(m => {
+            const q2 = (m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '');
+            return q2.includes(q1) || q1.includes(q2.slice(0, 25));
+          }) : null;
+          // Fallback: match by market_slug if question match failed
+          if (!imageMatch && p.market_slug) {
+            imageMatch = screenerMarkets.find(m => (m.slug || m.market_slug) === p.market_slug);
+          }
           return imageMatch?.image || imageMatch?.event_image_url || null;
         })(),
         like_count: 0
