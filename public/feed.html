@@ -163,7 +163,13 @@ body {
 }
 
 /* ── FEED ── */
-.feed-grid { display: flex; flex-direction: column; gap: 14px; }
+.feed-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 640px)  { .feed-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .feed-grid { grid-template-columns: repeat(3, 1fr); } }
 
 /* ── THESIS CARD ── */
 .thesis-card {
@@ -231,6 +237,20 @@ body {
   padding: 2px 7px;
   border-radius: 6px;
 }
+
+/* no-image gradient banner (replaces flat header row) */
+.card-img-fallback {
+  height: 130px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0;
+}
+.card-img-fallback.cat-politics { background: linear-gradient(135deg, #1a1a4e 0%, #2d1b69 100%); }
+.card-img-fallback.cat-crypto   { background: linear-gradient(135deg, #0f2027 0%, #203a43 100%); }
+.card-img-fallback.cat-sports   { background: linear-gradient(135deg, #1a2a1a 0%, #2d4a1e 100%); }
+.card-img-fallback.cat-other    { background: linear-gradient(135deg, #1a1a2e 0%, #0e0e15 100%); }
 
 /* badges */
 .badge-sharp {
@@ -518,6 +538,15 @@ function currentUser() {
   };
 }
 
+// ── CARD HELPERS ─────────────────────────────────────────────────────────────
+function getCategoryClass(t) {
+  const q = ((t.markets_preview && t.markets_preview[0]) || t.title || '').toLowerCase();
+  if (/polit|elect|president|congress|senate|trump|biden|democrat|republican/.test(q)) return 'politics';
+  if (/bitcoin|btc|eth|crypto|solana|coin|token|defi|nft/.test(q)) return 'crypto';
+  if (/nba|nfl|mlb|nhl|soccer|champion|world cup|super bowl|playoff|nascar|ufc/.test(q)) return 'sports';
+  return 'other';
+}
+
 // ── TRENDING STRIP ────────────────────────────────────────────────────────────
 function renderTrending(trending) {
   const sec  = document.getElementById('trending-section');
@@ -555,11 +584,13 @@ function buildCard(t) {
   const href     = t.creator_wallet ? `/trader/${esc(t.creator_wallet)}` : '/feed';
 
   // ── image or inline badges ──
+  const catClass = getCategoryClass(t);
   let topHtml;
   if (t.image_url) {
     topHtml = `
       <div class="card-img">
-        <img src="/api/img-proxy?url=${encodeURIComponent(t.image_url)}" alt="" loading="lazy">
+        <img src="/api/img-proxy?url=${encodeURIComponent(t.image_url)}" alt="" loading="lazy"
+             onerror="this.style.display='none'; this.parentElement.className='card-img card-img-fallback cat-${catClass}'">
         <div class="card-img-gradient"></div>
         <div class="card-img-badges">
           ${t.verified_sharp ? '<span class="badge-sharp">VERIFIED SHARP</span>' : ''}
@@ -569,10 +600,13 @@ function buildCard(t) {
       </div>`;
   } else {
     topHtml = `
-      <div class="card-header-row">
-        ${t.verified_sharp ? '<span class="badge-sharp">VERIFIED SHARP</span>' : ''}
-        <span class="clv-pill ${clvClass}">${esc(t.clv_classification || 'PENDING')}</span>
-        ${flexFmt ? `<span class="card-flex-inline">${flexFmt}</span>` : ''}
+      <div class="card-img-fallback cat-${catClass}">
+        <div class="card-img-gradient"></div>
+        <div class="card-img-badges">
+          ${t.verified_sharp ? '<span class="badge-sharp">VERIFIED SHARP</span>' : ''}
+          <span class="clv-pill ${clvClass}">${esc(t.clv_classification || 'PENDING')}</span>
+        </div>
+        ${flexFmt ? `<div class="card-flex-score">${flexFmt}</div>` : ''}
       </div>`;
   }
 
