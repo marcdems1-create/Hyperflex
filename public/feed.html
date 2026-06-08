@@ -455,6 +455,136 @@ body {
 }
 .feed-retry button:hover { background: #1a1a3a; }
 
+/* ── SIGNALS TAB ── */
+.hero-card {
+  background: #161618;
+  border: 1px solid #1e1e22;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  opacity: 0;
+  animation: fadeUp 0.35s ease 0.05s forwards;
+}
+.hero-card:hover { border-color: #2d2d40; }
+.hero-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: #5555ee;
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+.hero-live-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #5555ee; animation: pulse 2s ease-in-out infinite;
+}
+.hero-question {
+  font-size: 17px; font-weight: 700; line-height: 1.35;
+  color: #f0f0f5; margin-bottom: 14px;
+}
+.hero-prob {
+  font-size: 40px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1; margin-bottom: 12px;
+}
+.hero-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.hero-chip {
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  color: #555; letter-spacing: 0.4px;
+}
+.hero-chip.blue  { color: #4d9fff; }
+.hero-chip.green { color: #00e68a; }
+.hero-chip.gold  { color: #c9920d; }
+
+.signals-section-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #333;
+  font-family: 'JetBrains Mono', monospace;
+  margin: 20px 0 12px;
+}
+
+.signal-item {
+  display: flex; gap: 12px;
+  padding: 14px 0; border-bottom: 1px solid #141416;
+  cursor: default;
+  opacity: 0; animation: fadeUp 0.3s ease forwards;
+}
+.signal-item.has-link { cursor: pointer; }
+.signal-item.has-link:hover .signal-market { color: #e0e0f0; }
+.signal-type-bar {
+  flex-shrink: 0; width: 3px; border-radius: 2px;
+  background: #4d9fff; margin-top: 2px;
+}
+.signal-body { flex: 1; min-width: 0; }
+.signal-badge {
+  display: inline-block;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 3px;
+  margin-bottom: 6px; font-family: 'JetBrains Mono', monospace;
+  background: #161618; color: #888; border: 1px solid #1e1e22;
+}
+.signal-item.type-whale_cluster .signal-badge { color: #4d9fff; border-color: #1a2a4a; background: #0d1522; }
+.signal-item.type-new_entry     .signal-badge { color: #00e68a; border-color: #0a2a1a; background: #061510; }
+.signal-item.type-momentum      .signal-badge { color: #f59e0b; border-color: #2a1e0a; background: #15100a; }
+.signal-item.type-volume_surge  .signal-badge { color: #a855f7; border-color: #1e0a2a; background: #110820; }
+.signal-market {
+  font-size: 13px; font-weight: 600; color: #d0d0d8;
+  margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  transition: color 0.12s ease;
+}
+.signal-action {
+  font-size: 12px; color: #666; margin-bottom: 7px; line-height: 1.4;
+}
+.signal-footer { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.signal-stat {
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  color: #444; letter-spacing: 0.3px;
+}
+.signal-conf { font-weight: 700; }
+.signal-conf.HIGH   { color: #00e68a; }
+.signal-conf.MEDIUM { color: #f59e0b; }
+.signal-conf.LOW    { color: #555; }
+#signal-list .signal-item:last-child { border-bottom: none; }
+
+.edge-card {
+  background: #0d0d14; border: 1px solid #1a1a28;
+  border-radius: 8px; padding: 18px; margin: 24px 0;
+  opacity: 0; animation: fadeUp 0.4s ease 0.3s forwards;
+}
+.edge-card-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: #3333aa;
+  font-family: 'JetBrains Mono', monospace; margin-bottom: 10px;
+}
+.edge-card-stat {
+  font-size: 32px; font-weight: 700;
+  color: #ff4d6a; font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 8px; line-height: 1;
+}
+.edge-card-body { font-size: 13px; line-height: 1.65; color: #666; }
+
+.wallet-cta {
+  background: #161618; border: 1px solid #1e1e22;
+  border-radius: 8px; padding: 22px 20px; margin: 8px 0 20px;
+  text-align: center;
+  opacity: 0; animation: fadeUp 0.4s ease 0.35s forwards;
+}
+.wallet-cta-label {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: #444; margin-bottom: 10px; text-transform: uppercase;
+  letter-spacing: 1px; display: block;
+}
+.wallet-cta-title { font-size: 16px; font-weight: 700; color: #e8e8f0; margin-bottom: 8px; }
+.wallet-cta-sub { font-size: 12px; color: #555; margin-bottom: 16px; line-height: 1.6; }
+.wallet-cta-btn {
+  padding: 10px 24px; background: #5555ee; border: none;
+  color: #fff; font-size: 12px; font-weight: 600;
+  border-radius: 6px; cursor: pointer; font-family: inherit;
+  transition: background 0.15s ease;
+}
+.wallet-cta-btn:hover { background: #4444cc; }
+
 /* ── ANIMATIONS ── */
 @keyframes fadeUp {
   to { opacity: 1; transform: translateY(0); }
@@ -488,21 +618,29 @@ body {
 
   <!-- Tab bar -->
   <div class="tab-bar">
-    <button class="tab-btn active" data-tab="news" onclick="switchTab('news')">NEWS + MARKETS</button>
+    <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">SIGNALS</button>
     <button class="tab-btn" data-tab="takes" onclick="switchTab('takes')">TAKES</button>
   </div>
 
-  <!-- ── NEWS TAB ── -->
-  <div id="tab-news">
-    <div class="filter-rail" id="news-filter-rail">
-      <button class="filter-btn active" data-cat="">ALL</button>
-      <button class="filter-btn" data-cat="politics">POLITICS</button>
-      <button class="filter-btn" data-cat="crypto">CRYPTO</button>
-      <button class="filter-btn" data-cat="sports">SPORTS</button>
-      <button class="filter-btn" data-cat="business">BUSINESS</button>
-    </div>
-    <div class="news-list" id="news-list">
+  <!-- ── SIGNALS TAB ── -->
+  <div id="tab-signals">
+    <div id="hero-wrap">
       <div class="feed-empty">Loading…</div>
+    </div>
+    <div class="signals-section-label">LIVE SIGNALS</div>
+    <div id="signal-list">
+      <div class="feed-empty">Loading…</div>
+    </div>
+    <div class="edge-card">
+      <div class="edge-card-label">STRUCTURAL EDGE</div>
+      <div class="edge-card-stat">4×</div>
+      <div class="edge-card-body">NO resolves more often than YES on Polymarket. Crowd money piles into YES — it feels like a win. The sharps exploit the systematic optimism bias. Track where whale capital is actually positioned.</div>
+    </div>
+    <div class="wallet-cta" id="wallet-cta" style="display:none">
+      <div class="wallet-cta-label">TRACK YOUR EDGE</div>
+      <div class="wallet-cta-title">Connect your Polymarket wallet</div>
+      <div class="wallet-cta-sub">See how your picks compare to the top 50 whales. Every resolved market scored.</div>
+      <button class="wallet-cta-btn" onclick="location.href='/creator/login'">Connect wallet</button>
     </div>
   </div>
 
@@ -594,114 +732,119 @@ function currentUser() {
 }
 
 // ── TAB STATE ─────────────────────────────────────────────────────────────────
-let _activeTab = 'news';
-let _newsCat = '';
-let _newsItems = [];
+let _activeTab    = 'signals';
+let _signalsLoaded = false;
 let _takesFilters = { tier: '', sort: 'trending' };
-let _cardState = {};
+let _cardState    = {};
 
 function switchTab(tab) {
   _activeTab = tab;
-  document.getElementById('tab-news').style.display  = tab === 'news'  ? '' : 'none';
-  document.getElementById('tab-takes').style.display = tab === 'takes' ? '' : 'none';
+  document.getElementById('tab-signals').style.display = tab === 'signals' ? '' : 'none';
+  document.getElementById('tab-takes').style.display   = tab === 'takes'   ? '' : 'none';
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  if (tab === 'news'  && !_newsItems.length)  loadNews();
-  if (tab === 'takes' && !_takesLoaded)        loadTakes();
+  if (tab === 'signals' && !_signalsLoaded) loadSignals();
+  if (tab === 'takes'   && !_takesLoaded)   loadTakes();
 }
 
-// ── NEWS FEED ─────────────────────────────────────────────────────────────────
-async function loadNews() {
-  const list = document.getElementById('news-list');
-  list.innerHTML = '<div class="feed-empty">Loading…</div>';
-  const ctrl  = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const res = await fetch('/api/news-feed', { signal: ctrl.signal });
-    clearTimeout(timer);
-    const data = await res.json();
-    _newsItems = data.items || [];
-    document.getElementById('live-count').textContent =
-      _newsItems.filter(i => i.market).length + ' matched';
-    renderNews();
-  } catch (e) {
-    clearTimeout(timer);
-    console.error('[news-feed]', e);
-    list.innerHTML = '<div class="feed-empty feed-retry">Failed to load — <button onclick="loadNews()">Retry</button></div>';
-  }
-}
+// ── SIGNALS FEED ──────────────────────────────────────────────────────────────
+const _SIGNAL_COLORS = {
+  whale_cluster: '#4d9fff',
+  new_entry:     '#00e68a',
+  momentum:      '#f59e0b',
+  volume_surge:  '#a855f7',
+};
 
-function renderNews() {
-  const list = document.getElementById('news-list');
-  const filtered = _newsCat
-    ? _newsItems.filter(i => headlineCatMatch(i.headline, _newsCat))
-    : _newsItems;
-
-  if (!filtered.length) {
-    list.innerHTML = '<div class="feed-empty">No headlines match</div>';
-    return;
-  }
-
-  list.innerHTML = filtered.map(item => buildNewsItem(item)).join('');
-}
-
-function buildNewsItem(item) {
-  const sourceLabel = esc(item.source || 'News');
-  const headlineHtml = item.url
-    ? `<a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.headline)}</a>`
-    : esc(item.headline);
-
-  let marketHtml = '';
-  if (item.market) {
-    const m = item.market;
-    const { text: probText, cls: probCls } = probDisplay(m);
-    const catCls = mktCatClass(m);
-    const volStr = formatVol(m.volume);
-    const expStr = formatExpiry(m.end_date);
-    const edgeScore = m.edge_score ? Math.round(m.edge_score) : 0;
-    const edgeHtml = edgeScore >= 50
-      ? `<span class="mkt-edge">EDGE ${edgeScore}</span>` : '';
-
-    const imgSrc = m.image || m.event_image_url || '';
-    const imgHtml = imgSrc
-      ? `<img src="/api/img-proxy?url=${encodeURIComponent(imgSrc)}" alt=""
-              onerror="this.style.display='none'">`
-      : '';
-
-    const marketSlug = m.slug || '';
-    marketHtml = `
-      <div class="attached-market" onclick="location.href='/market/${esc(marketSlug)}'">
-        <div class="mkt-image-wrap ${catCls}">${imgHtml}</div>
-        <div class="mkt-body">
-          <div class="mkt-question">${esc(m.question)}</div>
-          <div class="mkt-meta-row">
-            <span class="mkt-prob ${probCls}">${esc(probText)}</span>
-            ${volStr ? `<span class="mkt-vol">${esc(volStr)}</span>` : ''}
-            ${expStr ? `<span class="mkt-expiry">${esc(expStr)}</span>` : ''}
-            ${edgeHtml}
-          </div>
-        </div>
-      </div>`;
-  }
-
+function buildHeroCard(m) {
+  if (!m) return '<div class="feed-empty">No active markets found</div>';
+  const pct  = Math.round((m.yes_price || 0.5) * 100);
+  const probColor = pct >= 65 ? '#00e68a' : pct <= 35 ? '#ff4d6a' : '#f0f0f5';
+  const edge = Math.round(m.edge_score || 0);
+  const vol  = formatVol(m.volume_24h || m.volume);
+  const whales = m.whale_count || 0;
+  const depth = m.depth_side ? m.depth_side.toUpperCase() + ' PRESSURE' : '';
+  const slug  = m.slug || '';
+  const click = slug ? `onclick="location.href='/market/${esc(slug)}'"` : '';
+  const imgSrc = m.image || m.event_image_url || '';
+  const imgHtml = imgSrc
+    ? `<img src="/api/img-proxy?url=${encodeURIComponent(imgSrc)}" alt="" loading="lazy"
+           onerror="this.style.display='none'"
+           style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block">`
+    : '';
   return `
-<div class="news-item">
-  <div class="news-headline-row">
-    <span class="news-source-chip">${sourceLabel}</span>
-    <div class="news-headline">${headlineHtml}</div>
+<div class="hero-card" ${click}>
+  <div class="hero-label"><span class="hero-live-dot"></span>HIGHEST EDGE — LIVE</div>
+  ${imgHtml}
+  <div class="hero-question">${esc(m.question)}</div>
+  <div class="hero-prob" style="color:${probColor}">${pct}%</div>
+  <div class="hero-meta">
+    ${edge  ? `<span class="hero-chip gold">EDGE ${edge}</span>` : ''}
+    ${whales ? `<span class="hero-chip blue">${whales} WHALES</span>` : ''}
+    ${vol   ? `<span class="hero-chip">${vol} 24H</span>` : ''}
+    ${depth ? `<span class="hero-chip green">${esc(depth)}</span>` : ''}
   </div>
-  ${marketHtml || '<div class="no-market-row">NO MARKET FOUND</div>'}
 </div>`;
 }
 
-// News category filter
-document.getElementById('news-filter-rail').addEventListener('click', e => {
-  const btn = e.target.closest('.filter-btn');
-  if (!btn) return;
-  _newsCat = btn.dataset.cat || '';
-  document.querySelectorAll('#news-filter-rail .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderNews();
-});
+function buildSignalCard(s, idx) {
+  const color = _SIGNAL_COLORS[s.type] || '#555';
+  const badge = (s.badge || s.type || 'Signal').replace(/_/g, ' ');
+  const capFmt = s.capital >= 1000 ? formatVol(s.capital) : '';
+  const when  = s.detected_at ? relTime(s.detected_at) : '';
+  const slug  = s.slug || '';
+  const click = slug ? `onclick="location.href='/market/${esc(slug)}'"` : '';
+  const hasLink = slug ? ' has-link' : '';
+  return `
+<div class="signal-item type-${esc(s.type || 'other')}${hasLink}" style="animation-delay:${idx*0.05}s" ${click}>
+  <div class="signal-type-bar" style="background:${color}"></div>
+  <div class="signal-body">
+    <span class="signal-badge">${esc(badge)}</span>
+    <div class="signal-market">${esc(s.market || '—')}</div>
+    <div class="signal-action">${esc(s.action || '')}</div>
+    <div class="signal-footer">
+      ${s.confidence ? `<span class="signal-stat signal-conf ${esc(s.confidence)}">${esc(s.confidence)}</span>` : ''}
+      ${s.whale_count > 0 ? `<span class="signal-stat">${s.whale_count} whales</span>` : ''}
+      ${capFmt ? `<span class="signal-stat">${capFmt}</span>` : ''}
+      ${s.yes_pct != null ? `<span class="signal-stat">${s.yes_pct}%</span>` : ''}
+      ${when ? `<span class="signal-stat">${esc(when)}</span>` : ''}
+    </div>
+  </div>
+</div>`;
+}
+
+async function loadSignals() {
+  const heroWrap   = document.getElementById('hero-wrap');
+  const signalList = document.getElementById('signal-list');
+  const countEl    = document.getElementById('live-count');
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const [alphaRes, sigRes] = await Promise.all([
+      fetch('/api/alpha/top?n=1', { signal: ctrl.signal }),
+      fetch('/api/signals',       { signal: ctrl.signal }),
+    ]);
+    clearTimeout(timer);
+    const [alphaData, sigData] = await Promise.all([
+      alphaRes.json().catch(() => ({})),
+      sigRes.json().catch(() => ({})),
+    ]);
+    const top     = (alphaData.markets || [])[0] || null;
+    const signals = (sigData.signals || []).slice(0, 10);
+    heroWrap.innerHTML   = buildHeroCard(top);
+    signalList.innerHTML = signals.length
+      ? signals.map((s, i) => buildSignalCard(s, i)).join('')
+      : '<div class="feed-empty">No active signals</div>';
+    if (countEl) countEl.textContent = signals.length + ' live';
+    _signalsLoaded = true;
+    // Show wallet CTA for anonymous users
+    const cta = document.getElementById('wallet-cta');
+    if (cta) cta.style.display = (window.__USER__ && window.__USER__.id) ? 'none' : '';
+  } catch (e) {
+    clearTimeout(timer);
+    console.error('[signals]', e);
+    heroWrap.innerHTML   = '<div class="feed-empty feed-retry">Failed to load — <button onclick="loadSignals()">Retry</button></div>';
+    signalList.innerHTML = '';
+  }
+}
 
 // ── TAKES FEED ────────────────────────────────────────────────────────────────
 let _takesLoaded = false;
@@ -960,8 +1103,8 @@ function shareCard(e, id, wallet) {
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
-if (document.readyState !== 'loading') { loadNews(); }
-else { document.addEventListener('DOMContentLoaded', loadNews); }
+if (document.readyState !== 'loading') { loadSignals(); }
+else { document.addEventListener('DOMContentLoaded', loadSignals); }
 </script>
 
 </body>
