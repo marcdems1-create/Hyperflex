@@ -4,102 +4,169 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Trader Profile | HYPERFLEX</title>
-<meta name="description" content="Trader profile — CLV classification, FLEX score, and resolved trade record."/>
+<meta name="description" content="Trader profile — CLV classification, FLEX score, and resolved thesis track record."/>
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/hyperflex-mobile.css"/>
 <style>
 :root {
-  --bg: #0a0a0d;
-  --surface: #111115;
-  --border: #1e1e2a;
+  --paper:   #0e0e15;
+  --paper-2: #16161f;
+  --paper-3: #1e1e2a;
+  --ink:     #f0f0f5;
+  --ink2:    #c8c8d8;
+  --ink3:    #8888a0;
+  --ink4:    #5a5a72;
+  --border:  #1e1e2a;
   --border2: #2a2a38;
-  --ink: #e8e8f0;
-  --ink2: #a0a0b8;
-  --ink3: #5a5a72;
-  --green: #00e68a;
-  --red: #ff4d6a;
-  --amber: #f59e0b;
-  --gold: #ffb800;
-  --cyan: #00d4ff;
-  --mono: 'JetBrains Mono', monospace;
-  --syne: 'Syne', sans-serif;
+  --green:   #00e68a;
+  --red:     #ff4d6a;
+  --amber:   #f59e0b;
+  --blue:    #4d9fff;
+  --mono:    'JetBrains Mono', ui-monospace, monospace;
+  --sans:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: var(--bg); color: var(--ink); font-family: var(--mono); min-height: 100vh; font-size: 13px; -webkit-font-smoothing: antialiased; }
-a { color: var(--cyan); text-decoration: none; }
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  min-height: 100vh;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+a { color: var(--blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-.nav { display:flex; align-items:center; justify-content:space-between; padding:0 20px; height:44px; border-bottom:1px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:10; }
-.nav-brand { font-family:var(--syne); font-size:13px; font-weight:900; color:var(--ink); letter-spacing:-.01em; }
-.nav-brand span { color:var(--gold); }
-.nav-link { font-size:9px; font-weight:700; letter-spacing:.14em; color:var(--ink3); text-transform:uppercase; }
-.nav-link:hover { color:var(--ink); text-decoration:none; }
 
 .header { max-width:960px; margin:0 auto; padding:32px 20px 24px; border-bottom:1px solid var(--border); }
 .header-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; }
 .wallet-line { display:flex; align-items:center; gap:10px; }
-.wallet-addr { font-size:13px; font-weight:600; color:var(--ink); letter-spacing:.02em; }
-.copy-btn { background:none; border:none; cursor:pointer; color:var(--ink3); font-family:var(--mono); font-size:11px; padding:2px 4px; }
-.copy-btn:hover { color:var(--cyan); }
-.display-name { font-family:var(--syne); font-size:22px; font-weight:900; color:var(--ink); letter-spacing:-.02em; margin-top:4px; }
-.twitter-link { font-size:10px; color:var(--cyan); margin-top:4px; display:block; }
-.verified-badge { display:none; align-items:center; gap:5px; padding:4px 10px; background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.25); font-size:8px; font-weight:700; letter-spacing:.18em; color:var(--green); text-transform:uppercase; }
+.wallet-addr {
+  font-family: var(--mono);
+  font-size:13px; font-weight:600; color:var(--ink); letter-spacing:.04em;
+}
+.copy-btn {
+  background:none; border:none; cursor:pointer;
+  color:var(--ink4); font-family:var(--mono); font-size:11px; padding:2px 4px;
+}
+.copy-btn:hover { color:var(--blue); }
+.display-name {
+  font-family: var(--sans);
+  font-size:20px; font-weight:800; color:var(--ink); margin-top:6px;
+}
+.twitter-link { font-family:var(--mono); font-size:10px; color:var(--blue); margin-top:4px; display:block; }
+/* VERIFIED SHARP: green monospace caps, hidden when false — no placeholder */
+.verified-badge {
+  display:none; align-items:center; gap:5px;
+  padding:4px 10px;
+  background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.25);
+  font-family:var(--mono); font-size:8px; font-weight:700;
+  letter-spacing:.18em; color:var(--green); text-transform:uppercase;
+}
 .verified-badge.show { display:flex; }
-.share-btn { background:none; border:1px solid var(--border2); color:var(--ink2); font-family:var(--mono); font-size:8px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; padding:7px 14px; cursor:pointer; }
-.share-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+.share-btn {
+  background:none; border:1px solid var(--border2);
+  color:var(--ink3); font-family:var(--mono);
+  font-size:8px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; padding:7px 14px; cursor:pointer;
+}
+.share-btn:hover { border-color:var(--blue); color:var(--blue); }
 
-.strip { max-width:960px; margin:0 auto; padding:20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
-.clv-pill { font-size:9px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; padding:5px 12px; border:1px solid; }
-.clv-pill.sharp  { color:var(--green); border-color:rgba(0,230,138,.3); background:rgba(0,230,138,.06); }
+/* ── CLASSIFICATION STRIP ────────────────────────────────── */
+.strip {
+  max-width:960px; margin:0 auto; padding:20px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:24px; flex-wrap:wrap;
+}
+/* .clv-pill color assignments match feed.html and signals.html exactly */
+.clv-pill {
+  font-family:var(--mono);
+  font-size:9px; font-weight:700; letter-spacing:.18em;
+  text-transform:uppercase; padding:5px 12px; border:1px solid;
+}
+.clv-pill.sharp  { color:var(--green); border-color:rgba(0,230,138,.3);  background:rgba(0,230,138,.06); }
 .clv-pill.good   { color:var(--amber); border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.06); }
-.clv-pill.square { color:var(--ink3); border-color:var(--border); background:transparent; }
-.clv-pill.fade   { color:var(--red); border-color:rgba(255,77,106,.3); background:rgba(255,77,106,.06); }
-.clv-pill.pending{ color:var(--ink3); border-color:var(--border); background:transparent; }
+.clv-pill.square { color:var(--ink4);  border-color:var(--border);       background:transparent; }
+.clv-pill.fade   { color:var(--red);   border-color:rgba(255,77,106,.3); background:rgba(255,77,106,.06); }
+.clv-pill.pending{ color:var(--ink4);  border-color:var(--border);       background:transparent; }
 .strip-stat { display:flex; flex-direction:column; gap:2px; }
-.strip-val { font-size:15px; font-weight:700; color:var(--ink); line-height:1; }
+.strip-val { font-family:var(--mono); font-size:15px; font-weight:700; color:var(--ink); line-height:1; }
 .strip-val.pos { color:var(--green); }
 .strip-val.neg { color:var(--red); }
-.strip-label { font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--ink3); text-transform:uppercase; }
+.strip-label { font-family:var(--mono); font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--ink4); text-transform:uppercase; }
 .strip-sep { width:1px; height:28px; background:var(--border); }
 
-.stats-row { max-width:960px; margin:0 auto; display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid var(--border); }
+/* ── STATS ROW ────────────────────────────────────────────── */
+.stats-row {
+  max-width:960px; margin:0 auto;
+  display:grid; grid-template-columns:repeat(4,1fr);
+  border-bottom:1px solid var(--border);
+}
 .stat-block { padding:18px 20px; border-right:1px solid var(--border); }
 .stat-block:last-child { border-right:none; }
-.stat-num { font-family:var(--syne); font-size:28px; font-weight:900; line-height:1; color:var(--ink); }
+.stat-num {
+  font-family:var(--sans);
+  font-size:28px; font-weight:900; line-height:1; color:var(--ink);
+}
 .stat-num.green { color:var(--green); }
-.stat-lbl { font-size:7px; font-weight:700; letter-spacing:.18em; color:var(--ink3); text-transform:uppercase; margin-top:5px; }
+.stat-lbl { font-family:var(--mono); font-size:7px; font-weight:700; letter-spacing:.18em; color:var(--ink4); text-transform:uppercase; margin-top:5px; }
 .record-counts { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
-.rc { font-size:9px; font-weight:700; padding:2px 7px; }
+.rc { font-family:var(--mono); font-size:9px; font-weight:700; padding:2px 7px; }
 .rc.hit     { color:var(--green); background:rgba(0,230,138,.08); }
 .rc.partial { color:var(--amber); background:rgba(245,158,11,.08); }
 .rc.miss    { color:var(--red);   background:rgba(255,77,106,.08); }
 
+/* ── SECTIONS ─────────────────────────────────────────────── */
 .section { max-width:960px; margin:0 auto; }
-.section-head { padding:16px 20px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
-.section-title { font-size:8px; font-weight:700; letter-spacing:.2em; color:var(--ink3); text-transform:uppercase; }
-.section-count { font-size:8px; color:var(--ink3); }
+.section-head {
+  padding:16px 20px 14px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.section-title { font-family:var(--mono); font-size:8px; font-weight:700; letter-spacing:.2em; color:var(--ink4); text-transform:uppercase; }
+.section-count { font-family:var(--mono); font-size:8px; color:var(--ink4); }
 
 .thesis-card { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px; }
 .thesis-card:last-child { border-bottom:none; }
 .thesis-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.badge-live    { font-size:7px; font-weight:700; letter-spacing:.18em; color:var(--green); padding:3px 8px; background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.2); text-transform:uppercase; }
-.badge-hit     { font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--green); padding:3px 8px; background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.2); text-transform:uppercase; }
-.badge-miss    { font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--red);   padding:3px 8px; background:rgba(255,77,106,.08); border:1px solid rgba(255,77,106,.2); text-transform:uppercase; }
-.side-yes { font-size:8px; font-weight:700; padding:3px 8px; color:#0a0a0d; background:var(--green); text-transform:uppercase; }
-.side-no  { font-size:8px; font-weight:700; padding:3px 8px; color:#0a0a0d; background:var(--red);   text-transform:uppercase; }
-.thesis-q { font-size:12px; font-weight:600; color:var(--ink); line-height:1.4; }
+.badge-live    { font-family:var(--mono); font-size:7px; font-weight:700; letter-spacing:.18em; color:var(--green); padding:3px 8px; background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.2); text-transform:uppercase; }
+.badge-hit     { font-family:var(--mono); font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--green); padding:3px 8px; background:rgba(0,230,138,.08); border:1px solid rgba(0,230,138,.2); text-transform:uppercase; }
+.badge-miss    { font-family:var(--mono); font-size:7px; font-weight:700; letter-spacing:.14em; color:var(--red);   padding:3px 8px; background:rgba(255,77,106,.08); border:1px solid rgba(255,77,106,.2); text-transform:uppercase; }
+.side-yes { font-family:var(--mono); font-size:8px; font-weight:700; padding:3px 8px; color:#0e0e15; background:var(--green); text-transform:uppercase; }
+.side-no  { font-family:var(--mono); font-size:8px; font-weight:700; padding:3px 8px; color:#0e0e15; background:var(--red);   text-transform:uppercase; }
+.thesis-q { font-size:13px; font-weight:600; color:var(--ink); line-height:1.4; }
 .thesis-q a { color:var(--ink); }
-.thesis-q a:hover { color:var(--cyan); }
+.thesis-q a:hover { color:var(--blue); text-decoration:none; }
 
-.empty-state { padding:40px 20px; text-align:center; font-size:9px; font-weight:700; letter-spacing:.18em; color:var(--ink3); text-transform:uppercase; }
-.loading-state { padding:80px 20px; text-align:center; font-size:9px; font-weight:700; letter-spacing:.18em; color:var(--ink3); text-transform:uppercase; }
+/* ── EMPTY / LOADING ─────────────────────────────────────── */
+.empty-state {
+  padding:40px 20px; text-align:center;
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  letter-spacing:.18em; color:var(--ink4); text-transform:uppercase;
+}
+.loading-state {
+  padding:80px 20px; text-align:center;
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  letter-spacing:.18em; color:var(--ink4); text-transform:uppercase;
+}
 
-.footer { max-width:960px; margin:0 auto; padding:24px 20px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:40px; }
-.footer-brand { font-size:8px; font-weight:700; letter-spacing:.18em; color:var(--ink3); text-transform:uppercase; }
-.footer-brand a { color:var(--gold); }
+/* ── FOOTER ──────────────────────────────────────────────── */
+.footer {
+  max-width:960px; margin:40px auto 0;
+  padding:24px 20px;
+  border-top:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px;
+}
+.footer-brand {
+  font-family:var(--mono); font-size:8px; font-weight:700;
+  letter-spacing:.18em; color:var(--ink4); text-transform:uppercase;
+}
+.footer-brand a { color:var(--blue); }
 
+/* ── MOBILE ──────────────────────────────────────────────── */
 @media(max-width:600px) {
   .stats-row { grid-template-columns:repeat(2,1fr); }
   .stat-block:nth-child(2) { border-right:none; }
@@ -109,19 +176,17 @@ a:hover { text-decoration: underline; }
 </head>
 <body>
 
-<nav class="nav">
-  <a href="/" class="nav-brand">HYPER<span>FLEX</span></a>
-  <a href="/signals" class="nav-link">← Signals</a>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js?v=22"></script>
 
-<div id="root"><div class="loading-state">Loading trader profile…</div></div>
+<div id="root"><div class="loading-state">LOADING TRADER PROFILE…</div></div>
 
 <script>
 (function() {
   var wallet = location.pathname.replace(/^\/trader\//i, '').split('?')[0].replace(/\/$/,'').toLowerCase();
 
   if (!wallet || !/^0x[0-9a-f]{40}$/i.test(wallet)) {
-    document.getElementById('root').innerHTML = '<div class="loading-state">Invalid wallet address.</div>';
+    document.getElementById('root').innerHTML = '<div class="loading-state">INVALID WALLET ADDRESS</div>';
     return;
   }
 
@@ -146,15 +211,23 @@ a:hover { text-decoration: underline; }
     return ['sharp','good','fade','square'].indexOf(c) >= 0 ? c : 'pending';
   }
 
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function thesisCard(t, isOpen) {
     var side = (t.side||'').toUpperCase();
-    var sideEl = side === 'YES' ? '<span class="side-yes">YES</span>' : '<span class="side-no">NO</span>';
+    var sideEl = side === 'YES'
+      ? '<span class="side-yes">YES</span>'
+      : '<span class="side-no">NO</span>';
     var badge = isOpen
       ? '<span class="badge-live">LIVE</span>'
       : (t.outcome === 'HIT' ? '<span class="badge-hit">HIT</span>' : '<span class="badge-miss">MISS</span>');
+    var qText = esc((t.question||'').slice(0,120));
     var qContent = t.slug
-      ? '<a href="/market/' + t.slug + '" target="_blank">' + (t.question||'').slice(0,120) + '</a>'
-      : (t.question||'').slice(0,120);
+      ? '<a href="/market/' + esc(t.slug) + '" target="_blank" rel="noopener">' + qText + '</a>'
+      : qText;
     var metas = [];
     if (t.price != null) metas.push('@ ' + Math.round(parseFloat(t.price)*100) + '¢');
     if (t.size != null && parseFloat(t.size) > 0) {
@@ -165,17 +238,17 @@ a:hover { text-decoration: underline; }
     if (!isOpen && t.resolved_at) metas.push('resolved ' + fmtDate(t.resolved_at));
     return '<div class="thesis-card">'
       + '<div class="thesis-top">' + badge + sideEl
-        + metas.map(function(m){ return '<span style="font-size:9px;color:var(--ink3);">' + m + '</span>'; }).join('')
+        + metas.map(function(m){ return '<span style="font-family:var(--mono);font-size:9px;color:var(--ink4);">' + esc(m) + '</span>'; }).join('')
       + '</div>'
       + '<div class="thesis-q">' + qContent + '</div>'
     + '</div>';
   }
 
-  fetch('/api/trader/' + wallet)
+  fetch('/api/trader/' + encodeURIComponent(wallet))
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.error) {
-        document.getElementById('root').innerHTML = '<div class="loading-state">' + d.error + '</div>';
+        document.getElementById('root').innerHTML = '<div class="loading-state">' + esc(d.error) + '</div>';
         return;
       }
 
@@ -186,7 +259,9 @@ a:hover { text-decoration: underline; }
       var flexScore = parseFloat(d.flex_score) || 0;
       var cls = clvClass(clv.classification);
       var avgClv = clv.avg_clv;
-      var avgClvStr = avgClv != null ? (avgClv >= 0 ? '+' : '') + parseFloat(avgClv).toFixed(2) + '¢' : '—';
+      var avgClvStr = avgClv != null
+        ? (avgClv >= 0 ? '+' : '') + parseFloat(avgClv).toFixed(2) + '¢'
+        : '—';
       var avgClvCls = avgClv != null ? (avgClv > 0 ? 'pos' : avgClv < 0 ? 'neg' : '') : '';
 
       var html = '';
@@ -194,39 +269,39 @@ a:hover { text-decoration: underline; }
       // HEADER
       html += '<div class="header"><div class="header-top"><div>'
         + '<div class="wallet-line">'
-          + '<span class="wallet-addr">' + trunc(wallet) + '</span>'
-          + '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + wallet + '\');this.textContent=\'✓\';setTimeout(function(){this.textContent=\'⎘\';}.bind(this),1500)">⎘</button>'
+          + '<span class="wallet-addr">' + esc(trunc(wallet)) + '</span>'
+          + '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(wallet) + '\');this.textContent=\'✓\';setTimeout(function(){this.textContent=\'⎘\';}.bind(this),1500)">⎘</button>'
         + '</div>'
-        + (p.display_name ? '<div class="display-name">' + p.display_name + '</div>' : '')
-        + (p.twitter_handle ? '<a class="twitter-link" href="https://twitter.com/' + p.twitter_handle.replace('@','') + '" target="_blank" rel="noopener">@' + p.twitter_handle.replace('@','') + '</a>' : '')
+        + (p.display_name ? '<div class="display-name">' + esc(p.display_name) + '</div>' : '')
+        + (p.twitter_handle ? '<a class="twitter-link" href="https://twitter.com/' + esc(p.twitter_handle.replace('@','')) + '" target="_blank" rel="noopener">@' + esc(p.twitter_handle.replace('@','')) + '</a>' : '')
       + '</div>'
       + '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">'
-        + '<span class="verified-badge' + (p.verified_sharp ? ' show' : '') + '">✓ Verified Sharp</span>'
+        + '<span class="verified-badge' + (p.verified_sharp ? ' show' : '') + '">✓ VERIFIED SHARP</span>'
         + '<button class="share-btn" onclick="navigator.clipboard.writeText(location.href);this.textContent=\'COPIED\';setTimeout(function(){this.textContent=\'SHARE PROFILE\';}.bind(this),1500)">SHARE PROFILE</button>'
       + '</div></div></div>';
 
       // CLASSIFICATION STRIP
       html += '<div class="strip">'
-        + '<span class="clv-pill ' + cls + '">' + (clv.classification || 'PENDING') + '</span>'
+        + '<span class="clv-pill ' + cls + '">' + esc(clv.classification || 'PENDING') + '</span>'
         + '<div class="strip-sep"></div>'
         + '<div class="strip-stat">'
-          + '<div class="strip-val ' + avgClvCls + '">' + avgClvStr + '</div>'
-          + '<div class="strip-label">Avg CLV · n=' + (clv.sample_size || 0) + '</div>'
+          + '<div class="strip-val ' + avgClvCls + '">' + esc(avgClvStr) + '</div>'
+          + '<div class="strip-label">AVG CLV · n=' + (clv.sample_size || 0) + '</div>'
         + '</div>'
         + '<div class="strip-sep"></div>'
         + '<div class="strip-stat">'
           + '<div class="strip-val">' + flexScore.toFixed(2) + '</div>'
-          + '<div class="strip-label">FLEX Score</div>'
+          + '<div class="strip-label">FLEX SCORE</div>'
         + '</div>'
       + '</div>';
 
-      // STATS ROW
+      // STATS ROW — 4 blocks: THESES / HIT RATE / OPEN / RECORD
       var hitRateStr = stats.total_theses > 0 ? parseFloat(stats.hit_rate).toFixed(1) + '%' : '—';
       html += '<div class="stats-row">'
-        + '<div class="stat-block"><div class="stat-num">' + (stats.total_theses||0) + '</div><div class="stat-lbl">Trades</div></div>'
-        + '<div class="stat-block"><div class="stat-num green">' + hitRateStr + '</div><div class="stat-lbl">Hit Rate</div></div>'
-        + '<div class="stat-block"><div class="stat-num">' + (stats.open||0) + '</div><div class="stat-lbl">Open</div></div>'
-        + '<div class="stat-block"><div class="stat-lbl" style="margin-bottom:6px;">Record</div>'
+        + '<div class="stat-block"><div class="stat-num">' + (stats.total_theses||0) + '</div><div class="stat-lbl">THESES</div></div>'
+        + '<div class="stat-block"><div class="stat-num green">' + esc(hitRateStr) + '</div><div class="stat-lbl">HIT RATE</div></div>'
+        + '<div class="stat-block"><div class="stat-num">' + (stats.open||0) + '</div><div class="stat-lbl">OPEN</div></div>'
+        + '<div class="stat-block"><div class="stat-lbl" style="margin-bottom:6px;">RECORD</div>'
           + '<div class="record-counts">'
             + '<span class="rc hit">' + (stats.hit||0) + ' HIT</span>'
             + (stats.partial > 0 ? '<span class="rc partial">' + stats.partial + ' PARTIAL</span>' : '')
@@ -235,24 +310,31 @@ a:hover { text-decoration: underline; }
         + '</div>'
       + '</div>';
 
-      // OPEN POSITIONS
+      // OPEN THESES — hidden entirely if zero open
       if (theses.open && theses.open.length > 0) {
-        html += '<div class="section"><div class="section-head"><span class="section-title">Open Positions</span><span class="section-count">' + theses.open.length + '</span></div>'
+        html += '<div class="section"><div class="section-head">'
+          + '<span class="section-title">OPEN THESES</span>'
+          + '<span class="section-count">' + theses.open.length + '</span>'
+          + '</div>'
           + theses.open.map(function(t){ return thesisCard(t, true); }).join('')
         + '</div>';
       }
 
-      // RESOLVED TRADES
-      html += '<div class="section"><div class="section-head"><span class="section-title">Resolved Trades</span><span class="section-count">' + (theses.resolved||[]).length + '</span></div>';
+      // RESOLVED THESES
+      html += '<div class="section"><div class="section-head">'
+        + '<span class="section-title">RESOLVED THESES</span>'
+        + '<span class="section-count">' + (theses.resolved||[]).length + '</span>'
+        + '</div>';
       if (!theses.resolved || theses.resolved.length === 0) {
-        html += '<div class="empty-state">NO RESOLVED TRADES YET</div>';
+        html += '<div class="empty-state">NO RESOLVED THESES YET</div>';
       } else {
         html += theses.resolved.map(function(t){ return thesisCard(t, false); }).join('');
       }
       html += '</div>';
 
       // FOOTER
-      html += '<div class="footer"><div class="footer-brand">POWERED BY <a href="/">HYPERFLEX</a></div>'
+      html += '<div class="footer">'
+        + '<div class="footer-brand">POWERED BY <a href="/">HYPERFLEX</a></div>'
         + '<button class="share-btn" onclick="navigator.clipboard.writeText(location.href);this.textContent=\'COPIED\';setTimeout(function(){this.textContent=\'SHARE PROFILE\';}.bind(this),1500)">SHARE PROFILE</button>'
       + '</div>';
 
@@ -260,7 +342,7 @@ a:hover { text-decoration: underline; }
       document.title = (p.display_name || trunc(wallet)) + ' | HYPERFLEX';
     })
     .catch(function() {
-      document.getElementById('root').innerHTML = '<div class="loading-state">Failed to load profile. Try again.</div>';
+      document.getElementById('root').innerHTML = '<div class="loading-state">FAILED TO LOAD PROFILE</div>';
     });
 })();
 </script>
