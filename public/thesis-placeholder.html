@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Thesis — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --paper:#0e0e15; --cream:#141420; --text:#f0f0f5; --dim:#8888a0;
+  --border:#1e1e2a; --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff;
+  --sans:'Inter',-apple-system,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);min-height:100vh;padding:24px;line-height:1.5}
+.wrap{max-width:640px;margin:40px auto}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+h1{font-size:28px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+.sub{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:24px}
+.thesis-card{background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:18px}
+.thesis-title{font-size:20px;font-weight:700;margin-bottom:8px;line-height:1.3}
+.thesis-rationale{font-size:14px;color:var(--dim);line-height:1.6;margin:10px 0 14px;border-left:2px solid var(--border);padding-left:12px}
+.state-badge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;padding:3px 10px;border-radius:4px;text-transform:uppercase}
+.state-open{background:rgba(77,159,255,0.12);color:var(--blue);border:1px solid rgba(77,159,255,0.35)}
+.state-hit{background:rgba(0,230,138,0.12);color:var(--green);border:1px solid rgba(0,230,138,0.35)}
+.state-partial{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.35)}
+.state-miss{background:rgba(255,77,106,0.12);color:var(--red);border:1px solid rgba(255,77,106,0.35)}
+.meta-row{font-family:var(--mono);font-size:12px;color:var(--dim);margin:10px 0}
+.leg{border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--paper)}
+.leg-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+.leg-q{font-size:14px;line-height:1.4;flex:1}
+.dir{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;padding:3px 8px;border-radius:4px;white-space:nowrap}
+.dir-yes{background:rgba(0,230,138,0.14);color:var(--green)}
+.dir-no{background:rgba(255,77,106,0.14);color:var(--red)}
+.leg-meta{font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+.placeholder{font-family:var(--mono);font-size:12px;color:var(--dim);background:var(--paper);border:1px dashed var(--border);border-radius:10px;padding:18px;text-align:center;line-height:1.6}
+.placeholder code{font-size:11px;color:var(--text);background:rgba(255,255,255,0.04);padding:2px 6px;border-radius:3px}
+.error{color:var(--red);font-family:var(--mono);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Prediction Thesis</div>
+  <h1 id="title">Loading…</h1>
+  <p class="sub">v1 stub — share-able permalink page lands in PR #175.</p>
+
+  <div id="content"></div>
+</div>
+
+<script>
+const m = window.location.pathname.match(/^\/thesis\/([0-9a-f-]{36})$/i);
+const id = m ? m[1] : null;
+const content = document.getElementById('content');
+const titleEl = document.getElementById('title');
+
+(async function load() {
+  if (!id) {
+    titleEl.textContent = 'Thesis';
+    content.innerHTML = '<div class="error">No thesis id in URL.</div>';
+    return;
+  }
+  try {
+    const r = await fetch('/api/theses/' + id);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      titleEl.textContent = 'Thesis';
+      content.innerHTML = '<div class="error">' + (j.error || ('Status ' + r.status)) + '</div>';
+      return;
+    }
+    const { thesis, legs } = await r.json();
+    titleEl.textContent = thesis.title;
+    const stateCls = { open: 'state-open', hit: 'state-hit', partial: 'state-partial', miss: 'state-miss' }[thesis.resolution_state] || 'state-open';
+    const card = document.createElement('div');
+    card.className = 'thesis-card';
+    card.innerHTML =
+      '<div class="state-badge ' + stateCls + '">' + (thesis.resolution_state || 'open').toUpperCase() + '</div>' +
+      (thesis.rationale ? '<div class="thesis-rationale">' + thesis.rationale.replace(/</g, '&lt;') + '</div>' : '') +
+      '<div class="meta-row">' +
+        thesis.legs_total + ' legs · $' + Math.round(Number(thesis.total_stake_usd || 0)).toLocaleString() + ' staked · ' +
+        new Date(thesis.created_at).toLocaleString() +
+      '</div>';
+    legs.forEach(l => {
+      const leg = document.createElement('div');
+      leg.className = 'leg';
+      const dirCls = l.direction === 'yes' ? 'dir-yes' : 'dir-no';
+      leg.innerHTML =
+        '<div class="leg-top">' +
+          '<div class="leg-q">' + (l.market_question || '').replace(/</g, '&lt;') + '</div>' +
+          '<span class="dir ' + dirCls + '">' + (l.direction || '').toUpperCase() + '</span>' +
+        '</div>' +
+        '<div class="leg-meta">' +
+          '<span>Entry ' + Math.round(Number(l.entry_price) * 100) + '¢</span>' +
+          '<span>$' + Math.round(Number(l.stake_usd)).toLocaleString() + ' staked</span>' +
+          (l.resolution ? '<span>· ' + l.resolution.toUpperCase() + '</span>' : '') +
+        '</div>';
+      card.appendChild(leg);
+    });
+    content.appendChild(card);
+    const note = document.createElement('div');
+    note.className = 'placeholder';
+    note.innerHTML = 'Resolution cron lands in PR #174 — legs are tracked but stay <code>open</code> until then. Permalink share page lands in PR #175.';
+    content.appendChild(note);
+  } catch (e) {
+    titleEl.textContent = 'Thesis';
+    content.innerHTML = '<div class="error">Network error.</div>';
+  }
+})();
+</script>
+</body>
+</html>

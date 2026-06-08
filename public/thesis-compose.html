@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Compose Thesis — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --paper:#0e0e15; --cream:#141420; --text:#f0f0f5; --dim:#8888a0;
+  --border:#1e1e2a; --gold:#c9920d; --green:#00e68a; --red:#ff4d6a;
+  --blue:#4d9fff; --sans:'Inter',-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);min-height:100vh;padding:20px;line-height:1.5}
+.wrap{max-width:640px;margin:0 auto}
+header{margin-bottom:28px}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+h1{font-size:28px;font-weight:800;letter-spacing:-.01em;margin-bottom:6px}
+.sub{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6}
+.field{margin-bottom:20px}
+.field-label{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.char-count{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.char-count.over{color:var(--red)}
+.input,.textarea{width:100%;background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:var(--sans);font-size:14px;color:var(--text);transition:border-color .15s}
+.input:focus,.textarea:focus{outline:none;border-color:var(--gold)}
+.textarea{font-family:var(--sans);min-height:80px;resize:vertical;line-height:1.5}
+.input.num{font-family:var(--mono)}
+.leg{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:18px 18px 14px;margin-bottom:14px;position:relative}
+.leg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.leg-remove{background:transparent;border:none;color:var(--dim);font-family:var(--mono);font-size:11px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:color .15s}
+.leg-remove:hover{color:var(--red)}
+.leg-remove:disabled{opacity:.3;cursor:not-allowed}
+.search-wrap{position:relative}
+.search-results{position:absolute;top:100%;left:0;right:0;background:var(--paper);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:280px;overflow-y:auto;z-index:10;display:none}
+.search-results.open{display:block}
+.search-result{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;line-height:1.4;transition:background .15s}
+.search-result:last-child{border-bottom:none}
+.search-result:hover{background:var(--cream)}
+.search-result .meta{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px;letter-spacing:.04em}
+.market-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.market-card .q{font-size:13px;line-height:1.4;flex:1}
+.market-card .price{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.market-card .swap{background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:color .15s}
+.market-card .swap:hover{color:var(--text);border-color:var(--text)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.dir-group{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.dir-btn{flex:1;background:transparent;border:none;color:var(--dim);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;padding:10px;cursor:pointer;transition:all .15s}
+.dir-btn.active.yes{background:var(--green);color:#0a0a14}
+.dir-btn.active.no{background:var(--red);color:#0a0a14}
+.add-leg{width:100%;background:transparent;border:1px dashed var(--border);color:var(--dim);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;padding:14px;border-radius:10px;cursor:pointer;transition:all .15s;text-transform:uppercase;margin-bottom:24px}
+.add-leg:hover{border-color:var(--gold);color:var(--gold)}
+.add-leg:disabled{opacity:.4;cursor:not-allowed}
+.summary{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.summary-stats{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.summary-stats strong{color:var(--text);font-weight:600}
+.btn-lock{background:var(--gold);color:#0a0a14;border:none;border-radius:10px;padding:14px 28px;font-family:var(--sans);font-size:14px;font-weight:800;letter-spacing:.04em;cursor:pointer;transition:opacity .15s;text-transform:uppercase}
+.btn-lock:hover{opacity:.88}
+.btn-lock:disabled{opacity:.4;cursor:not-allowed}
+.banner{padding:14px 18px;border-radius:10px;margin-bottom:18px;font-size:13px;line-height:1.5}
+.banner-err{background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.4);color:var(--red)}
+.banner-ok{background:rgba(0,230,138,0.08);border:1px solid rgba(0,230,138,0.4);color:var(--green)}
+.banner code{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:3px}
+@media (max-width:520px){
+  .row,.row3{grid-template-columns:1fr}
+  h1{font-size:24px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Compose Thesis</div>
+    <h1>Author a multi-leg view.</h1>
+    <p class="sub">Bundle 2–10 active Polymarket positions. Resolves leg-by-leg. Immutable once locked.</p>
+  </header>
+
+  <div id="banner" style="display:none"></div>
+
+  <div class="field">
+    <div class="field-label">
+      <span>Title</span>
+      <span class="char-count" id="ttlCount">0 / 80</span>
+    </div>
+    <input type="text" class="input" id="title" maxlength="80" placeholder="e.g. Fed cuts in June + Powell mentions patient"/>
+  </div>
+
+  <div class="field">
+    <div class="field-label">
+      <span>Rationale · optional</span>
+      <span class="char-count" id="ratCount">0 / 500</span>
+    </div>
+    <textarea class="textarea" id="rationale" maxlength="500" placeholder="Why these moves together?"></textarea>
+  </div>
+
+  <div id="legs"></div>
+
+  <button class="add-leg" id="addLegBtn">+ Add leg</button>
+
+  <div class="summary">
+    <div class="summary-stats">
+      <strong id="legCount">0</strong> legs · <strong id="stakeTotal">$0</strong> staked
+    </div>
+    <button class="btn-lock" id="lockBtn" disabled>Lock thesis</button>
+  </div>
+</div>
+
+<script>
+// PR #173 prediction-thesis composer v1. Mobile-first, dry voice.
+// 2 legs by default, max 10. POST /api/theses on lock. Auth via cookie
+// (Bearer JWT carried by the same session that loaded the page).
+const MAX_LEGS = 10;
+const MIN_LEGS = 2;
+const state = { legs: [] };
+
+function newLeg() {
+  return { market: null, direction: 'yes', entry_price: '', stake_usd: '' };
+}
+
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k.startsWith('on') && typeof attrs[k] === 'function') e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  if (children) (Array.isArray(children) ? children : [children]).forEach(c =>
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
+}
+
+function fmtCents(p) { return p == null ? '—' : (Math.round(p * 100) + '¢'); }
+
+function renderLegs() {
+  const wrap = document.getElementById('legs');
+  wrap.innerHTML = '';
+  state.legs.forEach((leg, idx) => {
+    const card = el('div', { class: 'leg' });
+    const head = el('div', { class: 'leg-head' });
+    head.appendChild(el('span', null, 'Leg ' + (idx + 1)));
+    const rm = el('button', { class: 'leg-remove' }, '× Remove');
+    rm.disabled = state.legs.length <= MIN_LEGS;
+    rm.addEventListener('click', () => { state.legs.splice(idx, 1); renderLegs(); recomputeSummary(); });
+    head.appendChild(rm);
+    card.appendChild(head);
+
+    if (!leg.market) {
+      // Search input mode
+      const sw = el('div', { class: 'search-wrap' });
+      const inp = el('input', { class: 'input', type: 'text', placeholder: 'Search markets — e.g. "fed cut" or "election"' });
+      const results = el('div', { class: 'search-results' });
+      let debounce = null;
+      inp.addEventListener('input', e => {
+        clearTimeout(debounce);
+        const q = e.target.value.trim();
+        if (q.length < 2) { results.classList.remove('open'); return; }
+        debounce = setTimeout(async () => {
+          try {
+            const r = await fetch('/api/takes/search-markets?q=' + encodeURIComponent(q));
+            const data = await r.json();
+            results.innerHTML = '';
+            (data.markets || []).slice(0, 10).forEach(m => {
+              const item = el('div', { class: 'search-result' });
+              item.appendChild(el('div', null, m.question || '(market)'));
+              const meta = el('div', { class: 'meta' });
+              meta.textContent = 'Yes ' + fmtCents(m.yes_price) + ' · Vol $' + Math.round(m.volume || 0).toLocaleString();
+              item.appendChild(meta);
+              item.addEventListener('click', () => {
+                leg.market = {
+                  condition_id: m.condition_id,
+                  question:     m.question,
+                  yes_price:    m.yes_price,
+                  token_id:     m.token_id || null,  // search endpoint may not return; cron can resolve via condition_id
+                };
+                leg.entry_price = m.yes_price != null ? String(m.yes_price) : '';
+                renderLegs(); recomputeSummary();
+              });
+              results.appendChild(item);
+            });
+            if (!(data.markets || []).length) {
+              results.appendChild(el('div', { class: 'search-result' }, 'No matches.'));
+            }
+            results.classList.add('open');
+          } catch (_) { results.classList.remove('open'); }
+        }, 200);
+      });
+      inp.addEventListener('blur', () => setTimeout(() => results.classList.remove('open'), 120));
+      sw.appendChild(inp);
+      sw.appendChild(results);
+      card.appendChild(sw);
+    } else {
+      // Filled-in mode
+      const mc = el('div', { class: 'market-card' });
+      mc.appendChild(el('div', { class: 'q' }, leg.market.question));
+      mc.appendChild(el('div', { class: 'price' }, 'Yes ' + fmtCents(leg.market.yes_price)));
+      const swap = el('button', { class: 'swap' }, 'change');
+      swap.addEventListener('click', () => { leg.market = null; leg.entry_price = ''; renderLegs(); recomputeSummary(); });
+      mc.appendChild(swap);
+      card.appendChild(mc);
+
+      // Direction toggle
+      const dirGroup = el('div', { class: 'dir-group', style: 'margin-bottom:10px' });
+      const yesBtn = el('button', { class: 'dir-btn yes' + (leg.direction === 'yes' ? ' active' : '') }, 'YES');
+      const noBtn  = el('button', { class: 'dir-btn no'  + (leg.direction === 'no'  ? ' active' : '') }, 'NO');
+      yesBtn.addEventListener('click', () => { leg.direction = 'yes'; renderLegs(); recomputeSummary(); });
+      noBtn.addEventListener('click',  () => { leg.direction = 'no';  renderLegs(); recomputeSummary(); });
+      dirGroup.appendChild(yesBtn); dirGroup.appendChild(noBtn);
+      card.appendChild(dirGroup);
+
+      // Entry price + stake
+      const row = el('div', { class: 'row' });
+      const epWrap = el('div');
+      const epLabel = el('div', { class: 'field-label', style: 'margin-bottom:6px' });
+      epLabel.appendChild(el('span', null, 'Entry price'));
+      epWrap.appendChild(epLabel);
+      const epInp = el('input', { class: 'input num', type: 'number', step: '0.01', min: '0.01', max: '0.99', value: leg.entry_price || '' });
+      epInp.addEventListener('input', e => { leg.entry_price = e.target.value; recomputeSummary(); });
+      epWrap.appendChild(epInp);
+      row.appendChild(epWrap);
+
+      const stWrap = el('div');
+      const stLabel = el('div', { class: 'field-label', style: 'margin-bottom:6px' });
+      stLabel.appendChild(el('span', null, 'Stake · USD'));
+      stWrap.appendChild(stLabel);
+      const stInp = el('input', { class: 'input num', type: 'number', step: '1', min: '1', value: leg.stake_usd || '' });
+      stInp.addEventListener('input', e => { leg.stake_usd = e.target.value; recomputeSummary(); });
+      stWrap.appendChild(stInp);
+      row.appendChild(stWrap);
+      card.appendChild(row);
+    }
+    wrap.appendChild(card);
+  });
+  document.getElementById('addLegBtn').disabled = state.legs.length >= MAX_LEGS;
+}
+
+function recomputeSummary() {
+  const filled = state.legs.filter(l => l.market && Number(l.entry_price) > 0 && Number(l.entry_price) < 1 && Number(l.stake_usd) > 0);
+  document.getElementById('legCount').textContent = filled.length;
+  const total = filled.reduce((s, l) => s + Number(l.stake_usd), 0);
+  document.getElementById('stakeTotal').textContent = '$' + Math.round(total).toLocaleString();
+  const title = document.getElementById('title').value.trim();
+  document.getElementById('lockBtn').disabled = !(filled.length >= MIN_LEGS && filled.length === state.legs.length && title.length > 0);
+}
+
+document.getElementById('title').addEventListener('input', e => {
+  const n = e.target.value.length;
+  const c = document.getElementById('ttlCount');
+  c.textContent = n + ' / 80';
+  c.classList.toggle('over', n > 80);
+  recomputeSummary();
+});
+document.getElementById('rationale').addEventListener('input', e => {
+  const n = e.target.value.length;
+  const c = document.getElementById('ratCount');
+  c.textContent = n + ' / 500';
+  c.classList.toggle('over', n > 500);
+});
+document.getElementById('addLegBtn').addEventListener('click', () => {
+  if (state.legs.length >= MAX_LEGS) return;
+  state.legs.push(newLeg()); renderLegs(); recomputeSummary();
+});
+
+function showBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = 'banner banner-' + kind;
+  b.innerHTML = html;
+  b.style.display = 'block';
+}
+
+document.getElementById('lockBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('lockBtn');
+  btn.disabled = true; btn.textContent = 'Locking…';
+  const body = {
+    title:     document.getElementById('title').value.trim(),
+    rationale: document.getElementById('rationale').value.trim() || undefined,
+    legs: state.legs.map(l => ({
+      condition_id:    l.market.condition_id,
+      token_id:        l.market.token_id || undefined,
+      market_question: l.market.question,
+      direction:       l.direction,
+      entry_price:     Number(l.entry_price),
+      stake_usd:       Number(l.stake_usd),
+    })),
+  };
+  try {
+    // Cookie-based session. If user isn't authenticated, the Authorization
+    // header set by HFX session bootstrap (if present) is the alt path.
+    const headers = { 'content-type': 'application/json' };
+    const token = (typeof localStorage !== 'undefined') && localStorage.getItem('auth_token');
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch('/api/theses', { method: 'POST', credentials: 'include', headers, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showBanner('err', (json.error || 'Lock failed') + (res.status === 401 ? ' — sign in first.' : ''));
+      btn.disabled = false; btn.textContent = 'Lock thesis';
+      return;
+    }
+    showBanner('ok', 'Thesis locked. <code>' + json.id + '</code> · Permalink page lands in the next PR. <a href="/thesis/' + json.id + '" style="color:var(--gold)">Open placeholder →</a>');
+    btn.textContent = 'Locked';
+    setTimeout(() => { window.location.href = '/thesis/' + json.id; }, 1400);
+  } catch (e) {
+    showBanner('err', 'Network error. Try again.');
+    btn.disabled = false; btn.textContent = 'Lock thesis';
+  }
+});
+
+// Seed two empty legs
+state.legs.push(newLeg(), newLeg());
+renderLegs(); recomputeSummary();
+</script>
+</body>
+</html>
