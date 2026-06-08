@@ -45233,27 +45233,34 @@ function _tokenize(text) {
 
 function _matchHeadlineToMarket(headline, markets) {
   if (!markets || markets.length === 0) return null;
-  const hSet = new Set(_tokenize(headline.title || headline));
-  if (hSet.size < 2) return null;
+
+  const hText = headline.title || headline;
+  const hSet = new Set(_tokenize(hText));
+  if (hSet.size < 1) return null;
 
   let bestMatch = null;
   let bestScore = 0;
 
   for (const m of markets) {
-    const qSet = new Set(_tokenize(m.question || ''));
+    const qSet   = new Set(_tokenize(m.question    || ''));
+    const dSet   = new Set(_tokenize(m.description || ''));
 
-    // Count distinct overlapping content tokens
-    let overlap = 0;
+    let qOverlap = 0, dOverlap = 0;
+    const matchedQ = [];
     for (const t of hSet) {
-      if (qSet.has(t)) overlap++;
+      if (qSet.has(t))      { qOverlap++; matchedQ.push(t); }
+      else if (dSet.has(t)) { dOverlap++; }
     }
 
-    // Hard gate: at least 2 distinct content words must match
-    if (overlap < 2) continue;
+    // Qualify if:
+    //   - 2+ question-token overlaps (strong signal), OR
+    //   - 1 question overlap on a word >= 6 chars (likely proper noun/topic), OR
+    //   - 1 question overlap + 1 description overlap
+    const rareMatch = qOverlap === 1 && matchedQ[0] && matchedQ[0].length >= 6;
+    if (qOverlap < 2 && !rareMatch && !(qOverlap === 1 && dOverlap >= 1)) continue;
 
-    // Overlap dominates; volume is a tiny tiebreaker only
     const vol = parseFloat(m.volume || 0);
-    const score = overlap * 1000 + Math.min(vol / 1e6, 5);
+    const score = qOverlap * 1000 + dOverlap * 50 + Math.min(vol / 1e6, 5);
 
     if (score > bestScore) {
       bestScore = score;
@@ -45261,6 +45268,7 @@ function _matchHeadlineToMarket(headline, markets) {
     }
   }
 
+  console.log('[match]', hText.slice(0, 45), '->', bestMatch ? bestMatch.question.slice(0, 40) : 'NO MATCH');
   return bestMatch;
 }
 
@@ -45298,6 +45306,7 @@ app.get('/api/news-feed', async (req, res) => {
 
     // Pair each headline with best market match
     console.log(`[news-feed] matching ${allHeadlines.length} headlines against ${markets.length} markets`);
+    console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
     const paired = allHeadlines.map(h => {
       const market = markets.length ? _matchHeadlineToMarket(h, markets) : null;
       return {
