@@ -4252,6 +4252,76 @@ body.nav-open .sidebar-backdrop {
   .modal-overlay { padding: 0 !important; align-items: flex-end !important; }
   .modal { border-radius: 20px 20px 0 0 !important; max-width: 100% !important; max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 }
+/* ═══ Performance cards v1 (PR #172) ═══════════════════════════════
+   Three-card grid for win rate · avg win/loss · risk-reward. Voice
+   charter dry. Big number Inter, subline JetBrains Mono. Win/loss
+   colors explicit (never gray) per CLAUDE.md rule.                  */
+.perf-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.perf-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 168px;
+}
+.perf-card-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 14px;
+}
+.perf-card-big {
+  font-family: var(--sans);
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.0;
+  color: var(--text);
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+.perf-card-big.perf-card-green { color: var(--green); }
+.perf-card-big.perf-card-red   { color: var(--red); }
+.perf-card-sub {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.perf-card-sub-row {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.perf-card-sub-row .perf-card-loss { color: var(--red); }
+.perf-card-narration {
+  margin-top: auto;
+  padding-top: 14px;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  font-weight: 500;
+  /* Avoid awkward mid-sentence wraps like "Time to read / the tape, not place it."
+     `balance` evens line lengths across the short narration paragraph; `pretty`
+     handles widow/orphan control. Older browsers ignore both gracefully. */
+  text-wrap: balance;
+}
+@media (max-width: 720px) {
+  .perf-card-grid { grid-template-columns: 1fr; gap: 12px; }
+  .perf-card { min-height: 0; }
+  .perf-card-big { font-size: 44px; }
+}
+
 /* ── Narrow phone ≤480px ── */
 @media (max-width: 480px) {
   .content { padding: 10px; }
@@ -7421,6 +7491,43 @@ window.hfxOpenDeposit = function() {
       <div id="tab-performance" style="display:none">
         <div class="section">
           <div style="max-width:860px">
+            <!-- ═══ PERFORMANCE CARDS v1 (PR #172, 2026-05-15) ═══
+                 Three cards: win rate · avg win/loss · risk-reward.
+                 90-day window matches FLEX scoring. Voice charter dry,
+                 narration bands per spec. Rendered by loadPerformanceCards
+                 against /api/dashboard/performance.                          -->
+            <div id="perfCardsContainer" style="display:none;margin-bottom:20px">
+              <div class="perf-card-grid">
+                <!-- Card 1: Win rate -->
+                <div class="perf-card" id="perfCardWinRate">
+                  <div class="perf-card-label">Win rate · 90d</div>
+                  <div class="perf-card-big" id="perfWinRateBig">—</div>
+                  <div class="perf-card-sub" id="perfWinRateSub">—</div>
+                  <div class="perf-card-narration" id="perfWinRateNarr"></div>
+                </div>
+                <!-- Card 2: Avg win / Avg loss -->
+                <div class="perf-card" id="perfCardAvg">
+                  <div class="perf-card-label">Average trade · 90d</div>
+                  <div class="perf-card-big perf-card-green" id="perfAvgWinBig">—</div>
+                  <div class="perf-card-sub-row" id="perfAvgLossRow">
+                    <span class="perf-card-loss">Average loss: <span id="perfAvgLossVal">—</span></span>
+                  </div>
+                  <div class="perf-card-sub" id="perfAvgSub">—</div>
+                </div>
+                <!-- Card 3: Risk/Reward -->
+                <div class="perf-card" id="perfCardRR">
+                  <div class="perf-card-label">Risk / reward · 90d</div>
+                  <div class="perf-card-big" id="perfRRBig">—</div>
+                  <div class="perf-card-sub" id="perfRRSub">—</div>
+                  <div class="perf-card-narration" id="perfRRNarr"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Empty state for unqualified users -->
+            <div id="perfCardsUnqualified" style="display:none;margin-bottom:20px;background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;text-align:center">
+              <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Performance card not yet available</div>
+              <div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6" id="perfCardsUnqualifiedSub">Need 20+ settled trades to surface performance. Currently 0.</div>
+            </div>
             <!-- Share My Record Button -->
             <div id="portfolioShareBar" style="display:none;margin-bottom:16px">
               <button id="shareRecordBtn" onclick="shareRecordOnX()" style="background:linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06));border:1px solid rgba(201,146,13,0.35);border-radius:12px;padding:14px 24px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;width:100%" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.25),rgba(201,146,13,0.12))';this.style.borderColor='var(--gold)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06))';this.style.borderColor='rgba(201,146,13,0.35)'">
@@ -16724,7 +16831,81 @@ async function loadPortfolio() {
 
 // ── PERFORMANCE TAB ─────────────────────────────────────────────────────────
 let _performanceLoaded = false;
+// ═══ Performance cards v1 (PR #172, 2026-05-15) ═══════════════════
+// Three cards driven by /api/dashboard/performance. 90-day window
+// from realized_trades. Renders dry narration bands per voice charter.
+// Edge cases: avg_win/avg_loss/risk_reward can be null (one-sided
+// samples or zero data); render "—" not "Infinity" / "$0".
+async function loadPerfCardsV1() {
+  const container = document.getElementById('perfCardsContainer');
+  const unqual    = document.getElementById('perfCardsUnqualified');
+  if (!container || !unqual) return;
+  let data;
+  try {
+    const res = await fetch('/api/dashboard/performance', { credentials: 'include' });
+    if (!res.ok) { container.style.display = 'none'; unqual.style.display = 'none'; return; }
+    data = await res.json();
+  } catch (_) { container.style.display = 'none'; unqual.style.display = 'none'; return; }
+
+  if (!data.qualifies) {
+    container.style.display = 'none';
+    unqual.style.display = 'block';
+    const sub = document.getElementById('perfCardsUnqualifiedSub');
+    if (sub) sub.textContent = 'Need 20+ settled trades to surface performance. Currently ' + (data.settled_count_90d || 0) + '.';
+    return;
+  }
+  unqual.style.display = 'none';
+  container.style.display = 'block';
+
+  const fmtPct = v => (v == null) ? '—' : (v * 100).toFixed(1) + '%';
+  const fmtUsd = v => {
+    if (v == null) return '—';
+    const sign = v >= 0 ? '+' : '−';
+    return sign + '$' + Math.round(Math.abs(v)).toLocaleString('en-US');
+  };
+  const fmtUsdNeg = v => (v == null) ? '—' : '−$' + Math.round(Math.abs(v)).toLocaleString('en-US');
+  const fmtRatio = v => (v == null) ? '—' : v.toFixed(2) + 'x';
+
+  // Card 1: Win rate + narration
+  const winRate = data.win_rate;  // 0..1
+  document.getElementById('perfWinRateBig').textContent = fmtPct(winRate);
+  document.getElementById('perfWinRateSub').textContent =
+    data.wins + ' W · ' + data.losses + ' L over ' + data.settled_events + ' settled trades';
+  const winNarr = document.getElementById('perfWinRateNarr');
+  let wnText = '';
+  if (winRate == null) wnText = '';
+  else if (winRate >= 0.55) wnText = 'Above the average. The book respects you.';
+  else if (winRate >= 0.46) wnText = 'Right at the average — coin-flip territory.';
+  else if (winRate >= 0.35) wnText = 'Below the average. Close — but the gap matters.';
+  else                      wnText = 'Well below the book. Time to read the tape, not place it.';
+  winNarr.textContent = wnText;
+
+  // Card 2: Avg win / Avg loss (no narration band — Card 3 narrates ratio)
+  document.getElementById('perfAvgWinBig').textContent = fmtUsd(data.avg_win);
+  document.getElementById('perfAvgLossVal').textContent = fmtUsdNeg(data.avg_loss);
+  document.getElementById('perfAvgSub').textContent =
+    data.wins + ' winning trades · ' + data.losses + ' losing trades';
+
+  // Card 3: Risk/Reward + narration
+  const rr = data.risk_reward;
+  document.getElementById('perfRRBig').textContent = fmtRatio(rr);
+  document.getElementById('perfRRSub').textContent = (rr == null)
+    ? 'Need wins and losses on both sides to compute.'
+    : ('For every $1 risked, you win $' + rr.toFixed(2) + ' when right');
+  const rrNarr = document.getElementById('perfRRNarr');
+  let rnText = '';
+  if (rr == null)        rnText = '';
+  else if (rr >= 1.5)    rnText = "You're paid more than you risk. The math works.";
+  else if (rr >= 1.0)    rnText = 'Break-even math. Slight edge if hit rate holds.';
+  else if (rr >= 0.6)    rnText = "You're shorting your own account. The market says thank you.";
+  else                   rnText = 'The casino tips its hat.';
+  rrNarr.textContent = rnText;
+}
+
 async function loadPerformanceTab() {
+  // Performance cards v1 (PR #172) — kicked off in parallel with the
+  // portfolio load. Independent data source (realized_trades aggregate).
+  loadPerfCardsV1().catch(e => console.warn('[perf-cards-v1]', e.message));
   // Ensure portfolio data is loaded first (for stats)
   if (!_portfolioLoaded) {
     await loadPortfolio();
