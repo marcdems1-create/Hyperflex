@@ -45224,6 +45224,16 @@ const _NEWS_STOP = new Set([
   'toward','turns','under','update','updates','using','week','while','world',
 ]);
 
+// Long-but-generic words that must NOT carry a single-token match — common
+// adjectives, colors, and qualifiers that coincidentally appear in market
+// names (e.g. "golden" in "Golden Knights" matching "macOS Golden Gate").
+const _NEWS_RARE_BLOCK = new Set([
+  'golden','silver','general','national','federal','united','american',
+  'global','market','markets','northern','southern','eastern','western',
+  'central','greater','special','digital','virtual','quarter','million',
+  'billion','company','quarterly','another','people','public',
+]);
+
 function _tokenize(text) {
   return (text || '').toLowerCase()
     .replace(/[^a-z\s]/g, ' ')   // strip ALL numbers and punctuation
@@ -45254,9 +45264,11 @@ function _matchHeadlineToMarket(headline, markets) {
 
     // Qualify if:
     //   - 2+ question-token overlaps (strong signal), OR
-    //   - 1 question overlap on a word >= 6 chars (likely proper noun/topic), OR
+    //   - 1 question overlap on a rare word: >= 7 chars, not a common
+    //     adjective/color/qualifier (likely a proper noun/topic), OR
     //   - 1 question overlap + 1 description overlap
-    const rareMatch = qOverlap === 1 && matchedQ[0] && matchedQ[0].length >= 6;
+    const w0 = matchedQ[0];
+    const rareMatch = qOverlap === 1 && w0 && w0.length >= 7 && !_NEWS_RARE_BLOCK.has(w0);
     if (qOverlap < 2 && !rareMatch && !(qOverlap === 1 && dOverlap >= 1)) continue;
 
     const vol = parseFloat(m.volume || 0);
@@ -45299,12 +45311,38 @@ app.get('/api/news-feed', async (req, res) => {
       })
       .slice(0, 40);
 
-    // Get screener markets for matching
-    const markets = (_screenerCache && Array.isArray(_screenerCache.data))
-      ? _screenerCache.data.filter(m => m.question && m.yes_price != null)
-      : [];
+    // Get the FULL market pool from the data-engine (~74-100 active poly
+    // markets, each with description text for richer matching). The alpha
+    // screener cache is a heavily-filtered ~11-market slice — too narrow for
+    // world-news matching, so we only fall back to it if the data-engine is
+    // cold.
+    let pool = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      pool = (dm.markets || []).map(m => ({
+        slug: m.source_id,
+        question: m.title,
+        description: m.description || '',
+        yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume: m.volume_total,
+        end_date: m.end_date,
+        image: m.image || null,
+        event_image_url: m.event_image_url || null,
+        category: m.category || null,
+        edge_score: 0,
+        whale_count: 0,
+      }));
+    } catch (e) {
+      console.warn('[news-feed] data-engine getMarkets failed:', e.message);
+    }
+    // Fallback to alpha screener cache if data-engine returned nothing
+    if (!pool.length && _screenerCache && Array.isArray(_screenerCache.data)) {
+      pool = _screenerCache.data;
+    }
+    const markets = pool.filter(m => m.question && m.yes_price != null);
 
     // Pair each headline with best market match
+    console.log(`[news-feed] using market pool size: ${markets.length}`);
     console.log(`[news-feed] matching ${allHeadlines.length} headlines against ${markets.length} markets`);
     console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
     const paired = allHeadlines.map(h => {
