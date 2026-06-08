@@ -39081,6 +39081,8 @@ async function _buildAlphaListInner(opts = {}) {
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
         slug: eventSlug || slug,
+        image: m.image || (m.events && m.events[0] && m.events[0].image) || m.icon || null,
+        event_image_url: (m.events && m.events[0] && m.events[0].image) || m.image || null,
         neg_risk: m.neg_risk === true || m.negRisk === true,
         group_item: m.groupItemTitle || '',
         edge_score: edgeScore,
