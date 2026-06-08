@@ -45203,43 +45203,65 @@ Only include headlines that actually affect a market. Skip irrelevant ones.`
 let _newsFeedCache = { ts: 0, data: null };
 const NEWS_FEED_TTL = 5 * 60 * 1000;
 
+const _NEWS_STOP = new Set([
+  // generic function words
+  'about','after','also','back','been','before','being','both','come','could','does',
+  'done','down','each','even','every','from','have','having','here','into','just',
+  'know','last','like','make','many','more','most','much','only','other','over',
+  'said','says','same','should','some','such','take','than','that','their','them',
+  'then','there','these','they','this','those','time','very','want','well','were',
+  'what','when','where','which','while','will','with','would','your',
+  // high-frequency news words that create false matches
+  'ahead','amid','amid','announces','announced','around','away','between','bring',
+  'brings','call','calls','change','coming','continue','continues','could','deal',
+  'does','during','early','expected','everything','expect','faces','find','first',
+  'following','gets','going','hear','heres','high','higher','hits','house','into',
+  'keep','keeps','latest','launch','launches','lead','leads','leave','leaves',
+  'live','look','looking','major','market','markets','move','moves','need','needs',
+  'news','next','open','part','people','plans','puts','report','reports','reveals',
+  'right','rise','rises','say','seen','sets','show','shows','small','someone',
+  'something','start','starts','still','stop','takes','talk','talks','tell','today',
+  'toward','turns','under','update','updates','using','week','while','world',
+]);
+
 function _tokenize(text) {
   return (text || '').toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^a-z\s]/g, ' ')   // strip ALL numbers and punctuation
     .split(/\s+/)
-    .filter(w => w.length > 3 && !/^(that|this|with|from|will|have|been|they|their|were|when|what|which|also|about|into|over|more|some|than|then|like|just|said|says|after|before|during|would|could|should|there|these|those|other|your|here|does|each|both|such|where|while)$/.test(w));
+    .filter(w => w.length >= 4 && !_NEWS_STOP.has(w));
 }
 
 function _matchHeadlineToMarket(headline, markets) {
   if (!markets || markets.length === 0) return null;
-  const hWords = _tokenize(headline.title || headline);
-  if (hWords.length === 0) return null;
-  const hSet = new Set(hWords);
+  const hSet = new Set(_tokenize(headline.title || headline));
+  if (hSet.size < 2) return null;
 
-  const stop = new Set(['about','where','their','there','would','could','should','which','after','before','other','these','those','being','having','doing','says','said','will','from','with','that','this','have','been','were','they','what','when','into','than','then','also','more','some','just','like','over','such','very','even','most','here','only','both','much','many','each','same','does','your','make','take','come','know','time','year','back','well','away','down']);
-
-  let best = null;
+  let bestMatch = null;
   let bestScore = 0;
 
   for (const m of markets) {
-    const mSet = new Set(_tokenize(m.question));
-    let score = 0;
-    for (const w of hSet) {
-      if (stop.has(w)) continue;
-      if (mSet.has(w)) score += 2;  // exact token hit in question
+    const qSet = new Set(_tokenize(m.question || ''));
+
+    // Count distinct overlapping content tokens
+    let overlap = 0;
+    for (const t of hSet) {
+      if (qSet.has(t)) overlap++;
     }
-    // Volume boost
+
+    // Hard gate: at least 2 distinct content words must match
+    if (overlap < 2) continue;
+
+    // Overlap dominates; volume is a tiny tiebreaker only
     const vol = parseFloat(m.volume || 0);
-    if (score > 0 && vol > 500000) score += 2;
-    else if (score > 0 && vol > 100000) score += 1;
+    const score = overlap * 1000 + Math.min(vol / 1e6, 5);
 
     if (score > bestScore) {
       bestScore = score;
-      best = m;
+      bestMatch = m;
     }
   }
 
-  return bestScore >= 2 ? best : null;
+  return bestMatch;
 }
 
 app.get('/api/news-feed', async (req, res) => {
