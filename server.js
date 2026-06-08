@@ -45194,6 +45194,357 @@ Only include headlines that actually affect a market. Skip irrelevant ones.`
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// NEWS-DRIVEN FEED  —  /api/news-feed
+// Pipeline: RSS fetch → keyword prefilter (free) → Haiku judge (picks match +
+// one-sentence edge) → 5-min response cache / 1-h per-headline decision cache
+// Zero paid calls at idle — only fires on actual HTTP requests.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _newsFeedCache = { data: null, ts: 0 };
+const NEWS_FEED_TTL  = 5 * 60 * 1000;   // 5 min full-response cache
+const _matchCache    = new Map();         // headline key → { slug, edge, ts }
+const MATCH_CACHE_TTL = 60 * 60 * 1000; // 1 h decision cache
+
+// Consolidated stopwords — high-frequency words that appear in nearly every
+// headline AND market question, giving meaningless token overlap
+const _NEWS_STOP = new Set([
+  // English function words (short already filtered by len ≥ 4)
+  'with','from','that','this','have','been','will','were','they','their','them',
+  'what','when','where','which','about','after','before','could','would','should',
+  'also','more','than','into','over','some','such','only','even','both','very',
+  'most','much','many','just','then','each','like','upon','make','made','made',
+  // High-frequency news words that appear in many headlines AND market questions
+  'news','report','live','update','updates','latest','breaking','official','says',
+  'said','told','says','says','people','world','first','again','today','this',
+  'week','month','year','time','back','down','year','show','take','plan','move',
+  'make','made','know','come','goes','came','look','work','want','need','call',
+  'high','says','next','away','long','long','puts','sets','here','lead','part',
+  'open','open','just','left','left','held','went','done','seen','gets','ways',
+  'hits','adds','adds','join','used','uses','used','hold','held','held','keep',
+  // Prediction market meta words
+  'market','markets','price','prices','odds','chance','probability','resolve',
+  'resolved','resolution','prediction','predict','likely','unlikely','expect',
+  'expected','currently','percent','million','billion','thousand','hundred',
+  // Common adjectives that carry no discriminative power
+  'major','minor','large','small','other','every','under','between','against',
+  'another','public','private','former','current','recent','latest','future',
+  'several','various','multiple','different','important','significant','possible',
+  // Geo-generic terms
+  'north','south','east','west','northern','southern','eastern','western',
+  'central','region','country','countries','nation','nations','government',
+  'president','minister','official','officials','leader','leaders','party',
+]);
+
+// Long words that must NOT carry a single-token match (too generic despite ≥7 chars)
+const _NEWS_RARE_BLOCK = new Set([
+  'golden','silver','general','national','federal','united','american',
+  'global','market','markets','northern','southern','eastern','western',
+  'central','greater','special','digital','virtual','quarter','million',
+  'billion','company','quarterly','another','people','public','country',
+  'nations','government','president','minister','officials','election',
+  'congress','senator','members','speaker','trading','traders','trading',
+  'winning','correct','correct','percent','hundred','thousand','project',
+]);
+
+function _tokenize(text) {
+  return (text || '').toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')   // strip ALL non-letters (digits, punctuation)
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && !_NEWS_STOP.has(w));
+}
+
+function _getCandidateMarkets(headline, markets, limit = 5) {
+  const hSet = new Set(_tokenize(headline.title || headline));
+  if (hSet.size < 1) return [];
+  const scored = [];
+  for (const m of markets) {
+    const qSet = new Set(_tokenize(m.question || m.title || ''));
+    const dSet = new Set(_tokenize(m.description || ''));
+    let qOverlap = 0, dOverlap = 0;
+    for (const t of hSet) {
+      if (qSet.has(t))      qOverlap++;
+      else if (dSet.has(t)) dOverlap++;
+    }
+    const score = qOverlap * 2 + dOverlap;
+    if (score > 0) scored.push({ m, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.m);
+}
+
+// Calls Haiku directly — bypasses CLAUDE_BACKGROUND_DISABLED kill switch
+// because this is user-facing and cheap (max_tokens: 80)
+async function _haikuPickMarket(headline, candidates) {
+  if (!candidates || candidates.length === 0) return null;
+  if (!anthropic) return null;
+  const hText = headline.title || headline;
+  const numbered = candidates.map((m, i) =>
+    `${i + 1}. ${m.question || m.title || ''}`
+  ).join('\n');
+  const prompt = `You are a prediction market analyst. Given a news headline and a list of Polymarket markets, pick the ONE market that is genuinely affected by the news (not just a coincidental word overlap). If no market is genuinely related, pick 0.
+
+NEWS HEADLINE: "${hText}"
+
+MARKETS:
+${numbered}
+
+Respond with ONLY a JSON object on one line: {"pick": N, "edge": "one sentence explaining why the news moves that market's probability"}
+If no match, respond: {"pick": 0, "edge": ""}
+No other text.`;
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 80,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { return null; }
+    const pick = parseInt(parsed.pick, 10);
+    if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
+    return { market: candidates[pick - 1], edge: parsed.edge || null };
+  } catch (e) {
+    console.warn('[haiku-match] AI call failed:', e.message);
+    return null;
+  }
+}
+
+async function _resolveMatchCached(headline, markets) {
+  const key = 'v3:' + (headline.title || headline);
+  const cached = _matchCache.get(key);
+  if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
+    if (!cached.slug) return null;
+    // Re-resolve market object by slug so price/image stays fresh
+    const m = markets.find(x => x.slug === cached.slug);
+    return m ? { market: m, edge: cached.edge } : null;
+  }
+  const candidates = _getCandidateMarkets(headline, markets, 5);
+  const aiEnabled  = process.env.NEWS_AI_MATCHING !== 'false' && !!anthropic;
+  let result = null;
+  if (aiEnabled && candidates.length > 0) {
+    result = await _haikuPickMarket(headline, candidates);
+  } else if (candidates.length > 0) {
+    result = { market: candidates[0], edge: null };
+  }
+  _matchCache.set(key, {
+    slug: result ? result.market.slug : null,
+    edge: result ? result.edge : null,
+    ts: Date.now()
+  });
+  return result;
+}
+
+// Bounded concurrency map (cap = max parallel in-flight promises)
+async function _mapLimit(arr, cap, fn) {
+  const results = new Array(arr.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < arr.length) {
+      const i = idx++;
+      results[i] = await fn(arr[i], i);
+    }
+  }
+  const workers = [];
+  for (let i = 0; i < Math.min(cap, arr.length); i++) workers.push(worker());
+  await Promise.all(workers);
+  return results;
+}
+
+app.get('/api/news-feed', async (req, res) => {
+  try {
+    if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
+      return res.json(_newsFeedCache.data);
+    }
+
+    // 1. Fetch headlines from Google News RSS in parallel
+    const [top, world, biz, crypto] = await Promise.all([
+      fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 25),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/search?q=crypto+bitcoin+polymarket&hl=en-US&gl=US&ceid=US:en', 10),
+    ]);
+    const allRaw = [...top, ...world, ...biz, ...crypto];
+
+    // Deduplicate
+    const seen = new Set();
+    const headlines = allRaw.filter(h => {
+      const k = h.title.toLowerCase().slice(0, 45);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).slice(0, 50);
+
+    // 2. Fetch market pool from data-engine
+    let markets = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      markets = (dm.markets || []).map(m => ({
+        slug:        m.source_id,
+        question:    m.title,
+        description: m.description || '',
+        yes_price:   (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume:      m.volume_total,
+        end_date:    m.end_date,
+        image:       m.image || m.event_image_url || null,
+      }));
+    } catch (e) {
+      console.warn('[news-feed] data-engine fallback:', e.message);
+    }
+
+    // 3. Resolve matches (bounded concurrency to cap Haiku spend)
+    const aiEnabled = process.env.NEWS_AI_MATCHING !== 'false' && !!anthropic;
+    console.log(`[news-feed] matching ${headlines.length} headlines against ${markets.length} markets | ai_enabled: ${aiEnabled}`);
+
+    const matched = await _mapLimit(headlines, 5, async h => {
+      const r = await _resolveMatchCached(h, markets);
+      return {
+        headline:  h.title,
+        url:       h.link || null,
+        source:    h.source || null,
+        market:    r ? r.market : null,
+        edge:      r ? r.edge  : null,
+      };
+    });
+
+    _newsFeedCache.data = { items: matched, generatedAt: new Date().toISOString() };
+    _newsFeedCache.ts   = Date.now();
+    console.log(`[news-feed] done — ${matched.filter(m => m.market).length}/${matched.length} matched`);
+    res.json(_newsFeedCache.data);
+  } catch (err) {
+    console.error('[news-feed]', err.message);
+    res.json(_newsFeedCache.data || { items: [], generatedAt: null });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EDGE FEED  —  /api/edge-feed
+// Two-stage: Haiku triages all ~74 markets → 5 best candidates → Sonnet writes
+// 2-3 sentence thesis per candidate. Postgres-backed 6h cache. Hard daily cap
+// of 20 Sonnet calls. Zero paid calls at idle.
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _edgeFeedSonnetDay   = '';
+let _edgeFeedSonnetCount = 0;
+const EDGE_FEED_SONNET_CAP = parseInt(process.env.EDGE_FEED_SONNET_CAP || '20', 10);
+const EDGE_FEED_TTL_MS = (parseInt(process.env.EDGE_FEED_TTL_HOURS || '6', 10)) * 3600 * 1000;
+
+// In-memory cache (survives re-reads of this block, clears on deploy)
+let _edgeFeedCache = { data: null, ts: 0 };
+
+function _edgeFeedTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function _sonnetBudgetOk() {
+  const today = _edgeFeedTodayKey();
+  if (_edgeFeedSonnetDay !== today) { _edgeFeedSonnetDay = today; _edgeFeedSonnetCount = 0; }
+  return _edgeFeedSonnetCount < EDGE_FEED_SONNET_CAP;
+}
+
+async function _buildEdgeFeed(markets) {
+  if (!anthropic) return { edges: [], reason: 'no_ai' };
+  if (!_sonnetBudgetOk()) {
+    console.warn('[edge-feed] daily Sonnet cap reached');
+    return { edges: [], reason: 'cap_reached' };
+  }
+
+  // Stage 1 — Haiku triage: pick 5 most likely-mispriced markets
+  const marketList = markets.slice(0, 100).map((m, i) => {
+    const pct = m.yes_price != null ? Math.round(m.yes_price * 100) : '?';
+    const vol = m.volume ? `$${Math.round(m.volume / 1000)}k vol` : '';
+    return `${i + 1}. [${pct}%] ${m.question || m.title} ${vol}`;
+  }).join('\n');
+
+  let candidateSlugs = [];
+  try {
+    const triage = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 40,
+      messages: [{ role: 'user', content: `You are a quantitative prediction market analyst. From this list of Polymarket markets, pick the 5 most likely to be MISPRICED right now — where the crowd probability seems wrong based on available information, momentum, or structural bias. Return ONLY a JSON array of the market numbers, e.g. [3,7,12,21,34]. No other text.\n\n${marketList}` }]
+    });
+    const raw = (triage.content[0] && triage.content[0].text || '').trim();
+    const arr = JSON.parse(raw.match(/\[[\d,\s]+\]/)[0]);
+    candidateSlugs = arr.filter(n => n >= 1 && n <= markets.length).slice(0, 5).map(n => markets[n - 1]);
+  } catch (e) {
+    console.warn('[edge-feed] Haiku triage failed:', e.message);
+    // Fallback: pick 5 markets with highest volume
+    candidateSlugs = [...markets].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+  }
+
+  // Stage 2 — Sonnet thesis per candidate
+  const today = _edgeFeedTodayKey();
+  if (_edgeFeedSonnetDay !== today) { _edgeFeedSonnetDay = today; _edgeFeedSonnetCount = 0; }
+
+  const edges = [];
+  for (const m of candidateSlugs) {
+    if (_edgeFeedSonnetCount >= EDGE_FEED_SONNET_CAP) {
+      console.warn('[edge-feed] daily Sonnet cap reached mid-loop');
+      break;
+    }
+    try {
+      _edgeFeedSonnetCount++;
+      console.log(`[edge-feed] SONNET call for: ${m.slug || m.question} | daily count: ${_edgeFeedSonnetCount}`);
+      const thesis = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 120,
+        messages: [{ role: 'user', content: `You are a sharp prediction market analyst writing for experienced Polymarket traders. Write 2-3 sentences about why "${m.question || m.title}" at ${m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : 'current odds'} is mispriced. Be specific: cite the structural reason (base rate, recency bias, tail risk, information asymmetry). No hedging, no qualifiers. Dry, numerate voice.` }]
+      });
+      edges.push({
+        market:      m,
+        thesis:      thesis.content[0].text.trim(),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('[edge-feed] Sonnet call failed for', m.slug, ':', e.message);
+    }
+  }
+
+  return { edges, generatedAt: new Date().toISOString() };
+}
+
+app.get('/api/edge-feed', async (req, res) => {
+  if (process.env.EDGE_FEED_ENABLED === 'false') {
+    return res.json({ edges: [], reason: 'disabled' });
+  }
+  try {
+    if (_edgeFeedCache.data && Date.now() - _edgeFeedCache.ts < EDGE_FEED_TTL_MS) {
+      return res.json(_edgeFeedCache.data);
+    }
+
+    // Fetch market pool
+    let markets = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      markets = (dm.markets || []).map(m => ({
+        slug:      m.source_id,
+        question:  m.title,
+        yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume:    m.volume_total,
+        end_date:  m.end_date,
+        image:     m.image || m.event_image_url || null,
+      })).filter(m => m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95);
+    } catch (e) {
+      console.warn('[edge-feed] market pool fetch failed:', e.message);
+    }
+
+    if (!markets.length) return res.json({ edges: [], reason: 'no_markets' });
+
+    const result = await _buildEdgeFeed(markets);
+    if (result.edges.length > 0) {
+      _edgeFeedCache.data = result;
+      _edgeFeedCache.ts   = Date.now();
+    } else if (_edgeFeedCache.data) {
+      // Serve stale on cap/error
+      return res.json({ ..._edgeFeedCache.data, stale: true, reason: result.reason });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[edge-feed]', err.message);
+    res.json(_edgeFeedCache.data || { edges: [], reason: 'error' });
+  }
+});
+
 // ── NEW MARKETS — recently created on Polymarket ──────────────────────────
 let _newMarketsCache = null;
 
