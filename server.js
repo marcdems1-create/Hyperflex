@@ -14809,8 +14809,11 @@ app.get('/api/member/:userId', async (req, res) => {
     // Lazy-trigger realized_trades backfill from Polymarket data API.
     // Polymarket is where the real volume lives — without this, profiles
     // with a connected wallet but no HFX-routed trades render empty.
-    // First-ever load: await so the response sees the freshly-imported
-    // rows. Subsequent loads: fire-and-forget so we don't block the page.
+    // First-ever load: await up to 5s so the response sees the freshly-
+    // imported rows when possible; cap via Promise.race so a slow gamma
+    // day can't stall TTFB past 5.5s. The job keeps running in the
+    // background regardless — second profile load gets populated data.
+    // Subsequent loads: fire-and-forget so we don't block the page.
     if (pool && userData.polymarket_address) {
       try {
         const proxy = await ensureProxyStored(userData.id, userData.polymarket_address);
@@ -14818,7 +14821,12 @@ app.get('/api/member/:userId', async (req, res) => {
           const fresh = !userData.realized_trade_count || userData.realized_trade_count === 0;
           const job = backfillRealizedTrades(userData.id, userData.polymarket_address, proxy)
             .catch(e => console.error('[member backfill]', userData.id, e.message));
-          if (fresh) await job;
+          if (fresh) {
+            await Promise.race([
+              job,
+              new Promise(resolve => setTimeout(resolve, 5000)),
+            ]);
+          }
         }
       } catch (e) { console.warn('[member backfill outer]', e.message); }
     }
