@@ -4785,8 +4785,14 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
   return { ok: true, narratives: narratives.length, markets_created: totalCreated, sources: deduped.length };
 }
 
-// Run news scanner every 4 hours
+// Run news scanner every 4 hours — gated behind AI_BACKGROUND_ENABLED (default
+// OFF). This cron calls Haiku directly (generateNarratives) AND twitterapi.io
+// (fetchXTrending) — neither is stopped by CLAUDE_BACKGROUND_DISABLED, so at
+// idle it was the last source of paid API calls. Default-off = zero idle spend.
+// Flip AI_BACKGROUND_ENABLED=true to re-enable. The per-creator manual trigger
+// (POST /api/creator/news-scan) is unaffected.
 cron.schedule('0 */4 * * *', () => {
+  if (process.env.AI_BACKGROUND_ENABLED !== 'true') return;
   console.log('[cron] News intelligence scanner triggered');
   runNewsIntelligenceScanner().catch(e => console.error('[news-scanner] cron error:', e.message));
 });
@@ -45331,7 +45337,7 @@ function _getCandidateMarkets(headline, markets, limit = 5) {
 async function _haikuPickMarket(headline, candidates) {
   if (!candidates || candidates.length === 0) return null;
   const hText = headline.title || headline;
-  console.log('[haiku-match] CALLED for:', hText.slice(0, 40), 'candidates:', candidates.length);
+  console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
   const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, answer 0.
 
@@ -45369,8 +45375,8 @@ Answer with ONLY the number (0 if none are related). No explanation.`;
 // Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
 // — keeps price/image fresh even though the match decision is an hour old.
 async function _resolveMatchCached(headline, markets) {
-  // 'v2:' prefix busts any decisions cached by the earlier keyword-only logic.
-  const key = 'v2:' + (headline.title || headline);
+  // 'v3:' prefix busts any decisions cached by earlier keyword/v2 logic.
+  const key = 'v3:' + (headline.title || headline);
   const cached = _matchCache.get(key);
   let slug;
   if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
@@ -45460,7 +45466,9 @@ app.get('/api/news-feed', async (req, res) => {
       && markets.length > 0;
 
     console.log(`[news-feed] using market pool size: ${markets.length}`);
-    console.log(`[news-feed] matching ${allHeadlines.length} headlines (ai=${aiMatching})`);
+    console.log('[news-feed] ai_enabled:', aiMatching,
+      '| NEWS_AI_MATCHING:', process.env.NEWS_AI_MATCHING || '(unset→on)',
+      '| has_key:', !!process.env.ANTHROPIC_API_KEY, '| pool:', markets.length);
     console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
 
     const buildItem = (h, market) => ({
