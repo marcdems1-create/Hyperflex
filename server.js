@@ -4498,10 +4498,12 @@ function parseRSSItems(xml, limit = 30) {
     const linkMatch  = block.match(/<link[^>]*>\s*(https?:\/\/[^\s<]+)/i)
       || block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
     const sourceMatch = block.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
+    const pubMatch = block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
     const title  = titleMatch  ? titleMatch[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim() : null;
     const link   = linkMatch   ? linkMatch[1].trim() : null;
     const source = sourceMatch ? sourceMatch[1].trim() : null;
-    if (title && title.length > 10) items.push({ title, link, source });
+    const pubDate = pubMatch   ? pubMatch[1].trim() : null;
+    if (title && title.length > 10) items.push({ title, link, source, pubDate });
   }
   return items;
 }
@@ -45209,26 +45211,35 @@ function _tokenize(text) {
 }
 
 function _matchHeadlineToMarket(headline, markets) {
-  const hTokens = new Set(_tokenize(headline.title));
-  if (hTokens.size === 0) return null;
+  if (!markets || markets.length === 0) return null;
+  const hWords = _tokenize(headline.title || headline);
+  if (hWords.length === 0) return null;
+  const hSet = new Set(hWords);
+
+  const stop = new Set(['about','where','their','there','would','could','should','which','after','before','other','these','those','being','having','doing','says','said','will','from','with','that','this','have','been','were','they','what','when','into','than','then','also','more','some','just','like','over','such','very','even','most','here','only','both','much','many','each','same','does','your','make','take','come','know','time','year','back','well','away','down']);
 
   let best = null;
   let bestScore = 0;
 
   for (const m of markets) {
-    const mTokens = _tokenize(m.question);
-    let overlap = 0;
-    for (const t of hTokens) {
-      if (mTokens.includes(t)) overlap++;
+    const mSet = new Set(_tokenize(m.question));
+    let score = 0;
+    for (const w of hSet) {
+      if (stop.has(w)) continue;
+      if (mSet.has(w)) score += 2;  // exact token hit in question
     }
-    const score = overlap / Math.max(hTokens.size, mTokens.length, 1);
-    if (score > bestScore && overlap >= 2) {
+    // Volume boost
+    const vol = parseFloat(m.volume || 0);
+    if (score > 0 && vol > 500000) score += 2;
+    else if (score > 0 && vol > 100000) score += 1;
+
+    if (score > bestScore) {
       bestScore = score;
       best = m;
     }
   }
 
-  return bestScore >= 0.08 ? best : null;
+  return bestScore >= 2 ? best : null;
 }
 
 app.get('/api/news-feed', async (req, res) => {
@@ -45264,13 +45275,14 @@ app.get('/api/news-feed', async (req, res) => {
       : [];
 
     // Pair each headline with best market match
+    console.log(`[news-feed] matching ${allHeadlines.length} headlines against ${markets.length} markets`);
     const paired = allHeadlines.map(h => {
       const market = markets.length ? _matchHeadlineToMarket(h, markets) : null;
       return {
         headline: h.title,
         source: h.source || 'Google News',
         url: h.link || null,
-        publishedAt: null,
+        publishedAt: h.pubDate ? new Date(h.pubDate).toISOString() : null,
         market: market ? {
           slug: market.slug,
           question: market.question,
