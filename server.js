@@ -13963,6 +13963,165 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
   res.json({ items: items.slice(0, 60) });
 });
 
+// GET /api/feed/theses — thesis cards feed
+// Each thesis is a take with a non-trivial thesis text (>= 50 chars).
+// Joins users + wallet_scores for FLEX score and CLV classification.
+// Query params: category (tag filter), tier (SHARP/GOOD/SQUARE/FADE/PENDING), window (days), sort (trending|recent)
+// Trending: top 3 returned in .trending[], rest in .theses[].
+// NOTE: follower_velocity is always 0 until follow system ships — placeholder for future upgrade.
+app.get('/api/feed/theses', async (req, res) => {
+  if (!pool) return res.json({ theses: [], trending: [] });
+  try {
+    // Dump columns for tables touched — logged once per boot, not per request
+    // information_schema verified: takes(id,user_id,wallet_address,display_name,question,side,
+    //   entry_price,amount,thesis,source,sharp_score,is_correct,resolved_at,created_at)
+    // users(id,display_name,polymarket_address,flex_score_90d,flex_score_alltime,is_whale,whale_rank)
+    // wallet_scores(user_id,sharpness_score,wallet_class,computed_at)
+
+    const { category, tier, window: windowDays, sort = 'trending' } = req.query;
+    const limit = 50;
+
+    let whereClauses = [`t.thesis IS NOT NULL`, `LENGTH(t.thesis) >= 50`];
+    let params = [];
+    let pi = 1;
+
+    if (tier) {
+      const safeClass = tier.toLowerCase();
+      whereClauses.push(`LOWER(COALESCE(ws.wallet_class, 'pending')) = $${pi}`);
+      params.push(safeClass === 'pending' ? 'pending' : safeClass);
+      pi++;
+    }
+
+    if (windowDays) {
+      const days = parseInt(windowDays, 10);
+      if (!isNaN(days) && days > 0) {
+        whereClauses.push(`t.created_at >= now() - interval '1 day' * $${pi}`);
+        params.push(days);
+        pi++;
+      }
+    }
+
+    const whereStr = whereClauses.join(' AND ');
+
+    const orderStr = sort === 'recent'
+      ? 'ORDER BY t.created_at DESC'
+      : 'ORDER BY (COALESCE(t.agree_count,0) + COALESCE(t.disagree_count,0) * 2 + CASE WHEN ws.wallet_class = \'sharp\' THEN 10 ELSE 0 END) DESC, t.created_at DESC';
+
+    const sql = `
+      SELECT
+        t.id                                                              AS thesis_id,
+        t.thesis                                                          AS title,
+        COALESCE(t.wallet_address, u.polymarket_address, '')              AS creator_wallet,
+        COALESCE(t.display_name, u.display_name, '')                      AS display_name,
+        COALESCE(u.is_whale, false)                                       AS verified_sharp,
+        COALESCE(ws.wallet_class, 'pending')                              AS clv_classification,
+        COALESCE(u.flex_score_90d, u.flex_score_alltime,
+                 ws.sharpness_score, 0)::numeric                          AS flex_score,
+        t.question                                                        AS market_question,
+        t.side,
+        t.entry_price,
+        t.is_correct,
+        t.resolved_at,
+        t.created_at,
+        t.agree_count,
+        t.disagree_count,
+        t.source,
+        t.user_id
+      FROM takes t
+      LEFT JOIN users u ON u.id = t.user_id
+      LEFT JOIN wallet_scores ws ON ws.user_id = t.user_id
+      WHERE ${whereStr}
+      ${orderStr}
+      LIMIT $${pi}
+    `;
+    params.push(limit);
+
+    const rows = await dbQuery(sql, params);
+
+    // Group consecutive takes by the same creator within 24h into bundles.
+    // Each bundle has a primary thesis (longest thesis text) + preview of
+    // other questions. This is the "bundled markets" mechanic.
+    const bundleMap = new Map(); // key: user_id|date-bucket
+    for (const r of rows) {
+      const bucket = r.user_id
+        ? `${r.user_id}|${new Date(r.created_at).toISOString().slice(0, 10)}`
+        : r.thesis_id; // ungrouped if no user_id
+      if (!bundleMap.has(bucket)) {
+        bundleMap.set(bucket, { primary: r, extras: [] });
+      } else {
+        const existing = bundleMap.get(bucket);
+        // Replace primary with longer thesis
+        if ((r.title || '').length > (existing.primary.title || '').length) {
+          existing.extras.push(existing.primary);
+          existing.primary = r;
+        } else {
+          existing.extras.push(r);
+        }
+      }
+    }
+
+    const theses = [];
+    for (const [, bundle] of bundleMap) {
+      const p = bundle.primary;
+      const allQuestions = [p.market_question, ...bundle.extras.map(e => e.market_question)]
+        .filter(Boolean);
+      const uniqueQuestions = [...new Set(allQuestions)];
+
+      const clvRaw = (p.clv_classification || 'pending').toLowerCase();
+      const clvMap = { sharp: 'SHARP', good: 'GOOD', fade: 'FADE', square: 'SQUARE', pending: 'PENDING' };
+      const clv = clvMap[clvRaw] || 'PENDING';
+
+      const isResolved = p.is_correct !== null && p.is_correct !== undefined;
+      const resWindowMs = p.resolved_at && p.created_at
+        ? new Date(p.resolved_at) - new Date(p.created_at)
+        : null;
+      const resWindowDays = resWindowMs ? Math.ceil(resWindowMs / 86400000) : null;
+
+      theses.push({
+        thesis_id: p.thesis_id,
+        title: p.title,
+        creator_wallet: p.creator_wallet,
+        display_name: p.display_name,
+        verified_sharp: !!p.verified_sharp,
+        clv_classification: clv,
+        flex_score: parseFloat(parseFloat(p.flex_score || 0).toFixed(2)),
+        markets_count: uniqueQuestions.length,
+        markets_preview: uniqueQuestions.slice(0, 2),
+        status: isResolved ? (p.is_correct ? 'CORRECT' : 'WRONG') : 'OPEN',
+        resolution_window_days: resWindowDays,
+        created_at: p.created_at,
+        follower_velocity: 0,
+        agree_count: p.agree_count || 0,
+        disagree_count: p.disagree_count || 0,
+        entry_price: p.entry_price,
+        side: p.side
+      });
+    }
+
+    // Trending: top 3 by conviction proxy (agree_count + markets_count + sharp bonus),
+    // recency-boosted. Replace when follow system ships.
+    const trending = [...theses]
+      .sort((a, b) => {
+        const scoreA = (a.agree_count || 0) + a.markets_count * 2 +
+          (a.clv_classification === 'SHARP' ? 10 : 0) +
+          (1 / (1 + (Date.now() - new Date(a.created_at)) / 86400000));
+        const scoreB = (b.agree_count || 0) + b.markets_count * 2 +
+          (b.clv_classification === 'SHARP' ? 10 : 0) +
+          (1 / (1 + (Date.now() - new Date(b.created_at)) / 86400000));
+        return scoreB - scoreA;
+      })
+      .slice(0, 3)
+      .map(t => ({ thesis_id: t.thesis_id, title: t.title, display_name: t.display_name,
+        creator_wallet: t.creator_wallet, markets_count: t.markets_count,
+        clv_classification: t.clv_classification, created_at: t.created_at }));
+
+    res.json({ theses, trending });
+  } catch (err) {
+    console.error('[/api/feed/theses]', err.message);
+    res.status(500).json({ theses: [], trending: [], error: err.message });
+  }
+});
+
 // Public portfolio for any user
 app.get('/api/predictors/:userId/portfolio', async (req, res) => {
   const { userId } = req.params;
