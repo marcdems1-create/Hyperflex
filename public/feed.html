@@ -445,6 +445,15 @@ body {
   font-size: 11px; font-family: 'JetBrains Mono', monospace;
   letter-spacing: 1px; text-transform: uppercase;
 }
+.feed-retry button {
+  display: block; margin: 12px auto 0;
+  padding: 6px 18px;
+  background: #13132a; border: 1px solid #3333cc; color: #7777ff;
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  border-radius: 4px; cursor: pointer;
+}
+.feed-retry button:hover { background: #1a1a3a; }
 
 /* ── ANIMATIONS ── */
 @keyframes fadeUp {
@@ -604,16 +613,20 @@ function switchTab(tab) {
 async function loadNews() {
   const list = document.getElementById('news-list');
   list.innerHTML = '<div class="feed-empty">Loading…</div>';
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch('/api/news-feed');
+    const res = await fetch('/api/news-feed', { signal: ctrl.signal });
+    clearTimeout(timer);
     const data = await res.json();
     _newsItems = data.items || [];
     document.getElementById('live-count').textContent =
       _newsItems.filter(i => i.market).length + ' matched';
     renderNews();
   } catch (e) {
+    clearTimeout(timer);
     console.error('[news-feed]', e);
-    list.innerHTML = '<div class="feed-empty">Failed to load news</div>';
+    list.innerHTML = '<div class="feed-empty feed-retry">Failed to load — <button onclick="loadNews()">Retry</button></div>';
   }
 }
 
@@ -947,7 +960,8 @@ function shareCard(e, id, wallet) {
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
-loadNews();
+if (document.readyState !== 'loading') { loadNews(); }
+else { document.addEventListener('DOMContentLoaded', loadNews); }
 </script>
 
 </body>
