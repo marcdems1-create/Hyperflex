@@ -45331,6 +45331,7 @@ function _getCandidateMarkets(headline, markets, limit = 5) {
 async function _haikuPickMarket(headline, candidates) {
   if (!candidates || candidates.length === 0) return null;
   const hText = headline.title || headline;
+  console.log('[haiku-match] CALLED for:', hText.slice(0, 40), 'candidates:', candidates.length);
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
   const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, answer 0.
 
@@ -45341,17 +45342,25 @@ ${list}
 
 Answer with ONLY the number (0 if none are related). No explanation.`;
   try {
-    const resp = await backgroundClaudeCall({
+    // Direct anthropic.messages.create — deliberately BYPASSES backgroundClaudeCall
+    // (and thus the CLAUDE_BACKGROUND_DISABLED global kill switch). News matching
+    // is user-facing, bounded (5-min response cache + 1h decision cache),
+    // concurrency-capped at 5, and costs cents/day — it is NOT one of the
+    // always-on crons the global kill switch exists to stop. Dedicated off
+    // switch for this feature: NEWS_AI_MATCHING=false.
+    console.log('[haiku-match] calling Haiku...');
+    const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 8,
       messages: [{ role: 'user', content: prompt }]
-    }, 'news-match');
+    });
     const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
+    console.log('[haiku-match] raw response:', JSON.stringify(text));
     const pick = parseInt(text, 10);
     if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
     return candidates[pick - 1];
   } catch (e) {
-    console.error('[news-match] haiku error:', e.message);
+    console.log('[haiku-match] AI call failed — no match. msg:', e.message);
     return null; // fail safe: no match rather than a bad match
   }
 }
@@ -45360,7 +45369,8 @@ Answer with ONLY the number (0 if none are related). No explanation.`;
 // Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
 // — keeps price/image fresh even though the match decision is an hour old.
 async function _resolveMatchCached(headline, markets) {
-  const key = headline.title || headline;
+  // 'v2:' prefix busts any decisions cached by the earlier keyword-only logic.
+  const key = 'v2:' + (headline.title || headline);
   const cached = _matchCache.get(key);
   let slug;
   if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
@@ -45440,11 +45450,12 @@ app.get('/api/news-feed', async (req, res) => {
       for (const [k, v] of _matchCache) if (v.ts < cutoff) _matchCache.delete(k);
     }
 
-    // AI matching is on by default. Kill switches: NEWS_AI_MATCHING=false
-    // (feature-specific) or the global CLAUDE_BACKGROUND_DISABLED=true; either
-    // falls back to free keyword top-1 matching.
+    // AI matching is on by default and INDEPENDENT of the global
+    // CLAUDE_BACKGROUND_DISABLED kill switch (news matching is user-facing,
+    // cached, and cheap — see _haikuPickMarket). Dedicated off switch:
+    // NEWS_AI_MATCHING=false. Falls back to free keyword top-1 when off or
+    // when no API key is configured.
     const aiMatching = process.env.NEWS_AI_MATCHING !== 'false'
-      && process.env.CLAUDE_BACKGROUND_DISABLED !== 'true'
       && !!process.env.ANTHROPIC_API_KEY
       && markets.length > 0;
 
