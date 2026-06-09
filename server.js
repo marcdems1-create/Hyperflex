@@ -45343,14 +45343,16 @@ async function _haikuPickMarket(headline, candidates) {
   const hText = headline.title || headline;
   console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
-  const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, answer 0.
+  const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, pick 0.
 
 Headline: "${hText}"
 
 Markets:
 ${list}
 
-Answer with ONLY the number (0 if none are related). No explanation.`;
+Respond with ONLY a JSON object on one line: {"pick": N, "edge": "one dry sentence on how this news moves that market's probability"}
+If none are related: {"pick": 0, "edge": ""}
+No other text.`;
   try {
     // Direct anthropic.messages.create — deliberately BYPASSES backgroundClaudeCall
     // (and thus the CLAUDE_BACKGROUND_DISABLED global kill switch). News matching
@@ -45361,14 +45363,19 @@ Answer with ONLY the number (0 if none are related). No explanation.`;
     console.log('[haiku-match] calling Haiku...');
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8,
+      max_tokens: 80,
       messages: [{ role: 'user', content: prompt }]
     });
     const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
     console.log('[haiku-match] raw response:', JSON.stringify(text));
-    const pick = parseInt(text, 10);
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch { console.log('[haiku-match] JSON parse failed'); return null; }
+    const pick = parseInt(parsed.pick, 10);
     if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
-    return candidates[pick - 1];
+    const edge = (parsed.edge && String(parsed.edge).trim()) || null;
+    console.log('[news-edge]', hText.slice(0, 30), '| pick:', pick, '| edge:', edge ? edge.slice(0, 40) : 'none');
+    return { market: candidates[pick - 1], edge };
   } catch (e) {
     console.log('[haiku-match] AI call failed — no match. msg:', e.message);
     return null; // fail safe: no match rather than a bad match
@@ -45379,22 +45386,25 @@ Answer with ONLY the number (0 if none are related). No explanation.`;
 // Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
 // — keeps price/image fresh even though the match decision is an hour old.
 async function _resolveMatchCached(headline, markets) {
-  // 'v3:' prefix busts any decisions cached by earlier keyword/v2 logic.
-  const key = 'v3:' + (headline.title || headline);
+  // 'v5:' prefix busts any decisions cached before edge sentences were threaded.
+  const key = 'v5:' + (headline.title || headline);
   const cached = _matchCache.get(key);
-  let slug;
+  let slug, edge;
   if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
     slug = cached.slug;
+    edge = cached.edge || null;
   } else {
     const candidates = _getCandidateMarkets(headline, markets, 5);
     const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
-    slug = picked ? picked.slug : null;
-    _matchCache.set(key, { slug, ts: Date.now() });
+    slug = picked ? picked.market.slug : null;
+    edge = picked ? picked.edge : null;
+    _matchCache.set(key, { slug, edge, ts: Date.now() });
     console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
-      key.slice(0, 40), '-> pick:', picked ? (picked.question || '').slice(0, 40) : 'NONE');
+      key.slice(0, 40), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
   }
   if (!slug) return null;
-  return markets.find(m => m.slug === slug) || null;
+  const market = markets.find(m => m.slug === slug) || null;
+  return market ? { market, edge } : null;
 }
 
 app.get('/api/news-feed', async (req, res) => {
@@ -45475,11 +45485,12 @@ app.get('/api/news-feed', async (req, res) => {
       '| has_key:', !!process.env.ANTHROPIC_API_KEY, '| pool:', markets.length);
     console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
 
-    const buildItem = (h, market) => ({
+    const buildItem = (h, market, edge) => ({
       headline: h.title,
       source: h.source || 'Google News',
       url: h.link || null,
       publishedAt: h.pubDate ? new Date(h.pubDate).toISOString() : null,
+      edge: market ? (edge || null) : null,
       market: market ? {
         slug: market.slug,
         question: market.question,
@@ -45498,12 +45509,12 @@ app.get('/api/news-feed', async (req, res) => {
     if (aiMatching) {
       // Two-stage: keyword candidates → Haiku judge, concurrency-capped at 5.
       paired = await _mapLimit(allHeadlines, 5, async (h) => {
-        const market = await _resolveMatchCached(h, markets);
-        return buildItem(h, market);
+        const r = await _resolveMatchCached(h, markets);
+        return buildItem(h, r ? r.market : null, r ? r.edge : null);
       });
     } else {
-      // Free keyword fallback (strict gate, top-1).
-      paired = allHeadlines.map(h => buildItem(h, markets.length ? _matchHeadlineToMarket(h, markets) : null));
+      // Free keyword fallback (strict gate, top-1) — no edge sentence (no AI).
+      paired = allHeadlines.map(h => buildItem(h, markets.length ? _matchHeadlineToMarket(h, markets) : null, null));
     }
 
     // Prioritize items that have a matched market
@@ -45517,6 +45528,118 @@ app.get('/api/news-feed', async (req, res) => {
   } catch (err) {
     console.error('[news-feed]', err.message);
     res.json(_newsFeedCache.data || { items: [] });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EDGE FEED  —  /api/edge-feed
+// Two-stage: Haiku triages all ~74 markets → 5 best candidates → Sonnet writes
+// 2-3 sentence thesis per candidate. In-memory 6h cache, hard daily cap of 20
+// Sonnet calls. Zero paid calls at idle. ALWAYS returns JSON, even on error.
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _edgeFeedSonnetDay   = '';
+let _edgeFeedSonnetCount = 0;
+const EDGE_FEED_SONNET_CAP = parseInt(process.env.EDGE_FEED_SONNET_CAP || '20', 10);
+const EDGE_FEED_TTL_MS = (parseInt(process.env.EDGE_FEED_TTL_HOURS || '6', 10)) * 3600 * 1000;
+let _edgeFeedCache = { data: null, ts: 0 };
+
+function _edgeFeedTodayKey() { return new Date().toISOString().slice(0, 10); }
+
+function _sonnetBudgetOk() {
+  const today = _edgeFeedTodayKey();
+  if (_edgeFeedSonnetDay !== today) { _edgeFeedSonnetDay = today; _edgeFeedSonnetCount = 0; }
+  return _edgeFeedSonnetCount < EDGE_FEED_SONNET_CAP;
+}
+
+async function _buildEdgeFeed(markets) {
+  if (!anthropic) return { edges: [], reason: 'no_ai' };
+  if (!_sonnetBudgetOk()) {
+    console.warn('[edge-feed] daily Sonnet cap reached');
+    return { edges: [], reason: 'cap_reached' };
+  }
+
+  // Stage 1 — Haiku triage: pick the 5 most likely-mispriced markets
+  const marketList = markets.slice(0, 100).map((m, i) => {
+    const pct = m.yes_price != null ? Math.round(m.yes_price * 100) : '?';
+    const vol = m.volume ? `$${Math.round(m.volume / 1000)}k vol` : '';
+    return `${i + 1}. [${pct}%] ${m.question || m.title} ${vol}`;
+  }).join('\n');
+
+  let candidates = [];
+  try {
+    const triage = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 40,
+      messages: [{ role: 'user', content: `You are a quantitative prediction market analyst. From this list of Polymarket markets, pick the 5 most likely to be MISPRICED right now — where the crowd probability seems wrong based on available information, momentum, or structural bias. Return ONLY a JSON array of the market numbers, e.g. [3,7,12,21,34]. No other text.\n\n${marketList}` }]
+    });
+    const raw = (triage.content[0] && triage.content[0].text || '').trim();
+    const arr = JSON.parse(raw.match(/\[[\d,\s]+\]/)[0]);
+    candidates = arr.filter(n => n >= 1 && n <= markets.length).slice(0, 5).map(n => markets[n - 1]);
+    console.log('[edge-feed] Haiku triage picked:', candidates.map(m => (m.question || '').slice(0, 30)));
+  } catch (e) {
+    console.warn('[edge-feed] Haiku triage failed:', e.message);
+    candidates = [...markets].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+  }
+
+  // Stage 2 — Sonnet thesis per candidate
+  const edges = [];
+  for (const m of candidates) {
+    if (!_sonnetBudgetOk()) { console.warn('[edge-feed] Sonnet cap reached mid-loop'); break; }
+    try {
+      _edgeFeedSonnetCount++;
+      console.log(`[edge-feed] SONNET call for: ${m.slug || m.question} | daily count: ${_edgeFeedSonnetCount}`);
+      const thesis = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 120,
+        messages: [{ role: 'user', content: `You are a sharp prediction market analyst writing for experienced Polymarket traders. Write 2-3 sentences on why "${m.question || m.title}" at ${m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : 'current odds'} may be mispriced. Be specific: cite the structural reason (base rate, recency bias, tail risk, information asymmetry). No hedging. Dry, numerate voice.` }]
+      });
+      edges.push({ market: m, thesis: (thesis.content[0] && thesis.content[0].text || '').trim(), generatedAt: new Date().toISOString() });
+    } catch (e) {
+      console.warn('[edge-feed] Sonnet call failed for', m.slug, ':', e.message);
+    }
+  }
+  return { edges, generatedAt: new Date().toISOString() };
+}
+
+app.get('/api/edge-feed', async (req, res) => {
+  console.log('[edge-feed] route hit, enabled:', process.env.EDGE_FEED_ENABLED !== 'false');
+  if (process.env.EDGE_FEED_ENABLED === 'false') {
+    return res.json({ edges: [], reason: 'disabled' });
+  }
+  try {
+    if (_edgeFeedCache.data && Date.now() - _edgeFeedCache.ts < EDGE_FEED_TTL_MS) {
+      return res.json(_edgeFeedCache.data);
+    }
+
+    let markets = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      markets = (dm.markets || []).map(m => ({
+        slug:      m.source_id,
+        question:  m.title,
+        yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume:    m.volume_total,
+        end_date:  m.end_date,
+        image:     m.image || m.event_image_url || null,
+      })).filter(m => m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95);
+    } catch (e) {
+      console.warn('[edge-feed] market pool fetch failed:', e.message);
+    }
+
+    if (!markets.length) return res.json({ edges: [], reason: 'no_markets' });
+
+    const result = await _buildEdgeFeed(markets);
+    if (result.edges.length > 0) {
+      _edgeFeedCache.data = result;
+      _edgeFeedCache.ts   = Date.now();
+    } else if (_edgeFeedCache.data) {
+      return res.json({ ..._edgeFeedCache.data, stale: true, reason: result.reason });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[edge-feed] FAILED:', err.message);
+    res.json(_edgeFeedCache.data || { edges: [], reason: 'error', error: err.message });
   }
 });
 
