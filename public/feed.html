@@ -9,7 +9,7 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  background: #0e0e10;
+  background: #0a0a0a;
   color: #e0e0e6;
   min-height: 100vh;
 }
@@ -17,9 +17,9 @@ body {
 #nav-root { position: sticky; top: 0; z-index: 100; }
 
 .page-wrap {
-  max-width: 760px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: 24px 16px 80px;
+  padding: 20px 16px 80px;
 }
 
 /* ── HEADER ── */
@@ -27,433 +27,163 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  opacity: 0;
-  transform: translateY(-8px);
-  animation: fadeUp 0.4s ease forwards;
+  margin-bottom: 4px;
 }
 .feed-header h1 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.5px;
   color: #f0f0f5;
 }
-.feed-header h1 span { color: #5555ee; }
+.feed-header h1 span { color: #a78bfa; }
 .live-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #666;
+  font-size: 11px;
+  color: #555;
   font-family: 'JetBrains Mono', monospace;
 }
 .live-dot {
-  width: 7px; height: 7px;
+  width: 6px; height: 6px;
   border-radius: 50%;
   background: #00e68a;
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* ── TAB BAR ── */
-.tab-bar {
+/* ── TABS ── */
+.feed-tabs {
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid #1e1e22;
-  margin-bottom: 24px;
-  opacity: 0;
-  animation: fadeUp 0.4s ease 0.05s forwards;
+  gap: 8px;
+  margin: 16px 0;
+  position: sticky;
+  top: 0;
+  background: #0a0a0a;
+  padding: 12px 0;
+  z-index: 10;
 }
-.tab-btn {
-  padding: 8px 20px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #555;
+.feed-tab {
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  padding: 8px 18px;
+  border-radius: 99px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
+  border: 1px solid #222;
+  background: #111;
+  color: #888;
+  transition: all .15s;
 }
-.tab-btn:hover { color: #aaa; }
-.tab-btn.active { color: #7777ff; border-bottom-color: #5555ee; }
+.feed-tab.active { background: #fff; color: #000; border-color: transparent; }
+.feed-tab:not(.active):hover { color: #bbb; border-color: #333; }
 
-/* ── SHARED ── */
-.feed-grid { display: flex; flex-direction: column; gap: 14px; }
-.feed-empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: #333;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
+/* ── PANES ── */
+.feed-pane {}
 
-/* ══════════════════════════════════════════════════
-   NEWS TAB
-══════════════════════════════════════════════════ */
+/* ── NEWS PANE ── */
+.feed-item { border-bottom: 1px solid #1e1e1e; padding: 20px 0; }
+.feed-item:last-child { border-bottom: none; }
+.headline-block { display: block; text-decoration: none; color: inherit; }
+.headline-block:hover .headline-text { color: #a78bfa; }
+.headline-source { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.headline-text { font-size: 17px; font-weight: 600; line-height: 1.35; margin: 0 0 10px; color: #e5e5e5; }
+.edge-sentence { font-size: 13px; color: #a78bfa; font-style: italic; margin: 0 0 12px; padding-left: 12px; border-left: 2px solid #a78bfa; line-height: 1.5; }
 
-/* filter rail */
-.filter-rail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 20px;
-}
-.filter-btn {
-  padding: 5px 14px;
-  border-radius: 20px;
-  border: 1px solid #1e1e22;
-  background: transparent;
-  color: #555;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-.filter-btn:hover { color: #aaa; border-color: #2a2a35; }
-.filter-btn.active { background: #13132a; border-color: #3333cc; color: #7777ff; }
-
-/* news item */
-.news-item {
-  background: #111113;
-  border: 1px solid #1e1e22;
-  border-radius: 14px;
-  overflow: hidden;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: fadeUp 0.35s ease forwards;
-}
-.news-headline-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px 12px;
-}
-.news-source-dot {
-  flex-shrink: 0;
-  margin-top: 4px;
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #5555ee;
-}
-.news-headline-wrap { flex: 1; min-width: 0; }
-.news-headline {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.55;
-  color: #ddd;
-}
-.news-headline a { color: inherit; text-decoration: none; }
-.news-headline a:hover { color: #f0f0f5; text-decoration: underline; }
-.news-source {
-  margin-top: 4px;
-  font-size: 11px;
-  color: #444;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* market card embedded in news item */
-.news-market-card {
-  margin: 0 14px 14px;
-  border: 1px solid #1e1e2a;
-  border-radius: 10px;
+/* ── MARKET CARD (shared) ── */
+.market-card, .edge-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s;
-  background: #161618;
+  transition: border-color .15s, transform .15s;
 }
-.news-market-card:hover { border-color: #3333aa; }
-.mkt-img-wrap {
-  height: 80px;
-  overflow: hidden;
-  background: #1a1a1e;
+.market-card:hover, .edge-card:hover { border-color: #444; transform: translateY(-1px); }
+.edge-card { margin-bottom: 16px; }
+.card-image-wrap {
   position: relative;
-}
-.mkt-img-wrap img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  filter: brightness(0.55);
-}
-.mkt-img-fallback {
-  width: 100%; height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.mkt-img-gradient {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  height: 40px;
-  background: linear-gradient(to bottom, transparent, #161618);
-}
-.mkt-body { padding: 10px 12px 8px; }
-.mkt-question {
-  font-size: 13px;
-  font-weight: 500;
-  color: #ccc;
-  line-height: 1.5;
-  margin-bottom: 8px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  height: 120px;
+  background: #1a1a2e;
   overflow: hidden;
 }
-.mkt-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.mkt-prob {
+.card-image-wrap.img-fallback { background: linear-gradient(135deg, #1a1a2e, #16213e); }
+.card-image { width: 100%; height: 120px; object-fit: cover; display: block; }
+.card-probability {
+  position: absolute;
+  top: 8px; right: 10px;
   font-size: 16px;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
-  color: #f0f0f5;
-}
-.mkt-prob.hi  { color: #00e68a; }
-.mkt-prob.lo  { color: #ff4d6a; }
-.mkt-prob.mid { color: #4d9fff; }
-.mkt-prob-label {
-  font-size: 10px;
-  color: #444;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.mkt-sep { color: #2a2a35; }
-.mkt-vol {
-  font-size: 11px;
-  color: #444;
-  font-family: 'JetBrains Mono', monospace;
-}
-.mkt-expiry {
-  font-size: 11px;
-  color: #444;
-  font-family: 'JetBrains Mono', monospace;
-}
-.mkt-trade-btn {
-  margin-left: auto;
-  padding: 4px 12px;
-  background: #13132a;
-  border: 1px solid #3333cc;
-  border-radius: 6px;
-  color: #7777ff;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.mkt-trade-btn:hover { background: #1a1a40; }
-
-/* edge sentence */
-.edge-sentence {
-  margin: 0 14px 14px;
-  padding: 9px 12px;
-  border-left: 2px solid #a855f7;
-  background: rgba(168,85,247,0.06);
-  border-radius: 0 8px 8px 0;
-  font-size: 12px;
-  font-style: italic;
-  color: #aaa;
-  line-height: 1.6;
-}
-
-/* ══════════════════════════════════════════════════
-   EDGE TAB
-══════════════════════════════════════════════════ */
-.edge-card {
-  background: #111113;
-  border: 1px solid #1e1e22;
-  border-radius: 14px;
-  overflow: hidden;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: fadeUp 0.35s ease forwards;
-}
-.edge-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #1a1a1e;
-}
-.edge-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: #a855f7;
-  background: rgba(168,85,247,0.1);
-  border: 1px solid rgba(168,85,247,0.25);
+  background: rgba(0,0,0,.55);
   padding: 2px 8px;
-  border-radius: 4px;
-  flex-shrink: 0;
+  border-radius: 6px;
 }
-.edge-card-question {
-  font-size: 13px;
-  font-weight: 500;
-  color: #ddd;
-  line-height: 1.5;
+.prob-yes  { color: #4ade80; }
+.prob-no   { color: #f87171; }
+.prob-even { color: #facc15; }
+.card-body { padding: 12px 14px; }
+.card-question { font-size: 14px; font-weight: 500; line-height: 1.4; margin: 0 0 8px; color: #e5e5e5; }
+.card-meta { display: flex; gap: 10px; font-size: 11px; color: #666; margin-top: 8px; }
+.card-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1e1e1e; }
+.btn-yes {
   flex: 1;
-  min-width: 0;
-}
-.edge-card-body { padding: 12px 16px; }
-.edge-thesis {
-  font-size: 13px;
-  color: #bbb;
-  line-height: 1.7;
-}
-.edge-card-footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid #1a1a1e;
-}
-.edge-prob {
-  font-size: 18px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-}
-.edge-prob.hi  { color: #00e68a; }
-.edge-prob.lo  { color: #ff4d6a; }
-.edge-prob.mid { color: #4d9fff; }
-.edge-vol {
-  font-size: 11px;
-  color: #444;
-  font-family: 'JetBrains Mono', monospace;
-}
-.edge-trade-btn {
-  margin-left: auto;
-  padding: 5px 14px;
-  background: #13132a;
-  border: 1px solid #3333cc;
-  border-radius: 7px;
-  color: #7777ff;
+  background: rgba(74,222,128,.1);
+  border: 1px solid rgba(74,222,128,.3);
+  color: #4ade80;
+  border-radius: 6px;
+  padding: 7px 0;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
 }
-.edge-trade-btn:hover { background: #1a1a40; }
+.btn-yes:hover { background: rgba(74,222,128,.2); }
+.btn-no {
+  flex: 1;
+  background: rgba(248,113,113,.1);
+  border: 1px solid rgba(248,113,113,.3);
+  color: #f87171;
+  border-radius: 6px;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-no:hover { background: rgba(248,113,113,.2); }
+
+/* ── EDGE PANE ── */
+.thesis { margin: 10px 0; }
+.thesis-label { display: block; font-size: 10px; font-weight: 700; color: #a78bfa; letter-spacing: .08em; margin-bottom: 6px; }
+.thesis-body { font-size: 13px; color: #ccc; line-height: 1.55; }
+.thesis-body p { margin: 0 0 8px; }
+.thesis-body p:last-child { margin-bottom: 0; }
+.thesis-body strong { color: #fff; font-weight: 700; }
 .edge-stale-banner {
-  padding: 6px 16px;
-  background: rgba(245,158,11,0.08);
-  border-bottom: 1px solid rgba(245,158,11,0.15);
+  padding: 8px 0;
   font-size: 11px;
   color: #f59e0b;
   font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 12px;
 }
 
-/* ══════════════════════════════════════════════════
-   TAKES TAB (thesis cards)
-══════════════════════════════════════════════════ */
-.thesis-card {
-  background: #161618;
-  border: 1px solid #1e1e22;
-  border-radius: 14px;
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  opacity: 0;
-  transform: translateY(8px);
-}
-.thesis-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.5); }
-.thesis-card:nth-child(1)  { animation: fadeUp 0.35s ease 0.10s forwards; }
-.thesis-card:nth-child(2)  { animation: fadeUp 0.35s ease 0.15s forwards; }
-.thesis-card:nth-child(3)  { animation: fadeUp 0.35s ease 0.20s forwards; }
-.thesis-card:nth-child(4)  { animation: fadeUp 0.35s ease 0.25s forwards; }
-.thesis-card:nth-child(5)  { animation: fadeUp 0.35s ease 0.30s forwards; }
-.thesis-card:nth-child(n+6){ animation: fadeUp 0.35s ease 0.35s forwards; }
+/* ── SKELETON ── */
+.skeleton-item { padding: 20px 0; border-bottom: 1px solid #1e1e1e; }
+.skel-line { background: #1a1a1e; border-radius: 4px; margin-bottom: 8px; }
+.skel-line.w60 { width: 60%; height: 10px; }
+.skel-line.w90 { width: 90%; height: 18px; }
+.skel-line.w75 { width: 75%; height: 18px; }
+.skel-card { background: #1a1a1e; border-radius: 12px; height: 80px; margin-top: 12px; }
+@keyframes shimmer { 0%,100% { opacity: .4; } 50% { opacity: .8; } }
+.skeleton-item .skel-line, .skeleton-item .skel-card { animation: shimmer 1.4s ease-in-out infinite; }
 
-.card-clickable { cursor: pointer; }
-.card-img {
-  height: 130px;
-  position: relative;
-  overflow: hidden;
-  background: #1a1a1e;
-}
-.card-img img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  filter: brightness(0.5);
-  transform: scale(1.02);
-  transition: transform 0.4s ease;
-}
-.thesis-card:hover .card-img img { transform: scale(1.06); }
-.card-img-gradient {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  height: 60px;
-  background: linear-gradient(to bottom, transparent, #161618);
-  pointer-events: none;
-}
-.card-img-badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; align-items: center; }
-.card-flex-score {
-  position: absolute; top: 10px; right: 10px;
-  font-size: 11px; font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  color: #f0f0f5;
-  background: rgba(0,0,0,0.55);
-  padding: 2px 7px; border-radius: 6px;
-}
-.badge-sharp {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
-  color: #00e68a; background: rgba(0,230,138,0.12);
-  border: 1px solid rgba(0,230,138,0.25); padding: 2px 7px; border-radius: 4px;
-}
-.clv-pill { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
-.clv-pill.sharp  { color: #00e68a; background: rgba(0,230,138,0.1);   border: 1px solid rgba(0,230,138,0.2); }
-.clv-pill.good   { color: #4d9fff; background: rgba(77,159,255,0.1);  border: 1px solid rgba(77,159,255,0.2); }
-.clv-pill.fade   { color: #ff4d6a; background: rgba(255,77,106,0.1);  border: 1px solid rgba(255,77,106,0.2); }
-.clv-pill.square { color: #888;    background: rgba(136,136,136,0.1); border: 1px solid rgba(136,136,136,0.2); }
-.clv-pill.pending{ color: #555;    background: rgba(85,85,85,0.1);    border: 1px solid rgba(85,85,85,0.2); }
-.card-header-row { display: flex; align-items: center; gap: 8px; padding: 12px 16px 0; flex-wrap: wrap; }
-.card-header-row .card-flex-inline { margin-left: auto; font-size: 11px; color: #555; font-family: 'JetBrains Mono', monospace; }
-.card-body { padding: 14px 16px 10px; }
-.card-creator { font-size: 11px; font-weight: 600; color: #5555ee; letter-spacing: 0.5px; margin-bottom: 6px; }
-.card-title { font-size: 14px; font-weight: 500; color: #ddd; line-height: 1.65; margin-bottom: 10px; }
-.card-markets { display: flex; flex-direction: column; gap: 3px; }
-.card-market-line { font-size: 11px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-market-line.muted { color: #333; }
-.card-market-more { font-size: 10px; color: #444; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
-.card-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-top: 1px solid #1a1a1e; }
-.open-badge { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #00e68a; }
-.open-dot { width: 6px; height: 6px; border-radius: 50%; background: #00e68a; animation: pulse 2s ease-in-out infinite; }
-.status-correct { color: #00e68a; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
-.status-wrong   { color: #ff4d6a; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
-.card-footer-right { display: flex; align-items: center; gap: 12px; font-size: 10px; color: #444; font-family: 'JetBrains Mono', monospace; }
-.reactions-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-top: 1px solid #1a1a1e; }
-.reactions-left { display: flex; gap: 14px; }
-.react-btn { display: flex; align-items: center; gap: 5px; background: none; border: none; color: #555; font-size: 12px; cursor: pointer; padding: 3px 0; transition: color 0.15s ease; }
-.react-btn:hover { color: #aaa; }
-.react-btn.liked { color: #ff4d6a; }
-.share-btn { background: none; border: none; color: #444; font-size: 11px; cursor: pointer; padding: 3px 6px; border-radius: 4px; transition: color 0.15s, background 0.15s; font-family: 'JetBrains Mono', monospace; }
-.share-btn:hover { color: #aaa; background: #1a1a1e; }
-.share-btn.copied { color: #00e68a; }
-.comment-panel { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-.comment-panel.open { max-height: 320px; overflow-y: auto; border-top: 1px solid #1a1a1e; background: #111113; }
-.comment-list { padding: 10px 14px 0; }
-.comment-item { padding: 6px 0; border-bottom: 1px solid #1a1a1e; }
-.comment-item:last-child { border-bottom: none; }
-.comment-author { font-size: 10px; color: #444; margin-bottom: 2px; }
-.comment-body { font-size: 12px; color: #aaa; line-height: 1.5; }
-.comment-time { font-size: 10px; color: #333; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
-.comment-empty { font-size: 12px; color: #333; padding: 10px 0; }
-.comment-input-row { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1a1a1e; background: #111113; }
-.comment-input { flex: 1; background: #1a1a1e; border: 1px solid #252530; border-radius: 8px; color: #ddd; font-size: 13px; padding: 7px 10px; outline: none; font-family: inherit; transition: border-color 0.15s; }
-.comment-input:focus { border-color: #3333cc; }
-.comment-submit { background: #13132a; border: 1px solid #3333cc; border-radius: 8px; color: #7777ff; font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
-.comment-submit:hover { background: #1a1a40; }
+/* ── EMPTY / ERROR ── */
+.empty-state { padding: 40px 20px; text-align: center; color: #666; font-size: 13px; }
 
 @media (max-width: 390px) {
-  .page-wrap { padding: 16px 12px 60px; }
-  .feed-header h1 { font-size: 18px; }
+  .page-wrap { padding: 14px 12px 60px; }
+  .feed-header h1 { font-size: 17px; }
 }
 
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 </style>
 </head>
 <body>
@@ -471,51 +201,29 @@ body {
     </div>
   </div>
 
-  <div class="tab-bar">
-    <button class="tab-btn active" id="tab-news"  onclick="switchTab('news')">News</button>
-    <button class="tab-btn"        id="tab-edge"  onclick="switchTab('edge')">Edge</button>
-    <button class="tab-btn"        id="tab-takes" onclick="switchTab('takes')">Takes</button>
+  <div class="feed-tabs">
+    <button class="feed-tab active" data-tab="news" onclick="switchTab('news')">News</button>
+    <button class="feed-tab" data-tab="edge" onclick="switchTab('edge')">Edge</button>
   </div>
 
-  <!-- NEWS tab -->
-  <div id="pane-news">
-    <div class="filter-rail" id="news-filter-rail">
-      <button class="filter-btn active" data-cat="">All</button>
-      <button class="filter-btn" data-cat="politics">Politics</button>
-      <button class="filter-btn" data-cat="crypto">Crypto</button>
-      <button class="filter-btn" data-cat="sports">Sports</button>
-      <button class="filter-btn" data-cat="business">Business</button>
-    </div>
-    <div class="feed-grid" id="news-grid">
-      <div class="feed-empty">Loading…</div>
-    </div>
-  </div>
-
-  <!-- EDGE tab -->
-  <div id="pane-edge" style="display:none">
-    <div class="feed-grid" id="edge-grid">
-      <div class="feed-empty">Loading…</div>
-    </div>
-  </div>
-
-  <!-- TAKES tab -->
-  <div id="pane-takes" style="display:none">
-    <div class="feed-grid" id="takes-grid">
-      <div class="feed-empty">Loading…</div>
-    </div>
-  </div>
+  <div id="news-feed" class="feed-pane"></div>
+  <div id="edge-feed" class="feed-pane" style="display:none"></div>
 
 </div>
 
 <script>
 'use strict';
 
-function esc(s) {
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function relTime(ts) {
+
+function timeAgo(ts) {
+  if (!ts) return '';
   const diff = Date.now() - new Date(ts).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return 'just now';
@@ -524,394 +232,233 @@ function relTime(ts) {
   if (h < 24) return h + 'h ago';
   return Math.floor(h / 24) + 'd ago';
 }
-function currentUser() {
-  const u = window.__USER__;
-  return {
-    user_id:      (u && (u.id || u.userId)) || 'anonymous',
-    display_name: (u && (u.displayName || u.display_name || u.name)) || 'Anonymous'
-  };
-}
-function fmtVol(v) {
+
+function formatVolume(v) {
   if (!v || v < 1000) return '';
-  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M vol';
-  return '$' + Math.round(v / 1000) + 'k vol';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  return '$' + Math.round(v / 1000) + 'k';
 }
-function fmtExpiry(endDate) {
+
+function formatExpiry(endDate) {
   if (!endDate) return '';
   const d = new Date(endDate);
-  const now = new Date();
-  const days = Math.ceil((d - now) / 86400000);
+  const days = Math.ceil((d - Date.now()) / 86400000);
   if (days < 0) return 'expired';
-  if (days === 0) return 'expires today';
+  if (days === 0) return 'today';
   if (days === 1) return '1d left';
   if (days < 30) return days + 'd left';
-  const months = Math.round(days / 30);
-  return months + 'mo left';
-}
-function probClass(p) {
-  if (p == null) return 'mid';
-  if (p >= 0.65) return 'hi';
-  if (p <= 0.35) return 'lo';
-  return 'mid';
+  return Math.round(days / 30) + 'mo left';
 }
 
-// ══════════════════════════════════════════════════
-// TAB SWITCHING
-// ══════════════════════════════════════════════════
-let _activeTab = 'news';
-let _edgeLoaded = false;
-let _takesLoaded = false;
+function getProbClass(market) {
+  const p = market && market.yes_price;
+  if (p == null) return 'prob-even';
+  if (p >= 0.65) return 'prob-yes';
+  if (p <= 0.35) return 'prob-no';
+  return 'prob-even';
+}
+
+function getProbDisplay(market) {
+  const p = market && market.yes_price;
+  if (p == null) return '—';
+  return Math.round(p * 100) + '%';
+}
+
+function getYesPrice(market) {
+  const p = market && market.yes_price;
+  return p != null ? Math.round(p * 100) + '¢' : '—';
+}
+
+function getNoPrice(market) {
+  const p = market && market.yes_price;
+  return p != null ? Math.round((1 - p) * 100) + '¢' : '—';
+}
+
+// Tiny markdown renderer — bold + paragraph breaks only (no library)
+function renderThesis(text) {
+  if (!text) return '';
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n\n+/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+function skeletonNews(n) {
+  return Array.from({length: n}, () => `
+<div class="skeleton-item">
+  <div class="skel-line w60"></div>
+  <div class="skel-line w90"></div>
+  <div class="skel-line w75"></div>
+  <div class="skel-card"></div>
+</div>`).join('');
+}
+
+function skeletonEdge(n) {
+  return Array.from({length: n}, () => `
+<div class="skeleton-item">
+  <div class="skel-card" style="height:200px;margin-top:0"></div>
+</div>`).join('');
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+
+let edgeLoaded = false;
+let edgeCache  = null;
 
 function switchTab(tab) {
-  _activeTab = tab;
-  ['news','edge','takes'].forEach(t => {
-    document.getElementById('pane-' + t).style.display = t === tab ? '' : 'none';
-    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
-  });
-  if (tab === 'edge'  && !_edgeLoaded)  { _edgeLoaded  = true; loadEdge(); }
-  if (tab === 'takes' && !_takesLoaded) { _takesLoaded = true; loadTakes(); }
+  document.querySelectorAll('.feed-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('news-feed').style.display = tab === 'news' ? 'block' : 'none';
+  document.getElementById('edge-feed').style.display = tab === 'edge' ? 'block' : 'none';
+  if (tab === 'edge' && !edgeLoaded) { edgeLoaded = true; loadEdge(); }
 }
 
-// ══════════════════════════════════════════════════
-// NEWS TAB
-// ══════════════════════════════════════════════════
-let _newsItems = [];
-let _newsCatFilter = '';
+// ── News tab ─────────────────────────────────────────────────────────────────
 
-const _NEWS_CAT_KEYWORDS = {
-  politics: ['trump','biden','congress','senate','election','vote','president','white house','democrat','republican','political','legislation','policy','nato','ukraine','russia'],
-  crypto:   ['bitcoin','ethereum','crypto','blockchain','polymarket','binance','coinbase','defi','nft','web3','solana','btc','eth'],
-  sports:   ['nfl','nba','mlb','nhl','soccer','football','basketball','baseball','tennis','golf','super bowl','world cup','playoff','championship','draft'],
-  business: ['fed','interest rate','inflation','gdp','earnings','stock','market','oil','dollar','tariff','trade','economy','recession','ipo','merger'],
-};
-
-function headlineCatMatch(headline, cat) {
-  if (!cat) return true;
-  const kws = _NEWS_CAT_KEYWORDS[cat] || [];
-  const h = (headline || '').toLowerCase();
-  return kws.some(k => h.includes(k));
-}
-
-function buildNewsItem(item, idx) {
+function buildNewsItem(item) {
   const m = item.market;
-  const pct = m && m.yes_price != null ? Math.round(m.yes_price * 100) : null;
-  const pClass = pct != null ? probClass(m.yes_price) : 'mid';
-  const mktSlug = m ? m.slug : null;
+  const slug = m && m.slug ? escapeHtml(m.slug) : '';
 
-  // image
-  let imgHtml = '';
-  if (m && m.image) {
-    imgHtml = `<div class="mkt-img-wrap"><img src="/api/img-proxy?url=${encodeURIComponent(m.image)}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"><div class="mkt-img-gradient"></div></div>`;
-  }
-
-  // market card
-  let mktHtml = '';
-  if (m) {
-    const tradeUrl = mktSlug ? `/market/${esc(mktSlug)}` : '#';
-    mktHtml = `
-<div class="news-market-card" onclick="location.href='${tradeUrl}'">
-  ${imgHtml}
-  <div class="mkt-body">
-    <div class="mkt-question">${esc(m.question || '')}</div>
-    <div class="mkt-stats">
-      ${pct != null ? `<span class="mkt-prob ${pClass}">${pct}%</span><span class="mkt-prob-label">YES</span>` : ''}
-      ${m.volume ? `<span class="mkt-sep">·</span><span class="mkt-vol">${fmtVol(m.volume)}</span>` : ''}
-      ${m.end_date ? `<span class="mkt-sep">·</span><span class="mkt-expiry">${fmtExpiry(m.end_date)}</span>` : ''}
-      <button class="mkt-trade-btn" onclick="event.stopPropagation();location.href='${tradeUrl}'">Trade</button>
-    </div>
-  </div>
-</div>`;
-  }
-
-  // edge sentence
-  const edgeHtml = item.edge
-    ? `<div class="edge-sentence">${esc(item.edge)}</div>`
+  const imageHtml = m && (m.image || m.event_image_url)
+    ? `<img src="${escapeHtml(m.image || m.event_image_url)}" class="card-image" loading="lazy"
+         onerror="this.style.display='none';this.parentElement.classList.add('img-fallback')" alt="">`
     : '';
 
-  const headlineHtml = item.url
-    ? `<a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.headline)}</a>`
-    : esc(item.headline);
+  const marketHtml = m ? `
+    ${item.edge ? `<div class="edge-sentence">${escapeHtml(item.edge)}</div>` : ''}
+    <div class="market-card" onclick="location.href='/market/${slug}'">
+      <div class="card-image-wrap">
+        ${imageHtml}
+        <div class="card-probability ${getProbClass(m)}">${getProbDisplay(m)}</div>
+      </div>
+      <div class="card-body">
+        <p class="card-question">${escapeHtml(m.question || '')}</p>
+        <div class="card-meta">
+          ${formatVolume(m.volume) ? `<span>${formatVolume(m.volume)}</span>` : ''}
+          ${formatExpiry(m.end_date || m.endDate) ? `<span>${formatExpiry(m.end_date || m.endDate)}</span>` : ''}
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-yes" onclick="event.stopPropagation();location.href='/market/${slug}'">YES ${getYesPrice(m)}</button>
+        <button class="btn-no"  onclick="event.stopPropagation();location.href='/market/${slug}'">NO ${getNoPrice(m)}</button>
+      </div>
+    </div>` : '';
 
-  const delay = Math.min(idx * 0.04, 0.6);
+  const src = item.source ? escapeHtml(item.source) : 'Google News';
+  const ago = item.publishedAt ? timeAgo(item.publishedAt) : '';
+  const sourceStr = ago ? `${src} · ${ago}` : src;
+
   return `
-<div class="news-item" style="animation-delay:${delay}s">
-  <div class="news-headline-row">
-    <div class="news-source-dot"></div>
-    <div class="news-headline-wrap">
-      <div class="news-headline">${headlineHtml}</div>
-      ${item.source ? `<div class="news-source">${esc(item.source)}</div>` : ''}
-    </div>
-  </div>
-  ${mktHtml}
-  ${edgeHtml}
+<div class="feed-item">
+  <a class="headline-block" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener">
+    <div class="headline-source">${sourceStr}</div>
+    <h3 class="headline-text">${escapeHtml(item.headline || '')}</h3>
+  </a>
+  ${marketHtml}
 </div>`;
-}
-
-function renderNews() {
-  const grid = document.getElementById('news-grid');
-  const filtered = _newsItems.filter(item =>
-    headlineCatMatch(item.headline, _newsCatFilter) ||
-    (item.market && headlineCatMatch(item.market.question, _newsCatFilter))
-  );
-  if (!filtered.length) {
-    grid.innerHTML = '<div class="feed-empty">No items found.</div>';
-    return;
-  }
-  grid.innerHTML = filtered.map((item, i) => buildNewsItem(item, i)).join('');
 }
 
 async function loadNews() {
-  const grid = document.getElementById('news-grid');
+  const pane = document.getElementById('news-feed');
+  pane.innerHTML = skeletonNews(6);
+
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const resp = await fetch('/api/news-feed');
+    const resp = await fetch('/api/news-feed', { signal: ctrl.signal });
+    clearTimeout(tid);
     const data = await resp.json();
-    _newsItems = (data.items || []).map(x => ({
-      headline: x.headline,
-      url:      x.url,
-      source:   x.source,
-      market:   x.market,
-      edge:     x.edge,
-    }));
-    const matched = _newsItems.filter(x => x.market).length;
+    const items = data.items || [];
+    const matched = items.filter(x => x.market).length;
     document.getElementById('live-count').textContent = matched + ' matched';
-    renderNews();
+    if (!items.length) {
+      pane.innerHTML = '<div class="empty-state">No news available right now.</div>';
+      return;
+    }
+    pane.innerHTML = items.map(buildNewsItem).join('');
   } catch (e) {
+    clearTimeout(tid);
     console.error('[news-feed]', e);
-    grid.innerHTML = '<div class="feed-empty">Failed to load.</div>';
+    pane.innerHTML = '<div class="empty-state">Failed to load — <a href="javascript:location.reload()" style="color:#a78bfa">retry</a></div>';
   }
 }
 
-document.getElementById('news-filter-rail').addEventListener('click', e => {
-  const btn = e.target.closest('.filter-btn');
-  if (!btn) return;
-  document.querySelectorAll('#news-filter-rail .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  _newsCatFilter = btn.dataset.cat || '';
-  renderNews();
-});
+// ── Edge tab ─────────────────────────────────────────────────────────────────
 
-// ══════════════════════════════════════════════════
-// EDGE TAB
-// ══════════════════════════════════════════════════
-function buildEdgeCard(item, idx) {
-  const m = item.market || {};
-  const pct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
-  const pClass = pct != null ? probClass(m.yes_price) : 'mid';
-  const tradeUrl = m.slug ? `/market/${esc(m.slug)}` : '#';
-  const delay = Math.min(idx * 0.08, 0.6);
+function buildEdgeCard(e) {
+  const m = e.market || {};
+  const slug = m.slug ? escapeHtml(m.slug) : '';
+  const imageHtml = (m.image || m.event_image_url)
+    ? `<img src="${escapeHtml(m.image || m.event_image_url)}" class="card-image" loading="lazy"
+         onerror="this.style.display='none';this.parentElement.classList.add('img-fallback')" alt="">`
+    : '';
+
   return `
-<div class="edge-card" style="animation-delay:${delay}s">
-  <div class="edge-card-header">
-    <span class="edge-label">THE EDGE</span>
-    <span class="edge-card-question">${esc(m.question || 'Market')}</span>
+<div class="edge-card" onclick="location.href='/market/${slug}'">
+  <div class="card-image-wrap">
+    ${imageHtml}
+    <div class="card-probability ${getProbClass(m)}">${getProbDisplay(m)}</div>
   </div>
-  <div class="edge-card-body">
-    <div class="edge-thesis">${esc(item.thesis || '')}</div>
-  </div>
-  <div class="edge-card-footer">
-    ${pct != null ? `<span class="edge-prob ${pClass}">${pct}%</span>` : ''}
-    ${m.volume ? `<span class="edge-vol">${fmtVol(m.volume)}</span>` : ''}
-    <button class="edge-trade-btn" onclick="location.href='${tradeUrl}'">Trade</button>
+  <div class="card-body">
+    <p class="card-question">${escapeHtml(m.question || 'Market')}</p>
+    <div class="thesis">
+      <span class="thesis-label">THE EDGE</span>
+      <div class="thesis-body"><p>${renderThesis(e.thesis)}</p></div>
+    </div>
+    <div class="card-meta">
+      ${formatVolume(m.volume) ? `<span>${formatVolume(m.volume)}</span>` : ''}
+      ${formatExpiry(m.end_date || m.endDate) ? `<span>${formatExpiry(m.end_date || m.endDate)}</span>` : ''}
+    </div>
   </div>
 </div>`;
 }
 
 async function loadEdge() {
-  const grid = document.getElementById('edge-grid');
+  if (edgeCache) {
+    renderEdge(edgeCache);
+    return;
+  }
+
+  const pane = document.getElementById('edge-feed');
+  pane.innerHTML = skeletonEdge(5);
+
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const resp = await fetch('/api/edge-feed');
+    const resp = await fetch('/api/edge-feed', { signal: ctrl.signal });
+    clearTimeout(tid);
     const data = await resp.json();
-    const edges = data.edges || [];
-    if (data.stale) {
-      grid.insertAdjacentHTML('beforebegin',
-        '<div class="edge-stale-banner">Showing cached results — analysis updating</div>');
-    }
-    if (!edges.length) {
-      grid.innerHTML = data.reason === 'cap_reached'
-        ? '<div class="feed-empty">Daily edge analysis limit reached. Check back tomorrow.</div>'
-        : '<div class="feed-empty">No edge analysis available.</div>';
-      return;
-    }
-    grid.innerHTML = edges.map((e, i) => buildEdgeCard(e, i)).join('');
+    edgeCache = data;
+    renderEdge(data);
   } catch (e) {
+    clearTimeout(tid);
     console.error('[edge-feed]', e);
-    grid.innerHTML = '<div class="feed-empty">Failed to load.</div>';
+    document.getElementById('edge-feed').innerHTML =
+      '<div class="empty-state">Failed to load — <a href="javascript:switchTab(\'edge\')" onclick="edgeLoaded=false" style="color:#a78bfa">retry</a></div>';
   }
 }
 
-// ══════════════════════════════════════════════════
-// TAKES TAB
-// ══════════════════════════════════════════════════
-let _cardState = {};
+function renderEdge(data) {
+  const pane = document.getElementById('edge-feed');
+  const edges = data.edges || [];
 
-function buildTakeCard(t) {
-  const id = t.thesis_id;
-  const s  = _cardState[id] || {};
-  const liked        = !!s.liked;
-  const likeCount    = s.likeCount !== undefined ? s.likeCount : (t.agree_count || 0);
-  const commentCount = s.commentCount !== undefined ? s.commentCount : 0;
-  const commentOpen  = !!s.commentOpen;
-  const clvClass = (t.clv_classification || 'PENDING').toLowerCase();
-  const flexFmt  = t.flex_score > 0 ? t.flex_score.toFixed(2) : '';
-  const href     = t.creator_wallet ? `/trader/${esc(t.creator_wallet)}` : '/feed';
-
-  let topHtml;
-  if (t.image_url) {
-    topHtml = `<div class="card-img"><img src="/api/img-proxy?url=${encodeURIComponent(t.image_url)}" alt="" loading="lazy"><div class="card-img-gradient"></div><div class="card-img-badges">${t.verified_sharp ? '<span class="badge-sharp">VERIFIED SHARP</span>' : ''}<span class="clv-pill ${clvClass}">${esc(t.clv_classification || 'PENDING')}</span></div>${flexFmt ? `<div class="card-flex-score">${flexFmt}</div>` : ''}</div>`;
-  } else {
-    topHtml = `<div class="card-header-row">${t.verified_sharp ? '<span class="badge-sharp">VERIFIED SHARP</span>' : ''}<span class="clv-pill ${clvClass}">${esc(t.clv_classification || 'PENDING')}</span>${flexFmt ? `<span class="card-flex-inline">${flexFmt}</span>` : ''}</div>`;
+  let html = '';
+  if (data.stale) {
+    html += '<div class="edge-stale-banner">Showing cached results — analysis updating</div>';
   }
-
-  const mLines = (t.markets_preview || []).map(q =>
-    `<div class="card-market-line${t.status !== 'OPEN' ? ' muted' : ''}">${esc(q)}</div>`
-  ).join('');
-  const mMore = (t.markets_count || 0) > 2
-    ? `<div class="card-market-more">+${t.markets_count - 2} more</div>` : '';
-
-  let statusHtml;
-  if (t.status === 'CORRECT')    statusHtml = '<span class="status-correct">✓ CORRECT</span>';
-  else if (t.status === 'WRONG') statusHtml = '<span class="status-wrong">✗ WRONG</span>';
-  else statusHtml = '<div class="open-badge"><div class="open-dot"></div>OPEN</div>';
-
-  const entryStr = t.entry_price ? (parseFloat(t.entry_price) * 100).toFixed(0) + '¢' : '';
-  const resStr   = t.resolution_window_days ? t.resolution_window_days + 'd' : '';
-  const comments = s.comments || [];
-  const commentsHtml = comments.length
-    ? comments.map(c => commentRow(c)).join('')
-    : '<div class="comment-empty">No comments yet.</div>';
-
-  return `
-<div class="thesis-card" id="card-${esc(id)}">
-  <div class="card-clickable" onclick="location.href='${href}'">
-    ${topHtml}
-    <div class="card-body">
-      <div class="card-creator">${esc(t.display_name || 'Anonymous')}</div>
-      <div class="card-title">${esc(t.title || '')}</div>
-      <div class="card-markets">${mLines}${mMore}</div>
-    </div>
-    <div class="card-footer">
-      ${statusHtml}
-      <div class="card-footer-right">
-        ${entryStr ? `<span>${entryStr}</span>` : ''}
-        ${resStr   ? `<span>${resStr}</span>`   : ''}
-        <span>${relTime(t.created_at)}</span>
-      </div>
-    </div>
-  </div>
-  <div class="reactions-bar">
-    <div class="reactions-left">
-      <button class="react-btn${liked ? ' liked' : ''}" onclick="toggleLike('${esc(id)}')" title="Like">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span id="like-count-${esc(id)}">${likeCount}</span>
-      </button>
-      <button class="react-btn" onclick="toggleComments('${esc(id)}')" title="Comments">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span id="comment-count-${esc(id)}">${commentCount}</span>
-      </button>
-    </div>
-    <button class="share-btn" id="share-${esc(id)}" onclick="shareCard(event,'${esc(id)}','${esc(t.creator_wallet || '')}')">share</button>
-  </div>
-  <div class="comment-panel${commentOpen ? ' open' : ''}" id="comments-${esc(id)}">
-    <div class="comment-list" id="comment-list-${esc(id)}">${commentsHtml}</div>
-    <div class="comment-input-row">
-      <input class="comment-input" id="comment-input-${esc(id)}" placeholder="Add a take…" maxlength="500"
-             onkeydown="if(event.key==='Enter')submitComment('${esc(id)}')">
-      <button class="comment-submit" onclick="submitComment('${esc(id)}')">Post</button>
-    </div>
-  </div>
-</div>`;
-}
-
-function commentRow(c) {
-  return `<div class="comment-item"><div class="comment-author">${esc(c.display_name || 'Anonymous')}</div><div class="comment-body">${esc(c.body)}</div><div class="comment-time">${relTime(c.created_at)}</div></div>`;
-}
-
-async function loadTakes() {
-  const grid = document.getElementById('takes-grid');
-  try {
-    const params = new URLSearchParams({ sort: 'trending' });
-    const res  = await fetch(`/api/feed/theses?${params}`);
-    const data = await res.json();
-    const theses = data.theses || [];
-    if (!theses.length) { grid.innerHTML = '<div class="feed-empty">No takes yet.</div>'; return; }
-    for (const t of theses) {
-      if (!_cardState[t.thesis_id]) _cardState[t.thesis_id] = { liked: false, likeCount: t.agree_count || 0 };
-    }
-    grid.innerHTML = theses.map(buildTakeCard).join('');
-  } catch (e) {
-    console.error('[takes]', e);
-    grid.innerHTML = '<div class="feed-empty">Failed to load.</div>';
+  if (!edges.length) {
+    html += data.reason === 'cap_reached'
+      ? '<div class="empty-state">Daily edge analysis limit reached. Check back tomorrow.</div>'
+      : '<div class="empty-state">Edge analysis refreshing — check back shortly.</div>';
+    pane.innerHTML = html;
+    return;
   }
+  html += edges.map(buildEdgeCard).join('');
+  pane.innerHTML = html;
 }
 
-async function toggleLike(id) {
-  const s = _cardState[id] || {};
-  s.liked     = !s.liked;
-  s.likeCount = Math.max(0, (s.likeCount || 0) + (s.liked ? 1 : -1));
-  _cardState[id] = s;
-  _applyLikeUI(id, s);
-  try {
-    const { user_id, display_name } = currentUser();
-    const r    = await fetch(`/api/takes/${id}/like`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id, display_name }) });
-    const data = await r.json();
-    s.liked = data.liked; s.likeCount = data.count; _cardState[id] = s; _applyLikeUI(id, s);
-  } catch (_) {}
-}
-function _applyLikeUI(id, s) {
-  const btn = document.querySelector(`#card-${id} .react-btn[title="Like"]`);
-  const countEl = document.getElementById(`like-count-${id}`);
-  if (btn) { btn.classList.toggle('liked', s.liked); const p = btn.querySelector('path'); if (p) p.setAttribute('fill', s.liked ? 'currentColor' : 'none'); }
-  if (countEl) countEl.textContent = Math.max(0, s.likeCount);
-}
-async function toggleComments(id) {
-  const panel = document.getElementById(`comments-${id}`);
-  const s = _cardState[id] || {};
-  s.commentOpen = !s.commentOpen; _cardState[id] = s;
-  if (panel) panel.classList.toggle('open', s.commentOpen);
-  if (s.commentOpen && !s.commentsLoaded) {
-    s.commentsLoaded = true;
-    try {
-      const r = await fetch(`/api/takes/${id}/comments`);
-      const data = await r.json();
-      s.comments = data.comments || []; s.commentCount = s.comments.length; _cardState[id] = s;
-      _renderCommentList(id, s.comments);
-      const el = document.getElementById(`comment-count-${id}`); if (el) el.textContent = s.commentCount;
-    } catch (_) {}
-  }
-}
-function _renderCommentList(id, comments) {
-  const el = document.getElementById(`comment-list-${id}`);
-  if (!el) return;
-  el.innerHTML = comments.length ? comments.map(commentRow).join('') : '<div class="comment-empty">No comments yet.</div>';
-}
-async function submitComment(id) {
-  const input = document.getElementById(`comment-input-${id}`);
-  if (!input) return;
-  const body = input.value.trim(); if (!body) return;
-  const { user_id, display_name } = currentUser();
-  input.value = '';
-  const s = _cardState[id] || {}; if (!s.comments) s.comments = [];
-  const opt = { id: 'opt_' + Date.now(), display_name, body, created_at: new Date().toISOString() };
-  s.comments.push(opt); s.commentCount = (s.commentCount || 0) + 1; _cardState[id] = s;
-  const listEl = document.getElementById(`comment-list-${id}`); const countEl = document.getElementById(`comment-count-${id}`);
-  if (listEl) { const empty = listEl.querySelector('.comment-empty'); if (empty) empty.remove(); listEl.insertAdjacentHTML('beforeend', commentRow(opt)); }
-  if (countEl) countEl.textContent = s.commentCount;
-  try { await fetch(`/api/takes/${id}/comment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id, display_name, body }) }); } catch (_) {}
-}
-function shareCard(e, id, wallet) {
-  e.stopPropagation();
-  const url = wallet ? `https://hyperflex.network/trader/${wallet}` : 'https://hyperflex.network/feed';
-  navigator.clipboard.writeText(url).catch(() => {});
-  const btn = document.getElementById(`share-${id}`);
-  if (btn) { btn.textContent = 'copied'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'share'; btn.classList.remove('copied'); }, 1500); }
-}
-
-// ── Boot
-loadNews();
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadNews);
 </script>
 </body>
 </html>

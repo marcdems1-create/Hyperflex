@@ -45602,15 +45602,27 @@ async function _buildEdgeFeed(markets) {
   return { edges, generatedAt: new Date().toISOString() };
 }
 
+// In-memory 6h bucket key (date + 6h block). The cache is deliberately
+// in-memory — NOT Postgres — so there is no table to be missing and no write
+// that can silently fail. Worst case: recompute once per server restart.
+function _edgeFeedBucket() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10) + ':' + Math.floor(d.getUTCHours() / 6);
+}
+
 app.get('/api/edge-feed', async (req, res) => {
-  console.log('[edge-feed] route hit, enabled:', process.env.EDGE_FEED_ENABLED !== 'false');
+  const bucket = _edgeFeedBucket();
   if (process.env.EDGE_FEED_ENABLED === 'false') {
-    return res.json({ edges: [], reason: 'disabled' });
+    return res.json({ edges: [], reason: 'disabled', cached: false });
   }
   try {
+    // Cache HIT — return BEFORE any AI call.
     if (_edgeFeedCache.data && Date.now() - _edgeFeedCache.ts < EDGE_FEED_TTL_MS) {
-      return res.json(_edgeFeedCache.data);
+      console.log('[edge-feed] CACHE HIT bucket', bucket, '— 0 AI calls');
+      return res.json({ ..._edgeFeedCache.data, cached: true });
     }
+
+    console.log('[edge-feed] CACHE MISS bucket', bucket, '— computing, will run Haiku+Sonnet');
 
     let markets = [];
     try {
@@ -45627,19 +45639,24 @@ app.get('/api/edge-feed', async (req, res) => {
       console.warn('[edge-feed] market pool fetch failed:', e.message);
     }
 
-    if (!markets.length) return res.json({ edges: [], reason: 'no_markets' });
+    if (!markets.length) return res.json({ edges: [], reason: 'no_markets', cached: false });
 
     const result = await _buildEdgeFeed(markets);
     if (result.edges.length > 0) {
       _edgeFeedCache.data = result;
       _edgeFeedCache.ts   = Date.now();
+      console.log('[edge-feed] cache WRITE bucket', bucket, 'ok —', result.edges.length, 'edges');
     } else if (_edgeFeedCache.data) {
-      return res.json({ ..._edgeFeedCache.data, stale: true, reason: result.reason });
+      // Compute failed/capped but we have an older payload — serve it stale.
+      console.warn('[edge-feed] compute returned 0 edges (' + result.reason + ') — serving stale');
+      return res.json({ ..._edgeFeedCache.data, cached: true, stale: true, reason: result.reason });
     }
-    res.json(result);
+    res.json({ ...result, cached: false });
   } catch (err) {
     console.error('[edge-feed] FAILED:', err.message);
-    res.json(_edgeFeedCache.data || { edges: [], reason: 'error', error: err.message });
+    res.json(_edgeFeedCache.data
+      ? { ..._edgeFeedCache.data, cached: true, stale: true, reason: 'error', error: err.message }
+      : { edges: [], reason: 'error', error: err.message, cached: false });
   }
 });
 
