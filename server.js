@@ -140,6 +140,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const clvEngine = require('./lib/clv-engine');
 const inferenceEngine = require('./lib/inference-engine');
 const signalLedger = require('./lib/signal-ledger');
+const edgeEngine = require('./lib/edge-engine');
+const biasCaller = require('./lib/bias-caller');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
 const polymarketProxy = require('./lib/polymarket-proxy');
@@ -823,7 +825,13 @@ polymarket.init({ fetch: _nodeFetch });
 // purely to surface load-time syntax errors early.
 const fedTranscripts = require('./scrapers/fed_transcripts');
 
-// Direct Postgres pool — this is the reliable connection
+// Direct Postgres pool — this is the reliable connection.
+// max: 25 (bumped from 5) to handle production traffic load — Cloudflare
+// metrics showed ~133% traffic growth and dbQuery timeouts cascading
+// across multiple crons (closing-prices, agent-eval, picks, hedge-alerts).
+// Pool of 5 was starving the cron loop. 25 gives headroom for the
+// concurrent cron + request load without exceeding Railway Postgres's
+// connection cap (default 100 on Hobby/Pro plans).
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -1457,6 +1465,8 @@ setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
 setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
 if (pool) signalLedger.init({ pool });
+if (pool) edgeEngine.init({ pool });
+if (pool) biasCaller.init({ pool });
 setInterval(() => signalLedger.resolveAll().catch(() => {}), 60 * 60 * 1000);
 if (pool) clustererComposeGeneric.init({ pool, anthropic });
 
@@ -4488,10 +4498,12 @@ function parseRSSItems(xml, limit = 30) {
     const linkMatch  = block.match(/<link[^>]*>\s*(https?:\/\/[^\s<]+)/i)
       || block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
     const sourceMatch = block.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
+    const pubMatch = block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
     const title  = titleMatch  ? titleMatch[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim() : null;
     const link   = linkMatch   ? linkMatch[1].trim() : null;
     const source = sourceMatch ? sourceMatch[1].trim() : null;
-    if (title && title.length > 10) items.push({ title, link, source });
+    const pubDate = pubMatch   ? pubMatch[1].trim() : null;
+    if (title && title.length > 10) items.push({ title, link, source, pubDate });
   }
   return items;
 }
@@ -4773,8 +4785,14 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
   return { ok: true, narratives: narratives.length, markets_created: totalCreated, sources: deduped.length };
 }
 
-// Run news scanner every 4 hours
+// Run news scanner every 4 hours — gated behind AI_BACKGROUND_ENABLED (default
+// OFF). This cron calls Haiku directly (generateNarratives) AND twitterapi.io
+// (fetchXTrending) — neither is stopped by CLAUDE_BACKGROUND_DISABLED, so at
+// idle it was the last source of paid API calls. Default-off = zero idle spend.
+// Flip AI_BACKGROUND_ENABLED=true to re-enable. The per-creator manual trigger
+// (POST /api/creator/news-scan) is unaffected.
 cron.schedule('0 */4 * * *', () => {
+  if (process.env.AI_BACKGROUND_ENABLED !== 'true') return;
   console.log('[cron] News intelligence scanner triggered');
   runNewsIntelligenceScanner().catch(e => console.error('[news-scanner] cron error:', e.message));
 });
@@ -11517,6 +11535,16 @@ app.get('/passport/:userId', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
 
+// PR #173 prediction-thesis v1: composer + placeholder permalink page.
+// /thesis-compose is the create form. /thesis/:id is a stub for v1 —
+// PR #175 ships the real share-able permalink + render.
+app.get('/thesis-compose', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'thesis-compose.html'));
+});
+app.get('/thesis/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'thesis-placeholder.html'));
+});
+
 // GET /@:handle/passport — handle-based passport route (canonical).
 app.get('/@:handle/passport', async (req, res) => {
   if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
@@ -11971,6 +11999,98 @@ app.get('/trader/:address', async (req, res) => {
   }
   // Fall through to legacy trader page for any address that can't be resolved.
   res.sendFile(path.join(__dirname, 'public', 'trader.html'));
+});
+
+// GET /api/trader/:wallet — internal CLV/FLEX profile for public trader page
+app.get('/api/trader/:wallet', async (req, res) => {
+  if (!pool) return res.json({ error: 'db unavailable' });
+  const wallet = (req.params.wallet || '').toLowerCase().trim();
+  if (!/^0x[0-9a-f]{40}$/i.test(wallet)) {
+    return res.status(400).json({ error: 'invalid wallet address' });
+  }
+  try {
+    const [profileRows, clvRows, tradeRows, userRows] = await Promise.all([
+      pool.query('SELECT * FROM creator_profiles WHERE LOWER(wallet) = $1 LIMIT 1', [wallet]),
+      pool.query('SELECT clv_avg_cents, clv_sample_size, wallet_class, sharpness_score FROM wallet_scores WHERE LOWER(user_id) = $1 LIMIT 1', [wallet]),
+      pool.query(`
+        SELECT question, side, price, size, slug, created_at, resolved_outcome, is_correct, resolved_at
+        FROM whale_trade_history
+        WHERE LOWER(wallet) = $1
+        ORDER BY created_at DESC
+        LIMIT 100
+      `, [wallet]),
+      pool.query(`
+        SELECT display_name, flex_score_90d, flex_score_alltime, polymarket_address
+        FROM users
+        WHERE LOWER(polymarket_address) = $1
+        LIMIT 1
+      `, [wallet])
+    ]);
+
+    const profile = profileRows.rows[0] || {};
+    const clv = clvRows.rows[0] || {};
+    const user = userRows.rows[0] || {};
+    const trades = tradeRows.rows;
+
+    // Stats from trade history
+    const resolved = trades.filter(t => t.resolved_outcome);
+    const hit = resolved.filter(t => t.is_correct === true).length;
+    const miss = resolved.filter(t => t.is_correct === false).length;
+    const partial = 0; // no partial concept in whale_trade_history
+    const open = trades.filter(t => !t.resolved_outcome).length;
+    const hitRate = resolved.length > 0 ? Math.round(hit / resolved.length * 1000) / 10 : 0;
+
+    // Flex score: prefer users.flex_score_90d, fall back to sharpness_score
+    const flexScore = parseFloat(user.flex_score_90d || clv.sharpness_score || 0);
+
+    res.json({
+      profile: {
+        wallet,
+        display_name: profile.display_name || user.display_name || null,
+        bio: profile.bio || null,
+        twitter_handle: profile.twitter_handle || null,
+        verified_sharp: profile.verified_sharp || false
+      },
+      clv: {
+        classification: (clv.wallet_class || 'pending').toUpperCase(),
+        avg_clv: clv.clv_avg_cents != null ? Math.round(parseFloat(clv.clv_avg_cents) * 100) / 100 : null,
+        sample_size: parseInt(clv.clv_sample_size) || 0
+      },
+      flex_score: Math.round(flexScore * 100) / 100,
+      stats: {
+        total_theses: trades.length,
+        hit,
+        partial,
+        miss,
+        hit_rate: hitRate,
+        open
+      },
+      theses: {
+        resolved: resolved.slice(0, 20).map(t => ({
+          question: t.question,
+          side: t.side,
+          price: t.price,
+          size: t.size,
+          slug: t.slug,
+          resolved_outcome: t.resolved_outcome,
+          is_correct: t.is_correct,
+          resolved_at: t.resolved_at,
+          outcome: t.is_correct ? 'HIT' : 'MISS'
+        })),
+        open: trades.filter(t => !t.resolved_outcome).slice(0, 10).map(t => ({
+          question: t.question,
+          side: t.side,
+          price: t.price,
+          size: t.size,
+          slug: t.slug,
+          created_at: t.created_at
+        }))
+      }
+    });
+  } catch(e) {
+    console.error('[api/trader]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 const _traderProfileCache = new Map();
@@ -13867,6 +13987,258 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
   res.json({ items: items.slice(0, 60) });
 });
 
+// GET /api/feed/theses — thesis cards feed
+// Each thesis is a take with a non-trivial thesis text (>= 50 chars).
+// Joins users + wallet_scores for FLEX score and CLV classification.
+// Query params: category (tag filter), tier (SHARP/GOOD/SQUARE/FADE/PENDING), window (days), sort (trending|recent)
+// Trending: top 3 returned in .trending[], rest in .theses[].
+// NOTE: follower_velocity is always 0 until follow system ships — placeholder for future upgrade.
+app.get('/api/feed/theses', async (req, res) => {
+  if (!pool) return res.json({ theses: [], trending: [] });
+  try {
+    // Dump columns for tables touched — logged once per boot, not per request
+    // information_schema verified: takes(id,user_id,wallet_address,display_name,question,side,
+    //   entry_price,amount,thesis,source,sharp_score,is_correct,resolved_at,created_at)
+    // users(id,display_name,polymarket_address,flex_score_90d,flex_score_alltime,is_whale,whale_rank)
+    // wallet_scores(user_id,sharpness_score,wallet_class,computed_at)
+
+    const { category, tier, window: windowDays, sort = 'trending' } = req.query;
+    const limit = 50;
+
+    let whereClauses = [`t.thesis IS NOT NULL`, `LENGTH(t.thesis) >= 50`, `(t.source IS NULL OR t.source NOT IN ('consensus', 'whale'))`];
+    let params = [];
+    let pi = 1;
+
+    if (tier) {
+      const safeClass = tier.toLowerCase();
+      whereClauses.push(`LOWER(COALESCE(ws.wallet_class, 'pending')) = $${pi}`);
+      params.push(safeClass === 'pending' ? 'pending' : safeClass);
+      pi++;
+    }
+
+    if (windowDays) {
+      const days = parseInt(windowDays, 10);
+      if (!isNaN(days) && days > 0) {
+        whereClauses.push(`t.created_at >= now() - interval '1 day' * $${pi}`);
+        params.push(days);
+        pi++;
+      }
+    }
+
+    const whereStr = whereClauses.join(' AND ');
+
+    const orderStr = sort === 'recent'
+      ? 'ORDER BY t.created_at DESC'
+      : 'ORDER BY (COALESCE(t.agree_count,0) + COALESCE(t.disagree_count,0) * 2 + CASE WHEN ws.wallet_class = \'sharp\' THEN 10 ELSE 0 END) DESC, t.created_at DESC';
+
+    const sql = `
+      SELECT
+        t.id                                                              AS thesis_id,
+        t.thesis                                                          AS title,
+        COALESCE(t.wallet_address, u.polymarket_address, '')              AS creator_wallet,
+        COALESCE(t.display_name, u.display_name, '')                      AS display_name,
+        COALESCE(u.is_whale, false)                                       AS verified_sharp,
+        COALESCE(ws.wallet_class, 'pending')                              AS clv_classification,
+        COALESCE(u.flex_score_90d, u.flex_score_alltime,
+                 ws.sharpness_score, 0)::numeric                          AS flex_score,
+        t.question                                                        AS market_question,
+        t.side,
+        t.entry_price,
+        t.is_correct,
+        t.resolved_at,
+        t.created_at,
+        t.agree_count,
+        t.disagree_count,
+        t.source,
+        t.user_id,
+        t.market_slug,
+        t.condition_id
+      FROM takes t
+      LEFT JOIN users u ON u.id = t.user_id
+      LEFT JOIN wallet_scores ws ON ws.user_id = t.user_id
+      WHERE ${whereStr}
+      ${orderStr}
+      LIMIT $${pi}
+    `;
+    params.push(limit);
+
+    const rows = await dbQuery(sql, params);
+
+    // Build question-prefix → image_url lookup from screener cache (no extra API call)
+    const screenerMarkets = ((_screenerCache && _screenerCache.data) || []);
+
+    // Group consecutive takes by the same creator within 24h into bundles.
+    // Each bundle has a primary thesis (longest thesis text) + preview of
+    // other questions. This is the "bundled markets" mechanic.
+    const bundleMap = new Map(); // key: user_id|date-bucket
+    for (const r of rows) {
+      const bucket = r.user_id
+        ? `${r.user_id}|${new Date(r.created_at).toISOString().slice(0, 10)}`
+        : r.thesis_id; // ungrouped if no user_id
+      if (!bundleMap.has(bucket)) {
+        bundleMap.set(bucket, { primary: r, extras: [] });
+      } else {
+        const existing = bundleMap.get(bucket);
+        // Replace primary with longer thesis
+        if ((r.title || '').length > (existing.primary.title || '').length) {
+          existing.extras.push(existing.primary);
+          existing.primary = r;
+        } else {
+          existing.extras.push(r);
+        }
+      }
+    }
+
+    const theses = [];
+    for (const [, bundle] of bundleMap) {
+      const p = bundle.primary;
+      const allQuestions = [p.market_question, ...bundle.extras.map(e => e.market_question)]
+        .filter(Boolean);
+      const uniqueQuestions = [...new Set(allQuestions)];
+
+      const clvRaw = (p.clv_classification || 'pending').toLowerCase();
+      const clvMap = { sharp: 'SHARP', good: 'GOOD', fade: 'FADE', square: 'SQUARE', pending: 'PENDING' };
+      const clv = clvMap[clvRaw] || 'PENDING';
+
+      const isResolved = p.is_correct !== null && p.is_correct !== undefined;
+      const resWindowMs = p.resolved_at && p.created_at
+        ? new Date(p.resolved_at) - new Date(p.created_at)
+        : null;
+      const resWindowDays = resWindowMs ? Math.ceil(resWindowMs / 86400000) : null;
+
+      theses.push({
+        thesis_id: p.thesis_id,
+        title: p.title,
+        creator_wallet: p.creator_wallet,
+        display_name: p.display_name,
+        verified_sharp: !!p.verified_sharp,
+        clv_classification: clv,
+        flex_score: parseFloat(parseFloat(p.flex_score || 0).toFixed(2)),
+        markets_count: uniqueQuestions.length,
+        markets_preview: uniqueQuestions.slice(0, 2),
+        status: isResolved ? (p.is_correct ? 'CORRECT' : 'WRONG') : 'OPEN',
+        resolution_window_days: resWindowDays,
+        created_at: p.created_at,
+        follower_velocity: 0,
+        agree_count: p.agree_count || 0,
+        disagree_count: p.disagree_count || 0,
+        entry_price: p.entry_price,
+        side: p.side,
+        image_url: (() => {
+          const q1 = ((uniqueQuestions[0] || '')).toLowerCase().replace(/[^a-z0-9 ]/g, '').slice(0, 25);
+          let imageMatch = q1.length > 8 ? screenerMarkets.find(m => {
+            const q2 = (m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '');
+            return q2.includes(q1) || q1.includes(q2.slice(0, 25));
+          }) : null;
+          // Fallback: match by market_slug if question match failed
+          if (!imageMatch && p.market_slug) {
+            imageMatch = screenerMarkets.find(m => (m.slug || m.market_slug) === p.market_slug);
+          }
+          return imageMatch?.image || imageMatch?.event_image_url || null;
+        })(),
+        like_count: 0
+      });
+    }
+
+    // Trending: top 3 by conviction proxy (agree_count + markets_count + sharp bonus),
+    // recency-boosted. Replace when follow system ships.
+    const trending = [...theses]
+      .sort((a, b) => {
+        const scoreA = (a.agree_count || 0) + a.markets_count * 2 +
+          (a.clv_classification === 'SHARP' ? 10 : 0) +
+          (1 / (1 + (Date.now() - new Date(a.created_at)) / 86400000));
+        const scoreB = (b.agree_count || 0) + b.markets_count * 2 +
+          (b.clv_classification === 'SHARP' ? 10 : 0) +
+          (1 / (1 + (Date.now() - new Date(b.created_at)) / 86400000));
+        return scoreB - scoreA;
+      })
+      .slice(0, 3)
+      .map(t => ({ thesis_id: t.thesis_id, title: t.title, display_name: t.display_name,
+        creator_wallet: t.creator_wallet, markets_count: t.markets_count,
+        clv_classification: t.clv_classification, created_at: t.created_at,
+        image_url: t.image_url || null }));
+
+    res.json({ theses, trending });
+  } catch (err) {
+    console.error('[/api/feed/theses]', err.message);
+    res.status(500).json({ theses: [], trending: [], error: err.message });
+  }
+});
+
+// POST /api/takes/:id/like — toggle like on a take
+app.post('/api/takes/:id/like', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+  try {
+    const takeId = req.params.id;
+    const { user_id = 'anonymous', display_name = 'Anonymous' } = req.body || {};
+    if (!takeId) return res.status(400).json({ error: 'take id required' });
+
+    const existing = await dbQuery(
+      `SELECT id FROM take_reactions WHERE take_id = $1 AND user_id = $2 AND reaction = 'like'`,
+      [takeId, user_id]
+    );
+    let liked;
+    if (existing.length) {
+      await dbQuery('DELETE FROM take_reactions WHERE id = $1', [existing[0].id]);
+      liked = false;
+    } else {
+      await dbQuery(
+        `INSERT INTO take_reactions (take_id, user_id, display_name, reaction, body) VALUES ($1,$2,$3,'like',NULL)`,
+        [takeId, user_id, display_name]
+      );
+      liked = true;
+    }
+    const countRows = await dbQuery(
+      `SELECT COUNT(*)::int AS cnt FROM take_reactions WHERE take_id = $1 AND reaction = 'like'`,
+      [takeId]
+    );
+    res.json({ liked, count: countRows[0]?.cnt || 0 });
+  } catch (e) {
+    console.error('[takes/like]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/takes/:id/comment — post a comment on a take
+app.post('/api/takes/:id/comment', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'DB unavailable' });
+  try {
+    const takeId = req.params.id;
+    const { user_id = 'anonymous', display_name = 'Anonymous', body } = req.body || {};
+    if (!takeId) return res.status(400).json({ error: 'take id required' });
+    if (!body || !body.trim()) return res.status(400).json({ error: 'body required' });
+    if (body.length > 500) return res.status(400).json({ error: 'body max 500 chars' });
+
+    const rows = await dbQuery(
+      `INSERT INTO take_reactions (take_id, user_id, display_name, reaction, body)
+       VALUES ($1,$2,$3,NULL,$4) RETURNING id, display_name, body, created_at`,
+      [takeId, user_id, display_name, body.trim()]
+    );
+    res.json({ comment: rows[0] });
+  } catch (e) {
+    console.error('[takes/comment]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/takes/:id/comments — fetch all comments on a take
+app.get('/api/takes/:id/comments', async (req, res) => {
+  if (!pool) return res.json({ comments: [] });
+  try {
+    const takeId = req.params.id;
+    const rows = await dbQuery(
+      `SELECT id, display_name, body, created_at
+       FROM take_reactions WHERE take_id = $1 AND body IS NOT NULL
+       ORDER BY created_at ASC`,
+      [takeId]
+    );
+    res.json({ comments: rows });
+  } catch (e) {
+    console.error('[takes/comments]', e.message);
+    res.status(500).json({ comments: [], error: e.message });
+  }
+});
+
 // Public portfolio for any user
 app.get('/api/predictors/:userId/portfolio', async (req, res) => {
   const { userId } = req.params;
@@ -14538,8 +14910,11 @@ app.get('/api/member/:userId', async (req, res) => {
     // Lazy-trigger realized_trades backfill from Polymarket data API.
     // Polymarket is where the real volume lives — without this, profiles
     // with a connected wallet but no HFX-routed trades render empty.
-    // First-ever load: await so the response sees the freshly-imported
-    // rows. Subsequent loads: fire-and-forget so we don't block the page.
+    // First-ever load: await up to 5s so the response sees the freshly-
+    // imported rows when possible; cap via Promise.race so a slow gamma
+    // day can't stall TTFB past 5.5s. The job keeps running in the
+    // background regardless — second profile load gets populated data.
+    // Subsequent loads: fire-and-forget so we don't block the page.
     if (pool && userData.polymarket_address) {
       try {
         const proxy = await ensureProxyStored(userData.id, userData.polymarket_address);
@@ -14547,7 +14922,12 @@ app.get('/api/member/:userId', async (req, res) => {
           const fresh = !userData.realized_trade_count || userData.realized_trade_count === 0;
           const job = backfillRealizedTrades(userData.id, userData.polymarket_address, proxy)
             .catch(e => console.error('[member backfill]', userData.id, e.message));
-          if (fresh) await job;
+          if (fresh) {
+            await Promise.race([
+              job,
+              new Promise(resolve => setTimeout(resolve, 5000)),
+            ]);
+          }
         }
       } catch (e) { console.warn('[member backfill outer]', e.message); }
     }
@@ -16208,6 +16588,7 @@ app.get('/mentions', async (req, res) => {
     // calendar section on each load — neither benefits from
     // caching, since both reflect live Polymarket state.
     res.set('Cache-Control', 'no-store');
+    res.set('Content-Security-Policy', "img-src 'self' data: https://*.wikimedia.org https://*.amazonaws.com https://polymarket-upload.s3.us-east-2.amazonaws.com;");
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-route]', err);
@@ -16229,6 +16610,7 @@ app.get('/mentions/archive', async (req, res) => {
     const tpl = _loadMentionsTemplate();
     const heroHtml = '';
     const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Content-Security-Policy', "img-src 'self' data: https://*.wikimedia.org https://*.amazonaws.com https://polymarket-upload.s3.us-east-2.amazonaws.com;");
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-archive-route]', err);
@@ -18364,8 +18746,12 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(take_id, user_id)
     )`);
+    // Evolve take_reactions for likes + comments (body, display_name, nullable reaction, drop unique)
+    await dbQuery("ALTER TABLE take_reactions ADD COLUMN IF NOT EXISTS body TEXT").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions ADD COLUMN IF NOT EXISTS display_name TEXT").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions DROP CONSTRAINT IF EXISTS take_reactions_take_id_user_id_key").catch(() => {});
     await dbQuery("ALTER TABLE take_reactions DROP CONSTRAINT IF EXISTS take_reactions_reaction_check").catch(() => {});
-    await dbQuery("ALTER TABLE take_reactions ADD CONSTRAINT take_reactions_reaction_check CHECK (reaction IN ('agree','disagree','fire','sharp','fade','wrong'))").catch(() => {});
+    await dbQuery("ALTER TABLE take_reactions ALTER COLUMN reaction DROP NOT NULL").catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_created_at ON takes(created_at DESC)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_source ON takes(source)').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_takes_market_slug ON takes(market_slug)').catch(() => {});
@@ -18378,6 +18764,18 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_rank INTEGER').catch(() => {});
     await dbQuery('ALTER TABLE users ADD COLUMN IF NOT EXISTS whale_pnl NUMERIC').catch(() => {});
     await dbQuery('CREATE INDEX IF NOT EXISTS idx_users_is_whale ON users(is_whale) WHERE is_whale = true').catch(() => {});
+    // creator_profiles — public trader profile metadata
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS creator_profiles (
+        wallet VARCHAR(64) PRIMARY KEY,
+        display_name VARCHAR(64),
+        bio TEXT,
+        twitter_handle VARCHAR(64),
+        verified_sharp BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
     // CLV columns on wallet_scores — added with clv-engine
     await dbQuery(`ALTER TABLE wallet_scores
       ADD COLUMN IF NOT EXISTS clv_avg_cents NUMERIC,
@@ -18773,6 +19171,312 @@ app.get('/api/picks/:id/verify', async (req, res) => {
   } catch (err) {
     console.error('[picks] verify error:', err.message);
     res.status(500).json({ error: 'Verify failed' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// PREDICTION THESIS v1 (PR #173, 2026-05-15)
+// Narrative parlay — user-authored bundle of 2-10 active Polymarket
+// positions, tracked leg-by-leg. Resolution cron lands in PR #174;
+// leaderboard + permalink page in PR #175. This PR ships schema +
+// create/read API + composer UI + profile tab. Strict mode only —
+// original entry prices are load-bearing for resolution, immutability
+// is the product.
+// ═══════════════════════════════════════════════════════════════════════
+const PREDICTION_THESIS_CODE_VERSION = '2026-05-15-prediction-thesis-v1';
+
+function signThesisLockHash({ user_id, title, legs, created_at }) {
+  if (!HFX_PICK_SECRET) throw new Error('HYPERFLEX_PICK_SECRET unset');
+  const msg = JSON.stringify({
+    user_id,
+    title,
+    legs: legs.map(l => ({
+      condition_id: l.condition_id,
+      direction:    l.direction,
+      entry_price:  l.entry_price,
+    })),
+    created_at,
+  });
+  return crypto.createHmac('sha256', HFX_PICK_SECRET).update(msg).digest('hex');
+}
+
+// Resolve auth — admin-secret header bypass + Bearer JWT fall-through.
+// Mirrors /api/dashboard/performance dual-mode pattern. Returns
+// { userId } on success or { error, status } on failure.
+function _resolveThesisAuth(req, opts = {}) {
+  const adminSecret = req.header('x-admin-secret');
+  if (adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET) {
+    const userId = req.query.user_id || (req.body && req.body.user_id);
+    if (!userId && opts.requireUserId !== false) {
+      return { error: 'user_id required with admin auth', status: 400 };
+    }
+    return { userId, admin: true };
+  }
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return { error: 'Auth required', status: 401 };
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return { userId: payload.id };
+  } catch (_) {
+    return { error: 'Invalid token', status: 401 };
+  }
+}
+
+// POST /api/theses — create a thesis with 2-10 legs.
+app.post('/api/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    if (!HFX_PICK_SECRET) return res.status(503).json({ error: 'HYPERFLEX_PICK_SECRET unset' });
+
+    const authR = _resolveThesisAuth(req);
+    if (authR.error) return res.status(authR.status).json({ error: authR.error });
+    const userId = authR.userId;
+
+    const { title, rationale, legs } = req.body || {};
+    if (typeof title !== 'string' || !title.trim()) return res.status(400).json({ error: 'title required' });
+    if (title.length > 80) return res.status(400).json({ error: 'title must be ≤80 chars' });
+    if (rationale != null && typeof rationale !== 'string') return res.status(400).json({ error: 'rationale must be string' });
+    if (rationale && rationale.length > 500) return res.status(400).json({ error: 'rationale must be ≤500 chars' });
+    if (!Array.isArray(legs) || legs.length < 2 || legs.length > 10) {
+      return res.status(400).json({ error: 'legs.length must be between 2 and 10' });
+    }
+
+    // Per-leg shape + price range
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      if (!l || typeof l !== 'object') return res.status(400).json({ error: `leg ${i+1} invalid` });
+      if (typeof l.condition_id !== 'string' || !l.condition_id) return res.status(400).json({ error: `leg ${i+1} condition_id required` });
+      if (typeof l.market_question !== 'string' || !l.market_question) return res.status(400).json({ error: `leg ${i+1} market_question required` });
+      if (l.direction !== 'yes' && l.direction !== 'no') return res.status(400).json({ error: `leg ${i+1} direction must be 'yes' or 'no'` });
+      const ep = Number(l.entry_price);
+      if (!(ep > 0 && ep < 1)) return res.status(400).json({ error: `leg ${i+1} entry_price must be between 0 and 1 exclusive` });
+      const stake = Number(l.stake_usd);
+      if (!(stake > 0)) return res.status(400).json({ error: `leg ${i+1} stake_usd must be positive` });
+    }
+    // No duplicate condition_ids inside a single thesis
+    const seen = new Set();
+    for (const l of legs) {
+      if (seen.has(l.condition_id)) return res.status(400).json({ error: 'duplicate condition_id in legs' });
+      seen.add(l.condition_id);
+    }
+
+    // Validate each condition_id exists on Polymarket AND is currently live (closed:false)
+    for (let i = 0; i < legs.length; i++) {
+      let m;
+      try { m = await polymarket.fetchMarketByConditionId(legs[i].condition_id); }
+      catch (e) { return res.status(502).json({ error: `gamma unavailable validating leg ${i+1}: ${e.message}` }); }
+      if (!m) return res.status(400).json({ error: `leg ${i+1} condition_id not found on Polymarket` });
+      if (m.closed === true) return res.status(400).json({ error: `leg ${i+1} market is already closed` });
+    }
+
+    const createdAt = new Date().toISOString();
+    const lockedHash = signThesisLockHash({
+      user_id: userId,
+      title:   title.trim(),
+      legs,
+      created_at: createdAt,
+    });
+    const totalStake = legs.reduce((s, l) => s + Number(l.stake_usd), 0);
+
+    // Transaction: thesis + legs together so we never leave a half-built
+    // row behind. pg pool's client.query path is used directly because the
+    // dbQuery helper doesn't expose transaction control.
+    const client = await pool.connect();
+    let thesisId;
+    try {
+      await client.query('BEGIN');
+      const ins = await client.query(
+        `INSERT INTO prediction_thesis
+           (user_id, title, rationale, created_at, locked_hash,
+            resolution_state, legs_total, total_stake_usd, code_version)
+         VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8)
+         RETURNING id, created_at`,
+        [userId, title.trim(), rationale || null, createdAt, lockedHash,
+         legs.length, totalStake.toFixed(2), PREDICTION_THESIS_CODE_VERSION]
+      );
+      thesisId = ins.rows[0].id;
+      for (let i = 0; i < legs.length; i++) {
+        const l = legs[i];
+        await client.query(
+          `INSERT INTO prediction_thesis_leg
+             (thesis_id, leg_order, condition_id, token_id, market_question,
+              direction, entry_price, stake_usd)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [thesisId, i + 1, l.condition_id, l.token_id || null, l.market_question,
+           l.direction, Number(l.entry_price).toFixed(4), Number(l.stake_usd).toFixed(2)]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return res.status(201).json({
+      id:           thesisId,
+      locked_hash:  lockedHash,
+      legs_total:   legs.length,
+      created_at:   createdAt,
+      code_version: PREDICTION_THESIS_CODE_VERSION,
+    });
+  } catch (e) {
+    console.error('[thesis create]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/theses/:id — public read, full thesis + legs ordered.
+app.get('/api/theses/:id', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid id' });
+
+    const tRows = await dbQuery(`SELECT * FROM prediction_thesis WHERE id = $1 LIMIT 1`, [id]);
+    if (!tRows.length) return res.status(404).json({ error: 'thesis not found' });
+    const thesis = tRows[0];
+
+    const lRows = await dbQuery(
+      `SELECT * FROM prediction_thesis_leg WHERE thesis_id = $1 ORDER BY leg_order ASC`,
+      [id]
+    );
+    return res.json({ thesis, legs: lRows });
+  } catch (e) {
+    console.error('[thesis read]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/theses?user_id=<uuid>&state=<state>&limit=20 — public list.
+app.get('/api/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { user_id, state } = req.query;
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+
+    const where = [];
+    const params = [];
+    if (user_id) { params.push(user_id); where.push(`user_id = $${params.length}`); }
+    if (state && ['open','hit','partial','miss'].includes(state)) {
+      params.push(state); where.push(`resolution_state = $${params.length}`);
+    }
+    params.push(limit);
+    const sql = `SELECT id, user_id, title, rationale, created_at, resolution_state,
+                        legs_total, legs_won, legs_lost, legs_pushed,
+                        total_stake_usd, total_pnl_usd, resolved_at, code_version
+                   FROM prediction_thesis
+                   ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                  ORDER BY created_at DESC
+                  LIMIT $${params.length}`;
+    const rows = await dbQuery(sql, params);
+    return res.json({ theses: rows });
+  } catch (e) {
+    console.error('[thesis list]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/users/:userId/theses — pre-bucketed for profile UI.
+app.get('/api/users/:userId/theses', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const { userId } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) return res.status(400).json({ error: 'invalid userId' });
+
+    const rows = await dbQuery(
+      `SELECT id, user_id, title, rationale, created_at, resolution_state,
+              legs_total, legs_won, legs_lost, legs_pushed,
+              total_stake_usd, total_pnl_usd, resolved_at, code_version
+         FROM prediction_thesis
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      [userId]
+    );
+    const open     = rows.filter(r => r.resolution_state === 'open');
+    const resolved = rows.filter(r => r.resolution_state !== 'open');
+    return res.json({ open, resolved, code_version: PREDICTION_THESIS_CODE_VERSION });
+  } catch (e) {
+    console.error('[thesis user list]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/theses/:id/resolve-manual — admin-only manual resolution
+// to seed test data for PR #175 UI validation before the cron exists.
+app.post('/api/admin/theses/:id/resolve-manual', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+    const adminSecret = req.header('x-admin-secret');
+    if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: 'admin only' });
+    }
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid id' });
+    const { legs } = req.body || {};
+    if (!Array.isArray(legs) || !legs.length) return res.status(400).json({ error: 'legs[] required' });
+
+    const tRows = await dbQuery(`SELECT * FROM prediction_thesis WHERE id=$1 LIMIT 1`, [id]);
+    if (!tRows.length) return res.status(404).json({ error: 'thesis not found' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let won = 0, lost = 0, pushed = 0, pnl = 0;
+      for (const entry of legs) {
+        if (!entry || typeof entry.leg_order !== 'number') continue;
+        const r = (entry.resolution || '').toLowerCase();
+        if (!['won','lost','pushed'].includes(r)) continue;
+        const legRows = await client.query(
+          `SELECT stake_usd, entry_price FROM prediction_thesis_leg WHERE thesis_id=$1 AND leg_order=$2 LIMIT 1`,
+          [id, entry.leg_order]
+        );
+        if (!legRows.rows.length) continue;
+        const stake = Number(legRows.rows[0].stake_usd);
+        const ep    = Number(legRows.rows[0].entry_price);
+        let realized = 0;
+        if      (r === 'won')  { realized = stake * ((1 - ep) / ep);  won++; }
+        else if (r === 'lost') { realized = -stake;                   lost++; }
+        else                   { realized = 0;                        pushed++; }
+        pnl += realized;
+        await client.query(
+          `UPDATE prediction_thesis_leg
+              SET resolution=$1, resolved_at=NOW(), realized_pnl=$2
+            WHERE thesis_id=$3 AND leg_order=$4`,
+          [r, realized.toFixed(2), id, entry.leg_order]
+        );
+      }
+      const total = won + lost + pushed;
+      let state = 'open';
+      if (total >= tRows[0].legs_total) {
+        if      (won === tRows[0].legs_total) state = 'hit';
+        else if (won === 0)                   state = 'miss';
+        else                                  state = 'partial';
+      }
+      await client.query(
+        `UPDATE prediction_thesis
+            SET legs_won=$1, legs_lost=$2, legs_pushed=$3,
+                total_pnl_usd=$4,
+                resolution_state=$5,
+                resolved_at=CASE WHEN $5='open' THEN NULL ELSE NOW() END
+          WHERE id=$6`,
+        [won, lost, pushed, pnl.toFixed(2), state, id]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return res.json({ ok: true, id });
+  } catch (e) {
+    console.error('[thesis admin resolve]', e.message);
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -20103,22 +20807,23 @@ async function _fetchFlexStats(userId, diag) {
   // any user whose Polymarket history was backfilled from /activity rather
   // than logged through HFX-routed trades.
   //
-  // Without this UNION, _fetchFlexStats returns 0 settled events for any
-  // user whose only trade history is in realized_trades — including the
-  // entire top-50 whale leaderboard (verified by divergence query: 0/5
-  // sampled whales had any rows in polymarket_trades). The 4:30 AM cron
-  // then writes flex_settled_events=0 → flex_qualifies=false → profile
-  // renders "Building · 25 settled to unlock" forever.
+  // realized_trades.user_id is UUID; userId arrives here as TEXT (request
+  // body or cron iteration). Bare comparison auto-casts in some contexts
+  // but not all — explicit ::uuid cast matches the pattern at server.js
+  // :37262, :37372 (regrade aggregate refresh) and is defensive against
+  // type-coercion failures that silently zero out settled_events for the
+  // entire whale population.
   //
   // realized_trades is the FIFO-collapsed rollup; polymarket_trades is
   // the per-event log. Dedup by (condition_id, side) — polymarket_trades
   // wins on collision since it's the granular source. Mirror the dedup
   // logic from /api/member/:userId at server.js:14197-14223.
+  let realizedRows = [];
   let realizedTradeCount = 0;
   try {
-    const realizedRows = await dbQuery(`
+    realizedRows = await dbQuery(`
       SELECT condition_id, side, realized_pnl, entry_cost_usd
-        FROM realized_trades WHERE user_id = $1`, [userId]).catch(e => {
+        FROM realized_trades WHERE user_id = $1::uuid`, [userId]).catch(e => {
           if (diag) diag.errors.push({ stage: 'rt_query', message: e.message });
           return [];
         });
@@ -20175,6 +20880,7 @@ async function _fetchFlexStats(userId, diag) {
   }
   if (diag) diag.poly_stats_after_rt = { ...polyStats };
   if (diag) diag.realized_trade_count = realizedTradeCount;
+  console.log(`[flex/_fetch] user=${String(userId).slice(0, 8)} rt_fetched=${realizedRows.length} pt_has=${polyStats.has_trades} wins=${polyStats.wins} losses=${polyStats.losses}`);
 
   // closed_at probe — when consistency zeroes out for a whale with
   // hundreds of rows, two scenarios both produce weeks_active_90d=0
@@ -20507,7 +21213,11 @@ async function recomputeFlexScore(userId, opts) {
     console.warn('[flex] full update failed, trying fallback:', userId, e.message);
   }
 
-  // Tier 2 fallback: original-schema UPDATE without the aggregate columns
+  // Tier 2 fallback: CASE-guarded UPDATE preserves prediction_* columns when
+  // realized_trades has no rows for this user (rtTotal=0 → CASE is false).
+  const rtTotal = (diag && Number.isFinite(diag.realized_trade_count)) ? diag.realized_trade_count : 0;
+  const rtWinRate = 0;
+  const rtPnl = 0;
   try {
     const upd = await pool.query(`
       UPDATE users SET
@@ -20521,13 +21231,18 @@ async function recomputeFlexScore(userId, opts) {
         flex_c_pnl           = $8,
         flex_c_consistency   = $9,
         flex_c_breadth       = $10,
-        flex_computed_at     = now()
+        flex_computed_at     = now(),
+        realized_trade_count = CASE WHEN $12 > 0 THEN $12 ELSE realized_trade_count END,
+        total_predictions    = CASE WHEN $12 > 0 THEN $12 ELSE total_predictions END,
+        prediction_win_rate  = CASE WHEN $12 > 0 THEN $13 ELSE prediction_win_rate END,
+        prediction_pnl       = CASE WHEN $12 > 0 THEN $14 ELSE prediction_pnl END
       WHERE id = $11`,
       [
         result.score, tier, result.qualifies, result.settled_events, result.raw_win_rate,
         result.components.accuracy, result.components.calibration, result.components.pnl,
         result.components.consistency, result.components.breadth,
         userId,
+        rtTotal, rtWinRate, rtPnl,
       ]
     );
     if (diag) diag.update = { stage: 'fallback_existing', rowCount: upd.rowCount };
@@ -20658,6 +21373,239 @@ function recomputeSportsFlexForUser(userId) {
   recomputeFlexScore(userId).catch(() => {});
 }
 module.exports = Object.assign(module.exports || {}, { recomputeSportsFlexForUser });
+
+// ── Messaging v1 — 1:1 plain-text DMs ─────────────────────────────────────
+// Schema in supabase_migration_messaging.sql + boot-time auto-migration
+// at the bottom of server.js. Five endpoints, all requireAuth-gated.
+//
+// The message button on profile pages is the v1 entry point — clicking
+// "Message" hits POST /api/conversations with { recipient_user_id }, which
+// either returns the existing 1:1 thread or creates one. UI ships in a
+// follow-up; this PR is schema + API + tests only.
+//
+// Out of scope for v1 (locked, do NOT widen): group chat, attachments,
+// websockets/SSE (polling is the v1 transport), typing indicators,
+// read receipts visible to other party, search, block/report, message
+// editing UX (deleted_at column exists in schema but no endpoint uses it).
+
+// Find or create the canonical 1:1 conversation between two users.
+// Extracted as a module-level helper so the test suite can hit it
+// directly without bringing up the express layer. Also used by the
+// POST /api/conversations endpoint below.
+//
+// Idempotency: given the same two users in any order, returns the same
+// conversation_id. Existing-thread lookup keys on "exactly two
+// participants AND both are these users" — a >2-participant conversation
+// happens to contain user_a and user_b is NOT a 1:1 thread and won't match.
+//
+// `dbClient` is either the default `pool` (production) or a test-supplied
+// pg client / pool with the same `.query()` shape (so tests can use a
+// transaction-bound client for rollback isolation).
+async function findOrCreateOneOnOneConversation(userIdA, userIdB, dbClient) {
+  if (!dbClient) dbClient = pool;
+  if (!dbClient) throw new Error('messaging: no db client');
+  if (!userIdA || !userIdB) throw new Error('messaging: both user ids required');
+  if (userIdA === userIdB) throw new Error('messaging: cannot DM yourself');
+
+  // Existing 1:1 thread lookup.
+  const existing = await dbClient.query(
+    `SELECT c.id
+       FROM conversations c
+      WHERE EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $1)
+        AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = c.id AND user_id = $2)
+        AND (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) = 2
+      LIMIT 1`,
+    [userIdA, userIdB]
+  );
+  if (existing.rows && existing.rows.length) {
+    return { id: existing.rows[0].id, created: false };
+  }
+
+  // Create. Two participant inserts after the conversation row — wrapped
+  // in a transaction so we never end up with a conversation that has
+  // 0 or 1 participants if the second insert fails.
+  const conv = await dbClient.query(
+    `INSERT INTO conversations DEFAULT VALUES RETURNING id`
+  );
+  const convId = conv.rows[0].id;
+  await dbClient.query(
+    `INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3)`,
+    [convId, userIdA, userIdB]
+  );
+  return { id: convId, created: true };
+}
+module.exports = Object.assign(module.exports || {}, { findOrCreateOneOnOneConversation });
+
+// GET /api/conversations — list current user's conversations.
+// Returns: [{ id, other_user: {id, display_name, avatar_url}, last_message: {body, sender_id, created_at}, unread, last_message_at }]
+// Sorted by last_message_at desc, capped at 100.
+app.get('/api/conversations', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const rows = await dbQuery(
+      `SELECT c.id,
+              c.last_message_at,
+              cp.last_read_at,
+              (SELECT user_id FROM conversation_participants
+                WHERE conversation_id = c.id AND user_id <> $1 LIMIT 1) AS other_user_id,
+              (SELECT body FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_body,
+              (SELECT sender_id FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_sender,
+              (SELECT created_at FROM messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_created_at,
+              EXISTS (SELECT 1 FROM messages m
+                       WHERE m.conversation_id = c.id
+                         AND m.created_at > cp.last_read_at
+                         AND m.sender_id <> $1
+                         AND m.deleted_at IS NULL) AS unread
+         FROM conversations c
+         JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.user_id = $1
+        ORDER BY c.last_message_at DESC NULLS LAST
+        LIMIT 100`,
+      [req.userId]
+    );
+    // Hydrate other_user display info in one round-trip.
+    const otherIds = [...new Set(rows.map(r => r.other_user_id).filter(Boolean))];
+    let usersById = {};
+    if (otherIds.length) {
+      const userRows = await dbQuery(
+        `SELECT id, display_name, username, avatar_url FROM users WHERE id = ANY($1)`,
+        [otherIds]
+      );
+      for (const u of userRows) usersById[u.id] = u;
+    }
+    res.json({
+      conversations: rows.map(r => ({
+        id: r.id,
+        last_message_at: r.last_message_at,
+        unread: r.unread === true,
+        other_user: usersById[r.other_user_id] || { id: r.other_user_id },
+        last_message: r.last_message_body
+          ? { body: r.last_message_body, sender_id: r.last_message_sender, created_at: r.last_message_created_at }
+          : null,
+      })),
+    });
+  } catch (e) {
+    console.warn('[messaging] list conversations:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations — find-or-create a 1:1 thread.
+// Body: { recipient_user_id }. Returns { id, created }.
+app.post('/api/conversations', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const recipientId = String(req.body && req.body.recipient_user_id || '').trim();
+    if (!recipientId) return res.status(400).json({ error: 'recipient_user_id required' });
+    if (recipientId === req.userId) return res.status(400).json({ error: 'cannot DM yourself' });
+    // Recipient existence check — surface a clean 404 instead of a foreign-key error.
+    const exists = await dbQuery('SELECT 1 FROM users WHERE id = $1', [recipientId]);
+    if (!exists.length) return res.status(404).json({ error: 'recipient not found' });
+    const result = await findOrCreateOneOnOneConversation(req.userId, recipientId);
+    res.json(result);
+  } catch (e) {
+    console.warn('[messaging] create conversation:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/conversations/:id/messages — paginated thread.
+// Query: ?before=<msg_id>&limit=50. Default limit 50, max 100.
+// Order: newest-first within the page (UI reverses for chronological display).
+app.get('/api/conversations/:id/messages', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    // Authorize: current user must be a participant.
+    const member = await dbQuery(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!member.length) return res.status(404).json({ error: 'conversation not found' });
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const before = req.query.before ? String(req.query.before) : null;
+    let rows;
+    if (before) {
+      rows = await dbQuery(
+        `SELECT id, sender_id, body, created_at FROM messages
+          WHERE conversation_id = $1 AND deleted_at IS NULL
+            AND created_at < (SELECT created_at FROM messages WHERE id = $2 AND conversation_id = $1)
+          ORDER BY created_at DESC LIMIT $3`,
+        [convId, before, limit]
+      );
+    } else {
+      rows = await dbQuery(
+        `SELECT id, sender_id, body, created_at FROM messages
+          WHERE conversation_id = $1 AND deleted_at IS NULL
+          ORDER BY created_at DESC LIMIT $2`,
+        [convId, limit]
+      );
+    }
+    res.json({ messages: rows });
+  } catch (e) {
+    console.warn('[messaging] thread fetch:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations/:id/messages — send a message.
+// Body: { body }. 1..2000 chars. Returns the inserted message row.
+// Updates conversations.last_message_at as a side effect so the list
+// endpoint orders correctly.
+app.post('/api/conversations/:id/messages', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    const body = String(req.body && req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'body required' });
+    if (body.length > 2000) return res.status(400).json({ error: 'body too long (max 2000)' });
+    // Authorize: current user must be a participant.
+    const member = await dbQuery(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!member.length) return res.status(404).json({ error: 'conversation not found' });
+    const inserted = await dbQuery(
+      `INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3)
+       RETURNING id, sender_id, body, created_at`,
+      [convId, req.userId, body]
+    );
+    await dbQuery(
+      `UPDATE conversations SET last_message_at = NOW() WHERE id = $1`,
+      [convId]
+    );
+    res.json({ message: inserted[0] });
+  } catch (e) {
+    console.warn('[messaging] send message:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/conversations/:id/read — mark thread read.
+// Sets last_read_at = NOW() for the current user's participant row.
+// The list endpoint computes `unread` by comparing this against
+// messages.created_at (excluding messages the current user sent).
+app.post('/api/conversations/:id/read', requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'DB not configured' });
+    const convId = req.params.id;
+    const result = await pool.query(
+      `UPDATE conversation_participants SET last_read_at = NOW()
+        WHERE conversation_id = $1 AND user_id = $2`,
+      [convId, req.userId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'conversation not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.warn('[messaging] mark read:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // POST /api/takes — create a take (user prediction with optional thesis)
 app.post('/api/takes', requireAuth, async (req, res) => {
@@ -35087,7 +36035,7 @@ app.get('/api/img-proxy', async (req, res) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 8000);
     let r;
-    try { r = await _nodeFetch(url, { signal: ctrl.signal }); }
+    try { r = await _nodeFetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Hyperflex/1.0; +https://hyperflex.network)' } }); }
     finally { clearTimeout(t); }
     if (!r.ok) return res.status(r.status).end();
     const ct = r.headers.get('content-type') || 'image/jpeg';
@@ -36534,27 +37482,49 @@ app.get('/api/alpha/fade', async (req, res) => {
   }
 });
 
+// In-memory cache: question → { correlated, cached_at, computing }
+const _correlatedCache = new Map();
+const CORR_CACHE_TTL = 10 * 60 * 1000; // 10 min
+
+function _fireCorrelatedInBackground(trade) {
+  const key = trade.question;
+  const existing = _correlatedCache.get(key);
+  if (existing && (existing.computing || Date.now() - existing.cached_at < CORR_CACHE_TTL)) return;
+  _correlatedCache.set(key, { correlated: [], computing: true, cached_at: Date.now() });
+  inferenceEngine.inferCorrelated(trade)
+    .then(results => {
+      _correlatedCache.set(key, { correlated: results, computing: false, cached_at: Date.now() });
+      console.log('[correlated-cache] stored', results.length, 'results for:', key.slice(0, 60));
+    })
+    .catch(e => {
+      _correlatedCache.set(key, { correlated: [], computing: false, cached_at: Date.now(), error: e.message });
+    });
+}
+
 app.get('/api/alpha/correlated', async (req, res) => {
   try {
     const { wallet, question, side, price, clv_avg_cents } = req.query;
-    if (!question) return res.json({ correlated: [], debug: 'no question' });
-    const { rows: snapCheck } = await pool.query('SELECT COUNT(*) as cnt FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL \'24 hours\' AND yes_price > 0.03 AND yes_price < 0.97');
+    if (!question) return res.json({ correlated: [], status: 'no_question' });
     const trade = { wallet, question, side, price: parseFloat(price)||0, clv_avg_cents: parseFloat(clv_avg_cents)||0 };
-    const correlated = await inferenceEngine.inferCorrelated(trade);
+    const cached = _correlatedCache.get(question);
+    if (cached && !cached.computing && cached.correlated.length > 0) {
+      return res.json({ correlated: cached.correlated, status: 'cached', age_s: Math.round((Date.now() - cached.cached_at) / 1000) });
+    }
+    // Fire background inference (no-op if already computing)
+    _fireCorrelatedInBackground(trade);
     const state = inferenceEngine.getState();
     res.json({
-      correlated,
+      correlated: [],
+      status: cached && cached.computing ? 'computing' : 'started',
       debug: {
-        snapshots_available: parseInt(snapCheck[0].cnt),
-        question_received: question,
-        inference_engine_has_pool: state.hasPool,
-        inference_engine_has_anthropic: state.hasAnthropic,
+        has_pool: state.hasPool,
+        has_anthropic: state.hasAnthropic,
         last_error: state.lastError,
         last_raw: state.lastRaw
       }
     });
   } catch(e) {
-    res.json({ correlated: [], error: e.message });
+    res.json({ correlated: [], status: 'error', error: e.message });
   }
 });
 
@@ -36581,6 +37551,284 @@ app.post('/api/signal-history/resolve', async (req, res) => {
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
+});
+
+// GET /api/edge/* — pure data edge signals (no LLM required)
+app.get('/api/edge/consensus', async (req, res) => {
+  try {
+    const data = await edgeEngine.getSharpConsensus();
+    res.json({ consensus: data, count: data.length });
+  } catch(e) { res.json({ consensus: [], count: 0 }); }
+});
+
+app.get('/api/edge/accumulation', async (req, res) => {
+  try {
+    const data = await edgeEngine.getAccumulationAlerts();
+    res.json({ alerts: data, count: data.length });
+  } catch(e) { res.json({ alerts: [], count: 0 }); }
+});
+
+app.get('/api/edge/price-volume', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      WITH recent AS (
+        SELECT
+          market_id, question,
+          yes_price,
+          volume,
+          snapshot_at,
+          LAG(yes_price) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_price,
+          LAG(volume) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_volume
+        FROM market_snapshots
+        WHERE snapshot_at > NOW() - INTERVAL '6 hours'
+      )
+      SELECT
+        market_id,
+        question,
+        yes_price,
+        ROUND((yes_price * 100)::numeric, 1) as yes_cents,
+        volume,
+        prev_volume,
+        ROUND((volume - prev_volume)::numeric, 0) as volume_spike,
+        ROUND(ABS(yes_price - prev_price)::numeric * 100, 2) as price_move_cents,
+        ROUND(((volume - prev_volume) / NULLIF(prev_volume, 0) * 100)::numeric, 1) as volume_pct_change
+      FROM recent
+      WHERE prev_volume IS NOT NULL
+        AND prev_price IS NOT NULL
+        AND volume > prev_volume * 1.5
+        AND ABS(yes_price - prev_price) < 0.03
+        AND yes_price BETWEEN 0.05 AND 0.95
+        AND volume - prev_volume > 5000
+      ORDER BY volume_spike DESC
+      LIMIT 15
+    `);
+    res.json({
+      alerts: rows.map(r => ({
+        ...r,
+        signal: 'Volume up ' + r.volume_pct_change + '% but price flat — repricing imminent',
+        edge_note: 'Sharp money entering without moving price = someone knows something'
+      })),
+      count: rows.length
+    });
+  } catch(e) {
+    console.error('[price-volume]', e.message);
+    res.json({ alerts: [], count: 0, error: e.message });
+  }
+});
+
+app.get('/api/edge/sharp-new', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet,
+        wth.question,
+        wth.side,
+        wth.price,
+        wth.size,
+        wth.slug,
+        wth.created_at,
+        ws.clv_avg_cents,
+        ws.clv_sample_size,
+        ws.wallet_class,
+        COUNT(*) OVER (
+          PARTITION BY wth.wallet, wth.slug
+          ORDER BY wth.created_at
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) as position_trade_number
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE ws.wallet_class = 'sharp'
+        AND ws.clv_avg_cents > 10
+        AND wth.created_at > NOW() - INTERVAL '2 hours'
+        AND wth.size > 1000
+      ORDER BY wth.created_at DESC
+      LIMIT 20
+    `);
+    res.json({
+      trades: rows.filter(r => parseInt(r.position_trade_number) === 1),
+      all_recent: rows,
+      count: rows.length
+    });
+  } catch(e) {
+    res.json({ trades: [], all_recent: [], count: 0 });
+  }
+});
+
+app.get('/api/edge/bias', async (req, res) => {
+  try {
+    const bias = await edgeEngine.getResolutionBias();
+    const markets = await edgeEngine.getBiasEdgeMarkets();
+    res.json({ bias, bias_markets: markets });
+  } catch(e) { res.json({ bias: [], bias_markets: [] }); }
+});
+
+app.get('/api/edge/all', async (req, res) => {
+  try {
+    const [consensus, accumulation, bias, markets] = await Promise.all([
+      edgeEngine.getSharpConsensus(),
+      edgeEngine.getAccumulationAlerts(),
+      edgeEngine.getResolutionBias(),
+      edgeEngine.getBiasEdgeMarkets()
+    ]);
+
+    const [pvRows, sharpNew] = await Promise.all([
+      pool.query(`
+        WITH recent AS (
+          SELECT market_id, question, yes_price, volume, snapshot_at,
+            LAG(yes_price) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_price,
+            LAG(volume) OVER (PARTITION BY market_id ORDER BY snapshot_at) as prev_volume
+          FROM market_snapshots
+          WHERE snapshot_at > NOW() - INTERVAL '6 hours'
+        )
+        SELECT market_id, question, yes_price,
+          ROUND((yes_price*100)::numeric,1) as yes_cents,
+          ROUND(((volume-prev_volume)/NULLIF(prev_volume,0)*100)::numeric,1) as volume_pct_change,
+          ROUND(ABS(yes_price-prev_price)::numeric*100,2) as price_move_cents
+        FROM recent
+        WHERE prev_volume IS NOT NULL AND prev_price IS NOT NULL
+          AND volume > prev_volume * 1.5
+          AND ABS(yes_price - prev_price) < 0.03
+          AND yes_price BETWEEN 0.05 AND 0.95
+          AND volume - prev_volume > 5000
+        ORDER BY volume_pct_change DESC LIMIT 10
+      `),
+      pool.query(`
+        SELECT wth.wallet, wth.question, wth.side, wth.price, wth.size, wth.created_at,
+          ws.clv_avg_cents, ws.wallet_class
+        FROM whale_trade_history wth
+        JOIN wallet_scores ws ON wth.wallet = ws.user_id
+        WHERE ws.wallet_class = 'sharp' AND ws.clv_avg_cents > 10
+          AND wth.created_at > NOW() - INTERVAL '2 hours'
+          AND wth.size > 1000
+        ORDER BY wth.created_at DESC LIMIT 10
+      `)
+    ]);
+
+    res.json({
+      consensus,
+      accumulation,
+      bias,
+      bias_markets: markets,
+      price_volume_alerts: pvRows.rows.map(r => ({
+        ...r,
+        signal: 'Volume up ' + r.volume_pct_change + '% but price flat — repricing imminent'
+      })),
+      sharp_new_positions: sharpNew.rows
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
+app.get('/api/edge/bias-calls', async (req, res) => {
+  try {
+    const calls = await biasCaller.getBiasCalls();
+    const record = await biasCaller.getBiasTrackRecord();
+    res.json({ calls, record, count: calls.length });
+  } catch(e) { res.json({ calls: [], record: {}, count: 0 }); }
+});
+
+// GET /api/platform-stats — aggregate platform stats for landing page hero
+// 30s cache
+let _platformStatsCache = null;
+app.get('/api/platform-stats', async (req, res) => {
+  try {
+    if (_platformStatsCache && Date.now() - _platformStatsCache.ts < 30000) {
+      return res.json(_platformStatsCache.data);
+    }
+    const [snap, whaleTrades, sharpActive, signals] = await Promise.all([
+      pool.query(`SELECT COUNT(DISTINCT market_id) as active_markets FROM market_snapshots WHERE snapshot_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COALESCE(SUM(size), 0) as total FROM whale_trade_history WHERE created_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COUNT(DISTINCT wth.wallet) as sharp_count FROM whale_trade_history wth JOIN wallet_scores ws ON wth.wallet = ws.user_id WHERE ws.wallet_class IN ('sharp', 'good') AND wth.created_at > NOW() - INTERVAL '24 hours'`),
+      pool.query(`SELECT COUNT(*) as total_calls, COUNT(CASE WHEN resolved_outcome IS NOT NULL THEN 1 END) as resolved, COUNT(CASE WHEN resolved_outcome = called_side THEN 1 END) as correct FROM signal_history WHERE signal_type = 'bias_edge'`)
+    ]);
+    const sc = signals.rows[0];
+    const resolved = parseInt(sc.resolved) || 0;
+    const correct = parseInt(sc.correct) || 0;
+    const data = {
+      active_markets: parseInt(snap.rows[0].active_markets) || 0,
+      whale_capital_24h: Math.round(parseFloat(whaleTrades.rows[0].total) || 0),
+      sharp_wallets_active: parseInt(sharpActive.rows[0].sharp_count) || 0,
+      total_signals: parseInt(sc.total_calls) || 0,
+      signal_win_rate: resolved > 0 ? Math.round(correct / resolved * 100) : null,
+      top_edge_score: (_screenerCache && _screenerCache.length > 0) ? _screenerCache[0].edge_score : null,
+      updated_at: new Date().toISOString()
+    };
+    _platformStatsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch(e) {
+    console.warn('[platform-stats]', e.message);
+    res.json({ active_markets: 0, whale_capital_24h: 0, sharp_wallets_active: 0, total_signals: 0 });
+  }
+});
+
+// GET /api/whale-ticker — last 30 classified whale trades for live ticker strip
+// 30s cache
+let _whaleTickerCache = null;
+app.get('/api/whale-ticker', async (req, res) => {
+  try {
+    if (_whaleTickerCache && Date.now() - _whaleTickerCache.ts < 30000) {
+      return res.json(_whaleTickerCache.data);
+    }
+    const { rows } = await pool.query(`
+      SELECT
+        wth.wallet,
+        LEFT(wth.wallet, 6) || '…' || RIGHT(wth.wallet, 4) as wallet_short,
+        wth.question,
+        wth.side,
+        wth.price,
+        wth.size,
+        wth.created_at,
+        wth.slug,
+        ws.wallet_class,
+        ws.clv_avg_cents,
+        ws.sharpness_score
+      FROM whale_trade_history wth
+      JOIN wallet_scores ws ON wth.wallet = ws.user_id
+      WHERE wth.created_at > NOW() - INTERVAL '12 hours'
+        AND ws.wallet_class IN ('sharp', 'good', 'fade')
+        AND wth.size >= 500
+      ORDER BY wth.created_at DESC
+      LIMIT 30
+    `);
+    const data = { trades: rows, updated_at: new Date().toISOString() };
+    _whaleTickerCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch(e) {
+    console.warn('[whale-ticker]', e.message);
+    res.json({ trades: [] });
+  }
+});
+
+// GET /api/resolution-bias — structural edge analysis (delegates to edge-engine)
+app.get('/api/resolution-bias', async (req, res) => {
+  try {
+    const bias = await edgeEngine.getResolutionBias();
+    const markets = await edgeEngine.getBiasEdgeMarkets();
+    const { rows: overall } = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE yes_price >= 0.95) as yes_count,
+        COUNT(*) FILTER (WHERE yes_price <= 0.05) as no_count,
+        COUNT(*) as total
+      FROM (
+        SELECT DISTINCT ON (market_id) market_id, yes_price
+        FROM market_snapshots
+        WHERE yes_price >= 0.95 OR yes_price <= 0.05
+        ORDER BY market_id, snapshot_at DESC
+      ) resolved
+    `);
+    const total = parseInt(overall[0].total) || 1;
+    const yesCount = parseInt(overall[0].yes_count) || 0;
+    const noCount = parseInt(overall[0].no_count) || 0;
+    res.json({
+      yes_rate: Math.round(yesCount / total * 100),
+      no_rate: Math.round(noCount / total * 100),
+      yes_count: yesCount,
+      no_count: noCount,
+      total_resolved: total,
+      structural_edge: 'NO bias — markets resolve NO at ' + Math.round(noCount / Math.max(yesCount, 1)) + 'x the rate of YES',
+      by_price_range: bias,
+      currently_open_in_bias_zone: markets
+    });
+  } catch(e) { res.json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════
@@ -37847,6 +39095,8 @@ async function _buildAlphaListInner(opts = {}) {
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
         slug: eventSlug || slug,
+        image: m.image || (m.events && m.events[0] && m.events[0].image) || m.icon || null,
+        event_image_url: (m.events && m.events[0] && m.events[0].image) || m.image || null,
         neg_risk: m.neg_risk === true || m.negRisk === true,
         group_item: m.groupItemTitle || '',
         edge_score: edgeScore,
@@ -41251,6 +42501,83 @@ async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trad
   return totalPoints;
 }
 
+// GET /api/dashboard/performance — auth'd performance card data for the
+// account dashboard. 90-day window matches FLEX scoring. Hardcoded
+// 20-trade qualification threshold mirrors the rest of the app. Returns
+// nulls for avg_win / avg_loss / risk_reward when a side has zero
+// samples; UI renders "—", never "Infinity" or "$0" placeholders.
+//
+// Auth modes (mirrors /api/admin/flex/rebuild):
+//   1. x-admin-secret header + ?user_id=<uuid> → CLI smoke path
+//   2. Authorization: Bearer <jwt>             → normal session path
+const DASH_PERF_CODE_VERSION = '2026-05-15-dashboard-performance-card-v1';
+const DASH_PERF_QUALIFY_MIN = 20;
+app.get('/api/dashboard/performance', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'db unavailable' });
+
+    let userId;
+    const adminSecret = req.header('x-admin-secret');
+    if (adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET) {
+      userId = req.query.user_id;
+      if (!userId) return res.status(400).json({ error: 'user_id query param required with admin auth' });
+    } else {
+      const auth = req.headers.authorization;
+      const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+      if (!token) return res.status(401).json({ error: 'Auth required' });
+      try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        userId = payload.id;
+      } catch (_) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
+
+    const rows = await dbQuery(
+      `SELECT
+         COUNT(*) FILTER (WHERE realized_pnl > 0)                       AS wins,
+         COUNT(*) FILTER (WHERE realized_pnl < 0)                       AS losses,
+         AVG(realized_pnl) FILTER (WHERE realized_pnl > 0)              AS avg_win,
+         ABS(AVG(realized_pnl) FILTER (WHERE realized_pnl < 0))         AS avg_loss,
+         COUNT(*)                                                        AS settled_count_90d
+       FROM realized_trades
+       WHERE user_id = $1
+         AND closed_at >= NOW() - INTERVAL '90 days'`,
+      [userId]
+    );
+
+    const r = (rows && rows[0]) || {};
+    const wins   = Number(r.wins   || 0);
+    const losses = Number(r.losses || 0);
+    const settledCount = Number(r.settled_count_90d || 0);
+    const settledEvents = wins + losses;  // pushes excluded — math card semantics
+
+    const avgWin  = r.avg_win  != null ? Number(r.avg_win)  : null;
+    const avgLoss = r.avg_loss != null ? Number(r.avg_loss) : null;
+    const winRate = settledEvents > 0 ? (wins / settledEvents) : null;
+    const riskReward = (avgWin != null && avgLoss != null && avgLoss > 0)
+      ? (avgWin / avgLoss)
+      : null;
+    const qualifies = settledCount >= DASH_PERF_QUALIFY_MIN;
+
+    return res.json({
+      win_rate:           winRate,
+      wins,
+      losses,
+      settled_events:     settledEvents,
+      avg_win:            avgWin,
+      avg_loss:           avgLoss,
+      risk_reward:        riskReward,
+      qualifies,
+      settled_count_90d:  settledCount,
+      code_version:       DASH_PERF_CODE_VERSION,
+    });
+  } catch (e) {
+    console.error('[dashboard-performance]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // Get FLEX points balance
 app.get('/api/flex-points', requireAuth, async (req, res) => {
   try {
@@ -43880,6 +45207,458 @@ Only include headlines that actually affect a market. Skip irrelevant ones.`
   } catch (err) {
     console.error('[news-impact]', err.message);
     res.json(_newsTradeCache.data || []);
+  }
+});
+
+// ── GET /api/news-feed — news headlines paired with closest Polymarket market ──
+// 5-min TTL cache. No LLM — pure token-overlap scoring, fast + free.
+let _newsFeedCache = { ts: 0, data: null };
+const NEWS_FEED_TTL = 5 * 60 * 1000;
+
+const _NEWS_STOP = new Set([
+  // generic function words
+  'about','after','also','back','been','before','being','both','come','could','does',
+  'done','down','each','even','every','from','have','having','here','into','just',
+  'know','last','like','make','many','more','most','much','only','other','over',
+  'said','says','same','should','some','such','take','than','that','their','them',
+  'then','there','these','they','this','those','time','very','want','well','were',
+  'what','when','where','which','while','will','with','would','your',
+  // high-frequency news words that create false matches
+  'ahead','amid','amid','announces','announced','around','away','between','bring',
+  'brings','call','calls','change','coming','continue','continues','could','deal',
+  'does','during','early','expected','everything','expect','faces','find','first',
+  'following','gets','going','hear','heres','high','higher','hits','house','into',
+  'keep','keeps','latest','launch','launches','lead','leads','leave','leaves',
+  'live','look','looking','major','market','markets','move','moves','need','needs',
+  'news','next','open','part','people','plans','puts','report','reports','reveals',
+  'right','rise','rises','say','seen','sets','show','shows','small','someone',
+  'something','start','starts','still','stop','takes','talk','talks','tell','today',
+  'toward','turns','under','update','updates','using','week','while','world',
+]);
+
+// Long-but-generic words that must NOT carry a single-token match — common
+// adjectives, colors, and qualifiers that coincidentally appear in market
+// names (e.g. "golden" in "Golden Knights" matching "macOS Golden Gate").
+const _NEWS_RARE_BLOCK = new Set([
+  'golden','silver','general','national','federal','united','american',
+  'global','market','markets','northern','southern','eastern','western',
+  'central','greater','special','digital','virtual','quarter','million',
+  'billion','company','quarterly','another','people','public',
+]);
+
+function _tokenize(text) {
+  return (text || '').toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')   // strip ALL numbers and punctuation
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && !_NEWS_STOP.has(w));
+}
+
+function _matchHeadlineToMarket(headline, markets) {
+  if (!markets || markets.length === 0) return null;
+
+  const hText = headline.title || headline;
+  const hSet = new Set(_tokenize(hText));
+  if (hSet.size < 1) return null;
+
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const m of markets) {
+    const qSet   = new Set(_tokenize(m.question    || ''));
+    const dSet   = new Set(_tokenize(m.description || ''));
+
+    let qOverlap = 0, dOverlap = 0;
+    const matchedQ = [];
+    for (const t of hSet) {
+      if (qSet.has(t))      { qOverlap++; matchedQ.push(t); }
+      else if (dSet.has(t)) { dOverlap++; }
+    }
+
+    // Qualify if:
+    //   - 2+ question-token overlaps (strong signal), OR
+    //   - 1 question overlap on a rare word: >= 7 chars, not a common
+    //     adjective/color/qualifier (likely a proper noun/topic), OR
+    //   - 1 question overlap + 1 description overlap
+    const w0 = matchedQ[0];
+    const rareMatch = qOverlap === 1 && w0 && w0.length >= 7 && !_NEWS_RARE_BLOCK.has(w0);
+    if (qOverlap < 2 && !rareMatch && !(qOverlap === 1 && dOverlap >= 1)) continue;
+
+    const vol = parseFloat(m.volume || 0);
+    const score = qOverlap * 1000 + dOverlap * 50 + Math.min(vol / 1e6, 5);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = m;
+    }
+  }
+
+  console.log('[match]', hText.slice(0, 45), '->', bestMatch ? bestMatch.question.slice(0, 40) : 'NO MATCH');
+  return bestMatch;
+}
+
+// ── Two-stage matching: free keyword pre-filter → cheap Haiku judge ──────────
+// Stage 1 (free) collects up to 5 candidate markets by token overlap — NO
+// auto-pick, deliberately loose (any overlap qualifies). Stage 2 (cheap) asks
+// Haiku which candidate is genuinely related, or none. Per-headline decisions
+// are cached 1h so Haiku runs ~once per headline, not on every 5-min rebuild.
+const _matchCache = new Map(); // headlineText -> { slug, ts }  (slug null = no match)
+const MATCH_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// Bounded-concurrency async map — caps simultaneous in-flight tasks at `limit`.
+async function _mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
+// Stage 1: top-N candidates by overlap. Loose on purpose — Haiku filters.
+function _getCandidateMarkets(headline, markets, limit = 5) {
+  const hSet = new Set(_tokenize(headline.title || headline));
+  if (hSet.size < 1) return [];
+  const scored = [];
+  for (const m of markets) {
+    const qSet = new Set(_tokenize(m.question || m.title || ''));
+    const dSet = new Set(_tokenize(m.description || ''));
+    let qOverlap = 0, dOverlap = 0;
+    for (const t of hSet) {
+      if (qSet.has(t)) qOverlap++;
+      else if (dSet.has(t)) dOverlap++;
+    }
+    const score = qOverlap * 2 + dOverlap;
+    if (score > 0) scored.push({ m, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.m);
+}
+
+// Stage 2: Haiku picks the one genuinely-related market, or none (0).
+async function _haikuPickMarket(headline, candidates) {
+  if (!candidates || candidates.length === 0) return null;
+  const hText = headline.title || headline;
+  console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
+  const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
+  const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, pick 0.
+
+Headline: "${hText}"
+
+Markets:
+${list}
+
+Respond with ONLY a JSON object on one line: {"pick": N, "edge": "one dry sentence on how this news moves that market's probability"}
+If none are related: {"pick": 0, "edge": ""}
+No other text.`;
+  try {
+    // Direct anthropic.messages.create — deliberately BYPASSES backgroundClaudeCall
+    // (and thus the CLAUDE_BACKGROUND_DISABLED global kill switch). News matching
+    // is user-facing, bounded (5-min response cache + 1h decision cache),
+    // concurrency-capped at 5, and costs cents/day — it is NOT one of the
+    // always-on crons the global kill switch exists to stop. Dedicated off
+    // switch for this feature: NEWS_AI_MATCHING=false.
+    console.log('[haiku-match] calling Haiku...');
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 80,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
+    console.log('[haiku-match] raw response:', JSON.stringify(text));
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch { console.log('[haiku-match] JSON parse failed'); return null; }
+    const pick = parseInt(parsed.pick, 10);
+    if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
+    const edge = (parsed.edge && String(parsed.edge).trim()) || null;
+    console.log('[news-edge]', hText.slice(0, 30), '| pick:', pick, '| edge:', edge ? edge.slice(0, 40) : 'none');
+    return { market: candidates[pick - 1], edge };
+  } catch (e) {
+    console.log('[haiku-match] AI call failed — no match. msg:', e.message);
+    return null; // fail safe: no match rather than a bad match
+  }
+}
+
+// Resolve a headline to a live market object via the 1h decision cache.
+// Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
+// — keeps price/image fresh even though the match decision is an hour old.
+async function _resolveMatchCached(headline, markets) {
+  // 'v5:' prefix busts any decisions cached before edge sentences were threaded.
+  const key = 'v5:' + (headline.title || headline);
+  const cached = _matchCache.get(key);
+  let slug, edge;
+  if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
+    slug = cached.slug;
+    edge = cached.edge || null;
+  } else {
+    const candidates = _getCandidateMarkets(headline, markets, 5);
+    const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
+    slug = picked ? picked.market.slug : null;
+    edge = picked ? picked.edge : null;
+    _matchCache.set(key, { slug, edge, ts: Date.now() });
+    console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
+      key.slice(0, 40), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
+  }
+  if (!slug) return null;
+  const market = markets.find(m => m.slug === slug) || null;
+  return market ? { market, edge } : null;
+}
+
+app.get('/api/news-feed', async (req, res) => {
+  try {
+    if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
+      return res.json(_newsFeedCache.data);
+    }
+
+    // Fetch headlines from Google News RSS (multiple topic feeds in parallel)
+    const [top, world, biz, tech, politics, crypto] = await Promise.all([
+      fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 20),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en', 15),
+      fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en', 10),
+      fetchRSSFeed('https://news.google.com/rss/search?q=election+president+congress&hl=en-US&gl=US&ceid=US:en', 10),
+      fetchRSSFeed('https://news.google.com/rss/search?q=bitcoin+crypto+ethereum&hl=en-US&gl=US&ceid=US:en', 10),
+    ]);
+
+    // Dedupe by title prefix
+    const seen = new Set();
+    const allHeadlines = [...top, ...world, ...biz, ...tech, ...politics, ...crypto]
+      .filter(h => {
+        const key = h.title.toLowerCase().slice(0, 50);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 40);
+
+    // Get the FULL market pool from the data-engine (~74-100 active poly
+    // markets, each with description text for richer matching). The alpha
+    // screener cache is a heavily-filtered ~11-market slice — too narrow for
+    // world-news matching, so we only fall back to it if the data-engine is
+    // cold.
+    let pool = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      pool = (dm.markets || []).map(m => ({
+        slug: m.source_id,
+        question: m.title,
+        description: m.description || '',
+        yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume: m.volume_total,
+        end_date: m.end_date,
+        image: m.image || null,
+        event_image_url: m.event_image_url || null,
+        category: m.category || null,
+        edge_score: 0,
+        whale_count: 0,
+      }));
+    } catch (e) {
+      console.warn('[news-feed] data-engine getMarkets failed:', e.message);
+    }
+    // Fallback to alpha screener cache if data-engine returned nothing
+    if (!pool.length && _screenerCache && Array.isArray(_screenerCache.data)) {
+      pool = _screenerCache.data;
+    }
+    const markets = pool.filter(m => m.question && m.yes_price != null);
+
+    // Prune expired decision-cache entries (bounded memory)
+    if (_matchCache.size > 500) {
+      const cutoff = Date.now() - MATCH_CACHE_TTL;
+      for (const [k, v] of _matchCache) if (v.ts < cutoff) _matchCache.delete(k);
+    }
+
+    // AI matching is on by default and INDEPENDENT of the global
+    // CLAUDE_BACKGROUND_DISABLED kill switch (news matching is user-facing,
+    // cached, and cheap — see _haikuPickMarket). Dedicated off switch:
+    // NEWS_AI_MATCHING=false. Falls back to free keyword top-1 when off or
+    // when no API key is configured.
+    const aiMatching = process.env.NEWS_AI_MATCHING !== 'false'
+      && !!process.env.ANTHROPIC_API_KEY
+      && markets.length > 0;
+
+    console.log(`[news-feed] using market pool size: ${markets.length}`);
+    console.log('[news-feed] ai_enabled:', aiMatching,
+      '| NEWS_AI_MATCHING:', process.env.NEWS_AI_MATCHING || '(unset→on)',
+      '| has_key:', !!process.env.ANTHROPIC_API_KEY, '| pool:', markets.length);
+    console.log('[news-feed] sample market questions:', markets.slice(0, 3).map(m => m.question));
+
+    const buildItem = (h, market, edge) => ({
+      headline: h.title,
+      source: h.source || 'Google News',
+      url: h.link || null,
+      publishedAt: h.pubDate ? new Date(h.pubDate).toISOString() : null,
+      edge: market ? (edge || null) : null,
+      market: market ? {
+        slug: market.slug,
+        question: market.question,
+        yes_price: market.yes_price,
+        volume: market.volume,
+        end_date: market.end_date,
+        image: market.image || null,
+        event_image_url: market.event_image_url || null,
+        category: market.category || null,
+        edge_score: market.edge_score || 0,
+        whale_count: market.whale_count || 0,
+      } : null
+    });
+
+    let paired;
+    if (aiMatching) {
+      // Two-stage: keyword candidates → Haiku judge, concurrency-capped at 5.
+      paired = await _mapLimit(allHeadlines, 5, async (h) => {
+        const r = await _resolveMatchCached(h, markets);
+        return buildItem(h, r ? r.market : null, r ? r.edge : null);
+      });
+    } else {
+      // Free keyword fallback (strict gate, top-1) — no edge sentence (no AI).
+      paired = allHeadlines.map(h => buildItem(h, markets.length ? _matchHeadlineToMarket(h, markets) : null, null));
+    }
+
+    // Prioritize items that have a matched market
+    const withMarket    = paired.filter(p => p.market);
+    const withoutMarket = paired.filter(p => !p.market);
+    const result = { items: [...withMarket, ...withoutMarket].slice(0, 30) };
+
+    _newsFeedCache = { ts: Date.now(), data: result };
+    console.log(`[news-feed] ${withMarket.length}/${paired.length} headlines matched to markets`);
+    res.json(result);
+  } catch (err) {
+    console.error('[news-feed]', err.message);
+    res.json(_newsFeedCache.data || { items: [] });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EDGE FEED  —  /api/edge-feed
+// Two-stage: Haiku triages all ~74 markets → 5 best candidates → Sonnet writes
+// 2-3 sentence thesis per candidate. In-memory 6h cache, hard daily cap of 20
+// Sonnet calls. Zero paid calls at idle. ALWAYS returns JSON, even on error.
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _edgeFeedSonnetDay   = '';
+let _edgeFeedSonnetCount = 0;
+const EDGE_FEED_SONNET_CAP = parseInt(process.env.EDGE_FEED_SONNET_CAP || '20', 10);
+const EDGE_FEED_TTL_MS = (parseInt(process.env.EDGE_FEED_TTL_HOURS || '6', 10)) * 3600 * 1000;
+let _edgeFeedCache = { data: null, ts: 0 };
+
+function _edgeFeedTodayKey() { return new Date().toISOString().slice(0, 10); }
+
+function _sonnetBudgetOk() {
+  const today = _edgeFeedTodayKey();
+  if (_edgeFeedSonnetDay !== today) { _edgeFeedSonnetDay = today; _edgeFeedSonnetCount = 0; }
+  return _edgeFeedSonnetCount < EDGE_FEED_SONNET_CAP;
+}
+
+async function _buildEdgeFeed(markets) {
+  if (!anthropic) return { edges: [], reason: 'no_ai' };
+  if (!_sonnetBudgetOk()) {
+    console.warn('[edge-feed] daily Sonnet cap reached');
+    return { edges: [], reason: 'cap_reached' };
+  }
+
+  // Stage 1 — Haiku triage: pick the 5 most likely-mispriced markets
+  const marketList = markets.slice(0, 100).map((m, i) => {
+    const pct = m.yes_price != null ? Math.round(m.yes_price * 100) : '?';
+    const vol = m.volume ? `$${Math.round(m.volume / 1000)}k vol` : '';
+    return `${i + 1}. [${pct}%] ${m.question || m.title} ${vol}`;
+  }).join('\n');
+
+  let candidates = [];
+  try {
+    const triage = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 40,
+      messages: [{ role: 'user', content: `You are a quantitative prediction market analyst. From this list of Polymarket markets, pick the 5 most likely to be MISPRICED right now — where the crowd probability seems wrong based on available information, momentum, or structural bias. Return ONLY a JSON array of the market numbers, e.g. [3,7,12,21,34]. No other text.\n\n${marketList}` }]
+    });
+    const raw = (triage.content[0] && triage.content[0].text || '').trim();
+    const arr = JSON.parse(raw.match(/\[[\d,\s]+\]/)[0]);
+    candidates = arr.filter(n => n >= 1 && n <= markets.length).slice(0, 5).map(n => markets[n - 1]);
+    console.log('[edge-feed] Haiku triage picked:', candidates.map(m => (m.question || '').slice(0, 30)));
+  } catch (e) {
+    console.warn('[edge-feed] Haiku triage failed:', e.message);
+    candidates = [...markets].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+  }
+
+  // Stage 2 — Sonnet thesis per candidate
+  const edges = [];
+  for (const m of candidates) {
+    if (!_sonnetBudgetOk()) { console.warn('[edge-feed] Sonnet cap reached mid-loop'); break; }
+    try {
+      _edgeFeedSonnetCount++;
+      console.log(`[edge-feed] SONNET call for: ${m.slug || m.question} | daily count: ${_edgeFeedSonnetCount}`);
+      const thesis = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 120,
+        messages: [{ role: 'user', content: `You are a sharp prediction market analyst writing for experienced Polymarket traders. Write 2-3 sentences on why "${m.question || m.title}" at ${m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : 'current odds'} may be mispriced. Be specific: cite the structural reason (base rate, recency bias, tail risk, information asymmetry). No hedging. Dry, numerate voice.` }]
+      });
+      edges.push({ market: m, thesis: (thesis.content[0] && thesis.content[0].text || '').trim(), generatedAt: new Date().toISOString() });
+    } catch (e) {
+      console.warn('[edge-feed] Sonnet call failed for', m.slug, ':', e.message);
+    }
+  }
+  return { edges, generatedAt: new Date().toISOString() };
+}
+
+// In-memory 6h bucket key (date + 6h block). The cache is deliberately
+// in-memory — NOT Postgres — so there is no table to be missing and no write
+// that can silently fail. Worst case: recompute once per server restart.
+function _edgeFeedBucket() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10) + ':' + Math.floor(d.getUTCHours() / 6);
+}
+
+app.get('/api/edge-feed', async (req, res) => {
+  const bucket = _edgeFeedBucket();
+  if (process.env.EDGE_FEED_ENABLED === 'false') {
+    return res.json({ edges: [], reason: 'disabled', cached: false });
+  }
+  try {
+    // Cache HIT — return BEFORE any AI call.
+    if (_edgeFeedCache.data && Date.now() - _edgeFeedCache.ts < EDGE_FEED_TTL_MS) {
+      console.log('[edge-feed] CACHE HIT bucket', bucket, '— 0 AI calls');
+      return res.json({ ..._edgeFeedCache.data, cached: true });
+    }
+
+    console.log('[edge-feed] CACHE MISS bucket', bucket, '— computing, will run Haiku+Sonnet');
+
+    let markets = [];
+    try {
+      const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+      markets = (dm.markets || []).map(m => ({
+        slug:      m.source_id,
+        question:  m.title,
+        yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        volume:    m.volume_total,
+        end_date:  m.end_date,
+        image:     m.image || m.event_image_url || null,
+      })).filter(m => m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95);
+    } catch (e) {
+      console.warn('[edge-feed] market pool fetch failed:', e.message);
+    }
+
+    if (!markets.length) return res.json({ edges: [], reason: 'no_markets', cached: false });
+
+    const result = await _buildEdgeFeed(markets);
+    if (result.edges.length > 0) {
+      _edgeFeedCache.data = result;
+      _edgeFeedCache.ts   = Date.now();
+      console.log('[edge-feed] cache WRITE bucket', bucket, 'ok —', result.edges.length, 'edges');
+    } else if (_edgeFeedCache.data) {
+      // Compute failed/capped but we have an older payload — serve it stale.
+      console.warn('[edge-feed] compute returned 0 edges (' + result.reason + ') — serving stale');
+      return res.json({ ..._edgeFeedCache.data, cached: true, stale: true, reason: result.reason });
+    }
+    res.json({ ...result, cached: false });
+  } catch (err) {
+    console.error('[edge-feed] FAILED:', err.message);
+    res.json(_edgeFeedCache.data
+      ? { ..._edgeFeedCache.data, cached: true, stale: true, reason: 'error', error: err.message }
+      : { edges: [], reason: 'error', error: err.message, cached: false });
   }
 });
 
@@ -55857,6 +57636,74 @@ if (pool) {
         UNIQUE(challenge_id, user_id)
       )`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_challenge_picks_lb ON challenge_picks(challenge_id, score DESC)`).catch(() => {});
+
+      // Migration #62 — Prediction Thesis v1 (PR #173, 2026-05-15).
+      // Mirrors supabase_migration_62_prediction_thesis.sql. Two-table
+      // narrative-parlay product: thesis + leg. Resolution cron lands
+      // in PR #174; for now all theses sit at resolution_state='open'.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_thesis (
+        id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title             text NOT NULL CHECK (char_length(title) <= 80),
+        rationale         text CHECK (char_length(rationale) <= 500),
+        created_at        timestamptz NOT NULL DEFAULT NOW(),
+        locked_hash       text NOT NULL,
+        resolved_at       timestamptz,
+        resolution_state  text NOT NULL DEFAULT 'open'
+                          CHECK (resolution_state IN ('open', 'hit', 'partial', 'miss')),
+        legs_total        int NOT NULL DEFAULT 0,
+        legs_won          int NOT NULL DEFAULT 0,
+        legs_lost         int NOT NULL DEFAULT 0,
+        legs_pushed       int NOT NULL DEFAULT 0,
+        total_stake_usd   numeric(20,2),
+        total_pnl_usd     numeric(20,2),
+        code_version      text
+      )`).catch(e => console.warn('[boot] prediction_thesis create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_user ON prediction_thesis(user_id, created_at DESC)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_state ON prediction_thesis(resolution_state) WHERE resolution_state = 'open'`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_thesis_leg (
+        id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        thesis_id         uuid NOT NULL REFERENCES prediction_thesis(id) ON DELETE CASCADE,
+        leg_order         int NOT NULL CHECK (leg_order BETWEEN 1 AND 10),
+        condition_id      text NOT NULL,
+        token_id          text,
+        market_question   text NOT NULL,
+        direction         text NOT NULL CHECK (direction IN ('yes', 'no')),
+        entry_price       numeric(6,4) NOT NULL CHECK (entry_price > 0 AND entry_price < 1),
+        stake_usd         numeric(20,2) NOT NULL CHECK (stake_usd > 0),
+        resolution        text CHECK (resolution IN ('won', 'lost', 'pushed')),
+        resolved_at       timestamptz,
+        realized_pnl      numeric(20,2),
+        UNIQUE(thesis_id, leg_order)
+      )`).catch(e => console.warn('[boot] prediction_thesis_leg create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_thesis ON prediction_thesis_leg(thesis_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_condition ON prediction_thesis_leg(condition_id) WHERE resolution IS NULL`).catch(() => {});
+
+      // Messaging v1 — see supabase_migration_messaging.sql for the
+      // standalone migration file + scope notes. 1:1 plain-text DMs.
+      // users.id is TEXT, foreign keys match.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS conversations (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_message_at TIMESTAMPTZ
+      )`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS conversation_participants (
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_read_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (conversation_id, user_id)
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_conv_participants_user ON conversation_participants(user_id)`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS messages (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body            TEXT NOT NULL CHECK (length(body) > 0 AND length(body) <= 2000),
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at      TIMESTAMPTZ
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at DESC)`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }

@@ -1014,6 +1014,83 @@ nav {
   .nav-links { display: none; }
 }
 @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* LIVE WHALE TICKER */
+.whale-ticker-wrap {
+  background: rgba(0,230,138,0.03);
+  border-bottom: 1px solid rgba(0,230,138,0.1);
+  height: 36px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.whale-ticker-label {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-green);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border-right: 1px solid rgba(0,230,138,0.15);
+  height: 100%;
+  background: rgba(0,230,138,0.04);
+  white-space: nowrap;
+}
+.whale-ticker-label::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  animation: pulse-dot 1.8s infinite;
+}
+.whale-ticker-scroll {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.whale-ticker-inner {
+  display: flex;
+  gap: 0;
+  white-space: nowrap;
+  animation: ticker-scroll 60s linear infinite;
+  will-change: transform;
+}
+.whale-ticker-wrap:hover .whale-ticker-inner { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 20px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-right: 1px solid var(--border);
+  height: 36px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+.ticker-item:hover { background: rgba(255,255,255,0.03); }
+.ticker-class-sharp { color: var(--accent-green); font-weight: 700; font-size: 10px; }
+.ticker-class-good  { color: var(--accent-amber); font-weight: 700; font-size: 10px; }
+.ticker-class-fade  { color: var(--accent-red); font-weight: 700; font-size: 10px; }
+.ticker-side-yes { color: var(--accent-green); font-weight: 700; }
+.ticker-side-no  { color: var(--accent-red); font-weight: 700; }
+.ticker-q { color: var(--text-soft); max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.ticker-time { color: var(--muted); font-size: 10px; }
 .explore-insight-card {
   display: flex;
   align-items: center;
@@ -1143,6 +1220,48 @@ nav {
 <script src="/nav.js?v=22"></script>
 <script src="/hero-banner.js"></script>
 
+<!-- LIVE WHALE TICKER STRIP -->
+<div class="whale-ticker-wrap" id="whaleTicker">
+  <div class="whale-ticker-label">🐋 LIVE</div>
+  <div class="whale-ticker-scroll" onclick="window.location='/signals'">
+    <div class="whale-ticker-inner" id="tickerInner">
+      <span class="ticker-item"><span class="ticker-time">Loading whale activity...</span></span>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  function fmtSize(n){if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return '$'+Math.round(n/1e3)+'k';return '$'+Math.round(n);}
+  function timeAgo(iso){var ms=Date.now()-new Date(iso).getTime(),s=Math.floor(ms/1000);if(s<60)return s+'s';var m=Math.floor(s/60);if(m<60)return m+'m';return Math.floor(m/60)+'h';}
+  function truncate(s,n){return s&&s.length>n?s.slice(0,n)+'…':s||'';}
+  function render(trades){
+    if(!trades||!trades.length){
+      document.getElementById('tickerInner').innerHTML='<span class="ticker-item"><span class="ticker-time">No whale activity in last 12h</span></span>';
+      return;
+    }
+    var html=trades.map(function(t){
+      var cls=t.wallet_class==='sharp'?'sharp':t.wallet_class==='good'?'good':'fade';
+      var href=t.slug?'/market/'+t.slug:'#';
+      return '<a class="ticker-item" href="'+href+'">'
+        +'<span class="ticker-class-'+cls+'">'+cls.toUpperCase()+'</span>'
+        +'<span class="ticker-side-'+(t.side||'').toLowerCase()+'">'+(t.side||'?')+'</span>'
+        +'<span class="ticker-q">'+truncate(t.question,60)+'</span>'
+        +'<span style="color:var(--text-soft);font-size:10px;">'+fmtSize(parseFloat(t.size||0))+'</span>'
+        +'<span class="ticker-time">'+timeAgo(t.created_at)+'</span>'
+        +'</a>';
+    }).join('');
+    // Duplicate for seamless loop
+    var inner=document.getElementById('tickerInner');
+    inner.innerHTML=html+html;
+  }
+  function load(){
+    fetch('/api/whale-ticker').then(function(r){return r.json();}).then(function(d){render(d.trades);}).catch(function(){});
+  }
+  load();
+  setInterval(load,60000);
+})();
+</script>
+
 <!-- Member Auth Modal -->
 <div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
   <div style="background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:16px;width:100%;max-width:400px;padding:32px;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
@@ -1194,38 +1313,38 @@ nav {
 </div>
 
 <div class="hero">
-  <div class="live-badge">Live Intelligence Feed</div>
-  <h1>Where smart money<br><span>is moving right now</span></h1>
-  <p>Signal-based edge detection for Polymarket.</p>
+  <div class="live-badge">Live Prediction Market Intelligence</div>
+  <h1>Where sharp money<br><span>is moving right now</span></h1>
+  <p>Live whale tracking, structural edge detection, and classified signal history on Polymarket.</p>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
-      <div class="stat-pill-label">Markets Tracked</div>
+      <div class="stat-pill-label">Active Markets</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statWhaleCapital">—</div>
-      <div class="stat-pill-label">Whale Capital</div>
+      <div class="stat-pill-label">Whale Capital 24h</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statLiveMarkets">—</div>
-      <div class="stat-pill-label">Whale Positions</div>
+      <div class="stat-pill-label">Sharp Wallets Active</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statAvgEdge">—</div>
-      <div class="stat-pill-label">Avg Edge Score</div>
+      <div class="stat-pill-label">Top Edge Score</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTopROI">—</div>
-      <div class="stat-pill-label">Top Max ROI</div>
+      <div class="stat-pill-label">Signal Win Rate</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statCommunities">—</div>
-      <div class="stat-pill-label">Live Signals</div>
+      <div class="stat-pill-label">Total Signals</div>
     </div>
   </div>
 </div>
@@ -1263,41 +1382,43 @@ nav {
 <!-- INTELLIGENCE CARDS -->
 <div style="max-width:1200px;margin:0 auto 24px;padding:0 40px">
   <div class="intel-grid-top" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
-    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/alpha-live" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
-      <div style="font-size:22px;margin-bottom:8px">🎯</div>
-      <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Edge scores, whale flow, depth signals — ranked by alpha</div>
-      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="alphaCardPreview">Top edge: loading...</div>
-    </a>
-    <a href="/terminal" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
-      <div style="font-size:22px;margin-bottom:8px">📊</div>
-      <div style="font-size:14px;font-weight:700;color:var(--accent-purple);margin-bottom:4px;letter-spacing:-0.3px">Data Terminal</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale capital, sentiment, movers, Fear &amp; Greed</div>
-      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="dataCardPreview">Loading stats...</div>
-    </a>
-    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">⚡</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Top edges ranked by score — whale signals, volume, momentum</div>
+      <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Top edges ranked by Edge Score — whale clusters, volume spikes, book depth</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="alphaCardPreview">Top edge: loading…</div>
+    </a>
+    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
+      <div style="font-size:22px;margin-bottom:8px">📡</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-green);margin-bottom:4px;letter-spacing:-0.3px">Signal Engine</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Structural bias detection, sharp wallet consensus, price-volume divergence</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="signalsCardPreview">Bias edge: loading…</div>
+    </a>
+    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
+      <div style="font-size:22px;margin-bottom:8px">🐋</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-purple);margin-bottom:4px;letter-spacing:-0.3px">Whale Tracker</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Top 50 Polymarket wallets tracked — CLV-classified, live positions, copy alerts</div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text-soft)" id="whaleCardPreview">Sharp wallets: loading…</div>
     </a>
   </div>
   <div class="intel-grid-bottom" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">📡</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Signals</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale moves, momentum, edge scores — live feed</div>
+    <a href="/feed" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:22px;margin-bottom:8px">💬</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-blue);margin-bottom:4px;letter-spacing:-0.3px">FLEX Feed</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Takes, reactions, track records — the social layer on top of Polymarket</div>
     </a>
-    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">⚡</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Spread Scanner</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">Live orderbook arb detection on crypto windows</div>
+    <a href="/predictors" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:22px;margin-bottom:8px">🏆</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-amber);margin-bottom:4px;letter-spacing:-0.3px">Leaderboard</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Top predictors ranked by FLEX Score — accuracy, ROI, sample, recency</div>
     </a>
-    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:22px;margin-bottom:8px">🐋</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Market Intel</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">$20M+ tracked across 50 whale wallets</div>
+    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-red);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(255,77,106,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:22px;margin-bottom:8px">📊</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent-red);margin-bottom:4px;letter-spacing:-0.3px">Spread Scanner</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Live bid/ask orderbook imbalance — detect who's accumulating before the move</div>
     </a>
   </div>
 </div>
@@ -3280,6 +3401,16 @@ function renderStatsTicker(stats) {
     document.getElementById('statLiveMarkets').textContent = '395';
     document.getElementById('statCommunities').textContent = '10';
   });
+  // Supplement with real platform-stats
+  fetch('/api/platform-stats').then(function(r){return r.json();}).then(function(d){
+    function fmtU(n){if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return '$'+Math.round(n/1e3)+'k';return '$'+Math.round(n);}
+    if(d.active_markets>0) document.getElementById('statTotalTrades').textContent=d.active_markets.toLocaleString();
+    if(d.whale_capital_24h>0){var c=document.getElementById('statWhaleCapital');if(c)c.textContent=fmtU(d.whale_capital_24h);}
+    if(d.sharp_wallets_active>0) document.getElementById('statLiveMarkets').textContent=d.sharp_wallets_active.toLocaleString();
+    if(d.top_edge_score){var e=document.getElementById('statAvgEdge');if(e)e.textContent=d.top_edge_score+'/100';}
+    if(d.total_signals>0){var s=document.getElementById('statCommunities');if(s)s.textContent=d.total_signals.toLocaleString();}
+    if(d.signal_win_rate!=null){var r2=document.getElementById('statTopROI');if(r2)r2.textContent=d.signal_win_rate+'%';}
+  }).catch(function(){});
 }
 
 function _whaleNickname(addr) {
@@ -4010,18 +4141,28 @@ async function handleExploreCopyCta() {
     if(a&&a.markets&&a.markets[0]){
       var m=a.markets[0];var s=m.edge_score||0;
       var el=document.getElementById('alphaCardPreview');
-      if(el) el.innerHTML=(s>75?'\uD83D\uDD25 ':'')+' Top edge: <span style="color:var(--gold);font-weight:700">'+s+'</span> — '+(m.question||'').substring(0,30);
-    }
-    var i=iR.status==='fulfilled'?iR.value:null;
-    if(i){
-      var el2=document.getElementById('dataCardPreview');
-      if(el2&&i.fear_greed){
-        var fg=i.fear_greed;
-        var fgc=fg.score>=60?'var(--accent-green)':fg.score<=40?'var(--accent-red)':'var(--accent-amber)';
-        el2.innerHTML='F&G: <span style="color:'+fgc+';font-weight:700">'+fg.score+'</span> '+fg.label;
-      }
+      if(el) el.innerHTML="Top edge: <span style=\"color:var(--gold);font-weight:700\">"+s+"</span> — "+(m.question||"").substring(0,50);
     }
   }catch(e){}
+})();
+(function(){
+  Promise.allSettled([
+    fetch('/api/edge/bias-calls').then(function(r){return r.json();}),
+    fetch('/api/platform-stats').then(function(r){return r.json();})
+  ]).then(function(results){
+    var bc=results[0].status==='fulfilled'?results[0].value:null;
+    var ps=results[1].status==='fulfilled'?results[1].value:null;
+    var sig=document.getElementById('signalsCardPreview');
+    if(sig&&bc&&bc.count>0){
+      var fc=bc.calls&&bc.calls[0];
+      if(fc) sig.innerHTML='Latest: <span style="color:var(--accent-red);font-weight:700">NO</span> @ '+Math.round(fc.yes_price*100)+'c — '+fc.edge_multiple+'x overpriced';
+      else sig.innerHTML='<span style="color:var(--accent-green);font-weight:700">'+bc.count+'</span> active bias calls';
+    }
+    var wh=document.getElementById('whaleCardPreview');
+    if(wh&&ps&&ps.sharp_wallets_active>0){
+      wh.innerHTML='<span style="color:var(--accent-green);font-weight:700">'+ps.sharp_wallets_active+'</span> sharp wallets active today';
+    }
+  }).catch(function(){});
 })();
 
 // ── Sharp of the Week ──────────────────────────────────────────────────────────
