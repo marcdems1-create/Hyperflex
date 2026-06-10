@@ -64,7 +64,7 @@ a{color:inherit;text-decoration:none}
 .mn-speaker-badge{padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.5px;color:#e8eaf6;background:rgba(10,12,30,0.75);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.08);white-space:nowrap}
 .mn-type-badge{padding:3px 8px;border-radius:4px;font-size:9px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:#6870a0;background:rgba(10,12,30,0.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.05);white-space:nowrap}
 .mn-card-date{position:absolute;top:10px;right:10px;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:600;color:#6870a0;background:rgba(10,12,30,0.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.05);white-space:nowrap}
-.mn-stance-badge{position:absolute;bottom:10px;left:10px;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid}
+.mn-stance-badge{position:absolute;bottom:10px;left:10px;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid}
 .mn-stance-badge.dovish{color:#8899ff;border-color:rgba(68,102,255,0.4);background:rgba(20,30,80,0.7)}
 .mn-stance-badge.hawkish{color:#ff8899;border-color:rgba(239,68,68,0.4);background:rgba(80,20,20,0.7)}
 .mn-stance-badge.neutral{color:#8890c0;border-color:rgba(58,64,96,0.5);background:rgba(20,22,40,0.7)}
@@ -72,9 +72,19 @@ a{color:inherit;text-decoration:none}
 .mn-stance-badge.hawkish_pivot{color:#ff8899;border-color:rgba(239,68,68,0.4);background:rgba(80,20,20,0.7)}
 
 /* Card body */
-.mn-card-body{padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px;flex:1}
-.mn-card-blurb{font-size:13px;color:#b0b4c8;line-height:1.7;font-style:normal}
+.mn-card-body{padding:20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.mn-card-blurb{font-size:14px;color:#c8ccd8;line-height:1.8;font-style:normal;font-weight:400;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
 .mn-card-blurb .stance-word{color:#aab;font-style:normal;font-weight:600}
+.mn-signal-row{display:flex;gap:20px;padding:10px 0;border-top:1px solid #1a1d2e;margin-top:4px;flex-wrap:wrap}
+.mn-signal-item{display:flex;flex-direction:column;gap:3px}
+.mn-signal-label{font-size:9px;font-weight:700;color:#3a4060;text-transform:uppercase;letter-spacing:1.5px;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
+.mn-signal-val{font-size:13px;font-weight:700;color:#8890c0;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
+.mn-signal-val.dovish{color:#6688ff}
+.mn-signal-val.hawkish{color:#ff6688}
+.mn-signal-val.neutral{color:#8890c0}
+.mn-signal-val.deescalatory{color:#44dd88}
+.mn-signal-val.hawkish_pivot{color:#ff6688}
+.mn-signal-val.highlight{color:#ffffff}
 .mn-card-markets{display:flex;flex-wrap:wrap;gap:6px}
 .mn-market-chip{font-size:10px;color:#3a4060;border:1px solid #1a1d2e;border-radius:4px;padding:3px 7px;transition:color 0.15s,border-color 0.15s;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;display:block}
 .mn-market-chip:hover{color:#7b9aff;border-color:rgba(68,102,255,0.4)}
@@ -145,7 +155,7 @@ var SPEAKER_IMAGES = {
   'waller':   '/images/speakers/waller.jpg',
   'trump':    '/images/speakers/trump.jpg',
   'brainard': '/images/speakers/brainard.jpg',
-  'cook':     '/images/speakers/cook.jpg',
+  'cook':     null,
   'default':  null
 };
 
@@ -258,6 +268,16 @@ function renderCard(ev, idx) {
   html += '<div class="mn-card-body">';
   if (blurb) {
     html += '<div class="mn-card-blurb">' + blurbWithStanceWord(blurb, stance) + '</div>';
+  }
+  // Signal row
+  var conf = (ev.dominant_confidence || '').toUpperCase();
+  var mktCount = ev.market_count || (ev.top_market ? 1 : 0);
+  if (stance && stance !== 'insufficient_signal' && stance !== 'ambiguous') {
+    html += '<div class="mn-signal-row">';
+    html += '<div class="mn-signal-item"><span class="mn-signal-label">STANCE</span><span class="mn-signal-val ' + esc(stance) + '">' + esc(stance.replace(/_/g,' ').toUpperCase()) + '</span></div>';
+    if (conf) html += '<div class="mn-signal-item"><span class="mn-signal-label">CONFIDENCE</span><span class="mn-signal-val">' + esc(conf) + '</span></div>';
+    if (mktCount) html += '<div class="mn-signal-item"><span class="mn-signal-label">OPEN MARKETS</span><span class="mn-signal-val highlight">' + esc(String(mktCount)) + '</span></div>';
+    html += '</div>';
   }
   if (markets.length) {
     html += '<div class="mn-card-markets">';
