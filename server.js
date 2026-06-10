@@ -16331,30 +16331,33 @@ async function _buildCardEnrichment(slug) {
 function getMarketsForEvent(event, screenerData, limit = 3) {
   if (!screenerData || !screenerData.length) return [];
   const domainKeywords = {
-    'fed_monetary_policy': ['fed', 'rate', 'fomc', 'inflation', 'federal reserve', 'interest', 'cut', 'hike', 'powell', 'warsh', 'jefferson', 'waller'],
-    'us_politics':         ['trump', 'president', 'congress', 'senate', 'election', 'white house', 'executive', 'tariff', 'iran', 'ukraine'],
-    'crypto':              ['bitcoin', 'btc', 'ethereum', 'crypto', 'defi', 'coinbase'],
-    'global_politics':     ['war', 'ceasefire', 'nato', 'russia', 'china', 'taiwan', 'israel', 'gaza'],
+    'fed_monetary_policy': ['fed', 'federal reserve', 'rate cut', 'rate hike', 'fomc', 'interest rate', 'inflation', 'monetary', 'basis point', 'powell', 'warsh', 'jefferson', 'waller', 'cook'],
+    'us_politics':         ['trump', 'president', 'congress', 'senate', 'tariff', 'iran', 'executive order', 'white house', 'republican', 'democrat', 'election', 'midterm'],
+    'crypto':              ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'sec', 'coinbase', 'binance'],
+    'global_politics':     ['ceasefire', 'russia', 'ukraine', 'china', 'taiwan', 'israel', 'gaza', 'nato', 'war', 'sanctions'],
   };
   const keywords = domainKeywords[event.domain] || [];
+  if (!keywords.length) return [];
   const speakerName = (event.speaker || '').toLowerCase();
   const scored = screenerData
-    .filter(m => m.question && m.slug)
+    .filter(m => m.question && m.slug && !m.closed)
     .map(m => {
       const q = m.question.toLowerCase();
       let score = 0;
-      if (speakerName && q.includes(speakerName)) score += 3;
-      keywords.forEach(kw => { if (q.includes(kw)) score += 1; });
+      if (speakerName && q.includes(speakerName)) score += 5;
+      keywords.forEach(kw => {
+        if (kw.includes(' ') && q.includes(kw)) score += 3;
+        else if (q.includes(kw)) score += 1;
+      });
       return { _m: m, _score: score };
     })
-    .filter(x => x._score > 0)
+    .filter(x => x._score >= 2)
     .sort((a, b) => b._score - a._score)
     .slice(0, limit);
   return scored.map(({ _m: m }) => ({
     question:    m.question,
     slug:        m.slug,
     yes_price:   m.yes_price != null ? m.yes_price : null,
-    volume:      m.volume || 0,
     whale_count: m.whale_count || 0,
   }));
 }
