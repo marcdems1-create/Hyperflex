@@ -16362,6 +16362,56 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
   }));
 }
 
+// GET /api/finance/markets — top 20 screener markets by edge score + volume
+let _financeMarketsCache = null;
+app.get('/api/finance/markets', (req, res) => {
+  if (_financeMarketsCache && (Date.now() - _financeMarketsCache.ts < 60000)) {
+    return res.json(_financeMarketsCache.data);
+  }
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  if (!screener.length) return res.json({ markets: [] });
+
+  const sorted = screener
+    .filter(m => m.question && m.slug)
+    .sort((a, b) => {
+      const edgeDiff = (b.edge_score || 0) - (a.edge_score || 0);
+      if (edgeDiff !== 0) return edgeDiff;
+      return (b.volume || 0) - (a.volume || 0);
+    })
+    .slice(0, 20);
+
+  const markets = sorted.map(m => {
+    const yp = m.yes_price != null ? m.yes_price : 0.5;
+    const wc = m.whale_count || 0;
+    let edge_signal = '';
+    if (yp < 0.10) {
+      edge_signal = 'Structural NO edge: markets at this price resolve YES only 1.1% of the time.';
+      if (wc >= 3) edge_signal += ` ${wc} sharp wallets positioned.`;
+    } else if (yp > 0.75) {
+      edge_signal = 'High conviction YES — sharp money consensus.';
+      if (wc >= 3) edge_signal += ` ${wc} sharp wallets positioned.`;
+    } else if (wc >= 3) {
+      edge_signal = `${wc} sharp wallets positioned.`;
+    }
+    return {
+      question:          m.question,
+      slug:              m.slug,
+      category:          m.category || '',
+      yes_price:         yp,
+      volume:            m.volume || 0,
+      whale_count:       wc,
+      total_whale_capital: m.total_whale_capital || 0,
+      edge_score:        m.edge_score || 0,
+      end_date:          m.end_date || null,
+      image:             m.image || m.event_image_url || null,
+      edge_signal,
+    };
+  });
+
+  _financeMarketsCache = { ts: Date.now(), data: { markets } };
+  res.json({ markets });
+});
+
 let _mentionsApiCache = null;
 const _mentionsApiCacheTtlMs = 60 * 1000; // 60s; per-slug data cached 5min upstream
 
@@ -16615,23 +16665,9 @@ async function _renderMentionsHero() {
 `;
 }
 
-app.get('/mentions', async (req, res) => {
-  try {
-    const tpl = _loadMentionsTemplate();
-    const heroHtml = '';
-    const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
-    // PR #142: prevent edge/browser HTML cache from pinning the
-    // pre-rebuild template. The page assembles a hero strip + a
-    // calendar section on each load — neither benefits from
-    // caching, since both reflect live Polymarket state.
-    res.set('Cache-Control', 'no-store');
-    res.set('Content-Security-Policy', "img-src 'self' data: https://*.wikimedia.org https://*.amazonaws.com https://polymarket-upload.s3.us-east-2.amazonaws.com;");
-    res.set('Content-Type', 'text/html; charset=utf-8').send(body);
-  } catch (err) {
-    console.error('[mentions-route]', err);
-    res.sendFile(path.join(__dirname, 'public', 'mentions.html'));
-  }
-});
+app.get('/finance', (req, res) => res.sendFile(path.join(__dirname, 'public', 'finance.html')));
+
+app.get('/mentions', (req, res) => res.redirect(301, '/finance'));
 
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 

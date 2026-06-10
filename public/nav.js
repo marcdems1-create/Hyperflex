@@ -355,7 +355,7 @@
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/mentions', label: 'Mentions' },
+    { href: '/finance', label: 'Finance' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
@@ -1210,7 +1210,7 @@ window.showSkeletons = function(containerId, count, type) {
       { label: 'Home',     icon: '⌂',  href: '/' },
       { label: 'Feed',     icon: '◈',  href: '/feed' },
       { label: 'Alpha',    icon: '⚡', href: '/alpha-live' },
-      { label: 'Mentions', icon: '◎',  href: '/mentions' },
+      { label: 'Finance', icon: '◎',  href: '/finance' },
       { label: 'Profile',  icon: '👤', href: null }, // resolved at runtime
     ];
 

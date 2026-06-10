@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Intelligence — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0c;color:#e8eaf6;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+#nav-root{position:relative;z-index:200}
+
+/* HEADER */
+.fi-header{padding:28px 36px 24px;border-bottom:1px solid #111116}
+.fi-header-inner{max-width:1100px;margin:0 auto}
+.fi-label{font-size:10px;color:#3a4060;letter-spacing:3px;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+.fi-title{font-size:26px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:-0.01em}
+.fi-subtitle{font-size:13px;color:#3a4060;line-height:1.5}
+@media(max-width:768px){.fi-header{padding:20px 16px 18px}.fi-title{font-size:22px}}
+
+/* EDGE BANNER */
+.fi-edge-banner{background:#0f0f14;border-bottom:1px solid rgba(245,158,11,0.2);padding:12px 36px}
+.fi-edge-banner-inner{max-width:1100px;margin:0 auto;font-size:12px;color:#8890a0;line-height:1.6}
+.fi-edge-banner span{color:#f59e0b;font-weight:600}
+@media(max-width:768px){.fi-edge-banner{padding:10px 16px}.fi-edge-banner-inner{font-size:11px}}
+
+/* CONTENT */
+.fi-content{max-width:1100px;margin:0 auto;padding:24px 36px 80px}
+@media(max-width:768px){.fi-content{padding:16px 16px 72px}}
+
+/* FILTER RAIL */
+.fi-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;align-items:center}
+.fi-pill{appearance:none;background:transparent;border:1px solid #1a1a22;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:#4a5280;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:inherit}
+.fi-pill:hover{color:#7788cc;border-color:#252840}
+.fi-pill.active{background:rgba(58,64,128,0.12);border-color:#3a4080;color:#7788cc}
+.fi-pill.strong-only.active{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.4);color:#22c55e}
+@media(max-width:480px){.fi-filters{gap:6px}.fi-pill{padding:4px 10px;font-size:10px}}
+
+/* GRID */
+.fi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+@media(max-width:680px){.fi-grid{grid-template-columns:1fr}}
+
+/* CARD */
+.fi-card{background:#111116;border:1px solid #1a1a22;border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color 0.15s,transform 0.15s;animation:fadeUp 0.4s ease both;display:flex;flex-direction:column}
+.fi-card:hover{border-color:#2a2a40;transform:translateY(-2px)}
+.fi-card.strong-edge{border-color:rgba(245,158,11,0.25)}
+.fi-card.strong-edge:hover{border-color:rgba(245,158,11,0.5)}
+
+/* CATEGORY BAR */
+.fi-cat-bar{height:3px;width:100%;flex-shrink:0}
+.fi-cat-bar.fed{background:#6688ff}
+.fi-cat-bar.crypto{background:#f59e0b}
+.fi-cat-bar.politics{background:#ef4444}
+.fi-cat-bar.macro{background:#22c55e}
+
+/* CARD IMAGE */
+.fi-card-img-wrap{position:relative;height:140px;overflow:hidden;background:#16161e}
+.fi-card-img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.3s ease}
+.fi-card:hover .fi-card-img{transform:scale(1.03)}
+.fi-card-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,#111116 100%)}
+
+/* EDGE BADGE */
+.fi-edge-badge{position:absolute;top:10px;right:10px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(10,10,12,0.85);backdrop-filter:blur(4px)}
+.fi-edge-badge.strong{color:#22c55e;border:1px solid rgba(34,197,94,0.4)}
+.fi-edge-badge.moderate{color:#f59e0b;border:1px solid rgba(245,158,11,0.35)}
+.fi-edge-badge.none{color:#444;border:1px solid #222}
+
+/* CARD BODY */
+.fi-card-body{padding:14px 16px;flex:1;display:flex;flex-direction:column}
+.fi-card-question{font-size:14px;font-weight:500;color:#d0d4e8;line-height:1.45;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* PRICE ROW */
+.fi-price-row{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.fi-yes{font-size:20px;font-weight:700;color:#22c55e}
+.fi-yes.low{color:#ef4444}
+.fi-yes.mid{color:#f59e0b}
+.fi-price-label{font-size:10px;color:#3a4060;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.fi-vol{font-size:11px;color:#4a5280;margin-left:auto}
+.fi-vol span{color:#6870a0;font-weight:600}
+
+/* STATS ROW */
+.fi-stats-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.fi-stat{font-size:11px;color:#4a5280;display:flex;align-items:center;gap:4px}
+.fi-stat .val{color:#6870a0;font-weight:600}
+.fi-stat .whale-val{color:#a78bfa;font-weight:600}
+
+/* SIGNAL */
+.fi-signal{font-size:11px;color:#6870a0;line-height:1.55;padding-top:10px;border-top:1px solid #1a1a22;margin-top:auto}
+.fi-signal .hl{color:#f59e0b}
+
+/* STATES */
+.fi-loading{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
+.fi-empty{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
+
+/* COUNT */
+.fi-count{font-size:11px;color:#2a3050;margin-bottom:12px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+
+<div class="fi-header">
+  <div class="fi-header-inner">
+    <div class="fi-label">FINANCE INTELLIGENCE</div>
+    <div class="fi-title">Where's the edge?</div>
+    <div class="fi-subtitle">Highest volume markets ranked by structural edge and whale positioning.</div>
+  </div>
+</div>
+
+<div class="fi-edge-banner">
+  <div class="fi-edge-banner-inner">
+    Polymarket markets resolve NO at <span>4x</span> the rate of YES. Markets priced under <span>10¢</span> YES resolve YES only <span>1.1%</span> of the time. Sharp money exploits this bias.
+  </div>
+</div>
+
+<div class="fi-content">
+  <div class="fi-filters" id="filterRail">
+    <button class="fi-pill active" data-filter="all">ALL</button>
+    <button class="fi-pill" data-filter="fed">FED · RATES</button>
+    <button class="fi-pill" data-filter="crypto">CRYPTO</button>
+    <button class="fi-pill" data-filter="politics">POLITICS</button>
+    <button class="fi-pill" data-filter="macro">MACRO</button>
+    <button class="fi-pill strong-only" data-filter="strong">STRONG EDGE ONLY</button>
+  </div>
+  <div class="fi-count" id="mktCount"></div>
+  <div class="fi-grid" id="grid">
+    <div class="fi-loading">LOADING MARKETS…</div>
+  </div>
+</div>
+
+<script src="/nav.js"></script>
+<script>
+(function() {
+  var allMarkets = [];
+  var activeFilter = 'all';
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtVol(v) {
+    if (!v) return '$0';
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k';
+    return '$' + Math.round(v);
+  }
+
+  function catClass(cat) {
+    var c = (cat || '').toLowerCase();
+    if (/fed|rate|fomc|inflation|monetary|interest|federal reserve/.test(c)) return 'fed';
+    if (/crypto|bitcoin|btc|ethereum|eth|defi|coinbase|binance|solana/.test(c)) return 'crypto';
+    if (/polit|election|trump|president|congress|senate|democrat|republican/.test(c)) return 'politics';
+    return 'macro';
+  }
+
+  function matchesFilter(m, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'strong') return (m.edge_score || 0) >= 70;
+    var cat = catClass(m.category);
+    return cat === filter;
+  }
+
+  function yesClass(yp) {
+    if (yp < 0.15) return 'low';
+    if (yp < 0.5) return 'mid';
+    return '';
+  }
+
+  function edgeBadge(score) {
+    if (score >= 70) return { cls: 'strong', label: 'STRONG EDGE' };
+    if (score >= 40) return { cls: 'moderate', label: 'MODERATE EDGE' };
+    return { cls: 'none', label: 'NO EDGE' };
+  }
+
+  function renderCard(m, idx) {
+    var yp = m.yes_price != null ? m.yes_price : 0.5;
+    var yesPct = Math.round(yp * 100);
+    var cat = catClass(m.category);
+    var badge = edgeBadge(m.edge_score || 0);
+    var isStrong = (m.edge_score || 0) >= 70;
+    var delay = Math.min(idx * 0.05, 0.5);
+
+    var imgHtml = '';
+    if (m.image) {
+      imgHtml = '<img class="fi-card-img" src="' + esc(m.image) + '" loading="lazy" alt="" ' +
+        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161e,#0a0a0c)\';">';
+    }
+
+    var signalHtml = '';
+    if (m.edge_signal) {
+      var sig = esc(m.edge_signal)
+        .replace(/(1\.1%)/g, '<span class="hl">$1</span>')
+        .replace(/(\d+ sharp wallets)/g, '<span class="hl">$1</span>');
+      signalHtml = '<div class="fi-signal">' + sig + '</div>';
+    }
+
+    var whaleStat = m.whale_count > 0
+      ? '<div class="fi-stat">&#x1F40B; <span class="whale-val">' + m.whale_count + ' whale' + (m.whale_count > 1 ? 's' : '') + '</span></div>'
+      : '';
+
+    return '<a class="fi-card' + (isStrong ? ' strong-edge' : '') + '" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
+      '<div class="fi-cat-bar ' + cat + '"></div>' +
+      '<div class="fi-card-img-wrap">' +
+        imgHtml +
+        '<div class="fi-card-img-grad"></div>' +
+        '<div class="fi-edge-badge ' + badge.cls + '">' + badge.label + '</div>' +
+      '</div>' +
+      '<div class="fi-card-body">' +
+        '<div class="fi-card-question">' + esc(m.question) + '</div>' +
+        '<div class="fi-price-row">' +
+          '<div><div class="fi-yes ' + yesClass(yp) + '">' + yesPct + '&#162;</div>' +
+          '<div class="fi-price-label">YES</div></div>' +
+          '<div class="fi-vol">Vol <span>' + fmtVol(m.volume) + '</span></div>' +
+        '</div>' +
+        '<div class="fi-stats-row">' +
+          whaleStat +
+          '<div class="fi-stat">Edge <span class="val">' + Math.round(m.edge_score || 0) + '</span></div>' +
+        '</div>' +
+        signalHtml +
+      '</div>' +
+    '</a>';
+  }
+
+  function render() {
+    var visible = allMarkets.filter(function(m) { return matchesFilter(m, activeFilter); });
+    var count = document.getElementById('mktCount');
+    var grid = document.getElementById('grid');
+    if (count) count.textContent = visible.length + ' market' + (visible.length !== 1 ? 's' : '');
+    if (!visible.length) {
+      grid.innerHTML = '<div class="fi-empty">No markets match this filter.</div>';
+      return;
+    }
+    grid.innerHTML = visible.map(renderCard).join('');
+  }
+
+  document.getElementById('filterRail').addEventListener('click', function(e) {
+    var pill = e.target.closest('.fi-pill');
+    if (!pill) return;
+    document.querySelectorAll('.fi-pill').forEach(function(p) { p.classList.remove('active'); });
+    pill.classList.add('active');
+    activeFilter = pill.dataset.filter;
+    render();
+  });
+
+  fetch('/api/finance/markets')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allMarkets = (data && Array.isArray(data.markets)) ? data.markets : [];
+      render();
+    })
+    .catch(function() {
+      document.getElementById('grid').innerHTML = '<div class="fi-empty">Could not load markets.</div>';
+    });
+})();
+</script>
+</body>
+</html>
