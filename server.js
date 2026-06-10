@@ -16588,6 +16588,7 @@ app.get('/mentions', async (req, res) => {
     // calendar section on each load — neither benefits from
     // caching, since both reflect live Polymarket state.
     res.set('Cache-Control', 'no-store');
+    res.set('Content-Security-Policy', "img-src 'self' data: https://*.wikimedia.org https://*.amazonaws.com https://polymarket-upload.s3.us-east-2.amazonaws.com;");
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-route]', err);
@@ -16609,6 +16610,7 @@ app.get('/mentions/archive', async (req, res) => {
     const tpl = _loadMentionsTemplate();
     const heroHtml = '';
     const body = tpl.replace('<!--HERO_HTML-->', heroHtml);
+    res.set('Content-Security-Policy', "img-src 'self' data: https://*.wikimedia.org https://*.amazonaws.com https://polymarket-upload.s3.us-east-2.amazonaws.com;");
     res.set('Content-Type', 'text/html; charset=utf-8').send(body);
   } catch (err) {
     console.error('[mentions-archive-route]', err);
