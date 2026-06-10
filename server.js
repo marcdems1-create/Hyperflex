@@ -16351,7 +16351,7 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
       });
       return { _m: m, _score: score };
     })
-    .filter(x => x._score >= 2)
+    .filter(x => x._score >= 1)
     .sort((a, b) => b._score - a._score)
     .slice(0, limit);
   return scored.map(({ _m: m }) => ({
