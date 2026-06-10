@@ -36035,7 +36035,7 @@ app.get('/api/img-proxy', async (req, res) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 8000);
     let r;
-    try { r = await _nodeFetch(url, { signal: ctrl.signal }); }
+    try { r = await _nodeFetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Hyperflex/1.0; +https://hyperflex.network)' } }); }
     finally { clearTimeout(t); }
     if (!r.ok) return res.status(r.status).end();
     const ct = r.headers.get('content-type') || 'image/jpeg';
