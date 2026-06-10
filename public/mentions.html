@@ -86,8 +86,16 @@ a{color:inherit;text-decoration:none}
 .mn-signal-val.hawkish_pivot{color:#ff6688}
 .mn-signal-val.highlight{color:#ffffff}
 .mn-card-markets{display:flex;flex-wrap:wrap;gap:6px}
-.mn-market-chip{font-size:10px;color:#3a4060;border:1px solid #1a1d2e;border-radius:4px;padding:3px 7px;transition:color 0.15s,border-color 0.15s;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;display:block}
-.mn-market-chip:hover{color:#7b9aff;border-color:rgba(68,102,255,0.4)}
+.mn-markets-section{margin-top:12px;padding-top:12px;border-top:1px solid #1a1d2e}
+.mn-markets-label{font-size:9px;font-weight:700;color:#3a4060;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
+.mn-market-card{display:block;background:#0d0f1a;border:1px solid #1a1d2e;border-radius:8px;padding:10px 12px;margin-bottom:6px;text-decoration:none;transition:border-color 0.15s}
+.mn-market-card:hover{border-color:#3a4080}
+.mn-market-question{font-size:12px;color:#8890c0;line-height:1.5;margin-bottom:6px;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
+.mn-market-prices{display:flex;align-items:center;gap:10px}
+.mn-price{font-size:12px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
+.mn-price.yes{color:#22c55e}
+.mn-price.no{color:#ef4444}
+.mn-whale-tag{font-size:10px;color:#a78bfa;margin-left:auto;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif}
 .mn-card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid #1a1d2e;margin-top:auto}
 .mn-card-domain{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6870a0;font-weight:600}
 .mn-card-view{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#4a5280;font-weight:600;transition:color 0.15s}
@@ -279,11 +287,23 @@ function renderCard(ev, idx) {
     if (mktCount) html += '<div class="mn-signal-item"><span class="mn-signal-label">OPEN MARKETS</span><span class="mn-signal-val highlight">' + esc(String(mktCount)) + '</span></div>';
     html += '</div>';
   }
-  if (markets.length) {
-    html += '<div class="mn-card-markets">';
-    markets.forEach(function(m) {
-      var href = m.slug ? '/market/' + esc(m.slug) : '#';
-      html += '<a class="mn-market-chip" href="' + href + '">' + esc(m.question) + '</a>';
+  var linkedMarkets = Array.isArray(ev.linked_markets) ? ev.linked_markets : [];
+  if (linkedMarkets.length) {
+    html += '<div class="mn-markets-section">';
+    html += '<div class="mn-markets-label">Live Markets</div>';
+    linkedMarkets.forEach(function(m) {
+      var yesPct  = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      var noPct   = yesPct != null ? 100 - yesPct : null;
+      html += '<a class="mn-market-card" href="/market/' + esc(m.slug) + '">';
+      html += '<div class="mn-market-question">' + esc(m.question) + '</div>';
+      html += '<div class="mn-market-prices">';
+      if (yesPct != null) {
+        html += '<span class="mn-price yes">YES ' + yesPct + '&#162;</span>';
+        html += '<span class="mn-price no">NO ' + noPct + '&#162;</span>';
+      }
+      if (m.whale_count > 0) html += '<span class="mn-whale-tag">&#x1F40B; ' + m.whale_count + ' whales</span>';
+      html += '</div>';
+      html += '</a>';
     });
     html += '</div>';
   }

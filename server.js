@@ -16328,6 +16328,37 @@ async function _buildCardEnrichment(slug) {
   return empty;
 }
 
+function getMarketsForEvent(event, screenerData, limit = 3) {
+  if (!screenerData || !screenerData.length) return [];
+  const domainKeywords = {
+    'fed_monetary_policy': ['fed', 'rate', 'fomc', 'inflation', 'federal reserve', 'interest', 'cut', 'hike', 'powell', 'warsh', 'jefferson', 'waller'],
+    'us_politics':         ['trump', 'president', 'congress', 'senate', 'election', 'white house', 'executive', 'tariff', 'iran', 'ukraine'],
+    'crypto':              ['bitcoin', 'btc', 'ethereum', 'crypto', 'defi', 'coinbase'],
+    'global_politics':     ['war', 'ceasefire', 'nato', 'russia', 'china', 'taiwan', 'israel', 'gaza'],
+  };
+  const keywords = domainKeywords[event.domain] || [];
+  const speakerName = (event.speaker || '').toLowerCase();
+  const scored = screenerData
+    .filter(m => m.question && m.slug)
+    .map(m => {
+      const q = m.question.toLowerCase();
+      let score = 0;
+      if (speakerName && q.includes(speakerName)) score += 3;
+      keywords.forEach(kw => { if (q.includes(kw)) score += 1; });
+      return { _m: m, _score: score };
+    })
+    .filter(x => x._score > 0)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit);
+  return scored.map(({ _m: m }) => ({
+    question:    m.question,
+    slug:        m.slug,
+    yes_price:   m.yes_price != null ? m.yes_price : null,
+    volume:      m.volume || 0,
+    whale_count: m.whale_count || 0,
+  }));
+}
+
 let _mentionsApiCache = null;
 const _mentionsApiCacheTtlMs = 60 * 1000; // 60s; per-slug data cached 5min upstream
 
@@ -16351,10 +16382,13 @@ app.get('/api/mentions', async (req, res) => {
     // path (no registry entry, no fetch). Registry entries hit the
     // upstream 5min cache. Total cost on a cold response: ~2 gamma
     // walks (one per registry entry) regardless of row count.
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
     const enriched = [];
     for (const r of rows) {
       const ext = await _buildCardEnrichment(r.slug);
-      enriched.push(Object.assign({}, r, ext));
+      const ev = Object.assign({}, r, ext);
+      ev.linked_markets = getMarketsForEvent(ev, screenerData, 3);
+      enriched.push(ev);
     }
     const payload = { events: enriched };
     _mentionsApiCache = { value: payload, expiresAt: Date.now() + _mentionsApiCacheTtlMs };
