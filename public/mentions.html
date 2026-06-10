@@ -48,17 +48,16 @@ a{color:inherit;text-decoration:none}
 @media(max-width:480px){.mn-filters{gap:6px}.mn-pill{padding:4px 10px;font-size:10px}}
 
 /* GRID */
-.mn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-@media(max-width:480px){.mn-grid{grid-template-columns:1fr}}
+.mn-grid{display:flex;flex-direction:column}
 
 /* CARD */
-.mn-card{background:#0f1120;border:1px solid #1a1d2e;border-radius:14px;overflow:hidden;transition:transform 0.2s ease,border-color 0.2s ease;opacity:0;animation:fadeUp 0.5s ease both;display:flex;flex-direction:column}
+.mn-card{background:#0f1120;border:1px solid #1a1d2e;border-radius:14px;overflow:hidden;transition:transform 0.2s ease,border-color 0.2s ease;opacity:0;animation:fadeUp 0.5s ease both;display:flex;flex-direction:column;max-width:100%;margin-bottom:12px}
 .mn-card:hover{transform:translateY(-2px);border-color:#252840}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* Card image */
-.mn-card-img-wrap{position:relative;height:160px;overflow:hidden;flex-shrink:0}
-.mn-card-img{width:100%;height:100%;object-fit:cover;object-position:top center;filter:brightness(0.45);transition:transform 0.4s ease;display:block}
+.mn-card-img-wrap{position:relative;height:160px;overflow:hidden;flex-shrink:0;background:#1a1a2e}
+.mn-card-img{width:100%;height:100%;object-fit:cover;object-position:top center;filter:brightness(0.5);transition:transform 0.4s ease;display:block}
 .mn-card:hover .mn-card-img{transform:scale(1.03)}
 .mn-card-img-grad{position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(transparent,#0f1120);pointer-events:none}
 .mn-card-badges-tl{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:calc(100% - 90px)}
@@ -242,7 +241,7 @@ function renderCard(ev, idx) {
   var html = '<div class="mn-card" style="animation-delay:' + delay + 's">';
 
   html += '<div class="mn-card-img-wrap">';
-  html += '<img class="mn-card-img" src="' + esc(imgSrc) + '" alt="' + esc(speaker) + '" loading="lazy" onerror="this.src=\'' + SPEAKER_IMAGES['default'] + '\'">';
+  html += '<img class="mn-card-img" src="' + esc(imgSrc) + '" alt="' + esc(speaker) + '" loading="lazy" crossorigin="anonymous" onerror="this.src=\'' + SPEAKER_IMAGES['default'] + '\'">';
   html += '<div class="mn-card-img-grad"></div>';
   html += '<div class="mn-card-badges-tl">';
   html += '<span class="mn-speaker-badge">' + esc(speaker) + '</span>';
