@@ -27,7 +27,7 @@ a{color:inherit;text-decoration:none}
 
 /* WARSH HERO */
 .warsh-hero{position:relative;width:100%;height:220px;border-radius:14px;overflow:hidden;cursor:pointer;margin-bottom:24px;animation:fadeUp 0.5s ease 0.1s both}
-.warsh-hero-img{position:absolute;inset:0;background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Kevin_Warsh_official_portrait.jpg/800px-Kevin_Warsh_official_portrait.jpg');background-size:cover;background-position:top center;filter:brightness(0.45);transition:transform 0.4s ease}
+.warsh-hero-img{position:absolute;inset:0;background-image:url('/api/img-proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2Fthumb%2F9%2F95%2FKevin_Warsh_official_portrait.jpg%2F800px-Kevin_Warsh_official_portrait.jpg');background-size:cover;background-position:top center;filter:brightness(0.45);transition:transform 0.4s ease}
 .warsh-hero:hover .warsh-hero-img{transform:scale(1.02)}
 .warsh-hero-grad1{position:absolute;inset:0;background:linear-gradient(180deg,transparent 20%,#0d0f1a 100%)}
 .warsh-hero-grad2{position:absolute;inset:0;background:linear-gradient(135deg,rgba(68,102,255,0.3),transparent 60%)}
@@ -139,14 +139,14 @@ a{color:inherit;text-decoration:none}
 
 <script>
 var SPEAKER_IMAGES = {
-  'powell':   'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Jerome_Powell_official_portrait.jpg/800px-Jerome_Powell_official_portrait.jpg',
-  'warsh':    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Kevin_Warsh_official_portrait.jpg/800px-Kevin_Warsh_official_portrait.jpg',
-  'jefferson':'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Philip_Jefferson_official_portrait.jpg/800px-Philip_Jefferson_official_portrait.jpg',
-  'waller':   'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Christopher_Waller_official_portrait.jpg/800px-Christopher_Waller_official_portrait.jpg',
-  'trump':    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Donald_Trump_official_portrait_%282025%29.jpg/800px-Donald_Trump_official_portrait_%282025%29.jpg',
-  'brainard': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Lael_Brainard_official_portrait.jpg/800px-Lael_Brainard_official_portrait.jpg',
-  'cook':     'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Lisa_Cook_official_portrait.jpg/800px-Lisa_Cook_official_portrait.jpg',
-  'default':  'https://upload.wikimedia.org/wikipedia/commons/4/4e/Federal_Reserve.jpg'
+  'powell':   '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Jerome_Powell_official_portrait.jpg/800px-Jerome_Powell_official_portrait.jpg',
+  'warsh':    '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Kevin_Warsh_official_portrait.jpg/800px-Kevin_Warsh_official_portrait.jpg',
+  'jefferson':'/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Philip_Jefferson_official_portrait.jpg/800px-Philip_Jefferson_official_portrait.jpg',
+  'waller':   '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Christopher_Waller_official_portrait.jpg/800px-Christopher_Waller_official_portrait.jpg',
+  'trump':    '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Donald_Trump_official_portrait_%282025%29.jpg/800px-Donald_Trump_official_portrait_%282025%29.jpg',
+  'brainard': '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Lael_Brainard_official_portrait.jpg/800px-Lael_Brainard_official_portrait.jpg',
+  'cook':     '/api/img-proxy?url=https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Lisa_Cook_official_portrait.jpg/800px-Lisa_Cook_official_portrait.jpg',
+  'default':  null
 };
 
 var DOMAIN_LABELS = {
@@ -167,8 +167,8 @@ function esc(s) {
 }
 
 function speakerImg(speaker) {
-  if (!speaker) return SPEAKER_IMAGES['default'];
-  return SPEAKER_IMAGES[speaker.toLowerCase().trim()] || SPEAKER_IMAGES['default'];
+  if (!speaker) return null;
+  return SPEAKER_IMAGES[speaker.toLowerCase().trim()] || null;
 }
 
 function domainLabel(domain) {
@@ -241,7 +241,9 @@ function renderCard(ev, idx) {
   var html = '<div class="mn-card" style="animation-delay:' + delay + 's">';
 
   html += '<div class="mn-card-img-wrap">';
-  html += '<img class="mn-card-img" src="' + esc(imgSrc) + '" alt="' + esc(speaker) + '" loading="lazy" crossorigin="anonymous" onerror="this.src=\'' + SPEAKER_IMAGES['default'] + '\'">';
+  if (imgSrc) {
+    html += '<img class="mn-card-img" src="' + esc(imgSrc) + '" alt="' + esc(speaker) + '" loading="lazy" onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#1a1d2e,#0d0f1a)\';">';
+  }
   html += '<div class="mn-card-img-grad"></div>';
   html += '<div class="mn-card-badges-tl">';
   html += '<span class="mn-speaker-badge">' + esc(speaker) + '</span>';
