@@ -426,6 +426,78 @@ footer{
   .skel-line{height:12px;}
   .skel-pills{height:28px;}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DESKTOP LAYOUT BALANCE (≥768px) — center the page in a 1200px
+   column, rebuild the hero as a 2-column card, tame rail dead-space.
+   Mobile (<768px) is intentionally untouched: nothing here applies.
+   ═══════════════════════════════════════════════════════════════ */
+@media(min-width:768px){
+  /* 1 ── center every content section in a 1200px column ── */
+  .rows-wrap,
+  .home-topics,
+  #editTopicsBar,
+  #welcomeBackPanel,
+  #totdSection,
+  #daily-challenge,
+  footer{
+    max-width:1200px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  /* these banners carry an inline max-width:1400 — pull them to 1200 to match */
+  #quizBannerWrap,
+  #streakRiskBanner,
+  #tierProgressWrap{
+    max-width:1200px !important;
+  }
+
+  /* 2 ── HERO: contained 2-col card, capped height, image fills the right ── */
+  #hero{
+    max-width:1200px;
+    margin:24px auto 0;
+    height:380px;            /* was 100vh — no more full-screen-third */
+    min-height:0;            /* override base min-height:600px */
+    max-height:380px;        /* override base max-height:900px */
+    align-items:center;      /* vertically center the text column */
+    border:1px solid var(--border);
+    border-radius:16px;
+    overflow:hidden;
+  }
+  #hero-bg{
+    left:45%;                /* image occupies the right 55% (was full-bleed) */
+    background-position:center;
+  }
+  #hero-bg::after{
+    /* dark on the image's left edge → blends into the text panel; clear on the right */
+    background:linear-gradient(90deg,
+      var(--bg) 0%,
+      rgba(14,14,21,.55) 26%,
+      rgba(14,14,21,0) 70%);
+  }
+  .hero-content{
+    width:46%;
+    max-width:46%;
+    padding:0 44px;          /* drops the base 72px bottom pad (now centered) */
+  }
+  #hero-title{
+    font-size:clamp(28px,2.6vw,40px);  /* fits the narrower column + shorter card */
+    margin-bottom:14px;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+  }
+  .hero-meta{margin-bottom:16px;}
+  .hero-price{font-size:36px;margin-bottom:20px;}
+  .hero-dots{bottom:16px;right:20px;}
+
+  /* 3 ── section headers comfortable on desktop ── */
+  .row-title{font-size:18px;}
+}
+
+/* empty-rail note — a single line instead of a bare label over blank space */
+.row-empty{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  letter-spacing:.04em;padding:14px 0 16px;white-space:nowrap;
+}
 </style>
 </head>
 <body>
@@ -1107,6 +1179,30 @@ window.scrollRow = function(btn,dir){
   if(row) row.scrollBy({left:dir*480,behavior:'smooth'});
 };
 
+/* ── empty-rail handling ── never leave a bare section label over blank space ── */
+function rowHasCards(row){
+  return !!row && row.querySelectorAll(':scope > *:not(.sk)').length > 0;
+}
+/* Show a one-line note in a row that came back empty (instead of nothing). */
+window.setRowPlaceholder = function(rowId, msg){
+  var row = document.getElementById(rowId);
+  if(!row || rowHasCards(row)) return;
+  row.innerHTML = '<div class="row-empty">'+msg+'</div>';
+  row.setAttribute('data-placeholder','1');
+};
+/* Hide any rail whose data never arrived (skeleton-only / empty), so it doesn't
+   render as a title floating over dead space. Rows with a placeholder are kept. */
+window.sweepEmptyRows = function(){
+  var sections = document.querySelectorAll('.rows-wrap .row-section');
+  for(var i=0;i<sections.length;i++){
+    var section = sections[i];
+    if(section.style.display === 'none') continue;          // already hidden on purpose
+    var row = section.querySelector('.row-scroll');
+    if(!row || row.getAttribute('data-placeholder') === '1') continue;
+    if(!rowHasCards(row)) section.style.display = 'none';
+  }
+};
+
 /* ── build card ── */
 function buildCard(m, rank, pillClass, pillLabel){
   var slug   = getSlug(m);
@@ -1307,7 +1403,7 @@ function loadGamma(){
 Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   var carousel = results[0], gamma = results[1];
   var raw = carousel.length>=3 ? carousel : gamma;
-  if(!raw.length) return;
+  if(!raw.length){ if(window.sweepEmptyRows) window.sweepEmptyRows(); return; }
   function isValidMarket(m){var p=getYesPrice(m);return p==null||(p>0.01&&p<0.99);}
   var primary = raw.filter(isValidMarket);
   if(!primary.length) primary = raw;
@@ -1340,6 +1436,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     return buildCard(m,null,'mcard-pill-whale','WHALE');
   }).join('');
   setTimeout(function(){patchImages(rowWhale);},0);
+  window.setRowPlaceholder && window.setRowPlaceholder('rowWhale','No whale moves in the last 24h');
 
   /* featured wide — 6 */
   var cats = ['US POLITICS','SPORTS','CRYPTO','ELECTIONS','MACRO','AI'];
@@ -1355,6 +1452,9 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     return buildCard(m,i+1,'mcard-pill-live','● LIVE');
   }).join('');
   setTimeout(function(){patchImages(rowVolume);},0);
+
+  /* hide any always-on rail that ended up empty (whale keeps its placeholder) */
+  if(window.sweepEmptyRows) window.sweepEmptyRows();
 
   /* wire countdown timers for cards with end_date */
   setTimeout(function(){

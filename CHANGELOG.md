@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-06-10 — Session (Claude Code)
+
+### fix: desktop homepage layout — center in 1200px, rebuild hero, kill rail dead-space
+- **File:** `public/home.html` ONLY (this is the file served at `/` — `server.js:734` `res.sendFile('home.html')`; the CLAUDE.md file-map line calling `explore.html` the landing page is **stale**). feed.html untouched.
+- **Problem:** on wide monitors the page stretched edge-to-edge — full-`100vh` hero with text crammed bottom-left over a mostly-empty image, horizontal rails ending ~60% across leaving dead right margin, and a `Whale Moves` rail rendering as a bare label with no cards.
+- **What changed (all desktop-only, inside a single `@media(min-width:768px)` block appended to the main `<style>`):**
+  1. **Centering** — `max-width:1200px;margin:auto` on `.rows-wrap` (wraps every rail + bestOpp), `.home-topics`, `#editTopicsBar`, `#welcomeBackPanel`, `#totdSection`, `#daily-challenge`, `footer`; the three inline `max-width:1400` banners (`#quizBannerWrap`/`#streakRiskBanner`/`#tierProgressWrap`) pulled to 1200 via `!important`. Marquees (`nav`, `#ticker`, `#alphaTape`, `.home-value-strip`) deliberately stay full-bleed.
+  2. **Hero** — `#hero` 100vh→`height:380px` (override base `min-height:600px`/`max-height:900px`), contained 1200px card, `align-items:center`. `#hero-bg{left:45%}` so the market image fills the right 55%; `::after` gradient reworked to fade the image's left edge into the dark text panel. `.hero-content{width:46%}`, title clamp lowered to `40px` max + 3-line clamp to fit the shorter/narrower card.
+  3. **Empty rails** — new JS helpers `rowHasCards` / `window.setRowPlaceholder` / `window.sweepEmptyRows` (defined by `scrollRow`). Whale Moves now shows a one-line `No whale moves in the last 24h` placeholder when empty; the sweep hides any always-on rail (Hot/Featured/Volume) that came back skeleton-only on a data failure. Called after the synchronous row renders + on the `!raw.length` early-return.
+- **Do NOT break:** all layout changes are gated to `min-width:768px` — mobile (`@media(max-width:768px)` at the hero block) is untouched by design. Don't move the empty-rail JS out of the main data IIFE (it relies on `.row-scroll`/`.sk` skeleton markup). Don't constrain `#ticker`/`#alphaTape` (scrolling marquees, full-bleed on purpose).
+
 ## 2026-04-28 — Session 19 (Claude Code)
 
 ### milestone: first V2 trade accepted by Polymarket CLOB (pre-cutover)
