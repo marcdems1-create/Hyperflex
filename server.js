@@ -16403,41 +16403,57 @@ function buildEdgeSignal(yes_price, whale_count, volume) {
 
 async function fetchFinanceMarkets() {
   if (_financeCache && Date.now() - _financeCacheAt < FINANCE_TTL) return _financeCache;
-  const seen = new Set();
-  const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
-  for (const { q, cat } of FINANCE_QUERIES) {
-    if (sections[cat].length >= 5) continue;
-    try {
-      const r = await _nodeFetch(
-        'https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=' + encodeURIComponent(q) + '&order=volume&ascending=false&limit=3',
-        { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(6000) }
-      );
-      if (!r.ok) continue;
-      const events = await r.json();
-      if (!Array.isArray(events)) continue;
-      for (const ev of events) {
-        if (!ev.slug || seen.has(ev.slug)) continue;
-        if ((ev.markets || []).length > 2) continue; // skip multi-outcome/bracket markets
-        seen.add(ev.slug);
-        const market = (ev.markets || [])[0];
-        if (!market) continue;
-        const yp = parseFloat((market.outcomePrices && market.outcomePrices[0]) || market.bestAsk || 0.5);
-        sections[cat].push({
-          question:    ev.title || market.question || '',
-          slug:        ev.slug,
-          image:       ev.image || ev.imageUrl || null,
-          yes_price:   isNaN(yp) ? 0.5 : yp,
-          volume:      parseFloat(ev.volume || ev.volumeNum || 0),
-          whale_count: 0,
-          edge_signal: buildEdgeSignal(isNaN(yp) ? 0.5 : yp, 0, parseFloat(ev.volume || ev.volumeNum || 0)),
-        });
-        if (sections[cat].length >= 5) break;
+
+  try {
+    const r = await _nodeFetch(
+      'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume&ascending=false&limit=200',
+      { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) throw new Error('Gamma fetch failed: ' + r.status);
+    const markets = await r.json();
+    if (!Array.isArray(markets)) throw new Error('Bad response');
+
+    const PATTERNS = {
+      fed_rates: [/fed\b/i, /federal reserve/i, /fomc/i, /rate cut/i, /rate hike/i, /interest rate/i, /inflation/i, /warsh/i, /powell/i, /basis point/i, /cpi\b/i, /monetary policy/i],
+      crypto:    [/bitcoin/i, /\bbtc\b/i, /ethereum/i, /\beth\b/i, /\bcrypto\b/i, /coinbase/i, /solana/i, /\bsol\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /defi\b/i],
+      macro:     [/s&p 500/i, /nasdaq/i, /recession/i, /nvidia/i, /crude oil/i, /oil price/i, /\bgold\b/i, /stock market/i, /gdp\b/i, /treasury/i, /yield curve/i, /largest company/i, /apple.*stock/i],
+      politics:  [/\btrump\b/i, /tariff/i, /executive order/i, /us.*china/i, /iran.*deal/i, /\bsanction/i, /trade war/i, /congress.*pass/i, /senate.*vote/i, /trump.*approval/i],
+    };
+
+    const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
+    const seen = new Set();
+
+    for (const m of markets) {
+      if (!m.question || seen.has(m.question)) continue;
+      const q = m.question;
+      for (const [cat, patterns] of Object.entries(PATTERNS)) {
+        if (sections[cat].length >= 5) continue;
+        if (patterns.some(p => p.test(q))) {
+          seen.add(q);
+          const yesPrice = parseFloat((m.outcomePrices || ['0.5'])[0]);
+          const yp = isNaN(yesPrice) ? 0.5 : yesPrice;
+          sections[cat].push({
+            question:    q,
+            slug:        m.slug || m.conditionId,
+            image:       m.image || m.imageUrl || null,
+            yes_price:   yp,
+            volume:      parseFloat(m.volume || 0),
+            whale_count: 0,
+            edge_signal: buildEdgeSignal(yp, 0, parseFloat(m.volume || 0)),
+          });
+          break;
+        }
       }
-    } catch (e) { continue; }
+      if (Object.values(sections).every(s => s.length >= 5)) break;
+    }
+
+    _financeCache = { sections, updated_at: new Date().toISOString() };
+    _financeCacheAt = Date.now();
+    return _financeCache;
+  } catch (e) {
+    console.error('[finance] fetch error:', e.message);
+    return { sections: { fed_rates: [], crypto: [], macro: [], politics: [] } };
   }
-  _financeCache = { sections, updated_at: new Date().toISOString() };
-  _financeCacheAt = Date.now();
-  return _financeCache;
 }
 
 app.get('/api/finance/markets', async (req, res) => {
