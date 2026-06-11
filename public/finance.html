@@ -15,7 +15,7 @@ a{color:inherit;text-decoration:none}
 
 /* HEADER */
 .fi-header{padding:28px 36px 24px;border-bottom:1px solid #111116}
-.fi-header-inner{max-width:1100px;margin:0 auto}
+.fi-header-inner{max-width:840px;margin:0 auto}
 .fi-label{font-size:10px;color:#3a4060;letter-spacing:3px;text-transform:uppercase;font-weight:600;margin-bottom:8px}
 .fi-title{font-size:26px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:-0.01em}
 .fi-subtitle{font-size:13px;color:#3a4060;line-height:1.5}
@@ -23,41 +23,34 @@ a{color:inherit;text-decoration:none}
 
 /* EDGE BANNER */
 .fi-edge-banner{background:#0f0f14;border-bottom:1px solid rgba(245,158,11,0.2);padding:12px 36px}
-.fi-edge-banner-inner{max-width:1100px;margin:0 auto;font-size:12px;color:#8890a0;line-height:1.6}
+.fi-edge-banner-inner{max-width:840px;margin:0 auto;font-size:12px;color:#8890a0;line-height:1.6}
 .fi-edge-banner span{color:#f59e0b;font-weight:600}
 @media(max-width:768px){.fi-edge-banner{padding:10px 16px}.fi-edge-banner-inner{font-size:11px}}
 
 /* CONTENT */
-.fi-content{max-width:1100px;margin:0 auto;padding:24px 36px 80px}
-@media(max-width:768px){.fi-content{padding:16px 16px 72px}}
+.fi-content{max-width:840px;margin:0 auto;padding:8px 36px 80px}
+@media(max-width:768px){.fi-content{padding:8px 16px 72px}}
 
-/* FILTER RAIL */
-.fi-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;align-items:center}
-.fi-pill{appearance:none;background:transparent;border:1px solid #1a1a22;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:#4a5280;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:inherit}
-.fi-pill:hover{color:#7788cc;border-color:#252840}
-.fi-pill.active{background:rgba(58,64,128,0.12);border-color:#3a4080;color:#7788cc}
-.fi-pill.strong-only.active{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.4);color:#22c55e}
-@media(max-width:480px){.fi-filters{gap:6px}.fi-pill{padding:4px 10px;font-size:10px}}
-
-/* GRID */
-.fi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-@media(max-width:680px){.fi-grid{grid-template-columns:1fr}}
+/* SECTION HEADER */
+.fn-section-header{display:flex;align-items:center;gap:10px;margin:28px 0 12px;padding-bottom:10px;border-bottom:1px solid #1a1a24}
+.fn-section-icon{font-size:16px}
+.fn-section-title{font-size:13px;font-weight:700;color:#fff;letter-spacing:-0.3px}
+.fn-section-count{font-size:11px;color:#333;margin-left:auto}
+.fn-section-bar{width:3px;height:16px;border-radius:2px;flex-shrink:0}
+.fn-bar-fed_rates{background:#6688ff}
+.fn-bar-crypto{background:#f59e0b}
+.fn-bar-macro{background:#22c55e}
+.fn-bar-politics{background:#ef4444}
 
 /* CARD */
-.fi-card{background:#111116;border:1px solid #1a1a22;border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color 0.15s,transform 0.15s;animation:fadeUp 0.4s ease both;display:flex;flex-direction:column}
-.fi-card:hover{border-color:#2a2a40;transform:translateY(-2px)}
+.fi-card{background:#111116;border:1px solid #1a1a22;border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color 0.15s,transform 0.15s;animation:fadeUp 0.4s ease both;display:flex;flex-direction:column;margin-bottom:10px}
+.fi-card:last-child{margin-bottom:0}
+.fi-card:hover{border-color:#2a2a40;transform:translateY(-1px)}
 .fi-card.strong-edge{border-color:rgba(245,158,11,0.25)}
 .fi-card.strong-edge:hover{border-color:rgba(245,158,11,0.5)}
 
-/* CATEGORY BAR */
-.fi-cat-bar{height:3px;width:100%;flex-shrink:0}
-.fi-cat-bar.fed{background:#6688ff}
-.fi-cat-bar.crypto{background:#f59e0b}
-.fi-cat-bar.politics{background:#ef4444}
-.fi-cat-bar.macro{background:#22c55e}
-
 /* CARD IMAGE */
-.fi-card-img-wrap{position:relative;height:140px;overflow:hidden;background:#16161e}
+.fi-card-img-wrap{position:relative;height:130px;overflow:hidden;background:#16161e}
 .fi-card-img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.3s ease}
 .fi-card:hover .fi-card-img{transform:scale(1.03)}
 .fi-card-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,#111116 100%)}
@@ -73,7 +66,7 @@ a{color:inherit;text-decoration:none}
 .fi-card-question{font-size:14px;font-weight:500;color:#d0d4e8;line-height:1.45;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 /* PRICE ROW */
-.fi-price-row{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.fi-price-row{display:flex;align-items:center;gap:14px;margin-bottom:8px}
 .fi-yes{font-size:20px;font-weight:700;color:#22c55e}
 .fi-yes.low{color:#ef4444}
 .fi-yes.mid{color:#f59e0b}
@@ -82,7 +75,7 @@ a{color:inherit;text-decoration:none}
 .fi-vol span{color:#6870a0;font-weight:600}
 
 /* STATS ROW */
-.fi-stats-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.fi-stats-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .fi-stat{font-size:11px;color:#4a5280;display:flex;align-items:center;gap:4px}
 .fi-stat .val{color:#6870a0;font-weight:600}
 .fi-stat .whale-val{color:#a78bfa;font-weight:600}
@@ -93,10 +86,7 @@ a{color:inherit;text-decoration:none}
 
 /* STATES */
 .fi-loading{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
-.fi-empty{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
-
-/* COUNT */
-.fi-count{font-size:11px;color:#2a3050;margin-bottom:12px}
+.fi-empty{text-align:center;padding:40px 0;font-size:12px;color:#2a2a40;letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 </style>
@@ -119,77 +109,50 @@ a{color:inherit;text-decoration:none}
 </div>
 
 <div class="fi-content">
-  <div class="fi-filters" id="filterRail">
-    <button class="fi-pill active" data-filter="all">ALL</button>
-    <button class="fi-pill" data-filter="fed">FED · RATES</button>
-    <button class="fi-pill" data-filter="crypto">CRYPTO</button>
-    <button class="fi-pill" data-filter="politics">POLITICS</button>
-    <button class="fi-pill" data-filter="macro">MACRO</button>
-    <button class="fi-pill strong-only" data-filter="strong">STRONG EDGE ONLY</button>
-  </div>
-  <div class="fi-count" id="mktCount"></div>
-  <div class="fi-grid" id="grid">
-    <div class="fi-loading">LOADING MARKETS…</div>
-  </div>
+  <div id="sections"><div class="fi-loading">LOADING MARKETS…</div></div>
 </div>
 
 <script src="/nav.js"></script>
 <script>
 (function() {
-  var allMarkets = [];
-  var activeFilter = 'all';
-
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-
   function fmtVol(v) {
     if (!v) return '$0';
     if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
     if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k';
     return '$' + Math.round(v);
   }
-
-  function catClass(cat) {
-    var c = (cat || '').toLowerCase();
-    if (/fed|rate|fomc|inflation|monetary|interest|federal reserve/.test(c)) return 'fed';
-    if (/crypto|bitcoin|btc|ethereum|eth|defi|coinbase|binance|solana/.test(c)) return 'crypto';
-    if (/polit|election|trump|president|congress|senate|democrat|republican/.test(c)) return 'politics';
-    return 'macro';
-  }
-
-  function matchesFilter(m, filter) {
-    if (filter === 'all') return true;
-    if (filter === 'strong') return (m.edge_score || 0) >= 70;
-    var cat = catClass(m.category);
-    return cat === filter;
-  }
-
   function yesClass(yp) {
     if (yp < 0.15) return 'low';
     if (yp < 0.5) return 'mid';
     return '';
   }
-
   function edgeBadge(score) {
     if (score >= 70) return { cls: 'strong', label: 'STRONG EDGE' };
     if (score >= 40) return { cls: 'moderate', label: 'MODERATE EDGE' };
     return { cls: 'none', label: 'NO EDGE' };
   }
 
+  var SECTIONS = [
+    { key: 'fed_rates', icon: '🏦', title: 'FED & RATES' },
+    { key: 'crypto',    icon: '₿',  title: 'CRYPTO' },
+    { key: 'macro',     icon: '📈', title: 'MACRO' },
+    { key: 'politics',  icon: '🏛️', title: 'POLITICS' },
+  ];
+
   function renderCard(m, idx) {
     var yp = m.yes_price != null ? m.yes_price : 0.5;
     var yesPct = Math.round(yp * 100);
-    var cat = catClass(m.category);
     var badge = edgeBadge(m.edge_score || 0);
     var isStrong = (m.edge_score || 0) >= 70;
-    var delay = Math.min(idx * 0.05, 0.5);
+    var delay = Math.min(idx * 0.06, 0.4);
 
-    var imgHtml = '';
-    if (m.image) {
-      imgHtml = '<img class="fi-card-img" src="' + esc(m.image) + '" loading="lazy" alt="" ' +
-        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161e,#0a0a0c)\';">';
-    }
+    var imgHtml = m.image
+      ? '<img class="fi-card-img" src="' + esc(m.image) + '" loading="lazy" alt="" ' +
+        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161e,#0a0a0c)\';">'
+      : '';
 
     var signalHtml = '';
     if (m.edge_signal) {
@@ -204,7 +167,6 @@ a{color:inherit;text-decoration:none}
       : '';
 
     return '<a class="fi-card' + (isStrong ? ' strong-edge' : '') + '" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
-      '<div class="fi-cat-bar ' + cat + '"></div>' +
       '<div class="fi-card-img-wrap">' +
         imgHtml +
         '<div class="fi-card-img-grad"></div>' +
@@ -217,8 +179,7 @@ a{color:inherit;text-decoration:none}
           '<div class="fi-price-label">YES</div></div>' +
           '<div class="fi-vol">Vol <span>' + fmtVol(m.volume) + '</span></div>' +
         '</div>' +
-        '<div class="fi-stats-row">' +
-          whaleStat +
+        '<div class="fi-stats-row">' + whaleStat +
           '<div class="fi-stat">Edge <span class="val">' + Math.round(m.edge_score || 0) + '</span></div>' +
         '</div>' +
         signalHtml +
@@ -226,35 +187,29 @@ a{color:inherit;text-decoration:none}
     '</a>';
   }
 
-  function render() {
-    var visible = allMarkets.filter(function(m) { return matchesFilter(m, activeFilter); });
-    var count = document.getElementById('mktCount');
-    var grid = document.getElementById('grid');
-    if (count) count.textContent = visible.length + ' market' + (visible.length !== 1 ? 's' : '');
-    if (!visible.length) {
-      grid.innerHTML = '<div class="fi-empty">No markets match this filter.</div>';
-      return;
-    }
-    grid.innerHTML = visible.map(renderCard).join('');
+  function renderSection(def, markets) {
+    var header = '<div class="fn-section-header">' +
+      '<div class="fn-section-bar fn-bar-' + def.key + '"></div>' +
+      '<span class="fn-section-icon">' + def.icon + '</span>' +
+      '<span class="fn-section-title">' + def.title + '</span>' +
+      '<span class="fn-section-count">' + markets.length + ' market' + (markets.length !== 1 ? 's' : '') + '</span>' +
+    '</div>';
+    if (!markets.length) return header + '<div class="fi-empty">No markets.</div>';
+    return header + markets.map(renderCard).join('');
   }
-
-  document.getElementById('filterRail').addEventListener('click', function(e) {
-    var pill = e.target.closest('.fi-pill');
-    if (!pill) return;
-    document.querySelectorAll('.fi-pill').forEach(function(p) { p.classList.remove('active'); });
-    pill.classList.add('active');
-    activeFilter = pill.dataset.filter;
-    render();
-  });
 
   fetch('/api/finance/markets')
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      allMarkets = (data && Array.isArray(data.markets)) ? data.markets : [];
-      render();
+      var sections = (data && data.sections) ? data.sections : {};
+      var el = document.getElementById('sections');
+      var html = SECTIONS.map(function(def) {
+        return renderSection(def, sections[def.key] || []);
+      }).join('');
+      el.innerHTML = html || '<div class="fi-loading">No markets available.</div>';
     })
     .catch(function() {
-      document.getElementById('grid').innerHTML = '<div class="fi-empty">Could not load markets.</div>';
+      document.getElementById('sections').innerHTML = '<div class="fi-empty">Could not load markets.</div>';
     });
 })();
 </script>

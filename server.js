@@ -16362,25 +16362,30 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
   }));
 }
 
-// GET /api/finance/markets — top 20 screener markets by edge score + volume
+// GET /api/finance/markets — categorised screener markets, up to 5 per section
+const FINANCE_CATEGORIES = {
+  fed_rates: ['fed', 'federal reserve', 'rate cut', 'rate hike', 'fomc', 'interest rate', 'inflation', 'basis point', 'warsh', 'powell', 'monetary policy', 'cpi', 'unemployment'],
+  crypto:    ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'coinbase', 'binance', 'solana', 'defi', 'sec crypto', 'stablecoin', 'altcoin'],
+  macro:     ['gdp', 'recession', 's&p', 'nasdaq', 'dow', 'stock market', 'oil', 'crude', 'gold', 'dollar', 'yield', 'treasury', 'debt ceiling', 'tariff', 'trade war', 'china economy', 'nvidia', 'apple', 'largest company'],
+  politics:  ['trump', 'congress', 'senate', 'election', 'midterm', 'republican', 'democrat', 'white house', 'executive order', 'iran', 'ukraine', 'russia', 'china', 'taiwan', 'nato', 'ceasefire', 'sanctions'],
+};
 let _financeMarketsCache = null;
 app.get('/api/finance/markets', (req, res) => {
   if (_financeMarketsCache && (Date.now() - _financeMarketsCache.ts < 60000)) {
     return res.json(_financeMarketsCache.data);
   }
   const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
-  if (!screener.length) return res.json({ markets: [] });
+  if (!screener.length) return res.json({ sections: { fed_rates: [], crypto: [], macro: [], politics: [] } });
 
-  const sorted = screener
-    .filter(m => m.question && m.slug)
-    .sort((a, b) => {
-      const edgeDiff = (b.edge_score || 0) - (a.edge_score || 0);
-      if (edgeDiff !== 0) return edgeDiff;
-      return (b.volume || 0) - (a.volume || 0);
-    })
-    .slice(0, 20);
+  function assignCategory(question) {
+    const q = (question || '').toLowerCase();
+    for (const [cat, kws] of Object.entries(FINANCE_CATEGORIES)) {
+      if (kws.some(kw => q.includes(kw))) return cat;
+    }
+    return null;
+  }
 
-  const markets = sorted.map(m => {
+  function buildMarket(m) {
     const yp = m.yes_price != null ? m.yes_price : 0.5;
     const wc = m.whale_count || 0;
     let edge_signal = '';
@@ -16394,22 +16399,33 @@ app.get('/api/finance/markets', (req, res) => {
       edge_signal = `${wc} sharp wallets positioned.`;
     }
     return {
-      question:          m.question,
-      slug:              m.slug,
-      category:          m.category || '',
-      yes_price:         yp,
-      volume:            m.volume || 0,
-      whale_count:       wc,
-      total_whale_capital: m.total_whale_capital || 0,
-      edge_score:        m.edge_score || 0,
-      end_date:          m.end_date || null,
-      image:             m.image || m.event_image_url || null,
+      question:    m.question,
+      slug:        m.slug,
+      yes_price:   yp,
+      volume:      m.volume || 0,
+      whale_count: wc,
+      edge_score:  m.edge_score || 0,
+      image:       m.image || m.event_image_url || null,
       edge_signal,
     };
-  });
+  }
 
-  _financeMarketsCache = { ts: Date.now(), data: { markets } };
-  res.json({ markets });
+  const buckets = { fed_rates: [], crypto: [], macro: [], politics: [] };
+  for (const m of screener) {
+    if (!m.question || !m.slug) continue;
+    const cat = assignCategory(m.question);
+    if (cat) buckets[cat].push(m);
+  }
+  const sections = {};
+  for (const [cat, arr] of Object.entries(buckets)) {
+    sections[cat] = arr
+      .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+      .slice(0, 5)
+      .map(buildMarket);
+  }
+
+  _financeMarketsCache = { ts: Date.now(), data: { sections } };
+  res.json({ sections });
 });
 
 let _mentionsApiCache = null;
