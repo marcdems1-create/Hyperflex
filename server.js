@@ -16389,16 +16389,45 @@ let _financeCache = null;
 let _financeCacheAt = 0;
 const FINANCE_TTL = 10 * 60 * 1000; // 10-min cache; cleared on deploy by process restart
 
-function buildEdgeSignal(yes_price, whale_count, volume) {
-  const pct = Math.round(yes_price * 100);
-  const vol = volume > 1000000 ? '$' + (volume / 1000000).toFixed(1) + 'M vol' : volume > 1000 ? '$' + Math.round(volume / 1000) + 'K vol' : '';
-  if (pct <= 5)  return '🔴 STRONG NO EDGE: At ' + pct + '¢ YES, historical resolve rate is <0.5%. Structural bias heavily favors NO.';
-  if (pct <= 10) return '🔴 NO EDGE: At ' + pct + '¢ YES, only 1.1% of markets at this price resolve YES. Fade the YES.';
-  if (pct <= 20) return '🟡 LEAN NO: At ' + pct + '¢ YES, ~5% resolve YES historically. Sharp money typically fades this price range.';
-  if (pct >= 85) return '🟢 HIGH CONVICTION YES: ' + pct + '¢ consensus.' + (whale_count >= 3 ? ' ' + whale_count + ' whales positioned.' : '') + (vol ? ' ' + vol : '');
-  if (pct >= 70) return '🟢 MODERATE YES EDGE: ' + pct + '¢ pricing.' + (whale_count >= 3 ? ' ' + whale_count + ' whale wallets loaded.' : '') + ' Watch for sharp confirmation.';
-  if (Math.abs(pct - 50) <= 5) return '⚪ NO CLEAR EDGE: Market near 50/50 at ' + pct + '¢. Look for whale positioning before entering.';
-  return '🟡 DIRECTIONAL: ' + pct + '¢ YES. Check whale positioning on /signals for confirmation.';
+// Gamma's /markets returns outcomePrices as a JSON-encoded STRING
+// (e.g. '["0.45","0.55"]'). Indexing the string directly yields '[' → NaN,
+// which is why every finance card defaulted to 50/50. Parse it to a YES float.
+function _parseGammaYes(m) {
+  let op = m.outcomePrices;
+  if (typeof op === 'string') { try { op = JSON.parse(op); } catch (e) { op = null; } }
+  if (Array.isArray(op) && op.length) {
+    const v = parseFloat(op[0]);
+    if (!isNaN(v) && v > 0 && v < 1) return v;
+  }
+  return null;
+}
+
+// "WHY THIS IS AN EDGE" — built from real enriched data (screener whale +
+// edge cross-reference) plus structural price bias. Returns a ' · '-joined
+// reason string; callers gate on hasEdge so this is never empty filler.
+function buildEdgeSignal(e) {
+  const pct = Math.round((e.yes_price != null ? e.yes_price : 0.5) * 100);
+  const reasons = [];
+  if (pct <= 5)       reasons.push(`At ${pct}¢ YES, under 0.5% of markets resolve YES — structural NO edge`);
+  else if (pct <= 10) reasons.push(`At ${pct}¢ YES, only ~1.1% historically resolve YES — fade the YES`);
+  else if (pct <= 20) reasons.push(`At ${pct}¢ YES, ~5% resolve YES — sharp money fades this range`);
+  else if (pct >= 90) reasons.push(`${pct}¢ YES — near-certain consensus pricing`);
+  else if (pct >= 80) reasons.push(`${pct}¢ YES — high-conviction pricing`);
+  if ((e.whale_count || 0) >= 2) {
+    const capK = Math.round((e.total_whale_capital || 0) / 1000);
+    reasons.push(`${e.whale_count} whales positioned${capK > 0 ? ` — $${capK}k committed` : ''}`);
+  }
+  if ((e.volume_spike_ratio || 0) >= 2) {
+    reasons.push(`Volume spiked ${e.volume_spike_ratio.toFixed(1)}× above its 7-day average`);
+  }
+  if (Math.abs(e.price_change_24h || 0) >= 4) {
+    reasons.push(`Price moved ${e.price_change_24h > 0 ? '+' : ''}${e.price_change_24h}% in 24h`);
+  }
+  if ((e.edge_score || 0) >= 10) {
+    reasons.push(`Edge score ${Math.round(e.edge_score)}/100`);
+  }
+  if (!reasons.length) reasons.push(`Directional signal at ${pct}¢ YES`);
+  return reasons.join(' · ');
 }
 
 async function fetchFinanceMarkets() {
@@ -16439,8 +16468,8 @@ async function fetchFinanceMarkets() {
       if (/\bldpr\b/i.test(q)) return false;
       if (/liberal democratic party of russia/i.test(q)) return false;
       if (parseFloat(m.volume || 0) < 10) return false;
-      const yesPrice = parseFloat((m.outcomePrices || ['0.5'])[0]);
-      if (yesPrice > 0.40 && yesPrice < 0.60) return false;
+      const yesPrice = _parseGammaYes(m);
+      if (yesPrice != null && yesPrice > 0.40 && yesPrice < 0.60) return false;
       return true;
     });
 
@@ -16451,8 +16480,8 @@ async function fetchFinanceMarkets() {
         if (sections[cat].length >= 8) continue;
         if (patterns.some(p => p.test(q))) {
           seen.add(q);
-          const yesPrice = parseFloat((m.outcomePrices || ['0.5'])[0]);
-          const yp = isNaN(yesPrice) ? 0.5 : yesPrice;
+          const _gy = _parseGammaYes(m);
+          const yp = _gy != null ? _gy : 0.5;
           sections[cat].push({
             question:    q,
             slug:        m.slug || m.conditionId,
@@ -16460,7 +16489,7 @@ async function fetchFinanceMarkets() {
             yes_price:   yp,
             volume:      parseFloat(m.volume || 0),
             whale_count: 0,
-            edge_signal: buildEdgeSignal(yp, 0, parseFloat(m.volume || 0)),
+            edge_signal: buildEdgeSignal({ yes_price: yp, volume: parseFloat(m.volume || 0), whale_count: 0 }),
           });
           break;
         }
