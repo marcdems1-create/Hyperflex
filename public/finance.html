@@ -48,7 +48,7 @@ a{color:inherit;text-decoration:none}
 .fn-bar-macro{background:var(--green)}
 .fn-bar-politics{background:var(--red)}
 .fn-section-icon{font-size:15px}
-.fn-section-title{font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-0.2px}
+.fn-section-title{font-size:16px;font-weight:700;color:var(--ink);letter-spacing:1px}
 .fn-section-count{font-size:11px;color:var(--dim);margin-left:auto;font-family:var(--mono)}
 
 /* GRID — same as alpha */
@@ -65,10 +65,10 @@ a{color:inherit;text-decoration:none}
 }
 .edge-card:hover{border-color:rgba(77,159,255,0.4);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
 .edge-card-inner{overflow:hidden;border-radius:14px}
-.edge-card-body{padding:18px}
+.edge-card-body{padding:20px}
 
 /* Card image */
-.fi-img-wrap{position:relative;height:140px;overflow:hidden;background:var(--paper-2)}
+.fi-img-wrap{position:relative;height:160px;overflow:hidden;background:var(--paper-2)}
 .fi-img{width:100%;height:100%;object-fit:cover;object-position:center center;display:block;filter:brightness(0.4)}
 .fi-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(22,22,31,0.9) 100%)}
 
@@ -76,22 +76,22 @@ a{color:inherit;text-decoration:none}
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
 .yes-price-wrap{display:flex;flex-direction:column;align-items:center;min-width:60px}
 .yes-price-l{font-size:10px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px}
-.yes-price-n{font-family:var(--mono);font-weight:700;font-size:28px;line-height:1}
+.yes-price-n{font-family:var(--mono);font-weight:800;font-size:32px;line-height:1;letter-spacing:-0.5px}
 .yes-price-n.high{color:var(--green)}
 .yes-price-n.low{color:var(--red)}
 .yes-price-n.mid{color:var(--amber)}
 .no-price-sec{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:3px}
 
 .badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-.badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:0.02em}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;letter-spacing:0.02em}
 .badge-vol{background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.25)}
 .badge-whale{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.25)}
 
 /* Question */
-.card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:12px;min-height:40px}
+.card-q{font-size:15px;font-weight:500;color:#e0e0e8;line-height:1.55;margin-bottom:12px;min-height:40px}
 
 /* Signal strip — the edge reason, visible on every card */
-.signal-strip{font-size:12px;color:var(--soft);line-height:1.55;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid rgba(245,158,11,0.18);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.signal-strip{font-size:13px;color:#8890c0;line-height:1.6;padding:9px 12px;background:var(--paper);border-radius:8px;border:1px solid rgba(245,158,11,0.18);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .ss-edge{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-right:8px}
 
 /* Trade CTA — edge side + payout, one click to the market */
@@ -122,21 +122,9 @@ a{color:inherit;text-decoration:none}
     font-size: 32px !important;
   }
 
-  .fn-section-title {
-    font-size: 15px !important;
-  }
-
   .edge-grid {
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 16px;
-  }
-
-  .card-q {
-    font-size: 13px !important;
-  }
-
-  .yes-price-n {
-    font-size: 26px !important;
   }
 }
 
