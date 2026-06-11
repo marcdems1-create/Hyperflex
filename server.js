@@ -16406,7 +16406,7 @@ async function fetchFinanceMarkets() {
 
   try {
     const r = await _nodeFetch(
-      'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume&ascending=false&limit=200',
+      'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume&ascending=false&limit=500',
       { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(10000) }
     );
     if (!r.ok) throw new Error('Gamma fetch failed: ' + r.status);
@@ -16414,10 +16414,10 @@ async function fetchFinanceMarkets() {
     if (!Array.isArray(markets)) throw new Error('Bad response');
 
     const PATTERNS = {
-      fed_rates: [/fed\b/i, /federal reserve/i, /\bfomc\b/i, /rate cut/i, /rate hike/i, /interest rate/i, /inflation/i, /warsh/i, /powell/i, /basis point/i, /\bcpi\b/i, /monetary policy/i, /will the fed/i, /fed funds/i, /rate decision/i, /25 basis/i, /50 basis/i, /rate cut in/i, /cut rates/i, /hike rates/i, /how many.*cut/i, /number of.*cut/i],
-      crypto:    [/bitcoin/i, /\bbtc\b/i, /ethereum/i, /\bcrypto\b/i, /coinbase/i, /solana/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
-      macro:     [/s&p 500/i, /nasdaq/i, /recession/i, /nvidia/i, /crude oil/i, /oil price/i, /\bgold\b/i, /stock market/i, /\bgdp\b/i, /treasury/i, /yield curve/i, /largest company/i, /apple.*stock/i],
-      politics:  [/\btrump\b/i, /tariff/i, /will trump/i, /president trump/i, /executive order/i, /us.*trade/i, /china.*tariff/i, /trump.*sign/i, /iran.*deal/i, /\bsanction/i, /trade war/i, /congress.*pass/i, /senate.*vote/i, /trump.*approval/i],
+      fed_rates: [/interest rate/i, /rate cut/i, /rate hike/i, /fed funds/i, /\bfomc\b/i, /federal reserve/i, /\bwarsh\b/i, /\bpowell\b/i, /inflation.*2026/i, /cpi.*2026/i, /25 bps/i, /50 bps/i, /basis point/i, /how many.*cut/i, /fed\b/i, /monetary policy/i, /will the fed/i, /rate decision/i, /25 basis/i, /50 basis/i, /cut rates/i, /hike rates/i, /number of.*cut/i, /\bcpi\b/i, /inflation/i],
+      crypto:    [/\bbtc\b/i, /bitcoin.*price/i, /bitcoin.*hit/i, /bitcoin.*reach/i, /ethereum.*price/i, /crypto.*sec/i, /coinbase/i, /solana/i, /bitcoin/i, /ethereum/i, /\bcrypto\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
+      macro:     [/s&p.*500/i, /\bspx\b/i, /nasdaq/i, /recession/i, /nvidia/i, /oil.*price/i, /gold.*price/i, /\bgdp\b/i, /stock.*market/i, /elon.*musk.*tesla/i, /apple.*stock/i, /microsoft/i, /crude oil/i, /\bgold\b/i, /treasury/i, /yield curve/i, /largest company/i],
+      politics:  [/\btrump\b/i, /will trump/i, /elon musk/i, /sam altman/i, /openai/i, /executive order/i, /tariff/i, /us.*china/i, /\biran\b/i, /\bcongress\b/i, /\bsenate\b/i, /midterm/i, /president trump/i, /china.*tariff/i, /trump.*sign/i, /\bsanction/i, /trade war/i],
     };
 
     const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
@@ -16430,7 +16430,7 @@ async function fetchFinanceMarkets() {
       if (q.includes('up or down')) return false;
       if (q.includes('temperature')) return false;
       if (q.includes('weather')) return false;
-      if (parseFloat(m.volume || 0) < 1000) return false;
+      if (parseFloat(m.volume || 0) < 100) return false;
       return true;
     });
 
