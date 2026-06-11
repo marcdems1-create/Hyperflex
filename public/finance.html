@@ -26,7 +26,7 @@
 body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
 a{color:inherit;text-decoration:none}
 #nav-root{position:relative;z-index:200}
-.container{max-width:1100px;margin:0 auto;padding:0 24px}
+.container{width:100%;max-width:none;margin:0;padding:0 24px}
 
 /* HEADER */
 .hero{padding:36px 0 24px;border-bottom:1px solid var(--border)}
@@ -113,39 +113,31 @@ a{color:inherit;text-decoration:none}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 @media (min-width: 768px) {
-  /* Widen the main container */
   .container {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 32px;
+    width: 100%;
+    max-width: none !important;
+    padding: 0 40px;
   }
 
-  /* Larger page title */
   h1 {
-    font-size: 36px !important;
+    font-size: 32px !important;
   }
 
-  /* Card grid — 3 columns on desktop */
+  .fn-section-title {
+    font-size: 15px !important;
+  }
+
   .edge-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 16px;
   }
 
-  /* Bigger card question text */
   .card-q {
-    font-size: 14px !important;
-    line-height: 1.5;
+    font-size: 13px !important;
   }
 
-  /* Bigger price display */
   .yes-price-n {
-    font-size: 28px !important;
-  }
-
-  /* Section headers */
-  .fn-section-title {
-    font-size: 15px !important;
+    font-size: 26px !important;
   }
 }
 </style>
