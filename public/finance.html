@@ -133,7 +133,7 @@ a{color:inherit;text-decoration:none}
   </div>
 </div>
 
-<script src="/nav.js"></script>
+<script src="/nav.js?v=24"></script>
 <script>
 (function() {
   var allMarkets = [];
@@ -171,19 +171,29 @@ a{color:inherit;text-decoration:none}
     return '';
   }
 
-  function edgeBadge(score) {
-    if (score >= 70) return { cls: 'strong', label: 'STRONG EDGE' };
-    if (score >= 40) return { cls: 'moderate', label: 'MODERATE EDGE' };
-    return { cls: 'none', label: 'NO EDGE' };
+  // Edge badge color tier. The label is rendered separately as the numeric
+  // edge (e.g. "72 EDGE") so the badge never reads "NO EDGE"; renderCard
+  // suppresses the badge entirely below the floor.
+  function edgeBadgeClass(score) {
+    if (score >= 70) return 'strong';
+    if (score >= 40) return 'moderate';
+    return 'none';
   }
 
   function renderCard(m, idx) {
     var yp = m.yes_price != null ? m.yes_price : 0.5;
     var yesPct = Math.round(yp * 100);
     var cat = catClass(m.category);
-    var badge = edgeBadge(m.edge_score || 0);
-    var isStrong = (m.edge_score || 0) >= 70;
+    var edgeScore = m.edge_score || 0;
+    var edgeCls = edgeBadgeClass(edgeScore);
+    var isStrong = edgeScore >= 70;
     var delay = Math.min(idx * 0.05, 0.5);
+    // Only surface the edge badge when there's a real signal (>= 10). Below
+    // that it would stamp "0 EDGE" on every card — show no badge instead. The
+    // numeric edge still appears in the stats row below.
+    var edgeBadgeHtml = edgeScore >= 10
+      ? '<div class="fi-edge-badge ' + edgeCls + '">' + Math.round(edgeScore) + ' EDGE</div>'
+      : '';
 
     var imgHtml = '';
     if (m.image) {
@@ -208,7 +218,7 @@ a{color:inherit;text-decoration:none}
       '<div class="fi-card-img-wrap">' +
         imgHtml +
         '<div class="fi-card-img-grad"></div>' +
-        '<div class="fi-edge-badge ' + badge.cls + '">' + badge.label + '</div>' +
+        edgeBadgeHtml +
       '</div>' +
       '<div class="fi-card-body">' +
         '<div class="fi-card-question">' + esc(m.question) + '</div>' +

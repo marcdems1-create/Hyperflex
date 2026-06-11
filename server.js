@@ -16362,7 +16362,18 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
   }));
 }
 
-// GET /api/finance/markets — top 20 screener markets by edge score + volume
+// Finance keyword filter — a market must mention at least one of these terms
+// to qualify for the Finance Intelligence page. Without it the endpoint just
+// surfaced the highest-edge markets globally (sports, entertainment, etc.).
+const FINANCE_KEYWORDS = [
+  'fed', 'federal reserve', 'fomc', 'rate cut', 'interest rate',
+  'inflation', 'cpi', 'recession', 'gdp', 'unemployment', 'jobs report',
+  'treasury', 'yield', 'dollar', 'powell', 's&p', 'nasdaq', 'dow',
+  'earnings', 'ipo', 'stock market', 'debt ceiling', 'deficit',
+  'bitcoin', 'crypto', 'ethereum', 'tariff', 'trade war'
+];
+
+// GET /api/finance/markets — top 20 finance-keyword screener markets by edge + volume
 let _financeMarketsCache = null;
 app.get('/api/finance/markets', (req, res) => {
   if (_financeMarketsCache && (Date.now() - _financeMarketsCache.ts < 60000)) {
@@ -16373,6 +16384,13 @@ app.get('/api/finance/markets', (req, res) => {
 
   const sorted = screener
     .filter(m => m.question && m.slug)
+    // Volume floor — drop thin / zero-volume noise.
+    .filter(m => Number(m.volume || 0) >= 50000)
+    // Must match at least one finance keyword.
+    .filter(m => {
+      const q = m.question.toLowerCase();
+      return FINANCE_KEYWORDS.some(k => q.includes(k));
+    })
     .sort((a, b) => {
       const edgeDiff = (b.edge_score || 0) - (a.edge_score || 0);
       if (edgeDiff !== 0) return edgeDiff;
