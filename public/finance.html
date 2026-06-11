@@ -6,256 +6,230 @@
 <title>Finance Intelligence — HYPERFLEX</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0a0c;color:#e8eaf6;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+:root{
+  --bg:#0a0a0c;--surface:#111116;--surface-2:#16161e;
+  --border:#1e1e2a;--border-2:#2a2a40;
+  --ink:#f0f0f5;--ink-2:#d0d4e8;--muted:#6870a0;--muted-2:#3a4060;
+  --green:#00e68a;--red:#ff4d6a;--cyan:#4d9fff;--gold:#f59e0b;--purple:#a78bfa;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 #nav-root{position:relative;z-index:200}
 
 /* HEADER */
-.fi-header{padding:28px 36px 24px;border-bottom:1px solid #111116}
-.fi-header-inner{max-width:720px;margin:0 auto}
-.fi-label{font-size:10px;color:#3a4060;letter-spacing:3px;text-transform:uppercase;font-weight:600;margin-bottom:8px}
-.fi-title{font-size:26px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:-0.01em}
-.fi-subtitle{font-size:13px;color:#3a4060;line-height:1.5}
-@media(max-width:768px){.fi-header{padding:20px 16px 18px}.fi-title{font-size:22px}}
+.fp-header{padding:28px 36px 22px;border-bottom:1px solid var(--border)}
+.fp-header-inner{max-width:760px;margin:0 auto}
+.fp-label{font-size:10px;color:var(--muted-2);letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.fp-title{font-size:26px;font-weight:800;color:#fff;margin-bottom:4px;letter-spacing:-0.01em}
+.fp-sub{font-size:13px;color:var(--muted);line-height:1.5}
+@media(max-width:768px){.fp-header{padding:20px 16px 16px}.fp-title{font-size:22px}}
 
-/* EDGE BANNER */
-.fi-edge-banner{background:#0f0f14;border-bottom:1px solid rgba(245,158,11,0.2);padding:12px 36px}
-.fi-edge-banner-inner{max-width:720px;margin:0 auto;font-size:12px;color:#8890a0;line-height:1.6}
-.fi-edge-banner span{color:#f59e0b;font-weight:600}
-@media(max-width:768px){.fi-edge-banner{padding:10px 16px}.fi-edge-banner-inner{font-size:11px}}
+/* PAGE */
+.finance-page{max-width:760px;margin:0 auto;padding:24px 24px 90px}
+.fp-section{margin-bottom:34px}
+.fp-section-label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--ink);text-transform:uppercase;margin-bottom:3px}
+.fp-section-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+.fp-loading,.fp-empty{padding:30px 0;text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted-2);letter-spacing:1.5px;text-transform:uppercase}
+.fp-empty a{color:var(--cyan);text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:13px;display:inline-block;margin-top:8px}
 
-/* CONTENT */
-.fi-content{max-width:720px;margin:0 auto;padding:24px 24px 80px}
-@media(max-width:768px){.fi-content{padding:16px 16px 72px}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;animation:fadeUp .4s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* FILTER RAIL */
-.fi-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;align-items:center}
-.fi-pill{appearance:none;background:transparent;border:1px solid #1a1a22;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:#4a5280;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:inherit}
-.fi-pill:hover{color:#7788cc;border-color:#252840}
-.fi-pill.active{background:rgba(58,64,128,0.12);border-color:#3a4080;color:#7788cc}
-.fi-pill.strong-only.active{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.4);color:#22c55e}
-@media(max-width:480px){.fi-filters{gap:6px}.fi-pill{padding:4px 10px;font-size:10px}}
+/* ── RATE TRACKER ── */
+.rate-tracker{display:block;padding:26px 30px;border:1px solid rgba(0,230,138,.2);border-radius:14px;background:linear-gradient(135deg,rgba(0,230,138,.06),rgba(10,10,12,1));transition:border-color .15s}
+.rate-tracker:hover{border-color:rgba(0,230,138,.4)}
+.rt-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rt-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--green);text-transform:uppercase}
+.rt-source{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.rt-number{font-family:var(--mono);font-size:60px;font-weight:700;color:#fff;line-height:1;margin:12px 0 6px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rt-context{font-size:12px;color:var(--ink-2);margin-bottom:16px;line-height:1.5}
+.rt-context .rt-q{color:var(--muted)}
+.rt-bar{height:8px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin-bottom:8px}
+.rt-fill{height:100%;background:var(--green);border-radius:4px;transition:width 1s ease;width:0}
+.rt-legend{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted-2);letter-spacing:.04em}
 
-/* GRID */
-.fi-grid{display:flex;flex-direction:column;gap:16px}
+/* ── CONSENSUS CARDS ── */
+.consensus-card{padding:18px 20px;margin-bottom:12px}
+.cc-question{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:14px;line-height:1.35;letter-spacing:-.005em}
+.cc-comparison{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.cc-side{padding:12px;border-radius:9px;text-align:center}
+.cc-expert{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.cc-market{background:rgba(0,230,138,.06);border:1px solid rgba(0,230,138,.18)}
+.cc-source{font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:5px}
+.cc-pct{font-family:var(--mono);font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.cc-expert .cc-pct{color:var(--ink-2)}
+.cc-market .cc-pct{color:var(--green)}
+.cc-tag{font-family:var(--mono);font-size:9px;color:var(--muted-2);margin-top:6px;letter-spacing:.04em}
+.cc-whale{color:var(--purple);font-weight:700}
+.cc-gap{display:flex;align-items:center;gap:11px;padding:10px 13px;background:rgba(77,159,255,.06);border:1px solid rgba(77,159,255,.14);border-radius:9px;margin-bottom:12px}
+.cc-gap-num{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--cyan);flex-shrink:0;font-variant-numeric:tabular-nums}
+.cc-signal{font-size:12px;color:var(--ink-2);line-height:1.45}
+.cc-actions{display:flex;gap:8px}
+.cc-btn{flex:1;height:42px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:background .12s;font-variant-numeric:tabular-nums}
+.cc-btn-yes{background:rgba(0,230,138,.12);color:var(--green);border:1px solid rgba(0,230,138,.28)}
+.cc-btn-yes:hover{background:rgba(0,230,138,.2)}
+.cc-btn-no{background:rgba(255,77,106,.08);color:var(--red);border:1px solid rgba(255,77,106,.22)}
+.cc-btn-no:hover{background:rgba(255,77,106,.16)}
 
-/* CARD */
-.fi-card{background:#111116;border:1px solid #1a1a22;border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color 0.15s,transform 0.15s;animation:fadeUp 0.4s ease both;display:flex;flex-direction:column}
-.fi-card:hover{border-color:#2a2a40;transform:translateY(-2px)}
-.fi-card.strong-edge{border-color:rgba(245,158,11,0.25)}
-.fi-card.strong-edge:hover{border-color:rgba(245,158,11,0.5)}
+/* ── MACRO CALENDAR ── */
+.cal-week{font-family:var(--mono);font-size:10px;color:var(--muted-2);letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+.cal-event{display:flex;gap:14px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:10px}
+.cal-date{flex-shrink:0;width:52px;text-align:center}
+.cal-dow{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--gold);letter-spacing:.06em}
+.cal-day{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.cal-body{flex:1;min-width:0}
+.cal-name{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:8px}
+.cal-mkt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border)}
+.cal-mkt-q{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-mkt-q:hover{color:var(--cyan)}
+.cal-mkt-px{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);flex-shrink:0;font-variant-numeric:tabular-nums}
+.cal-nomkt{font-family:var(--mono);font-size:11px;color:var(--muted-2);padding-top:7px;border-top:1px solid var(--border)}
 
-/* CATEGORY BAR */
-.fi-cat-bar{height:3px;width:100%;flex-shrink:0}
-.fi-cat-bar.fed{background:#6688ff}
-.fi-cat-bar.crypto{background:#f59e0b}
-.fi-cat-bar.politics{background:#ef4444}
-.fi-cat-bar.macro{background:#22c55e}
-
-/* CARD IMAGE */
-.fi-card-img-wrap{position:relative;height:140px;overflow:hidden;background:#16161e}
-.fi-card-img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.3s ease}
-.fi-card:hover .fi-card-img{transform:scale(1.03)}
-.fi-card-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,#111116 100%)}
-
-/* EDGE BADGE */
-.fi-edge-badge{position:absolute;top:10px;right:10px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(10,10,12,0.85);backdrop-filter:blur(4px)}
-.fi-edge-badge.strong{color:#22c55e;border:1px solid rgba(34,197,94,0.4)}
-.fi-edge-badge.moderate{color:#f59e0b;border:1px solid rgba(245,158,11,0.35)}
-.fi-edge-badge.none{color:#444;border:1px solid #222}
-
-/* CARD BODY */
-.fi-card-body{padding:14px 16px;flex:1;display:flex;flex-direction:column}
-.fi-card-question{font-size:14px;font-weight:500;color:#d0d4e8;line-height:1.45;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-
-/* PRICE ROW */
-.fi-price-row{display:flex;align-items:center;gap:14px;margin-bottom:10px}
-.fi-yes{font-size:20px;font-weight:700;color:#22c55e}
-.fi-yes.low{color:#ef4444}
-.fi-yes.mid{color:#f59e0b}
-.fi-price-label{font-size:10px;color:#3a4060;text-transform:uppercase;letter-spacing:1px;font-weight:600}
-.fi-vol{font-size:11px;color:#4a5280;margin-left:auto}
-.fi-vol span{color:#6870a0;font-weight:600}
-
-/* STATS ROW */
-.fi-stats-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.fi-stat{font-size:11px;color:#4a5280;display:flex;align-items:center;gap:4px}
-.fi-stat .val{color:#6870a0;font-weight:600}
-.fi-stat .whale-val{color:#a78bfa;font-weight:600}
-
-/* SIGNAL */
-.fi-signal{font-size:11px;color:#6870a0;line-height:1.55;padding-top:10px;border-top:1px solid #1a1a22;margin-top:auto}
-.fi-signal .hl{color:#f59e0b}
-
-/* STATES */
-.fi-loading{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
-.fi-empty{text-align:center;padding:80px 0;font-size:12px;color:#2a2a40;letter-spacing:2px;text-transform:uppercase;font-weight:700}
-
-/* COUNT */
-.fi-count{font-size:11px;color:#2a3050;margin-bottom:12px}
-
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+/* ── LIVE FINANCE MARKETS ── */
+.fmkt{display:block;padding:15px 17px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:10px;transition:border-color .15s,transform .15s}
+.fmkt:hover{border-color:var(--border-2);transform:translateY(-1px)}
+.fmkt.strong{border-color:rgba(0,230,138,.22)}
+.fmkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}
+.fmkt-q{font-size:14px;font-weight:600;color:var(--ink-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.fmkt-yes{font-family:var(--mono);font-size:20px;font-weight:800;color:var(--green);flex-shrink:0;line-height:1;font-variant-numeric:tabular-nums}
+.fmkt-yes.low{color:var(--red)}.fmkt-yes.mid{color:var(--gold)}
+.fmkt-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.fmkt-whale{color:var(--purple);font-weight:700}
+.fmkt-edge{margin-left:auto;color:var(--green);font-weight:700;border:1px solid rgba(0,230,138,.25);padding:2px 7px;border-radius:5px}
+.fmkt-edge.none{color:var(--muted-2);border-color:var(--border)}
+.fmkt-signal{font-size:11px;color:var(--muted);line-height:1.5;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)}
 </style>
 </head>
 <body>
 <div id="nav-root"></div>
-
-<div class="fi-header">
-  <div class="fi-header-inner">
-    <div class="fi-label">FINANCE INTELLIGENCE</div>
-    <div class="fi-title">Where's the edge?</div>
-    <div class="fi-subtitle">Highest volume markets ranked by structural edge and whale positioning.</div>
-  </div>
-</div>
-
-<div class="fi-edge-banner">
-  <div class="fi-edge-banner-inner">
-    Polymarket markets resolve NO at <span>4x</span> the rate of YES. Markets priced under <span>10¢</span> YES resolve YES only <span>1.1%</span> of the time. Sharp money exploits this bias.
-  </div>
-</div>
-
-<div class="fi-content">
-  <div class="fi-filters" id="filterRail">
-    <button class="fi-pill active" data-filter="all">ALL</button>
-    <button class="fi-pill" data-filter="fed">FED · RATES</button>
-    <button class="fi-pill" data-filter="crypto">CRYPTO</button>
-    <button class="fi-pill" data-filter="politics">POLITICS</button>
-    <button class="fi-pill" data-filter="macro">MACRO</button>
-    <button class="fi-pill strong-only" data-filter="strong">STRONG EDGE ONLY</button>
-  </div>
-  <div class="fi-count" id="mktCount"></div>
-  <div class="fi-grid" id="grid">
-    <div class="fi-loading">LOADING MARKETS…</div>
-  </div>
-</div>
-
 <script src="/nav.js"></script>
+
+<div class="fp-header">
+  <div class="fp-header-inner">
+    <div class="fp-label">Finance Intelligence</div>
+    <div class="fp-title">FINANCE INTELLIGENCE</div>
+    <div class="fp-sub">Where prediction markets diverge from Wall Street consensus.</div>
+  </div>
+</div>
+
+<div class="finance-page">
+
+  <section class="fp-section">
+    <div id="rateTracker"><div class="fp-loading">Loading rate tracker…</div></div>
+  </section>
+
+  <section class="fp-section">
+    <div class="fp-section-label">Smart Money vs Consensus</div>
+    <div class="fp-section-sub">Where prediction markets disagree with the experts.</div>
+    <div id="consensusGaps"><div class="fp-loading">Loading…</div></div>
+  </section>
+
+  <section class="fp-section">
+    <div class="fp-section-label">Macro Calendar</div>
+    <div class="fp-section-sub">This week's market-moving events.</div>
+    <div id="macroCalendar"><div class="fp-loading">Loading…</div></div>
+  </section>
+
+  <section class="fp-section">
+    <div class="fp-section-label">Live Finance Markets</div>
+    <div class="fp-section-sub">Finance markets right now, sorted by edge score.</div>
+    <div id="financeMarkets"><div class="fp-loading">Loading…</div></div>
+  </section>
+
+</div>
+
 <script>
-(function() {
-  var allMarkets = [];
-  var activeFilter = 'all';
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmtVol(v){v=Number(v||0);if(v>=1e6)return '$'+(v/1e6).toFixed(1)+'M';if(v>=1e3)return '$'+Math.round(v/1e3)+'k';return '$'+Math.round(v);}
+function yesCls(p){return p<15?'low':p<50?'mid':'';}
+function emptyCTA(msg){return '<div class="fp-empty">'+esc(msg)+'<br><a href="/edge-finder">Open the Edge Finder →</a></div>';}
 
-  function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+async function getJSON(url){var r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
 
-  function fmtVol(v) {
-    if (!v) return '$0';
-    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k';
-    return '$' + Math.round(v);
-  }
+// ── Section 1: Rate tracker ──
+getJSON('/api/finance/rate-tracker').then(function(d){
+  var el=document.getElementById('rateTracker');
+  if(!d||!d.available){ el.innerHTML='<div class="fp-empty">No live Fed rate-cut market right now.</div>'; return; }
+  var href = d.slug ? '/market/'+esc(d.slug) : '#';
+  el.innerHTML =
+    '<a class="rate-tracker" href="'+href+'">'
+    + '<div class="rt-header"><span class="rt-label">Fed Rate Cut Probability</span><span class="rt-source">Polymarket · Live</span></div>'
+    + '<div class="rt-number">'+d.pct+'%</div>'
+    + '<div class="rt-context">'+esc(d.context)+' <span class="rt-q">— '+esc(d.question)+'</span></div>'
+    + '<div class="rt-bar"><div class="rt-fill" id="rtFill"></div></div>'
+    + '<div class="rt-legend"><span>0% · no cut</span><span>100% · certain cut</span></div>'
+    + '</a>';
+  requestAnimationFrame(function(){ var f=document.getElementById('rtFill'); if(f) f.style.width=d.pct+'%'; });
+}).catch(function(){ document.getElementById('rateTracker').innerHTML='<div class="fp-empty">Rate tracker unavailable.</div>'; });
 
-  function catClass(cat) {
-    var c = (cat || '').toLowerCase();
-    if (/fed|rate|fomc|inflation|monetary|interest|federal reserve/.test(c)) return 'fed';
-    if (/crypto|bitcoin|btc|ethereum|eth|defi|coinbase|binance|solana/.test(c)) return 'crypto';
-    if (/polit|election|trump|president|congress|senate|democrat|republican/.test(c)) return 'politics';
-    return 'macro';
-  }
-
-  function matchesFilter(m, filter) {
-    if (filter === 'all') return true;
-    if (filter === 'strong') return (m.edge_score || 0) >= 70;
-    var cat = catClass(m.category);
-    return cat === filter;
-  }
-
-  function yesClass(yp) {
-    if (yp < 0.15) return 'low';
-    if (yp < 0.5) return 'mid';
-    return '';
-  }
-
-  function edgeBadge(score) {
-    if (score >= 70) return { cls: 'strong', label: 'STRONG EDGE' };
-    if (score >= 40) return { cls: 'moderate', label: 'MODERATE EDGE' };
-    return { cls: 'none', label: 'NO EDGE' };
-  }
-
-  function renderCard(m, idx) {
-    var yp = m.yes_price != null ? m.yes_price : 0.5;
-    var yesPct = Math.round(yp * 100);
-    var cat = catClass(m.category);
-    var badge = edgeBadge(m.edge_score || 0);
-    var isStrong = (m.edge_score || 0) >= 70;
-    var delay = Math.min(idx * 0.05, 0.5);
-
-    var imgHtml = '';
-    if (m.image) {
-      imgHtml = '<img class="fi-card-img" src="' + esc(m.image) + '" loading="lazy" alt="" ' +
-        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161e,#0a0a0c)\';">';
-    }
-
-    var signalHtml = '';
-    if (m.edge_signal) {
-      var sig = esc(m.edge_signal)
-        .replace(/(1\.1%)/g, '<span class="hl">$1</span>')
-        .replace(/(\d+ sharp wallets)/g, '<span class="hl">$1</span>');
-      signalHtml = '<div class="fi-signal">' + sig + '</div>';
-    }
-
-    var whaleStat = m.whale_count > 0
-      ? '<div class="fi-stat">&#x1F40B; <span class="whale-val">' + m.whale_count + ' whale' + (m.whale_count > 1 ? 's' : '') + '</span></div>'
+// ── Section 2: Consensus gaps ──
+getJSON('/api/finance/consensus-gaps').then(function(d){
+  var el=document.getElementById('consensusGaps');
+  var gaps=(d&&d.gaps)||[];
+  if(!gaps.length){ el.innerHTML=emptyCTA('No consensus markets live right now.'); return; }
+  el.innerHTML = gaps.map(function(g){
+    var noPct = 100 - g.market_pct;
+    var whaleChip = g.whale_count>=1 ? '<span class="cc-whale">'+g.whale_count+' whale'+(g.whale_count>1?'s':'')+'</span>' : '';
+    var actions = g.market_slug
+      ? '<div class="cc-actions"><a class="cc-btn cc-btn-yes" href="/market/'+esc(g.market_slug)+'?side=YES">YES '+g.market_pct+'¢</a>'
+        + '<a class="cc-btn cc-btn-no" href="/market/'+esc(g.market_slug)+'?side=NO">NO '+noPct+'¢</a></div>'
       : '';
+    return '<div class="card consensus-card">'
+      + '<div class="cc-question">'+esc(g.question)+'</div>'
+      + '<div class="cc-comparison">'
+      +   '<div class="cc-side cc-expert"><div class="cc-source">'+esc(g.benchmark_source)+'</div><div class="cc-pct">'+g.benchmark_pct+'%</div><div class="cc-tag">'+esc(g.benchmark_label)+'</div></div>'
+      +   '<div class="cc-side cc-market"><div class="cc-source">Polymarket '+whaleChip+'</div><div class="cc-pct">'+g.market_pct+'¢</div><div class="cc-tag">live YES price</div></div>'
+      + '</div>'
+      + '<div class="cc-gap"><span class="cc-gap-num">'+(g.gap>0?'+':'')+g.gap+' pts</span><span class="cc-signal">'+esc(g.signal)+'</span></div>'
+      + actions
+      + '</div>';
+  }).join('');
+}).catch(function(){ document.getElementById('consensusGaps').innerHTML='<div class="fp-empty">Consensus data unavailable.</div>'; });
 
-    return '<a class="fi-card' + (isStrong ? ' strong-edge' : '') + '" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
-      '<div class="fi-cat-bar ' + cat + '"></div>' +
-      '<div class="fi-card-img-wrap">' +
-        imgHtml +
-        '<div class="fi-card-img-grad"></div>' +
-        '<div class="fi-edge-badge ' + badge.cls + '">' + badge.label + '</div>' +
-      '</div>' +
-      '<div class="fi-card-body">' +
-        '<div class="fi-card-question">' + esc(m.question) + '</div>' +
-        '<div class="fi-price-row">' +
-          '<div><div class="fi-yes ' + yesClass(yp) + '">' + yesPct + '&#162;</div>' +
-          '<div class="fi-price-label">YES</div></div>' +
-          '<div class="fi-vol">Vol <span>' + fmtVol(m.volume) + '</span></div>' +
-        '</div>' +
-        '<div class="fi-stats-row">' +
-          whaleStat +
-          '<div class="fi-stat">Edge <span class="val">' + Math.round(m.edge_score || 0) + '</span></div>' +
-        '</div>' +
-        signalHtml +
-      '</div>' +
-    '</a>';
-  }
+// ── Section 3: Macro calendar ──
+getJSON('/api/finance/calendar').then(function(d){
+  var el=document.getElementById('macroCalendar');
+  var events=(d&&d.events)||[];
+  if(!events.length){ el.innerHTML='<div class="fp-empty">No macro events scheduled.</div>'; return; }
+  var head = d.week_of ? '<div class="cal-week">Week of '+esc(d.week_of)+'</div>' : '';
+  el.innerHTML = head + events.map(function(e){
+    var mkts = (e.markets&&e.markets.length)
+      ? e.markets.map(function(m){
+          return '<a class="cal-mkt" href="/market/'+esc(m.slug)+'"><span class="cal-mkt-q">'+esc(m.question)+'</span><span class="cal-mkt-px">'+m.yes_pct+'¢ YES</span></a>';
+        }).join('')
+      : '<div class="cal-nomkt">No active markets</div>';
+    return '<div class="cal-event">'
+      + '<div class="cal-date"><div class="cal-dow">'+esc(e.dow)+'</div><div class="cal-day">'+esc(e.day_label)+'</div></div>'
+      + '<div class="cal-body"><div class="cal-name">'+esc(e.name)+'</div>'+mkts+'</div>'
+      + '</div>';
+  }).join('');
+}).catch(function(){ document.getElementById('macroCalendar').innerHTML='<div class="fp-empty">Calendar unavailable.</div>'; });
 
-  function render() {
-    var visible = allMarkets.filter(function(m) { return matchesFilter(m, activeFilter); });
-    var count = document.getElementById('mktCount');
-    var grid = document.getElementById('grid');
-    if (count) count.textContent = visible.length + ' market' + (visible.length !== 1 ? 's' : '');
-    if (!visible.length) {
-      grid.innerHTML = '<div class="fi-empty">No markets match this filter.</div>';
-      return;
-    }
-    grid.innerHTML = visible.map(renderCard).join('');
-  }
-
-  document.getElementById('filterRail').addEventListener('click', function(e) {
-    var pill = e.target.closest('.fi-pill');
-    if (!pill) return;
-    document.querySelectorAll('.fi-pill').forEach(function(p) { p.classList.remove('active'); });
-    pill.classList.add('active');
-    activeFilter = pill.dataset.filter;
-    render();
-  });
-
-  fetch('/api/finance/markets')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      allMarkets = (data && Array.isArray(data.markets)) ? data.markets : [];
-      render();
-    })
-    .catch(function() {
-      document.getElementById('grid').innerHTML = '<div class="fi-empty">Could not load markets.</div>';
-    });
-})();
+// ── Section 4: Live finance markets ──
+getJSON('/api/finance/markets').then(function(d){
+  var el=document.getElementById('financeMarkets');
+  var markets=(d&&d.markets)||[];
+  if(!markets.length){ el.innerHTML=emptyCTA('No finance markets live right now.'); return; }
+  el.innerHTML = markets.map(function(m){
+    var yp=m.yes_price!=null?m.yes_price:0.5;
+    var pct=Math.round(yp*100);
+    var edge=Math.round(m.edge_score||0);
+    var strong=edge>=70;
+    var whale=m.whale_count>0?'<span class="fmkt-whale">'+m.whale_count+' whale'+(m.whale_count>1?'s':'')+'</span>':'';
+    var sig=m.edge_signal?'<div class="fmkt-signal">'+esc(m.edge_signal)+'</div>':'';
+    return '<a class="fmkt'+(strong?' strong':'')+'" href="/market/'+esc(m.slug)+'">'
+      + '<div class="fmkt-top"><div class="fmkt-q">'+esc(m.question)+'</div><div class="fmkt-yes '+yesCls(pct)+'">'+pct+'¢</div></div>'
+      + '<div class="fmkt-meta"><span>Vol '+fmtVol(m.volume)+'</span>'+whale
+      +   '<span class="fmkt-edge'+(edge<40?' none':'')+'">EDGE '+edge+'</span></div>'
+      + sig
+      + '</a>';
+  }).join('');
+}).catch(function(){ document.getElementById('financeMarkets').innerHTML='<div class="fp-empty">Markets unavailable.</div>'; });
 </script>
 </body>
 </html>

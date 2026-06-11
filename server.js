@@ -16364,6 +16364,64 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
 
 // GET /api/finance/markets — top 20 screener markets by edge score + volume
 let _financeMarketsCache = null;
+
+// ── Finance Intelligence shared data ──────────────────────────────────
+// Keywords that mark a market as "finance" for the /finance surface.
+const FINANCE_KEYWORDS = ['fed','rate','inflation','recession','gdp','cpi','pce',
+  'treasury','dollar','yield','earnings','stock','s&p','sp500','nasdaq','dow',
+  'powell','fomc','unemployment','jobs','economy','interest','bond','tariff'];
+
+// Expert/consensus benchmarks vs live prediction-market prices. benchmark_pct
+// is a manual weekly snapshot of the named source. Each entry matches a live
+// screener market via all/any keyword sets (robust to Polymarket's exact
+// phrasing, which we don't control). yes_bullish flags whether a YES outcome
+// is risk-on — so the signal can say "optimistic" vs "cautious" correctly even
+// for negatively-framed questions like recession.
+const FINANCE_BENCHMARKS = [
+  { question:'Will the Fed cut rates in July 2026?',          benchmark_source:'CME FedWatch',        benchmark_pct:28, benchmark_label:'the futures market', yes_bullish:true,  all:['jul'], any:['fed','rate','fomc','interest'] },
+  { question:'Will the Fed cut rates in September 2026?',      benchmark_source:'CME FedWatch',        benchmark_pct:55, benchmark_label:'the futures market', yes_bullish:true,  all:['sep'], any:['fed','rate','fomc','interest'] },
+  { question:'Will the US enter a recession by end of 2026?',  benchmark_source:'Goldman Sachs',       benchmark_pct:35, benchmark_label:'the Goldman forecast', yes_bullish:false, all:['recession'], any:['2026','us','enter','this year'] },
+  { question:'Will the S&P 500 hit a new all-time high in 2026?', benchmark_source:'Wall St consensus', benchmark_pct:72, benchmark_label:'analyst consensus', yes_bullish:true, all:['high'], any:['s&p','sp 500','sp500'] },
+  { question:'Will inflation fall below 3% in 2026?',          benchmark_source:'Fed SEP',             benchmark_pct:48, benchmark_label:'the Fed projection', yes_bullish:true,  all:[], any:['inflation','cpi'] },
+  { question:'Will Bitcoin hit $150k in 2026?',                benchmark_source:'Standard Chartered',  benchmark_pct:40, benchmark_label:'the bank target',   yes_bullish:true,  all:['150'], any:['bitcoin','btc'] },
+];
+
+// Rolling macro calendar — real dates. The endpoint surfaces events in a
+// "this week" window around the server clock so day labels stay correct as
+// the week rolls. Extend the list as the schedule fills in.
+const MACRO_EVENTS = [
+  { date:'2026-06-11', name:'CPI Report (May)',              any:['cpi','inflation'] },
+  { date:'2026-06-12', name:'UMich Consumer Sentiment',      any:['sentiment','consumer','michigan'] },
+  { date:'2026-06-16', name:'Retail Sales (May)',            any:['retail','consumer spending'] },
+  { date:'2026-06-17', name:'FOMC Rate Decision + Powell',   any:['fed','fomc','rate','powell','interest'] },
+  { date:'2026-06-26', name:'PCE Inflation (May)',           any:['pce','inflation'] },
+  { date:'2026-07-02', name:'Jobs Report (June)',            any:['jobs','unemployment','payroll'] },
+  { date:'2026-07-15', name:'CPI Report (June)',             any:['cpi','inflation'] },
+  { date:'2026-07-29', name:'FOMC Rate Decision + Powell',   any:['fed','fomc','rate','powell','interest'] },
+];
+
+function _financeMatch(screener, all, any) {
+  return screener.find(m => {
+    const q = (m.question || '').toLowerCase();
+    if (all && all.length && !all.every(t => q.includes(t))) return false;
+    if (any && any.length && !any.some(t => q.includes(t))) return false;
+    return true;
+  }) || null;
+}
+
+function buildConsensusSignal(gap, whales, benchmark) {
+  if (gap == null) return null;
+  const abs = Math.abs(gap);
+  // market more optimistic than the expert? depends on which way YES leans.
+  const optimistic = (gap > 0) === (benchmark.yes_bullish !== false);
+  const dir = optimistic ? 'more optimistic' : 'more cautious';
+  if (abs < 5)  return `Prediction markets are aligned with ${benchmark.benchmark_label}.`;
+  if (abs >= 15 && whales >= 3) return `Smart money ${abs}pt ${dir} than ${benchmark.benchmark_label}. ${whales} whales positioned.`;
+  if (abs >= 15) return `Traders ${abs}pt ${dir} than ${benchmark.benchmark_label}. Significant divergence.`;
+  if (abs >= 8)  return `Traders ${abs}pt ${dir} than ${benchmark.benchmark_label}. Worth watching.`;
+  return `Roughly aligned with ${benchmark.benchmark_label} — ${abs}pt apart.`;
+}
+
 app.get('/api/finance/markets', (req, res) => {
   if (_financeMarketsCache && (Date.now() - _financeMarketsCache.ts < 60000)) {
     return res.json(_financeMarketsCache.data);
@@ -16372,7 +16430,7 @@ app.get('/api/finance/markets', (req, res) => {
   if (!screener.length) return res.json({ markets: [] });
 
   const sorted = screener
-    .filter(m => m.question && m.slug)
+    .filter(m => m.question && m.slug && FINANCE_KEYWORDS.some(k => m.question.toLowerCase().includes(k)))
     .sort((a, b) => {
       const edgeDiff = (b.edge_score || 0) - (a.edge_score || 0);
       if (edgeDiff !== 0) return edgeDiff;
@@ -16410,6 +16468,81 @@ app.get('/api/finance/markets', (req, res) => {
 
   _financeMarketsCache = { ts: Date.now(), data: { markets } };
   res.json({ markets });
+});
+
+// GET /api/finance/consensus-gaps — prediction market price vs expert benchmark.
+app.get('/api/finance/consensus-gaps', (req, res) => {
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  const gaps = FINANCE_BENCHMARKS.map(b => {
+    const live = _financeMatch(screener, b.all, b.any);
+    const marketPct = live ? Math.round((live.yes_price != null ? live.yes_price : 0.5) * 100) : null;
+    const gap = marketPct != null ? marketPct - b.benchmark_pct : null;
+    const whales = live ? (live.whale_count || 0) : 0;
+    return {
+      question:         b.question,
+      benchmark_source: b.benchmark_source,
+      benchmark_pct:    b.benchmark_pct,
+      benchmark_label:  b.benchmark_label,
+      market_pct:       marketPct,
+      market_slug:      live ? live.slug : null,
+      gap,
+      edge_score:       live ? Math.round(live.edge_score || 0) : 0,
+      whale_count:      whales,
+      signal:           buildConsensusSignal(gap, whales, b),
+    };
+  }).filter(g => g.market_pct != null);
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ gaps, updated_at: new Date().toISOString() });
+});
+
+// GET /api/finance/calendar — this week's macro events + live markets attached.
+app.get('/api/finance/calendar', (req, res) => {
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  const now = Date.now(), DAY = 86400000;
+  const stamp = e => ({ e, t: new Date(e.date + 'T12:00:00Z').getTime() });
+  let chosen = MACRO_EVENTS.map(stamp)
+    .filter(x => isFinite(x.t) && x.t >= now - DAY && x.t <= now + 9 * DAY)
+    .sort((a, b) => a.t - b.t);
+  // Schedule gap → fall back to the next few upcoming events so it's never blank.
+  if (!chosen.length) {
+    chosen = MACRO_EVENTS.map(stamp).filter(x => isFinite(x.t) && x.t >= now - DAY).sort((a, b) => a.t - b.t).slice(0, 3);
+  }
+  const events = chosen.map(({ e, t }) => {
+    const d = new Date(t);
+    const markets = screener
+      .filter(m => { const q = (m.question || '').toLowerCase(); return m.slug && (e.any || []).some(k => q.includes(k)); })
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, 2)
+      .map(m => ({ question: m.question, slug: m.slug, yes_pct: Math.round((m.yes_price != null ? m.yes_price : 0.5) * 100) }));
+    return {
+      date:      e.date,
+      dow:       d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toUpperCase(),
+      day_label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      name:      e.name,
+      markets,
+    };
+  });
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ week_of: new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }), events });
+});
+
+// GET /api/finance/rate-tracker — live Polymarket Fed-rate-cut probability.
+app.get('/api/finance/rate-tracker', (req, res) => {
+  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  const candidates = screener.filter(m => {
+    const q = (m.question || '').toLowerCase();
+    return m.slug && q.includes('cut') && (q.includes('fed') || q.includes('rate') || q.includes('fomc') || q.includes('interest'));
+  });
+  const mkt = candidates.sort((a, b) => (b.volume || 0) - (a.volume || 0))[0] || null;
+  if (!mkt) return res.json({ available: false });
+  const pct = Math.round((mkt.yes_price != null ? mkt.yes_price : 0.5) * 100);
+  let context;
+  if (pct >= 70)      context = 'Market is pricing a cut as the base case.';
+  else if (pct >= 45) context = 'Roughly a coin flip — the market is undecided.';
+  else if (pct >= 20) context = 'Market leans toward no cut at this meeting.';
+  else                context = 'Market sees a cut as unlikely here.';
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ available: true, pct, question: mkt.question, slug: mkt.slug, volume: mkt.volume || 0, edge_score: Math.round(mkt.edge_score || 0), context });
 });
 
 let _mentionsApiCache = null;
