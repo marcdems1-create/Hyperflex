@@ -16364,24 +16364,30 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
 
 // GET /api/finance/markets — direct Gamma API fetch, 10-min cache
 const FINANCE_QUERIES = [
-  { q: 'fed rate',        cat: 'fed_rates' },
-  { q: 'federal reserve', cat: 'fed_rates' },
-  { q: 'interest rate',   cat: 'fed_rates' },
-  { q: 'inflation',       cat: 'fed_rates' },
-  { q: 'bitcoin',         cat: 'crypto' },
-  { q: 'ethereum',        cat: 'crypto' },
-  { q: 'crypto',          cat: 'crypto' },
-  { q: 'recession',       cat: 'macro' },
-  { q: 'stock market',    cat: 'macro' },
-  { q: 'nvidia',          cat: 'macro' },
-  { q: 'oil price',       cat: 'macro' },
-  { q: 'trump tariff',    cat: 'politics' },
-  { q: 'trump',           cat: 'politics' },
-  { q: 'congress',        cat: 'politics' },
+  { q: 'Fed rate cut 2026',      cat: 'fed_rates' },
+  { q: 'FOMC interest rate',     cat: 'fed_rates' },
+  { q: 'Federal Reserve cut',    cat: 'fed_rates' },
+  { q: 'inflation CPI 2026',     cat: 'fed_rates' },
+  { q: 'Warsh Fed',              cat: 'fed_rates' },
+  { q: 'Bitcoin price 2026',     cat: 'crypto' },
+  { q: 'Bitcoin all time high',  cat: 'crypto' },
+  { q: 'Ethereum price',         cat: 'crypto' },
+  { q: 'crypto SEC regulation',  cat: 'crypto' },
+  { q: 'Bitcoin hit',            cat: 'crypto' },
+  { q: 'S&P 500 2026',           cat: 'macro' },
+  { q: 'recession 2026',         cat: 'macro' },
+  { q: 'Nvidia stock',           cat: 'macro' },
+  { q: 'oil price 2026',         cat: 'macro' },
+  { q: 'gold price 2026',        cat: 'macro' },
+  { q: 'Trump tariff',           cat: 'politics' },
+  { q: 'Trump executive order',  cat: 'politics' },
+  { q: 'US China trade',         cat: 'politics' },
+  { q: 'Iran deal 2026',         cat: 'politics' },
+  { q: 'Trump approval',         cat: 'politics' },
 ];
 let _financeCache = null;
 let _financeCacheAt = 0;
-const FINANCE_TTL = 10 * 60 * 1000;
+const FINANCE_TTL = 10 * 60 * 1000; // 10-min cache; cleared on deploy by process restart
 
 function buildEdgeSignal(yes_price, whale_count, volume) {
   const pct = Math.round(yes_price * 100);
@@ -16403,7 +16409,7 @@ async function fetchFinanceMarkets() {
     if (sections[cat].length >= 5) continue;
     try {
       const r = await _nodeFetch(
-        'https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=' + encodeURIComponent(q) + '&order=volume&ascending=false&limit=5',
+        'https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=' + encodeURIComponent(q) + '&order=volume&ascending=false&limit=3',
         { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(6000) }
       );
       if (!r.ok) continue;
@@ -16411,6 +16417,7 @@ async function fetchFinanceMarkets() {
       if (!Array.isArray(events)) continue;
       for (const ev of events) {
         if (!ev.slug || seen.has(ev.slug)) continue;
+        if ((ev.markets || []).length > 2) continue; // skip multi-outcome/bracket markets
         seen.add(ev.slug);
         const market = (ev.markets || [])[0];
         if (!market) continue;

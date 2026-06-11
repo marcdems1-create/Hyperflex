@@ -59,11 +59,17 @@ a{color:inherit;text-decoration:none}
 .edge-card{
   background:rgba(22,22,31,0.8);
   border:1px solid var(--border);border-radius:14px;
-  padding:18px;position:relative;cursor:pointer;
+  overflow:hidden;position:relative;cursor:pointer;
   transition:all .15s;text-decoration:none;color:inherit;display:block;
   animation:fadeUp 0.4s ease both;
 }
 .edge-card:hover{border-color:rgba(77,159,255,0.4);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.edge-card-body{padding:18px}
+
+/* Card image */
+.fi-img-wrap{position:relative;height:120px;overflow:hidden;background:var(--paper-2)}
+.fi-img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(0.4)}
+.fi-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(22,22,31,0.9) 100%)}
 
 /* Card top */
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
@@ -159,16 +165,29 @@ a{color:inherit;text-decoration:none}
       ? '<div class="signal-strip">' + esc(m.edge_signal) + '</div>'
       : '';
 
+    var imgHtml = '';
+    if (m.image) {
+      var proxied = '/api/img-proxy?url=' + encodeURIComponent(m.image);
+      imgHtml = '<div class="fi-img-wrap">' +
+        '<img class="fi-img" src="' + esc(proxied) + '" loading="lazy" alt="" ' +
+        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161f,#0e0e15)\';">' +
+        '<div class="fi-img-grad"></div>' +
+      '</div>';
+    }
+
     return '<a class="edge-card" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
-      '<div class="card-top">' +
-        '<div class="yes-price-wrap">' +
-          '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '¢</div>' +
-          '<div class="yes-price-l">YES</div>' +
+      imgHtml +
+      '<div class="edge-card-body">' +
+        '<div class="card-top">' +
+          '<div class="yes-price-wrap">' +
+            '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '¢</div>' +
+            '<div class="yes-price-l">YES</div>' +
+          '</div>' +
+          '<div class="badges">' + badges + '</div>' +
         '</div>' +
-        '<div class="badges">' + badges + '</div>' +
+        '<div class="card-q">' + esc(m.question) + '</div>' +
+        signalHtml +
       '</div>' +
-      '<div class="card-q">' + esc(m.question) + '</div>' +
-      signalHtml +
     '</a>';
   }
 
