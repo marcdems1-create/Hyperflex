@@ -61053,6 +61053,271 @@ async function detectCascade(newPredId, marketId, postedAt) {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// EDGE FINDER — internal arb, correlated markets, volume signals
+// ════════════════════════════════════════════════════════════
+
+app.get('/edge-finder', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'edge-finder.html')));
+
+// /api/arb/internal — multi-outcome events where sum of YES prices deviates >5¢
+{
+  let _arbInternalCache = null;
+  let _arbInternalCacheAt = 0;
+  const ARB_INTERNAL_TTL = 2 * 60 * 1000;
+
+  app.get('/api/arb/internal', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (_arbInternalCache && (now - _arbInternalCacheAt) < ARB_INTERNAL_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_arbInternalCache);
+      }
+
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 12000);
+      let events;
+      try {
+        const r = await _nodeFetch(
+          'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume24hr&ascending=false&limit=250',
+          { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+        );
+        if (!r.ok) throw new Error(`Gamma HTTP ${r.status}`);
+        events = await r.json();
+      } finally { clearTimeout(t); }
+
+      if (!Array.isArray(events)) throw new Error('Bad Gamma response');
+
+      const results = [];
+      for (const ev of events) {
+        const markets = Array.isArray(ev.markets)
+          ? ev.markets.filter(m => !m.closed && !m.archived && m.active !== false)
+          : [];
+        if (markets.length < 2) continue;
+
+        const outcomes = [];
+        for (const m of markets) {
+          let prices = m.outcomePrices;
+          if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) { prices = null; } }
+          if (!Array.isArray(prices) || prices.length === 0) continue;
+          const yesPrice = parseFloat(prices[0]);
+          if (!isFinite(yesPrice) || yesPrice <= 0 || yesPrice >= 1) continue;
+          outcomes.push({
+            question: (m.question || m.groupItemTitle || 'Unknown').replace(/^Will\s+/i, '').slice(0, 60),
+            slug: m.slug || ev.slug,
+            price_cents: Math.round(yesPrice * 100)
+          });
+        }
+        if (outcomes.length < 2) continue;
+
+        const totalCents = outcomes.reduce((s, o) => s + o.price_cents, 0);
+        const deviation = totalCents - 100;
+        if (Math.abs(deviation) <= 5) continue;
+
+        const vol24h = Number(ev.volume24hr || ev.volume_24h || 0);
+        const volTotal = Number(ev.volume || 0);
+        if (vol24h < 5000 && volTotal < 50000) continue;
+
+        const score = Math.abs(deviation) * Math.log(Math.max(vol24h || volTotal, 1));
+        const edgeScore = Math.min(99, Math.round(
+          Math.abs(deviation) * 1.5 + Math.log10(Math.max(vol24h || volTotal, 1)) * 4
+        ));
+
+        results.push({
+          event_slug: ev.slug,
+          title: ev.title || 'Untitled Event',
+          outcomes: outcomes.sort((a, b) => b.price_cents - a.price_cents),
+          total_cents: totalCents,
+          deviation,
+          direction: deviation > 0 ? 'overpriced' : 'underpriced',
+          volume_24h: vol24h,
+          volume_total: volTotal,
+          outcome_count: outcomes.length,
+          edge_score: edgeScore,
+          score
+        });
+      }
+
+      results.sort((a, b) => b.score - a.score);
+
+      _arbInternalCache = {
+        opportunities: results,
+        count: results.length,
+        updated_at: new Date().toISOString()
+      };
+      _arbInternalCacheAt = now;
+
+      res.set('Cache-Control', 'public, max-age=60').json(_arbInternalCache);
+    } catch (err) {
+      console.error('[arb/internal]', err.message);
+      if (_arbInternalCache) return res.json({ ..._arbInternalCache, stale: true });
+      res.status(502).json({ error: 'Failed to fetch arb data', detail: err.message });
+    }
+  });
+}
+
+// /api/arb/correlated — 8 hardcoded correlated pairs, gap > 8¢
+{
+  let _arbCorrCache = null;
+  let _arbCorrCacheAt = 0;
+  const ARB_CORR_TTL = 3 * 60 * 1000;
+
+  const CORR_PAIRS = [
+    { a: { label: 'Trump wins 2028', kws: ['trump', '2028', 'president'] },    b: { label: 'Republican WH 2028', kws: ['republican', 'white house', '2028'] }, rationale: 'Trump IS the Republican candidate — prices should be near-identical.' },
+    { a: { label: 'Fed cut July', kws: ['fed', 'rate', 'july', 'cut'] },       b: { label: 'Fed cut September', kws: ['fed', 'rate', 'september', 'cut'] },    rationale: 'A July cut implies September remains cut-friendly; pricing should align.' },
+    { a: { label: 'Bitcoin $100k', kws: ['bitcoin', '100,000', '100k'] },      b: { label: 'Bitcoin $150k', kws: ['bitcoin', '150,000', '150k'] },             rationale: 'Path to $150k requires clearing $100k first — lower bound must trade ≥ upper.' },
+    { a: { label: 'Dems win House', kws: ['democrat', 'house', 'win', '2026'] }, b: { label: 'Dems win Senate', kws: ['democrat', 'senate', 'win', '2026'] },   rationale: 'Wave elections move chambers together; large splits are historically rare.' },
+    { a: { label: 'Recession 2025', kws: ['recession', '2025', 'us'] },        b: { label: 'Unemployment spike', kws: ['unemployment', '2025', 'rise'] },       rationale: 'NBER recession definition requires sustained job losses — must be correlated.' },
+    { a: { label: 'Warsh Fed Chair', kws: ['warsh', 'fed', 'chair'] },         b: { label: 'Fed rate cut 2025', kws: ['rate', 'cut', '2025', 'fed'] },          rationale: 'Hawkish Warsh appointment should depress near-term rate-cut probability.' },
+    { a: { label: 'S&P 500 at 6000', kws: ['s&p', '6000', 'spx', 'sp500'] },  b: { label: 'Nasdaq at 20000', kws: ['nasdaq', '20000', 'ndx', 'qqq'] },        rationale: 'Correlated indices — divergence implies sector rotation, not a free lunch.' },
+    { a: { label: 'AGI by 2026', kws: ['agi', '2026', 'artificial general'] }, b: { label: 'GPT-5 release', kws: ['gpt-5', 'gpt5', 'openai', 'release'] },     rationale: 'Frontier model releases are the primary AGI-milestone catalyst.' },
+  ];
+
+  app.get('/api/arb/correlated', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (_arbCorrCache && (now - _arbCorrCacheAt) < ARB_CORR_TTL) {
+        return res.set('Cache-Control', 'public, max-age=120').json(_arbCorrCache);
+      }
+
+      // Build market lookup: screener + fresh Gamma fetch
+      const allMarkets = [];
+
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+      for (const m of screenerData) {
+        allMarkets.push({
+          q: (m.question || '').toLowerCase(),
+          slug: m.slug,
+          price: Math.round((m.yes_price || 0.5) * 100),
+          vol: Number(m.volume_24h || m.volume || 0)
+        });
+      }
+
+      // Supplement with Gamma events
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 9000);
+        try {
+          const r = await _nodeFetch(
+            'https://gamma-api.polymarket.com/events?closed=false&active=true&order=volume&ascending=false&limit=200',
+            { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+          );
+          if (r.ok) {
+            const evts = await r.json();
+            if (Array.isArray(evts)) {
+              for (const ev of evts) {
+                const mkts = Array.isArray(ev.markets) ? ev.markets.filter(m => !m.closed) : [];
+                for (const m of mkts) {
+                  let prices = m.outcomePrices;
+                  if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch (_) { prices = null; } }
+                  const p = Array.isArray(prices) && prices[0] != null ? Math.round(parseFloat(prices[0]) * 100) : null;
+                  if (p == null) continue;
+                  allMarkets.push({
+                    q: (m.question || ev.title || '').toLowerCase(),
+                    slug: m.slug || ev.slug,
+                    price: p,
+                    vol: Number(m.volume || ev.volume || 0)
+                  });
+                }
+              }
+            }
+          }
+        } finally { clearTimeout(t); }
+      } catch (_) {}
+
+      function findMatch(kws) {
+        let best = null, bestScore = 0;
+        for (const m of allMarkets) {
+          let sc = 0;
+          for (const kw of kws) { if (m.q.includes(kw.toLowerCase())) sc++; }
+          if (sc > bestScore || (sc === bestScore && sc > 0 && m.vol > (best?.vol || 0))) {
+            bestScore = sc; best = m;
+          }
+        }
+        return bestScore >= 1 ? best : null;
+      }
+
+      const pairs = [];
+      for (const p of CORR_PAIRS) {
+        const mA = findMatch(p.a.kws);
+        const mB = findMatch(p.b.kws);
+        if (!mA || !mB || mA.slug === mB.slug) continue;
+        const gap = Math.abs(mA.price - mB.price);
+        if (gap < 8) continue;
+        pairs.push({
+          label_a: p.a.label, label_b: p.b.label,
+          slug_a: mA.slug, slug_b: mB.slug,
+          price_a: mA.price, price_b: mB.price,
+          gap_cents: gap,
+          higher: mA.price >= mB.price ? 'a' : 'b',
+          rationale: p.rationale,
+          volume_a: mA.vol, volume_b: mB.vol
+        });
+      }
+      pairs.sort((a, b) => b.gap_cents - a.gap_cents);
+
+      _arbCorrCache = { pairs, count: pairs.length, updated_at: new Date().toISOString() };
+      _arbCorrCacheAt = now;
+
+      res.set('Cache-Control', 'public, max-age=120').json(_arbCorrCache);
+    } catch (err) {
+      console.error('[arb/correlated]', err.message);
+      if (_arbCorrCache) return res.json({ ..._arbCorrCache, stale: true });
+      res.status(502).json({ error: 'Failed to fetch correlated arb', detail: err.message });
+    }
+  });
+}
+
+// /api/arb/volume-price — volume spike ≥5× but price change <5¢ (order absorption signals)
+{
+  let _arbVolCache = null;
+  let _arbVolCacheAt = 0;
+  const ARB_VOL_TTL = 2 * 60 * 1000;
+
+  app.get('/api/arb/volume-price', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (_arbVolCache && (now - _arbVolCacheAt) < ARB_VOL_TTL) {
+        return res.set('Cache-Control', 'public, max-age=60').json(_arbVolCache);
+      }
+
+      const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+
+      const signals = screenerData
+        .filter(m => {
+          const ratio = Number(m.volume_spike_ratio || 0);
+          const chg   = Math.abs(Number(m.price_change_24h || 0));
+          return ratio >= 5 && chg < 5 && Number(m.volume_24h || 0) > 10000;
+        })
+        .map(m => {
+          const ratio = Number(m.volume_spike_ratio);
+          return {
+            question:       m.question,
+            slug:           m.slug,
+            price_cents:    Math.round((m.yes_price || 0.5) * 100),
+            price_change:   Number(m.price_change_24h || 0),
+            volume_24h:     Number(m.volume_24h || 0),
+            spike_ratio:    parseFloat(ratio.toFixed(1)),
+            whale_count:    Number(m.whale_count || 0),
+            edge_score:     Number(m.edge_score || 0),
+            signal_strength: ratio >= 10 ? 'high' : 'medium',
+            rationale:      `${ratio.toFixed(1)}× volume surge with only ${Math.abs(m.price_change_24h || 0).toFixed(0)}¢ price move — order absorption. Move imminent.`
+          };
+        })
+        .sort((a, b) => (b.spike_ratio * b.volume_24h) - (a.spike_ratio * a.volume_24h))
+        .slice(0, 40);
+
+      _arbVolCache = { signals, count: signals.length, updated_at: new Date().toISOString() };
+      _arbVolCacheAt = now;
+
+      res.set('Cache-Control', 'public, max-age=60').json(_arbVolCache);
+    } catch (err) {
+      console.error('[arb/volume-price]', err.message);
+      if (_arbVolCache) return res.json({ ..._arbVolCache, stale: true });
+      res.status(500).json({ error: 'Failed to compute volume-price signals' });
+    }
+  });
+}
+
 // 404 catch-all — MUST be the very last route
 app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));

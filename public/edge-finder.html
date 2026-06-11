@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Edge Finder · Arb & Volume Signals</title>
+<meta name="description" content="Internal arb on multi-outcome markets, correlated pair gaps, and volume absorption signals on Polymarket.">
+<meta property="og:title" content="HYPERFLEX Edge Finder">
+<meta property="og:description" content="Spot mispricings before the market corrects. Internal arb, correlated pairs, volume signals.">
+<meta property="og:url" content="https://hyperflex.network/edge-finder">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#0e0e15;
+    --paper-2:#16161f;
+    --paper-3:#1e1e2a;
+    --ink:#f0f0f5;
+    --dim:#8888a0;
+    --soft:#aaaabe;
+    --border:#1e1e2a;
+    --green:#00e68a;
+    --red:#ff4d6a;
+    --blue:#4d9fff;
+    --purple:#a855f7;
+    --amber:#f59e0b;
+    --gold:#c9920d;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .container{max-width:1280px;margin:0 auto;padding:0 24px}
+
+  /* ── Hero ── */
+  .hero{padding:48px 0 32px;border-bottom:1px solid var(--border)}
+  .hero-eyebrow{font-size:11px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:14px}
+  .hero h1{font-weight:900;font-size:42px;line-height:1.08;letter-spacing:-0.03em;margin-bottom:12px;max-width:800px}
+  .hero h1 em{background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:normal}
+  .hero-sub{font-size:13px;color:var(--dim);max-width:580px;line-height:1.6;margin-bottom:28px}
+
+  /* Stats bar */
+  .stats-bar{display:flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--paper-2);flex-wrap:wrap}
+  .stat-cell{flex:1;min-width:140px;padding:16px 20px;border-right:1px solid var(--border)}
+  .stat-cell:last-child{border-right:none}
+  .stat-cell .n{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
+  .stat-cell .l{font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.12em}
+  .stat-cell.s-arb .n{color:var(--red)}
+  .stat-cell.s-corr .n{color:var(--amber)}
+  .stat-cell.s-vol .n{color:var(--blue)}
+  .stat-cell.s-fresh .n{color:var(--green)}
+
+  /* ── Tabs ── */
+  .tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin-top:32px}
+  .tab{padding:13px 20px;font-size:13px;font-weight:600;color:var(--soft);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;outline:none}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--ink);border-bottom-color:var(--blue)}
+  .tab .count{display:inline-block;margin-left:7px;font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--paper-3);color:var(--soft)}
+  .tab.active .count{background:rgba(77,159,255,0.12);color:var(--blue)}
+
+  /* ── Tab panels ── */
+  .tab-panel{display:none;padding:24px 0 60px}
+  .tab-panel.active{display:block}
+
+  /* ── Panel header ── */
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+  .panel-head h2{font-size:15px;font-weight:700}
+  .panel-head .meta{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .refresh-btn{background:var(--paper-2);border:1px solid var(--border);color:var(--soft);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .15s}
+  .refresh-btn:hover{border-color:var(--blue);color:var(--blue)}
+
+  /* Live dot */
+  .live-dot{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--soft)}
+  .live-dot::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;flex-shrink:0}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* ── Card grid ── */
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px}
+
+  /* ── Base card ── */
+  .ef-card{
+    background:var(--paper-2);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px 18px 14px;
+    position:relative;
+    transition:all .15s;
+    border-left-width:4px;
+  }
+  .ef-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+  .ef-card.over{border-left-color:var(--red)}
+  .ef-card.under{border-left-color:var(--green)}
+  .ef-card.neutral{border-left-color:var(--blue)}
+  .ef-card.amber{border-left-color:var(--amber)}
+
+  /* Card title row */
+  .card-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .card-title{font-size:14px;font-weight:700;line-height:1.3;color:var(--ink);flex:1;min-width:0}
+  .dev-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;white-space:nowrap;flex-shrink:0}
+  .dev-badge.over{background:rgba(255,77,106,0.12);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
+  .dev-badge.under{background:rgba(0,230,138,0.10);color:var(--green);border:1px solid rgba(0,230,138,0.2)}
+
+  /* Signal sentence */
+  .signal-line{font-size:12px;color:var(--soft);margin-bottom:14px;line-height:1.5}
+
+  /* Outcome table */
+  .outcome-table{background:var(--paper);border-radius:10px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border)}
+  .outcome-row{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px}
+  .outcome-row:last-child{border-bottom:none}
+  .outcome-row.total-row{border-top:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);font-weight:700;font-size:13px}
+  .outcome-name{color:var(--soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:12px}
+  .outcome-row.total-row .outcome-name{color:var(--ink)}
+  .outcome-price{font-family:var(--mono);font-weight:600;flex-shrink:0}
+  .outcome-price.over{color:var(--red)}
+  .outcome-price.under{color:var(--green)}
+  .outcome-price.dim{color:var(--soft)}
+
+  /* Card footer */
+  .card-footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .cf-meta{font-size:11px;color:var(--dim);display:flex;align-items:center;gap:4px}
+  .cf-meta strong{color:var(--soft)}
+  .edge-chip{display:inline-flex;align-items:center;font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--paper-3);color:var(--soft);border:1px solid var(--border)}
+  .edge-chip.high{background:rgba(0,230,138,0.08);color:var(--green);border-color:rgba(0,230,138,0.2)}
+  .edge-chip.mid{background:rgba(77,159,255,0.08);color:var(--blue);border-color:rgba(77,159,255,0.2)}
+  .poly-link{margin-left:auto;font-size:11px;color:var(--blue);text-decoration:none;font-weight:600;white-space:nowrap;transition:color .15s}
+  .poly-link:hover{color:var(--ink)}
+
+  /* ── Correlated pair card ── */
+  .pair-table{display:grid;grid-template-columns:1fr auto 1fr;gap:0;background:var(--paper);border-radius:10px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border)}
+  .pair-cell{padding:12px 14px}
+  .pair-cell.mid{display:flex;align-items:center;justify-content:center;background:var(--paper-3);border-left:1px solid var(--border);border-right:1px solid var(--border)}
+  .pair-label{font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+  .pair-question{font-size:12px;font-weight:600;color:var(--ink);line-height:1.3;margin-bottom:6px}
+  .pair-price{font-family:var(--mono);font-size:22px;font-weight:800}
+  .pair-price.higher{color:var(--red)}
+  .pair-price.lower{color:var(--green)}
+  .gap-number{font-family:var(--mono);font-size:18px;font-weight:900;color:var(--amber)}
+  .gap-label{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px}
+  .rationale{font-size:11px;color:var(--soft);line-height:1.5;font-style:italic;margin-bottom:12px;padding:8px 12px;background:rgba(245,158,11,0.05);border-radius:6px;border-left:2px solid rgba(245,158,11,0.25)}
+
+  /* ── Volume signal card ── */
+  .vol-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .vol-stat{background:var(--paper);border-radius:8px;padding:10px 12px;border:1px solid var(--border)}
+  .vol-stat .vn{font-family:var(--mono);font-size:18px;font-weight:800;line-height:1;margin-bottom:3px}
+  .vol-stat .vl{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em}
+  .vol-stat.spike .vn{color:var(--blue)}
+  .vol-stat.price .vn{color:var(--soft)}
+  .vol-stat.vol .vn{color:var(--amber)}
+  .signal-strength-bar{height:3px;border-radius:2px;background:var(--paper-3);overflow:hidden;margin-top:8px}
+  .signal-strength-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width .5s}
+
+  /* ── Empty / loading / error states ── */
+  .loading-state{text-align:center;padding:80px 20px;color:var(--dim);font-size:13px}
+  .loading-state .spinner{width:32px;height:32px;border:2px solid var(--paper-3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error-state{text-align:center;padding:60px 20px;color:var(--red);font-size:13px}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--dim);font-size:13px}
+  .empty-state p{max-width:400px;margin:0 auto;line-height:1.6}
+
+  /* Divider line for outcome table */
+  .outcome-divider{height:1px;background:rgba(255,255,255,0.08);margin:0}
+
+  /* Scrollable tabs on mobile */
+  @media(max-width:768px){
+    .hero h1{font-size:30px}
+    .card-grid{grid-template-columns:1fr}
+    .tab-bar{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+    .tab-bar::-webkit-scrollbar{display:none}
+    .tab{padding:12px 14px;font-size:12px}
+    .stats-bar{border-radius:10px}
+    .stat-cell{min-width:120px;padding:12px 14px}
+    .stat-cell .n{font-size:22px}
+    .pair-table{grid-template-columns:1fr}
+    .pair-cell.mid{border-left:none;border-right:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 14px;flex-direction:row;gap:8px}
+    .vol-stats{grid-template-columns:repeat(2,1fr)}
+    .container{padding:0 14px}
+  }
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/nav.js?v=22"></script>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">◎ Edge Finder</div>
+    <h1>Market mispricings you can <em>act on now.</em></h1>
+    <p class="hero-sub">Internal arb in multi-outcome events, correlated pairs with divergent prices, and volume absorption signals before the price move.</p>
+    <div class="stats-bar">
+      <div class="stat-cell s-arb"><div class="n" id="stat-arb">—</div><div class="l">Arb Opportunities</div></div>
+      <div class="stat-cell s-corr"><div class="n" id="stat-corr">—</div><div class="l">Correlated Gaps</div></div>
+      <div class="stat-cell s-vol"><div class="n" id="stat-vol">—</div><div class="l">Volume Signals</div></div>
+      <div class="stat-cell s-fresh"><div class="n" id="stat-fresh">—</div><div class="l">Updated</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+  <div class="tab-bar" role="tablist">
+    <button class="tab active" id="tab-arb" role="tab" onclick="switchTab('arb')">
+      Internal Arb <span class="count" id="tc-arb">—</span>
+    </button>
+    <button class="tab" id="tab-corr" role="tab" onclick="switchTab('corr')">
+      Correlated Markets <span class="count" id="tc-corr">—</span>
+    </button>
+    <button class="tab" id="tab-vol" role="tab" onclick="switchTab('vol')">
+      Volume Signals <span class="count" id="tc-vol">—</span>
+    </button>
+  </div>
+
+  <!-- Internal Arb tab -->
+  <div class="tab-panel active" id="panel-arb">
+    <div class="panel-head">
+      <div>
+        <h2>Internal Arb — Multi-Outcome Events</h2>
+        <div class="meta" id="arb-meta">Sum of outcome YES prices deviating &gt;5¢ from 100¢</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="live-dot" id="arb-live">Loading…</span>
+        <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="card-grid" id="arb-grid">
+      <div class="loading-state"><div class="spinner"></div>Scanning Polymarket events…</div>
+    </div>
+  </div>
+
+  <!-- Correlated Markets tab -->
+  <div class="tab-panel" id="panel-corr">
+    <div class="panel-head">
+      <div>
+        <h2>Correlated Pairs — Price Divergence</h2>
+        <div class="meta">Logically linked markets where prices have drifted apart &gt;8¢</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="live-dot" id="corr-live" style="opacity:0">—</span>
+        <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="card-grid" id="corr-grid">
+      <div class="loading-state"><div class="spinner"></div>Matching correlated pairs…</div>
+    </div>
+  </div>
+
+  <!-- Volume Signals tab -->
+  <div class="tab-panel" id="panel-vol">
+    <div class="panel-head">
+      <div>
+        <h2>Volume Absorption — Imminent Moves</h2>
+        <div class="meta">Volume ≥5× baseline but price barely moved — buyers and sellers matched. Breakout imminent.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="live-dot" id="vol-live" style="opacity:0">—</span>
+        <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="card-grid" id="vol-grid">
+      <div class="loading-state"><div class="spinner"></div>Scanning volume patterns…</div>
+    </div>
+  </div>
+
+  <div style="padding:40px 0 20px;text-align:center;font-size:11px;color:var(--dim);border-top:1px solid var(--border);margin-top:20px">
+    Not financial advice. All markets can resolve against you. Edge signals are probabilistic, not guaranteed.
+    Data refreshes every 2 minutes from Polymarket Gamma and internal screener.
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var _currentTab = 'arb';
+  var _data = { arb: null, corr: null, vol: null };
+  var _lastLoaded = 0;
+  var _REFRESH_MS = 2 * 60 * 1000;
+
+  function switchTab(tab) {
+    _currentTab = tab;
+    ['arb','corr','vol'].forEach(function(t) {
+      var btn = document.getElementById('tab-' + t);
+      var panel = document.getElementById('panel-' + t);
+      if (t === tab) { btn.classList.add('active'); panel.classList.add('active'); }
+      else { btn.classList.remove('active'); panel.classList.remove('active'); }
+    });
+  }
+  window.switchTab = switchTab;
+
+  function fmtVol(v) {
+    v = Number(v) || 0;
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'k';
+    return '$' + v;
+  }
+
+  function fmtAge(iso) {
+    if (!iso) return '—';
+    var ms = Date.now() - new Date(iso).getTime();
+    var sec = Math.floor(ms / 1000);
+    if (sec < 60) return sec + 's ago';
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + 'm ago';
+    return Math.floor(min / 60) + 'h ago';
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Internal Arb rendering ──
+  function renderArb(data) {
+    var grid = document.getElementById('arb-grid');
+    var items = (data && data.opportunities) || [];
+
+    document.getElementById('stat-arb').textContent = items.length;
+    document.getElementById('tc-arb').textContent = items.length;
+    document.getElementById('arb-live').textContent = 'Live · ' + fmtAge(data && data.updated_at);
+
+    if (!items.length) {
+      grid.innerHTML = '<div class="empty-state"><p>No internal arb opportunities above 5¢ deviation detected right now. Markets may be efficiently priced.</p></div>';
+      return;
+    }
+
+    grid.innerHTML = items.map(function(ev) {
+      var isOver = ev.deviation > 0;
+      var dir = isOver ? 'over' : 'under';
+      var devAbs = Math.abs(ev.deviation);
+      var badge = isOver
+        ? '<span class="dev-badge over">+' + devAbs + '¢ OVERPRICED</span>'
+        : '<span class="dev-badge under">−' + devAbs + '¢ UNDERPRICED</span>';
+
+      var signal = isOver
+        ? 'Sum of outcome prices totals ' + ev.total_cents + '¢ — you can buy NO on every outcome and pocket ' + devAbs + '¢ risk-free if the market corrects.'
+        : 'Sum of outcome prices totals only ' + ev.total_cents + '¢ — at least one outcome is underpriced by ' + devAbs + '¢ relative to certainty.';
+
+      var outcomes = (ev.outcomes || []).slice(0, 8);
+      var outcomeRows = outcomes.map(function(o) {
+        var priceClass = isOver ? 'over' : 'under';
+        return '<div class="outcome-row">' +
+          '<span class="outcome-name">' + esc(o.question) + '</span>' +
+          '<span class="outcome-price ' + priceClass + '">' + o.price_cents + '¢</span>' +
+          '</div>';
+      }).join('');
+
+      var more = ev.outcome_count > 8
+        ? '<div class="outcome-row" style="opacity:0.5;font-size:11px"><span class="outcome-name">+ ' + (ev.outcome_count - 8) + ' more outcomes</span><span class="outcome-price dim">…</span></div>'
+        : '';
+
+      var totalClass = isOver ? 'over' : 'under';
+      var totalRow = '<div class="outcome-row total-row">' +
+        '<span class="outcome-name">Total (' + ev.outcome_count + ' outcomes)</span>' +
+        '<span class="outcome-price ' + totalClass + '">' + ev.total_cents + '¢</span>' +
+        '</div>';
+
+      var edgeClass = ev.edge_score >= 70 ? 'high' : ev.edge_score >= 45 ? 'mid' : '';
+      var polyUrl = ev.event_slug
+        ? 'https://polymarket.com/event/' + encodeURIComponent(ev.event_slug)
+        : 'https://polymarket.com';
+
+      return '<div class="ef-card ' + dir + '">' +
+        '<div class="card-title-row">' +
+          '<div class="card-title">' + esc(ev.title) + '</div>' +
+          badge +
+        '</div>' +
+        '<div class="signal-line">' + signal + '</div>' +
+        '<div class="outcome-table">' + outcomeRows + more + '<div class="outcome-divider"></div>' + totalRow + '</div>' +
+        '<div class="card-footer">' +
+          '<span class="cf-meta"><strong>' + fmtVol(ev.volume_24h || ev.volume_total) + '</strong> vol</span>' +
+          '<span style="color:var(--border)">&middot;</span>' +
+          '<span class="cf-meta"><strong>' + ev.outcome_count + '</strong> outcomes</span>' +
+          '<span class="edge-chip ' + edgeClass + '">' + ev.edge_score + ' EDGE</span>' +
+          '<a class="poly-link" href="' + polyUrl + '" target="_blank" rel="noopener">View on Polymarket &rarr;</a>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Correlated pairs rendering ──
+  function renderCorr(data) {
+    var grid = document.getElementById('corr-grid');
+    var pairs = (data && data.pairs) || [];
+
+    document.getElementById('stat-corr').textContent = pairs.length;
+    document.getElementById('tc-corr').textContent = pairs.length;
+    document.getElementById('corr-live').style.opacity = '1';
+    document.getElementById('corr-live').textContent = 'Live · ' + fmtAge(data && data.updated_at);
+
+    if (!pairs.length) {
+      grid.innerHTML = '<div class="empty-state"><p>No correlated pair gaps above 8¢ detected. Prices may be efficiently aligned across paired markets.</p></div>';
+      return;
+    }
+
+    grid.innerHTML = pairs.map(function(p) {
+      var aHigher = p.higher === 'a';
+      var aClass = aHigher ? 'higher' : 'lower';
+      var bClass = aHigher ? 'lower' : 'higher';
+
+      var slugA = p.slug_a ? '/market/' + encodeURIComponent(p.slug_a) : '#';
+      var slugB = p.slug_b ? '/market/' + encodeURIComponent(p.slug_b) : '#';
+
+      return '<div class="ef-card amber">' +
+        '<div class="card-title-row" style="margin-bottom:14px">' +
+          '<div class="card-title">Correlated Pair Gap</div>' +
+          '<span class="dev-badge" style="background:rgba(245,158,11,0.1);color:var(--amber);border:1px solid rgba(245,158,11,0.25)">' + p.gap_cents + '¢ GAP</span>' +
+        '</div>' +
+        '<div class="pair-table">' +
+          '<div class="pair-cell">' +
+            '<div class="pair-label">' + esc(p.label_a) + '</div>' +
+            '<div class="pair-price ' + aClass + '">' + p.price_a + '¢</div>' +
+            (p.volume_a ? '<div style="font-size:10px;color:var(--dim);margin-top:4px">' + fmtVol(p.volume_a) + ' vol</div>' : '') +
+          '</div>' +
+          '<div class="pair-cell mid">' +
+            '<div style="text-align:center">' +
+              '<div class="gap-number">' + p.gap_cents + '¢</div>' +
+              '<div class="gap-label">GAP</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pair-cell" style="text-align:right">' +
+            '<div class="pair-label">' + esc(p.label_b) + '</div>' +
+            '<div class="pair-price ' + bClass + '">' + p.price_b + '¢</div>' +
+            (p.volume_b ? '<div style="font-size:10px;color:var(--dim);margin-top:4px">' + fmtVol(p.volume_b) + ' vol</div>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="rationale">' + esc(p.rationale) + '</div>' +
+        '<div class="card-footer">' +
+          (slugA !== '#' ? '<a class="poly-link" style="margin-left:0" href="' + slugA + '" target="_blank" rel="noopener">Market A &rarr;</a>' : '') +
+          (slugB !== '#' ? '<a class="poly-link" href="' + slugB + '" target="_blank" rel="noopener">Market B &rarr;</a>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Volume signals rendering ──
+  function renderVol(data) {
+    var grid = document.getElementById('vol-grid');
+    var signals = (data && data.signals) || [];
+
+    document.getElementById('stat-vol').textContent = signals.length;
+    document.getElementById('tc-vol').textContent = signals.length;
+    document.getElementById('vol-live').style.opacity = '1';
+    document.getElementById('vol-live').textContent = 'Live · ' + fmtAge(data && data.updated_at);
+
+    if (!signals.length) {
+      grid.innerHTML = '<div class="empty-state"><p>No volume absorption signals detected. Either the screener cache hasn\'t built yet, or markets are in equilibrium.</p></div>';
+      return;
+    }
+
+    grid.innerHTML = signals.map(function(m) {
+      var priceSgn = m.price_change >= 0 ? '+' : '−';
+      var priceAbs = Math.abs(m.price_change);
+      var priceColor = priceAbs < 2 ? 'var(--soft)' : m.price_change > 0 ? 'var(--green)' : 'var(--red)';
+      var strengthPct = Math.min(100, Math.round((m.spike_ratio / 20) * 100));
+      var strengthClass = m.signal_strength === 'high' ? 'high' : 'mid';
+      var link = m.slug ? '/market/' + encodeURIComponent(m.slug) : '#';
+
+      return '<div class="ef-card neutral">' +
+        '<div class="card-title-row" style="margin-bottom:10px">' +
+          '<div class="card-title">' + esc(m.question) + '</div>' +
+          '<span class="dev-badge" style="background:rgba(77,159,255,0.08);color:var(--blue);border:1px solid rgba(77,159,255,0.2)">' + m.spike_ratio + '× VOL</span>' +
+        '</div>' +
+        '<div class="signal-line">' + esc(m.rationale) + '</div>' +
+        '<div class="vol-stats">' +
+          '<div class="vol-stat spike"><div class="vn">' + m.spike_ratio + '×</div><div class="vl">Volume Spike</div></div>' +
+          '<div class="vol-stat price"><div class="vn" style="color:' + priceColor + '">' + priceSgn + priceAbs + '¢</div><div class="vl">Price Change 24h</div></div>' +
+          '<div class="vol-stat vol"><div class="vn">' + fmtVol(m.volume_24h) + '</div><div class="vl">24h Volume</div></div>' +
+        '</div>' +
+        '<div class="signal-strength-bar"><div class="signal-strength-fill" style="width:' + strengthPct + '%"></div></div>' +
+        '<div style="font-size:10px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Signal strength: ' + (m.signal_strength === 'high' ? 'HIGH' : 'MEDIUM') + ' &middot; ' + strengthPct + '%</div>' +
+        '<div class="card-footer" style="margin-top:12px">' +
+          (m.whale_count > 0 ? '<span class="cf-meta"><strong style="color:var(--purple)">' + m.whale_count + ' whale' + (m.whale_count > 1 ? 's' : '') + '</strong> positioned</span>' : '') +
+          '<span class="edge-chip ' + strengthClass + '">' + m.edge_score + ' EDGE</span>' +
+          (link !== '#' ? '<a class="poly-link" href="' + link + '">Trade &rarr;</a>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Fetch all three endpoints ──
+  async function loadAll() {
+    _lastLoaded = Date.now();
+    document.getElementById('stat-fresh').textContent = 'Now';
+
+    // Parallel fetches
+    var [arbRes, corrRes, volRes] = await Promise.allSettled([
+      fetch('/api/arb/internal').then(function(r) { return r.json(); }),
+      fetch('/api/arb/correlated').then(function(r) { return r.json(); }),
+      fetch('/api/arb/volume-price').then(function(r) { return r.json(); })
+    ]);
+
+    if (arbRes.status === 'fulfilled') {
+      _data.arb = arbRes.value;
+      renderArb(_data.arb);
+    } else {
+      document.getElementById('arb-grid').innerHTML = '<div class="error-state">Failed to load arb data. Retrying shortly.</div>';
+      document.getElementById('stat-arb').textContent = 'err';
+    }
+
+    if (corrRes.status === 'fulfilled') {
+      _data.corr = corrRes.value;
+      renderCorr(_data.corr);
+    } else {
+      document.getElementById('corr-grid').innerHTML = '<div class="error-state">Failed to load correlated pair data.</div>';
+      document.getElementById('stat-corr').textContent = 'err';
+    }
+
+    if (volRes.status === 'fulfilled') {
+      _data.vol = volRes.value;
+      renderVol(_data.vol);
+    } else {
+      document.getElementById('vol-grid').innerHTML = '<div class="error-state">Failed to load volume signal data.</div>';
+      document.getElementById('stat-vol').textContent = 'err';
+    }
+
+    // Update fresh timestamp
+    var now = new Date();
+    var hh = now.getHours().toString().padStart(2,'0');
+    var mm = now.getMinutes().toString().padStart(2,'0');
+    document.getElementById('stat-fresh').textContent = hh + ':' + mm;
+  }
+  window.loadAll = loadAll;
+
+  // Auto-refresh every 2 min
+  function scheduleRefresh() {
+    setTimeout(function() { loadAll().then(scheduleRefresh); }, _REFRESH_MS);
+  }
+
+  loadAll().then(scheduleRefresh);
+})();
+</script>
+</body>
+</html>

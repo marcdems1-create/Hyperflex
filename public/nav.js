@@ -353,6 +353,7 @@
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
+    { href: '/edge-finder', label: 'Edge' },
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/finance', label: 'Finance' },
