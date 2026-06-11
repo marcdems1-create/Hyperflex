@@ -150,18 +150,21 @@ a{color:inherit;text-decoration:none}
     return '$' + Math.round(v);
   }
 
-  function catClass(cat) {
-    var c = (cat || '').toLowerCase();
-    if (/fed|rate|fomc|inflation|monetary|interest|federal reserve/.test(c)) return 'fed';
-    if (/crypto|bitcoin|btc|ethereum|eth|defi|coinbase|binance|solana/.test(c)) return 'crypto';
-    if (/polit|election|trump|president|congress|senate|democrat|republican/.test(c)) return 'politics';
+  function catClass(m) {
+    // Run against question text — detectCategory() returns 'crypto'/'politics'/'other'
+    // so matching against m.category alone misses 'fed' and many 'macro' subcategories.
+    var q = ((m && m.question) || (typeof m === 'string' ? m : '') || '').toLowerCase();
+    var c = ((m && m.category) || '').toLowerCase();
+    if (/fed|rate|fomc|inflation|monetary|interest|federal reserve/.test(q)) return 'fed';
+    if (c === 'crypto' || /crypto|bitcoin|btc|ethereum|eth|defi|coinbase|binance|solana/.test(q)) return 'crypto';
+    if (c === 'politics' || /trump|president|election|congress|senate|democrat|republican/.test(q)) return 'politics';
     return 'macro';
   }
 
   function matchesFilter(m, filter) {
     if (filter === 'all') return true;
     if (filter === 'strong') return (m.edge_score || 0) >= 70;
-    var cat = catClass(m.category);
+    var cat = catClass(m);
     return cat === filter;
   }
 
@@ -180,7 +183,7 @@ a{color:inherit;text-decoration:none}
   function renderCard(m, idx) {
     var yp = m.yes_price != null ? m.yes_price : 0.5;
     var yesPct = Math.round(yp * 100);
-    var cat = catClass(m.category);
+    var cat = catClass(m);
     var badge = edgeBadge(m.edge_score || 0);
     var isStrong = (m.edge_score || 0) >= 70;
     var delay = Math.min(idx * 0.05, 0.5);
