@@ -16414,16 +16414,27 @@ async function fetchFinanceMarkets() {
     if (!Array.isArray(markets)) throw new Error('Bad response');
 
     const PATTERNS = {
-      fed_rates: [/fed\b/i, /federal reserve/i, /fomc/i, /rate cut/i, /rate hike/i, /interest rate/i, /inflation/i, /warsh/i, /powell/i, /basis point/i, /cpi\b/i, /monetary policy/i],
-      crypto:    [/bitcoin/i, /\bbtc\b/i, /ethereum/i, /\beth\b/i, /\bcrypto\b/i, /coinbase/i, /solana/i, /\bsol\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /defi\b/i],
-      macro:     [/s&p 500/i, /nasdaq/i, /recession/i, /nvidia/i, /crude oil/i, /oil price/i, /\bgold\b/i, /stock market/i, /gdp\b/i, /treasury/i, /yield curve/i, /largest company/i, /apple.*stock/i],
-      politics:  [/\btrump\b/i, /tariff/i, /executive order/i, /us.*china/i, /iran.*deal/i, /\bsanction/i, /trade war/i, /congress.*pass/i, /senate.*vote/i, /trump.*approval/i],
+      fed_rates: [/fed\b/i, /federal reserve/i, /\bfomc\b/i, /rate cut/i, /rate hike/i, /interest rate/i, /inflation/i, /warsh/i, /powell/i, /basis point/i, /\bcpi\b/i, /monetary policy/i, /will the fed/i, /fed funds/i, /rate decision/i, /25 basis/i, /50 basis/i, /rate cut in/i, /cut rates/i, /hike rates/i, /how many.*cut/i, /number of.*cut/i],
+      crypto:    [/bitcoin/i, /\bbtc\b/i, /ethereum/i, /\bcrypto\b/i, /coinbase/i, /solana/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
+      macro:     [/s&p 500/i, /nasdaq/i, /recession/i, /nvidia/i, /crude oil/i, /oil price/i, /\bgold\b/i, /stock market/i, /\bgdp\b/i, /treasury/i, /yield curve/i, /largest company/i, /apple.*stock/i],
+      politics:  [/\btrump\b/i, /tariff/i, /will trump/i, /president trump/i, /executive order/i, /us.*trade/i, /china.*tariff/i, /trump.*sign/i, /iran.*deal/i, /\bsanction/i, /trade war/i, /congress.*pass/i, /senate.*vote/i, /trump.*approval/i],
     };
 
     const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
     const seen = new Set();
 
-    for (const m of markets) {
+    // filter noise: intraday, near-coinflip, low-volume
+    const filteredMarkets = markets.filter(m => {
+      const q = (m.question || '').toLowerCase();
+      if (/\d{1,2}:\d{2}\s*(pm|am)/i.test(q)) return false;
+      if (q.includes('up or down')) return false;
+      if (q.includes('temperature')) return false;
+      if (q.includes('weather')) return false;
+      if (parseFloat(m.volume || 0) < 1000) return false;
+      return true;
+    });
+
+    for (const m of filteredMarkets) {
       if (!m.question || seen.has(m.question)) continue;
       const q = m.question;
       for (const [cat, patterns] of Object.entries(PATTERNS)) {
@@ -16445,7 +16456,7 @@ async function fetchFinanceMarkets() {
         }
       }
       if (Object.values(sections).every(s => s.length >= 5)) break;
-    }
+    } // end filteredMarkets loop
 
     _financeCache = { sections, updated_at: new Date().toISOString() };
     _financeCacheAt = Date.now();

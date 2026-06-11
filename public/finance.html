@@ -92,6 +92,18 @@ a{color:inherit;text-decoration:none}
 /* Signal strip */
 .signal-strip{font-size:12px;color:var(--soft);line-height:1.55;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid var(--border)}
 
+/* Expandable edge panel */
+.fn-edge-panel{overflow:hidden;max-height:0;transition:max-height 0.3s ease;background:#0a0a10;border-top:1px solid #151520}
+.fn-edge-panel.open{max-height:240px}
+.fn-edge-panel-inner{padding:12px 14px}
+.fn-edge-title{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+.fn-edge-body{font-size:13px;color:#8890c0;line-height:1.6;margin-bottom:10px}
+.fn-edge-stats{display:flex;gap:16px;margin-bottom:10px}
+.fn-edge-stat{font-size:11px;color:#444}
+.fn-edge-stat span{color:#666}
+.fn-edge-cta{font-size:11px;font-weight:600;color:#6688ff;text-decoration:none;display:inline-block}
+.fn-edge-cta:hover{color:#8899ff}
+
 /* States */
 .loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase}
 .err{color:var(--red);text-align:center;padding:40px 20px;font-size:12px}
@@ -161,10 +173,6 @@ a{color:inherit;text-decoration:none}
     if (vol) badges += '<span class="badge badge-vol">' + esc(vol) + '</span>';
     if (m.whale_count > 0) badges += '<span class="badge badge-whale">&#x1F40B; ' + m.whale_count + '</span>';
 
-    var signalHtml = m.edge_signal
-      ? '<div class="signal-strip">' + esc(m.edge_signal) + '</div>'
-      : '';
-
     var imgHtml = '';
     if (m.image) {
       var proxied = '/api/img-proxy?url=' + encodeURIComponent(m.image);
@@ -175,7 +183,19 @@ a{color:inherit;text-decoration:none}
       '</div>';
     }
 
-    return '<a class="edge-card" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
+    var panelHtml = '<div class="fn-edge-panel">' +
+      '<div class="fn-edge-panel-inner">' +
+        '<div class="fn-edge-title">WHY THIS MARKET HAS EDGE</div>' +
+        '<div class="fn-edge-body">' + esc(m.edge_signal || '') + '</div>' +
+        '<div class="fn-edge-stats">' +
+          '<div class="fn-edge-stat">YES <span>' + pct + '¢</span></div>' +
+          (vol ? '<div class="fn-edge-stat">Vol <span>' + esc(vol) + '</span></div>' : '') +
+        '</div>' +
+        '<a class="fn-edge-cta" href="/market/' + esc(m.slug) + '">Trade on Polymarket &#8594;</a>' +
+      '</div>' +
+    '</div>';
+
+    return '<div class="edge-card fn-market-card" style="animation-delay:' + delay + 's">' +
       imgHtml +
       '<div class="edge-card-body">' +
         '<div class="card-top">' +
@@ -186,9 +206,9 @@ a{color:inherit;text-decoration:none}
           '<div class="badges">' + badges + '</div>' +
         '</div>' +
         '<div class="card-q">' + esc(m.question) + '</div>' +
-        signalHtml +
       '</div>' +
-    '</a>';
+      panelHtml +
+    '</div>';
   }
 
   function renderSection(def, markets) {
@@ -211,6 +231,21 @@ a{color:inherit;text-decoration:none}
         return renderSection(def, sections[def.key] || []);
       }).join('');
       el.innerHTML = html || '<div class="loading">No markets available.</div>';
+
+      // Click handler — toggle edge panel on each card
+      el.addEventListener('click', function(e) {
+        var card = e.target.closest('.fn-market-card');
+        if (!card) return;
+        // if click is directly on the trade CTA link, let it navigate
+        if (e.target.closest('.fn-edge-cta')) return;
+        e.preventDefault();
+        var panel = card.querySelector('.fn-edge-panel');
+        if (!panel) return;
+        var isOpen = panel.classList.contains('open');
+        // close all other panels first
+        el.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        if (!isOpen) panel.classList.add('open');
+      });
     })
     .catch(function() {
       document.getElementById('sections').innerHTML = '<div class="err">Could not load markets.</div>';
