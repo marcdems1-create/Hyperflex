@@ -16362,70 +16362,79 @@ function getMarketsForEvent(event, screenerData, limit = 3) {
   }));
 }
 
-// GET /api/finance/markets — categorised screener markets, up to 5 per section
-const FINANCE_CATEGORIES = {
-  fed_rates: ['fed', 'federal reserve', 'rate cut', 'rate hike', 'fomc', 'interest rate', 'inflation', 'basis point', 'warsh', 'powell', 'monetary policy', 'cpi', 'unemployment'],
-  crypto:    ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'coinbase', 'binance', 'solana', 'defi', 'sec crypto', 'stablecoin', 'altcoin'],
-  macro:     ['gdp', 'recession', 's&p', 'nasdaq', 'dow', 'stock market', 'oil', 'crude', 'gold', 'dollar', 'yield', 'treasury', 'debt ceiling', 'tariff', 'trade war', 'china economy', 'nvidia', 'apple', 'largest company'],
-  politics:  ['trump', 'congress', 'senate', 'election', 'midterm', 'republican', 'democrat', 'white house', 'executive order', 'iran', 'ukraine', 'russia', 'china', 'taiwan', 'nato', 'ceasefire', 'sanctions'],
-};
-let _financeMarketsCache = null;
-app.get('/api/finance/markets', (req, res) => {
-  if (_financeMarketsCache && (Date.now() - _financeMarketsCache.ts < 60000)) {
-    return res.json(_financeMarketsCache.data);
-  }
-  const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
-  if (!screener.length) return res.json({ sections: { fed_rates: [], crypto: [], macro: [], politics: [] } });
+// GET /api/finance/markets — direct Gamma API fetch, 10-min cache
+const FINANCE_QUERIES = [
+  { q: 'fed rate',        cat: 'fed_rates' },
+  { q: 'federal reserve', cat: 'fed_rates' },
+  { q: 'interest rate',   cat: 'fed_rates' },
+  { q: 'inflation',       cat: 'fed_rates' },
+  { q: 'bitcoin',         cat: 'crypto' },
+  { q: 'ethereum',        cat: 'crypto' },
+  { q: 'crypto',          cat: 'crypto' },
+  { q: 'recession',       cat: 'macro' },
+  { q: 'stock market',    cat: 'macro' },
+  { q: 'nvidia',          cat: 'macro' },
+  { q: 'oil price',       cat: 'macro' },
+  { q: 'trump tariff',    cat: 'politics' },
+  { q: 'trump',           cat: 'politics' },
+  { q: 'congress',        cat: 'politics' },
+];
+let _financeCache = null;
+let _financeCacheAt = 0;
+const FINANCE_TTL = 10 * 60 * 1000;
 
-  function assignCategory(question) {
-    const q = (question || '').toLowerCase();
-    for (const [cat, kws] of Object.entries(FINANCE_CATEGORIES)) {
-      if (kws.some(kw => q.includes(kw))) return cat;
-    }
-    return null;
-  }
+function buildEdgeSignal(yes_price, whale_count) {
+  if (yes_price < 0.10) return 'Structural NO edge: markets at this price resolve YES only 1.1% of the time historically.';
+  if (yes_price > 0.80) return 'High conviction YES — ' + Math.round(yes_price * 100) + '¢ market pricing strong probability.' + (whale_count >= 3 ? ' ' + whale_count + ' sharp wallets positioned.' : '');
+  if (yes_price > 0.60) return 'Moderate YES lean — watch for sharp money confirmation.';
+  return 'Market near 50/50 — look for whale positioning to identify edge direction.';
+}
 
-  function buildMarket(m) {
-    const yp = m.yes_price != null ? m.yes_price : 0.5;
-    const wc = m.whale_count || 0;
-    let edge_signal = '';
-    if (yp < 0.10) {
-      edge_signal = 'Structural NO edge: markets at this price resolve YES only 1.1% of the time.';
-      if (wc >= 3) edge_signal += ` ${wc} sharp wallets positioned.`;
-    } else if (yp > 0.75) {
-      edge_signal = 'High conviction YES — sharp money consensus.';
-      if (wc >= 3) edge_signal += ` ${wc} sharp wallets positioned.`;
-    } else if (wc >= 3) {
-      edge_signal = `${wc} sharp wallets positioned.`;
-    }
-    return {
-      question:    m.question,
-      slug:        m.slug,
-      yes_price:   yp,
-      volume:      m.volume || 0,
-      whale_count: wc,
-      edge_score:  m.edge_score || 0,
-      image:       m.image || m.event_image_url || null,
-      edge_signal,
-    };
+async function fetchFinanceMarkets() {
+  if (_financeCache && Date.now() - _financeCacheAt < FINANCE_TTL) return _financeCache;
+  const seen = new Set();
+  const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
+  for (const { q, cat } of FINANCE_QUERIES) {
+    if (sections[cat].length >= 5) continue;
+    try {
+      const r = await _nodeFetch(
+        'https://gamma-api.polymarket.com/events?closed=false&active=true&keyword=' + encodeURIComponent(q) + '&order=volume&ascending=false&limit=5',
+        { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(6000) }
+      );
+      if (!r.ok) continue;
+      const events = await r.json();
+      if (!Array.isArray(events)) continue;
+      for (const ev of events) {
+        if (!ev.slug || seen.has(ev.slug)) continue;
+        seen.add(ev.slug);
+        const market = (ev.markets || [])[0];
+        if (!market) continue;
+        const yp = parseFloat((market.outcomePrices && market.outcomePrices[0]) || market.bestAsk || 0.5);
+        sections[cat].push({
+          question:    ev.title || market.question || '',
+          slug:        ev.slug,
+          image:       ev.image || ev.imageUrl || null,
+          yes_price:   isNaN(yp) ? 0.5 : yp,
+          volume:      parseFloat(ev.volume || ev.volumeNum || 0),
+          whale_count: 0,
+          edge_signal: buildEdgeSignal(isNaN(yp) ? 0.5 : yp, 0),
+        });
+        if (sections[cat].length >= 5) break;
+      }
+    } catch (e) { continue; }
   }
+  _financeCache = { sections, updated_at: new Date().toISOString() };
+  _financeCacheAt = Date.now();
+  return _financeCache;
+}
 
-  const buckets = { fed_rates: [], crypto: [], macro: [], politics: [] };
-  for (const m of screener) {
-    if (!m.question || !m.slug) continue;
-    const cat = assignCategory(m.question);
-    if (cat) buckets[cat].push(m);
+app.get('/api/finance/markets', async (req, res) => {
+  try {
+    const data = await fetchFinanceMarkets();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: 'finance_fetch_failed', detail: e.message });
   }
-  const sections = {};
-  for (const [cat, arr] of Object.entries(buckets)) {
-    sections[cat] = arr
-      .sort((a, b) => (b.volume || 0) - (a.volume || 0))
-      .slice(0, 5)
-      .map(buildMarket);
-  }
-
-  _financeMarketsCache = { ts: Date.now(), data: { sections } };
-  res.json({ sections });
 });
 
 let _mentionsApiCache = null;
