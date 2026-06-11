@@ -16423,13 +16423,16 @@ async function fetchFinanceMarkets() {
     const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
     const seen = new Set();
 
-    // filter noise: intraday, near-coinflip, low-volume
+    // filter noise: intraday, tweet-count, low-volume, misc
     const filteredMarkets = markets.filter(m => {
       const q = (m.question || '').toLowerCase();
       if (/\d{1,2}:\d{2}\s*(pm|am)/i.test(q)) return false;
       if (q.includes('up or down')) return false;
       if (q.includes('temperature')) return false;
       if (q.includes('weather')) return false;
+      if (/\d{3}-\d{3}.*tweet/i.test(q)) return false;
+      if (/post \d+.*tweet/i.test(q)) return false;
+      if (/gold card/i.test(q)) return false;
       if (parseFloat(m.volume || 0) < 100) return false;
       return true;
     });

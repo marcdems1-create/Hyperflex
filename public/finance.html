@@ -59,11 +59,12 @@ a{color:inherit;text-decoration:none}
 .edge-card{
   background:rgba(22,22,31,0.8);
   border:1px solid var(--border);border-radius:14px;
-  overflow:hidden;position:relative;cursor:pointer;
-  transition:all .15s;text-decoration:none;color:inherit;display:block;
+  position:relative;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s;color:inherit;display:block;
   animation:fadeUp 0.4s ease both;
 }
-.edge-card:hover{border-color:rgba(77,159,255,0.4);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.edge-card:hover{border-color:rgba(77,159,255,0.4);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.edge-card-inner{overflow:hidden;border-radius:14px 14px 0 0}
 .edge-card-body{padding:18px}
 
 /* Card image */
@@ -92,16 +93,15 @@ a{color:inherit;text-decoration:none}
 /* Signal strip */
 .signal-strip{font-size:12px;color:var(--soft);line-height:1.55;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid var(--border)}
 
-/* Expandable edge panel */
-.fn-edge-panel{overflow:hidden;max-height:0;transition:max-height 0.3s ease;background:#0a0a10;border-top:1px solid #151520}
-.fn-edge-panel.open{max-height:240px}
-.fn-edge-panel-inner{padding:12px 14px}
-.fn-edge-title{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+/* Expandable edge panel — sits outside .edge-card-inner so overflow:hidden doesn't clip it */
+.fn-edge-panel{overflow:hidden;max-height:0;transition:max-height 0.35s ease}
+.fn-edge-panel.open{max-height:200px}
+.fn-edge-panel-inner{padding:12px 14px;background:#080810;border-top:1px solid #151520;border-radius:0 0 14px 14px}
+.fn-edge-title{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
 .fn-edge-body{font-size:13px;color:#8890c0;line-height:1.6;margin-bottom:10px}
-.fn-edge-stats{display:flex;gap:16px;margin-bottom:10px}
-.fn-edge-stat{font-size:11px;color:#444}
-.fn-edge-stat span{color:#666}
-.fn-edge-cta{font-size:11px;font-weight:600;color:#6688ff;text-decoration:none;display:inline-block}
+.fn-edge-footer{display:flex;justify-content:space-between;align-items:center}
+.fn-edge-vol{font-size:11px;color:#333}
+.fn-edge-cta{font-size:11px;font-weight:600;color:#6688ff;text-decoration:none}
 .fn-edge-cta:hover{color:#8899ff}
 
 /* States */
@@ -187,38 +187,39 @@ a{color:inherit;text-decoration:none}
       '<div class="fn-edge-panel-inner">' +
         '<div class="fn-edge-title">WHY THIS MARKET HAS EDGE</div>' +
         '<div class="fn-edge-body">' + esc(m.edge_signal || '') + '</div>' +
-        '<div class="fn-edge-stats">' +
-          '<div class="fn-edge-stat">YES <span>' + pct + '¢</span></div>' +
-          (vol ? '<div class="fn-edge-stat">Vol <span>' + esc(vol) + '</span></div>' : '') +
+        '<div class="fn-edge-footer">' +
+          '<span class="fn-edge-vol">' + (vol ? 'Vol ' + esc(vol) : '') + '</span>' +
+          '<a class="fn-edge-cta" href="/market/' + esc(m.slug) + '" onclick="event.stopPropagation()">View market &#8594;</a>' +
         '</div>' +
-        '<a class="fn-edge-cta" href="/market/' + esc(m.slug) + '">Trade on Polymarket &#8594;</a>' +
       '</div>' +
     '</div>';
 
     return '<div class="edge-card fn-market-card" style="animation-delay:' + delay + 's">' +
-      imgHtml +
-      '<div class="edge-card-body">' +
-        '<div class="card-top">' +
-          '<div class="yes-price-wrap">' +
-            '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '¢</div>' +
-            '<div class="yes-price-l">YES</div>' +
+      '<div class="edge-card-inner">' +
+        imgHtml +
+        '<div class="edge-card-body">' +
+          '<div class="card-top">' +
+            '<div class="yes-price-wrap">' +
+              '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '¢</div>' +
+              '<div class="yes-price-l">YES</div>' +
+            '</div>' +
+            '<div class="badges">' + badges + '</div>' +
           '</div>' +
-          '<div class="badges">' + badges + '</div>' +
+          '<div class="card-q">' + esc(m.question) + '</div>' +
         '</div>' +
-        '<div class="card-q">' + esc(m.question) + '</div>' +
       '</div>' +
       panelHtml +
     '</div>';
   }
 
   function renderSection(def, markets) {
+    if (!markets.length) return '';
     var header = '<div class="fn-section-header">' +
       '<div class="fn-section-bar fn-bar-' + def.key + '"></div>' +
       '<span class="fn-section-icon">' + def.icon + '</span>' +
       '<span class="fn-section-title">' + def.title + '</span>' +
       '<span class="fn-section-count">' + markets.length + ' market' + (markets.length !== 1 ? 's' : '') + '</span>' +
     '</div>';
-    if (!markets.length) return header + '<div class="err">No markets found.</div>';
     return header + '<div class="edge-grid">' + markets.map(renderCard).join('') + '</div>';
   }
 
