@@ -11535,15 +11535,18 @@ app.get('/passport/:userId', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'passport.html'));
 });
 
-// PR #173 prediction-thesis v1: composer + placeholder permalink page.
-// /thesis-compose is the create form. /thesis/:id is a stub for v1 —
-// PR #175 ships the real share-able permalink + render.
+// Prediction-thesis composer + placeholder (legacy URLs kept for existing links)
 app.get('/thesis-compose', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'thesis-compose.html'));
 });
 app.get('/thesis/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'thesis-placeholder.html'));
 });
+
+// /combos — Polymarket Combos builder (rebranded thesis experience)
+// Uses the existing /api/theses backend; no separate DB or API needed.
+app.get('/combos', (req, res) => res.sendFile(path.join(__dirname, 'public', 'combo.html')));
+app.get('/combos/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'combo-view.html')));
 
 // GET /@:handle/passport — handle-based passport route (canonical).
 app.get('/@:handle/passport', async (req, res) => {

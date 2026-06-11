@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Combo — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --paper:#0e0e15; --cream:#141420; --text:#f0f0f5; --dim:#8888a0;
+  --border:#1e1e2a; --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff;
+  --sans:'Inter',-apple-system,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);min-height:100vh;padding:24px;line-height:1.5}
+nav{display:flex;align-items:center;gap:16px;margin-bottom:28px;max-width:640px;margin-left:auto;margin-right:auto}
+.nav-back{font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;letter-spacing:.06em}
+.nav-back:hover{color:var(--text)}
+.nav-logo{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:.1em}
+.nav-spacer{flex:1}
+.wrap{max-width:640px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+h1{font-size:24px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+.state-badge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;padding:3px 10px;border-radius:4px;text-transform:uppercase;margin-bottom:14px}
+.state-open   {background:rgba(77,159,255,0.12);color:var(--blue);  border:1px solid rgba(77,159,255,0.35)}
+.state-hit    {background:rgba(0,230,138,0.12); color:var(--green); border:1px solid rgba(0,230,138,0.35)}
+.state-partial{background:rgba(201,146,13,0.12);color:var(--gold);  border:1px solid rgba(201,146,13,0.35)}
+.state-miss   {background:rgba(255,77,106,0.12);color:var(--red);   border:1px solid rgba(255,77,106,0.35)}
+
+/* Odds panel */
+.odds-panel{background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:12px;padding:16px 18px;margin-bottom:18px}
+.odds-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.odds-stat{text-align:center;flex:1;min-width:70px}
+.odds-label{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+.odds-value{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)}
+.odds-divider{width:1px;height:32px;background:var(--border);flex-shrink:0}
+
+.rationale{font-size:14px;color:var(--dim);line-height:1.6;margin:0 0 16px;border-left:2px solid var(--border);padding-left:14px}
+.meta-row{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:18px}
+
+.leg{border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--cream)}
+.leg.won {border-color:rgba(0,230,138,0.3)}
+.leg.lost{border-color:rgba(255,77,106,0.3)}
+.leg-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+.leg-q{font-size:14px;line-height:1.4;flex:1}
+.leg-badges{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.dir{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;padding:3px 8px;border-radius:4px;white-space:nowrap}
+.dir-yes{background:rgba(0,230,138,0.14);color:var(--green)}
+.dir-no {background:rgba(255,77,106,0.14);color:var(--red)}
+.res-badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:4px;white-space:nowrap}
+.res-won {background:rgba(0,230,138,0.14);color:var(--green)}
+.res-lost{background:rgba(255,77,106,0.14);color:var(--red)}
+.res-pushed{background:rgba(136,136,160,0.14);color:var(--dim)}
+.leg-meta{font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+.leg-num{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.btn{padding:11px 20px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;border:none}
+.btn-share{background:var(--cream);color:var(--text);border:1px solid var(--border)}
+.btn-share:hover{border-color:var(--gold);color:var(--gold)}
+.btn-new{background:var(--gold);color:#0a0a14}
+.btn-new:hover{opacity:.88}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--cream);border:1px solid var(--green);color:var(--green);font-family:var(--mono);font-size:12px;padding:10px 18px;border-radius:8px;opacity:0;transition:opacity .18s;pointer-events:none;z-index:999}
+.toast.show{opacity:1}
+.error{color:var(--red);font-family:var(--mono);font-size:13px;margin-top:24px}
+.skeleton{height:16px;background:var(--cream);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
+@media(max-width:500px){
+  .odds-value{font-size:18px}
+  h1{font-size:20px}
+}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/feed" class="nav-back">← Feed</a>
+  <span class="nav-logo">HYPERFLEX</span>
+  <div class="nav-spacer"></div>
+  <a href="/combos" class="nav-back">New Combo →</a>
+</nav>
+
+<div class="wrap">
+  <div class="eyebrow">Combo</div>
+  <h1 id="title"><div class="skeleton" style="width:60%;height:28px"></div></h1>
+  <div id="content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function fmtCents(p) {
+  if (p == null) return '—';
+  return Math.round(Number(p) * 100) + '¢';
+}
+
+function calcOdds(legs) {
+  if (!legs || legs.length < 2) return null;
+  let prob = 1;
+  for (const l of legs) {
+    const p = Number(l.entry_price);
+    if (!p) return null;
+    prob *= l.direction === 'yes' ? p : (1 - p);
+  }
+  return { prob, multiplier: 1 / prob };
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+const m = window.location.pathname.match(/^\/combos\/([0-9a-f-]{36})$/i);
+const id = m ? m[1] : null;
+const content = document.getElementById('content');
+const titleEl = document.getElementById('title');
+
+(async function load() {
+  if (!id) {
+    titleEl.textContent = 'Combo';
+    content.innerHTML = '<div class="error">No combo id in URL.</div>';
+    return;
+  }
+  try {
+    const r = await fetch('/api/theses/' + id);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      titleEl.textContent = 'Combo';
+      content.innerHTML = '<div class="error">' + escH(j.error || ('Error ' + r.status)) + '</div>';
+      return;
+    }
+    const { thesis, legs } = await r.json();
+    titleEl.textContent = thesis.title;
+    document.title = thesis.title + ' — HYPERFLEX';
+
+    const html = [];
+
+    // State badge
+    const stateCls = { open:'state-open', hit:'state-hit', partial:'state-partial', miss:'state-miss' }[thesis.resolution_state] || 'state-open';
+    const stateLabel = { open:'Open', hit:'All Hit', partial:'Partial', miss:'Miss' }[thesis.resolution_state] || 'Open';
+    html.push('<span class="state-badge ' + stateCls + '">' + stateLabel + '</span>');
+
+    // Odds panel
+    const odds = calcOdds(legs);
+    if (odds) {
+      const totalStake = legs.reduce((s, l) => s + Number(l.stake_usd || 0), 0);
+      const impliedPayout = totalStake > 0 ? '$' + Math.round(totalStake * odds.multiplier).toLocaleString() : '—';
+      html.push(
+        '<div class="odds-panel">' +
+          '<div class="odds-row">' +
+            '<div class="odds-stat"><div class="odds-label">Combined odds</div><div class="odds-value">' + Math.round(odds.prob * 100) + '%</div></div>' +
+            '<div class="odds-divider"></div>' +
+            '<div class="odds-stat"><div class="odds-label">Multiplier</div><div class="odds-value">' + odds.multiplier.toFixed(2) + 'x</div></div>' +
+            '<div class="odds-divider"></div>' +
+            '<div class="odds-stat"><div class="odds-label">Implied payout</div><div class="odds-value">' + impliedPayout + '</div></div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    if (thesis.rationale) {
+      html.push('<div class="rationale">' + escH(thesis.rationale) + '</div>');
+    }
+
+    html.push(
+      '<div class="meta-row">' +
+        thesis.legs_total + ' legs · $' + Math.round(Number(thesis.total_stake_usd || 0)).toLocaleString() + ' staked · ' +
+        new Date(thesis.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) +
+      '</div>'
+    );
+
+    // Legs
+    legs.forEach((l, i) => {
+      const dirCls = l.direction === 'yes' ? 'dir-yes' : 'dir-no';
+      const legCls = l.resolution === 'won' ? ' won' : l.resolution === 'lost' ? ' lost' : '';
+      let resBadge = '';
+      if (l.resolution) {
+        const rc = l.resolution === 'won' ? 'res-won' : l.resolution === 'lost' ? 'res-lost' : 'res-pushed';
+        resBadge = '<span class="res-badge ' + rc + '">' + l.resolution.toUpperCase() + '</span>';
+      }
+      html.push(
+        '<div class="leg' + legCls + '">' +
+          '<div class="leg-num">Leg ' + (i + 1) + '</div>' +
+          '<div class="leg-top">' +
+            '<div class="leg-q">' + escH(l.market_question || '') + '</div>' +
+            '<div class="leg-badges">' +
+              '<span class="dir ' + dirCls + '">' + (l.direction || '').toUpperCase() + '</span>' +
+              resBadge +
+            '</div>' +
+          '</div>' +
+          '<div class="leg-meta">' +
+            '<span>Entry ' + fmtCents(l.entry_price) + '</span>' +
+            '<span>$' + Math.round(Number(l.stake_usd || 0)).toLocaleString() + ' staked</span>' +
+            (l.realized_pnl != null ? '<span style="color:' + (Number(l.realized_pnl) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (Number(l.realized_pnl) >= 0 ? '+' : '') + '$' + Math.abs(Math.round(Number(l.realized_pnl))).toLocaleString() + ' P&amp;L</span>' : '') +
+          '</div>' +
+        '</div>'
+      );
+    });
+
+    html.push(
+      '<div class="actions">' +
+        '<button class="btn btn-share" id="shareBtn">Share</button>' +
+        '<a href="/combos" class="btn btn-new">New Combo</a>' +
+      '</div>'
+    );
+
+    content.innerHTML = html.join('');
+
+    document.getElementById('shareBtn').addEventListener('click', () => {
+      const url = window.location.href;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => showToast('Link copied.'));
+      } else {
+        const inp = document.createElement('input');
+        inp.value = url; document.body.appendChild(inp);
+        inp.select(); document.execCommand('copy');
+        document.body.removeChild(inp);
+        showToast('Link copied.');
+      }
+    });
+
+  } catch (e) {
+    titleEl.textContent = 'Combo';
+    content.innerHTML = '<div class="error">Network error.</div>';
+  }
+})();
+</script>
+</body>
+</html>
