@@ -64,7 +64,7 @@ a{color:inherit;text-decoration:none}
   animation:fadeUp 0.4s ease both;
 }
 .edge-card:hover{border-color:rgba(77,159,255,0.4);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
-.edge-card-inner{overflow:hidden;border-radius:14px 14px 0 0}
+.edge-card-inner{overflow:hidden;border-radius:14px}
 .edge-card-body{padding:18px}
 
 /* Card image */
@@ -90,19 +90,17 @@ a{color:inherit;text-decoration:none}
 /* Question */
 .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:12px;min-height:40px}
 
-/* Signal strip */
-.signal-strip{font-size:12px;color:var(--soft);line-height:1.55;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid var(--border)}
+/* Signal strip — the edge reason, visible on every card */
+.signal-strip{font-size:12px;color:var(--soft);line-height:1.55;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid rgba(245,158,11,0.18);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ss-edge{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-right:8px}
 
-/* Expandable edge panel — sits outside .edge-card-inner so overflow:hidden doesn't clip it */
-.fn-edge-panel{overflow:hidden;max-height:0;transition:max-height 0.35s ease}
-.fn-edge-panel.open{max-height:200px}
-.fn-edge-panel-inner{padding:12px 14px;background:#080810;border-top:1px solid #151520;border-radius:0 0 14px 14px}
-.fn-edge-title{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
-.fn-edge-body{font-size:13px;color:#8890c0;line-height:1.6;margin-bottom:10px}
-.fn-edge-footer{display:flex;justify-content:space-between;align-items:center}
-.fn-edge-vol{font-size:11px;color:#333}
-.fn-edge-cta{font-size:11px;font-weight:600;color:#6688ff;text-decoration:none}
-.fn-edge-cta:hover{color:#8899ff}
+/* Trade CTA — edge side + payout, one click to the market */
+.card-cta{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:12px;font-weight:700;padding:9px 12px;border-radius:8px;transition:background .15s}
+.card-cta .arrow{font-weight:400;opacity:.6}
+.cta-yes{background:rgba(0,230,138,0.10);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
+.cta-no{background:rgba(255,77,106,0.08);color:var(--red);border:1px solid rgba(255,77,106,0.22)}
+.edge-card:hover .cta-yes{background:rgba(0,230,138,0.18)}
+.edge-card:hover .cta-no{background:rgba(255,77,106,0.16)}
 
 /* States */
 .loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase}
@@ -211,18 +209,16 @@ a{color:inherit;text-decoration:none}
       '</div>';
     }
 
-    var panelHtml = '<div class="fn-edge-panel">' +
-      '<div class="fn-edge-panel-inner">' +
-        '<div class="fn-edge-title">WHY THIS MARKET HAS EDGE</div>' +
-        '<div class="fn-edge-body">' + esc(m.edge_signal || '') + '</div>' +
-        '<div class="fn-edge-footer">' +
-          '<span class="fn-edge-vol">' + (vol ? 'Vol ' + esc(vol) : '') + '</span>' +
-          '<a class="fn-edge-cta" href="/market/' + esc(m.slug) + '" onclick="event.stopPropagation()">View market &#8594;</a>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
+    // Edge side + payout. 40-60% markets are filtered server-side, so every
+    // card leans one way: low YES = structural NO edge, high YES = consensus.
+    var edgeNo = pct < 50;
+    var side = edgeNo ? 'NO' : 'YES';
+    var sidePrice = edgeNo ? (100 - pct) : pct;
+    var mult = sidePrice > 0 ? (100 / sidePrice) : 0;
+    var ctaCls = edgeNo ? 'cta-no' : 'cta-yes';
+    var ctaText = 'Trade ' + side + ' @ ' + sidePrice + '¢ — pays ' + mult.toFixed(2) + '×';
 
-    return '<div class="edge-card fn-market-card" style="animation-delay:' + delay + 's">' +
+    return '<a class="edge-card fn-market-card" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
       '<div class="edge-card-inner">' +
         imgHtml +
         '<div class="edge-card-body">' +
@@ -235,10 +231,11 @@ a{color:inherit;text-decoration:none}
             '<div class="badges">' + badges + '</div>' +
           '</div>' +
           '<div class="card-q">' + esc(m.question) + '</div>' +
+          '<div class="signal-strip"><span class="ss-edge">Edge</span>' + esc(m.edge_signal || '') + '</div>' +
+          '<div class="card-cta ' + ctaCls + '"><span>' + ctaText + '</span><span class="arrow">→</span></div>' +
         '</div>' +
       '</div>' +
-      panelHtml +
-    '</div>';
+    '</a>';
   }
 
   function renderSection(def, markets) {
@@ -261,18 +258,6 @@ a{color:inherit;text-decoration:none}
         return renderSection(def, sections[def.key] || []);
       }).join('');
       el.innerHTML = html || '<div class="loading">No markets available.</div>';
-
-      // Click handler — document-level delegation so it works on dynamically rendered cards
-      document.addEventListener('click', function(e) {
-        var card = e.target.closest('.fn-market-card');
-        if (!card) return;
-        if (e.target.tagName === 'A') return;
-        var panel = card.querySelector('.fn-edge-panel');
-        if (!panel) return;
-        var isOpen = panel.classList.contains('open');
-        document.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
-        if (!isOpen) panel.classList.add('open');
-      });
     })
     .catch(function() {
       document.getElementById('sections').innerHTML = '<div class="err">Could not load markets.</div>';
