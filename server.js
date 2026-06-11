@@ -16383,11 +16383,16 @@ let _financeCache = null;
 let _financeCacheAt = 0;
 const FINANCE_TTL = 10 * 60 * 1000;
 
-function buildEdgeSignal(yes_price, whale_count) {
-  if (yes_price < 0.10) return 'Structural NO edge: markets at this price resolve YES only 1.1% of the time historically.';
-  if (yes_price > 0.80) return 'High conviction YES — ' + Math.round(yes_price * 100) + '¢ market pricing strong probability.' + (whale_count >= 3 ? ' ' + whale_count + ' sharp wallets positioned.' : '');
-  if (yes_price > 0.60) return 'Moderate YES lean — watch for sharp money confirmation.';
-  return 'Market near 50/50 — look for whale positioning to identify edge direction.';
+function buildEdgeSignal(yes_price, whale_count, volume) {
+  const pct = Math.round(yes_price * 100);
+  const vol = volume > 1000000 ? '$' + (volume / 1000000).toFixed(1) + 'M vol' : volume > 1000 ? '$' + Math.round(volume / 1000) + 'K vol' : '';
+  if (pct <= 5)  return '🔴 STRONG NO EDGE: At ' + pct + '¢ YES, historical resolve rate is <0.5%. Structural bias heavily favors NO.';
+  if (pct <= 10) return '🔴 NO EDGE: At ' + pct + '¢ YES, only 1.1% of markets at this price resolve YES. Fade the YES.';
+  if (pct <= 20) return '🟡 LEAN NO: At ' + pct + '¢ YES, ~5% resolve YES historically. Sharp money typically fades this price range.';
+  if (pct >= 85) return '🟢 HIGH CONVICTION YES: ' + pct + '¢ consensus.' + (whale_count >= 3 ? ' ' + whale_count + ' whales positioned.' : '') + (vol ? ' ' + vol : '');
+  if (pct >= 70) return '🟢 MODERATE YES EDGE: ' + pct + '¢ pricing.' + (whale_count >= 3 ? ' ' + whale_count + ' whale wallets loaded.' : '') + ' Watch for sharp confirmation.';
+  if (Math.abs(pct - 50) <= 5) return '⚪ NO CLEAR EDGE: Market near 50/50 at ' + pct + '¢. Look for whale positioning before entering.';
+  return '🟡 DIRECTIONAL: ' + pct + '¢ YES. Check whale positioning on /signals for confirmation.';
 }
 
 async function fetchFinanceMarkets() {
@@ -16417,7 +16422,7 @@ async function fetchFinanceMarkets() {
           yes_price:   isNaN(yp) ? 0.5 : yp,
           volume:      parseFloat(ev.volume || ev.volumeNum || 0),
           whale_count: 0,
-          edge_signal: buildEdgeSignal(isNaN(yp) ? 0.5 : yp, 0),
+          edge_signal: buildEdgeSignal(isNaN(yp) ? 0.5 : yp, 0, parseFloat(ev.volume || ev.volumeNum || 0)),
         });
         if (sections[cat].length >= 5) break;
       }
