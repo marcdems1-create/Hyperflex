@@ -68,8 +68,8 @@ a{color:inherit;text-decoration:none}
 .edge-card-body{padding:18px}
 
 /* Card image */
-.fi-img-wrap{position:relative;height:120px;overflow:hidden;background:var(--paper-2)}
-.fi-img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(0.4)}
+.fi-img-wrap{position:relative;height:140px;overflow:hidden;background:var(--paper-2)}
+.fi-img{width:100%;height:100%;object-fit:cover;object-position:center center;display:block;filter:brightness(0.4)}
 .fi-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(22,22,31,0.9) 100%)}
 
 /* Card top */
@@ -223,7 +223,7 @@ a{color:inherit;text-decoration:none}
     return header + '<div class="edge-grid">' + markets.map(renderCard).join('') + '</div>';
   }
 
-  fetch('/api/finance/markets')
+  fetch('/api/finance/markets?_v=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var sections = (data && data.sections) ? data.sections : {};
