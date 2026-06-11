@@ -61284,23 +61284,42 @@ app.get('/edge-finder', (req, res) =>
 
       const signals = screenerData
         .filter(m => {
+          // m.volume is the 24h volume (or total if 24h unavailable) on screener objects.
+          // m.volume_24h does not exist — field is m.volume. Bug fix: use m.volume.
+          const vol = Number(m.volume || 0);
+          if (vol < 10000) return false;
+          // Primary: use stored spike ratio (built from 7-day DB baseline)
           const ratio = Number(m.volume_spike_ratio || 0);
-          const chg   = Math.abs(Number(m.price_change_24h || 0));
-          return ratio >= 5 && chg < 5 && Number(m.volume_24h || 0) > 10000;
+          if (ratio >= 5) {
+            return Math.abs(Number(m.price_change_24h || 0)) < 5;
+          }
+          // Fallback: use edge_components.volume_spike when baseline cache is cold.
+          // edgeVolumeSpike >= 8 maps to ratio >= 10, >= 5 maps to ratio >= 5.
+          const ecSpike = Number((m.edge_components && m.edge_components.volume_spike) || 0);
+          if (ecSpike >= 8) {
+            return Math.abs(Number(m.price_change_24h || 0)) < 5;
+          }
+          return false;
         })
         .map(m => {
-          const ratio = Number(m.volume_spike_ratio);
+          const vol = Number(m.volume || 0);
+          const ratio = Number(m.volume_spike_ratio || 0);
+          const ecSpike = Number((m.edge_components && m.edge_components.volume_spike) || 0);
+          // Use real ratio if available, else estimate from edge component
+          const displayRatio = ratio >= 5 ? ratio
+            : ecSpike >= 8 ? 10 : 5;
+          const priceChg = Number(m.price_change_24h || 0);
           return {
-            question:       m.question,
-            slug:           m.slug,
-            price_cents:    Math.round((m.yes_price || 0.5) * 100),
-            price_change:   Number(m.price_change_24h || 0),
-            volume_24h:     Number(m.volume_24h || 0),
-            spike_ratio:    parseFloat(ratio.toFixed(1)),
-            whale_count:    Number(m.whale_count || 0),
-            edge_score:     Number(m.edge_score || 0),
-            signal_strength: ratio >= 10 ? 'high' : 'medium',
-            rationale:      `${ratio.toFixed(1)}× volume surge with only ${Math.abs(m.price_change_24h || 0).toFixed(0)}¢ price move — order absorption. Move imminent.`
+            question:        m.question,
+            slug:            m.slug,
+            price_cents:     Math.round((m.yes_price || 0.5) * 100),
+            price_change:    priceChg,
+            volume_24h:      vol,
+            spike_ratio:     parseFloat(displayRatio.toFixed(1)),
+            whale_count:     Number(m.whale_count || 0),
+            edge_score:      Number(m.edge_score || 0),
+            signal_strength: displayRatio >= 10 ? 'high' : 'medium',
+            rationale:       `${displayRatio.toFixed(1)}× volume surge with only ${Math.abs(priceChg).toFixed(0)}¢ price move — order absorption. Move imminent.`
           };
         })
         .sort((a, b) => (b.spike_ratio * b.volume_24h) - (a.spike_ratio * a.volume_24h))

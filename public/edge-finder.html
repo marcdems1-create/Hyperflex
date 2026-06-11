@@ -159,6 +159,11 @@
   /* Divider line for outcome table */
   .outcome-divider{height:1px;background:rgba(255,255,255,0.08);margin:0}
 
+  /* Countdown bar */
+  .refresh-bar{display:flex;align-items:center;gap:10px;padding:12px 0 4px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .refresh-track{flex:1;height:2px;background:var(--paper-3);border-radius:2px;overflow:hidden;max-width:180px}
+  .refresh-fill{height:100%;background:var(--blue);border-radius:2px;transition:width 1s linear}
+
   /* Scrollable tabs on mobile */
   @media(max-width:768px){
     .hero h1{font-size:30px}
@@ -206,6 +211,11 @@
     <button class="tab" id="tab-vol" role="tab" onclick="switchTab('vol')">
       Volume Signals <span class="count" id="tc-vol">—</span>
     </button>
+  </div>
+
+  <div class="refresh-bar">
+    <div class="refresh-track"><div class="refresh-fill" id="cdFill" style="width:100%"></div></div>
+    <span id="cdText">Refreshing in 2m</span>
   </div>
 
   <!-- Internal Arb tab -->
@@ -519,8 +529,32 @@
   }
   window.loadAll = loadAll;
 
+  // Countdown bar
+  var _cdStart = 0;
+  var _cdInterval = null;
+  function startCountdown() {
+    _cdStart = Date.now();
+    if (_cdInterval) clearInterval(_cdInterval);
+    _cdInterval = setInterval(function() {
+      var elapsed = Date.now() - _cdStart;
+      var remaining = Math.max(0, _REFRESH_MS - elapsed);
+      var pct = (remaining / _REFRESH_MS) * 100;
+      var fill = document.getElementById('cdFill');
+      var text = document.getElementById('cdText');
+      if (fill) fill.style.width = pct + '%';
+      if (text) {
+        var secs = Math.ceil(remaining / 1000);
+        text.textContent = secs >= 60
+          ? 'Refreshing in ' + Math.ceil(secs / 60) + 'm'
+          : 'Refreshing in ' + secs + 's';
+      }
+      if (remaining <= 0) clearInterval(_cdInterval);
+    }, 1000);
+  }
+
   // Auto-refresh every 2 min
   function scheduleRefresh() {
+    startCountdown();
     setTimeout(function() { loadAll().then(scheduleRefresh); }, _REFRESH_MS);
   }
 
