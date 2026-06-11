@@ -16433,7 +16433,14 @@ async function fetchFinanceMarkets() {
       if (/\d{3}-\d{3}.*tweet/i.test(q)) return false;
       if (/post \d+.*tweet/i.test(q)) return false;
       if (/gold card/i.test(q)) return false;
+      if (/above \$\d+.*on (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec) \d+/i.test(q)) return false;
+      if (/up or down/i.test(q)) return false;
+      if (/\bufo\b/i.test(q)) return false;
+      if (/\bldpr\b/i.test(q)) return false;
+      if (/liberal democratic party of russia/i.test(q)) return false;
       if (parseFloat(m.volume || 0) < 10) return false;
+      const yesPrice = parseFloat((m.outcomePrices || ['0.5'])[0]);
+      if (yesPrice > 0.40 && yesPrice < 0.60) return false;
       return true;
     });
 
