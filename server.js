@@ -16371,8 +16371,26 @@ app.get('/api/finance/markets', (req, res) => {
   const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
   if (!screener.length) return res.json({ markets: [] });
 
+  // Finance-only gate — the screener is all-category (sports, pop culture,
+  // etc.). Keep only markets whose question mentions a macro / markets /
+  // crypto term, then floor to liquid markets so the page isn't padded with
+  // dead-volume noise. Sort surviving markets by edge, then volume.
+  const FINANCE_KEYWORDS = [
+    'fed', 'federal reserve', 'fomc', 'rate cut', 'interest rate',
+    'inflation', 'cpi', 'recession', 'gdp', 'unemployment', 'jobs report',
+    'treasury', 'yield', 'dollar', 'powell', 's&p', 'nasdaq', 'dow',
+    'earnings', 'ipo', 'stock market', 'debt ceiling', 'deficit',
+    'bitcoin', 'crypto', 'ethereum', 'tariff', 'trade war'
+  ];
+
   const sorted = screener
     .filter(m => m.question && m.slug)
+    .filter(m => {
+      const q = (m.question || '').toLowerCase();
+      // Must match AT LEAST ONE finance keyword
+      return FINANCE_KEYWORDS.some(k => q.includes(k));
+    })
+    .filter(m => Number(m.volume || 0) >= 50000)
     .sort((a, b) => {
       const edgeDiff = (b.edge_score || 0) - (a.edge_score || 0);
       if (edgeDiff !== 0) return edgeDiff;
