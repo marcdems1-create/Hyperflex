@@ -74,13 +74,13 @@ a{color:inherit;text-decoration:none}
 
 /* Card top */
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
-.yes-price-wrap{display:flex;flex-direction:column;align-items:center;min-width:56px}
-.yes-price-n{font-family:var(--mono);font-weight:700;font-size:30px;line-height:1}
+.yes-price-wrap{display:flex;flex-direction:column;align-items:center;min-width:60px}
+.yes-price-l{font-size:10px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px}
+.yes-price-n{font-family:var(--mono);font-weight:700;font-size:28px;line-height:1}
 .yes-price-n.high{color:var(--green)}
 .yes-price-n.low{color:var(--red)}
 .yes-price-n.mid{color:var(--amber)}
-.yes-price-n.neutral{color:var(--blue)}
-.yes-price-l{font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px}
+.no-price-sec{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:3px}
 
 .badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:0.02em}
@@ -150,9 +150,8 @@ a{color:inherit;text-decoration:none}
   }
   function yesClass(yp) {
     const pct = Math.round(yp * 100);
-    if (pct <= 15) return 'low';
-    if (pct >= 70) return 'high';
-    if (Math.abs(pct - 50) <= 10) return 'neutral';
+    if (pct < 35) return 'low';
+    if (pct > 65) return 'high';
     return 'mid';
   }
 
@@ -200,8 +199,9 @@ a{color:inherit;text-decoration:none}
         '<div class="edge-card-body">' +
           '<div class="card-top">' +
             '<div class="yes-price-wrap">' +
-              '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '¢</div>' +
               '<div class="yes-price-l">YES</div>' +
+              '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '%</div>' +
+              '<div class="no-price-sec">NO ' + (100 - pct) + '%</div>' +
             '</div>' +
             '<div class="badges">' + badges + '</div>' +
           '</div>' +
@@ -233,16 +233,16 @@ a{color:inherit;text-decoration:none}
       }).join('');
       el.innerHTML = html || '<div class="loading">No markets available.</div>';
 
-      // Click handler — toggle edge panel on each card
-      el.querySelectorAll('.fn-market-card').forEach(function(card) {
-        card.addEventListener('click', function(e) {
-          if (e.target.tagName === 'A') return;
-          var panel = card.querySelector('.fn-edge-panel');
-          if (!panel) return;
-          var isOpen = panel.classList.contains('open');
-          el.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
-          if (!isOpen) panel.classList.add('open');
-        });
+      // Click handler — document-level delegation so it works on dynamically rendered cards
+      document.addEventListener('click', function(e) {
+        var card = e.target.closest('.fn-market-card');
+        if (!card) return;
+        if (e.target.tagName === 'A') return;
+        var panel = card.querySelector('.fn-edge-panel');
+        if (!panel) return;
+        var isOpen = panel.classList.contains('open');
+        document.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        if (!isOpen) panel.classList.add('open');
       });
     })
     .catch(function() {
