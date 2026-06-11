@@ -356,6 +356,7 @@
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/finance', label: 'Finance' },
+    { href: '/edge-finder', label: 'Edge', gold: true },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 

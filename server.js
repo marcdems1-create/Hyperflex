@@ -16667,6 +16667,8 @@ async function _renderMentionsHero() {
 
 app.get('/finance', (req, res) => res.sendFile(path.join(__dirname, 'public', 'finance.html')));
 
+app.get('/edge-finder', (req, res) => res.sendFile(path.join(__dirname, 'public', 'edge-finder.html')));
+
 app.get('/mentions', (req, res) => res.redirect(301, '/finance'));
 
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
@@ -39504,6 +39506,166 @@ app.get('/api/screener', async (req, res) => {
     console.error('[screener]', err.message);
     if (_screenerCache) return res.json(filterScreenerResults(_screenerCache.data, req.query));
     res.status(502).json({ error: 'Failed to fetch screener data', detail: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// EDGE FINDER — pure-Polymarket-data mispricing detectors (no external
+// APIs). Surfaced at /edge-finder. Three signals:
+//   /api/arb/internal      — mutually-exclusive outcomes that don't sum to 100¢
+//   /api/arb/correlated    — correlated markets that have drifted apart
+//   /api/arb/volume-price  — volume spiked but price hasn't moved (absorption)
+// ─────────────────────────────────────────────────────────────────────
+function buildArbSignal(deviation, count, volume) {
+  const abs = Math.abs(deviation);
+  const dir = deviation > 0 ? 'overpriced' : 'underpriced';
+  const liq = volume >= 1e6 ? 'High-volume' : volume >= 1e5 ? 'Liquid' : 'Thin';
+  if (abs >= 20) return `${abs}¢ total mispricing across ${count} mutually-exclusive outcomes. ${liq} market — strong arb signal.`;
+  if (abs >= 10) return `Outcomes sum to ${100 + deviation}¢ instead of 100¢ — ${abs}¢ ${dir} across ${count} outcomes.`;
+  return `${abs}¢ deviation from fair value across ${count} outcomes. Minor ${dir}.`;
+}
+
+// An event's YES prices only sum to 100¢ when its outcomes are mutually
+// exclusive (a negRisk event — one and only one resolves YES). A plain
+// bundle of independent yes/no questions grouped under one event sums to
+// anything, so summing it is meaningless. Gate on negRisk to avoid garbage.
+function _arbIsMutuallyExclusive(event) {
+  if (event.negRisk === true || event.neg_risk === true) return true;
+  const mkts = event.markets || [];
+  if (mkts.length && mkts.every(m => m && (m.negRiskMarketID || m.negRisk === true))) return true;
+  return false;
+}
+
+app.get('/api/arb/internal', async (req, res) => {
+  try {
+    const r = await _nodeFetch(
+      'https://gamma-api.polymarket.com/events?limit=100&closed=false&active=true&order=volume&ascending=false',
+      { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
+    );
+    if (!r.ok) throw new Error('Gamma events ' + r.status);
+    const events = _gammaUnwrap(await r.json());
+
+    const opportunities = [];
+    for (const event of (Array.isArray(events) ? events : [])) {
+      const markets = event.markets || [];
+      if (markets.length < 3) continue;
+      if (!_arbIsMutuallyExclusive(event)) continue;
+
+      let total = 0, priced = 0;
+      const outcomes = [];
+      for (const m of markets) {
+        if (m.closed === true || m.active === false) continue;
+        let price = null;
+        try {
+          const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          price = Array.isArray(prices) ? parseFloat(prices[0]) : null;
+        } catch (_) {}
+        if (price == null || !isFinite(price)) continue;
+        total += price;
+        priced++;
+        outcomes.push({ question: m.question || m.groupItemTitle || '', slug: m.slug || null, price: Math.round(price * 100) });
+      }
+      // Trust the sum only if (nearly) every outcome was priced.
+      if (priced < 3 || priced < markets.length - 1) continue;
+
+      const totalPct = Math.round(total * 100);
+      const deviation = totalPct - 100;
+      if (Math.abs(deviation) < 5) continue;
+
+      const vol = Number(event.volume || 0);
+      opportunities.push({
+        event_title: event.title,
+        event_slug: event.slug,
+        image: event.image || null,
+        total_pct: totalPct,
+        deviation,
+        deviation_type: deviation > 0 ? 'OVERPRICED' : 'UNDERPRICED',
+        outcome_count: priced,
+        outcomes: outcomes.sort((a, b) => b.price - a.price).slice(0, 6),
+        volume: vol,
+        volume_fmt: vol >= 1e6 ? '$' + (vol / 1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol / 1e3) + 'K' : '$' + Math.round(vol),
+        signal: buildArbSignal(deviation, priced, vol),
+        edge: Math.min(99, Math.round(Math.abs(deviation) * 1.5 + (vol >= 1e6 ? 15 : vol >= 1e5 ? 8 : 3))),
+      });
+    }
+
+    opportunities.sort((a, b) => Math.abs(b.deviation) * Math.log(b.volume + 1) - Math.abs(a.deviation) * Math.log(a.volume + 1));
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json({ opportunities: opportunities.slice(0, 20), total_found: opportunities.length, updated_at: new Date().toISOString() });
+  } catch (e) {
+    console.error('[arb/internal]', e.message);
+    res.status(500).json({ error: e.message, opportunities: [] });
+  }
+});
+
+app.get('/api/arb/correlated', async (req, res) => {
+  try {
+    const screener = (_screenerCache && _screenerCache.data) || [];
+    // Pairs that SHOULD track together. A wide gap means one side is mispriced.
+    const CORRELATED_PAIRS = [
+      { label: 'Trump 2028 vs Republican president 2028', keywordA: ['trump.*2028', '2028.*trump'], keywordB: ['republican.*2028', '2028.*republican'], note: 'If Trump is the nominee these should track within a few cents.' },
+      { label: 'Fed cut in July vs September', keywordA: ['(fed|rate).*cut.*jul', 'jul.*(rate|fed).*cut'], keywordB: ['(fed|rate).*cut.*sep', 'sep.*(rate|fed).*cut'], note: 'September probability should be ≥ July — more time, more chances.' },
+      { label: 'Bitcoin $100k vs $150k', keywordA: ['bitcoin.*100k', 'btc.*100k'], keywordB: ['bitcoin.*150k', 'btc.*150k'], note: '$100k should always be ≥ $150k.' },
+      { label: 'Bitcoin $150k vs $200k', keywordA: ['bitcoin.*150k', 'btc.*150k'], keywordB: ['bitcoin.*200k', 'btc.*200k'], note: '$150k should always be ≥ $200k.' },
+    ];
+
+    const divergences = [];
+    for (const pair of CORRELATED_PAIRS) {
+      const matchA = screener.find(m => pair.keywordA.some(k => new RegExp(k, 'i').test(m.question || '')));
+      const matchB = screener.find(m => pair.keywordB.some(k => new RegExp(k, 'i').test(m.question || '')));
+      if (!matchA || !matchB || matchA === matchB) continue;
+      const priceA = Math.round((matchA.yes_price != null ? matchA.yes_price : 0.5) * 100);
+      const priceB = Math.round((matchB.yes_price != null ? matchB.yes_price : 0.5) * 100);
+      const gap = Math.abs(priceA - priceB);
+      if (gap < 5) continue;
+      divergences.push({
+        label: pair.label,
+        note: pair.note,
+        market_a: { question: matchA.question, slug: matchA.slug, price: priceA },
+        market_b: { question: matchB.question, slug: matchB.slug, price: priceB },
+        gap,
+        signal: `${gap}¢ gap between two correlated markets. ${pair.note}`,
+      });
+    }
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ divergences });
+  } catch (e) {
+    console.error('[arb/correlated]', e.message);
+    res.status(500).json({ error: e.message, divergences: [] });
+  }
+});
+
+app.get('/api/arb/volume-price', async (req, res) => {
+  try {
+    const screener = (_screenerCache && _screenerCache.data) || [];
+    // High volume vs 7-day average, but price barely moved = order
+    // absorption. The screener exposes volume_spike_ratio + price_change_24h.
+    const signals = screener
+      .filter(m => Number(m.volume_spike_ratio || 0) >= 5 && Math.abs(Number(m.price_change_24h || 0)) < 5 && Number(m.volume || 0) >= 50000)
+      .map(m => {
+        const ratio = Math.round(Number(m.volume_spike_ratio || 0) * 10) / 10;
+        const move = Math.round(Math.abs(Number(m.price_change_24h || 0)) * 10) / 10;
+        const vol = Number(m.volume || 0);
+        return {
+          slug: m.slug,
+          question: m.question,
+          image: m.image || null,
+          yes_price: Math.round((m.yes_price != null ? m.yes_price : 0.5) * 100),
+          volume: vol,
+          volume_fmt: vol >= 1e6 ? '$' + (vol / 1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol / 1e3) + 'K' : '$' + Math.round(vol),
+          spike_ratio: ratio,
+          price_change: Math.round(Number(m.price_change_24h || 0) * 10) / 10,
+          edge_score: Math.round(m.edge_score || 0),
+          signal: `Volume ${ratio}× its 7-day average but YES moved only ${move}% in 24h. Someone's absorbing size — the move likely hasn't landed yet.`,
+        };
+      })
+      .sort((a, b) => (b.spike_ratio || 0) - (a.spike_ratio || 0))
+      .slice(0, 12);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ signals });
+  } catch (e) {
+    console.error('[arb/volume-price]', e.message);
+    res.status(500).json({ error: e.message, signals: [] });
   }
 });
 

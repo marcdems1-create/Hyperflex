@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Finder — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0c;--panel:#0f1120;--panel-2:#12131f;
+  --line:#1a1d2e;--line-2:#252840;
+  --ink:#e8eaf6;--ink-2:#c8ccd8;--muted:#6870a0;--muted-2:#3a4060;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;--blue:#4466ff;--blue-2:#7b9aff;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+#nav-root{position:relative;z-index:200}
+
+/* HEADER */
+.ep-header{padding:28px 36px 22px;border-bottom:1px solid var(--line)}
+.ep-header-inner{max-width:720px;margin:0 auto}
+.ep-label{font-size:10px;color:var(--muted-2);letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.ep-title{font-size:26px;font-weight:800;color:#fff;margin-bottom:4px;letter-spacing:-0.01em}
+.ep-sub{font-size:13px;color:var(--muted);line-height:1.5}
+@media(max-width:768px){.ep-header{padding:20px 16px 16px}.ep-title{font-size:22px}}
+
+/* TABS */
+.ep-tabs{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--line);padding:0 36px;display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:792px;margin:0 auto}
+.ep-tabs::-webkit-scrollbar{display:none}
+.ep-tab{appearance:none;background:transparent;border:none;border-bottom:2px solid transparent;padding:14px 18px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
+.ep-tab:hover{color:var(--ink-2)}
+.ep-tab.active{color:#fff;border-bottom-color:var(--amber)}
+@media(max-width:768px){.ep-tabs{padding:0 8px}.ep-tab{padding:12px 13px 10px;font-size:10px}}
+
+/* CONTENT */
+.ep-content{max-width:720px;margin:0 auto;padding:22px 24px 90px;display:flex;flex-direction:column;gap:14px}
+.ep-loading,.ep-empty,.ep-error{padding:64px 20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:1px}
+.ep-empty .ee-big{font-size:15px;color:var(--ink-2);margin-bottom:10px;letter-spacing:0;font-family:var(--sans);font-weight:600}
+.ep-empty a,.ep-error button{display:inline-block;margin-top:14px;font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);border:1px solid rgba(245,158,11,.4);padding:9px 16px;border-radius:6px;background:transparent;cursor:pointer}
+
+/* shared card chrome */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;animation:fadeUp .4s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── INTERNAL ARB ── */
+.arb-card{border-left:3px solid var(--muted-2)}
+.arb-card.arb-under{border-left-color:var(--green)}
+.arb-card.arb-over{border-left-color:var(--amber)}
+.arb-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 12px}
+.arb-event{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;letter-spacing:-.005em}
+.arb-badge{flex-shrink:0;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.5px;padding:5px 10px;border-radius:6px;white-space:nowrap}
+.badge-under{color:var(--green);background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.35)}
+.badge-over{color:var(--amber);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35)}
+.arb-signal{padding:0 18px 14px;font-size:13px;color:var(--ink-2);line-height:1.5}
+.arb-outcomes{margin:0 18px;border-top:1px solid var(--line);padding:10px 0}
+.arb-outcome{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0;font-size:12px}
+.ao-name{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ao-price{font-family:var(--mono);font-weight:700;color:var(--ink-2);font-variant-numeric:tabular-nums;flex-shrink:0}
+.arb-total{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0 3px;margin-top:4px;border-top:1px dashed var(--line-2);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted-2);text-transform:uppercase}
+.arb-total .total-over{color:var(--amber);font-size:14px}
+.arb-total .total-under{color:var(--green);font-size:14px}
+.arb-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted)}
+.arb-edge{margin-left:auto;color:var(--amber);font-weight:700;border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:5px}
+.arb-cta,.vol-cta{display:block;padding:12px 18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--blue-2);text-transform:uppercase;transition:background .12s}
+.arb-cta:hover,.vol-cta:hover{background:rgba(68,102,255,.06)}
+
+/* ── CORRELATED ── */
+.corr-card{padding:16px 18px}
+.corr-label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--ink);text-transform:uppercase;margin-bottom:12px}
+.corr-markets{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch;margin-bottom:12px}
+.corr-market{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;transition:border-color .12s}
+.corr-market:hover{border-color:var(--line-2)}
+.cm-q{font-size:12px;color:var(--ink-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cm-p{font-family:var(--mono);font-size:18px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+.corr-gap{display:flex;align-items:center;justify-content:center}
+.corr-gap span{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--amber);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:6px;padding:6px 8px;white-space:nowrap;writing-mode:horizontal-tb}
+.corr-signal{font-size:12px;color:var(--muted);line-height:1.5;border-top:1px solid var(--line);padding-top:11px}
+@media(max-width:560px){.corr-markets{grid-template-columns:1fr;gap:8px}.corr-gap span{writing-mode:horizontal-tb}}
+
+/* ── VOLUME ── */
+.vol-card{padding:0}
+.vol-q{padding:16px 18px 10px;font-size:15px;font-weight:700;color:var(--ink);line-height:1.35}
+.vol-stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 18px 12px}
+.vs{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;border:1px solid var(--line-2);color:var(--ink-2)}
+.vs-spike{color:var(--amber);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08)}
+.vs-edge{color:var(--green);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.07)}
+.vol-signal{padding:0 18px 14px;font-size:13px;color:var(--ink-2);line-height:1.5}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
+
+<div class="ep-header">
+  <div class="ep-header-inner">
+    <div class="ep-label">Edge Finder</div>
+    <div class="ep-title">EDGE FINDER</div>
+    <div class="ep-sub">Mathematical mispricings in Polymarket data. No external APIs, no opinions — pure signal.</div>
+  </div>
+</div>
+
+<div class="ep-tabs" role="tablist">
+  <button class="ep-tab active" data-tab="arb" role="tab">Internal Arb</button>
+  <button class="ep-tab" data-tab="correlated" role="tab">Correlated Markets</button>
+  <button class="ep-tab" data-tab="volume" role="tab">Volume Signals</button>
+</div>
+
+<div class="ep-content" id="epContent">
+  <div class="ep-loading">Loading edge signals…</div>
+</div>
+
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function clip(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
+
+var ENDPOINTS = { arb:'/api/arb/internal', correlated:'/api/arb/correlated', volume:'/api/arb/volume-price' };
+var content = document.getElementById('epContent');
+
+document.querySelectorAll('.ep-tab').forEach(function(tab){
+  tab.addEventListener('click', function(){
+    document.querySelectorAll('.ep-tab').forEach(function(t){ t.classList.remove('active'); });
+    this.classList.add('active');
+    loadTab(this.dataset.tab);
+  });
+});
+
+function emptyState(msg){
+  return '<div class="ep-empty"><div class="ee-big">' + esc(msg) + '</div>'
+       + 'Markets look efficient right now. <a href="/finance">View live edges →</a></div>';
+}
+
+async function loadTab(tab){
+  content.innerHTML = '<div class="ep-loading">Scanning Polymarket…</div>';
+  try{
+    var res = await fetch(ENDPOINTS[tab]);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    if(tab==='arb') renderArb(data);
+    else if(tab==='correlated') renderCorrelated(data);
+    else renderVolume(data);
+  }catch(e){
+    content.innerHTML = '<div class="ep-error">Couldn’t load this scan.<br><button onclick="loadTab(\'' + tab + '\')">Retry</button></div>';
+  }
+}
+
+function renderArb(data){
+  var ops = (data && data.opportunities) || [];
+  if(!ops.length){ content.innerHTML = emptyState('No internal arbitrage right now.'); return; }
+  content.innerHTML = ops.map(function(op){
+    var under = op.deviation < 0;
+    return '<div class="card arb-card ' + (under?'arb-under':'arb-over') + '">'
+      + '<div class="arb-top"><div class="arb-event">' + esc(op.event_title) + '</div>'
+      + '<div class="arb-badge ' + (under?'badge-under':'badge-over') + '">'
+      + (op.deviation>0?'+':'') + op.deviation + '¢ ' + esc(op.deviation_type) + '</div></div>'
+      + '<div class="arb-signal">' + esc(op.signal) + '</div>'
+      + '<div class="arb-outcomes">'
+      + (op.outcomes||[]).map(function(o){
+          return '<div class="arb-outcome"><span class="ao-name">' + esc(clip(String(o.question||'').replace(/^Will\s+/i,''),46)) + '</span>'
+               + '<span class="ao-price">' + o.price + '¢</span></div>';
+        }).join('')
+      + '<div class="arb-total"><span>Sum of outcomes</span>'
+      + '<span class="' + (op.total_pct>100?'total-over':'total-under') + '">' + op.total_pct + '¢</span></div>'
+      + '</div>'
+      + '<div class="arb-meta"><span>' + esc(op.volume_fmt) + ' volume</span><span>' + op.outcome_count + ' outcomes</span>'
+      + '<span class="arb-edge">' + op.edge + ' EDGE</span></div>'
+      + '<a class="arb-cta" href="https://polymarket.com/event/' + esc(op.event_slug) + '" target="_blank" rel="noopener">View on Polymarket →</a>'
+      + '</div>';
+  }).join('');
+}
+
+function renderCorrelated(data){
+  var divs = (data && data.divergences) || [];
+  if(!divs.length){ content.innerHTML = emptyState('No correlated-market divergences right now.'); return; }
+  content.innerHTML = divs.map(function(d){
+    return '<div class="card corr-card">'
+      + '<div class="corr-label">' + esc(d.label) + '</div>'
+      + '<div class="corr-markets">'
+      + '<a class="corr-market" href="/market/' + esc(d.market_a.slug) + '"><div class="cm-q">' + esc(d.market_a.question) + '</div><div class="cm-p">' + d.market_a.price + '¢</div></a>'
+      + '<div class="corr-gap"><span>' + d.gap + '¢ GAP</span></div>'
+      + '<a class="corr-market" href="/market/' + esc(d.market_b.slug) + '"><div class="cm-q">' + esc(d.market_b.question) + '</div><div class="cm-p">' + d.market_b.price + '¢</div></a>'
+      + '</div>'
+      + '<div class="corr-signal">' + esc(d.signal) + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderVolume(data){
+  var sigs = (data && data.signals) || [];
+  if(!sigs.length){ content.innerHTML = emptyState('No volume-price divergences right now.'); return; }
+  content.innerHTML = sigs.map(function(s){
+    return '<div class="card vol-card">'
+      + '<div class="vol-q">' + esc(s.question) + '</div>'
+      + '<div class="vol-stats">'
+      + '<span class="vs vs-spike">' + s.spike_ratio + '× volume</span>'
+      + '<span class="vs">' + s.yes_price + '¢ YES</span>'
+      + '<span class="vs">' + (s.price_change>0?'+':'') + s.price_change + '% 24h</span>'
+      + '<span class="vs vs-edge">' + s.edge_score + ' EDGE</span>'
+      + '</div>'
+      + '<div class="vol-signal">' + esc(s.signal) + '</div>'
+      + '<a class="vol-cta" href="/market/' + esc(s.slug) + '">Trade →</a>'
+      + '</div>';
+  }).join('');
+}
+
+loadTab('arb');
+</script>
+</body>
+</html>
