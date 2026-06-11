@@ -16414,10 +16414,10 @@ async function fetchFinanceMarkets() {
     if (!Array.isArray(markets)) throw new Error('Bad response');
 
     const PATTERNS = {
-      fed_rates: [/interest rate/i, /rate cut/i, /rate hike/i, /fed funds/i, /\bfomc\b/i, /federal reserve/i, /\bwarsh\b/i, /\bpowell\b/i, /inflation.*2026/i, /cpi.*2026/i, /25 bps/i, /50 bps/i, /basis point/i, /how many.*cut/i, /fed\b/i, /monetary policy/i, /will the fed/i, /rate decision/i, /25 basis/i, /50 basis/i, /cut rates/i, /hike rates/i, /number of.*cut/i, /\bcpi\b/i, /inflation/i],
+      fed_rates: [/interest rate/i, /rate cut/i, /rate hike/i, /fed funds/i, /\bfomc\b/i, /federal reserve/i, /\bwarsh\b/i, /\bpowell\b/i, /inflation.*2026/i, /cpi.*2026/i, /25 bps/i, /50 bps/i, /basis point/i, /how many.*cut/i, /fed\b/i, /monetary policy/i, /will the fed/i, /rate decision/i, /25 basis/i, /50 basis/i, /cut rates/i, /hike rates/i, /number of.*cut/i, /\bcpi\b/i, /inflation/i, /fed rate/i, /rate in 2026/i, /rate in june/i, /rate in july/i, /inflation rate/i, /cpi in/i, /number of cuts/i, /how many cuts/i, /rate cuts in 2026/i],
       crypto:    [/\bbtc\b/i, /bitcoin.*price/i, /bitcoin.*hit/i, /bitcoin.*reach/i, /ethereum.*price/i, /crypto.*sec/i, /coinbase/i, /solana/i, /bitcoin/i, /ethereum/i, /\bcrypto\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
-      macro:     [/s&p.*500/i, /\bspx\b/i, /nasdaq/i, /recession/i, /nvidia/i, /oil.*price/i, /gold.*price/i, /\bgdp\b/i, /stock.*market/i, /elon.*musk.*tesla/i, /apple.*stock/i, /microsoft/i, /crude oil/i, /\bgold\b/i, /treasury/i, /yield curve/i, /largest company/i],
-      politics:  [/\btrump\b/i, /will trump/i, /elon musk/i, /sam altman/i, /openai/i, /executive order/i, /tariff/i, /us.*china/i, /\biran\b/i, /\bcongress\b/i, /\bsenate\b/i, /midterm/i, /president trump/i, /china.*tariff/i, /trump.*sign/i, /\bsanction/i, /trade war/i],
+      macro:     [/s&p.*500/i, /\bspx\b/i, /nasdaq/i, /recession/i, /nvidia/i, /oil.*price/i, /gold.*price/i, /\bgdp\b/i, /stock.*market/i, /elon.*musk.*tesla/i, /apple.*stock/i, /microsoft/i, /crude oil/i, /\bgold\b/i, /treasury/i, /yield curve/i, /largest company/i, /dow jones/i, /russell 2000/i, /\bvix\b/i, /10.*year.*yield/i, /treasury.*yield/i, /oil.*barrel/i, /\bwti\b/i, /\bbrent\b/i, /gold.*ounce/i, /\bsilver\b/i, /\bcopper\b/i, /natural gas/i, /microsoft.*stock/i, /tesla.*stock/i, /amazon.*stock/i],
+      politics:  [/\btrump\b/i, /will trump/i, /elon musk/i, /sam altman/i, /openai/i, /executive order/i, /tariff/i, /us.*china/i, /\biran\b/i, /\bcongress\b/i, /\bsenate\b/i, /midterm/i, /president trump/i, /china.*tariff/i, /trump.*sign/i, /\bsanction/i, /trade war/i, /trump.*2026/i, /trump.*order/i, /us.*tariff/i, /china.*trade/i, /iran.*nuclear/i, /ukraine.*war/i, /\bnato\b/i, /us.*russia/i, /\bbiden\b/i, /\bdemocrat\b/i, /\brepublican\b/i, /congress.*bill/i, /senate.*pass/i],
     };
 
     const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
@@ -16433,7 +16433,7 @@ async function fetchFinanceMarkets() {
       if (/\d{3}-\d{3}.*tweet/i.test(q)) return false;
       if (/post \d+.*tweet/i.test(q)) return false;
       if (/gold card/i.test(q)) return false;
-      if (parseFloat(m.volume || 0) < 100) return false;
+      if (parseFloat(m.volume || 0) < 10) return false;
       return true;
     });
 
@@ -16441,7 +16441,7 @@ async function fetchFinanceMarkets() {
       if (!m.question || seen.has(m.question)) continue;
       const q = m.question;
       for (const [cat, patterns] of Object.entries(PATTERNS)) {
-        if (sections[cat].length >= 5) continue;
+        if (sections[cat].length >= 8) continue;
         if (patterns.some(p => p.test(q))) {
           seen.add(q);
           const yesPrice = parseFloat((m.outcomePrices || ['0.5'])[0]);
@@ -16458,7 +16458,7 @@ async function fetchFinanceMarkets() {
           break;
         }
       }
-      if (Object.values(sections).every(s => s.length >= 5)) break;
+      if (Object.values(sections).every(s => s.length >= 8)) break;
     } // end filteredMarkets loop
 
     _financeCache = { sections, updated_at: new Date().toISOString() };

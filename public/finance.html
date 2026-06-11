@@ -234,18 +234,15 @@ a{color:inherit;text-decoration:none}
       el.innerHTML = html || '<div class="loading">No markets available.</div>';
 
       // Click handler — toggle edge panel on each card
-      el.addEventListener('click', function(e) {
-        var card = e.target.closest('.fn-market-card');
-        if (!card) return;
-        // if click is directly on the trade CTA link, let it navigate
-        if (e.target.closest('.fn-edge-cta')) return;
-        e.preventDefault();
-        var panel = card.querySelector('.fn-edge-panel');
-        if (!panel) return;
-        var isOpen = panel.classList.contains('open');
-        // close all other panels first
-        el.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
-        if (!isOpen) panel.classList.add('open');
+      el.querySelectorAll('.fn-market-card').forEach(function(card) {
+        card.addEventListener('click', function(e) {
+          if (e.target.tagName === 'A') return;
+          var panel = card.querySelector('.fn-edge-panel');
+          if (!panel) return;
+          var isOpen = panel.classList.contains('open');
+          el.querySelectorAll('.fn-edge-panel.open').forEach(function(p) { p.classList.remove('open'); });
+          if (!isOpen) panel.classList.add('open');
+        });
       });
     })
     .catch(function() {
