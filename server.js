@@ -4099,9 +4099,33 @@ async function processPendingEmails() {
 
     if (!due?.length) return;
 
+    // Surface WHERE we're connecting so a wrong env var is visible in one
+    // log line instead of a bare "Connection timeout".
+    const smtpTarget = `${process.env.SMTP_HOST}:${parseInt(process.env.SMTP_PORT || '587', 10)} (secure=${process.env.SMTP_SECURE === 'true'})`;
+
+    // Transient-failure retry: 3 attempts with 2s/4s backoff, but only for
+    // connection-class errors (timeout/refused/DNS/socket). Permanent SMTP
+    // rejections (bad recipient, auth) fail fast — retrying those is noise.
+    const _isTransient = (err) =>
+      ['ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED', 'ECONNRESET', 'EDNS', 'ESOCKET'].includes(err.code) ||
+      /timeout|connection/i.test(err.message || '');
+    const sendWithRetry = async (mail) => {
+      let lastErr;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try { return await transport.sendMail(mail); }
+        catch (err) {
+          lastErr = err;
+          if (!_isTransient(err) || attempt === 3) throw err;
+          console.warn(`[email-queue] transient send failure via ${smtpTarget} (attempt ${attempt}/3): ${err.message} — retrying in ${2 ** attempt}s`);
+          await new Promise(r => setTimeout(r, (2 ** attempt) * 1000));
+        }
+      }
+      throw lastErr;
+    };
+
     for (const email of due) {
       try {
-        await transport.sendMail({
+        await sendWithRetry({
           from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
           replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || 'noreply@hyperflex.network',
           to: email.to_email,
@@ -4119,7 +4143,7 @@ async function processPendingEmails() {
         }
         console.log(`[email-queue] sent "${email.subject}" to ${email.to_email}`);
       } catch (err) {
-        console.error(`[email-queue] failed to send to ${email.to_email}:`, err.message);
+        console.error(`[email-queue] failed to send to ${email.to_email} via ${smtpTarget}:`, err.code || '', err.message);
       }
     }
   } catch (err) {
@@ -20382,7 +20406,8 @@ function _midprice(book) {
 }
 
 // Fetch Polymarket market metadata by condition_id via gamma API.
-// Returns { endDate, clobTokenIds: [yes, no], closed, active } or null.
+// Returns { endDate, clobTokenIds: [yes, no], closed, active, question,
+// lastTradePrice, bestBid, bestAsk } or null.
 async function _fetchPolymarketMeta(conditionId) {
   try {
     const r = await fetch(`https://gamma-api.polymarket.com/markets/keyset?condition_ids=${encodeURIComponent(conditionId)}&limit=1`, {
@@ -20395,11 +20420,16 @@ async function _fetchPolymarketMeta(conditionId) {
     if (!m) return null;
     let tokens = [];
     try { tokens = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : (m.clobTokenIds || []); } catch {}
+    const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
     return {
       endDate: m.endDate || m.end_date || null,
       tokens,
       closed: !!m.closed,
       active: m.active !== false,
+      question: m.question || null,
+      lastTradePrice: _num(m.lastTradePrice),
+      bestBid: _num(m.bestBid),
+      bestAsk: _num(m.bestAsk),
     };
   } catch { return null; }
 }
@@ -20450,10 +20480,43 @@ async function _fetchKalshiMeta(ticker) {
 // Window: close_ts within next 15 min OR already in past (up to 48h back)
 // AND no snapshot row yet. Capped at 40 markets per run so one sweep
 // doesn't pound the APIs.
+//
+// Starvation fix (June 2026): the old query had no scan tracking, so
+// `ORDER BY tagged_at DESC LIMIT 40` re-fetched the SAME newest-tagged 40
+// rows every 5 min — typically days-from-close markets that always skip —
+// while markets actually at close sat deeper in the queue until their books
+// died. Now every scanned row is stamped (cp_last_scan_at) and cooled down
+// 20 min, with oldest-scanned-first ordering = LRU round-robin, no row can
+// starve the queue. Dead-book closed markets fall back to gamma bestBid/
+// bestAsk mid or lastTradePrice (the closing LINE — never outcomePrices:
+// settlement 0/1 is not a closing price and would corrupt CLV downstream).
+// Kalshi rows are excluded — platform dropped April 30.
+let _cpScanColsEnsured = false;
 async function sweepClosingPrices() {
   if (!pool) return { scanned: 0, snapped: 0 };
   let scanned = 0, snapped = 0, skipped = 0;
+  const skipReasons = {};
+  let skipExample = null;
+  const _skip = (row, reason) => {
+    skipped++;
+    skipReasons[reason] = (skipReasons[reason] || 0) + 1;
+    if (!skipExample) skipExample = `${row.external_id}:${reason}`;
+  };
   try {
+    if (!_cpScanColsEnsured) {
+      try {
+        await dbQuery(`ALTER TABLE market_sport_tags ADD COLUMN IF NOT EXISTS cp_last_scan_at TIMESTAMPTZ`);
+        await dbQuery(`ALTER TABLE market_sport_tags ADD COLUMN IF NOT EXISTS cp_scan_attempts INTEGER DEFAULT 0`);
+        await dbQuery(`ALTER TABLE market_closing_prices ADD COLUMN IF NOT EXISTS price_source TEXT`);
+        _cpScanColsEnsured = true; // only after ALL ALTERs succeed — a transient failure retries next sweep
+      } catch (e) {
+        if (/relation "(market_sport_tags|market_closing_prices)" does not exist/i.test(e.message)) {
+          console.warn('[closing-prices] sweep skipped — dependency table missing');
+          return { scanned: 0, snapped: 0, error: 'missing_table' };
+        }
+        throw e;
+      }
+    }
     let pending;
     try {
       pending = await dbQuery(`
@@ -20463,7 +20526,9 @@ async function sweepClosingPrices() {
           ON cp.source = mst.source AND cp.external_id = mst.external_id
         WHERE cp.external_id IS NULL
           AND mst.sport <> 'other'
-        ORDER BY mst.tagged_at DESC
+          AND mst.source = 'polymarket'
+          AND (mst.cp_last_scan_at IS NULL OR mst.cp_last_scan_at < NOW() - INTERVAL '20 minutes')
+        ORDER BY mst.cp_last_scan_at ASC NULLS FIRST, mst.tagged_at DESC
         LIMIT 40`);
     } catch (e) {
       if (/relation "(market_sport_tags|market_closing_prices)" does not exist/i.test(e.message)) {
@@ -20475,54 +20540,64 @@ async function sweepClosingPrices() {
     scanned = pending.length;
     for (const row of pending) {
       try {
-        if (row.source === 'polymarket') {
-          const meta = await _fetchPolymarketMeta(row.external_id);
-          if (!meta || !meta.endDate || !meta.tokens || meta.tokens.length < 2) { skipped++; continue; }
-          const endTs = Date.parse(meta.endDate);
-          if (!Number.isFinite(endTs)) { skipped++; continue; }
-          const now = Date.now();
-          const windowMs = 15 * 60 * 1000;
-          const backfillMs = 48 * 60 * 60 * 1000;
-          const inWindow = (endTs - now <= windowMs) && (now - endTs <= backfillMs);
-          if (!inWindow && meta.active && !meta.closed) { skipped++; continue; }
+        // Stamp first — even a row that errors mid-scan goes to the back of
+        // the round-robin instead of blocking the head.
+        await dbQuery(
+          `UPDATE market_sport_tags SET cp_last_scan_at = NOW(), cp_scan_attempts = COALESCE(cp_scan_attempts, 0) + 1
+           WHERE source = $1 AND external_id = $2`,
+          [row.source, row.external_id]
+        ).catch(() => {});
+
+        const meta = await _fetchPolymarketMeta(row.external_id);
+        if (!meta) { _skip(row, 'no_meta'); continue; }
+        if (!meta.endDate) { _skip(row, 'no_end_date'); continue; }
+        const endTs = Date.parse(meta.endDate);
+        if (!Number.isFinite(endTs)) { _skip(row, 'bad_end_date'); continue; }
+        const now = Date.now();
+        const windowMs = 15 * 60 * 1000;
+        const backfillMs = 48 * 60 * 60 * 1000;
+        const inWindow = (endTs - now <= windowMs) && (now - endTs <= backfillMs);
+        if (!inWindow && meta.active && !meta.closed) { _skip(row, 'not_in_window'); continue; }
+
+        // Price priority: live book mid → gamma bestBid/bestAsk mid →
+        // gamma lastTradePrice. All are closing-line proxies; the book dies
+        // shortly after close, the gamma quotes persist.
+        let yes = null, no = null, priceSource = null;
+        if (meta.tokens && meta.tokens.length >= 2) {
           const prices = await _fetchPolymarketCloseBooks(meta.tokens);
-          if (!prices || prices.yes_price == null) { skipped++; continue; }
-          await pool.query(
-            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
-             VALUES ('polymarket', $1, $2, $3, $4, now())
-             ON CONFLICT (source, external_id) DO NOTHING`,
-            [row.external_id, prices.yes_price, prices.no_price, new Date(endTs).toISOString()]
-          );
-          snapped++;
-        } else if (row.source === 'kalshi') {
-          const meta = await _fetchKalshiMeta(row.external_id);
-          if (!meta || !meta.close_ts) { skipped++; continue; }
-          const closeTs = Date.parse(meta.close_ts);
-          if (!Number.isFinite(closeTs)) { skipped++; continue; }
-          const now = Date.now();
-          const windowMs = 15 * 60 * 1000;
-          const backfillMs = 48 * 60 * 60 * 1000;
-          const isFinal = /closed|settled|finalized|determined/.test(meta.status || '');
-          const inWindow = (closeTs - now <= windowMs) && (now - closeTs <= backfillMs);
-          if (!inWindow && !isFinal) { skipped++; continue; }
-          if (meta.yes_price == null) { skipped++; continue; }
-          await pool.query(
-            `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at)
-             VALUES ('kalshi', $1, $2, $3, $4, now())
-             ON CONFLICT (source, external_id) DO NOTHING`,
-            [row.external_id, meta.yes_price, meta.no_price, new Date(closeTs).toISOString()]
-          );
-          snapped++;
+          if (prices && prices.yes_price != null) {
+            yes = prices.yes_price; no = prices.no_price; priceSource = 'book';
+          }
         }
+        if (yes == null && meta.bestBid != null && meta.bestAsk != null) {
+          yes = Math.round(((meta.bestBid + meta.bestAsk) / 2) * 1e6) / 1e6;
+          priceSource = 'gamma_quote';
+        }
+        if (yes == null && meta.lastTradePrice != null && meta.lastTradePrice > 0 && meta.lastTradePrice < 1) {
+          yes = meta.lastTradePrice;
+          priceSource = 'gamma_last_trade';
+        }
+        if (yes == null) { _skip(row, 'dead_book'); continue; }
+        if (no == null) no = Math.round((1 - yes) * 1e6) / 1e6;
+
+        await pool.query(
+          `INSERT INTO market_closing_prices (source, external_id, yes_price, no_price, close_ts, captured_at, price_source)
+           VALUES ('polymarket', $1, $2, $3, $4, now(), $5)
+           ON CONFLICT (source, external_id) DO NOTHING`,
+          [row.external_id, yes, no, new Date(endTs).toISOString(), priceSource]
+        );
+        snapped++;
         // Small pause between markets so we don't hammer the upstream APIs.
         await new Promise(res => setTimeout(res, 250));
       } catch (e) {
         console.warn('[closing-prices] per-market error:', row.source, row.external_id, e.message);
-        skipped++;
+        _skip(row, 'error');
       }
     }
-    if (scanned) console.log(`[closing-prices] sweep scanned=${scanned} snapped=${snapped} skipped=${skipped}`);
-    return { scanned, snapped, skipped };
+    if (scanned) console.log(`[closing-prices] sweep scanned=${scanned} snapped=${snapped} skipped=${skipped}`
+      + (skipped ? ` skip_reasons=${JSON.stringify(skipReasons)}` : '')
+      + (skipExample && !snapped ? ` example=${skipExample}` : ''));
+    return { scanned, snapped, skipped, skip_reasons: skipReasons };
   } catch (e) {
     console.error('[closing-prices] sweep error:', e.message);
     return { scanned, snapped, skipped, error: e.message };
@@ -55793,16 +55868,21 @@ app.get('/api/accuracy/recent', async (req, res) => {
   }
 });
 
-// Auto-grade expired predictions — runs every 30 min
+// Auto-grade expired predictions — runs every 30 min.
+// Bounded: newest-expired 400 per cycle (most likely to be inside the
+// recent-closed gamma window), so a multi-thousand-row backlog can't make
+// every cycle a full-table rescan. Rows that stay unpriceable accumulate
+// grade_attempts and terminally expire at 5 attempts — the backlog drains
+// instead of growing forever.
 async function gradeExpiredPredictions() {
   try {
     let unresolved = [];
     if (pool) {
       unresolved = await dbQuery(
-        "SELECT * FROM prediction_log WHERE resolved = false AND expires_at < NOW()"
+        "SELECT * FROM prediction_log WHERE resolved = false AND expires_at < NOW() ORDER BY expires_at DESC LIMIT 400"
       );
     } else {
-      const { data } = await supabase.from('prediction_log').select('*').eq('resolved', false).lt('expires_at', new Date().toISOString());
+      const { data } = await supabase.from('prediction_log').select('*').eq('resolved', false).lt('expires_at', new Date().toISOString()).order('expires_at', { ascending: false }).limit(400);
       unresolved = data || [];
     }
 
@@ -55834,8 +55914,13 @@ async function gradeExpiredPredictions() {
       ]);
       for (const r of [rc1, rc2]) {
         if (!r || !r.ok) continue;
-        const mkts = await r.json().catch(() => []);
-        for (const m of (Array.isArray(mkts) ? mkts : [])) {
+        // markets/keyset returns an envelope ({ markets: [...] }), NOT a bare
+        // array. The old `Array.isArray(mkts) ? mkts : []` guard silently
+        // iterated [] on every cycle — the closed-market source contributed
+        // ZERO prices since it shipped, which is the root cause of
+        // "N graded 0, skipped N (no price data)". _gammaUnwrap handles both.
+        const mkts = _gammaUnwrap(await r.json().catch(() => null));
+        for (const m of mkts) {
           if (!m.outcomePrices) continue;
           try {
             const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
@@ -55849,6 +55934,8 @@ async function gradeExpiredPredictions() {
     } catch (e) { console.warn('[accuracy/grade] closed-market lookup error:', e.message); }
 
     let graded = 0, skipped = 0;
+    const unmatchedIds = [];
+    let targetedBudget = 25; // per-cycle cap on per-market gamma lookups — bounded backfill, no API hammering
 
     for (const pred of unresolved) {
       let currentPrice = null;
@@ -55878,7 +55965,37 @@ async function gradeExpiredPredictions() {
         if (match) currentPrice = (match.current_price || 50) / 100;
       }
 
-      if (currentPrice === null) { skipped++; continue; }
+      // 4. Targeted per-market rescue — the bulk closed fetch only covers the
+      // ~400 most-recent/highest-volume closed markets; backlog rows whose
+      // markets closed weeks ago need a direct condition_id lookup. Budgeted
+      // per cycle; resolved markets grade from outcomePrices via the same
+      // gamma row.
+      if (currentPrice === null && pred.market_id && targetedBudget > 0) {
+        targetedBudget--;
+        try {
+          const r = await fetch(`https://gamma-api.polymarket.com/markets/keyset?condition_ids=${encodeURIComponent(pred.market_id)}&limit=1`, {
+            headers: { Accept: 'application/json' },
+            signal: AbortSignal.timeout(8000),
+          });
+          if (r.ok) {
+            const arr = _gammaUnwrap(await r.json().catch(() => null));
+            const m = arr[0];
+            if (m && m.outcomePrices) {
+              try {
+                const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+                const yp = parseFloat(prices[0]);
+                if (!isNaN(yp)) {
+                  currentPrice = yp;
+                  _gradePriceLookup.set(pred.market_id.toLowerCase(), yp); // dedupe within this run
+                }
+              } catch {}
+            }
+          }
+          await new Promise(res => setTimeout(res, 250));
+        } catch {}
+      }
+
+      if (currentPrice === null) { skipped++; if (pred.id != null) unmatchedIds.push(pred.id); continue; }
 
       let outcome = 'expired';
       const entryPrice = parseFloat(pred.market_price_at_prediction) || 0.5;
@@ -55922,15 +56039,41 @@ async function gradeExpiredPredictions() {
             resolved_at: new Date().toISOString(), pnl_if_followed: pnl
           }).eq('id', pred.id);
         }
-        if (outcome === 'correct') tweetWinRecap(pred, outcome).catch(() => {});
+        // Tweet only fresh wins (expired within 24h) — when a backlog fix
+        // suddenly grades hundreds of old rows, firing a tweet per win would
+        // spam the account with stale recaps.
+        const expAge = Date.now() - new Date(pred.expires_at || 0).getTime();
+        if (outcome === 'correct' && expAge < 24 * 60 * 60 * 1000) tweetWinRecap(pred, outcome).catch(() => {});
         graded++;
       } catch (e) {
         console.warn('[accuracy/grade] Failed to update prediction:', pred.id, e.message);
       }
     }
 
+    // Attempt tracking + terminal state: rows that stay unpriceable across 5
+    // grading cycles (~2.5h minimum) get resolved as 'expired' so the backlog
+    // drains instead of being rescanned every 30 min forever. 'expired' rows
+    // are already excluded from /api/accuracy/stats denominators (it filters
+    // outcome IN correct/incorrect).
+    let terminal = 0;
+    if (pool && unmatchedIds.length) {
+      try {
+        await dbQuery(
+          `UPDATE prediction_log SET grade_attempts = COALESCE(grade_attempts, 0) + 1 WHERE id = ANY($1::int[])`,
+          [unmatchedIds]
+        );
+        const term = await dbQuery(
+          `UPDATE prediction_log SET resolved = true, outcome = 'expired', resolved_at = NOW()
+           WHERE id = ANY($1::int[]) AND COALESCE(grade_attempts, 0) >= 5
+           RETURNING id`,
+          [unmatchedIds]
+        );
+        terminal = (term || []).length;
+      } catch (e) { console.warn('[accuracy/grade] attempt-tracking error:', e.message); }
+    }
+
     _accuracyStatsCache = null;
-    console.log(`[accuracy/grade] Done: ${graded} graded, ${skipped} skipped (no price data)`);
+    console.log(`[accuracy/grade] Done: ${graded} graded, ${skipped} skipped (no price data)${terminal ? `, ${terminal} terminally expired (5+ attempts)` : ''}`);
   } catch (err) {
     console.error('[accuracy/grade]', err.message);
   }
@@ -57111,6 +57254,7 @@ if (pool) {
       await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS outcome TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS market_price_at_resolution NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS grade_attempts INTEGER DEFAULT 0`).catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS signal_outcomes (
         id SERIAL PRIMARY KEY, signal_type TEXT, source TEXT,
@@ -57825,9 +57969,13 @@ if (pool) {
       // Mirrors supabase_migration_62_prediction_thesis.sql. Two-table
       // narrative-parlay product: thesis + leg. Resolution cron lands
       // in PR #174; for now all theses sit at resolution_state='open'.
+      // user_id is TEXT — users.id is TEXT on Railway (NOT uuid). The original
+      // uuid declaration made the FK fail ("cannot be implemented"), which
+      // aborted this CREATE, which then made prediction_thesis_leg's FK fail
+      // with "relation does not exist" on every boot.
       await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_thesis (
         id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id           text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         title             text NOT NULL CHECK (char_length(title) <= 80),
         rationale         text CHECK (char_length(rationale) <= 500),
         created_at        timestamptz NOT NULL DEFAULT NOW(),
@@ -57996,8 +58144,11 @@ async function resolveSignalOutcomes() {
       ]);
       for (const r of [r1, r2]) {
         if (!r || !r.ok) continue;
-        const mkts = await r.json().catch(() => []);
-        for (const m of (Array.isArray(mkts) ? mkts : [])) {
+        // markets/keyset returns { markets: [...] } — unwrap or iterate [].
+        // This exact miss is why the closed-market source never graded a
+        // single signal despite the comment below claiming it fixed 0.3%.
+        const mkts = _gammaUnwrap(await r.json().catch(() => null));
+        for (const m of mkts) {
           if (!m.question || !m.outcomePrices) continue;
           try {
             const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;

@@ -11,7 +11,9 @@
 
 CREATE TABLE IF NOT EXISTS prediction_thesis (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- users.id is TEXT on Railway, not uuid — a uuid FK here "cannot be
+  -- implemented" and aborts the whole CREATE (June 2026 boot-log fix).
+  user_id           text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title             text NOT NULL CHECK (char_length(title) <= 80),
   rationale         text CHECK (char_length(rationale) <= 500),
   created_at        timestamptz NOT NULL DEFAULT NOW(),
