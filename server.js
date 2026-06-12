@@ -16431,17 +16431,33 @@ function _parseGammaYes(m) {
   return null;
 }
 
-// "WHY THIS IS AN EDGE" — built from real enriched data (screener whale +
-// edge cross-reference) plus structural price bias. Returns a ' · '-joined
-// reason string; callers gate on hasEdge so this is never empty filler.
-function buildEdgeSignal(e) {
+// "WHY THIS IS AN EDGE" — primary signal + enrichment signals joined by ' · '.
+// category-aware so sports gets payout math, finance gets NO-bias context.
+function buildEdgeSignal(e, category) {
   const pct = Math.round((e.yes_price != null ? e.yes_price : 0.5) * 100);
   const reasons = [];
-  if (pct <= 5)       reasons.push(`At ${pct}¢ YES, under 0.5% of markets resolve YES — structural NO edge`);
-  else if (pct <= 10) reasons.push(`At ${pct}¢ YES, only ~1.1% historically resolve YES — fade the YES`);
-  else if (pct <= 20) reasons.push(`At ${pct}¢ YES, ~5% resolve YES — sharp money fades this range`);
-  else if (pct >= 90) reasons.push(`${pct}¢ YES — near-certain consensus pricing`);
-  else if (pct >= 80) reasons.push(`${pct}¢ YES — high-conviction pricing`);
+
+  if (category === 'sports') {
+    const mult = pct > 0 ? (100 / pct).toFixed(1) : null;
+    if      (pct <= 5)  reasons.push(`Long shot at ${pct}¢ — pays ${mult}× if it lands`);
+    else if (pct <= 15) reasons.push(`Heavy underdog at ${pct}¢ — ${mult}× payout`);
+    else if (pct <= 30) reasons.push(`Underdog at ${pct}¢ — ${mult}× implied return, room to move`);
+    else if (pct <= 45) reasons.push(`${pct}¢ — competitive market, pays ${mult}× on a YES`);
+    else if (pct >= 85) reasons.push(`Heavy favorite at ${pct}¢ — high-conviction consensus`);
+    else if (pct >= 65) reasons.push(`${pct}¢ favorite — market leaning one way, pays ${mult}×`);
+    else                reasons.push(`${pct}¢ — tight market, ${mult}× on YES`);
+    const vol = e.volume || 0;
+    if      (vol >= 1e6)    reasons.push(`$${(vol/1e6).toFixed(1)}M traded — deep book`);
+    else if (vol >= 200e3)  reasons.push(`$${Math.round(vol/1e3)}k traded — active market`);
+  } else {
+    if      (pct <= 5)  reasons.push(`At ${pct}¢ YES, under 0.5% of markets resolve YES — structural NO edge`);
+    else if (pct <= 10) reasons.push(`At ${pct}¢ YES, only ~1.1% historically resolve YES — fade the YES`);
+    else if (pct <= 20) reasons.push(`At ${pct}¢ YES, ~5% resolve YES — sharp money fades this range`);
+    else if (pct >= 90) reasons.push(`${pct}¢ YES — near-certain consensus pricing`);
+    else if (pct >= 80) reasons.push(`${pct}¢ YES — high-conviction pricing`);
+  }
+
+  // enrichment signals fire for all categories when present
   if ((e.whale_count || 0) >= 2) {
     const capK = Math.round((e.total_whale_capital || 0) / 1000);
     reasons.push(`${e.whale_count} whales positioned${capK > 0 ? ` — $${capK}k committed` : ''}`);
@@ -16455,7 +16471,7 @@ function buildEdgeSignal(e) {
   if ((e.edge_score || 0) >= 10) {
     reasons.push(`Edge score ${Math.round(e.edge_score)}/100`);
   }
-  if (!reasons.length) reasons.push(`Directional signal at ${pct}¢ YES`);
+  if (!reasons.length) reasons.push(`Directional signal at ${pct}¢`);
   return reasons.join(' · ');
 }
 
@@ -16519,7 +16535,7 @@ async function fetchFinanceMarkets() {
             yes_price:   yp,
             volume:      parseFloat(m.volume || 0),
             whale_count: 0,
-            edge_signal: buildEdgeSignal({ yes_price: yp, volume: parseFloat(m.volume || 0), whale_count: 0 }),
+            edge_signal: buildEdgeSignal({ yes_price: yp, volume: parseFloat(m.volume || 0), whale_count: 0 }, cat),
           });
           break;
         }
