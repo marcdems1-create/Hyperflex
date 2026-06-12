@@ -152,6 +152,7 @@
   .loading-state{text-align:center;padding:80px 20px;color:var(--dim);font-size:13px}
   .loading-state .spinner{width:32px;height:32px;border:2px solid var(--paper-3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
   .error-state{text-align:center;padding:60px 20px;color:var(--red);font-size:13px}
   .empty-state{text-align:center;padding:60px 20px;color:var(--dim);font-size:13px}
   .empty-state p{max-width:400px;margin:0 auto;line-height:1.6}
@@ -163,6 +164,87 @@
   .refresh-bar{display:flex;align-items:center;gap:10px;padding:12px 0 4px;font-family:var(--mono);font-size:11px;color:var(--dim)}
   .refresh-track{flex:1;height:2px;background:var(--paper-3);border-radius:2px;overflow:hidden;max-width:180px}
   .refresh-fill{height:100%;background:var(--blue);border-radius:2px;transition:width 1s linear}
+
+  /* ── Copy Trades tab ── */
+  .copy-sub-bar{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+  .copy-sub-btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .15s}
+  .copy-sub-btn:hover{color:var(--ink);border-color:rgba(255,255,255,0.15)}
+  .copy-sub-btn.active{background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.35);color:var(--purple)}
+  .copy-controls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;align-items:center}
+  .copy-ctrl-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);margin-right:2px}
+  .copy-pill{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .15s}
+  .copy-pill:hover{color:var(--ink)}
+  .copy-pill.active{background:rgba(0,230,138,0.08);border-color:rgba(0,230,138,0.3);color:var(--green)}
+  .copy-card{background:var(--paper-2);border:1px solid var(--border);border-radius:14px;padding:18px;position:relative;transition:all .15s;border-left:4px solid var(--purple)}
+  .copy-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3);border-color:rgba(168,85,247,0.35)}
+  .copy-card-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+  .whale-avatar{width:38px;height:38px;border-radius:10px;background:rgba(168,85,247,0.12);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:800;color:var(--purple);flex-shrink:0;text-transform:uppercase}
+  .whale-meta{flex:1;min-width:0}
+  .whale-name-row{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+  .whale-name{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .whale-rank-chip{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(201,146,13,0.1);color:var(--gold);border:1px solid rgba(201,146,13,0.2);flex-shrink:0}
+  .whale-pnl{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .whale-pnl.pos{color:var(--green)}
+  .copy-score-wrap{flex-shrink:0;text-align:center}
+  .copy-score{font-family:var(--mono);font-size:22px;font-weight:900;line-height:1}
+  .copy-score.high{color:var(--green)}
+  .copy-score.mid{color:var(--blue)}
+  .copy-score.low{color:var(--soft)}
+  .copy-score-label{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);margin-top:2px}
+  .copy-question{font-size:13px;color:var(--ink);line-height:1.4;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .copy-trade-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .copy-side{font-family:var(--mono);font-size:13px;font-weight:800;padding:4px 10px;border-radius:6px}
+  .copy-side.yes{background:rgba(0,230,138,0.1);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
+  .copy-side.no{background:rgba(255,77,106,0.1);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
+  .copy-price{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink)}
+  .copy-meta-chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto}
+  .copy-chip{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 7px;border-radius:5px;background:var(--paper-3);color:var(--soft);border:1px solid var(--border)}
+  .copy-chip.edge{background:rgba(77,159,255,0.08);color:var(--blue);border-color:rgba(77,159,255,0.2)}
+  .copy-chip.whale{background:rgba(168,85,247,0.08);color:var(--purple);border-color:rgba(168,85,247,0.2)}
+  .copy-actions{display:flex;gap:8px;align-items:center}
+  .btn-copy-trade{flex:1;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:9px 16px;border-radius:8px;border:1px solid rgba(0,230,138,0.4);background:rgba(0,230,138,0.07);color:var(--green);cursor:pointer;transition:all .15s}
+  .btn-copy-trade:hover{background:rgba(0,230,138,0.14);border-color:rgba(0,230,138,0.6)}
+  .btn-view-market{font-family:var(--mono);font-size:10px;font-weight:600;padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;text-decoration:none;transition:all .15s;display:inline-flex;align-items:center}
+  .btn-view-market:hover{color:var(--ink);border-color:rgba(255,255,255,0.15)}
+  .copy-status-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(168,85,247,0.05);border:1px solid rgba(168,85,247,0.15);border-radius:10px;margin-bottom:20px}
+  .copy-status-dot{width:7px;height:7px;border-radius:50%;background:var(--purple);box-shadow:0 0 8px var(--purple);animation:pulse 2s infinite;flex-shrink:0}
+  .copy-status-text{font-family:var(--mono);font-size:11px;color:var(--soft);flex:1}
+  .copy-status-text strong{color:var(--purple)}
+
+  /* Copy modal */
+  .cm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99998;display:none;align-items:center;justify-content:center;padding:16px}
+  .cm-overlay.open{display:flex}
+  .cm-box{background:#12121c;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:28px;width:100%;max-width:420px;box-shadow:0 24px 64px rgba(0,0,0,0.6)}
+  .cm-title{font-weight:800;font-size:18px;letter-spacing:-0.02em;margin-bottom:4px}
+  .cm-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:22px;line-height:1.6}
+  .cm-market{font-size:12px;color:var(--soft);padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border);margin-bottom:16px;line-height:1.4}
+  .cm-market strong{color:var(--ink);font-weight:600}
+  .cm-field{margin-bottom:16px}
+  .cm-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim);margin-bottom:7px;display:block}
+  .cm-input{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink);outline:none;transition:border-color .15s}
+  .cm-input:focus{border-color:rgba(0,230,138,0.4)}
+  .cm-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+  .cm-toggle-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink)}
+  .cm-toggle-sub{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+  .cm-toggle{position:relative;width:40px;height:22px;flex-shrink:0}
+  .cm-toggle input{opacity:0;width:0;height:0}
+  .cm-toggle-slider{position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:11px;cursor:pointer;transition:.2s}
+  .cm-toggle-slider:before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+  .cm-toggle input:checked+.cm-toggle-slider{background:var(--green)}
+  .cm-toggle input:checked+.cm-toggle-slider:before{transform:translateX(18px)}
+  .cm-actions{display:flex;gap:10px;margin-top:22px}
+  .cm-confirm{flex:1;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:12px;border-radius:8px;border:none;background:var(--green);color:#0e0e15;cursor:pointer;transition:opacity .15s}
+  .cm-confirm:hover{opacity:0.85}
+  .cm-confirm:disabled{opacity:0.4;cursor:not-allowed}
+  .cm-cancel{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:12px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .15s}
+  .cm-cancel:hover{color:var(--ink)}
+  .cm-err{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:10px;display:none}
+  .cm-success{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:10px;display:none}
+
+  /* Toast */
+  .hf-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a28;border:1px solid rgba(0,230,138,0.3);border-radius:10px;padding:12px 20px;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);opacity:0;pointer-events:none;transition:all .3s;z-index:99999;white-space:nowrap}
+  .hf-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hf-toast.err{border-color:rgba(255,77,106,0.3);color:var(--red)}
 
   /* Scrollable tabs on mobile */
   @media(max-width:768px){
@@ -195,6 +277,7 @@
       <div class="stat-cell s-arb"><div class="n" id="stat-arb">—</div><div class="l">Arb Opportunities</div></div>
       <div class="stat-cell s-corr"><div class="n" id="stat-corr">—</div><div class="l">Correlated Gaps</div></div>
       <div class="stat-cell s-vol"><div class="n" id="stat-vol">—</div><div class="l">Volume Signals</div></div>
+      <div class="stat-cell" style="--n-color:var(--purple)"><div class="n" id="stat-copy" style="color:var(--purple)">—</div><div class="l">Copy Signals</div></div>
       <div class="stat-cell s-fresh"><div class="n" id="stat-fresh">—</div><div class="l">Updated</div></div>
     </div>
   </div>
@@ -210,6 +293,9 @@
     </button>
     <button class="tab" id="tab-vol" role="tab" onclick="switchTab('vol')">
       Volume Signals <span class="count" id="tc-vol">—</span>
+    </button>
+    <button class="tab" id="tab-copy" role="tab" onclick="switchTab('copy')" style="border-bottom-color:transparent">
+      Copy Trades <span class="count" id="tc-copy" style="background:rgba(168,85,247,0.12);color:var(--purple)">—</span>
     </button>
   </div>
 
@@ -269,6 +355,82 @@
     </div>
   </div>
 
+  <!-- Copy Trades tab -->
+  <div class="tab-panel" id="panel-copy">
+    <div class="panel-head">
+      <div>
+        <h2>Copy Trades — Whale Signals</h2>
+        <div class="meta" id="copy-meta">Ranked by Copy Score — whale rank × market edge × price zone</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="live-dot" id="copy-live" style="opacity:0">—</span>
+        <button class="refresh-btn" onclick="loadCopy()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- Sub-feed toggle -->
+    <div class="copy-sub-bar">
+      <button class="copy-sub-btn active" id="csub-fire" onclick="setCopyFeed('fire')">Fire Feed</button>
+      <button class="copy-sub-btn" id="csub-follow" onclick="setCopyFeed('follow')">Follow Feed</button>
+      <div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)" id="copy-sub-desc">Highest Copy Score across all tracked whales</div>
+    </div>
+
+    <!-- Risk controls -->
+    <div class="copy-controls">
+      <span class="copy-ctrl-label">Min Score</span>
+      <button class="copy-pill active" id="cpill-score-0" onclick="setCopyScore(0)">Any</button>
+      <button class="copy-pill" id="cpill-score-50" onclick="setCopyScore(50)">50+</button>
+      <button class="copy-pill" id="cpill-score-70" onclick="setCopyScore(70)">70+</button>
+      <span class="copy-ctrl-label" style="margin-left:12px">Category</span>
+      <button class="copy-pill active" id="cpill-cat-all" onclick="setCopyCat('all')">All</button>
+      <button class="copy-pill" id="cpill-cat-politics" onclick="setCopyCat('politics')">Politics</button>
+      <button class="copy-pill" id="cpill-cat-crypto" onclick="setCopyCat('crypto')">Crypto</button>
+      <button class="copy-pill" id="cpill-cat-sports" onclick="setCopyCat('sports')">Sports</button>
+      <button class="copy-pill" id="cpill-cat-macro" onclick="setCopyCat('macro')">Macro</button>
+    </div>
+
+    <!-- Active subscription status (shown when logged in and copying) -->
+    <div class="copy-status-bar" id="copyStatusBar" style="display:none">
+      <div class="copy-status-dot"></div>
+      <div class="copy-status-text">Copying <strong id="copyActiveCount">0</strong> whale<span id="copyActivePlural">s</span> — auto-execute enabled for trades above your min score. <a href="/copy-trading" style="color:var(--purple);text-decoration:none">Manage →</a></div>
+    </div>
+
+    <div class="card-grid" id="copy-grid">
+      <div class="loading-state"><div class="spinner"></div>Loading whale signals…</div>
+    </div>
+  </div>
+
+  <!-- Copy trade modal -->
+  <div class="cm-overlay" id="cmOverlay" onclick="if(event.target===this)closeCopyModal()">
+    <div class="cm-box">
+      <div class="cm-title" id="cmTitle">Copy trade</div>
+      <div class="cm-sub" id="cmSub">Set your allocation. Your wallet executes the trade.</div>
+      <div class="cm-market" id="cmMarket"></div>
+      <div class="cm-field">
+        <label class="cm-label" for="cmAlloc">Allocation per trade (USDC)</label>
+        <input class="cm-input" id="cmAlloc" type="number" min="1" max="10000" value="50" placeholder="50">
+      </div>
+      <div class="cm-toggle-row">
+        <div>
+          <div class="cm-toggle-label">Auto-execute</div>
+          <div class="cm-toggle-sub">Mirror future trades from this whale automatically via your connected wallet.</div>
+        </div>
+        <label class="cm-toggle">
+          <input type="checkbox" id="cmAutoExec">
+          <span class="cm-toggle-slider"></span>
+        </label>
+      </div>
+      <div class="cm-actions">
+        <button class="cm-cancel" onclick="closeCopyModal()">Cancel</button>
+        <button class="cm-confirm" id="cmConfirmBtn" onclick="confirmCopy()">Start copying</button>
+      </div>
+      <div class="cm-err" id="cmErr"></div>
+      <div class="cm-success" id="cmSuccess"></div>
+    </div>
+  </div>
+
+  <div class="hf-toast" id="hfToast"></div>
+
   <div style="padding:40px 0 20px;text-align:center;font-size:11px;color:var(--dim);border-top:1px solid var(--border);margin-top:20px">
     Not financial advice. All markets can resolve against you. Edge signals are probabilistic, not guaranteed.
     Data refreshes every 2 minutes from Polymarket Gamma and internal screener.
@@ -286,12 +448,20 @@
 
   function switchTab(tab) {
     _currentTab = tab;
-    ['arb','corr','vol'].forEach(function(t) {
+    ['arb','corr','vol','copy'].forEach(function(t) {
       var btn = document.getElementById('tab-' + t);
       var panel = document.getElementById('panel-' + t);
-      if (t === tab) { btn.classList.add('active'); panel.classList.add('active'); }
-      else { btn.classList.remove('active'); panel.classList.remove('active'); }
+      if (t === tab) {
+        btn.classList.add('active');
+        if (t === 'copy') btn.style.borderBottomColor = 'var(--purple)';
+        panel.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+        if (t === 'copy') btn.style.borderBottomColor = 'transparent';
+        panel.classList.remove('active');
+      }
     });
+    if (tab === 'copy' && !_copyLoaded) loadCopy();
   }
   window.switchTab = switchTab;
 
@@ -483,6 +653,252 @@
         '</div>' +
       '</div>';
     }).join('');
+  }
+
+  // ── Copy Trades tab state ──
+  var _copyFeed = 'fire';
+  var _copyMinScore = 0;
+  var _copyCat = 'all';
+  var _copyLoaded = false;
+  var _copyModalTrade = null;
+  var _token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+
+  function setCopyFeed(feed) {
+    _copyFeed = feed;
+    ['fire','follow'].forEach(function(f) {
+      document.getElementById('csub-' + f).classList.toggle('active', f === feed);
+    });
+    var desc = document.getElementById('copy-sub-desc');
+    if (desc) desc.textContent = feed === 'fire'
+      ? 'Highest Copy Score across all tracked whales'
+      : 'Trades from whales you follow or have subscribed to copy';
+    loadCopy();
+  }
+  window.setCopyFeed = setCopyFeed;
+
+  function setCopyScore(min) {
+    _copyMinScore = min;
+    [0,50,70].forEach(function(v) {
+      document.getElementById('cpill-score-' + v).classList.toggle('active', v === min);
+    });
+    loadCopy();
+  }
+  window.setCopyScore = setCopyScore;
+
+  function setCopyCat(cat) {
+    _copyCat = cat;
+    ['all','politics','crypto','sports','macro'].forEach(function(c) {
+      document.getElementById('cpill-cat-' + c).classList.toggle('active', c === cat);
+    });
+    loadCopy();
+  }
+  window.setCopyCat = setCopyCat;
+
+  function fmtPnl(v) {
+    if (v == null) return null;
+    var a = Math.abs(v);
+    var s = v >= 0 ? '+$' : '-$';
+    if (a >= 1e6) return s + (a/1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return s + Math.round(a/1e3) + 'k';
+    return s + Math.round(a);
+  }
+
+  function copyScoreClass(score) {
+    return score >= 70 ? 'high' : score >= 50 ? 'mid' : 'low';
+  }
+
+  function whaleInitials(name) {
+    if (!name) return '?';
+    var parts = name.replace(/Whale\s*#\d+/, 'WH').trim().split(/\s+/);
+    return parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+  }
+
+  function renderCopyCard(t, idx) {
+    var sc = t.copy_score || 0;
+    var scCls = copyScoreClass(sc);
+    var delay = Math.min(idx * 0.04, 0.5);
+    var pnlStr = fmtPnl(t.whale_pnl);
+    var pnlCls = (t.whale_pnl || 0) >= 0 ? 'pos' : '';
+    var sideStr = (t.side || '').toUpperCase();
+    var sideCls = sideStr === 'YES' ? 'yes' : 'no';
+    var marketLink = t.market_slug ? '/market/' + encodeURIComponent(t.market_slug) : '#';
+    var profileLink = t.profile_url || '#';
+
+    return '<div class="copy-card" style="animation:fadeUp 0.4s ease ' + delay + 's both">' +
+      '<div class="copy-card-top">' +
+        '<a href="' + profileLink + '" style="text-decoration:none">' +
+          '<div class="whale-avatar">' + esc(whaleInitials(t.whale_name)) + '</div>' +
+        '</a>' +
+        '<div class="whale-meta">' +
+          '<div class="whale-name-row">' +
+            '<div class="whale-name">' + esc(t.whale_name) + '</div>' +
+            (t.whale_rank ? '<span class="whale-rank-chip">Rank #' + t.whale_rank + '</span>' : '') +
+          '</div>' +
+          (pnlStr ? '<div class="whale-pnl ' + pnlCls + '">' + esc(pnlStr) + ' all-time P&amp;L</div>' : '<div class="whale-pnl">On-chain whale</div>') +
+        '</div>' +
+        '<div class="copy-score-wrap">' +
+          '<div class="copy-score ' + scCls + '">' + sc + '</div>' +
+          '<div class="copy-score-label">Copy Score</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="copy-question">' + esc(t.question || '') + '</div>' +
+      '<div class="copy-trade-row">' +
+        '<span class="copy-side ' + sideCls + '">' + sideStr + '</span>' +
+        '<span class="copy-price">' + (t.price_pct || '?') + '¢</span>' +
+        '<div class="copy-meta-chips">' +
+          (t.edge_score > 0 ? '<span class="copy-chip edge">Edge ' + t.edge_score + '</span>' : '') +
+          (t.whale_count > 1 ? '<span class="copy-chip whale">' + t.whale_count + ' whales</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="copy-actions">' +
+        '<button class="btn-copy-trade" onclick=\'openCopyModal(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Copy this trade</button>' +
+        (t.market_slug ? '<a class="btn-view-market" href="' + marketLink + '">View →</a>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  async function loadCopy() {
+    _copyLoaded = true;
+    var grid = document.getElementById('copy-grid');
+    var liveEl = document.getElementById('copy-live');
+    if (liveEl) { liveEl.style.opacity = '1'; liveEl.textContent = 'Loading…'; }
+    grid.innerHTML = '<div class="loading-state"><div class="spinner"></div>Loading whale signals…</div>';
+
+    var url = '/api/copy-trades/feed?filter=' + _copyFeed + '&min_score=' + _copyMinScore + '&category=' + _copyCat;
+    try {
+      var headers = {};
+      if (_token) headers['Authorization'] = 'Bearer ' + _token;
+      var r = await fetch(url, { headers: headers });
+      var data = await r.json();
+      var trades = (data && data.trades) || [];
+
+      document.getElementById('stat-copy').textContent = trades.length;
+      document.getElementById('tc-copy').textContent = trades.length;
+      if (liveEl) liveEl.textContent = 'Live · ' + fmtAge(data && data.updated_at);
+
+      if (!trades.length) {
+        var emptyMsg = _copyFeed === 'follow'
+          ? 'No copy signals from whales you follow. <a href="/copy-trading" style="color:var(--purple)">Subscribe to a whale →</a>'
+          : 'No whale trades match this filter. Try lowering the Copy Score minimum.';
+        grid.innerHTML = '<div class="empty-state"><p>' + emptyMsg + '</p></div>';
+        return;
+      }
+
+      grid.innerHTML = trades.map(renderCopyCard).join('');
+
+      // Check active subscriptions to show status bar
+      if (_token) {
+        fetch('/api/copy-bot/subscriptions', { headers: { 'Authorization': 'Bearer ' + _token } })
+          .then(function(r) { return r.ok ? r.json() : { subscriptions: [] }; })
+          .then(function(d) {
+            var subs = (d && d.subscriptions) || [];
+            var bar = document.getElementById('copyStatusBar');
+            if (subs.length > 0 && bar) {
+              bar.style.display = 'flex';
+              document.getElementById('copyActiveCount').textContent = subs.length;
+              document.getElementById('copyActivePlural').textContent = subs.length === 1 ? '' : 's';
+            }
+          }).catch(function() {});
+      }
+    } catch (e) {
+      grid.innerHTML = '<div class="error-state">Failed to load copy trade signals.</div>';
+      if (liveEl) liveEl.textContent = 'Error';
+    }
+  }
+  window.loadCopy = loadCopy;
+
+  // Copy modal
+  function openCopyModal(trade) {
+    _copyModalTrade = trade;
+    var box = document.getElementById('cmOverlay');
+    var title = document.getElementById('cmTitle');
+    var sub = document.getElementById('cmSub');
+    var mkt = document.getElementById('cmMarket');
+    var err = document.getElementById('cmErr');
+    var succ = document.getElementById('cmSuccess');
+    var btn = document.getElementById('cmConfirmBtn');
+    if (!box) return;
+    title.textContent = 'Copy ' + (trade.whale_name || 'whale');
+    sub.textContent = 'Set allocation per trade. Auto-execute mirrors future trades automatically.';
+    mkt.innerHTML = '<strong>' + esc(trade.side) + '</strong> — ' + esc((trade.question || '').substring(0, 100)) + (trade.price_pct ? ' · ' + trade.price_pct + '¢' : '');
+    err.style.display = 'none';
+    succ.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = 'Start copying';
+    box.classList.add('open');
+  }
+  window.openCopyModal = openCopyModal;
+
+  function closeCopyModal() {
+    document.getElementById('cmOverlay').classList.remove('open');
+    _copyModalTrade = null;
+  }
+  window.closeCopyModal = closeCopyModal;
+
+  async function confirmCopy() {
+    if (!_copyModalTrade) return;
+    var alloc = parseFloat(document.getElementById('cmAlloc').value) || 50;
+    var autoExec = document.getElementById('cmAutoExec').checked;
+    var btn = document.getElementById('cmConfirmBtn');
+    var err = document.getElementById('cmErr');
+    var succ = document.getElementById('cmSuccess');
+
+    if (!_token) {
+      err.textContent = 'Sign in to copy trades. ';
+      err.innerHTML += '<a href="/creator/login" style="color:var(--blue)">Sign in →</a>';
+      err.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    err.style.display = 'none';
+    succ.style.display = 'none';
+
+    try {
+      var trade = _copyModalTrade;
+      var r = await fetch('/api/copy-bot/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+        body: JSON.stringify({
+          whale_address: trade.polymarket_address || trade.user_id,
+          whale_name: trade.whale_name,
+          allocation_per_trade: alloc,
+          notify_only: !autoExec,
+        })
+      });
+      var data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Failed to subscribe');
+
+      succ.textContent = autoExec ? 'Auto-execute enabled — future trades will mirror automatically.' : 'Alerts enabled — you\'ll be notified when this whale trades.';
+      succ.style.display = 'block';
+      btn.textContent = 'Done';
+
+      // Show the market link
+      if (trade.market_slug) {
+        succ.innerHTML += ' <a href="/market/' + encodeURIComponent(trade.market_slug) + '" style="color:var(--green)">Trade this market now →</a>';
+      }
+
+      showHfToast(autoExec ? 'Auto-copy enabled' : 'Alerts enabled');
+      setTimeout(function() { loadCopy(); }, 400);
+    } catch (e) {
+      err.textContent = e.message;
+      err.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Start copying';
+    }
+  }
+  window.confirmCopy = confirmCopy;
+
+  function showHfToast(msg, isErr) {
+    var t = document.getElementById('hfToast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'hf-toast' + (isErr ? ' err' : '') + ' show';
+    clearTimeout(t._tid);
+    t._tid = setTimeout(function() { t.classList.remove('show'); }, 3000);
   }
 
   // ── Fetch all three endpoints ──

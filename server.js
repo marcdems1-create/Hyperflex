@@ -61337,6 +61337,119 @@ app.get('/edge-finder', (req, res) =>
   });
 }
 
+// GET /api/copy-trades/feed — whale trades enriched with Copy Score for the Edge Finder copy tab
+// Public for Fire Feed (no auth needed). Follow Feed requires auth token.
+app.get('/api/copy-trades/feed', optionalAuth, async (req, res) => {
+  try {
+    const filter    = req.query.filter || 'fire';          // 'fire' | 'follow'
+    const minScore  = parseInt(req.query.min_score) || 0;
+    const category  = (req.query.category || 'all').toLowerCase();
+    const limit     = Math.min(parseInt(req.query.limit) || 30, 50);
+
+    // Screener lookup by slug for edge enrichment
+    const screenerData = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const screenerBySlug = new Map();
+    for (const m of screenerData) { if (m.slug) screenerBySlug.set(m.slug, m); }
+
+    let rows = [];
+    if (pool) {
+      let whereClause = "WHERE t.source IN ('whale','consensus')";
+      const params = [];
+
+      if (filter === 'follow' && req.userId) {
+        params.push(req.userId);
+        whereClause += ` AND t.user_id IN (
+          SELECT pf.following_id::text FROM predictor_follows pf WHERE pf.follower_id = $${params.length}::uuid
+          UNION
+          SELECT cbs.whale_address FROM copy_bot_subscriptions cbs WHERE cbs.user_id = $${params.length} AND cbs.active = true
+        )`;
+      }
+
+      rows = await dbQuery(
+        `SELECT t.id, t.user_id, t.display_name, t.market_slug, t.question, t.side,
+                t.entry_price, t.source, t.agree_count, t.created_at,
+                u.whale_rank, u.whale_pnl, u.is_whale, u.flex_score_90d,
+                u.polymarket_address, u.display_name AS u_display_name
+         FROM takes t
+         LEFT JOIN users u ON u.id::text = t.user_id::text
+         ${whereClause}
+         ORDER BY t.created_at DESC
+         LIMIT 150`,
+        params
+      ).catch(() => []);
+    }
+
+    const results = [];
+    for (const t of rows) {
+      const slug    = t.market_slug || '';
+      const screen  = screenerBySlug.get(slug);
+      const edge    = screen ? (Number(screen.edge_score) || 0) : 0;
+      const price   = t.entry_price ? parseFloat(t.entry_price) : 0.5;
+      const pricePct = price * 100;
+
+      // Rank factor (0-40)
+      const rank = t.whale_rank != null ? Number(t.whale_rank) : null;
+      const rankF = rank == null ? 5 : rank <= 5 ? 40 : rank <= 10 ? 30 : rank <= 20 ? 20 : 10;
+
+      // Edge factor (0-30)
+      const edgeF = edge >= 70 ? 30 : edge >= 50 ? 22 : edge >= 30 ? 12 : 5;
+
+      // Price zone factor (0-15): sweet spot 20-80¢
+      const priceF = (pricePct >= 20 && pricePct <= 80) ? 15 : (pricePct >= 10 && pricePct <= 90) ? 8 : 3;
+
+      // Flex factor as accuracy proxy (0-15)
+      const flex = t.flex_score_90d != null ? Number(t.flex_score_90d) : null;
+      const flexF = flex == null ? 5 : flex >= 80 ? 15 : flex >= 60 ? 10 : 4;
+
+      const copyScore = Math.min(100, rankF + edgeF + priceF + flexF);
+      if (copyScore < minScore) continue;
+
+      // Category detection
+      const q = (t.question || '').toLowerCase();
+      let cat = 'macro';
+      if (/fed|fomc|rate|inflation|monetary|federal reserve/.test(q)) cat = 'macro';
+      else if (/crypto|bitcoin|btc|ethereum|eth|solana|defi|binance/.test(q)) cat = 'crypto';
+      else if (/trump|president|election|congress|senate|democrat|republican/.test(q)) cat = 'politics';
+      else if (/nfl|nba|mlb|nhl|soccer|tennis|golf|championship|world cup/.test(q)) cat = 'sports';
+      if (category !== 'all' && cat !== category) continue;
+
+      const whaleName = (t.u_display_name && !t.u_display_name.startsWith('0x') ? t.u_display_name : null)
+        || (t.display_name && !t.display_name.startsWith('0x') ? t.display_name : null)
+        || (rank ? 'Whale #' + rank : 'Whale');
+
+      results.push({
+        take_id:          t.id,
+        user_id:          t.user_id,
+        whale_name:       whaleName,
+        whale_rank:       rank,
+        whale_pnl:        t.whale_pnl ? parseFloat(t.whale_pnl) : null,
+        polymarket_address: t.polymarket_address || null,
+        copy_score:       copyScore,
+        market_slug:      slug,
+        question:         t.question,
+        side:             (t.side || '').toUpperCase(),
+        price_pct:        Math.round(pricePct),
+        source:           t.source,
+        edge_score:       edge,
+        whale_count:      screen ? (Number(screen.whale_count) || 0) : 0,
+        volume:           screen ? (Number(screen.volume) || 0) : 0,
+        agree_count:      t.agree_count || 0,
+        posted_at:        t.created_at,
+        category:         cat,
+        profile_url:      '/m/' + t.user_id,
+      });
+    }
+
+    // Sort: copy_score DESC, then recency
+    results.sort((a, b) => b.copy_score - a.copy_score || new Date(b.posted_at) - new Date(a.posted_at));
+
+    res.json({ trades: results.slice(0, limit), total: results.length, updated_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[copy-trades/feed]', err.message);
+    res.status(500).json({ error: err.message, trades: [] });
+  }
+});
+
 // 404 catch-all — MUST be the very last route
 app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
