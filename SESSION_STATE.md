@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-12 (grading root-cause: gamma envelope + starved sweeps — on `main`)
+
+**Shipped (with hashes):**
+- `c964930` (merge to main, pushed): edge-receipts branch `claude/clever-goldberg-zv6aqi` merged — Railway now deploys the receipts endpoint + decided-only accuracy. The work was branch-only before this; prod was still running old denominators (Marc caught it via the old-format log line).
+- `824fe40` (main, pushed): THE root cause of "0 graded / N skipped (no price data)" — gamma `markets/keyset` returns `{markets:[...]}` envelope; both graders' closed-market lookups iterated `[]` since they shipped. Unwrapped via `_gammaUnwrap` + bounded prediction_log backfill (400/cycle + 25 targeted condition_id lookups + terminal 'expired' at 5 attempts + tweet-spam guard) + closing-prices sweep LRU round-robin (was head-of-line starved re-scanning the same 40 rows every 5 min) + signal-agent IMMUTABLE index/ON CONFLICT fix (persists were failing on every insert) + prediction_thesis uuid→text FK fix + email-queue retry/backoff with host:port in failure logs.
+
+**Active blockers:**
+- (none new) — Surgical FLEX fix still parked (inherited)
+
+**Queued (priority order):**
+1. **Verify post-deploy (Marc, ~1h after Railway picks up `824fe40`):** (a) `curl -s https://hyperflex.network/api/edge/receipts` → JSON with `record` non-null; (b) Railway logs: new-format `[intelligence] Platform: X% accuracy across N decided signals (M expired excluded, ...)`; (c) `[accuracy/grade] Done: N graded` with N > 0 (the envelope fix proves itself here); (d) `[closing-prices] sweep ... skip_reasons={...}` — snapped should go nonzero within hours as at-close markets rotate in.
+2. **Receipts on explore/landing** — still deliberately held until the record proves out (unchanged from 06-11 entry).
+
+**Open questions / unverified:**
+- Whether prod `agent_signals` has legacy duplicate rows — the pre-index dedup DELETE handles it; if the unique index still can't build, `[signal-agent] dedup index error:` names why.
+- How much of the 2600 prediction_log backlog is rescuable vs terminal — the targeted lookups answer it organically over ~2 days; watch the `terminally expired (5+ attempts)` counts.
+
+**Notes for next session:**
+- ⛔ Lesson now in CHANGELOG: every gamma `*/keyset` response goes through `_gammaUnwrap`. `Array.isArray(body) ? body : []` is the silent-empty anti-pattern that caused months of 0-graded cycles.
+- ⛔ Never write `outcomePrices` (settlement) into `market_closing_prices` — CLV needs the closing LINE; provenance is in the new `price_source` column.
+- Sandbox cannot curl prod (egress allowlist) or reach the DB — deployed-endpoint curls are the verification path, which is why receipts/intelligence endpoints exist as one-curl diagnostics.
+
 ## 2026-06-11 (edge receipts — "best place to find polymarket edge")
 
 **Shipped (with hashes):**
