@@ -16408,6 +16408,11 @@ const FINANCE_QUERIES = [
   { q: 'US China trade',         cat: 'politics' },
   { q: 'Iran deal 2026',         cat: 'politics' },
   { q: 'Trump approval',         cat: 'politics' },
+  { q: 'FIFA World Cup 2026',    cat: 'sports' },
+  { q: 'World Cup winner',       cat: 'sports' },
+  { q: 'NBA Finals 2026',        cat: 'sports' },
+  { q: 'NFL champion 2026',      cat: 'sports' },
+  { q: 'UFC champion',           cat: 'sports' },
 ];
 let _financeCache = null;
 let _financeCacheAt = 0;
@@ -16471,9 +16476,10 @@ async function fetchFinanceMarkets() {
       crypto:    [/\bbtc\b/i, /bitcoin.*price/i, /bitcoin.*hit/i, /bitcoin.*reach/i, /ethereum.*price/i, /crypto.*sec/i, /coinbase/i, /solana/i, /bitcoin/i, /ethereum/i, /\bcrypto\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
       macro:     [/s&p.*500/i, /\bspx\b/i, /nasdaq/i, /recession/i, /nvidia/i, /oil.*price/i, /gold.*price/i, /\bgdp\b/i, /stock.*market/i, /elon.*musk.*tesla/i, /apple.*stock/i, /microsoft/i, /crude oil/i, /\bgold\b/i, /treasury/i, /yield curve/i, /largest company/i, /dow jones/i, /russell 2000/i, /\bvix\b/i, /10.*year.*yield/i, /treasury.*yield/i, /oil.*barrel/i, /\bwti\b/i, /\bbrent\b/i, /gold.*ounce/i, /\bsilver\b/i, /\bcopper\b/i, /natural gas/i, /microsoft.*stock/i, /tesla.*stock/i, /amazon.*stock/i],
       politics:  [/\btrump\b/i, /will trump/i, /elon musk/i, /sam altman/i, /openai/i, /executive order/i, /tariff/i, /us.*china/i, /\biran\b/i, /\bcongress\b/i, /\bsenate\b/i, /midterm/i, /president trump/i, /china.*tariff/i, /trump.*sign/i, /\bsanction/i, /trade war/i, /trump.*2026/i, /trump.*order/i, /us.*tariff/i, /china.*trade/i, /iran.*nuclear/i, /ukraine.*war/i, /us.*russia/i, /congress.*bill/i, /senate.*pass/i, /trump.*tariff/i, /trump.*china/i, /us.*china.*trade/i, /iran.*deal/i, /ukraine.*ceasefire/i, /us.*russia.*sanction/i, /elon.*musk.*court/i, /elon.*musk.*case/i],
+      sports:    [/world cup/i, /\bfifa\b/i, /\bnba\b/i, /nba finals/i, /\bnfl\b/i, /super bowl/i, /\bmlb\b/i, /world series/i, /\bnhl\b/i, /stanley cup/i, /\bufc\b/i, /\bmma\b/i, /\bpga\b/i, /wimbledon/i, /us open.*tennis/i, /french open/i, /australian open/i, /champions league/i, /premier league/i, /copa america/i, /euro.*cup/i, /\bsoccer\b/i, /\btennis\b/i, /\bgolf\b/i, /masters.*golf/i, /\bnascar\b/i, /formula 1/i, /\bf1\b.*race/i, /olympic/i, /world series/i, /playoff/i, /championship/i, /win.*final/i, /\bfinal.*champion/i],
     };
 
-    const sections = { fed_rates: [], crypto: [], macro: [], politics: [] };
+    const sections = { fed_rates: [], crypto: [], macro: [], politics: [], sports: [] };
     const seen = new Set();
 
     // filter noise: intraday, tweet-count, low-volume, misc
@@ -16526,7 +16532,7 @@ async function fetchFinanceMarkets() {
     return _financeCache;
   } catch (e) {
     console.error('[finance] fetch error:', e.message);
-    return { sections: { fed_rates: [], crypto: [], macro: [], politics: [] } };
+    return { sections: { fed_rates: [], crypto: [], macro: [], politics: [], sports: [] } };
   }
 }
 
