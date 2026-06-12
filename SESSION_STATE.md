@@ -49,6 +49,30 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-11 (edge receipts — "best place to find polymarket edge")
+
+**Shipped (with hashes):**
+- `e502d54` (branch `claude/clever-goldberg-zv6aqi`, pushed): intelligence grading fix (prod fire #4 — 0.4% accuracy was 'expired' rows in the denominator; now decided-only everywhere + 30d rolling record + expired-rescue pass + YES-price standardization across all 5 signal sources) + new public `GET /api/edge/receipts` + RECEIPTS strip & 30d hit-rate hero stat on `/alpha-live` + 2-min auto-refresh edge ticker on `/feed`
+- Docs commit (this entry + CHANGELOG + CLAUDE.md fire #4 annotation) — hash in `git log origin/claude/clever-goldberg-zv6aqi`
+
+**Active blockers:**
+- (none new) — Surgical FLEX fix still parked on Marc's curl (inherited)
+
+**Queued (priority order):**
+1. **Merge `claude/clever-goldberg-zv6aqi` → main**, then verify: (a) Railway log shows `[intelligence] Platform: X% accuracy across N decided signals (M expired excluded, ...)` with a sane X after the first 30-min resolve cycle; (b) `/api/edge/receipts` returns a non-null record; (c) RECEIPTS strip renders on `/alpha-live` once ≥5 graded calls exist
+2. **Receipts on explore/landing** — once the record proves out, surface the 30d hit rate on `/` hero (acquisition-side proof). Deliberately NOT shipped until real numbers are verified post-merge
+3. **TAKES tab** (inherited) — still deferred, no human creator content
+4. **Hyperliquid strip** (inherited) — still no public endpoint
+
+**Open questions / unverified:**
+- Post-merge: how many of the 21,866 expired-era rows are recent enough (<60d) for the rescue pass to actually re-grade? The bulk are likely too old to ever match the 400-market closed lookup — they stay 'expired' and simply no longer pollute the stat. That's the intended end state, not a bug.
+- `/api/signals` + `/api/alpha/top` 403-to-curl question (inherited from 06-08): routes have NO auth middleware in code — if curl still 403s it's a CDN/bot layer, not the app. Browser users unaffected; feed ticker + receipts both fetch same-origin.
+
+**Notes for next session:**
+- The directive this session was "make hyperflex the best place to find polymarket edge." The positioning answer: every screener shows edges; nobody grades their own calls in public. `signal_outcomes` already had the ledger — it was just broken (0.4%) and invisible. Now it's fixed and on the terminal. Keep compounding: receipts → trust → follows → builder-fee flow.
+- New-source rule (also in CHANGELOG): any new signal pushed into `/api/signals` MUST set `yes_price` (YES-equivalent, or explicit null). The grader assumes it.
+- Receipts UI thresholds: section hidden <5 graded, hero rate hidden <10 graded in window. Don't lower them to make the page look alive — that's the empty-playfulness anti-pattern.
+
 ## 2026-06-08 (feed signal-first redesign)
 
 **Shipped (with hashes):**

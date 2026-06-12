@@ -52245,6 +52245,7 @@ app.get('/api/signals', async (req, res) => {
               action: `BUY ${consensusSide} at ${Math.round(sidePrice * 100)}\u00A2`,
               side: consensusSide,
               price: sidePrice, // <-- actual market price for the consensus side, not whale consensus %
+              yes_price: livePrice, // YES-equivalent price for outcome grading (grader assumes YES price)
               confidence: whaleCount >= 10 ? 'HIGH' : whaleCount >= 7 ? 'MEDIUM' : 'LOW',
               whale_count: whaleCount,
               capital: m.total_capital || m.capital || 0,
@@ -52283,6 +52284,7 @@ app.get('/api/signals', async (req, res) => {
               action: `BUY ${direction} — odds: ${m.start_price || '?'}\u00A2 \u2192 ${m.current_price || '?'}\u00A2`,
               side: direction,
               price: (m.current_price || 50) / 100,
+              yes_price: (m.current_price || 50) / 100, // movers track YES price directly
               confidence: absChange >= 25 ? 'HIGH' : absChange >= 15 ? 'MEDIUM' : 'LOW',
               whale_count: 0,
               change_pct: m.change_pct,
@@ -52313,6 +52315,10 @@ app.get('/api/signals', async (req, res) => {
           action: `${t.trader_name || t.trader?.name || 'Whale'} opened ${p.outcome || 'YES'} position`,
           side: p.outcome || 'YES',
           price: p.current_price || 0,
+          // Position price is side-relative on the data-api; convert to YES-equivalent for grading
+          yes_price: (p.current_price != null)
+            ? ((p.outcome || 'YES').toUpperCase() === 'NO' ? Math.round((1 - p.current_price) * 10000) / 10000 : p.current_price)
+            : null,
           confidence: (parseFloat(p.size) || 0) >= 50000 ? 'HIGH' : (parseFloat(p.size) || 0) >= 10000 ? 'MEDIUM' : 'LOW',
           whale_count: 1,
           capital: parseFloat(p.size) || 0,
@@ -52437,6 +52443,7 @@ app.get('/api/signals', async (req, res) => {
           action: actionText,
           side,
           price: m.yes_price || 0.5,
+          yes_price: m.yes_price != null ? m.yes_price : null,
           confidence,
           whale_count: whaleConvergence,
           capital: 0,
@@ -52578,6 +52585,7 @@ app.get('/api/signals', async (req, res) => {
             action: `${m.whale_count} whales, ${consensus}% ${topSide[0]}`,
             side: topSide[0],
             price: consensus / 100,
+            yes_price: null, // fallback path has no live market price — consensus % is not a price
             confidence: m.whale_count >= 5 ? 'HIGH' : m.whale_count >= 3 ? 'MEDIUM' : 'LOW',
             whale_count: m.whale_count,
             capital: m.total_capital,
@@ -57908,7 +57916,16 @@ async function logSignalOutcome(signal) {
     if (_loggedSignalHashes.has(hash)) return; // already logged this cycle
     _loggedSignalHashes.add(hash);
 
-    const price = parseFloat(signal.price) || 0.5;
+    // market_price_at_signal is ALWAYS the YES price — the resolver's PnL math
+    // (1/entry-1 for YES, 1/(1-entry)-1 for NO) assumes it. Sources attach an
+    // explicit yes_price; yes_price === null means "price unknown" (store NULL,
+    // never a guess). Legacy signals without the field fall back to sig.price.
+    let price;
+    if (signal.yes_price === null) price = null;
+    else if (signal.yes_price !== undefined) price = parseFloat(signal.yes_price);
+    else if (signal.yes_pct != null) price = signal.yes_pct / 100;
+    else price = parseFloat(signal.price) || 0.5;
+    if (price != null && (isNaN(price) || price <= 0 || price >= 1)) price = null;
     const whaleCount = signal.whale_count || 0;
     const url = (signal.url || '').substring(0, 500);
 
@@ -57927,8 +57944,19 @@ async function resolveSignalOutcomes() {
   if (!pool) return;
   try {
     const pending = await dbQuery(
-      "SELECT id, market_question, predicted_side, market_price_at_signal FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
     );
+
+    // Rescue pass: signals the OLD resolver aged out as 'expired' before the
+    // closed-market lookup existed. If their final price is findable now, grade
+    // them for real. Bounded to the same 60-day window so ancient rows (whose
+    // markets will never appear in the recent-closed fetch) don't churn forever.
+    const rescuable = await dbQuery(
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal FROM signal_outcomes WHERE outcome = 'expired' AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+    ).catch(() => []);
+    for (const r of rescuable) r._wasExpired = true;
+    pending.push(...rescuable);
+
     if (!pending.length) return;
 
     // Build lookup from ALL available market data
@@ -57984,6 +58012,7 @@ async function resolveSignalOutcomes() {
 
     let resolved = 0;
     let expired = 0;
+    let rescued = 0;
 
     for (const sig of pending) {
       const q = (sig.market_question || '').toLowerCase().trim();
@@ -58001,8 +58030,9 @@ async function resolveSignalOutcomes() {
       if (!match) {
         // Only expire signals older than 60 days (matches the query window) — don't
         // discard signals that are simply waiting on a closed-market data gap.
+        // (Already-expired rescue rows just stay expired — no write needed.)
         const sigAge = Date.now() - new Date(sig.predicted_at || 0).getTime();
-        if (sigAge > 60 * 86400000) {
+        if (!sig._wasExpired && sigAge > 60 * 86400000) {
           await dbQuery("UPDATE signal_outcomes SET outcome = 'expired', resolved_at = NOW() WHERE id = $1", [sig.id]);
           expired++;
         }
@@ -58010,31 +58040,37 @@ async function resolveSignalOutcomes() {
       }
 
       const price = match.price;
-      const entryPrice = parseFloat(sig.market_price_at_signal) || 0.5;
+      // Entry price is the YES price at call time. NULL = source had no live
+      // price — still grade correct/wrong, but leave pnl/edge NULL rather than
+      // fabricating an evens cost basis.
+      const rawEntry = parseFloat(sig.market_price_at_signal);
+      const entryPrice = (!isNaN(rawEntry) && rawEntry > 0 && rawEntry < 1) ? rawEntry : null;
       const side = (sig.predicted_side || '').toUpperCase();
 
       // Resolved YES (price > 95%)
       if (price > 0.95) {
         const correct = side === 'YES';
-        const pnl = correct ? Math.round((1 / entryPrice - 1) * 100) / 100 : -1;
-        const edge = Math.round((price - entryPrice) * 100); // cents of edge
+        const pnl = entryPrice == null ? null : (correct ? Math.round((1 / entryPrice - 1) * 100) / 100 : -1);
+        const edge = entryPrice == null ? null : Math.round((price - entryPrice) * 100); // cents of edge
         await dbQuery('UPDATE signal_outcomes SET outcome=$1, market_price_at_close=1, pnl_if_followed=$2, edge_cents=$3, resolved_at=NOW() WHERE id=$4',
           [correct ? 'correct' : 'wrong', pnl, edge, sig.id]);
         resolved++;
+        if (sig._wasExpired) rescued++;
       }
       // Resolved NO (price < 5%)
       else if (price < 0.05) {
         const correct = side === 'NO';
-        const pnl = correct ? Math.round((1 / (1 - entryPrice) - 1) * 100) / 100 : -1;
-        const edge = Math.round((entryPrice - price) * 100);
+        const pnl = entryPrice == null ? null : (correct ? Math.round((1 / (1 - entryPrice) - 1) * 100) / 100 : -1);
+        const edge = entryPrice == null ? null : Math.round((entryPrice - price) * 100);
         await dbQuery('UPDATE signal_outcomes SET outcome=$1, market_price_at_close=0, pnl_if_followed=$2, edge_cents=$3, resolved_at=NOW() WHERE id=$4',
           [correct ? 'correct' : 'wrong', pnl, edge, sig.id]);
         resolved++;
+        if (sig._wasExpired) rescued++;
       }
     }
 
     if (resolved > 0 || expired > 0) {
-      console.log(`[intelligence] Resolved ${resolved} signals, expired ${expired}`);
+      console.log(`[intelligence] Resolved ${resolved} signals (${rescued} rescued from expired), expired ${expired}`);
       await updateSourceAccuracy();
       await updateConfidenceCalibration();
       await updatePlatformMetrics();
@@ -58053,8 +58089,8 @@ async function updateSourceAccuracy() {
         SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
         SUM(CASE WHEN outcome='wrong' THEN 1 ELSE 0 END) as wrong,
         SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) as pending,
-        AVG(CASE WHEN outcome IS NOT NULL THEN pnl_if_followed END) as avg_pnl,
-        AVG(CASE WHEN outcome IS NOT NULL THEN edge_cents END) as avg_edge
+        AVG(CASE WHEN outcome IN ('correct','wrong') THEN pnl_if_followed END) as avg_pnl,
+        AVG(CASE WHEN outcome IN ('correct','wrong') THEN edge_cents END) as avg_edge
       FROM signal_outcomes GROUP BY source
     `);
 
@@ -58103,7 +58139,7 @@ async function updateConfidenceCalibration() {
       SELECT confidence_level,
         COUNT(*) as total,
         SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct
-      FROM signal_outcomes WHERE outcome IS NOT NULL AND confidence_level IS NOT NULL
+      FROM signal_outcomes WHERE outcome IN ('correct','wrong') AND confidence_level IS NOT NULL
       GROUP BY confidence_level
     `);
     const calibration = {};
@@ -58122,36 +58158,53 @@ async function updateConfidenceCalibration() {
 }
 
 // 5. PLATFORM METRICS — aggregate stats
+// Accuracy is computed over DECIDED signals only (correct + wrong). 'expired'
+// rows are signals we never found a final price for — counting them in the
+// denominator is what produced the bogus "0.4% accuracy across 21,866 resolved
+// signals" stat (prod fire #4, May 10). They're reported separately.
 async function updatePlatformMetrics() {
   if (!pool) return;
   try {
     const totals = await dbQuery(`
       SELECT
-        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as decided,
         COUNT(*) FILTER (WHERE outcome='correct') as correct,
         COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
+        COUNT(*) FILTER (WHERE outcome='expired') as expired,
         COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
-        AVG(CASE WHEN outcome IS NOT NULL THEN pnl_if_followed END) as avg_pnl,
-        AVG(CASE WHEN outcome IS NOT NULL THEN edge_cents END) as avg_edge,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
+        AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong')) as avg_edge,
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as decided_30d,
+        COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
         COUNT(DISTINCT source) as source_count,
         MIN(predicted_at) as first_signal,
         MAX(predicted_at) as last_signal
       FROM signal_outcomes
     `);
     const t = totals[0] || {};
-    const resolved = parseInt(t.resolved) || 0;
-    const acc = resolved > 0 ? Math.round(parseInt(t.correct) / resolved * 1000) / 10 : null;
+    const decided = parseInt(t.decided) || 0;
+    const acc = decided > 0 ? Math.round(parseInt(t.correct) / decided * 1000) / 10 : null;
+    const decided30 = parseInt(t.decided_30d) || 0;
+    const acc30 = decided30 > 0 ? Math.round(parseInt(t.correct_30d) / decided30 * 1000) / 10 : null;
 
     const ctx = {
-      total_resolved: resolved,
+      total_decided: decided,
       correct: parseInt(t.correct) || 0,
       wrong: parseInt(t.wrong) || 0,
+      expired: parseInt(t.expired) || 0,
       pending: parseInt(t.pending) || 0,
       avg_pnl: Math.round((parseFloat(t.avg_pnl) || 0) * 100) / 100,
       avg_edge_cents: Math.round(parseFloat(t.avg_edge) || 0),
+      decided_30d: decided30,
+      correct_30d: parseInt(t.correct_30d) || 0,
+      accuracy_30d: acc30,
+      avg_pnl_30d: Math.round((parseFloat(t.avg_pnl_30d) || 0) * 100) / 100,
       source_count: parseInt(t.source_count) || 0,
       tracking_since: t.first_signal,
-      last_signal: t.last_signal
+      last_signal: t.last_signal,
+      // kept for any consumer still reading the old key — same value as total_decided
+      total_resolved: decided
     };
 
     await dbQuery(`INSERT INTO platform_intelligence (id, metric, value, context, updated_at)
@@ -58159,7 +58212,7 @@ async function updatePlatformMetrics() {
       ON CONFLICT (metric) DO UPDATE SET value=$1, context=$2, updated_at=NOW()`,
       [acc, JSON.stringify(ctx)]);
 
-    console.log(`[intelligence] Platform: ${acc}% accuracy across ${resolved} resolved signals, avg edge ${ctx.avg_edge_cents}¢`);
+    console.log(`[intelligence] Platform: ${acc}% accuracy across ${decided} decided signals (${ctx.expired} expired excluded, ${decided30} decided in 30d at ${acc30}%), avg edge ${ctx.avg_edge_cents}¢`);
   } catch(e) { console.warn('[intelligence] platform metrics error:', e.message); }
 }
 
@@ -58201,8 +58254,8 @@ app.get('/api/intelligence', async (req, res) => {
       dbQuery("SELECT * FROM platform_intelligence WHERE metric = 'platform_accuracy' LIMIT 1").catch(() => []),
       dbQuery("SELECT * FROM platform_intelligence WHERE metric = 'confidence_calibration' LIMIT 1").catch(() => []),
       dbQuery('SELECT source, total_signals, correct, wrong, pending, accuracy_pct, avg_pnl, avg_edge FROM source_accuracy ORDER BY total_signals DESC').catch(() => []),
-      dbQuery("SELECT signal_type, source, market_question, predicted_side, outcome, pnl_if_followed, edge_cents, confidence_level, predicted_at, resolved_at FROM signal_outcomes WHERE outcome IS NOT NULL ORDER BY resolved_at DESC LIMIT 30").catch(() => []),
-      dbQuery("SELECT signal_type, COUNT(*) as total, SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct FROM signal_outcomes WHERE outcome IS NOT NULL GROUP BY signal_type").catch(() => [])
+      dbQuery("SELECT signal_type, source, market_question, predicted_side, outcome, pnl_if_followed, edge_cents, confidence_level, predicted_at, resolved_at FROM signal_outcomes WHERE outcome IN ('correct','wrong') ORDER BY resolved_at DESC LIMIT 30").catch(() => []),
+      dbQuery("SELECT signal_type, COUNT(*) as total, SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct FROM signal_outcomes WHERE outcome IN ('correct','wrong') GROUP BY signal_type").catch(() => [])
     ]);
 
     const platformAcc = accuracy[0] || {};
@@ -58231,6 +58284,115 @@ app.get('/api/intelligence', async (req, res) => {
   }
 });
 
+// 7b. API: EDGE RECEIPTS — the terminal's own graded track record, public.
+// Every signal is logged at call time and graded when its market resolves.
+// Decided = correct + wrong. Expired (no final price found) and pending rows
+// never enter the hit-rate denominator. Computed live from signal_outcomes
+// so it can't drift from a stale platform_intelligence row. 5-min cache.
+let _edgeReceiptsCache = null;
+app.get('/api/edge/receipts', async (req, res) => {
+  try {
+    if (_edgeReceiptsCache && (Date.now() - _edgeReceiptsCache.ts < 5 * 60 * 1000)) {
+      res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+      return res.json(_edgeReceiptsCache.data);
+    }
+    if (!pool) return res.json({ record: null, receipts: [], updated_at: new Date().toISOString() });
+
+    const [totals, byType, receipts] = await Promise.all([
+      dbQuery(`
+        SELECT
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as graded,
+          COUNT(*) FILTER (WHERE outcome='correct') as correct,
+          COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
+          COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+          AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as graded_30d,
+          COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
+          COUNT(*) FILTER (WHERE outcome='wrong' AND resolved_at > NOW() - INTERVAL '30 days') as wrong_30d,
+          AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
+          AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_edge_30d,
+          MIN(predicted_at) as tracking_since
+        FROM signal_outcomes
+      `),
+      dbQuery(`
+        SELECT signal_type,
+          COUNT(*) as graded,
+          SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct
+        FROM signal_outcomes
+        WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days'
+        GROUP BY signal_type
+        ORDER BY COUNT(*) DESC
+        LIMIT 8
+      `).catch(() => []),
+      dbQuery(`
+        SELECT signal_type, market_question, predicted_side, market_price_at_signal,
+               outcome, pnl_if_followed, predicted_at, resolved_at
+        FROM signal_outcomes
+        WHERE outcome IN ('correct','wrong')
+        ORDER BY resolved_at DESC
+        LIMIT 24
+      `).catch(() => [])
+    ]);
+
+    const t = totals[0] || {};
+    const graded = parseInt(t.graded) || 0;
+    const graded30 = parseInt(t.graded_30d) || 0;
+    const pct = (c, n) => n > 0 ? Math.round(c / n * 1000) / 10 : null;
+
+    const record = {
+      last30d: {
+        graded: graded30,
+        correct: parseInt(t.correct_30d) || 0,
+        wrong: parseInt(t.wrong_30d) || 0,
+        hit_rate_pct: pct(parseInt(t.correct_30d) || 0, graded30),
+        avg_pnl_per_dollar: t.avg_pnl_30d != null ? Math.round(parseFloat(t.avg_pnl_30d) * 100) / 100 : null,
+        avg_edge_cents: t.avg_edge_30d != null ? Math.round(parseFloat(t.avg_edge_30d)) : null
+      },
+      alltime: {
+        graded,
+        correct: parseInt(t.correct) || 0,
+        wrong: parseInt(t.wrong) || 0,
+        hit_rate_pct: pct(parseInt(t.correct) || 0, graded),
+        avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null
+      },
+      pending: parseInt(t.pending) || 0,
+      by_type: (byType || []).map(r => ({
+        signal_type: r.signal_type,
+        graded: parseInt(r.graded) || 0,
+        correct: parseInt(r.correct) || 0,
+        hit_rate_pct: pct(parseInt(r.correct) || 0, parseInt(r.graded) || 0)
+      })),
+      tracking_since: t.tracking_since || null
+    };
+
+    const receiptRows = (receipts || []).map(r => {
+      const entry = parseFloat(r.market_price_at_signal);
+      const entryYes = (!isNaN(entry) && entry > 0 && entry < 1) ? Math.round(entry * 100) : null;
+      const side = (r.predicted_side || 'YES').toUpperCase();
+      return {
+        signal_type: r.signal_type,
+        market_question: r.market_question,
+        predicted_side: side,
+        entry_yes_cents: entryYes,
+        cost_cents: entryYes == null ? null : (side === 'NO' ? 100 - entryYes : entryYes),
+        outcome: r.outcome,
+        pnl_if_followed: r.pnl_if_followed != null ? Math.round(parseFloat(r.pnl_if_followed) * 100) / 100 : null,
+        predicted_at: r.predicted_at,
+        resolved_at: r.resolved_at
+      };
+    });
+
+    const data = { record, receipts: receiptRows, updated_at: new Date().toISOString() };
+    _edgeReceiptsCache = { ts: Date.now(), data };
+    res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+    res.json(data);
+  } catch(e) {
+    console.warn('[edge-receipts]', e.message);
+    if (_edgeReceiptsCache) return res.json(_edgeReceiptsCache.data);
+    res.json({ record: null, receipts: [], updated_at: new Date().toISOString() });
+  }
+});
+
 // 8. CRONS — all wrapped with safeCron to prevent unhandled rejections
 setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
 setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
@@ -58249,6 +58411,11 @@ setTimeout(() => {
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS confidence_level TEXT').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS whale_count INTEGER DEFAULT 0').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS edge_cents INTEGER').catch(() => {});
+  // Fresh-DB safety: CREATE TABLE signal_outcomes omits these, but the logger
+  // INSERTs market_url and the resolver UPDATEs the other two.
+  dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_url TEXT').catch(() => {});
+  dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_price_at_close NUMERIC').catch(() => {});
+  dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
   // Boot-time first rule pass so we don't wait 15min for the first run.
   // LLM pass deferred to its hourly schedule — no need to burn budget on boot.

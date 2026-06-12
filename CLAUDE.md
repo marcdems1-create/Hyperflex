@@ -58,7 +58,7 @@ Triage these before any feature work. Container SIGTERM'd 18:04:40 UTC May 10.
 
 3. **Polygon RPC degradation.** `derivePolymarketProxy` failing on every wallet lookup. `publicnode` reverts; `1rpc.io` rate-limited on free tier. Add Alchemy or QuickNode as primary; demote public RPCs to fallback. *(Filed in PR #104 — `_polygonRpcList()` helper reads `ALCHEMY_POLYGON_KEY` env var. Set the var on Railway dashboard to activate; without it, behavior unchanged.)*
 
-4. **Intelligence accuracy = 0.4%.** Platform-wide grading is broken. 21,866 resolved signals at 0.4% is not low confidence — it's a grading bug. Separate workstream, but log it now so it doesn't get forgotten.
+4. **Intelligence accuracy = 0.4%.** Platform-wide grading is broken. 21,866 resolved signals at 0.4% is not low confidence — it's a grading bug. Separate workstream, but log it now so it doesn't get forgotten. *(Fixed on branch `claude/clever-goldberg-zv6aqi` commit `e502d54` — denominator counted 'expired' rows; now decided-only + expired-rescue pass + public `/api/edge/receipts`. Verify the `[intelligence] Platform:` log line after merge shows a sane % over decided signals.)*
 
 ---
 

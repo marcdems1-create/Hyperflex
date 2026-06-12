@@ -51,6 +51,50 @@ body {
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* ── EDGE TICKER ── */
+.edge-ticker {
+  display: none;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 12px 0 0;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.edge-ticker::-webkit-scrollbar { display: none; }
+.edge-ticker.show { display: flex; }
+.ticker-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  color: #ccc;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color .15s, box-shadow .4s;
+}
+.ticker-chip:hover { border-color: #444; }
+.ticker-chip .score {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ticker-chip .score.high { color: #00e68a; }
+.ticker-chip .score.mid  { color: #4d9fff; }
+.ticker-chip .score.low  { color: #666; }
+.ticker-chip .px {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #666;
+}
+.ticker-chip.terminal-link { color: #a78bfa; border-color: rgba(167,139,250,.3); font-weight: 600; }
+.ticker-chip.terminal-link:hover { border-color: rgba(167,139,250,.6); }
+.ticker-chip.flash { box-shadow: 0 0 14px rgba(0,230,138,.35); border-color: rgba(0,230,138,.5); }
+
 /* ── TABS ── */
 .feed-tabs {
   display: flex;
@@ -200,6 +244,8 @@ body {
       <span id="live-count">live</span>
     </div>
   </div>
+
+  <div class="edge-ticker" id="edge-ticker"></div>
 
   <div class="feed-tabs">
     <button class="feed-tab active" data-tab="news" onclick="switchTab('news')">News</button>
@@ -457,8 +503,56 @@ function renderEdge(data) {
   pane.innerHTML = html;
 }
 
+// ── Edge ticker — top live edges, auto-refreshed every 2 min ────────────────
+
+let _tickerTopSlug = null;
+
+function truncateQ(s, n) {
+  s = String(s || '');
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+async function loadEdgeTicker(isRefresh) {
+  const strip = document.getElementById('edge-ticker');
+  if (!strip) return;
+  try {
+    const resp = await fetch('/api/alpha/top?n=8');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const markets = (data.markets || []).filter(m => m.slug);
+    if (markets.length < 3) return; // no thin-supply ticker
+
+    const newLeader = isRefresh && markets[0] && markets[0].slug !== _tickerTopSlug;
+    _tickerTopSlug = markets[0] ? markets[0].slug : null;
+
+    strip.innerHTML = markets.map((m, i) => {
+      const score = m.edge_score || 0;
+      const cls = score >= 60 ? 'high' : score >= 35 ? 'mid' : 'low';
+      const px = m.yes_price != null ? Math.round(m.yes_price * 100) + '¢' : '';
+      return `<a class="ticker-chip${i === 0 && newLeader ? ' flash' : ''}" href="/market/${escapeHtml(m.slug)}">` +
+        `<span class="score ${cls}">${score}</span>` +
+        `<span>${escapeHtml(truncateQ(m.question, 48))}</span>` +
+        (px ? `<span class="px">${px}</span>` : '') +
+      `</a>`;
+    }).join('') +
+    `<a class="ticker-chip terminal-link" href="/alpha-live">Terminal →</a>`;
+
+    strip.classList.add('show');
+    if (newLeader) {
+      setTimeout(() => {
+        const first = strip.querySelector('.ticker-chip.flash');
+        if (first) first.classList.remove('flash');
+      }, 3000);
+    }
+  } catch (e) { /* ticker is optional — never block the feed */ }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', loadNews);
+document.addEventListener('DOMContentLoaded', () => {
+  loadNews();
+  loadEdgeTicker(false);
+  setInterval(() => loadEdgeTicker(true), 2 * 60 * 1000);
+});
 </script>
 </body>
 </html>

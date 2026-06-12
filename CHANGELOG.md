@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-06-11 — Edge receipts session (Claude Code, branch `claude/clever-goldberg-zv6aqi`)
+
+### fix(intelligence): the 0.4% accuracy stat was a denominator bug — decided-only grading (commit e502d54)
+- **Files:** `server.js` → `updatePlatformMetrics`, `updateConfidenceCalibration`, `updateSourceAccuracy`, `/api/intelligence`, `resolveSignalOutcomes`, `logSignalOutcome`, 5 signal-source builders in `/api/signals`
+- **Root cause (prod fire #4, filed May 10):** `updatePlatformMetrics` computed accuracy as `correct / COUNT(outcome IS NOT NULL)` — and that denominator included `'expired'` rows. Before the closed-market lookup landed in `resolveSignalOutcomes`, nearly every signal aged out as `expired` (final price never findable), so 21,866 "resolved" signals were overwhelmingly expired rows → 0.4%. The resolver was fixed earlier; the metric denominators never were. Now: accuracy = `correct / (correct + wrong)` everywhere (platform metrics, confidence calibration, `/api/intelligence` recent outcomes + by-type). Expired is reported as its own count. 30d rolling record added to the `platform_accuracy` context blob.
+- **Rescue pass:** `resolveSignalOutcomes` now also pulls `outcome='expired'` rows inside the 60-day window and re-grades them when the closed-market lookup finds a final price (prematurely-expired signals from before the lookup existed get graded for real). Bounded LIMIT 200, no re-expire writes on miss.
+- **Entry-price standardization:** the grader's PnL math (`1/entry−1` YES, `1/(1−entry)−1` NO) always assumed `market_price_at_signal` was the YES price, but whale_cluster/new_entry logged side-relative prices and the fallback whale_cluster logged consensus-% (not a price at all). All 5 sources now attach explicit `yes_price` (NULL = unknown, stored as NULL); `logSignalOutcome` prefers it; the resolver leaves `pnl_if_followed`/`edge_cents` NULL when entry is unknown instead of fabricating an evens cost basis. Correct/wrong grading was never affected (side vs resolution only) — this fixes the PnL/edge ledger going forward.
+- **Don't break:** accuracy denominators must stay `IN ('correct','wrong')`. If you add a new outcome state (e.g. 'void'), it must NOT enter the denominator. The `total_resolved` key in the context blob is kept as an alias of `total_decided` for any stale consumer — don't repoint it at a count that includes expired. New-source rule: any new signal source pushed into `/api/signals` MUST set `yes_price` (YES-equivalent, or explicit `null`).
+
+### feat(edge): GET /api/edge/receipts + RECEIPTS strip on /alpha-live — the terminal grades itself in public (commit e502d54)
+- **Files:** `server.js` (new route after `/api/intelligence`), `public/alpha-live.html`
+- **Endpoint:** public, 5-min in-memory cache (`_edgeReceiptsCache`), computed live from `signal_outcomes` so it can't drift from a stale `platform_intelligence` row. Returns `record` (last30d + alltime decided-only: graded/correct/wrong/hit_rate_pct/avg_pnl_per_dollar/avg_edge_cents, pending count, 30d by_type top 8, tracking_since) + `receipts` (last 24 graded calls: side, `entry_yes_cents`, `cost_cents` = side cost basis, outcome, pnl, timestamps).
+- **Frontend:** RECEIPTS section between signal rail and edge grid — summary line (`Last 30 days: N graded · X.X% hit · +0.XX per $1 if followed · N pending`) + horizontal chip strip, CORRECT green / WRONG red border-left. 30d hit-rate added as 5th hero stat (`#s-hit`). Falls back to all-time window (relabeled) when 30d graded < 10.
+- **Supply gates (don't remove):** whole section hidden under 5 graded calls all-time; hero hit-rate stays "—" under 10 graded in the chosen window. Per CLAUDE.md anti-pattern rule — no playful/flex surfaces on empty data. Also replaced the hardcoded "71% of the time" explainer line (unverifiable claim) with a pointer to the live record.
+- **Voice charter compliance:** zero emoji, mono numbers, hit rate 1 decimal, PnL signed 2 decimals with U+2212 minus, no second person, no editorializing on outcomes — CORRECT/WRONG labels describe mechanics.
+
+### feat(feed): edge ticker strip with 2-min auto-refresh (commit e502d54)
+- **File:** `public/feed.html` — `.edge-ticker` CSS + `#edge-ticker` div between header and tabs + `loadEdgeTicker()`
+- Top 8 edges from `/api/alpha/top?n=8` (slug-bearing only) as score-colored chips → `/market/:slug`, trailing `Terminal →` chip → `/alpha-live`. Refreshes every 2 min; when the #1 slug changes between refreshes the new leader chip flashes green for 3s. Hidden under 3 items or on any fetch failure — the ticker is optional and never blocks the feed.
+- **Don't break:** boot is now a single `DOMContentLoaded` listener calling `loadNews()` + `loadEdgeTicker(false)` + the interval. If you add more boot work, extend that listener — don't add a second competing one for the same concerns.
+
+---
+
 ## 2026-04-28 — Session 19 (Claude Code)
 
 ### milestone: first V2 trade accepted by Polymarket CLOB (pre-cutover)
