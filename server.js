@@ -16507,6 +16507,10 @@ async function fetchFinanceMarkets() {
       if (q.includes('weather')) return false;
       if (/\d{3}-\d{3}.*tweet/i.test(q)) return false;
       if (/post \d+.*tweet/i.test(q)) return false;
+      if (/truth social.*post/i.test(q)) return false;
+      if (/will trump post \d+/i.test(q)) return false;
+      if (/cia.*truth social/i.test(q)) return false;
+      if (/between \$[\d,]+ and \$[\d,]+/i.test(q)) return false;
       if (/gold card/i.test(q)) return false;
       if (/above \$\d+.*on (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec) \d+/i.test(q)) return false;
       if (/up or down/i.test(q)) return false;
