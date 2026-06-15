@@ -674,6 +674,13 @@ function fmtSigned(v, decimals){
   return (v<0?'−':'+')+abs;
 }
 
+// Receipts strip gating (decided = correct + wrong whale-edge calls).
+var STRIP_MIN_DECIDED = 5;          // below this, the whole strip + chips stay hidden
+var WINDOW_MIN_DECIDED = 10;        // 30d window needs this many to be preferred over all-time
+var RATE_DISPLAY_MIN_DECIDED = 30;  // whale-population floor: receipts now count whale-only signals
+                                    // (~24 decided), where a 62.5% rate carries a ±19pt CI — too
+                                    // fragile to publish, so suppress the headline % below 30.
+
 function loadReceipts(){
   fetch('/api/edge/receipts')
     .then(function(r){return r.ok?r.json():null;})
@@ -682,32 +689,38 @@ function loadReceipts(){
       var rec=data.record;
       var receipts=data.receipts||[];
 
-      // Supply threshold: no record flex under 5 graded calls, ever.
-      if((rec.alltime&&rec.alltime.graded||0)<5) return;
+      // Supply threshold: no strip (and no chips) under STRIP_MIN_DECIDED.
+      var allGraded=(rec.alltime&&rec.alltime.graded)||0;
+      if(allGraded<STRIP_MIN_DECIDED) return;
 
-      // Window pick: 30d when it has enough sample, else all-time (labeled).
-      var use30=rec.last30d&&rec.last30d.graded>=10;
+      // Window pick: prefer the fresher 30d window once it has enough sample,
+      // else fall back to all-time.
+      var use30=rec.last30d&&rec.last30d.graded>=WINDOW_MIN_DECIDED;
       var win=use30?rec.last30d:rec.alltime;
-      var winLabel=use30?'Last 30 days':'All-time';
+      var sumEl=document.getElementById('receipts-summary');
 
-      // Hero stat
-      if(win.graded>=10&&win.hit_rate_pct!=null){
+      // Headline % is published ONLY when the chosen window clears the
+      // whale-population floor. Below it the rate's CI is too wide to show —
+      // chips alone carry the record (each is an individually-true call).
+      if(win&&win.graded>=RATE_DISPLAY_MIN_DECIDED&&win.hit_rate_pct!=null){
         var hitEl=document.getElementById('s-hit');
         var hitLabel=document.getElementById('s-hit-label');
         if(hitEl) hitEl.textContent=win.hit_rate_pct.toFixed(1)+'%';
         if(hitLabel) hitLabel.textContent=(use30?'30d':'All-time')+' Hit Rate';
-      }
 
-      // Summary line
-      var parts=[winLabel+': '+win.graded+' graded'];
-      if(win.hit_rate_pct!=null) parts.push('<span class="hit">'+win.hit_rate_pct.toFixed(1)+'% hit</span>');
-      if(win.avg_pnl_per_dollar!=null){
-        var cls=win.avg_pnl_per_dollar>=0?'pos':'neg';
-        parts.push('<span class="'+cls+'">'+fmtSigned(win.avg_pnl_per_dollar)+' per $1 if followed</span>');
+        var parts=[(use30?'Last 30 days':'All-time')+': '+win.graded+' graded'];
+        parts.push('<span class="hit">'+win.hit_rate_pct.toFixed(1)+'% hit</span>');
+        if(win.avg_pnl_per_dollar!=null){
+          var cls=win.avg_pnl_per_dollar>=0?'pos':'neg';
+          parts.push('<span class="'+cls+'">'+fmtSigned(win.avg_pnl_per_dollar)+' per $1 if followed</span>');
+        }
+        if(rec.pending) parts.push(rec.pending+' pending');
+        if(sumEl) sumEl.innerHTML=parts.join(' · ');
+      } else {
+        // Below the rate floor — neutral line, real decided count, no % shown.
+        // Hero hit-rate tile stays at its default "—".
+        if(sumEl) sumEl.textContent='Track record building — '+allGraded+' decided call'+(allGraded===1?'':'s')+' so far';
       }
-      if(rec.pending) parts.push(rec.pending+' pending');
-      var sumEl=document.getElementById('receipts-summary');
-      if(sumEl) sumEl.innerHTML=parts.join(' · ');
 
       // Chips
       var strip=document.getElementById('receipts-strip');
