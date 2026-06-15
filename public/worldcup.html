@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>World Cup 2026 — Live Odds | HYPERFLEX</title>
+<meta name="description" content="Live Polymarket odds for the 2026 FIFA World Cup — tournament winner board, today's matches, and whale flow. Real-time, tradeable.">
+<meta property="og:title" content="World Cup 2026 — Live Odds">
+<meta property="og:description" content="Live tournament-winner odds + today's matches on Polymarket. Real-time, tradeable.">
+<meta property="og:url" content="https://hyperflex.network/worldcup">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a12; --surface:#12121c; --surface2:#181826;
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.16);
+  --ink:#f4f4fa; --ink2:rgba(244,244,250,.62); --muted:rgba(244,244,250,.34);
+  --green:#00e68a; --red:#ff4d6a; --gold:#c9920d; --cyan:#4d9fff;
+  --display:'Bebas Neue',Impact,sans-serif; --sans:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px 40px}
+
+/* hero header */
+.wc-hero{padding:28px 0 14px;text-align:center}
+.wc-kicker{font-family:var(--mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--green);margin-bottom:8px}
+.wc-title{font-family:var(--display);font-size:clamp(44px,11vw,84px);line-height:.92;letter-spacing:.01em}
+.wc-sub{font-size:13px;color:var(--ink2);margin-top:8px}
+.wc-live{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+
+/* section heads */
+.sec{margin-top:30px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+.sec-h h2{font-family:var(--display);font-size:28px;letter-spacing:.02em;font-weight:400}
+.sec-h .meta{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em}
+
+/* winner board */
+.winner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.winner-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 18px 14px;position:relative;transition:border-color .15s,transform .15s;display:block}
+.winner-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.winner-card.rank1{border-color:rgba(201,146,13,.45);background:linear-gradient(180deg,rgba(201,146,13,.08),var(--surface))}
+.wc-rank{position:absolute;top:14px;right:16px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.wc-team{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.wc-flag{font-size:30px;line-height:1}
+.wc-name{font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.wc-prob{font-family:var(--display);font-size:64px;line-height:.86;letter-spacing:.01em}
+.wc-prob .pct{font-size:28px;color:var(--ink2);margin-left:2px}
+.wc-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:10px}
+.wc-chg{font-family:var(--mono);font-size:13px;font-weight:700}
+.wc-chg.up{color:var(--green)} .wc-chg.down{color:var(--red)} .wc-chg.flat{color:var(--muted)}
+.spark{height:26px;width:84px;flex-shrink:0}
+.wc-final{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase}
+
+/* matches strip */
+.match-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.match-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;transition:border-color .15s,transform .15s;display:block}
+.match-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.match-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.match-when{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em}
+.badge-live{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--red);background:rgba(255,77,106,.12);border:1px solid rgba(255,77,106,.3);padding:3px 8px;border-radius:20px}
+.badge-live .dot{background:var(--red);box-shadow:0 0 8px var(--red)}
+.badge-final{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--border);padding:3px 8px;border-radius:20px}
+.match-sides{display:flex;flex-direction:column;gap:10px}
+.side{display:flex;align-items:center;gap:10px}
+.side .wc-flag{font-size:24px}
+.side-name{font-size:14px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-prob{font-family:var(--display);font-size:34px;line-height:1;letter-spacing:.01em}
+.side.win .side-prob{color:var(--green)} .side.lose .side-prob{color:var(--ink2)}
+.side-prob .pct{font-size:15px;color:var(--muted)}
+
+/* whale corner */
+.whale-list{display:flex;flex-direction:column;gap:10px}
+.whale-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:12px;padding:12px 14px}
+.whale-cap{font-family:var(--display);font-size:26px;color:var(--gold);line-height:1;flex-shrink:0}
+.whale-body{flex:1;min-width:0}
+.whale-q{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.whale-meta{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.whale-side{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;flex-shrink:0}
+.whale-side.yes{color:var(--green);background:rgba(0,230,138,.12)} .whale-side.no{color:var(--red);background:rgba(255,77,106,.12)}
+
+.empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:13px}
+.skel{background:var(--surface);border:1px solid var(--border);border-radius:16px;height:150px;animation:sh 1.4s ease-in-out infinite}
+@keyframes sh{0%,100%{opacity:.45}50%{opacity:.8}}
+.foot{margin-top:36px;padding-top:18px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=24"></script>
+
+<div class="wrap">
+  <div class="wc-hero">
+    <div class="wc-kicker">FIFA World Cup 2026</div>
+    <div class="wc-title">LIVE ODDS</div>
+    <div class="wc-sub">Tournament winner board, today's matches, and whale flow — straight from Polymarket.</div>
+    <div class="wc-live"><span class="dot"></span><span id="liveLabel">Loading…</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Winner</h2><span class="meta" id="winMeta"></span></div>
+    <div class="winner-grid" id="winners"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+  </div>
+
+  <div class="sec" id="matchSec" style="display:none">
+    <div class="sec-h"><h2>Today's Matches</h2><span class="meta" id="matchMeta"></span></div>
+    <div class="match-strip" id="matches"></div>
+  </div>
+
+  <div class="sec" id="whaleSec" style="display:none">
+    <div class="sec-h"><h2>Whale Corner</h2><span class="meta">Consensus on World Cup markets</span></div>
+    <div class="whale-list" id="whales"></div>
+  </div>
+
+  <div class="foot">
+    Odds are live Polymarket prices and can move or resolve to zero. Not financial advice.<br>
+    <span id="footMeta"></span>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* Country/code → flag emoji. Static reference data only (not a team list or
+   odds) — decorates names the live feed provides; unknowns render no flag. */
+var NAME2ISO = {
+  'argentina':'AR','france':'FR','brazil':'BR','england':'GB','spain':'ES','germany':'DE','portugal':'PT',
+  'netherlands':'NL','belgium':'BE','italy':'IT','croatia':'HR','uruguay':'UY','colombia':'CO','mexico':'MX',
+  'usa':'US','united states':'US','canada':'CA','japan':'JP','south korea':'KR','korea republic':'KR',
+  'morocco':'MA','senegal':'SN','ghana':'GH','nigeria':'NG','cameroon':'CM','ivory coast':'CI',
+  "cote d'ivoire":'CI','south africa':'ZA','egypt':'EG','algeria':'DZ','tunisia':'TN','australia':'AU',
+  'denmark':'DK','switzerland':'CH','poland':'PL','serbia':'RS','sweden':'SE','austria':'AT','ukraine':'UA',
+  'wales':'GB','scotland':'GB','ecuador':'EC','peru':'PE','chile':'CL','paraguay':'PY','venezuela':'VE',
+  'costa rica':'CR','panama':'PA','jamaica':'JM','honduras':'HN','qatar':'QA','saudi arabia':'SA',
+  'iran':'IR','iraq':'IQ','uae':'AE','united arab emirates':'AE','turkey':'TR','türkiye':'TR','greece':'GR',
+  'norway':'NO','czech republic':'CZ','czechia':'CZ','hungary':'HU','romania':'RO','slovakia':'SK',
+  'slovenia':'SI','new zealand':'NZ','china':'CN','india':'IN','indonesia':'ID','thailand':'TH',
+  'vietnam':'VN','uzbekistan':'UZ','jordan':'JO','mali':'ML','dr congo':'CD','burkina faso':'BF',
+  'cape verde':'CV','gabon':'GA','angola':'AO','zambia':'ZM','kenya':'KE','israel':'IL','bolivia':'BO'
+};
+var FIFA3 = {
+  'arg':'AR','fra':'FR','bra':'BR','eng':'GB','esp':'ES','ger':'DE','por':'PT','ned':'NL','bel':'BE',
+  'ita':'IT','cro':'HR','uru':'UY','col':'CO','mex':'MX','usa':'US','can':'CA','jpn':'JP','kor':'KR',
+  'mar':'MA','sen':'SN','gha':'GH','nga':'NG','cmr':'CM','civ':'CI','rsa':'ZA','egy':'EG','alg':'DZ',
+  'tun':'TN','aus':'AU','den':'DK','sui':'CH','pol':'PL','srb':'RS','swe':'SE','aut':'AT','ukr':'UA',
+  'ecu':'EC','per':'PE','chi':'CL','par':'PY','ven':'VE','crc':'CR','pan':'PA','jam':'JM','hon':'HN',
+  'qat':'QA','ksa':'SA','irn':'IR','irq':'IQ','uae':'AE','tur':'TR','gre':'GR','nor':'NO','cze':'CZ',
+  'hun':'HU','rou':'RO','svk':'SK','svn':'SI','nzl':'NZ','chn':'CN','ind':'IN','idn':'ID','tha':'TH',
+  'vie':'VN','uzb':'UZ','jor':'JO','mli':'ML','cod':'CD','bfa':'BF','cpv':'CV','gab':'GA'
+};
+function iso2flag(iso){ if(!iso||iso.length!==2) return ''; return iso.toUpperCase().replace(/./g,function(c){return String.fromCodePoint(127397+c.charCodeAt(0));}); }
+function flagFor(name){
+  if(!name) return '';
+  var k=String(name).toLowerCase().trim();
+  if(NAME2ISO[k]) return iso2flag(NAME2ISO[k]);
+  if(FIFA3[k]) return iso2flag(FIFA3[k]);
+  // try first token (e.g. "Mexico (to win)")
+  var first=k.split(/[\s(]/)[0];
+  if(NAME2ISO[first]) return iso2flag(NAME2ISO[first]);
+  if(FIFA3[first]) return iso2flag(FIFA3[first]);
+  return '';
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function chgClass(v){return v>0?'up':v<0?'down':'flat';}
+function chgText(v){if(v==null)return '';var s=v>0?'+':v<0?'−':'';return s+Math.abs(v)+'¢ 24h';}
+
+function sparkSvg(arr){
+  if(!arr||arr.length<3) return '';
+  var w=84,h=26,mn=Math.min.apply(null,arr),mx=Math.max.apply(null,arr),rg=(mx-mn)||1;
+  var pts=arr.map(function(v,i){return (i/(arr.length-1)*w).toFixed(1)+','+(h-((v-mn)/rg)*h).toFixed(1);}).join(' ');
+  var col=arr[arr.length-1]>=arr[0]?'#00e68a':'#ff4d6a';
+  return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+}
+
+/* slug "fifwc-mex-rsa-2026-06-11" → "MEX vs RSA" with flags, best-effort */
+function matchTitleFromSlug(slug){
+  var m=(slug||'').replace(/^fifwc-/,'').match(/^([a-z]{3})-([a-z]{3})/i);
+  if(!m) return null;
+  return {a:m[1].toUpperCase(),b:m[2].toUpperCase()};
+}
+function whenLabel(mt){
+  if(mt.is_final) return 'FINAL';
+  if(mt.is_today) return 'TODAY';
+  if(mt.date){ try{ return new Date(mt.date+'T12:00:00Z').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }catch(e){} }
+  return '';
+}
+
+function renderWinners(winners){
+  var el=document.getElementById('winners');
+  if(!winners||!winners.length){ el.innerHTML='<div class="empty">No World Cup winner markets in the live feed right now.</div>'; return; }
+  el.innerHTML=winners.map(function(w,i){
+    var flag=flagFor(w.country);
+    var probTxt = w.prob!=null ? Math.round(w.prob) : '—';
+    var href = w.slug ? ('/market/'+encodeURIComponent(w.slug)+'?from=worldcup') : '#';
+    var right = w.resolved_side
+      ? '<span class="wc-final">'+(w.resolved_side==='YES'?'Champion':'Out')+'</span>'
+      : (sparkSvg(w.spark) || ('<span class="wc-chg '+chgClass(w.odds_change_24h)+'">'+chgText(w.odds_change_24h)+'</span>'));
+    var chg = (!w.resolved_side && w.spark && w.odds_change_24h!=null)
+      ? '<span class="wc-chg '+chgClass(w.odds_change_24h)+'">'+chgText(w.odds_change_24h)+'</span>' : '<span></span>';
+    return '<a class="winner-card'+(i===0?' rank1':'')+'" href="'+href+'">'+
+      '<div class="wc-rank">#'+(i+1)+'</div>'+
+      '<div class="wc-team"><span class="wc-flag">'+(flag||'🏳')+'</span><span class="wc-name">'+esc(w.country)+'</span></div>'+
+      '<div class="wc-prob">'+probTxt+'<span class="pct">%</span></div>'+
+      '<div class="wc-row">'+chg+right+'</div>'+
+    '</a>';
+  }).join('');
+}
+
+function renderMatches(matches){
+  var sec=document.getElementById('matchSec'), el=document.getElementById('matches');
+  var list=(matches||[]).slice(0,12);
+  if(!list.length){ sec.style.display='none'; return; }
+  sec.style.display='';
+  document.getElementById('matchMeta').textContent=list.length+' event'+(list.length>1?'s':'');
+  el.innerHTML=list.map(function(mt){
+    var st=matchTitleFromSlug(mt.slug);
+    var sides=(mt.sides||[]).slice(0,3);
+    var sidesHtml=sides.map(function(s,idx){
+      var nm=s.label||'';
+      var flag=flagFor(nm) || (st? flagFor(idx===0?st.a:st.b):'');
+      var cls=mt.is_final?(s.resolved_side==='YES'?'win':'lose'):(idx===0?'win':'');
+      var prob=s.prob!=null?Math.round(s.prob):'—';
+      return '<div class="side '+cls+'"><span class="wc-flag">'+(flag||'🏳')+'</span>'+
+        '<span class="side-name">'+esc(nm)+'</span>'+
+        '<span class="side-prob">'+prob+'<span class="pct">%</span></span></div>';
+    }).join('');
+    var when=mt.is_live?('<span class="badge-live"><span class="dot"></span>Live</span>')
+      :mt.is_final?'<span class="badge-final">Final</span>'
+      :'<span class="match-when">'+whenLabel(mt)+'</span>';
+    return '<a class="match-card" href="/worldcup/'+encodeURIComponent(mt.slug)+'">'+
+      '<div class="match-top">'+when+'<span class="match-when">'+(mt.is_final?'Resolved':'tap for live')+'</span></div>'+
+      '<div class="match-sides">'+sidesHtml+'</div>'+
+    '</a>';
+  }).join('');
+}
+
+function renderWhales(whales){
+  var sec=document.getElementById('whaleSec'), el=document.getElementById('whales');
+  if(!whales||!whales.length){ sec.style.display='none'; return; }
+  sec.style.display='';
+  el.innerHTML=whales.map(function(w){
+    var cap=w.total_capital? ('$'+(w.total_capital>=1e6?(w.total_capital/1e6).toFixed(1)+'M':Math.round(w.total_capital/1e3)+'k')):'';
+    var side=(w.consensus_side||'').toUpperCase();
+    var sideCls=side==='YES'?'yes':side==='NO'?'no':'';
+    var meta=(w.whale_count?w.whale_count+' whales':'')+(w.consensus_pct?' · '+w.consensus_pct+'% aligned':'')+(w.strength?' · '+w.strength:'');
+    var href=w.slug?('/worldcup/'+encodeURIComponent(w.slug)):(w.url||'#');
+    return '<a class="whale-row" href="'+esc(href)+'">'+
+      '<span class="whale-cap">'+cap+'</span>'+
+      '<span class="whale-body"><span class="whale-q">'+esc(w.market||'')+'</span><span class="whale-meta">'+esc(meta)+'</span></span>'+
+      (side?'<span class="whale-side '+sideCls+'">'+side+'</span>':'')+
+    '</a>';
+  }).join('');
+}
+
+function load(){
+  fetch('/api/worldcup').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d){ document.getElementById('winners').innerHTML='<div class="empty">Could not load World Cup odds. <a href="javascript:location.reload()" style="color:var(--cyan)">Retry</a></div>'; return; }
+    var c=d.counts||{};
+    document.getElementById('liveLabel').textContent=(c.winner_markets||0)+' winner · '+(c.match_events||0)+' matches live';
+    document.getElementById('winMeta').textContent=(c.winner_markets||0)+' markets';
+    document.getElementById('footMeta').textContent='Holding '+(c.winner_markets||0)+' winner + '+(c.match_markets||0)+' match markets · updated '+(d.updated_at?new Date(d.updated_at).toLocaleTimeString():'');
+    renderWinners(d.winners);
+    renderMatches(d.matches);
+    renderWhales(d.whale_corner);
+  }).catch(function(){
+    document.getElementById('winners').innerHTML='<div class="empty">Could not load World Cup odds. <a href="javascript:location.reload()" style="color:var(--cyan)">Retry</a></div>';
+  });
+}
+load();
+setInterval(load, 30000); // piggyback: refresh hub every 30s (no new infra)
+</script>
+</body>
+</html>

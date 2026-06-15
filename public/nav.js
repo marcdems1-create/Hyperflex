@@ -349,6 +349,7 @@
   // as a first-class route. The homepage (/) will be rebuilt into the
   // townsquare per spec §6; once that lands the two URLs diverge.
   var primaryLinks = [
+    { href: '/worldcup', label: '⚽ World Cup', gold: true },
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
@@ -1207,11 +1208,11 @@ window.showSkeletons = function(containerId, count, type) {
     if (document.getElementById('hfx-bottom-nav')) return;
     var path = window.location.pathname;
     var items = [
-      { label: 'Home',     icon: '⌂',  href: '/' },
-      { label: 'Feed',     icon: '◈',  href: '/feed' },
-      { label: 'Alpha',    icon: '⚡', href: '/alpha-live' },
-      { label: 'Finance', icon: '◎',  href: '/finance' },
-      { label: 'Profile',  icon: '👤', href: null }, // resolved at runtime
+      { label: 'Home',      icon: '⌂',  href: '/' },
+      { label: 'Feed',      icon: '◈',  href: '/feed' },
+      { label: 'Alpha',     icon: '⚡', href: '/alpha-live' },
+      { label: 'World Cup', icon: '⚽', href: '/worldcup' },
+      { label: 'Profile',   icon: '👤', href: null }, // resolved at runtime
     ];
 
     // Resolve profile link

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!--WC_OG-->
+<title>World Cup Match — Live Odds | HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a12; --surface:#12121c; --surface2:#181826;
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.16);
+  --ink:#f4f4fa; --ink2:rgba(244,244,250,.62); --muted:rgba(244,244,250,.34);
+  --green:#00e68a; --red:#ff4d6a; --gold:#c9920d; --cyan:#4d9fff;
+  --display:'Bebas Neue',Impact,sans-serif; --sans:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px 48px}
+
+.mback{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;margin:18px 0 8px}
+.mhead{text-align:center;padding:6px 0 4px}
+.mstatus{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:10px}
+.dot{width:7px;height:7px;border-radius:50%;animation:pulse 1.6s infinite}
+.live .dot{background:var(--red);box-shadow:0 0 9px var(--red)} .live{color:var(--red)}
+.upc .dot{background:var(--cyan);box-shadow:0 0 9px var(--cyan)} .upc{color:var(--cyan);animation:none}
+.fin{color:var(--muted)} .fin .dot{background:var(--muted);animation:none}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+
+/* the money: giant side probabilities */
+.sides{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.bigside{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px 22px 18px;position:relative;overflow:hidden;transition:border-color .2s}
+.bigside.lead{border-color:rgba(0,230,138,.4);background:linear-gradient(180deg,rgba(0,230,138,.07),var(--surface))}
+.bigside.resolved-win{border-color:rgba(0,230,138,.5)} .bigside.resolved-lose{opacity:.6}
+.bs-top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.bs-flag{font-size:44px;line-height:1}
+.bs-name{font-size:20px;font-weight:800;letter-spacing:-.02em;flex:1;min-width:0}
+.bs-prob{font-family:var(--display);font-size:clamp(72px,22vw,128px);line-height:.82;letter-spacing:.01em;transition:color .35s}
+.bs-prob .pct{font-size:.36em;color:var(--ink2);margin-left:4px}
+.bs-prob.flash-up{color:var(--green)} .bs-prob.flash-down{color:var(--red)}
+.bs-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:12px}
+.bs-cents{font-family:var(--mono);font-size:13px;color:var(--ink2)}
+.bs-chg{font-family:var(--mono);font-size:12px;font-weight:700}
+.bs-chg.up{color:var(--green)} .bs-chg.down{color:var(--red)} .bs-chg.flat{color:var(--muted)}
+.bs-trade{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:#06110b;background:var(--green);padding:9px 16px;border-radius:10px;transition:filter .15s}
+.bs-trade:hover{filter:brightness(1.08)}
+.bs-trade.no{background:var(--red);color:#1a0509}
+.bs-final{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.flash-pill{position:absolute;top:14px;right:16px;font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;opacity:0;transition:opacity .25s}
+.flash-pill.show{opacity:1}
+.flash-pill.up{color:var(--green);background:rgba(0,230,138,.14)} .flash-pill.down{color:var(--red);background:rgba(255,77,106,.14)}
+
+/* haiku line */
+.takeline{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-top:16px;font-size:14px;line-height:1.5;color:var(--ink);font-weight:500}
+.takeline .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px}
+
+/* chart */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:16px}
+.card h3{font-family:var(--display);font-size:22px;font-weight:400;letter-spacing:.02em;margin-bottom:12px}
+#chart{width:100%;height:150px;display:block}
+.chart-empty{font-family:var(--mono);font-size:11px;color:var(--muted);padding:24px 0;text-align:center}
+
+/* over/under */
+.ou-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ou-cell{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.ou-label{font-size:12px;color:var(--ink2);margin-bottom:4px}
+.ou-prob{font-family:var(--display);font-size:34px;line-height:1}
+
+/* whale feed */
+.wf-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.wf-row:last-child{border-bottom:none}
+.wf-side{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;flex-shrink:0}
+.wf-side.yes{color:var(--green);background:rgba(0,230,138,.12)} .wf-side.no{color:var(--red);background:rgba(255,77,106,.12)}
+.wf-name{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wf-amt{font-family:var(--mono);font-size:12px;color:var(--gold);flex-shrink:0}
+.wf-ago{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
+
+.empty{padding:40px 18px;text-align:center;color:var(--muted);font-size:13px}
+.skel{background:var(--surface);border:1px solid var(--border);border-radius:20px;height:170px;animation:sh 1.4s ease-in-out infinite;margin-top:14px}
+@keyframes sh{0%,100%{opacity:.45}50%{opacity:.8}}
+.foot{margin-top:30px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js?v=24"></script>
+
+<div class="wrap">
+  <a class="mback" href="/worldcup">← World Cup</a>
+  <div class="mhead"><span class="mstatus" id="status"><span class="dot"></span><span id="statusTxt">Loading</span></span></div>
+  <div id="sides"><div class="skel"></div><div class="skel"></div></div>
+  <div id="takeWrap"></div>
+  <div id="ouWrap"></div>
+  <div class="card" id="chartCard" style="display:none"><h3>Price Movement · 7d</h3><svg id="chart" viewBox="0 0 600 150" preserveAspectRatio="none"></svg></div>
+  <div class="card" id="whaleCard" style="display:none"><h3>Whale Flow</h3><div id="whaleFeed"></div></div>
+  <div class="foot">Live Polymarket odds — can move or resolve to zero. Not financial advice.<br><span id="footMeta"></span></div>
+</div>
+
+<script>
+'use strict';
+var NAME2ISO={'argentina':'AR','france':'FR','brazil':'BR','england':'GB','spain':'ES','germany':'DE','portugal':'PT','netherlands':'NL','belgium':'BE','italy':'IT','croatia':'HR','uruguay':'UY','colombia':'CO','mexico':'MX','usa':'US','united states':'US','canada':'CA','japan':'JP','south korea':'KR','morocco':'MA','senegal':'SN','ghana':'GH','nigeria':'NG','cameroon':'CM','ivory coast':'CI','south africa':'ZA','egypt':'EG','algeria':'DZ','tunisia':'TN','australia':'AU','denmark':'DK','switzerland':'CH','poland':'PL','serbia':'RS','sweden':'SE','austria':'AT','ukraine':'UA','wales':'GB','scotland':'GB','ecuador':'EC','peru':'PE','chile':'CL','paraguay':'PY','venezuela':'VE','costa rica':'CR','panama':'PA','jamaica':'JM','honduras':'HN','qatar':'QA','saudi arabia':'SA','iran':'IR','iraq':'IQ','uae':'AE','turkey':'TR','türkiye':'TR','greece':'GR','norway':'NO','czechia':'CZ','hungary':'HU','romania':'RO','slovakia':'SK','slovenia':'SI','new zealand':'NZ','china':'CN','india':'IN','indonesia':'ID','thailand':'TH','vietnam':'VN','uzbekistan':'UZ','jordan':'JO','mali':'ML','cape verde':'CV','gabon':'GA','angola':'AO','zambia':'ZM','kenya':'KE','israel':'IL','bolivia':'BO'};
+var FIFA3={'arg':'AR','fra':'FR','bra':'BR','eng':'GB','esp':'ES','ger':'DE','por':'PT','ned':'NL','bel':'BE','ita':'IT','cro':'HR','uru':'UY','col':'CO','mex':'MX','usa':'US','can':'CA','jpn':'JP','kor':'KR','mar':'MA','sen':'SN','gha':'GH','nga':'NG','cmr':'CM','civ':'CI','rsa':'ZA','egy':'EG','alg':'DZ','tun':'TN','aus':'AU','den':'DK','sui':'CH','pol':'PL','srb':'RS','swe':'SE','aut':'AT','ukr':'UA','ecu':'EC','per':'PE','chi':'CL','par':'PY','ven':'VE','crc':'CR','pan':'PA','jam':'JM','hon':'HN','qat':'QA','ksa':'SA','irn':'IR','irq':'IQ','uae':'AE','tur':'TR','gre':'GR','nor':'NO','cze':'CZ','hun':'HU','rou':'RO','svk':'SK','svn':'SI','nzl':'NZ','chn':'CN','ind':'IN','idn':'ID','tha':'TH','vie':'VN','uzb':'UZ','jor':'JO','mli':'ML','cod':'CD','bfa':'BF','cpv':'CV','gab':'GA'};
+function iso2flag(iso){if(!iso||iso.length!==2)return '';return iso.toUpperCase().replace(/./g,function(c){return String.fromCodePoint(127397+c.charCodeAt(0));});}
+function flagFor(name){if(!name)return '';var k=String(name).toLowerCase().trim();if(NAME2ISO[k])return iso2flag(NAME2ISO[k]);if(FIFA3[k])return iso2flag(FIFA3[k]);var f=k.split(/[\s(]/)[0];if(NAME2ISO[f])return iso2flag(NAME2ISO[f]);if(FIFA3[f])return iso2flag(FIFA3[f]);return '';}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function ago(ts){if(!ts)return '';var s=Math.floor((Date.now()-(typeof ts==='number'?ts:new Date(ts).getTime()))/1000);if(s<60)return s+'s';var m=Math.floor(s/60);if(m<60)return m+'m';var h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d';}
+
+var SLUG=decodeURIComponent((location.pathname.split('/worldcup/')[1]||'').replace(/\/$/,''));
+var _prev={}; // market_id -> last prob, for flash
+var _es=null;
+
+function tradeHref(s){ return '/market/'+encodeURIComponent(SLUG)+'?outcome='+encodeURIComponent(s.market_id||'')+'&from=worldcup'; }
+
+function renderSides(d){
+  var el=document.getElementById('sides');
+  var sides=(d.sides||[]).slice(0,3);
+  if(!sides.length){ el.innerHTML='<div class="empty">No tradeable markets for this match right now.</div>'; return; }
+  el.innerHTML=sides.map(function(s,i){
+    var flag=flagFor(s.label);
+    var prob=s.prob!=null?Math.round(s.prob):null;
+    var cents=s.prob!=null?Math.round(s.prob):null; // YES cents ~= prob for this outcome
+    var resolved=s.resolved_side;
+    var cls='bigside'+(i===0&&!d.is_final?' lead':'')+(resolved==='YES'?' resolved-win':resolved==='NO'?' resolved-lose':'');
+    var foot;
+    if(d.is_final){
+      foot='<span class="bs-final">'+(resolved==='YES'?'✓ Winner':resolved==='NO'?'Eliminated':'Final')+'</span>';
+    }else{
+      var chg=s.odds_change_24h;
+      var chgCls=chg>0?'up':chg<0?'down':'flat';
+      var chgTxt=chg!=null?((chg>0?'+':chg<0?'−':'')+Math.abs(chg)+'¢ 24h'):'';
+      foot='<span class="bs-chg '+chgCls+'">'+chgTxt+'</span>'+
+           '<a class="bs-trade" href="'+tradeHref(s)+'">Buy '+(cents!=null?cents+'¢':'')+' →</a>';
+    }
+    return '<div class="bigside '+cls+'" data-mid="'+esc(s.market_id||'')+'">'+
+      '<div class="flash-pill" id="fp-'+i+'"></div>'+
+      '<div class="bs-top"><span class="bs-flag">'+(flag||'🏳')+'</span><span class="bs-name">'+esc(s.label||'')+'</span></div>'+
+      '<div class="bs-prob" id="prob-'+i+'">'+(prob!=null?prob:'—')+'<span class="pct">%</span></div>'+
+      '<div class="bs-foot">'+foot+'</div>'+
+    '</div>';
+  }).join('');
+  // flash on change vs previous poll
+  sides.forEach(function(s,i){
+    var mid=s.market_id||('idx'+i);
+    if(_prev[mid]!=null && s.prob!=null && Math.round(s.prob)!==Math.round(_prev[mid])){
+      flash(i, s.prob>_prev[mid]);
+    }
+    if(s.prob!=null) _prev[mid]=s.prob;
+  });
+}
+
+function flash(i, up){
+  var p=document.getElementById('prob-'+i), pill=document.getElementById('fp-'+i);
+  if(p){ p.classList.remove('flash-up','flash-down'); void p.offsetWidth; p.classList.add(up?'flash-up':'flash-down'); setTimeout(function(){p.classList.remove('flash-up','flash-down');},900); }
+  if(pill){ pill.textContent=up?'▲':'▼'; pill.className='flash-pill show '+(up?'up':'down'); setTimeout(function(){pill.classList.remove('show');},1100); }
+}
+
+function renderTake(d){
+  var w=document.getElementById('takeWrap');
+  if(!d.summary){ w.innerHTML=''; return; }
+  w.innerHTML='<div class="takeline"><span class="lbl">What the market thinks</span>'+esc(d.summary)+'</div>';
+}
+
+function renderOU(d){
+  var w=document.getElementById('ouWrap');
+  var ou=(d.over_under||[]).filter(function(o){return o.prob!=null;}).slice(0,2);
+  if(!ou.length){ w.innerHTML=''; return; }
+  w.innerHTML='<div class="card"><h3>Total Goals</h3><div class="ou-grid">'+ou.map(function(o){
+    return '<div class="ou-cell"><div class="ou-label">'+esc(o.label||'')+'</div><div class="ou-prob">'+Math.round(o.prob)+'<span style="font-size:15px;color:var(--muted)">%</span></div></div>';
+  }).join('')+'</div></div>';
+}
+
+function renderChart(history){
+  var card=document.getElementById('chartCard'), svg=document.getElementById('chart');
+  var pts=(history||[]).map(function(h){return h.price;}).filter(function(p){return p!=null&&!isNaN(p);});
+  if(pts.length<3){ card.style.display='none'; return; }
+  card.style.display='';
+  var W=600,H=150,mn=Math.min.apply(null,pts),mx=Math.max.apply(null,pts),rg=(mx-mn)||1;
+  var coords=pts.map(function(v,i){return [(i/(pts.length-1)*W),(H-((v-mn)/rg)*(H-16)-8)];});
+  var line=coords.map(function(c,i){return (i?'L':'M')+c[0].toFixed(1)+' '+c[1].toFixed(1);}).join(' ');
+  var up=pts[pts.length-1]>=pts[0];
+  var col=up?'#00e68a':'#ff4d6a';
+  var area=line+' L'+W+' '+H+' L0 '+H+' Z';
+  svg.innerHTML='<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+col+'" stop-opacity=".22"/><stop offset="1" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>'+
+    '<path d="'+area+'" fill="url(#g)"/>'+
+    '<path d="'+line+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+}
+
+function renderWhales(whales){
+  var card=document.getElementById('whaleCard'), el=document.getElementById('whaleFeed');
+  if(!whales||!whales.length){ card.style.display='none'; return; }
+  card.style.display='';
+  el.innerHTML=whales.map(function(w){
+    var side=(w.side||'').toUpperCase();
+    var sideCls=side==='YES'?'yes':side==='NO'?'no':'';
+    var amt=w.size_display||(w.size?'$'+(w.size>=1e3?Math.round(w.size/1e3)+'k':Math.round(w.size)):'');
+    return '<div class="wf-row">'+
+      (side?'<span class="wf-side '+sideCls+'">'+side+'</span>':'')+
+      '<span class="wf-name">'+esc(w.trader_name||'Whale')+' '+esc(w.action||'')+'</span>'+
+      '<span class="wf-amt">'+esc(amt)+'</span>'+
+      '<span class="wf-ago">'+ago(w.ts)+'</span>'+
+    '</div>';
+  }).join('');
+}
+
+function setStatus(d){
+  var el=document.getElementById('status'), t=document.getElementById('statusTxt');
+  if(d.is_live){ el.className='mstatus live'; t.textContent='Live now'; }
+  else if(d.is_final){ el.className='mstatus fin'; t.textContent='Final'; }
+  else { el.className='mstatus upc'; var dt=d.date?new Date(d.date+'T12:00:00Z'):null; t.textContent=dt?('Kickoff '+dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})):'Upcoming'; }
+}
+
+var _pollMs=20000, _liveActive=false;
+function load(){
+  if(!SLUG){ document.getElementById('sides').innerHTML='<div class="empty">No match selected.</div>'; return; }
+  fetch('/api/worldcup/match/'+encodeURIComponent(SLUG)).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d){ document.getElementById('sides').innerHTML='<div class="empty">Match not found in the live feed. <a href="/worldcup" style="color:var(--cyan)">Back to hub</a></div>'; return; }
+    setStatus(d);
+    renderSides(d);
+    renderTake(d);
+    renderOU(d);
+    renderChart(d.history);
+    renderWhales(d.whales);
+    document.getElementById('footMeta').textContent='Updated '+(d.updated_at?new Date(d.updated_at).toLocaleTimeString():'');
+    // Tighten poll during live windows so the number really moves
+    if(d.is_live && !_liveActive){ _liveActive=true; _pollMs=12000; connectBetFeed(); }
+  }).catch(function(){});
+}
+
+/* Live trade flashes via the existing global bet-feed SSE, filtered to this
+   match. Polling drives the authoritative number; bets add per-trade motion. */
+function connectBetFeed(){
+  if(_es || typeof EventSource==='undefined') return;
+  try{
+    _es=new EventSource('/api/bet-feed/stream');
+    _es.addEventListener('bet',function(ev){
+      try{
+        var b=JSON.parse(ev.data);
+        if((b.market_slug||'').toLowerCase()!==SLUG.toLowerCase()) return;
+        // refresh promptly so the authoritative prob reflects the trade
+        load();
+      }catch(e){}
+    });
+    _es.addEventListener('error',function(){ /* auto-reconnects */ });
+  }catch(e){}
+}
+
+load();
+(function loop(){ setTimeout(function(){ load(); loop(); }, _pollMs); })();
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) load(); });
+</script>
+</body>
+</html>

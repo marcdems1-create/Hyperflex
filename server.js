@@ -35750,6 +35750,299 @@ app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
+
+// ════════════════════════════════════════════════════════════════════
+// WORLD CUP LIVE ODDS HUB — composition of existing systems only.
+// Data source: _screenerCache (already maintained by the existing screener
+// refresh + watchdog). No new external API, no new cron, no new dep.
+// Reads "what we hold" — the honest basis for the market counts.
+// ════════════════════════════════════════════════════════════════════
+let _wcCache = null;
+const WC_CACHE_TTL = 60 * 1000; // 60s — piggybacks the screener's own refresh
+
+// Tournament-winner market, e.g. "Will France win the 2026 FIFA World Cup?"
+function _wcIsWinner(m) {
+  const q = (m.question || '').toLowerCase();
+  const s = (m.slug || '').toLowerCase();
+  return (/world cup/.test(q) && /\bwin(s|ner)?\b|champion/.test(q)) ||
+         (/world-cup/.test(s) && /(winner|champion|to-win)/.test(s));
+}
+// Head-to-head match event, slug prefix "fifwc-" (e.g. fifwc-mex-rsa-2026-06-11)
+function _wcIsMatch(m) {
+  return (m.slug || '').toLowerCase().startsWith('fifwc-');
+}
+function _wcResolvedSide(m) {
+  // Closed-market guardrail: price pinned to 0/1 = resolved, never tradeable.
+  const p = m.yes_price;
+  if (p == null) return null;
+  if (p >= 0.99) return 'YES';
+  if (p <= 0.01) return 'NO';
+  if (m.end_date && new Date(m.end_date) < new Date()) return p >= 0.5 ? 'YES' : 'NO';
+  return null;
+}
+function _wcDateFromSlug(slug) {
+  const mm = (slug || '').match(/(\d{4}-\d{2}-\d{2})/);
+  return mm ? mm[1] : null;
+}
+function _wcSideLabel(m) {
+  // Best-available label for an outcome line within a match event.
+  if (m.group_item && m.group_item.trim()) return m.group_item.trim();
+  const q = (m.question || '').replace(/\?$/, '');
+  const mm = q.match(/will (.+?) (?:beat|win|defeat|advance)/i);
+  return mm ? mm[1].trim() : q;
+}
+function _wcIsOverUnder(m) {
+  const t = ((m.question || '') + ' ' + (m.group_item || '')).toLowerCase();
+  return /over|under|o\/u|total goals|total of/.test(t);
+}
+
+async function getWorldCupData() {
+  if (_wcCache && Date.now() - _wcCache.ts < WC_CACHE_TTL) return _wcCache.data;
+  const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+
+  const winners = [];
+  const groups = {}; // eventSlug -> { slug, markets: [] }
+  for (const m of all) {
+    if (_wcIsWinner(m)) {
+      const cm = (m.question || '').match(/will (.+?) (?:win|be)/i);
+      const country = cm ? cm[1].trim() : (m.group_item || m.question || '').trim();
+      winners.push({
+        country,
+        market_id: m.market_id,
+        slug: m.slug,
+        prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null,
+        odds_change_24h: m.odds_change_24h != null ? m.odds_change_24h : null,
+        volume: m.volume || 0,
+        resolved_side: _wcResolvedSide(m)
+      });
+    } else if (_wcIsMatch(m)) {
+      (groups[m.slug] = groups[m.slug] || { slug: m.slug, markets: [] }).markets.push(m);
+    }
+  }
+
+  winners.sort((a, b) => (b.prob || 0) - (a.prob || 0));
+
+  // Sparklines for the top winners — ONE batched snapshot query (existing
+  // market_snapshots, keyed by the market_id we hold). Cached 60s with the
+  // rest of the hub payload. Degrades to no-spark if the table is thin.
+  const topWinners = winners.slice(0, 12);
+  if (pool && topWinners.length) {
+    try {
+      const ids = topWinners.map(w => w.market_id).filter(Boolean);
+      if (ids.length) {
+        const rows = await dbQuery(
+          `SELECT market_id, yes_price, snapshot_at FROM market_snapshots
+           WHERE market_id = ANY($1) AND snapshot_at > NOW() - INTERVAL '24 hours'
+           ORDER BY market_id, snapshot_at ASC`, [ids]
+        );
+        const byId = {};
+        for (const r of (rows || [])) (byId[r.market_id] = byId[r.market_id] || []).push(parseFloat(r.yes_price));
+        for (const w of topWinners) { const s = byId[w.market_id]; if (s && s.length >= 3) w.spark = s.slice(-40); }
+      }
+    } catch (e) { /* sparklines optional */ }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const matches = Object.values(groups).map(g => {
+    const date = _wcDateFromSlug(g.slug);
+    const moneyline = g.markets.filter(m => !_wcIsOverUnder(m));
+    const ou = g.markets.filter(_wcIsOverUnder);
+    const sides = moneyline.map(m => ({
+      label: _wcSideLabel(m),
+      market_id: m.market_id,
+      prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null,
+      odds_change_24h: m.odds_change_24h != null ? m.odds_change_24h : null,
+      resolved_side: _wcResolvedSide(m)
+    })).sort((a, b) => (b.prob || 0) - (a.prob || 0));
+    const anyResolved = g.markets.some(m => _wcResolvedSide(m) !== null);
+    const closed = g.markets.every(m => (m.end_date && new Date(m.end_date) < new Date()) || _wcResolvedSide(m) !== null);
+    const totalVol = g.markets.reduce((s, m) => s + (m.volume || 0), 0);
+    return {
+      slug: g.slug,
+      date,
+      is_today: date === today,
+      is_final: closed && anyResolved,
+      image: (g.markets[0] && (g.markets[0].event_image_url || g.markets[0].image)) || null,
+      sides,
+      over_under: ou.map(m => ({ label: _wcSideLabel(m), market_id: m.market_id, prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null })),
+      volume: totalVol
+    };
+  }).sort((a, b) => {
+    // Today first, then by volume
+    if (a.is_today !== b.is_today) return a.is_today ? -1 : 1;
+    return (b.volume || 0) - (a.volume || 0);
+  });
+
+  // Whale corner — consensus picks filtered to WC (reads existing caches only)
+  let whaleCorner = [];
+  try {
+    const picks = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
+    whaleCorner = picks
+      .filter(p => /world cup|fifa/i.test(p.market || '') )
+      .slice(0, 6)
+      .map(p => ({ market: p.market, whale_count: p.whale_count, consensus_side: p.consensus_side, consensus_pct: p.consensus_pct, total_capital: p.total_capital, strength: p.strength, url: p.url }));
+    if (!whaleCorner.length && Array.isArray(_whaleTradeStream)) {
+      whaleCorner = _whaleTradeStream
+        .filter(t => /world cup|fifa/i.test(t.question || '') || (t.slug || '').toLowerCase().startsWith('fifwc-'))
+        .slice(0, 6)
+        .map(t => ({ market: t.question, whale_count: 1, consensus_side: t.side, total_capital: t.size, trader_name: t.trader_name, url: t.url, slug: t.slug }));
+    }
+  } catch (e) { /* whale corner is optional */ }
+
+  const data = {
+    winners: topWinners,
+    matches,
+    whale_corner: whaleCorner,
+    counts: {
+      winner_markets: winners.length,
+      match_markets: Object.values(groups).reduce((s, g) => s + g.markets.length, 0),
+      match_events: Object.keys(groups).length,
+      today_matches: matches.filter(m => m.is_today).length
+    },
+    screener_size: all.length,
+    updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
+  };
+  _wcCache = { ts: Date.now(), data };
+  return data;
+}
+
+// Hub data — first thing to curl. counts reflect WC markets we currently hold.
+app.get('/api/worldcup', async (req, res) => {
+  try {
+    const data = await getWorldCupData();
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    res.json(data);
+  } catch (e) {
+    console.error('[worldcup]', e.message);
+    res.status(502).json({ error: 'worldcup data unavailable', detail: e.message });
+  }
+});
+
+// One match event: outcome markets + price history + whale feed + cached summary.
+app.get('/api/worldcup/match/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').toLowerCase();
+    const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const markets = all.filter(m => (m.slug || '').toLowerCase() === slug);
+    if (!markets.length) return res.status(404).json({ error: 'match not found', slug });
+
+    const moneyline = markets.filter(m => !_wcIsOverUnder(m));
+    const ou = markets.filter(_wcIsOverUnder);
+    const sides = moneyline.map(m => ({
+      label: _wcSideLabel(m), market_id: m.market_id, slug: m.slug,
+      yes_price: m.yes_price,
+      prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null,
+      odds_change_24h: m.odds_change_24h != null ? m.odds_change_24h : null,
+      clobTokenIds: m.clobTokenIds || null,
+      resolved_side: _wcResolvedSide(m)
+    })).sort((a, b) => (b.prob || 0) - (a.prob || 0));
+
+    // Primary market = highest-volume moneyline line, for history + summary
+    const primary = moneyline.slice().sort((a, b) => (b.volume || 0) - (a.volume || 0))[0] || markets[0];
+
+    // Price history from existing market_snapshots (keyed by market_id we hold)
+    let history = [];
+    if (pool && primary) {
+      try {
+        const rows = await dbQuery(
+          `SELECT yes_price, snapshot_at FROM market_snapshots WHERE market_id = $1 AND snapshot_at > NOW() - INTERVAL '7 days' ORDER BY snapshot_at ASC LIMIT 400`,
+          [primary.market_id]
+        );
+        history = (rows || []).map(r => ({ price: parseFloat(r.yes_price), ts: r.snapshot_at }));
+      } catch (e) { /* history optional */ }
+    }
+
+    // Whale feed for this match — existing stream, filtered by condition_id/slug
+    let whales = [];
+    try {
+      const ids = new Set(markets.map(m => (m.market_id || '').toLowerCase()));
+      whales = (Array.isArray(_whaleTradeStream) ? _whaleTradeStream : [])
+        .filter(t => (t.condition_id && ids.has((t.condition_id || '').toLowerCase())) || (t.slug || '').toLowerCase() === slug)
+        .slice(0, 12)
+        .map(t => ({ trader_name: t.trader_name, action: t.action, side: t.side, size: t.size, size_display: t.size_display, price: t.price, ts: t.ts, question: t.question }));
+    } catch (e) { /* optional */ }
+
+    const isFinal = markets.every(m => (m.end_date && new Date(m.end_date) < new Date()) || _wcResolvedSide(m) !== null);
+    const isToday = _wcDateFromSlug(slug) === new Date().toISOString().slice(0, 10);
+    const isLive = isToday && !isFinal;
+
+    // Cached Haiku line — reused system. Live matches refresh at most every
+    // 10 min (TTL-gated, never per-pageview); others use the standard 4h TTL.
+    let summary = null;
+    try {
+      if (primary) {
+        summary = await marketSummaryLib.getSummary(slug, primary, {
+          db: pool, anthropic, maxAgeMs: isLive ? 10 * 60 * 1000 : undefined
+        });
+      }
+    } catch (e) { /* summary optional */ }
+
+    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=45');
+    res.json({
+      slug, sides, over_under: ou.map(m => ({ label: _wcSideLabel(m), market_id: m.market_id, prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null, resolved_side: _wcResolvedSide(m) })),
+      image: (primary && (primary.event_image_url || primary.image)) || null,
+      date: _wcDateFromSlug(slug), is_today: isToday, is_final: isFinal, is_live: isLive,
+      history, whales, summary,
+      updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
+    });
+  } catch (e) {
+    console.error('[worldcup/match]', e.message);
+    res.status(502).json({ error: 'match data unavailable', detail: e.message });
+  }
+});
+
+// Hub page
+app.get('/worldcup', (req, res) => res.sendFile(path.join(__dirname, 'public', 'worldcup.html')));
+
+// Match page — server-injects per-match OG meta (live odds in og:title) so
+// shared links unfurl with numbers. Falls back to the static file if no data.
+let _wcMatchTpl = null;
+app.get('/worldcup/:slug', async (req, res) => {
+  const tplPath = path.join(__dirname, 'public', 'worldcup-match.html');
+  try {
+    const slug = String(req.params.slug || '').toLowerCase();
+    if (_wcMatchTpl == null) { try { _wcMatchTpl = fs.readFileSync(tplPath, 'utf8'); } catch (e) { _wcMatchTpl = ''; } }
+    if (!_wcMatchTpl) return res.sendFile(tplPath);
+
+    const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const markets = all.filter(m => (m.slug || '').toLowerCase() === slug && !_wcIsOverUnder(m));
+    const sides = markets
+      .map(m => ({ label: _wcSideLabel(m), prob: m.yes_price != null ? Math.round(m.yes_price * 100) : null }))
+      .filter(s => s.prob != null)
+      .sort((a, b) => b.prob - a.prob);
+
+    let ogTitle, ogDesc;
+    if (sides.length >= 2) {
+      ogTitle = `${sides[0].label} ${sides[0].prob}% vs ${sides[1].label} ${sides[1].prob}% — live World Cup odds`;
+      ogDesc = `Live Polymarket odds: ${sides.map(s => `${s.label} ${s.prob}%`).join(' · ')}. Trade on HYPERFLEX.`;
+    } else if (sides.length === 1) {
+      ogTitle = `${sides[0].label} ${sides[0].prob}% — live World Cup odds`;
+      ogDesc = `Live Polymarket odds on HYPERFLEX.`;
+    } else {
+      ogTitle = `World Cup live odds — HYPERFLEX`;
+      ogDesc = `Live Polymarket World Cup odds, whale flow, and price history on HYPERFLEX.`;
+    }
+    const canonical = `https://hyperflex.network/worldcup/${encodeURIComponent(slug)}`;
+    const og = [
+      `<title>${_escHtmlStr(ogTitle)}</title>`,
+      `<meta name="description" content="${_escHtmlStr(ogDesc)}"/>`,
+      `<meta property="og:type" content="website"/>`,
+      `<meta property="og:title" content="${_escHtmlStr(ogTitle)}"/>`,
+      `<meta property="og:description" content="${_escHtmlStr(ogDesc)}"/>`,
+      `<meta property="og:url" content="${canonical}"/>`,
+      `<meta name="twitter:card" content="summary_large_image"/>`,
+      `<meta name="twitter:title" content="${_escHtmlStr(ogTitle)}"/>`,
+      `<meta name="twitter:description" content="${_escHtmlStr(ogDesc)}"/>`
+    ].join('\n');
+
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    res.type('html').send(_wcMatchTpl.replace('<!--WC_OG-->', og));
+  } catch (e) {
+    console.error('[worldcup/:slug]', e.message);
+    res.sendFile(tplPath);
+  }
+});
+
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
 app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges.html')));
 // Sports pick'em page — distinct from /challenges (which is head-to-head).
