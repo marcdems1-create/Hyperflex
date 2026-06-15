@@ -178,14 +178,31 @@ function renderSidebar(sections) {
 }
 
 // Market list
-function buildEdgeSignal(m) {
+function edgeStars(yes_price) {
+  const pct = Math.round(yes_price * 100);
+  if (pct <= 5 || pct >= 95) return { stars: 5, label: 'Max edge', color: '#22c55e' };
+  if (pct <= 10 || pct >= 90) return { stars: 4, label: 'Strong edge', color: '#22c55e' };
+  if (pct <= 20 || pct >= 80) return { stars: 3, label: 'Moderate edge', color: '#f59e0b' };
+  if (pct <= 30 || pct >= 70) return { stars: 2, label: 'Lean edge', color: '#f59e0b' };
+  return { stars: 1, label: 'Weak edge', color: '#555' };
+}
+
+function renderStars(yes_price) {
+  const { stars, color } = edgeStars(yes_price);
+  const filled = '★'.repeat(stars);
+  const empty = '☆'.repeat(5 - stars);
+  return `<span style="color:${color};font-size:12px;letter-spacing:1px">${filled}<span style="color:#252535">${empty}</span></span>`;
+}
+
+function shortEdge(m) {
   const pct = Math.round((m.yes_price || 0) * 100);
-  if (pct <= 5) return '🔴 Strong NO edge — ' + pct + '¢ YES resolves YES <0.5% historically';
-  if (pct <= 10) return '🔴 NO edge — ' + pct + '¢ YES resolves YES only 1.1% historically. Fade it.';
-  if (pct <= 20) return '🟡 Lean NO — ' + pct + '¢ YES, ~5% resolve YES. Sharp money typically fades.';
-  if (pct >= 85) return '🟢 High conviction YES — ' + pct + '¢ consensus. Sharp money positioned.';
-  if (pct >= 70) return '🟢 Moderate YES edge — ' + pct + '¢ pricing. Watch whale confirmation.';
-  return '⚪ No clear edge — ' + pct + '¢ YES. Check /signals for whale positioning.';
+  if (pct <= 5) return 'Structural NO — <1% resolve YES at this price';
+  if (pct <= 10) return 'Strong NO bias — 1.1% resolve YES historically';
+  if (pct <= 20) return 'Lean NO — ~5% resolve YES. Sharp money fades.';
+  if (pct >= 90) return 'Near-certain YES — consensus pricing';
+  if (pct >= 80) return 'High conviction YES — sharp money loaded';
+  if (pct >= 70) return 'Moderate YES — watch whale confirmation';
+  return 'No clear edge — check /signals for positioning';
 }
 
 function priceClass(pct) {
@@ -213,7 +230,7 @@ function renderMarkets(markets) {
       <div class="mbody">
         <div class="mcat">${CAT_LABELS[m._cat] || m._cat}</div>
         <div class="mq">${m.question || ''}</div>
-        <div class="medge">${buildEdgeSignal(m)}</div>
+        <div class="medge">${renderStars(m.yes_price)} <span style="color:#555;font-size:11px">${edgeStars(m.yes_price).label} — ${shortEdge(m)}</span></div>
       </div>
       <div class="mright">
         <div class="mprice ${priceClass(pct)}">${pct}%</div>
@@ -242,13 +259,14 @@ function selectMarket(m) {
   const pct = Math.round((m.yes_price || 0) * 100);
   const img = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
   const slug = m.slug || m.conditionId || '';
-  const edgeType = pct >= 85 ? 'Strong YES' : pct >= 70 ? 'Moderate YES' : pct <= 10 ? 'Strong NO' : pct <= 20 ? 'Lean NO' : 'No clear edge';
   const edgeColor = pct >= 70 ? '#22c55e' : pct <= 20 ? '#ef4444' : '#f59e0b';
+  const { stars, label, color } = edgeStars(m.yes_price);
+  const starsHtml = '★'.repeat(stars) + '<span style="color:#252535">☆</span>'.repeat(5 - stars);
 
   document.getElementById('detail-panel').innerHTML = `
     ${img ? `<img class="dp-img" src="${img}" onerror="this.style.display='none'" alt="">` : ''}
     <div class="dp-body">
-      <div class="dp-cat">${CAT_LABELS[m._cat] || m._cat} · ${edgeType}</div>
+      <div class="dp-cat">${CAT_LABELS[m._cat] || m._cat} · ${label}</div>
       <div class="dp-title">${m.question || ''}</div>
       <div class="dp-price-row">
         <div>
@@ -259,12 +277,12 @@ function selectMarket(m) {
       </div>
       <div class="dp-edge-box">
         <div class="dp-edge-label">Why this has edge</div>
-        <div class="dp-edge-text">${m.edge_signal || buildEdgeSignal(m)}</div>
+        <div class="dp-edge-text">${m.edge_signal || shortEdge(m)}</div>
       </div>
       <div class="dp-stats">
         <div class="dp-stat"><div class="dp-stat-label">Volume</div><div class="dp-stat-val">${fmtVol(m.volume)}</div></div>
         <div class="dp-stat"><div class="dp-stat-label">YES price</div><div class="dp-stat-val" style="color:${edgeColor}">${pct}¢</div></div>
-        <div class="dp-stat"><div class="dp-stat-label">Edge type</div><div class="dp-stat-val" style="color:${edgeColor}">${edgeType}</div></div>
+        <div class="dp-stat"><div class="dp-stat-label">Edge type</div><div class="dp-stat-val" style="color:${color}">${starsHtml}</div></div>
         <div class="dp-stat"><div class="dp-stat-label">Category</div><div class="dp-stat-val">${CAT_LABELS[m._cat] || m._cat}</div></div>
       </div>
       <a class="dp-cta" href="/market/${slug}">View full analysis →</a>
