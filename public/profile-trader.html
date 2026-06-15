@@ -234,7 +234,8 @@
         '<div>No profile matches this handle. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div></div>';
     }
 
-    var handle = window.location.pathname.split('/').filter(Boolean).pop();
+    const raw = window.location.pathname.split('/').pop();
+    const handle = raw.startsWith('@') ? raw.slice(1) : raw;
     if (!handle) { notFound(); return; }
 
     fetch('/api/user/profile/' + encodeURIComponent(handle))
