@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-06-15 — World Cup Live Odds Hub (Claude Code, on `main`)
+
+### feat(worldcup): /worldcup hub + /worldcup/:match — composition only, zero new infra (commit `97a50e4`)
+- **Data source:** `getWorldCupData()` reads ONLY `_screenerCache.data` (already maintained by the screener refresh + watchdog). No new external API, dep, or cron. 60s in-memory cache piggybacks the existing refresh. Counts reflect "what we hold" — the honest basis for VERIFY #1.
+- **WC classification:** winner markets = question `~/world cup/` + `win|champion` (robust, question-based); match events = `slug` prefix `fifwc-`, grouped by event slug; O/U split out by `over|under|total goals`. All from live feed — no hardcoded teams/odds/dates. The ONLY static table is a country→flag-emoji reference map (client-side display; graceful blank on unknown).
+- **Endpoints:** `GET /api/worldcup` (winners top-12 + matches + whale_corner + `.counts`), `GET /api/worldcup/match/:slug` (sides + O/U + price history + match whale feed + cached Haiku line + live/final flags). Pages: `GET /worldcup`, `GET /worldcup/:slug`.
+- **OG injection:** `/worldcup/:slug` server-injects `<!--WC_OG-->` with live odds in og:title (e.g. `Mexico 67% vs South Africa 21% — live World Cup odds`). Template cached in `_wcMatchTpl`. ⚠️ og:title is in the BODY `<head>` — verify with `curl -s ... | grep og:title`, NOT `curl -I` (headers only).
+- **History/sparkline:** existing `market_snapshots` keyed by `market_id` (which screener objects carry). Winner sparklines = ONE batched query, 60s-cached, degrades to none if thin.
+- **Live motion:** match page polls `/api/worldcup/match/:slug` every 12–20s + taps the existing `/api/bet-feed/stream` SSE filtered to the match; probability flashes green-up/red-down on change. (No per-token price WS exists in this codebase — poll + bet-SSE is the faithful zero-new-infra path.)
+- **Summary:** reuses `lib/market-summary.js` `getSummary`; added backward-compatible `maxAgeMs` (live matches pass 10min so the cached Haiku line keeps pace — still TTL-gated, never per-pageview; idle matches make zero AI calls).
+- **Guardrail:** resolved sides (price pinned 0/1 or past end_date) render FINAL, never a trade CTA. Trade CTAs deep-link `/market/:slug?from=worldcup` (existing builder-attribution flow).
+- **Nav:** World Cup added to top nav + bottom nav (`nav.js`); cache-bust `nav.js?v=23→v=24` across all 15 pages (commit `7dd207d`) so the link propagates.
+- **Don't break:** `getWorldCupData()` is whale/screener-cache-only by design — do NOT add a gamma fetch to it (would inflate "what we hold" beyond the screener and muddy the count). The WC routes touch NONE of: edge engine, signal_outcomes, grading, dedup, receipts.
+- **Unverified from sandbox (egress blocks prod + gamma + DB):** the 5 VERIFY items must be run against prod — see the session reply for exact commands. Bottom nav now shows 5 items (World Cup replaced Finance; Finance still in top nav + hamburger).
+
+---
+
 ## 2026-06-12 — Grading pipeline root-cause session (Claude Code, on `main`)
 
 ### fix(grading): gamma `markets/keyset` envelope — closed-market price lookups iterated `[]` since they shipped (commit `824fe40`)

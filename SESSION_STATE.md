@@ -49,6 +49,29 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-15 (World Cup Live Odds Hub — flagship consumer surface)
+
+**Shipped (with hashes, on `main`):**
+- `97a50e4`: World Cup hub — `getWorldCupData()` (reads `_screenerCache` only), `GET /api/worldcup` + `/api/worldcup/match/:slug`, `/worldcup` + `/worldcup/:slug` pages with per-match OG injection, `public/worldcup.html` + `public/worldcup-match.html` (Bebas Neue hero numbers, flash-on-tick, 7d chart, whale flow, cached Haiku line), `lib/market-summary.js` `maxAgeMs` param for 10-min live regen.
+- `7dd207d`: nav.js World Cup link (top + bottom nav) + `nav.js?v=23→v=24` cache-bust across 15 pages.
+
+**Active blockers:**
+- (none in code) — but ALL 5 VERIFY items are unrun: sandbox egress blocks `hyperflex.network`, gamma, the DB, Railway logs, and a browser. Only Marc can run them against prod.
+
+**Queued (priority order):**
+1. **Marc runs VERIFY (post-deploy):**
+   - #1 count: `curl -s https://hyperflex.network/api/worldcup | jq '.counts, .screener_size'` — if `winner_markets`/`match_events` are 0, WC markets aren't in `_screenerCache` (data-scope issue, not UI) — report before trusting pages.
+   - #2 render: same curl shows real markets in `.winners`/`.matches`.
+   - #3 live tick: open `/worldcup/<a live fifwc- slug>` during a match; number polls every 12–20s + flashes on each bet.
+   - #4 og: `curl -s https://hyperflex.network/worldcup/<slug> | grep -i 'og:title'` (NOT `curl -I` — og is in body).
+   - #5 logs: watch for `[worldcup]`/`[worldcup/match]`/`[worldcup/:slug]` errors (all try/caught, shouldn't spam).
+2. If counts are 0 or thin: confirm the `fifwc-` slug prefix + winner-question pattern against a real `/api/screener` sample, adjust `_wcIsMatch`/`_wcIsWinner`.
+
+**Notes for next session:**
+- The hub is screener-cache-only by design (honest "what we hold" count, zero new infra). If completeness needs more than top-200 markets, that's a screener-scope decision, not a WC-page change.
+- Bottom nav: World Cup replaced Finance (kept 5 items); Finance still in top nav + hamburger.
+
+
 ## 2026-06-12 (grading root-cause: gamma envelope + starved sweeps — on `main`)
 
 **Shipped (with hashes):**
