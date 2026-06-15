@@ -28038,6 +28038,54 @@ app.get('/quiz', (req, res) => {
 app.get('/discuss/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'discuss.html')));
 app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'group.html')));
 
+// GET /api/user/profile/:handle — unified trader profile (user + wallet score + recent takes).
+// NOTE: `tipster_handle` was renamed to `handle` (drop_tipster_gate migration), so the
+// lookup is handle/username only. Columns are limited to ones that actually exist on the
+// `users`/`wallet_scores` tables — recent takes are folded in since there is no
+// /api/takes?user_id= endpoint.
+app.get('/api/user/profile/:handle', async (req, res) => {
+  try {
+    const { handle } = req.params;
+    const rows = await dbQuery(`
+      SELECT
+        u.id, u.handle, u.display_name, u.avatar_url, u.banner_url,
+        u.bio, u.wallet_verified,
+        u.flex_score, u.flex_tier, u.flex_qualifies,
+        u.flex_c_accuracy, u.flex_c_pnl, u.flex_c_calibration,
+        u.flex_c_consistency, u.flex_c_breadth,
+        u.follower_count, u.following_count,
+        u.predictions_resolved, u.prediction_win_rate,
+        u.polymarket_address,
+        ws.wallet_class, ws.clv_avg_cents, ws.clv_sample_size,
+        ws.realized_pnl_usd, ws.total_volume_usd, ws.sharpness_score
+      FROM users u
+      LEFT JOIN wallet_scores ws ON ws.user_id = u.id
+      WHERE u.handle = $1 OR u.username = $1
+      LIMIT 1
+    `, [handle]);
+
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    const profile = rows[0];
+
+    // Recent takes for the profile feed (folded in — no /api/takes?user_id= route exists).
+    try {
+      profile.takes = await dbQuery(`
+        SELECT id, question, side, entry_price, thesis,
+               agree_count, disagree_count, is_correct, created_at, market_slug
+        FROM takes WHERE user_id = $1 AND source = 'user'
+        ORDER BY created_at DESC LIMIT 25
+      `, [profile.id]);
+    } catch (e) {
+      profile.takes = [];
+    }
+
+    res.json(profile);
+  } catch (err) {
+    console.error('[api/user/profile]', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (RESERVED_SLUGS.has(slug) || slug.includes('.')) return next();
@@ -28052,6 +28100,9 @@ app.get('/:slug', async (req, res, next) => {
       const { data } = await supabase.from('creator_settings').select('display_name, community_description, custom_points_name, slug').eq('slug', slug).eq('is_active', true).maybeSingle();
       settings = data;
     }
+
+    // No creator found — treat as a trader handle, redirect to the profile page.
+    if (!settings) return res.redirect(302, `/p/${slug}`);
 
     const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
 
