@@ -2,624 +2,253 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trader Profile — HYPERFLEX</title>
   <meta property="og:type" content="profile">
   <meta property="og:title" content="Trader Profile — HYPERFLEX">
-  <meta property="og:description" content="Verified prediction market track record on HYPERFLEX. See win rate, P&L, and best calls across Polymarket, Kalshi & more.">
+  <meta property="og:description" content="Verified prediction market track record on HYPERFLEX. FLEX score, wallet class, CLV and recent takes.">
   <meta property="og:image" content="https://hyperflex.network/og-default.png">
-  <meta property="og:url" content="https://hyperflex.network">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Trader Profile — HYPERFLEX">
-  <meta name="twitter:description" content="Verified prediction market track record on HYPERFLEX.">
-  <meta name="twitter:image" content="https://hyperflex.network/og-default.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --paper: #0a0a0f; --surface: #111118; --card: #16161f; --card-hover: #1a1a24;
-      --border: #1e1e2a; --border-hover: #2a2a38;
-      --text: #e8e6f0; --soft: #a0a0b4; --muted: #6b6880; --dim: #4a4760;
-      --green: #00e68a; --green-dim: rgba(0,230,138,0.12);
-      --red: #ff4d6a; --red-dim: rgba(255,77,106,0.12);
-      --blue: #4d9fff; --blue-dim: rgba(77,159,255,0.12);
-      --purple: #a855f7; --purple-dim: rgba(168,85,247,0.12);
-      --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.12);
-      --gold: #c9920d;
-      --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      --mono: 'JetBrains Mono', monospace;
+    :root{
+      --paper:#0e0e15; --paper-2:#15151e; --paper-3:#1c1c28;
+      --ink:#f0f0f5; --dim:#8a8aa0; --soft:#aab; --border:#232333;
+      --cyan:#22d3ee; --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --gray:#6b7280;
+      --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+      --mono:'JetBrains Mono',monospace;
     }
-    html { background: var(--paper); }
-    body { font-family: var(--sans); background: var(--paper); color: var(--text); min-height: 100vh; overflow-x: hidden; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+    a{color:inherit;text-decoration:none}
+    #nav-root{position:relative;z-index:200}
+    .wrap{max-width:760px;margin:0 auto;padding:0 16px 80px}
 
-    /* Loading */
-    #loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 16px; }
-    #loading .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #error-state { display: none; text-align: center; padding: 120px 24px; }
-    #error-state h2 { font-size: 24px; font-weight: 800; margin-bottom: 12px; }
-    #error-state p { color: var(--soft); margin-bottom: 24px; }
-    #profile-content { display: none; }
+    /* HERO */
+    .hero{margin-top:18px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--paper-2)}
+    .banner{height:140px;background:linear-gradient(135deg,#13131f 0%,#1b1b2e 60%,#0e0e15 100%);background-size:cover;background-position:center}
+    .hero-body{padding:0 20px 20px;position:relative}
+    .avatar-row{display:flex;align-items:flex-end;gap:14px;margin-top:-38px}
+    .avatar{width:84px;height:84px;border-radius:50%;border:3px solid var(--paper-2);background:var(--paper-3);object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:var(--cyan)}
+    .verified{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--cyan);color:#04121a;font-size:11px;font-weight:900;margin-left:6px;vertical-align:middle}
+    .name-block{padding-bottom:6px;min-width:0}
+    .display-name{font-size:22px;font-weight:800;letter-spacing:-0.4px;line-height:1.15;display:flex;align-items:center;flex-wrap:wrap}
+    .handle{font-size:13px;color:var(--dim);font-family:var(--mono);margin-top:1px}
+    .bio{font-size:13px;color:var(--soft);line-height:1.55;margin-top:12px;max-width:560px}
 
-    /* Layout */
-    .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
-    .profile-layout { display: grid; grid-template-columns: 1fr 340px; gap: 24px; padding: 24px 0 60px; }
+    /* FLEX + class */
+    .flex-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+    .flex-block{display:flex;align-items:baseline;gap:10px}
+    .flex-num{font-family:var(--mono);font-size:46px;font-weight:800;color:var(--cyan);line-height:1;letter-spacing:-1px}
+    .flex-meta{display:flex;flex-direction:column;gap:3px}
+    .flex-label{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:2px}
+    .tier-badge{display:inline-block;font-size:11px;font-weight:700;color:var(--cyan);background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.28);border-radius:6px;padding:2px 8px;text-transform:uppercase;letter-spacing:1px;width:fit-content}
+    .class-badge{font-size:12px;font-weight:800;border-radius:7px;padding:5px 12px;letter-spacing:1.5px;text-transform:uppercase}
 
-    /* Back link */
-    .back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--soft); padding: 16px 0 0; }
-    .back-link:hover { color: var(--text); text-decoration: none; }
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+    .chip{font-size:11px;font-weight:600;color:var(--soft);background:var(--paper-3);border:1px solid var(--border);border-radius:20px;padding:4px 11px}
 
-    /* Hero Card */
-    .hero-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 24px; }
-    .hero-top { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
-    .avatar { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, var(--green), var(--blue)); display: flex; align-items: center; justify-content: center; font-family: var(--sans); font-weight: 800; font-size: 24px; color: #fff; flex-shrink: 0; }
-    .hero-info { flex: 1; min-width: 0; }
-    .display-name { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
-    .username-text { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-top: 2px; }
-    .hero-badges { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-    .rank-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-dim); border: 1px solid rgba(0,230,138,0.25); padding: 3px 10px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); }
-    .platform-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); color: var(--soft); }
-    .platform-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
-    .dot-poly { background: #8b5cf6; }
-    .dot-kalshi { background: #eab308; }
-    .dot-manifold { background: #6366f1; }
-    .hero-actions { display: flex; gap: 10px; }
-    .btn-follow { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 8px 20px; font-family: var(--sans); font-weight: 700; font-size: 13px; cursor: pointer; min-height: 36px; transition: opacity 0.15s; }
-    .btn-follow:hover { opacity: 0.85; }
-    .btn-follow.following { background: transparent; color: var(--green); border: 1px solid var(--green); }
-    .follower-count { font-size: 12px; color: var(--muted); display: flex; align-items: center; }
-    .follower-count strong { color: var(--soft); margin-right: 4px; }
+    /* INSIDER card */
+    .insider{margin-top:16px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.28);border-radius:10px;padding:12px 14px}
+    .insider-label{font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}
+    .insider-text{font-size:13px;color:#d8c08a;line-height:1.5}
 
-    /* Stats Grid */
-    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-radius: 12px; overflow: hidden; }
-    .stat-cell { background: var(--card); padding: 20px 16px; text-align: center; }
-    .stat-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
-    .stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1; }
-    .stat-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
-    .pnl-positive { color: var(--green); }
-    .pnl-negative { color: var(--red); }
+    /* STATS */
+    .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:16px}
+    .stat{background:var(--paper-2);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center}
+    .stat-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-0.5px}
+    .stat-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+    @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}}
 
-    /* Donut ring */
-    .donut-ring { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 4px; }
-    .donut-ring .donut-value { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--text); position: relative; z-index: 1; }
-    .sharp-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 600; }
-    .sharp-high { background: var(--green-dim); color: var(--green); }
-    .sharp-mid { background: var(--amber-dim); color: var(--amber); }
-    .sharp-low { background: var(--red-dim); color: var(--red); }
+    /* FEED */
+    .feed-head{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:2px;margin:28px 0 12px}
+    .take{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
+    .take-top{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+    .side{font-size:10px;font-weight:800;font-family:var(--mono);padding:2px 7px;border-radius:5px;letter-spacing:0.5px;background:rgba(34,211,238,0.12);color:var(--cyan)}
+    .grade{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;letter-spacing:0.5px}
+    .grade.correct{background:rgba(34,197,94,0.14);color:var(--green)}
+    .grade.wrong{background:rgba(239,68,68,0.14);color:var(--red)}
+    .grade.open{background:var(--paper-3);color:var(--dim)}
+    .take-time{font-size:11px;color:var(--dim);margin-left:auto;font-family:var(--mono)}
+    .take-q{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4}
+    .take-thesis{font-size:13px;color:var(--soft);line-height:1.55;margin-top:6px}
+    .take-foot{font-size:11px;color:var(--dim);margin-top:9px;font-family:var(--mono)}
 
-    /* Section cards */
-    .section-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-    .section-title { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-
-    /* P&L Chart */
-    .chart-container { height: 140px; position: relative; }
-    .chart-svg { width: 100%; height: 100%; }
-    .chart-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 6px; }
-    .chart-y-labels { position: absolute; top: 0; left: 0; bottom: 0; width: 60px; display: flex; flex-direction: column; justify-content: space-between; font-family: var(--mono); font-size: 9px; color: var(--dim); pointer-events: none; }
-
-    /* Positions table */
-    .pos-table { width: 100%; border-collapse: collapse; }
-    .pos-table th { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-    .pos-table td { padding: 12px 10px; border-bottom: 1px solid rgba(30,30,42,0.5); font-size: 13px; vertical-align: middle; }
-    .pos-table tr:hover { background: rgba(77,159,255,0.04); }
-    .pos-market { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
-    .pos-side { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-    .pos-side.yes { background: var(--green-dim); color: var(--green); }
-    .pos-side.no { background: var(--red-dim); color: var(--red); }
-    .pos-val { font-family: var(--mono); font-size: 13px; font-weight: 600; }
-    .pos-pnl { font-family: var(--mono); font-size: 13px; font-weight: 700; }
-    .copy-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--green); background: rgba(0,230,138,0.06); color: var(--green); font-family: var(--sans); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-    .copy-btn:hover { background: rgba(0,230,138,0.15); }
-    .pos-odds { font-family: var(--mono); font-size: 12px; color: var(--soft); }
-
-    /* Best Calls */
-    .best-call { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 8px; transition: border-color 0.15s; }
-    .best-call:hover { border-color: var(--border-hover); }
-    .best-call:first-child { border-color: var(--green); background: rgba(0,230,138,0.03); }
-    .best-call:first-child::before { content: '#1 BEST CALL'; display: inline-block; font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--green); background: var(--green-dim); padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; letter-spacing: 0.5px; }
-    .bc-question { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; line-height: 1.4; }
-    .bc-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
-    .bc-side { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-    .bc-side.yes { background: var(--green-dim); color: var(--green); }
-    .bc-side.no { background: var(--red-dim); color: var(--red); }
-    .bc-pnl { font-family: var(--mono); font-weight: 700; }
-
-    /* Sidebar */
-    .sidebar { display: flex; flex-direction: column; gap: 16px; }
-    .sidebar-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
-
-    /* Platform badges */
-    .platform-badges { display: flex; flex-direction: column; gap: 8px; }
-    .platform-badge { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-    .platform-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .platform-dot.polymarket { background: #8b5cf6; }
-    .platform-dot.kalshi { background: #eab308; }
-    .platform-dot.manifold { background: #6366f1; }
-    .platform-dot.hyperflex { background: var(--gold); }
-    .platform-name { font-weight: 600; font-size: 13px; flex: 1; }
-    .platform-count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-
-    /* Activity */
-    .activity-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(30,30,42,0.5); }
-    .activity-item:last-child { border-bottom: none; }
-    .activity-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; min-width: 40px; text-align: center; }
-    .badge-won { background: var(--green-dim); color: var(--green); }
-    .badge-lost { background: var(--red-dim); color: var(--red); }
-    .badge-open { background: var(--blue-dim); color: var(--blue); }
-    .activity-question { flex: 1; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .activity-side { font-size: 11px; color: var(--muted); flex-shrink: 0; }
-    .activity-time { font-family: var(--mono); font-size: 10px; color: var(--dim); flex-shrink: 0; }
-
-    /* Share bar */
-    .share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .btn-share-x { background: #000; color: #fff; border: 1px solid #333; border-radius: 8px; padding: 8px 16px; font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; }
-    .btn-share-x:hover { background: #1a1a1a; }
-    .btn-copy-link { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; font-family: var(--sans); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: border-color 0.15s; }
-    .btn-copy-link:hover { border-color: var(--blue); }
-    .polymarket-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(139,92,246,0.3); background: rgba(139,92,246,0.06); color: #a78bfa; font-size: 12px; font-weight: 600; transition: all 0.15s; }
-    .polymarket-link:hover { background: rgba(139,92,246,0.12); text-decoration: none; }
-
-    /* CTA */
-    .cta-section { background: linear-gradient(135deg, var(--card), var(--surface)); border: 1px solid var(--border); border-radius: 14px; padding: 28px; text-align: center; }
-    .cta-section h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-    .cta-section p { color: var(--soft); font-size: 13px; margin-bottom: 16px; }
-    .btn-cta { background: var(--green); color: #000; border: none; border-radius: 8px; padding: 12px 28px; font-family: var(--sans); font-weight: 700; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; transition: opacity 0.15s; text-decoration: none; }
-    .btn-cta:hover { opacity: 0.85; text-decoration: none; }
-
-    .empty-state { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .profile-layout { grid-template-columns: 1fr; }
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .stat-value { font-size: 18px; }
-      .donut-ring { width: 48px; height: 48px; }
-      .donut-ring .donut-value { font-size: 14px; }
-      .hero-top { flex-direction: column; text-align: center; }
-      .hero-badges { justify-content: center; }
-      .hero-actions { justify-content: center; }
-      .pos-table th:nth-child(5), .pos-table td:nth-child(5) { display: none; }
-    }
-    @media (max-width: 480px) {
-      .container { padding: 0 14px; }
-      .pos-table th:nth-child(4), .pos-table td:nth-child(4) { display: none; }
-    }
+    .state{text-align:center;padding:70px 20px;color:var(--dim)}
+    .state h2{font-size:18px;color:var(--ink);font-weight:700;margin-bottom:8px}
+    .skeleton{color:var(--dim);text-align:center;padding:70px 20px;font-size:12px;letter-spacing:2px;text-transform:uppercase}
   </style>
 </head>
 <body>
+  <div id="nav-root"></div>
+  <script src="/nav.js?v=22"></script>
 
-  <div id="loading">
-    <div class="spinner"></div>
-    <span style="color: var(--muted); font-size: 13px;">Loading profile...</span>
+  <div class="wrap">
+    <div id="root"><div class="skeleton">Loading profile…</div></div>
   </div>
 
-  <div id="error-state">
-    <h2>Trader not found</h2>
-    <p>This profile doesn't exist or hasn't been set up yet.</p>
-    <a href="/" class="btn-cta">Go to HYPERFLEX</a>
-  </div>
+  <script>
+  (function(){
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function num(v){var n=parseFloat(v);return isNaN(n)?null:n;}
 
-  <div id="profile-content">
-    <!-- Nav -->
-    <div id="nav-root"></div>
-    <script src="/nav.js?v=22"></script>
-
-    <div class="container">
-      <a href="/predictors" class="back-link">&larr; Back to Predictors</a>
-
-      <!-- Hero Card -->
-      <div class="hero-card" style="margin-top:16px;">
-        <div class="hero-top">
-          <div class="avatar" id="avatar-initials">--</div>
-          <div class="hero-info">
-            <div class="display-name" id="display-name">---</div>
-            <div class="username-text" id="username-text">@---</div>
-            <div class="hero-badges">
-              <span class="rank-badge" id="rank-badge" style="display:none"></span>
-              <span class="platform-tag" id="platform-tag-poly" style="display:none"><span class="dot dot-poly"></span> Polymarket</span>
-            </div>
-          </div>
-          <div class="hero-actions" id="hero-actions" style="display:none;">
-            <button class="btn-follow" id="btn-follow" onclick="toggleFollow()">Follow</button>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);">
-          <span id="member-since">---</span>
-          <span>&middot;</span>
-          <span class="follower-count" id="follower-count"><strong>0</strong> followers</span>
-        </div>
-      </div>
-
-      <!-- Stats Grid -->
-      <div class="stats-grid" style="margin-bottom:24px;">
-        <div class="stat-cell">
-          <div class="stat-label">Total P&L</div>
-          <div class="stat-value" id="total-pnl">--</div>
-          <div class="stat-sub" id="pnl-sub">Polymarket</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Poly ROI</div>
-          <div class="stat-value" id="poly-roi">--</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Open Positions</div>
-          <div class="stat-value" id="total-trades">--</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Platforms</div>
-          <div class="stat-value" id="platform-count">1</div>
-        </div>
-      </div>
-
-      <!-- Two column layout -->
-      <div class="profile-layout">
-        <!-- Main column -->
-        <div class="main-col">
-          <!-- P&L Chart -->
-          <div class="section-card">
-            <div class="section-title">Cumulative P&L (30D)</div>
-            <div class="chart-container" id="pnl-chart-container">
-              <svg class="chart-svg" id="pnl-chart" viewBox="0 0 600 140" preserveAspectRatio="none"></svg>
-            </div>
-            <div class="chart-labels">
-              <span id="chart-start">---</span>
-              <span id="chart-end">---</span>
-            </div>
-          </div>
-
-          <!-- Positions -->
-          <div class="section-card">
-            <div class="section-title">Polymarket Positions <span style="font-family:var(--mono);font-size:10px;background:rgba(139,92,246,0.15);color:#a78bfa;padding:2px 8px;border-radius:10px;">POLY</span></div>
-            <div style="overflow-x:auto;">
-              <table class="pos-table" id="positions-table">
-                <thead>
-                  <tr><th>Market</th><th>Side</th><th>Value</th><th>P&L</th><th>Odds</th><th></th></tr>
-                </thead>
-                <tbody id="positions-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Sidebar -->
-        <div class="sidebar">
-          <!-- Share -->
-          <div class="sidebar-card">
-            <div class="section-title">Share Profile</div>
-            <div class="share-actions">
-              <button class="btn-share-x" id="btn-share-x" onclick="shareOnX()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                Share on X
-              </button>
-              <button class="btn-copy-link" id="btn-copy-link" onclick="copyLink()">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                Copy link
-              </button>
-            </div>
-            <a href="#" class="polymarket-link" id="polymarket-profile-link" style="margin-top:10px;display:none;">
-              <span class="dot dot-poly" style="width:8px;height:8px;display:inline-block;border-radius:50;"></span>
-              Polymarket Profile
-            </a>
-          </div>
-
-          <!-- Platforms -->
-          <div class="sidebar-card">
-            <div class="section-title">Platforms</div>
-            <div class="platform-badges" id="platform-badges"></div>
-          </div>
-
-          <!-- Best Calls -->
-          <div class="sidebar-card">
-            <div class="section-title">Best Calls</div>
-            <div id="best-calls"></div>
-          </div>
-
-          <!-- Recent Activity -->
-          <div class="sidebar-card">
-            <div class="section-title">Recent Activity</div>
-            <div id="recent-activity"></div>
-          </div>
-
-          <!-- CTA -->
-          <div class="cta-section">
-            <h3>Track your own performance</h3>
-            <p>Connect Polymarket &amp; Kalshi. See P&L, win rate, and sharp score.</p>
-            <a href="/creator/signup" class="btn-cta">Get started free</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<script>
-(function() {
-  const pathParts = window.location.pathname.split('/');
-  const username = pathParts[2] || '';
-  if (!username) return showError();
-
-  let _profileData = null;
-  let _isFollowing = false;
-  let _currentUser = null;
-
-  try {
-    const token = localStorage.getItem('hf_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      _currentUser = { id: payload.userId || payload.id || payload.sub };
+    function fmtUsd(v){
+      var n=num(v); if(n==null) return '—';
+      var neg=n<0; n=Math.abs(n); var s;
+      if(n>=1e6) s='$'+(n/1e6).toFixed(1)+'M';
+      else if(n>=1e3) s='$'+(n/1e3).toFixed(1)+'K';
+      else s='$'+n.toFixed(0);
+      return (neg?'-':'')+s;
     }
-  } catch (e) {}
-
-  fetch('/api/trader-profile/' + encodeURIComponent(username))
-    .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
-    .then(data => {
-      _profileData = data;
-      render(data);
-      updateOGMeta(data);
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('profile-content').style.display = 'block';
-    })
-    .catch(() => showError());
-
-  function showError() {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error-state').style.display = 'block';
-  }
-
-  function render(d) {
-    const initials = (d.display_name || '??').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    document.getElementById('avatar-initials').textContent = initials;
-    document.getElementById('display-name').textContent = d.display_name;
-    document.getElementById('username-text').textContent = d.username;
-    document.getElementById('member-since').textContent = 'Joined ' + new Date(d.member_since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    document.getElementById('follower-count').innerHTML = '<strong>' + (d.follower_count || 0) + '</strong> followers';
-    document.title = d.display_name + ' — HYPERFLEX Trader Profile';
-
-    // Rank badge
-    if (d.rank && d.rank <= 50) {
-      var rb = document.getElementById('rank-badge');
-      rb.textContent = '#' + d.rank;
-      rb.style.display = 'inline-flex';
+    function fmtPct(v){var n=num(v); return n==null?'—':n.toFixed(1)+'%';}
+    function fmtClv(v){var n=num(v); if(n==null) return '—'; return (n>=0?'+':'')+n.toFixed(1)+'¢';}
+    function fmtInt(v){var n=num(v); return n==null?'—':String(Math.round(n));}
+    function fmtAgo(ts){
+      if(!ts) return '';
+      var d=new Date(ts), diff=(Date.now()-d.getTime())/1000;
+      if(diff<60) return 'just now';
+      if(diff<3600) return Math.floor(diff/60)+'m ago';
+      if(diff<86400) return Math.floor(diff/3600)+'h ago';
+      if(diff<86400*2) return 'yesterday';
+      return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
     }
 
-    // Platform tag
-    if (d.platforms_connected && d.platforms_connected.includes('polymarket')) {
-      document.getElementById('platform-tag-poly').style.display = 'inline-flex';
+    // wallet_class values are stored lowercase ('sharp'|'good'|'square'|'fade'|'pending').
+    var CLASS_MAP = {
+      sharp:  {label:'SHARP',  color:'#22d3ee', bg:'rgba(34,211,238,0.12)', br:'rgba(34,211,238,0.30)'},
+      good:   {label:'GOOD',   color:'#22c55e', bg:'rgba(34,197,94,0.12)',  br:'rgba(34,197,94,0.30)'},
+      square: {label:'SQUARE', color:'#9ca3af', bg:'rgba(156,163,175,0.12)',br:'rgba(156,163,175,0.30)'},
+      fade:   {label:'FADE',   color:'#ef4444', bg:'rgba(239,68,68,0.12)',  br:'rgba(239,68,68,0.30)'}
+    };
+
+    function render(d){
+      var name = d.display_name || d.handle || 'Trader';
+      var handle = d.handle || d.username || '';
+      var wc = (d.wallet_class || '').toLowerCase();
+      var cls = CLASS_MAP[wc] || null;
+      var clv = num(d.clv_avg_cents);
+
+      // Banner
+      var banner = d.banner_url
+        ? '<div class="banner" style="background-image:url(\'/api/img-proxy?url=' + encodeURIComponent(d.banner_url) + '\')"></div>'
+        : '<div class="banner"></div>';
+
+      // Avatar (image or initial)
+      var avatar = d.avatar_url
+        ? '<img class="avatar" src="/api/img-proxy?url=' + encodeURIComponent(d.avatar_url) + '" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'avatar\',textContent:\'' + esc((name[0]||'?').toUpperCase()) + '\'}))">'
+        : '<div class="avatar">' + esc((name[0] || '?').toUpperCase()) + '</div>';
+
+      var verified = d.wallet_verified ? '<span class="verified" title="Wallet verified">&#10003;</span>' : '';
+
+      // FLEX score (null until qualified)
+      var flexNum = (d.flex_score == null) ? '—' : String(d.flex_score);
+      var tierBadge = d.flex_tier ? '<span class="tier-badge">' + esc(d.flex_tier) + '</span>' : '';
+
+      // Wallet class badge (hidden when unrated/pending)
+      var classBadge = cls
+        ? '<span class="class-badge" style="color:' + cls.color + ';background:' + cls.bg + ';border:1px solid ' + cls.br + '">' + cls.label + '</span>'
+        : '';
+
+      // Topic chips (topic_preferences is not yet a column — render only if present)
+      var chips = '';
+      if (Array.isArray(d.topic_preferences) && d.topic_preferences.length) {
+        chips = '<div class="chips">' + d.topic_preferences.map(function(t){
+          return '<span class="chip">' + esc(t) + '</span>';
+        }).join('') + '</div>';
+      }
+
+      // INSIDER card — only for sharp wallets with strong CLV
+      var insider = '';
+      if (wc === 'sharp' && clv != null && clv > 15) {
+        insider = '<div class="insider">' +
+          '<div class="insider-label">Insider activity detected</div>' +
+          '<div class="insider-text">This wallet averages +' + clv.toFixed(1) + '¢ CLV across ' +
+          fmtInt(d.clv_sample_size) + ' trades.</div></div>';
+      }
+
+      var bioHtml = d.bio ? '<div class="bio">' + esc(d.bio) + '</div>' : '';
+
+      var hero =
+        '<div class="hero">' + banner +
+          '<div class="hero-body">' +
+            '<div class="avatar-row">' + avatar +
+              '<div class="name-block">' +
+                '<div class="display-name">' + esc(name) + verified + '</div>' +
+                (handle ? '<div class="handle">@' + esc(handle) + '</div>' : '') +
+              '</div>' +
+            '</div>' +
+            bioHtml +
+            '<div class="flex-row">' +
+              '<div class="flex-block">' +
+                '<div class="flex-num">' + flexNum + '</div>' +
+                '<div class="flex-meta"><span class="flex-label">FLEX Score</span>' + tierBadge + '</div>' +
+              '</div>' +
+              classBadge +
+            '</div>' +
+            chips +
+            insider +
+          '</div>' +
+        '</div>';
+
+      // Stats row
+      var stats =
+        '<div class="stats">' +
+          '<div class="stat"><div class="stat-val">' + fmtPct(d.prediction_win_rate) + '</div><div class="stat-lbl">Win rate</div></div>' +
+          '<div class="stat"><div class="stat-val">' + fmtInt(d.predictions_resolved) + '</div><div class="stat-lbl">Resolved</div></div>' +
+          '<div class="stat"><div class="stat-val">' + fmtUsd(d.realized_pnl_usd) + '</div><div class="stat-lbl">Realized PnL</div></div>' +
+          '<div class="stat"><div class="stat-val">' + fmtUsd(d.total_volume_usd) + '</div><div class="stat-lbl">Volume</div></div>' +
+          '<div class="stat"><div class="stat-val">' + fmtClv(d.clv_avg_cents) + '</div><div class="stat-lbl">CLV avg</div></div>' +
+        '</div>';
+
+      // Takes feed
+      var takes = Array.isArray(d.takes) ? d.takes : [];
+      var feed;
+      if (!takes.length) {
+        feed = '<div class="feed-head">Recent takes</div>' +
+          '<div class="take" style="text-align:center;color:var(--dim)">No takes yet. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div>';
+      } else {
+        feed = '<div class="feed-head">Recent takes</div>' + takes.map(function(t){
+          var grade = t.is_correct === true ? '<span class="grade correct">CORRECT</span>'
+                    : t.is_correct === false ? '<span class="grade wrong">WRONG</span>'
+                    : '<span class="grade open">OPEN</span>';
+          var side = t.side ? '<span class="side">' + esc(String(t.side).toUpperCase()) + '</span>' : '';
+          var q = esc(t.question || '');
+          var qHtml = t.market_slug ? '<a href="/market/' + esc(t.market_slug) + '" class="take-q">' + q + '</a>' : '<div class="take-q">' + q + '</div>';
+          var thesis = t.thesis ? '<div class="take-thesis">' + esc(t.thesis) + '</div>' : '';
+          var agree = num(t.agree_count) || 0, disagree = num(t.disagree_count) || 0;
+          return '<div class="take">' +
+            '<div class="take-top">' + side + grade + '<span class="take-time">' + fmtAgo(t.created_at) + '</span></div>' +
+            qHtml + thesis +
+            '<div class="take-foot">' + agree + ' agree · ' + disagree + ' disagree</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      document.getElementById('root').innerHTML = hero + stats + feed;
     }
 
-    // Follow button — always show (non-logged-in users get sign-in prompt on click)
-    document.getElementById('hero-actions').style.display = 'flex';
-
-    // P&L
-    const pnlEl = document.getElementById('total-pnl');
-    const pnl = d.total_pnl || 0;
-    pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + fmt(Math.abs(pnl));
-    pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
-
-    // ROI
-    const roiEl = document.getElementById('poly-roi');
-    const roi = d.roi_pct || 0;
-    roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(0) + '%';
-    roiEl.className = 'stat-value ' + (roi >= 0 ? 'pnl-positive' : 'pnl-negative');
-
-    // Trades
-    document.getElementById('total-trades').textContent = (d.total_trades || 0).toLocaleString();
-
-    // Platforms count
-    document.getElementById('platform-count').textContent = (d.platforms_connected || []).length || 1;
-
-    // Chart
-    renderChart(d.pnl_chart || []);
-
-    // Positions
-    renderPositions(d.positions || d.recent_activity || []);
-
-    // Platforms
-    renderPlatforms(d);
-
-    // Best calls
-    renderBestCalls(d.best_calls || []);
-
-    // Activity
-    renderActivity(d.recent_activity || []);
-
-    // Polymarket profile link
-    if (d.polymarket_address) {
-      var link = document.getElementById('polymarket-profile-link');
-      link.href = 'https://polymarket.com/profile/' + d.polymarket_address;
-      link.target = '_blank';
-      link.style.display = 'inline-flex';
-    }
-  }
-
-  function renderChart(chart) {
-    const svg = document.getElementById('pnl-chart');
-    if (!chart.length) {
-      svg.parentElement.innerHTML = '<div class="empty-state">No chart data yet</div>';
-      return;
+    function notFound(){
+      document.getElementById('root').innerHTML =
+        '<div class="state"><h2>Trader not found</h2>' +
+        '<div>No profile matches this handle. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div></div>';
     }
 
-    // Build cumulative P&L line
-    let cumulative = [];
-    let sum = 0;
-    for (const c of chart) { sum += c.daily; cumulative.push(sum); }
+    var handle = window.location.pathname.split('/').filter(Boolean).pop();
+    if (!handle) { notFound(); return; }
 
-    const w = 600, h = 140, pad = 4;
-    const minV = Math.min(0, ...cumulative);
-    const maxV = Math.max(0, ...cumulative);
-    const range = maxV - minV || 1;
-
-    const pts = cumulative.map((v, i) => {
-      const x = pad + (i / (cumulative.length - 1)) * (w - pad * 2);
-      const y = h - pad - ((v - minV) / range) * (h - pad * 2);
-      return x.toFixed(1) + ',' + y.toFixed(1);
-    });
-
-    const lineColor = sum >= 0 ? 'var(--green)' : 'var(--red)';
-    const fillPts = pts.join(' ') + ' ' + (w - pad) + ',' + (h - pad) + ' ' + pad + ',' + (h - pad);
-
-    // Zero line
-    const zeroY = h - pad - ((0 - minV) / range) * (h - pad * 2);
-
-    svg.innerHTML =
-      '<defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="' + lineColor + '" stop-opacity="0.2"/>' +
-      '<stop offset="100%" stop-color="' + lineColor + '" stop-opacity="0"/>' +
-      '</linearGradient></defs>' +
-      '<line x1="' + pad + '" y1="' + zeroY.toFixed(1) + '" x2="' + (w - pad) + '" y2="' + zeroY.toFixed(1) + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,4"/>' +
-      '<polygon points="' + fillPts + '" fill="url(#cg)"/>' +
-      '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + lineColor + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<circle cx="' + pts[pts.length - 1].split(',')[0] + '" cy="' + pts[pts.length - 1].split(',')[1] + '" r="4" fill="' + lineColor + '" stroke="var(--paper)" stroke-width="2"/>' +
-      '<text x="' + (w - pad - 2) + '" y="' + (parseFloat(pts[pts.length - 1].split(',')[1]) - 8) + '" fill="' + lineColor + '" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" text-anchor="end">' +
-      (sum >= 0 ? '+$' : '-$') + fmt(Math.abs(sum)) + '</text>';
-
-    if (chart.length > 0) {
-      document.getElementById('chart-start').textContent = formatShortDate(chart[0].date);
-      document.getElementById('chart-end').textContent = formatShortDate(chart[chart.length - 1].date);
-    }
-  }
-
-  function renderPositions(positions) {
-    const body = document.getElementById('positions-body');
-    if (!positions || !positions.length) {
-      body.innerHTML = '<tr><td colspan="6" class="empty-state">No positions data</td></tr>';
-      return;
-    }
-    let html = '';
-    const sorted = positions.sort((a, b) => Math.abs(b.value || b.pnl || 0) - Math.abs(a.value || a.pnl || 0));
-    for (const p of sorted) {
-      const side = (p.side || 'YES').toUpperCase();
-      const sideClass = side === 'YES' || side === 'NO' ? side.toLowerCase() : 'yes';
-      const value = p.value || p.current_value || 0;
-      const pnl = p.pnl || 0;
-      const odds = p.odds || p.current_price || 0;
-      const question = p.question || p.market || '';
-      const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-      html += '<tr>' +
-        '<td class="pos-market" title="' + escHtml(question) + '">' + escHtml(question.substring(0, 50)) + '</td>' +
-        '<td><span class="pos-side ' + sideClass + '">' + escHtml(side) + '</span></td>' +
-        '<td class="pos-val">$' + fmt(Math.abs(value)) + '</td>' +
-        '<td class="pos-pnl ' + pnlClass + '">' + (pnl >= 0 ? '+' : '') + '$' + fmt(Math.abs(pnl)) + '</td>' +
-        '<td class="pos-odds">' + (odds > 0 ? Math.round(odds * 100) + '\u00a2' : '0\u00a2') + '</td>' +
-        '<td><button class="copy-btn" onclick="copySide(\'' + escHtml(side) + '\',this)">Copy ' + escHtml(side) + ' &rarr;</button></td>' +
-        '</tr>';
-    }
-    body.innerHTML = html;
-  }
-
-  function renderPlatforms(d) {
-    const con = document.getElementById('platform-badges');
-    const platforms = d.platforms_connected || [];
-    const stats = d.platform_stats || {};
-    let html = '';
-    for (const pl of platforms) {
-      const names = { polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold' };
-      const count = stats[pl]?.count || d.total_trades || 0;
-      html += '<div class="platform-badge"><span class="platform-dot ' + pl + '"></span><span class="platform-name">' +
-        (names[pl] || pl) + '</span><span class="platform-count">' + count + ' positions</span></div>';
-    }
-    if (!html) html = '<div class="platform-badge"><span class="platform-dot polymarket"></span><span class="platform-name">Polymarket</span><span class="platform-count">' + (d.total_trades || 0) + ' positions</span></div>';
-    con.innerHTML = html;
-  }
-
-  function renderBestCalls(calls) {
-    const con = document.getElementById('best-calls');
-    if (!calls.length) { con.innerHTML = '<div class="empty-state">No resolved wins yet</div>'; return; }
-    let html = '';
-    for (const c of calls.slice(0, 5)) {
-      const sideClass = (c.side || 'YES').toLowerCase();
-      html += '<div class="best-call">' +
-        '<div class="bc-question">' + escHtml(c.question) + '</div>' +
-        '<div class="bc-meta">' +
-          '<span class="bc-side ' + sideClass + '">' + (c.side || 'YES') + '</span>' +
-          '<span class="bc-pnl pnl-positive">+$' + Math.abs(c.pnl || 0).toFixed(2) + '</span>' +
-        '</div></div>';
-    }
-    con.innerHTML = html;
-  }
-
-  function renderActivity(items) {
-    const con = document.getElementById('recent-activity');
-    if (!items.length) { con.innerHTML = '<div class="empty-state">No activity yet</div>'; return; }
-    let html = '';
-    for (const a of items.slice(0, 10)) {
-      const badgeClass = a.status === 'WON' ? 'badge-won' : a.status === 'LOST' ? 'badge-lost' : 'badge-open';
-      html += '<div class="activity-item">' +
-        '<span class="activity-badge ' + badgeClass + '">' + (a.status || 'OPEN') + '</span>' +
-        '<span class="activity-question" title="' + escHtml(a.question) + '">' + escHtml(a.question) + '</span>' +
-        '<span class="activity-side">' + (a.side || '') + '</span>' +
-        '<span class="activity-time">' + timeAgo(a.created_at) + '</span>' +
-      '</div>';
-    }
-    con.innerHTML = html;
-  }
-
-  function updateOGMeta(d) {
-    setMeta('og:title', d.display_name + ' — Prediction Market Track Record');
-    setMeta('og:description', (d.total_pnl >= 0 ? '+' : '') + '$' + d.total_pnl.toFixed(2) + ' P&L across ' + d.total_trades + ' trades on HYPERFLEX.');
-    setMeta('og:url', 'https://hyperflex.network/trader/' + d.username);
-    setMeta('twitter:title', d.display_name + ' — Prediction Market Track Record');
-    setMeta('twitter:description', '$' + Math.abs(d.total_pnl).toFixed(2) + ' P&L across ' + d.total_trades + ' trades.');
-  }
-  function setMeta(prop, content) {
-    let el = document.querySelector('meta[property="' + prop + '"]') || document.querySelector('meta[name="' + prop + '"]');
-    if (el) el.setAttribute('content', content);
-  }
-
-  window.shareOnX = function() {
-    if (!_profileData) return;
-    const d = _profileData;
-    const pnlStr = (d.total_pnl >= 0 ? '+' : '') + '$' + fmt(Math.abs(d.total_pnl));
-    const text = d.display_name + ' on @HyperFlexApp \u2014 ' + pnlStr + ' P&L across ' + d.total_trades + ' trades.\n\nTrack yours \u2192';
-    window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent('https://hyperflex.network/trader/' + d.username), '_blank');
-  };
-
-  window.copyLink = function() {
-    const url = 'https://hyperflex.network/trader/' + (_profileData?.username || username);
-    navigator.clipboard.writeText(url).then(() => {
-      const btn = document.getElementById('btn-copy-link');
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy link'; }, 1500);
-    });
-  };
-
-  window.copySide = function(side, btn) {
-    btn.textContent = 'Copied!';
-    btn.style.borderColor = 'var(--blue)';
-    btn.style.color = 'var(--blue)';
-    setTimeout(() => { btn.textContent = 'Copy ' + side + ' \u2192'; btn.style.borderColor = ''; btn.style.color = ''; }, 1500);
-  };
-
-  window.toggleFollow = function() {
-    if (!_currentUser) { alert('Sign in to follow traders'); return; }
-    if (!_profileData) return;
-    const btn = document.getElementById('btn-follow');
-    _isFollowing = !_isFollowing;
-    btn.textContent = _isFollowing ? 'Following' : 'Follow';
-    btn.classList.toggle('following', _isFollowing);
-    const followId = _profileData.user_id || _profileData.wallet || username;
-    fetch('/api/predictors/' + encodeURIComponent(followId) + '/follow', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') },
-    }).catch(() => {});
-  };
-
-  function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function fmt(n) { return n >= 1e6 ? (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? (n/1e3).toFixed(1) + 'K' : n.toFixed(n < 100 ? 1 : 0); }
-  function formatShortDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }); }
-  function timeAgo(ts) {
-    if (!ts) return '';
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'now';
-    if (mins < 60) return mins + 'm';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return hrs + 'h';
-    return Math.floor(hrs / 24) + 'd';
-  }
-})();
-</script>
+    fetch('/api/user/profile/' + encodeURIComponent(handle))
+      .then(function(r){ if (r.status === 404) { notFound(); return null; } return r.json(); })
+      .then(function(d){
+        if (!d) return;
+        if (d.error) { notFound(); return; }
+        document.title = (d.display_name || d.handle || 'Trader') + ' — HYPERFLEX';
+        render(d);
+      })
+      .catch(function(){
+        document.getElementById('root').innerHTML = '<div class="state"><h2>Couldn\'t load profile</h2><div>Try again in a moment.</div></div>';
+      });
+  })();
+  </script>
 </body>
 </html>
