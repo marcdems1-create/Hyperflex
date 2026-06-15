@@ -1,253 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finance Intelligence — HYPERFLEX</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --paper:#0e0e15;
-  --paper-2:#16161f;
-  --paper-3:#1e1e2a;
-  --ink:#f0f0f5;
-  --dim:#8888a0;
-  --soft:#aaaabe;
-  --border:#1e1e2a;
-  --green:#00e68a;
-  --red:#ff4d6a;
-  --blue:#4d9fff;
-  --purple:#a855f7;
-  --amber:#f59e0b;
-  --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
-  --mono:'JetBrains Mono',monospace;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
-a{color:inherit;text-decoration:none}
-#nav-root{position:relative;z-index:200}
-.container{width:100%;max-width:none;margin:0;padding:0 24px}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Intelligence — HYPERFLEX</title>
+  <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #08080f; font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #e8e8f0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-/* HEADER */
-.hero{padding:36px 0 24px;border-bottom:1px solid var(--border)}
-.hero-eyebrow{font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:10px}
-.hero h1{font-weight:800;font-size:36px;line-height:1.1;letter-spacing:-0.02em;margin-bottom:8px}
-.hero-sub{font-size:13px;color:var(--dim);max-width:600px;line-height:1.6}
-@media(max-width:768px){.hero h1{font-size:26px}}
+.topbar { height: 44px; background: #0d0d16; border-bottom: 1px solid #1a1a28; display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0; }
+.logo { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+.logo span { color: #6366f1; }
+.nav-tabs { display: flex; gap: 2px; margin-left: 8px; }
+.nav-tab { font-size: 12px; padding: 4px 10px; border-radius: 6px; color: #555; cursor: pointer; text-decoration: none; }
+.nav-tab.active { background: #1a1a28; color: #fff; }
+.live-pill { margin-left: auto; font-size: 11px; color: #22c55e; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); border-radius: 20px; padding: 3px 10px; }
 
-/* EDGE BANNER */
-.edge-banner{background:rgba(245,158,11,0.06);border-bottom:1px solid rgba(245,158,11,0.18);padding:10px 0}
-.edge-banner-inner{font-size:12px;color:var(--soft);line-height:1.6}
-.edge-banner-inner span{color:var(--amber);font-weight:600}
+.edge-banner { background: #0d0d16; border-bottom: 1px solid #1a1a28; padding: 6px 20px; font-size: 11px; color: #555; flex-shrink: 0; }
+.edge-banner b { color: #f59e0b; font-weight: 600; }
 
-/* SECTION HEADER */
-.fn-section-header{display:flex;align-items:center;gap:10px;padding:28px 0 14px;border-bottom:1px solid var(--border);margin-bottom:14px}
-.fn-section-bar{width:3px;height:16px;border-radius:2px;flex-shrink:0}
-.fn-bar-fed_rates{background:#6688ff}
-.fn-bar-crypto{background:var(--amber)}
-.fn-bar-macro{background:var(--green)}
-.fn-bar-politics{background:var(--red)}
-.fn-bar-sports{background:#4d9fff}
-.fn-section-icon{font-size:15px}
-.fn-section-title{font-size:16px;font-weight:700;color:var(--ink);letter-spacing:1px}
-.fn-section-count{font-size:11px;color:var(--dim);margin-left:auto;font-family:var(--mono)}
+.app-body { display: flex; flex: 1; overflow: hidden; }
 
-/* GRID */
-.edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;margin-bottom:8px}
-@media(max-width:680px){.edge-grid{grid-template-columns:1fr}}
+.sidebar { width: 180px; background: #0a0a12; border-right: 1px solid #141420; padding: 12px 0; overflow-y: auto; flex-shrink: 0; }
+.sg { margin-bottom: 16px; }
+.sg-label { font-size: 10px; font-weight: 700; color: #333; text-transform: uppercase; letter-spacing: 2px; padding: 0 12px; margin-bottom: 6px; }
+.si { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; cursor: pointer; border-radius: 6px; margin: 0 4px; transition: background 0.15s; }
+.si:hover { background: #111120; }
+.si.active { background: #13132a; border-left: 2px solid #6366f1; padding-left: 10px; }
+.si-left { display: flex; align-items: center; gap: 8px; }
+.si-dot { width: 7px; height: 7px; border-radius: 50%; }
+.si-name { font-size: 12px; color: #666; }
+.si.active .si-name { color: #fff; font-weight: 500; }
+.si-count { font-size: 10px; color: #333; background: #111118; border-radius: 4px; padding: 1px 5px; }
 
-/* CARD — exact alpha classes */
-.edge-card{
-  background:rgba(22,22,31,0.8);
-  border:1px solid var(--border);border-radius:14px;
-  position:relative;cursor:pointer;
-  transition:border-color .15s,box-shadow .15s;color:inherit;display:block;
-  animation:fadeUp 0.4s ease both;
-}
-.edge-card:hover{border-color:rgba(77,159,255,0.4);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
-.edge-card-inner{overflow:hidden;border-radius:14px}
-.edge-card-body{padding:20px}
+.main-feed { flex: 1; overflow-y: auto; padding: 16px; }
+.feed-header { margin-bottom: 12px; }
+.feed-title { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.feed-sub { font-size: 11px; color: #444; margin-top: 2px; }
 
-/* Card image */
-.fi-img-wrap{position:relative;height:160px;overflow:hidden;background:var(--paper-2)}
-.fi-img{width:100%;height:100%;object-fit:cover;object-position:center center;display:block;filter:brightness(0.4)}
-.fi-img-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(22,22,31,0.9) 100%)}
+.mrow { display: flex; align-items: center; background: #0d0d18; border: 1px solid #141420; border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; gap: 12px; transition: all 0.15s; }
+.mrow:hover, .mrow.active { border-color: #252535; background: #111120; }
+.mrow.active { border-color: #6366f1; }
+.mimg { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #1a1a28; }
+.mbody { flex: 1; min-width: 0; }
+.mcat { font-size: 10px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+.mq { font-size: 13px; font-weight: 500; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.medge { font-size: 11px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mright { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.mprice { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.mprice.yes { color: #22c55e; }
+.mprice.no { color: #ef4444; }
+.mprice.mid { color: #f59e0b; }
+.mlabel { font-size: 10px; color: #444; }
+.mvol { font-size: 10px; color: #333; }
 
-/* Card top */
-.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
-.yes-price-wrap{display:flex;flex-direction:column;align-items:center;min-width:60px}
-.yes-price-l{font-size:10px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px}
-.yes-price-n{font-family:var(--mono);font-weight:800;font-size:32px;line-height:1;letter-spacing:-0.5px}
-.yes-price-n.high{color:var(--green)}
-.yes-price-n.low{color:var(--red)}
-.yes-price-n.mid{color:var(--amber)}
-.no-price-sec{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:3px}
+.detail-panel { width: 280px; background: #0a0a12; border-left: 1px solid #141420; overflow-y: auto; flex-shrink: 0; }
+.dp-img { width: 100%; height: 150px; object-fit: cover; display: block; background: #1a1a28; }
+.dp-body { padding: 14px; }
+.dp-cat { font-size: 10px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.dp-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.45; margin-bottom: 12px; }
+.dp-price-row { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #141420; }
+.dp-yes { font-size: 36px; font-weight: 800; color: #22c55e; letter-spacing: -1px; }
+.dp-no { font-size: 14px; font-weight: 600; color: #ef4444; }
+.dp-vol { font-size: 11px; color: #333; margin-top: 2px; }
+.dp-edge-box { background: #0d0d1a; border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.dp-edge-label { font-size: 9px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+.dp-edge-text { font-size: 12px; color: #8890c0; line-height: 1.6; }
+.dp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.dp-stat { background: #0d0d1a; border-radius: 6px; padding: 8px; }
+.dp-stat-label { font-size: 9px; color: #444; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+.dp-stat-val { font-size: 14px; font-weight: 700; color: #ddd; }
+.dp-cta { display: block; width: 100%; background: #6366f1; color: #fff; font-size: 13px; font-weight: 600; text-align: center; padding: 11px; border-radius: 8px; text-decoration: none; transition: background 0.15s; }
+.dp-cta:hover { background: #7577f5; }
 
-.badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-.badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;letter-spacing:0.02em}
-.badge-vol{background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.25)}
-.badge-whale{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.25)}
-
-/* Question */
-.card-q{font-size:15px;font-weight:500;color:#e0e0e8;line-height:1.55;margin-bottom:12px;min-height:40px}
-
-/* Signal strip — the edge reason, visible on every card */
-.signal-strip{font-size:13px;color:#8890c0;line-height:1.6;padding:9px 12px;background:var(--paper);border-radius:8px;border:1px solid rgba(245,158,11,0.18);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.ss-edge{font-size:9px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-right:8px}
-
-/* Trade CTA — edge side + payout, one click to the market */
-.card-cta{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:12px;font-weight:700;padding:9px 12px;border-radius:8px;transition:background .15s}
-.card-cta .arrow{font-weight:400;opacity:.6}
-.cta-yes{background:rgba(0,230,138,0.10);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
-.cta-no{background:rgba(255,77,106,0.08);color:var(--red);border:1px solid rgba(255,77,106,0.22)}
-.edge-card:hover .cta-yes{background:rgba(0,230,138,0.18)}
-.edge-card:hover .cta-no{background:rgba(255,77,106,0.16)}
-
-/* States */
-.loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase}
-.err{color:var(--red);text-align:center;padding:40px 20px;font-size:12px}
-
-.content-wrap{padding:0 0 80px}
-
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-
-/* Wide screens: 4-column grid */
-@media (min-width: 1440px) {
-  .container, .content-wrap {
-    padding-left: 56px;
-    padding-right: 56px;
-  }
-  .edge-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 18px;
-  }
-}
-</style>
+.empty-state { text-align: center; padding: 40px 16px; color: #333; font-size: 13px; }
+  </style>
 </head>
 <body>
-<div id="nav-root"></div>
 
-<div class="hero">
-  <div class="container">
-    <div class="hero-eyebrow">Finance Intelligence</div>
-    <h1>Where's the edge?</h1>
-    <p class="hero-sub">Highest volume markets ranked by structural edge and whale positioning.</p>
-  </div>
+<div class="topbar">
+  <div class="logo">HYPER<span>FLEX</span></div>
+  <nav class="nav-tabs">
+    <a href="/" class="nav-tab">Feed</a>
+    <a href="/alpha" class="nav-tab">Alpha</a>
+    <a href="/finance" class="nav-tab active">Finance</a>
+    <a href="/signals" class="nav-tab">Signals</a>
+    <a href="/predictors" class="nav-tab">Predictors</a>
+  </nav>
+  <div class="live-pill" id="live-count">● 0 live</div>
 </div>
 
 <div class="edge-banner">
-  <div class="container">
-    <div class="edge-banner-inner">
-      Polymarket markets resolve NO at <span>4×</span> the rate of YES. Markets priced under <span>10¢</span> YES resolve YES only <span>1.1%</span> of the time. Sharp money exploits this bias.
+  Polymarket markets resolve NO at <b>4×</b> the rate of YES. Markets priced under <b>10¢</b> resolve YES only <b>1.1%</b> of the time. Sharp money exploits this bias.
+</div>
+
+<div class="app-body">
+  <div class="sidebar" id="sidebar"><!-- rendered by JS --></div>
+  <div class="main-feed" id="main-feed">
+    <div class="feed-header">
+      <div class="feed-title">Where's the edge?</div>
+      <div class="feed-sub" id="feed-sub">Loading markets...</div>
     </div>
+    <div id="market-list"></div>
+  </div>
+  <div class="detail-panel" id="detail-panel">
+    <div class="empty-state">Select a market to see the edge breakdown.</div>
   </div>
 </div>
 
-<div class="container content-wrap">
-  <div id="sections"><div class="loading">Loading markets…</div></div>
-</div>
-
-<script src="/nav.js"></script>
 <script>
-(function() {
-  function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function fmtVol(v) {
-    if (!v || v < 1) return null;
-    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k';
-    return '$' + Math.round(v);
-  }
-  function yesClass(yp) {
-    const pct = Math.round(yp * 100);
-    if (pct < 35) return 'low';
-    if (pct > 65) return 'high';
-    return 'mid';
-  }
+// State
+let allMarkets = [];
+let activeCategory = 'all';
+let activeMarketSlug = null;
 
-  var SECTIONS = [
-    { key: 'sports',    icon: '⚽', title: 'SPORTS' },
-    { key: 'fed_rates', icon: '🏦', title: 'FED & RATES' },
-    { key: 'crypto',    icon: '₿',  title: 'CRYPTO' },
-    { key: 'macro',     icon: '📈', title: 'MACRO' },
-    { key: 'politics',  icon: '🏛️', title: 'POLITICS' },
-  ];
+// Fetch markets
+async function loadMarkets() {
+  try {
+    const res = await fetch('/api/finance/markets?_v=' + Date.now());
+    const data = await res.json();
+    const sections = data.sections || {};
 
-  function renderCard(m, idx) {
-    var yp = m.yes_price != null ? m.yes_price : 0.5;
-    var pct = Math.round(yp * 100);
-    var delay = Math.min(idx * 0.06, 0.36);
-
-    var vol = fmtVol(m.volume);
-    var badges = '';
-    if (vol) badges += '<span class="badge badge-vol">' + esc(vol) + '</span>';
-    if (m.whale_count > 0) badges += '<span class="badge badge-whale">&#x1F40B; ' + m.whale_count + '</span>';
-
-    var imgHtml = '';
-    if (m.image) {
-      var proxied = '/api/img-proxy?url=' + encodeURIComponent(m.image);
-      imgHtml = '<div class="fi-img-wrap">' +
-        '<img class="fi-img" src="' + esc(proxied) + '" loading="lazy" alt="" ' +
-        'onerror="this.onerror=null;this.style.display=\'none\';this.parentElement.style.background=\'linear-gradient(135deg,#16161f,#0e0e15)\';">' +
-        '<div class="fi-img-grad"></div>' +
-      '</div>';
+    // Flatten all markets with category
+    allMarkets = [];
+    const catOrder = ['fed_rates', 'crypto', 'macro', 'politics'];
+    for (const cat of catOrder) {
+      const markets = sections[cat] || [];
+      markets.forEach(m => { m._cat = cat; allMarkets.push(m); });
     }
 
-    // Edge side + payout. 40-60% markets are filtered server-side, so every
-    // card leans one way: low YES = structural NO edge, high YES = consensus.
-    var edgeNo = pct < 50;
-    var side = edgeNo ? 'NO' : 'YES';
-    var sidePrice = edgeNo ? (100 - pct) : pct;
-    var mult = sidePrice > 0 ? (100 / sidePrice) : 0;
-    var ctaCls = edgeNo ? 'cta-no' : 'cta-yes';
-    var ctaText = 'Trade ' + side + ' @ ' + sidePrice + '¢ — pays ' + mult.toFixed(2) + '×';
+    // Update live count
+    const liveCount = allMarkets.filter(m => m.yes_price > 0).length;
+    document.getElementById('live-count').textContent = '● ' + liveCount + ' live';
+    document.getElementById('feed-sub').textContent = liveCount + ' directional markets · Updated just now';
 
-    return '<a class="edge-card fn-market-card" href="/market/' + esc(m.slug) + '" style="animation-delay:' + delay + 's">' +
-      '<div class="edge-card-inner">' +
-        imgHtml +
-        '<div class="edge-card-body">' +
-          '<div class="card-top">' +
-            '<div class="yes-price-wrap">' +
-              '<div class="yes-price-l">YES</div>' +
-              '<div class="yes-price-n ' + yesClass(yp) + '">' + pct + '%</div>' +
-              '<div class="no-price-sec">NO ' + (100 - pct) + '%</div>' +
-            '</div>' +
-            '<div class="badges">' + badges + '</div>' +
-          '</div>' +
-          '<div class="card-q">' + esc(m.question) + '</div>' +
-          '<div class="signal-strip"><span class="ss-edge">Edge</span>' + esc(m.edge_signal || '') + '</div>' +
-          '<div class="card-cta ' + ctaCls + '"><span>' + ctaText + '</span><span class="arrow">→</span></div>' +
-        '</div>' +
-      '</div>' +
-    '</a>';
+    renderSidebar(sections);
+    renderMarkets(allMarkets);
+
+    // Auto-select first market
+    if (allMarkets.length > 0) selectMarket(allMarkets[0]);
+
+  } catch(e) {
+    document.getElementById('feed-sub').textContent = 'Failed to load markets';
   }
+}
 
-  function renderSection(def, markets) {
-    if (!markets.length) return '';
-    var header = '<div class="fn-section-header">' +
-      '<div class="fn-section-bar fn-bar-' + def.key + '"></div>' +
-      '<span class="fn-section-icon">' + def.icon + '</span>' +
-      '<span class="fn-section-title">' + def.title + '</span>' +
-      '<span class="fn-section-count">' + markets.length + ' market' + (markets.length !== 1 ? 's' : '') + '</span>' +
-    '</div>';
-    return header + '<div class="edge-grid">' + markets.map(renderCard).join('') + '</div>';
+// Sidebar
+const CAT_LABELS = { all: 'All', fed_rates: 'Fed & rates', crypto: 'Crypto', macro: 'Macro', politics: 'Politics' };
+const CAT_COLORS = { all: '#6366f1', fed_rates: '#60a5fa', crypto: '#f59e0b', macro: '#22c55e', politics: '#ef4444' };
+
+function renderSidebar(sections) {
+  const counts = { all: allMarkets.length };
+  for (const [cat, markets] of Object.entries(sections)) counts[cat] = markets.length;
+
+  const cats = ['all', 'fed_rates', 'crypto', 'macro', 'politics'];
+  let html = '<div class="sg"><div class="sg-label">Categories</div>';
+  for (const cat of cats) {
+    if (cat !== 'all' && !counts[cat]) continue;
+    html += `<div class="si ${cat === activeCategory ? 'active' : ''}" data-cat="${cat}">
+      <div class="si-left"><div class="si-dot" style="background:${CAT_COLORS[cat]}"></div><div class="si-name">${CAT_LABELS[cat]}</div></div>
+      <div class="si-count">${counts[cat] || 0}</div>
+    </div>`;
   }
+  html += '</div>';
 
-  fetch('/api/finance/markets?_v=' + Date.now())
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var sections = (data && data.sections) ? data.sections : {};
-      var el = document.getElementById('sections');
-      var html = SECTIONS.map(function(def) {
-        return renderSection(def, sections[def.key] || []);
-      }).join('');
-      el.innerHTML = html || '<div class="loading">No markets available.</div>';
-    })
-    .catch(function() {
-      document.getElementById('sections').innerHTML = '<div class="err">Could not load markets.</div>';
+  document.getElementById('sidebar').innerHTML = html;
+  document.querySelectorAll('.si[data-cat]').forEach(el => {
+    el.addEventListener('click', () => {
+      activeCategory = el.dataset.cat;
+      document.querySelectorAll('.si[data-cat]').forEach(s => s.classList.remove('active'));
+      el.classList.add('active');
+      const filtered = activeCategory === 'all' ? allMarkets : allMarkets.filter(m => m._cat === activeCategory);
+      renderMarkets(filtered);
+      if (filtered.length > 0) selectMarket(filtered[0]);
     });
-})();
+  });
+}
+
+// Market list
+function buildEdgeSignal(m) {
+  const pct = Math.round((m.yes_price || 0) * 100);
+  if (pct <= 5) return '🔴 Strong NO edge — ' + pct + '¢ YES resolves YES <0.5% historically';
+  if (pct <= 10) return '🔴 NO edge — ' + pct + '¢ YES resolves YES only 1.1% historically. Fade it.';
+  if (pct <= 20) return '🟡 Lean NO — ' + pct + '¢ YES, ~5% resolve YES. Sharp money typically fades.';
+  if (pct >= 85) return '🟢 High conviction YES — ' + pct + '¢ consensus. Sharp money positioned.';
+  if (pct >= 70) return '🟢 Moderate YES edge — ' + pct + '¢ pricing. Watch whale confirmation.';
+  return '⚪ No clear edge — ' + pct + '¢ YES. Check /signals for whale positioning.';
+}
+
+function priceClass(pct) {
+  if (pct >= 70) return 'yes';
+  if (pct <= 30) return 'no';
+  return 'mid';
+}
+
+function fmtVol(v) {
+  if (!v) return '';
+  if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
+  if (v >= 1000) return '$' + Math.round(v/1000) + 'K';
+  return '$' + Math.round(v);
+}
+
+function renderMarkets(markets) {
+  const list = document.getElementById('market-list');
+  if (!markets.length) { list.innerHTML = '<div class="empty-state">No markets found in this category.</div>'; return; }
+
+  list.innerHTML = markets.map((m, i) => {
+    const pct = Math.round((m.yes_price || 0) * 100);
+    const img = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
+    return `<div class="mrow ${m.slug === activeMarketSlug ? 'active' : ''}" data-idx="${allMarkets.indexOf(m)}">
+      ${img ? `<img class="mimg" src="${img}" onerror="this.style.display='none'" alt="">` : '<div class="mimg"></div>'}
+      <div class="mbody">
+        <div class="mcat">${CAT_LABELS[m._cat] || m._cat}</div>
+        <div class="mq">${m.question || ''}</div>
+        <div class="medge">${buildEdgeSignal(m)}</div>
+      </div>
+      <div class="mright">
+        <div class="mprice ${priceClass(pct)}">${pct}%</div>
+        <div class="mlabel">YES</div>
+        <div class="mvol">${fmtVol(m.volume)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('.mrow').forEach(row => {
+    row.addEventListener('click', () => {
+      const m = allMarkets[parseInt(row.dataset.idx)];
+      if (m) selectMarket(m);
+    });
+  });
+}
+
+// Detail panel
+function selectMarket(m) {
+  activeMarketSlug = m.slug;
+  document.querySelectorAll('.mrow').forEach(r => r.classList.remove('active'));
+  const idx = allMarkets.indexOf(m);
+  const rows = document.querySelectorAll('.mrow');
+  if (rows[idx]) rows[idx].classList.add('active'); // Note: index may differ if filtered
+
+  const pct = Math.round((m.yes_price || 0) * 100);
+  const img = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
+  const slug = m.slug || m.conditionId || '';
+  const edgeType = pct >= 85 ? 'Strong YES' : pct >= 70 ? 'Moderate YES' : pct <= 10 ? 'Strong NO' : pct <= 20 ? 'Lean NO' : 'No clear edge';
+  const edgeColor = pct >= 70 ? '#22c55e' : pct <= 20 ? '#ef4444' : '#f59e0b';
+
+  document.getElementById('detail-panel').innerHTML = `
+    ${img ? `<img class="dp-img" src="${img}" onerror="this.style.display='none'" alt="">` : ''}
+    <div class="dp-body">
+      <div class="dp-cat">${CAT_LABELS[m._cat] || m._cat} · ${edgeType}</div>
+      <div class="dp-title">${m.question || ''}</div>
+      <div class="dp-price-row">
+        <div>
+          <div class="dp-yes" style="color:${edgeColor}">${pct}%</div>
+          <div class="dp-vol">YES · ${fmtVol(m.volume)} volume</div>
+        </div>
+        <div class="dp-no">NO ${100-pct}%</div>
+      </div>
+      <div class="dp-edge-box">
+        <div class="dp-edge-label">Why this has edge</div>
+        <div class="dp-edge-text">${m.edge_signal || buildEdgeSignal(m)}</div>
+      </div>
+      <div class="dp-stats">
+        <div class="dp-stat"><div class="dp-stat-label">Volume</div><div class="dp-stat-val">${fmtVol(m.volume)}</div></div>
+        <div class="dp-stat"><div class="dp-stat-label">YES price</div><div class="dp-stat-val" style="color:${edgeColor}">${pct}¢</div></div>
+        <div class="dp-stat"><div class="dp-stat-label">Edge type</div><div class="dp-stat-val" style="color:${edgeColor}">${edgeType}</div></div>
+        <div class="dp-stat"><div class="dp-stat-label">Category</div><div class="dp-stat-val">${CAT_LABELS[m._cat] || m._cat}</div></div>
+      </div>
+      <a class="dp-cta" href="/market/${slug}">View full analysis →</a>
+    </div>
+  `;
+}
+
+loadMarkets();
 </script>
+
 </body>
 </html>
