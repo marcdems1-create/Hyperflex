@@ -16488,11 +16488,37 @@ async function fetchFinanceMarkets() {
     if (!Array.isArray(markets)) throw new Error('Bad response');
 
     const PATTERNS = {
-      fed_rates: [/interest rate/i, /rate cut/i, /rate hike/i, /fed funds/i, /\bfomc\b/i, /federal reserve/i, /\bwarsh\b/i, /\bpowell\b/i, /inflation.*2026/i, /cpi.*2026/i, /25 bps/i, /50 bps/i, /basis point/i, /how many.*cut/i, /fed\b/i, /monetary policy/i, /will the fed/i, /rate decision/i, /25 basis/i, /50 basis/i, /cut rates/i, /hike rates/i, /number of.*cut/i, /\bcpi\b/i, /inflation/i, /fed rate/i, /rate in 2026/i, /rate in june/i, /rate in july/i, /inflation rate/i, /cpi in/i, /number of cuts/i, /how many cuts/i, /rate cuts in 2026/i],
-      crypto:    [/\bbtc\b/i, /bitcoin.*price/i, /bitcoin.*hit/i, /bitcoin.*reach/i, /ethereum.*price/i, /crypto.*sec/i, /coinbase/i, /solana/i, /bitcoin/i, /ethereum/i, /\bcrypto\b/i, /binance/i, /\bnft\b/i, /stablecoin/i, /\bdefi\b/i],
-      macro:     [/s&p.*500/i, /\bspx\b/i, /nasdaq/i, /recession/i, /nvidia/i, /oil.*price/i, /gold.*price/i, /\bgdp\b/i, /stock.*market/i, /elon.*musk.*tesla/i, /apple.*stock/i, /microsoft/i, /crude oil/i, /\bgold\b/i, /treasury/i, /yield curve/i, /largest company/i, /dow jones/i, /russell 2000/i, /\bvix\b/i, /10.*year.*yield/i, /treasury.*yield/i, /oil.*barrel/i, /\bwti\b/i, /\bbrent\b/i, /gold.*ounce/i, /\bsilver\b/i, /\bcopper\b/i, /natural gas/i, /microsoft.*stock/i, /tesla.*stock/i, /amazon.*stock/i],
-      politics:  [/\btrump\b/i, /will trump/i, /elon musk/i, /sam altman/i, /openai/i, /executive order/i, /tariff/i, /us.*china/i, /\biran\b/i, /\bcongress\b/i, /\bsenate\b/i, /midterm/i, /president trump/i, /china.*tariff/i, /trump.*sign/i, /\bsanction/i, /trade war/i, /trump.*2026/i, /trump.*order/i, /us.*tariff/i, /china.*trade/i, /iran.*nuclear/i, /ukraine.*war/i, /us.*russia/i, /congress.*bill/i, /senate.*pass/i, /trump.*tariff/i, /trump.*china/i, /us.*china.*trade/i, /iran.*deal/i, /ukraine.*ceasefire/i, /us.*russia.*sanction/i, /elon.*musk.*court/i, /elon.*musk.*case/i],
-      sports:    [/world cup/i, /\bfifa\b/i, /\bnba\b/i, /nba finals/i, /\bnfl\b/i, /super bowl/i, /\bmlb\b/i, /world series/i, /\bnhl\b/i, /stanley cup/i, /\bufc\b/i, /\bmma\b/i, /\bpga\b/i, /wimbledon/i, /us open.*tennis/i, /french open/i, /australian open/i, /champions league/i, /premier league/i, /copa america/i, /euro.*cup/i, /\bsoccer\b/i, /\btennis\b/i, /\bgolf\b/i, /masters.*golf/i, /\bnascar\b/i, /formula 1/i, /\bf1\b.*race/i, /olympic/i, /world series/i, /playoff/i, /championship/i, /win.*final/i, /\bfinal.*champion/i],
+      fed_rates: [
+        /fed funds/i, /federal reserve/i, /\bfomc\b/i, /rate cut/i, /rate hike/i,
+        /interest rate/i, /basis point/i, /\bwarsh\b/i, /\bpowell\b/i,
+        /inflation.*2026/i, /\bcpi\b/i, /monetary policy/i, /how many.*cut/i,
+        /will the fed/i, /fed rate/i, /number of cuts/i
+      ],
+      crypto: [
+        /\bbitcoin\b/i, /\bbtc\b/i, /\bethereum\b/i, /\beth\b/i,
+        /\bsolana\b/i, /\bsol\b/i, /\bcoinbase\b/i, /\bcoin\b.*stock/i,
+        /\bcrypto\b/i, /\bdefi\b/i, /\bnft\b/i, /\bstablecoin\b/i,
+        /price of bitcoin/i, /price of ethereum/i, /price of solana/i,
+        /bitcoin.*above/i, /bitcoin.*below/i, /bitcoin.*hit/i
+      ],
+      macro: [
+        /s&p 500/i, /\bspx\b/i, /\bnasdaq\b/i, /recession/i,
+        /\bnvidia\b/i, /crude oil/i, /\boil\b.*price/i, /\bwti\b/i, /\bbrent\b/i,
+        /\bgold\b.*settle/i, /\bgold\b.*price/i, /\bgold\b.*above/i,
+        /\bsilver\b/i, /stock market/i, /\bgdp\b/i, /treasury yield/i,
+        /largest company/i, /\bnvidias\b/i, /settle.*\$\d/i,
+        /\bapple\b.*stock/i, /\bmicrosoft\b.*stock/i, /\btesla\b.*stock/i
+      ],
+      politics: [
+        /iranian/i, /\biran\b/i, /kharg/i, /kharg island/i,
+        /presidential election/i, /will.*win.*election/i, /win.*president/i,
+        /\btrump\b/i, /tariff/i, /diplomatic/i, /ceasefire/i,
+        /\bukraine\b/i, /\brussia\b/i, /\bchina\b.*trade/i,
+        /\bisrael\b/i, /\bgaza\b/i, /\bnato\b/i, /nuclear deal/i,
+        /peace deal/i, /\bsanction/i, /\bwar\b.*2026/i,
+        /\bsenate\b/i, /\bcongress\b/i, /\belection\b/i,
+        /win.*seat/i, /parliamentary/i, /prime minister/i
+      ]
     };
 
     const sections = { fed_rates: [], crypto: [], macro: [], politics: [], sports: [] };
