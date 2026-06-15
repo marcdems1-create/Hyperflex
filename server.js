@@ -58113,6 +58113,20 @@ const EDGE_BAND_SQL = `market_price_at_signal BETWEEN ${EDGE_BAND_LO} AND ${EDGE
 // population whose hit rate we publish (receipts) or log as platform accuracy.
 const WHALE_EDGE_SQL = `signal_type = 'whale_cluster' AND whale_count >= 3 AND ${EDGE_BAND_SQL}`;
 
+// DEDUP — one row per distinct market-EVENT, not per cron re-log. The signal
+// cron re-detects the same whale position every ~20 min; conditionId/slug are
+// NOT persisted on signal_outcomes, so (market_question, predicted_side) is the
+// only available event key. DISTINCT ON keeps the earliest DECIDED re-log when
+// the event resolved (so a resolved event never reads as pending just because
+// the first copy wasn't the row the resolver happened to grade), else the
+// earliest pending copy. Selecting `*` keeps every column for the caller.
+const WHALE_EVENTS_CTE = `
+  SELECT DISTINCT ON (market_question, predicted_side) *
+  FROM signal_outcomes
+  WHERE ${WHALE_EDGE_SQL}
+  ORDER BY market_question, predicted_side, (outcome IN ('correct','wrong')) DESC, predicted_at ASC
+`;
+
 // 1. LOG SIGNAL — deduped by market+side+type hash
 async function logSignalOutcome(signal) {
   if (!pool) return;
@@ -58146,10 +58160,25 @@ async function logSignalOutcome(signal) {
     // trusts that every row in signal_outcomes was in-band at call time.
     if (price == null || price < EDGE_BAND_LO || price > EDGE_BAND_HI) return;
 
-    _loggedSignalHashes.add(hash); // only mark logged once we know we're inserting
     const whaleCount = signal.whale_count || 0;
     const url = (signal.url || '').substring(0, 500);
 
+    // Cross-cycle dedup: one OPEN row per (market_question, predicted_side).
+    // The in-memory hash only suppresses re-logs within a single 20-min window;
+    // this covers the across-window/restart case that bloated the ledger (same
+    // Nuggets position re-logged ~17x). Once the event resolves the open row is
+    // no longer NULL, and a closed market won't re-signal (the gate rejects
+    // >0.85), so this never blocks a genuinely new event. If the check itself
+    // errors we fall through and insert — read-time dedup still protects counts.
+    try {
+      const open = await dbQuery(
+        `SELECT 1 FROM signal_outcomes WHERE market_question = $1 AND predicted_side = $2 AND outcome IS NULL LIMIT 1`,
+        [mkt, side]
+      );
+      if (open && open.length) { _loggedSignalHashes.add(hash); return; }
+    } catch (e) { /* fall through to insert */ }
+
+    _loggedSignalHashes.add(hash); // only mark logged once we know we're inserting
     await dbQuery(`INSERT INTO signal_outcomes
       (signal_type, source, market_question, market_url, predicted_side,
        predicted_at, market_price_at_signal, confidence_level, whale_count)
@@ -58309,12 +58338,14 @@ async function resolveSignalOutcomes() {
 //       correctly, so whale_cluster's real in-band record surfaces here even
 //       though their old `source` value was a narrative or 'Other'.
 //   (b) Apply the EDGE_BAND gate on read — settled-market rows never count.
+//   (c) Dedup to one row per (signal_type, market_question, predicted_side) so
+//       cron re-logs of the same position count as one event, not 17.
 // Stored into source_accuracy.source so downstream (getSourceWeight,
 // refreshSourceWeights) keys on mechanism consistently.
 async function updateSourceAccuracy() {
   if (!pool) return;
   try {
-    // All-time stats — in-band only
+    // All-time stats — in-band, deduped to distinct market-events
     const allTime = await dbQuery(`
       SELECT signal_type AS source,
         COUNT(*) as total,
@@ -58323,21 +58354,31 @@ async function updateSourceAccuracy() {
         SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) as pending,
         AVG(CASE WHEN outcome IN ('correct','wrong') THEN pnl_if_followed END) as avg_pnl,
         AVG(CASE WHEN outcome IN ('correct','wrong') THEN edge_cents END) as avg_edge
-      FROM signal_outcomes
-      WHERE ${EDGE_BAND_SQL}
+      FROM (
+        SELECT DISTINCT ON (signal_type, market_question, predicted_side)
+          signal_type, outcome, pnl_if_followed, edge_cents
+        FROM signal_outcomes
+        WHERE ${EDGE_BAND_SQL}
+        ORDER BY signal_type, market_question, predicted_side, (outcome IN ('correct','wrong')) DESC, predicted_at ASC
+      ) ev
       GROUP BY signal_type
     `);
 
-    // Recent stats (last 14 days) — weighted more heavily, same gate
+    // Recent stats (last 14 days) — weighted more heavily, same gate + dedup
     const recent = await dbQuery(`
       SELECT signal_type AS source,
         COUNT(*) as total,
         SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
         SUM(CASE WHEN outcome='wrong' THEN 1 ELSE 0 END) as wrong
-      FROM signal_outcomes
-      WHERE predicted_at > NOW() - INTERVAL '14 days'
-        AND outcome IN ('correct','wrong')
-        AND ${EDGE_BAND_SQL}
+      FROM (
+        SELECT DISTINCT ON (signal_type, market_question, predicted_side)
+          signal_type, outcome
+        FROM signal_outcomes
+        WHERE predicted_at > NOW() - INTERVAL '14 days'
+          AND outcome IN ('correct','wrong')
+          AND ${EDGE_BAND_SQL}
+        ORDER BY signal_type, market_question, predicted_side, predicted_at ASC
+      ) ev
       GROUP BY signal_type
     `);
     const recentMap = Object.fromEntries((recent || []).map(r => [r.source, r]));
@@ -58394,40 +58435,47 @@ async function updateConfidenceCalibration() {
 }
 
 // 5. PLATFORM METRICS — the headline accuracy is the REAL EDGE only:
-// whale-consensus (3+ whales), in-band, decided. Pooling every source +
-// settled-market noise is what produced the meaningless 22.6%. Non-whale
-// in-band and out-of-band counts are kept as context, never in the headline.
+// whale-consensus (3+ whales), in-band, decided, and DEDUPED to distinct
+// market-events (cron re-logs collapsed). Pooling every source + settled
+// noise + counting re-logs is what produced the meaningless 22.6%.
 async function updatePlatformMetrics() {
   if (!pool) return;
   try {
     const totals = await dbQuery(`
+      WITH whale_events AS (${WHALE_EVENTS_CTE})
       SELECT
-        -- headline: whale-edge, in-band, decided
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as decided,
-        COUNT(*) FILTER (WHERE outcome='correct' AND ${WHALE_EDGE_SQL}) as correct,
-        COUNT(*) FILTER (WHERE outcome='wrong' AND ${WHALE_EDGE_SQL}) as wrong,
-        COUNT(*) FILTER (WHERE outcome IS NULL AND ${WHALE_EDGE_SQL}) as pending,
-        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as avg_pnl,
-        AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as avg_edge,
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as decided_30d,
-        COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as correct_30d,
-        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as avg_pnl_30d,
-        MIN(predicted_at) FILTER (WHERE ${WHALE_EDGE_SQL}) as first_signal,
-        MAX(predicted_at) FILTER (WHERE ${WHALE_EDGE_SQL}) as last_signal,
-        -- context: other in-band decided (non-whale) and out-of-band excluded
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND ${EDGE_BAND_SQL} AND NOT (${WHALE_EDGE_SQL})) as ctx_other_inband_decided,
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND NOT (${EDGE_BAND_SQL})) as ctx_outofband_decided
-      FROM signal_outcomes
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as decided,
+        COUNT(*) FILTER (WHERE outcome='correct') as correct,
+        COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
+        COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
+        AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong')) as avg_edge,
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as decided_30d,
+        COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
+        MIN(predicted_at) as first_signal,
+        MAX(predicted_at) as last_signal
+      FROM whale_events
     `);
+    // Raw (pre-dedup) decided count over the same gate — the gap vs `decided`
+    // is the re-log inflation we just removed.
+    const rawRows = await dbQuery(`
+      SELECT COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as raw_decided
+      FROM signal_outcomes WHERE ${WHALE_EDGE_SQL}
+    `).catch(() => [{}]);
+
     const t = totals[0] || {};
     const decided = parseInt(t.decided) || 0;
+    const rawDecided = parseInt((rawRows[0] || {}).raw_decided) || 0;
     const acc = decided > 0 ? Math.round(parseInt(t.correct) / decided * 1000) / 10 : null;
     const decided30 = parseInt(t.decided_30d) || 0;
     const acc30 = decided30 > 0 ? Math.round(parseInt(t.correct_30d) / decided30 * 1000) / 10 : null;
 
     const ctx = {
-      population: 'whale_cluster, 3+ whales, price 0.15-0.85 at signal, decided',
+      population: 'whale_cluster, 3+ whales, price 0.15-0.85 at signal, decided, DEDUPED to distinct (market,side) events',
       total_decided: decided,
+      raw_decided_rows: rawDecided,
+      dedup_ratio: decided > 0 ? Math.round(rawDecided / decided * 10) / 10 : null,
       correct: parseInt(t.correct) || 0,
       wrong: parseInt(t.wrong) || 0,
       pending: parseInt(t.pending) || 0,
@@ -58439,8 +58487,6 @@ async function updatePlatformMetrics() {
       avg_pnl_30d: Math.round((parseFloat(t.avg_pnl_30d) || 0) * 100) / 100,
       tracking_since: t.first_signal,
       last_signal: t.last_signal,
-      excluded_other_inband_decided: parseInt(t.ctx_other_inband_decided) || 0,
-      excluded_outofband_decided: parseInt(t.ctx_outofband_decided) || 0,
       // kept for any consumer still reading the old key
       total_resolved: decided
     };
@@ -58450,7 +58496,7 @@ async function updatePlatformMetrics() {
       ON CONFLICT (metric) DO UPDATE SET value=$1, context=$2, updated_at=NOW()`,
       [acc, JSON.stringify(ctx)]);
 
-    console.log(`[intelligence] Platform (whale-edge, in-band): ${acc}% across ${decided} decided (${decided30} in 30d at ${acc30}%), avg edge ${ctx.avg_edge_cents}¢ — excluded ${ctx.excluded_other_inband_decided} other-source + ${ctx.excluded_outofband_decided} out-of-band decided`);
+    console.log(`[intelligence] Platform (whale-edge, in-band, deduped): ${acc}% across ${decided} distinct decided events (${rawDecided} raw rows, ${ctx.dedup_ratio}x re-log inflation removed; ${decided30} in 30d at ${acc30}%)`);
   } catch(e) { console.warn('[intelligence] platform metrics error:', e.message); }
 }
 
@@ -58537,10 +58583,12 @@ app.get('/api/edge/receipts', async (req, res) => {
     if (!pool) return res.json({ record: null, receipts: [], updated_at: new Date().toISOString() });
 
     // The PUBLISHED record + chips are whale-edge only (3+ whales, in-band,
-    // decided) — the only population we stand behind. by_type stays a broader
-    // in-band breakdown for context, but it is NOT what the headline rate uses.
-    const [totals, byType, receipts] = await Promise.all([
+    // decided) AND deduped to distinct (market,side) events — cron re-logs of
+    // the same position count once. by_type stays a broader in-band breakdown
+    // for context, but it is NOT what the headline rate uses.
+    const [totals, byType, receipts, rawCount] = await Promise.all([
       dbQuery(`
+        WITH whale_events AS (${WHALE_EVENTS_CTE})
         SELECT
           COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as graded,
           COUNT(*) FILTER (WHERE outcome='correct') as correct,
@@ -58553,34 +58601,47 @@ app.get('/api/edge/receipts', async (req, res) => {
           AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
           AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_edge_30d,
           MIN(predicted_at) as tracking_since
-        FROM signal_outcomes
-        WHERE ${WHALE_EDGE_SQL}
+        FROM whale_events
       `),
+      // by_type — in-band context, deduped per (signal_type, market, side)
       dbQuery(`
         SELECT signal_type,
           COUNT(*) as graded,
           SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct
-        FROM signal_outcomes
-        WHERE outcome IN ('correct','wrong') AND ${EDGE_BAND_SQL}
-          AND resolved_at > NOW() - INTERVAL '30 days'
+        FROM (
+          SELECT DISTINCT ON (signal_type, market_question, predicted_side)
+            signal_type, outcome
+          FROM signal_outcomes
+          WHERE outcome IN ('correct','wrong') AND ${EDGE_BAND_SQL}
+            AND resolved_at > NOW() - INTERVAL '30 days'
+          ORDER BY signal_type, market_question, predicted_side, predicted_at ASC
+        ) ev
         GROUP BY signal_type
         ORDER BY COUNT(*) DESC
         LIMIT 8
       `).catch(() => []),
+      // Chips — one per distinct decided whale-event, most-recent first
       dbQuery(`
+        WITH whale_events AS (${WHALE_EVENTS_CTE})
         SELECT signal_type, market_question, predicted_side, market_price_at_signal,
                whale_count, outcome, pnl_if_followed, predicted_at, resolved_at
-        FROM signal_outcomes
-        WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}
+        FROM whale_events
+        WHERE outcome IN ('correct','wrong')
         ORDER BY resolved_at DESC
         LIMIT 24
-      `).catch(() => [])
+      `).catch(() => []),
+      // Raw (pre-dedup) decided whale rows — so the JSON shows the dedup ratio
+      dbQuery(`
+        SELECT COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as raw_decided
+        FROM signal_outcomes WHERE ${WHALE_EDGE_SQL}
+      `).catch(() => [{}])
     ]);
 
     const t = totals[0] || {};
     const graded = parseInt(t.graded) || 0;
     const graded30 = parseInt(t.graded_30d) || 0;
     const pct = (c, n) => n > 0 ? Math.round(c / n * 1000) / 10 : null;
+    const rawDecided = parseInt((rawCount && rawCount[0] || {}).raw_decided) || 0;
 
     const record = {
       last30d: {
@@ -58599,7 +58660,13 @@ app.get('/api/edge/receipts', async (req, res) => {
         avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null
       },
       pending: parseInt(t.pending) || 0,
-      // Context only — in-band decided by mechanism, NOT the published rate.
+      // Dedup transparency: distinct events vs raw re-logged rows, all-time.
+      dedup: {
+        distinct_decided: graded,
+        raw_decided_rows: rawDecided,
+        ratio: graded > 0 ? Math.round(rawDecided / graded * 10) / 10 : null
+      },
+      // Context only — in-band decided by mechanism, deduped, NOT the published rate.
       by_type: (byType || []).map(r => ({
         signal_type: r.signal_type,
         graded: parseInt(r.graded) || 0,
@@ -58609,7 +58676,7 @@ app.get('/api/edge/receipts', async (req, res) => {
       tracking_since: t.tracking_since || null,
       // Self-documenting: makes "where does this rate come from" answerable
       // straight from the JSON.
-      population: 'whale_cluster · 3+ whales · price 0.15-0.85 at signal · decided'
+      population: 'whale_cluster · 3+ whales · price 0.15-0.85 at signal · decided · deduped to distinct (market,side) events'
     };
 
     const receiptRows = (receipts || []).map(r => {
@@ -58653,15 +58720,34 @@ app.post('/api/admin/intelligence/recompute', requireAdminSecret, async (req, re
     await updatePlatformMetrics();
     await refreshSourceWeights();
     _edgeReceiptsCache = null;
-    const [sourceRows, platform] = await Promise.all([
+    const [sourceRows, platform, dedupDiag] = await Promise.all([
       dbQuery(`SELECT source, total_signals, correct, wrong, pending, accuracy_pct, avg_pnl, avg_edge
                FROM source_accuracy ORDER BY total_signals DESC`).catch(() => []),
-      dbQuery(`SELECT value, context, updated_at FROM platform_intelligence WHERE metric='platform_accuracy' LIMIT 1`).catch(() => [])
+      dbQuery(`SELECT value, context, updated_at FROM platform_intelligence WHERE metric='platform_accuracy' LIMIT 1`).catch(() => []),
+      // STEP 1 diagnostic: raw decided rows vs distinct (market,side) events
+      // over the whale population — the duplication ratio, in one read.
+      dbQuery(`
+        SELECT
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as raw_decided,
+          COUNT(DISTINCT (market_question, predicted_side)) FILTER (WHERE outcome IN ('correct','wrong')) as distinct_decided,
+          COUNT(*) FILTER (WHERE outcome='correct') as raw_correct,
+          COUNT(*) FILTER (WHERE outcome='wrong') as raw_wrong
+        FROM signal_outcomes WHERE ${WHALE_EDGE_SQL}
+      `).catch(() => [{}])
     ]);
     const p = platform[0] || {};
+    const d = dedupDiag[0] || {};
+    const rawDec = parseInt(d.raw_decided) || 0;
+    const distDec = parseInt(d.distinct_decided) || 0;
     res.json({
       ok: true,
-      gate: `in-band ${EDGE_BAND_LO}-${EDGE_BAND_HI}; source_accuracy keyed by signal_type; platform = whale-edge only`,
+      gate: `in-band ${EDGE_BAND_LO}-${EDGE_BAND_HI}; deduped to distinct (market,side) events; source_accuracy keyed by signal_type; platform/receipts = whale-edge only`,
+      dedup_diagnostic: {
+        whale_raw_decided_rows: rawDec,
+        whale_distinct_decided_events: distDec,
+        ratio: distDec > 0 ? Math.round(rawDec / distDec * 10) / 10 : null,
+        note: 'raw counts every cron re-log; distinct is the real number of market-events'
+      },
       platform_accuracy: p.value != null ? parseFloat(p.value) : null,
       platform_context: typeof p.context === 'string' ? JSON.parse(p.context) : (p.context || {}),
       source_accuracy: sourceRows,
@@ -58703,6 +58789,10 @@ setTimeout(() => {
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_price_at_close NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
+  // Speeds the write-time dedup check (open row per market+side) and the
+  // read-time DISTINCT ON dedup. Partial (NULL outcome) index = small + hot.
+  dbQuery(`CREATE INDEX IF NOT EXISTS idx_signal_outcomes_open_event ON signal_outcomes(market_question, predicted_side) WHERE outcome IS NULL`).catch(() => {});
+  dbQuery(`CREATE INDEX IF NOT EXISTS idx_signal_outcomes_event ON signal_outcomes(market_question, predicted_side, predicted_at)`).catch(() => {});
   // Boot-time first rule pass so we don't wait 15min for the first run.
   // LLM pass deferred to its hourly schedule — no need to burn budget on boot.
   mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) }).catch(e => _logError('boot/mentionSyncRule', e));
