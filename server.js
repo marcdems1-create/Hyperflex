@@ -48588,18 +48588,13 @@ Format: 3-4 short paragraphs of flowing prose. End with what to watch today. No 
         }
       } catch (logErr) { /* silent — don't break brief delivery */ }
 
-      // Log to signal_outcomes (for source accuracy weights)
-      try {
-        if (pool) {
-          await dbQuery(
-            `INSERT INTO signal_outcomes (signal_type, source, market_question, predicted_side, predicted_at, market_price_at_signal, confidence_level, whale_count)
-             VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7)`,
-            ['ai_brief', 'ai_brief', (call.market || '').substring(0, 200), side, entryPrice, call.confidence || 'MEDIUM', 0]
-          );
-        }
-      } catch (logErr) { /* silent */ }
+      // STEP 2 — ai_brief no longer writes to signal_outcomes. News/AI calls
+      // graded out at ~10% — anti-predictive noise that dragged the pooled
+      // platform number down. They stay in prediction_log (the /accuracy page
+      // display + Haiku market match) but must NEVER create a graded edge-
+      // ledger row. signal_outcomes is whale-edge territory only.
     }
-    console.log(`[daily-brief] Logged ${loggedCallHashes.size} AI calls to prediction_log + signal_outcomes`);
+    console.log(`[daily-brief] Logged ${loggedCallHashes.size} AI calls to prediction_log (signal_outcomes excluded — news is display-only, not a graded edge source)`);
 
     // ── Staleness detection: invalidate cache if key data shifts significantly ──
     // Store key metrics for comparison on next request
@@ -52703,7 +52698,9 @@ app.get('/api/signals', async (req, res) => {
     diversified.forEach(sig => {
       const conf = confScore[sig.confidence] || 15;
       const whales = (sig.whale_count || 0) * 2;
-      const sourceW = getSourceWeight(sig._narrative || sig.type || 'unknown');
+      // Weight keyed on the signal mechanism — matches signal_outcomes.source
+      // (now = signal_type) so the feedback loop's source_accuracy rows line up.
+      const sourceW = getSourceWeight(sig.type || 'unknown');
       const recency = Math.max(0, 10 - (Date.now() - new Date(sig.detected_at || 0).getTime()) / 3600000); // 0-10 pts, decays over 10h
       sig._score = Math.round((conf + whales + recency) * sourceW * 10) / 10;
     });
@@ -58077,6 +58074,19 @@ if (pool) {
 const _loggedSignalHashes = new Set();
 setInterval(() => _loggedSignalHashes.clear(), 20 * 60 * 1000); // clear every 20 min
 
+// Eligibility band: a signal only carries edge if the market wasn't near-
+// settled at call time. Below 0.15 / above 0.85 the outcome is all but
+// decided — recording it just pools settled-market noise into the ledger
+// (this single gate cleaned ~300 noisy whale rows down to 24 real ones).
+// Used by the insert gate AND every read-side recompute so old ungated
+// rows are excluded honestly without a destructive migration.
+const EDGE_BAND_LO = 0.15;
+const EDGE_BAND_HI = 0.85;
+const EDGE_BAND_SQL = `market_price_at_signal BETWEEN ${EDGE_BAND_LO} AND ${EDGE_BAND_HI}`;
+// "Real edge" = whale-consensus, in-band, decided. This is the ONLY
+// population whose hit rate we publish (receipts) or log as platform accuracy.
+const WHALE_EDGE_SQL = `signal_type = 'whale_cluster' AND whale_count >= 3 AND ${EDGE_BAND_SQL}`;
+
 // 1. LOG SIGNAL — deduped by market+side+type hash
 async function logSignalOutcome(signal) {
   if (!pool) return;
@@ -58084,11 +58094,15 @@ async function logSignalOutcome(signal) {
     const mkt = (signal.market || '').substring(0, 200);
     const side = (signal.side || 'YES').toUpperCase();
     const type = signal.type || 'unknown';
-    const source = signal._narrative || type;
+    // SOURCE = the signal mechanism (whale_cluster, momentum, …), NOT the
+    // market's topic. The old `_narrative || type` stuffed the narrative
+    // ('NBA & Basketball', or the 'Other' fallback) into source, which is why
+    // source_accuracy was a junk bin keyed on topic. signal_type already
+    // carries the mechanism; source now mirrors it so the two never diverge.
+    const source = type;
     const confidence = signal.confidence || 'MEDIUM';
     const hash = `${type}:${side}:${mkt.substring(0, 60).toLowerCase()}`;
     if (_loggedSignalHashes.has(hash)) return; // already logged this cycle
-    _loggedSignalHashes.add(hash);
 
     // market_price_at_signal is ALWAYS the YES price — the resolver's PnL math
     // (1/entry-1 for YES, 1/(1-entry)-1 for NO) assumes it. Sources attach an
@@ -58100,6 +58114,13 @@ async function logSignalOutcome(signal) {
     else if (signal.yes_pct != null) price = signal.yes_pct / 100;
     else price = parseFloat(signal.price) || 0.5;
     if (price != null && (isNaN(price) || price <= 0 || price >= 1)) price = null;
+
+    // STEP 1 — ELIGIBILITY GATE. Near-settled or unknown-price signals never
+    // enter the ledger. This is the load-bearing rule; everything downstream
+    // trusts that every row in signal_outcomes was in-band at call time.
+    if (price == null || price < EDGE_BAND_LO || price > EDGE_BAND_HI) return;
+
+    _loggedSignalHashes.add(hash); // only mark logged once we know we're inserting
     const whaleCount = signal.whale_count || 0;
     const url = (signal.url || '').substring(0, 500);
 
@@ -58255,31 +58276,43 @@ async function resolveSignalOutcomes() {
   } catch(e) { console.warn('[intelligence] resolve error:', e.message); }
 }
 
-// 3. SOURCE ACCURACY — with time-decay (recent signals weighted 2x)
+// 3. SOURCE ACCURACY — honest recompute, keyed on signal MECHANISM.
+// Two corrections from the pooled-22.6% era:
+//   (a) GROUP BY signal_type, not the polluted `source` column (which held
+//       the market's narrative/topic). Legacy rows have signal_type set
+//       correctly, so whale_cluster's real in-band record surfaces here even
+//       though their old `source` value was a narrative or 'Other'.
+//   (b) Apply the EDGE_BAND gate on read — settled-market rows never count.
+// Stored into source_accuracy.source so downstream (getSourceWeight,
+// refreshSourceWeights) keys on mechanism consistently.
 async function updateSourceAccuracy() {
   if (!pool) return;
   try {
-    // All-time stats
+    // All-time stats — in-band only
     const allTime = await dbQuery(`
-      SELECT source,
+      SELECT signal_type AS source,
         COUNT(*) as total,
         SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
         SUM(CASE WHEN outcome='wrong' THEN 1 ELSE 0 END) as wrong,
         SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) as pending,
         AVG(CASE WHEN outcome IN ('correct','wrong') THEN pnl_if_followed END) as avg_pnl,
         AVG(CASE WHEN outcome IN ('correct','wrong') THEN edge_cents END) as avg_edge
-      FROM signal_outcomes GROUP BY source
+      FROM signal_outcomes
+      WHERE ${EDGE_BAND_SQL}
+      GROUP BY signal_type
     `);
 
-    // Recent stats (last 14 days) — weighted more heavily
+    // Recent stats (last 14 days) — weighted more heavily, same gate
     const recent = await dbQuery(`
-      SELECT source,
+      SELECT signal_type AS source,
         COUNT(*) as total,
         SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
         SUM(CASE WHEN outcome='wrong' THEN 1 ELSE 0 END) as wrong
       FROM signal_outcomes
-      WHERE predicted_at > NOW() - INTERVAL '14 days' AND outcome IS NOT NULL
-      GROUP BY source
+      WHERE predicted_at > NOW() - INTERVAL '14 days'
+        AND outcome IN ('correct','wrong')
+        AND ${EDGE_BAND_SQL}
+      GROUP BY signal_type
     `);
     const recentMap = Object.fromEntries((recent || []).map(r => [r.source, r]));
 
@@ -58334,29 +58367,30 @@ async function updateConfidenceCalibration() {
   } catch(e) { /* silent */ }
 }
 
-// 5. PLATFORM METRICS — aggregate stats
-// Accuracy is computed over DECIDED signals only (correct + wrong). 'expired'
-// rows are signals we never found a final price for — counting them in the
-// denominator is what produced the bogus "0.4% accuracy across 21,866 resolved
-// signals" stat (prod fire #4, May 10). They're reported separately.
+// 5. PLATFORM METRICS — the headline accuracy is the REAL EDGE only:
+// whale-consensus (3+ whales), in-band, decided. Pooling every source +
+// settled-market noise is what produced the meaningless 22.6%. Non-whale
+// in-band and out-of-band counts are kept as context, never in the headline.
 async function updatePlatformMetrics() {
   if (!pool) return;
   try {
     const totals = await dbQuery(`
       SELECT
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as decided,
-        COUNT(*) FILTER (WHERE outcome='correct') as correct,
-        COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
-        COUNT(*) FILTER (WHERE outcome='expired') as expired,
-        COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
-        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
-        AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong')) as avg_edge,
-        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as decided_30d,
-        COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
-        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
-        COUNT(DISTINCT source) as source_count,
-        MIN(predicted_at) as first_signal,
-        MAX(predicted_at) as last_signal
+        -- headline: whale-edge, in-band, decided
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as decided,
+        COUNT(*) FILTER (WHERE outcome='correct' AND ${WHALE_EDGE_SQL}) as correct,
+        COUNT(*) FILTER (WHERE outcome='wrong' AND ${WHALE_EDGE_SQL}) as wrong,
+        COUNT(*) FILTER (WHERE outcome IS NULL AND ${WHALE_EDGE_SQL}) as pending,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as avg_pnl,
+        AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}) as avg_edge,
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as decided_30d,
+        COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as correct_30d,
+        AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days' AND ${WHALE_EDGE_SQL}) as avg_pnl_30d,
+        MIN(predicted_at) FILTER (WHERE ${WHALE_EDGE_SQL}) as first_signal,
+        MAX(predicted_at) FILTER (WHERE ${WHALE_EDGE_SQL}) as last_signal,
+        -- context: other in-band decided (non-whale) and out-of-band excluded
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND ${EDGE_BAND_SQL} AND NOT (${WHALE_EDGE_SQL})) as ctx_other_inband_decided,
+        COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND NOT (${EDGE_BAND_SQL})) as ctx_outofband_decided
       FROM signal_outcomes
     `);
     const t = totals[0] || {};
@@ -58366,10 +58400,10 @@ async function updatePlatformMetrics() {
     const acc30 = decided30 > 0 ? Math.round(parseInt(t.correct_30d) / decided30 * 1000) / 10 : null;
 
     const ctx = {
+      population: 'whale_cluster, 3+ whales, price 0.15-0.85 at signal, decided',
       total_decided: decided,
       correct: parseInt(t.correct) || 0,
       wrong: parseInt(t.wrong) || 0,
-      expired: parseInt(t.expired) || 0,
       pending: parseInt(t.pending) || 0,
       avg_pnl: Math.round((parseFloat(t.avg_pnl) || 0) * 100) / 100,
       avg_edge_cents: Math.round(parseFloat(t.avg_edge) || 0),
@@ -58377,10 +58411,11 @@ async function updatePlatformMetrics() {
       correct_30d: parseInt(t.correct_30d) || 0,
       accuracy_30d: acc30,
       avg_pnl_30d: Math.round((parseFloat(t.avg_pnl_30d) || 0) * 100) / 100,
-      source_count: parseInt(t.source_count) || 0,
       tracking_since: t.first_signal,
       last_signal: t.last_signal,
-      // kept for any consumer still reading the old key — same value as total_decided
+      excluded_other_inband_decided: parseInt(t.ctx_other_inband_decided) || 0,
+      excluded_outofband_decided: parseInt(t.ctx_outofband_decided) || 0,
+      // kept for any consumer still reading the old key
       total_resolved: decided
     };
 
@@ -58389,7 +58424,7 @@ async function updatePlatformMetrics() {
       ON CONFLICT (metric) DO UPDATE SET value=$1, context=$2, updated_at=NOW()`,
       [acc, JSON.stringify(ctx)]);
 
-    console.log(`[intelligence] Platform: ${acc}% accuracy across ${decided} decided signals (${ctx.expired} expired excluded, ${decided30} decided in 30d at ${acc30}%), avg edge ${ctx.avg_edge_cents}¢`);
+    console.log(`[intelligence] Platform (whale-edge, in-band): ${acc}% across ${decided} decided (${decided30} in 30d at ${acc30}%), avg edge ${ctx.avg_edge_cents}¢ — excluded ${ctx.excluded_other_inband_decided} other-source + ${ctx.excluded_outofband_decided} out-of-band decided`);
   } catch(e) { console.warn('[intelligence] platform metrics error:', e.message); }
 }
 
@@ -58475,6 +58510,9 @@ app.get('/api/edge/receipts', async (req, res) => {
     }
     if (!pool) return res.json({ record: null, receipts: [], updated_at: new Date().toISOString() });
 
+    // The PUBLISHED record + chips are whale-edge only (3+ whales, in-band,
+    // decided) — the only population we stand behind. by_type stays a broader
+    // in-band breakdown for context, but it is NOT what the headline rate uses.
     const [totals, byType, receipts] = await Promise.all([
       dbQuery(`
         SELECT
@@ -58490,22 +58528,24 @@ app.get('/api/edge/receipts', async (req, res) => {
           AVG(edge_cents) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_edge_30d,
           MIN(predicted_at) as tracking_since
         FROM signal_outcomes
+        WHERE ${WHALE_EDGE_SQL}
       `),
       dbQuery(`
         SELECT signal_type,
           COUNT(*) as graded,
           SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct
         FROM signal_outcomes
-        WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days'
+        WHERE outcome IN ('correct','wrong') AND ${EDGE_BAND_SQL}
+          AND resolved_at > NOW() - INTERVAL '30 days'
         GROUP BY signal_type
         ORDER BY COUNT(*) DESC
         LIMIT 8
       `).catch(() => []),
       dbQuery(`
         SELECT signal_type, market_question, predicted_side, market_price_at_signal,
-               outcome, pnl_if_followed, predicted_at, resolved_at
+               whale_count, outcome, pnl_if_followed, predicted_at, resolved_at
         FROM signal_outcomes
-        WHERE outcome IN ('correct','wrong')
+        WHERE outcome IN ('correct','wrong') AND ${WHALE_EDGE_SQL}
         ORDER BY resolved_at DESC
         LIMIT 24
       `).catch(() => [])
@@ -58533,13 +58573,17 @@ app.get('/api/edge/receipts', async (req, res) => {
         avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null
       },
       pending: parseInt(t.pending) || 0,
+      // Context only — in-band decided by mechanism, NOT the published rate.
       by_type: (byType || []).map(r => ({
         signal_type: r.signal_type,
         graded: parseInt(r.graded) || 0,
         correct: parseInt(r.correct) || 0,
         hit_rate_pct: pct(parseInt(r.correct) || 0, parseInt(r.graded) || 0)
       })),
-      tracking_since: t.tracking_since || null
+      tracking_since: t.tracking_since || null,
+      // Self-documenting: makes "where does this rate come from" answerable
+      // straight from the JSON.
+      population: 'whale_cluster · 3+ whales · price 0.15-0.85 at signal · decided'
     };
 
     const receiptRows = (receipts || []).map(r => {
@@ -58550,6 +58594,7 @@ app.get('/api/edge/receipts', async (req, res) => {
         signal_type: r.signal_type,
         market_question: r.market_question,
         predicted_side: side,
+        whale_count: r.whale_count != null ? parseInt(r.whale_count) : null,
         entry_yes_cents: entryYes,
         cost_cents: entryYes == null ? null : (side === 'NO' ? 100 - entryYes : entryYes),
         outcome: r.outcome,
@@ -58570,6 +58615,37 @@ app.get('/api/edge/receipts', async (req, res) => {
   }
 });
 
+// 7c. ADMIN: one-shot honest recompute of the ledger aggregates.
+// Rebuilds source_accuracy (by mechanism, gated) + platform_accuracy
+// (whale-edge, gated) against existing rows, then returns both so a single
+// curl shows the post-gate numbers. No data mutation beyond the aggregate
+// tables. Also busts the receipts cache so the next read is fresh.
+app.post('/api/admin/intelligence/recompute', requireAdminSecret, async (req, res) => {
+  try {
+    await updateSourceAccuracy();
+    await updateConfidenceCalibration();
+    await updatePlatformMetrics();
+    await refreshSourceWeights();
+    _edgeReceiptsCache = null;
+    const [sourceRows, platform] = await Promise.all([
+      dbQuery(`SELECT source, total_signals, correct, wrong, pending, accuracy_pct, avg_pnl, avg_edge
+               FROM source_accuracy ORDER BY total_signals DESC`).catch(() => []),
+      dbQuery(`SELECT value, context, updated_at FROM platform_intelligence WHERE metric='platform_accuracy' LIMIT 1`).catch(() => [])
+    ]);
+    const p = platform[0] || {};
+    res.json({
+      ok: true,
+      gate: `in-band ${EDGE_BAND_LO}-${EDGE_BAND_HI}; source_accuracy keyed by signal_type; platform = whale-edge only`,
+      platform_accuracy: p.value != null ? parseFloat(p.value) : null,
+      platform_context: typeof p.context === 'string' ? JSON.parse(p.context) : (p.context || {}),
+      source_accuracy: sourceRows,
+      recomputed_at: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // 8. CRONS — all wrapped with safeCron to prevent unhandled rejections
 setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
 setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
@@ -58584,6 +58660,13 @@ setInterval(safeCron('mentionSyncLlm',  () => mentionSync.llmPass(dbQuery,  { lo
 setTimeout(() => {
   resolveSignalOutcomes().catch(e => _logError('boot/resolveSignalOutcomes', e));
   refreshSourceWeights().catch(e => _logError('boot/refreshSourceWeights', e));
+  // Honest recompute on boot so the gated/whale-edge numbers apply to the
+  // existing 39k rows immediately on deploy, not only after the next resolve
+  // cycle happens to grade something new.
+  updateSourceAccuracy()
+    .then(() => updatePlatformMetrics())
+    .then(() => { _edgeReceiptsCache = null; })
+    .catch(e => _logError('boot/recomputeIntelligence', e));
   // Add missing columns if they don't exist yet
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS confidence_level TEXT').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS whale_count INTEGER DEFAULT 0').catch(() => {});
