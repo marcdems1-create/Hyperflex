@@ -117,6 +117,16 @@
     btn.title = 'Report a bug';
     btn.innerHTML = '🐛';
     btn.style.cssText = 'position:fixed !important;bottom:20px !important;left:20px !important;width:40px !important;height:40px !important;border-radius:50% !important;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);color:#a855f7;font-size:18px;cursor:pointer;z-index:9998 !important;display:flex !important;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(8px);padding:0 !important;margin:0 !important';
+    // On mobile (≤768px) the bottom-nav appears as a 64px fixed bar; lift the
+    // button above it (plus the iOS safe-area inset) so it stops covering the
+    // Home tab. Desktop keeps the normal bottom-left corner placement.
+    var bugBtnMq = window.matchMedia('(max-width:768px)');
+    function placeBugBtn() {
+      btn.style.setProperty('bottom', bugBtnMq.matches ? 'calc(64px + env(safe-area-inset-bottom) + 16px)' : '20px', 'important');
+    }
+    placeBugBtn();
+    if (bugBtnMq.addEventListener) bugBtnMq.addEventListener('change', placeBugBtn);
+    else if (bugBtnMq.addListener) bugBtnMq.addListener(placeBugBtn);
     btn.onmouseenter = function() { btn.style.background = 'rgba(168,85,247,0.3)'; btn.style.transform = 'scale(1.1)'; };
     btn.onmouseleave = function() { btn.style.background = 'rgba(168,85,247,0.15)'; btn.style.transform = 'scale(1)'; };
     btn.onclick = openBugModal;
