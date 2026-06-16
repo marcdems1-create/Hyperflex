@@ -35753,12 +35753,59 @@ app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public',
 
 // ════════════════════════════════════════════════════════════════════
 // WORLD CUP LIVE ODDS HUB — composition of existing systems only.
-// Data source: _screenerCache (already maintained by the existing screener
-// refresh + watchdog). No new external API, no new cron, no new dep.
-// Reads "what we hold" — the honest basis for the market counts.
+// Data source: _alphaRawCache — the wide in-scope gamma pool (~100-350 +
+// WC markets) that the alpha engine fetches, NOT the post-filter
+// _screenerCache (which drops WC down to a handful of top-scored markets).
+// No new external API, no new cron, no new dep — piggybacks the screener refresh.
 // ════════════════════════════════════════════════════════════════════
 let _wcCache = null;
 const WC_CACHE_TTL = 60 * 1000; // 60s — piggybacks the screener's own refresh
+
+// Normalize a RAW gamma market (from _alphaRawCache) into the screener-shaped
+// object the WC code expects. Already-normalized screener objects pass through.
+function _wcNormalize(m) {
+  if (!m) return null;
+  if (m.yes_price !== undefined && m.market_id) return m; // already screener-shaped
+  let yes = null;
+  try {
+    const op = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+    if (Array.isArray(op) && op.length) { const p = parseFloat(op[0]); if (!isNaN(p)) yes = p; }
+  } catch {}
+  let tokens = null;
+  try { tokens = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : (m.clobTokenIds || null); } catch {}
+  const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
+  const odc = (m.oneDayPriceChange != null && !isNaN(parseFloat(m.oneDayPriceChange)))
+    ? Math.round(parseFloat(m.oneDayPriceChange) * 100) : null;
+  return {
+    market_id: m.conditionId || m.slug || '',
+    question: m.question || '',
+    slug: eventSlug,                       // event slug — match grouping + match page
+    market_slug: m.slug || eventSlug,      // specific market — winner trade link
+    yes_price: yes,
+    odds_change_24h: odc,
+    volume: parseFloat(m.volume24hr || m.volume || 0) || 0,
+    end_date: (m.endDate || m.end_date) ? new Date(m.endDate || m.end_date).toISOString() : null,
+    image: m.image || (m.events && m.events[0] && m.events[0].image) || m.icon || null,
+    event_image_url: (m.events && m.events[0] && m.events[0].image) || m.image || null,
+    group_item: m.groupItemTitle || '',
+    clobTokenIds: tokens
+  };
+}
+
+// The WC market pool: wide in-scope alpha pool (normalized), with the
+// post-filter screener cache as a fallback if the raw pool isn't warm yet.
+// Memoized by _alphaRawCache.ts so normalization runs once per 90s refresh,
+// not once per match-page poll.
+let _wcNormMemo = null;
+function _wcMarkets() {
+  if (_alphaRawCache && Array.isArray(_alphaRawCache.data) && _alphaRawCache.data.length) {
+    if (_wcNormMemo && _wcNormMemo.ts === _alphaRawCache.ts) return _wcNormMemo.data;
+    const norm = _alphaRawCache.data.map(_wcNormalize).filter(Boolean);
+    _wcNormMemo = { ts: _alphaRawCache.ts, data: norm };
+    return norm;
+  }
+  return (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+}
 
 // Tournament-winner market, e.g. "Will France win the 2026 FIFA World Cup?"
 function _wcIsWinner(m) {
@@ -35798,7 +35845,11 @@ function _wcIsOverUnder(m) {
 
 async function getWorldCupData() {
   if (_wcCache && Date.now() - _wcCache.ts < WC_CACHE_TTL) return _wcCache.data;
-  const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+  // Warm the in-scope pool if cold (buildAlphaList self-guards at 90s — no-op when warm)
+  if (!_alphaRawCache || !(_alphaRawCache.data && _alphaRawCache.data.length)) {
+    try { await buildAlphaList(); } catch (e) { /* fall back to whatever's cached */ }
+  }
+  const all = _wcMarkets();
 
   const winners = [];
   const groups = {}; // eventSlug -> { slug, markets: [] }
@@ -35809,7 +35860,7 @@ async function getWorldCupData() {
       winners.push({
         country,
         market_id: m.market_id,
-        slug: m.slug,
+        slug: m.market_slug || m.slug, // specific winner market for the trade link
         prob: m.yes_price != null ? Math.round(m.yes_price * 1000) / 10 : null,
         odds_change_24h: m.odds_change_24h != null ? m.odds_change_24h : null,
         volume: m.volume || 0,
@@ -35899,7 +35950,8 @@ async function getWorldCupData() {
       match_events: Object.keys(groups).length,
       today_matches: matches.filter(m => m.is_today).length
     },
-    screener_size: all.length,
+    pool_size: all.length,
+    pool_source: (_alphaRawCache && _alphaRawCache.data && _alphaRawCache.data.length) ? 'alpha_raw' : 'screener_fallback',
     updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
   };
   _wcCache = { ts: Date.now(), data };
@@ -35922,7 +35974,10 @@ app.get('/api/worldcup', async (req, res) => {
 app.get('/api/worldcup/match/:slug', async (req, res) => {
   try {
     const slug = String(req.params.slug || '').toLowerCase();
-    const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    if (!_alphaRawCache || !(_alphaRawCache.data && _alphaRawCache.data.length)) {
+      try { await buildAlphaList(); } catch (e) {}
+    }
+    const all = _wcMarkets();
     const markets = all.filter(m => (m.slug || '').toLowerCase() === slug);
     if (!markets.length) return res.status(404).json({ error: 'match not found', slug });
 
@@ -36004,7 +36059,7 @@ app.get('/worldcup/:slug', async (req, res) => {
     if (_wcMatchTpl == null) { try { _wcMatchTpl = fs.readFileSync(tplPath, 'utf8'); } catch (e) { _wcMatchTpl = ''; } }
     if (!_wcMatchTpl) return res.sendFile(tplPath);
 
-    const all = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+    const all = _wcMarkets();
     const markets = all.filter(m => (m.slug || '').toLowerCase() === slug && !_wcIsOverUnder(m));
     const sides = markets
       .map(m => ({ label: _wcSideLabel(m), prob: m.yes_price != null ? Math.round(m.yes_price * 100) : null }))
@@ -38853,6 +38908,12 @@ async function fetchClobDepth(markets, opts = {}) {
 // MARKET SCREENER — filter and discover enriched markets
 // ════════════════════════════════════════════════════════════
 let _screenerCache = null;
+// Wide in-scope gamma pool (~100-350 markets, pre-scoring) + any World Cup
+// markets from the full 500. This is what the /worldcup hub reads — the
+// post-filter _screenerCache.data only carries a handful of top-scored markets
+// and drops WC. Populated by _buildAlphaListInner; does NOT alter the edge
+// engine's scored set.
+let _alphaRawCache = null;
 
 // ── Edge Velocity Tracker ──────────────────────────────────────────────────
 // Remembers each market's previous edge score so we can compute
@@ -39154,6 +39215,21 @@ async function _buildAlphaListInner(opts = {}) {
       }
     }
     console.log('[alpha] gamma fetch:', _sortedAll.length, '→', rawMarkets.length, 'in scope (' + _whaleForced + ' force-included whale markets)');
+
+    // Cache the in-scope pool + any World Cup markets from the full 500 for the
+    // /worldcup hub. Edge engine's `rawMarkets`/scoring is untouched — this is a
+    // read-side pool only. WC detection: fifwc- event slug, or winner question.
+    try {
+      const _wcExtra = _sortedAll.filter(m => {
+        const cid = m.conditionId;
+        if (cid && _inScope.has(cid)) return false; // already in rawMarkets
+        const q = (m.question || '').toLowerCase();
+        const eslug = ((m.events && m.events[0] && m.events[0].slug) || m.slug || '').toLowerCase();
+        return eslug.startsWith('fifwc-') || (/world cup/.test(q) && /\bwin|champion/.test(q));
+      });
+      _alphaRawCache = { ts: Date.now(), data: rawMarkets.concat(_wcExtra) };
+      if (_wcExtra.length) console.log('[worldcup] in-scope pool +', _wcExtra.length, 'WC markets from full 500');
+    } catch (e) { _alphaRawCache = { ts: Date.now(), data: rawMarkets }; }
 
     // Auto-detect category
     function detectCategory(q) {
