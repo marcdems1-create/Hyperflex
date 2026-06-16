@@ -123,6 +123,7 @@
     };
 
     function render(d){
+      d = d || {};
       var name = d.display_name || d.handle || 'Trader';
       var handle = d.handle || d.username || '';
       var wc = (d.wallet_class || '').toLowerCase();
@@ -209,6 +210,7 @@
           '<div class="take" style="text-align:center;color:var(--dim)">No takes yet. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div>';
       } else {
         feed = '<div class="feed-head">Recent takes</div>' + takes.map(function(t){
+          t = t || {};
           var grade = t.is_correct === true ? '<span class="grade correct">CORRECT</span>'
                     : t.is_correct === false ? '<span class="grade wrong">WRONG</span>'
                     : '<span class="grade open">OPEN</span>';
@@ -244,9 +246,15 @@
         if (!d) return;
         if (d.error) { notFound(); return; }
         document.title = (d.display_name || d.handle || 'Trader') + ' — HYPERFLEX';
-        render(d);
+        try {
+          render(d);
+        } catch (err) {
+          console.error('[profile] render crashed:', err, '\n  on data:', d);
+          document.getElementById('root').innerHTML = '<div class="state"><h2>Couldn\'t load profile</h2><div>Try again in a moment.</div></div>';
+        }
       })
-      .catch(function(){
+      .catch(function(err){
+        console.error('[profile] fetch/parse failed:', err);
         document.getElementById('root').innerHTML = '<div class="state"><h2>Couldn\'t load profile</h2><div>Try again in a moment.</div></div>';
       });
   })();
