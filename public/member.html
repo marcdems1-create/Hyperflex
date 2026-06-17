@@ -1120,7 +1120,7 @@ async function load() {
 
           ${user.bio ? `<div class="hero-bio">${user.bio.replace(/</g,'&lt;')}</div>` : ''}
 
-          ${isOwnProfile && (() => {
+          ${isOwner && (() => {
             // Tier progress bar: show what's needed for next tier
             const TIERS = [
               { label:'BUILDING', min:0,  wr:0,   settled:0   },
