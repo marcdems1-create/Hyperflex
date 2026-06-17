@@ -35807,12 +35807,27 @@ function _wcMarkets() {
   return (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
 }
 
-// Tournament-winner market, e.g. "Will France win the 2026 FIFA World Cup?"
+// Tournament-winner market: "Will [Country] win the 2026 FIFA World Cup?".
+// The subject is a country and the object of "win" is the Cup itself — NOT an
+// individual side award. Award/prop markets ("...win the Golden Boot / Young
+// Player Award / Silver Ball at the 2026 FIFA World Cup") also contain
+// "world cup" + "win", so the old loose match swept them into the winners list
+// (Désiré Doué Young Player Award, Gavi Silver Ball, Netherlands Fair Play Award
+// were leading /api/worldcup). Gate on a prop-noun blocklist FIRST, then require
+// the structural "win the World Cup" phrase. The award noun can live in the
+// question OR the per-outcome groupItemTitle, so check both (plus the slug).
+const _WC_PROP_RX = /\b(?:award|ball|boot|glove|young\s*players?|fair\s*play|top[\s-]*scorers?|golden|silver|bronze|saves?|assists?|mvp|goalkeeper|player\s+of)\b/i;
 function _wcIsWinner(m) {
-  const q = (m.question || '').toLowerCase();
-  const s = (m.slug || '').toLowerCase();
-  return (/world cup/.test(q) && /\bwin(s|ner)?\b|champion/.test(q)) ||
-         (/world-cup/.test(s) && /(winner|champion|to-win)/.test(s));
+  const q  = (m.question || '').toLowerCase();
+  const s  = (m.slug || '').toLowerCase();
+  const gi = (m.group_item || '').toLowerCase();
+  const hay = q + ' ¦ ' + gi;                                    // question + outcome label
+  if (_WC_PROP_RX.test(hay) || _WC_PROP_RX.test(s.replace(/-/g, ' '))) return false; // side award / prop
+  const winsTheCup =
+    /\bwin(s)?\s+the\s+(\d{4}\s+)?(fifa\s+)?world\s+cup\b/.test(hay) ||
+    /\b(\d{4}\s+)?(fifa\s+)?world\s+cup\s+(winner|champion)\b/.test(hay);
+  const slugWinner = /world-cup/.test(s) && /(winner|champion|to-win)/.test(s);
+  return winsTheCup || slugWinner;
 }
 // Head-to-head match event, slug prefix "fifwc-" (e.g. fifwc-mex-rsa-2026-06-11)
 function _wcIsMatch(m) {

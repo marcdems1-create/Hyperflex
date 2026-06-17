@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-06-17 — World Cup winner classifier tightened (Claude Code, branch `claude/nifty-galileo-4vvl5c`)
+
+### fix(worldcup): `_wcIsWinner` swept side-award props into the winners list
+- **The bug:** after the alpha-pool repoint (`45e11e8`), `/api/worldcup` winners led with `Désiré Doué Young Player Award`, `Gavi Silver Ball`, `Netherlands Fair Play Award` — prop markets, not the tournament title. The old test (`/world cup/` + `win|champion`) matches award markets too, since they read "…win the **Golden Boot** at the 2026 FIFA World Cup".
+- **The fix:** prop-noun blocklist runs FIRST (early `return false`), THEN the structural `win the [2026] [FIFA] World Cup` gate. `_WC_PROP_RX` = `award|ball|boot|glove|young player|fair play|top scorer|golden|silver|bronze|save(s)|assist(s)|mvp|goalkeeper|player of`. Checked against question **and** `group_item` (the award noun rides the per-outcome `groupItemTitle` on grouped negRisk events) **and** the de-hyphenated slug. Blocklist-first ordering is load-bearing: `…win the Fair Play Award at the 2026 FIFA World Cup?` contains the literal "win the … 2026 FIFA World Cup" substring, so the structural gate alone would keep it — the blocklist catches `fair play`/`award` before that runs.
+- **Word boundaries matter:** `\bball\b` does NOT trip on "football" (verified) — no false-negative on legit winners.
+- **Sort:** winners already sorted prob DESC (favorites first) at the `winners.sort(...)` line — verified intact, no change. Top-12 slice unchanged.
+- **Files:** `server.js` `_wcIsWinner` + new `_WC_PROP_RX` const (single callsite, line ~35857). No endpoint/shape change — `data.winners[]` is the same object, just correctly filtered.
+- **Verified:** offline pure-function harness, 22/22 cases (9 country winners KEEP incl. grouped/slug-carried; 11 props DROP incl. all three live offenders + Golden Boot/Glove/Ball, most assists/saves, top scorer, Player of the Tournament; football guard; red-card non-winner). `node --check server.js` green.
+- **Unverified from sandbox (egress blocks prod + gamma):** the live ordered list with real probabilities — curl `/api/worldcup` after deploy; expect France/Spain/Argentina/England/etc. leading, zero award rows.
+- **Don't break:** blocklist must stay BEFORE the structural gate. If a new WC award type appears (e.g. "Best Goalkeeper"), extend `_WC_PROP_RX`, don't loosen the gate.
+
+---
+
 ## 2026-06-15 — World Cup Live Odds Hub (Claude Code, on `main`)
 
 ### feat(worldcup): /worldcup hub + /worldcup/:match — composition only, zero new infra (commit `97a50e4`)
