@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HYPERFLEX — Leaderboard</title>
+<meta name="description" content="HYPERFLEX traders ranked by Sharp Score, realized PnL, and win rate. Weekly and all-time. Real money, public receipts.">
+<meta property="og:title" content="HYPERFLEX Leaderboard">
+<meta property="og:description" content="Sharp Score, PnL, win rate. Weekly + all-time. Real money, public receipts.">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hyperflex-mobile.css">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --card: #16161f;
+  --card-2: #1a1a24;
+  --border: #1e1e2a;
+  --border-hover: #2a2a38;
+  --text: #f1f0f5;
+  --text-soft: #a0a0b4;
+  --muted: #6b6880;
+  --gold: #c9920d;
+  --gold-bright: #f5a623;
+  --gold-warm: #FFD96B;
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --blue: #4d9fff;
+  --radius: 14px;
+  --display: 'Anton', 'Inter', sans-serif;
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+}
+a { color: inherit; text-decoration: none; }
+
+.page { max-width: 1100px; margin: 0 auto; padding: 96px 32px 120px; }
+@media (max-width: 720px) { .page { padding: 80px 16px 100px; } }
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  border-radius: 18px;
+  padding: 36px 32px 30px;
+  margin-bottom: 24px;
+  background:
+    radial-gradient(110% 80% at 0% 0%, rgba(245,166,35,0.08), transparent 60%),
+    linear-gradient(180deg, #14110a, #0e0e15);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.hero h1 {
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(48px, 8vw, 88px); line-height: 0.95;
+  text-transform: uppercase; letter-spacing: 0.005em;
+  color: #fff;
+}
+.hero h1 em {
+  font-family: var(--serif); font-style: italic; font-weight: 400;
+  color: var(--text-soft); font-size: 0.5em; margin-left: 14px;
+  letter-spacing: 0.02em;
+}
+.hero-sub {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--muted);
+  margin-top: 10px;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tabs.secondary { margin-bottom: 24px; }
+.tab {
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--muted);
+  padding: 14px 18px; cursor: pointer;
+  background: transparent; border: none;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  font-family: var(--mono);
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--gold-bright);
+}
+.tabs.secondary .tab.active { border-bottom-color: var(--text); }
+
+/* ── Table ──────────────────────────────────────────────────────────── */
+.lb-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px 12px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted);
+}
+.lb-meta .live {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.lb-meta .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: livepulse 1.6s infinite;
+}
+@keyframes livepulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,230,138,0.7); }
+  50%     { box-shadow: 0 0 0 6px rgba(0,230,138,0); }
+}
+
+.lb-table {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 130px 110px 110px;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-row.head {
+  background: rgba(255,255,255,0.02);
+  font-family: var(--mono); font-size: 9px; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+  padding: 12px 18px;
+}
+.lb-row.head .lb-rank { text-align: left; }
+.lb-row:hover:not(.head) { background: rgba(255,255,255,0.02); }
+.lb-row.viewer-self {
+  background: linear-gradient(90deg, rgba(245,166,35,0.10), rgba(245,166,35,0.02) 60%);
+  border-left: 2px solid var(--gold-bright);
+  padding-left: 16px;
+}
+
+.lb-rank {
+  font-family: var(--mono); font-size: 22px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text); line-height: 1;
+}
+.lb-row.head .lb-rank { font-size: 9px; }
+.lb-rank.gold { background: linear-gradient(180deg, #FFFFFF 0%, var(--gold-warm) 60%, var(--gold-bright) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.lb-user { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lb-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, #2a2a38, #1a1a24);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 12px; font-weight: 800;
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lb-avatar.whale { border-color: var(--blue); color: var(--blue); }
+.lb-handle {
+  font-weight: 700; font-size: 14px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-display {
+  font-size: 11px; color: var(--muted); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-tag {
+  display: inline-block; margin-left: 6px;
+  font-family: var(--mono); font-size: 9px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 3px;
+  background: rgba(77,159,255,0.14); color: var(--blue);
+}
+
+.lb-num {
+  font-family: var(--mono); font-size: 16px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.lb-num.primary { color: var(--text); font-size: 18px; font-weight: 800; }
+.lb-num.muted   { color: var(--text-soft); font-size: 13px; font-weight: 500; }
+.lb-num.pos     { color: var(--green); }
+.lb-num.neg     { color: var(--red); }
+.lb-num .unit   { font-size: 10px; color: var(--muted); margin-left: 2px; font-weight: 600; }
+
+@media (max-width: 720px) {
+  .lb-row { grid-template-columns: 36px 1fr 100px; padding: 12px 14px; }
+  .lb-row.head { grid-template-columns: 36px 1fr 100px; }
+  .lb-rank { font-size: 16px; }
+  .lb-num.muted { display: none; }
+  .lb-display { display: none; }
+  .lb-handle { font-size: 13px; }
+  .lb-num.primary { font-size: 15px; }
+}
+
+/* ── Empty state ────────────────────────────────────────────────────── */
+.empty {
+  padding: 60px 30px; text-align: center;
+  border: 1px dashed var(--border-hover); border-radius: var(--radius);
+  color: var(--muted); font-size: 14px;
+  background: var(--card);
+}
+.empty .head {
+  font-family: var(--display); font-size: 22px; color: var(--text-soft);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+}
+
+/* ── Loading ────────────────────────────────────────────────────────── */
+.skeleton {
+  height: 60px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, var(--card) 0%, var(--card-2) 50%, var(--card) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse { 0%,100% { background-position: 200% 0; } 50% { background-position: -100% 0; } }
+
+/* ── Viewer pill (floating bottom) ──────────────────────────────────── */
+.viewer-pill {
+  position: fixed;
+  left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--card); border: 1px solid var(--border-hover);
+  border-radius: 999px;
+  padding: 10px 18px;
+  display: none; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text);
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+  z-index: 50;
+}
+.viewer-pill.visible { display: inline-flex; }
+.viewer-pill .lbl { color: var(--muted); }
+.viewer-pill .rank {
+  color: var(--gold-bright); font-weight: 800; font-size: 13px;
+}
+
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/utils.js"></script>
+<script src="/nav.js?v=20"></script>
+
+<div class="page">
+  <div class="hero">
+    <h1>Leaderboard <em>real money. public receipts.</em></h1>
+    <div class="hero-sub">Ranked by Sharp Score · PnL · Win Rate · Weekly + All-Time</div>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Time period">
+    <button class="tab" data-period="all"  role="tab">All-Time</button>
+    <button class="tab" data-period="week" role="tab">Weekly</button>
+  </div>
+  <div class="tabs secondary" role="tablist" aria-label="Sort">
+    <button class="tab" data-sort="sharp"   role="tab">Sharp Score</button>
+    <button class="tab" data-sort="pnl"     role="tab">PnL</button>
+    <button class="tab" data-sort="winrate" role="tab">Win Rate</button>
+  </div>
+
+  <div class="lb-meta">
+    <span id="lbContext">All-time · Sharp Score</span>
+    <span class="live"><span class="dot"></span><span id="lbUpdated">Loading…</span></span>
+  </div>
+
+  <div class="lb-table" id="lbTable">
+    <div class="lb-row head">
+      <span class="lb-rank">Rank</span>
+      <span>Trader</span>
+      <span class="lb-num" id="hdrPrimary">Sharp</span>
+      <span class="lb-num">PnL</span>
+      <span class="lb-num">Win Rate</span>
+    </div>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+  </div>
+
+  <div id="lbEmpty" class="empty" style="display:none">
+    <div class="head">Not enough data yet</div>
+    <div>Leaderboard fills as more traders settle trades.</div>
+  </div>
+</div>
+
+<div id="viewerPill" class="viewer-pill">
+  <span class="lbl">You</span>
+  <span class="rank" id="viewerRank">—</span>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = { period: 'all', sort: 'sharp' };
+  var meId = null;
+
+  // Try to identify the viewer via existing app conventions; if window.HF
+  // exposes a current-user id, use that. Otherwise we just don't gold-row.
+  try {
+    if (window.HF && window.HF.userId) meId = window.HF.userId;
+    else if (window._currentUserId)    meId = window._currentUserId;
+  } catch (_) {}
+
+  function setActive(group, key, val) {
+    document.querySelectorAll(group).forEach(function (el) {
+      el.classList.toggle('active', el.dataset[key] === val);
+    });
+  }
+  setActive('.tabs:not(.secondary) .tab', 'period', state.period);
+  setActive('.tabs.secondary .tab', 'sort', state.sort);
+
+  function fmtUsd(n) {
+    if (n == null || isNaN(n)) return '$0';
+    n = Number(n);
+    var sign = n < 0 ? '-' : '+';
+    var abs = Math.abs(n);
+    if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return sign + '$' + (abs/1e3).toFixed(1) + 'k';
+    return sign + '$' + abs.toFixed(0);
+  }
+  function fmtPct(f) {
+    if (f == null || isNaN(f)) return '—';
+    return (Number(f) * 100).toFixed(1) + '%';
+  }
+  function fmtSharp(s) {
+    if (s == null || isNaN(s)) return '—';
+    return Number(s).toFixed(1);
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function relTime(iso) {
+    if (!iso) return '';
+    var s = Math.floor((Date.now() - Date.parse(iso)) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    return Math.floor(s/3600) + 'h ago';
+  }
+
+  function contextLabel() {
+    var p = state.period === 'week' ? 'Weekly' : 'All-time';
+    var s = state.sort === 'pnl' ? 'PnL' : state.sort === 'winrate' ? 'Win Rate' : 'Sharp Score';
+    return p + ' · ' + s;
+  }
+
+  function rowHtml(r) {
+    var initials = (r.handle || r.display_name || '?').slice(0, 2).toUpperCase();
+    var isMe = meId && r.user_id === meId;
+    var rankClass = r.rank <= 3 ? 'lb-rank gold' : 'lb-rank';
+    var primary, secondary, tertiary;
+
+    if (state.sort === 'pnl') {
+      primary   = '<span class="lb-num primary ' + (r.realized_pnl >= 0 ? 'pos' : 'neg') + '">' + fmtUsd(r.realized_pnl) + '</span>';
+      secondary = '<span class="lb-num muted">' + fmtSharp(r.sharp_score) + '<span class="unit">SHARP</span></span>';
+      tertiary  = '<span class="lb-num muted">' + fmtPct(r.win_rate) + '</span>';
+    } else if (state.sort === 'winrate') {
+      primary   = '<span class="lb-num primary">' + fmtPct(r.win_rate) + '</span>';
+      secondary = '<span class="lb-num muted ' + (r.realized_pnl >= 0 ? 'pos' : 'neg') + '">' + fmtUsd(r.realized_pnl) + '</span>';
+      tertiary  = '<span class="lb-num muted">' + (r.settled_trades || 0) + '<span class="unit">SETTLED</span></span>';
+    } else {
+      primary   = '<span class="lb-num primary">' + fmtSharp(r.sharp_score) + '</span>';
+      secondary = '<span class="lb-num muted ' + (r.realized_pnl >= 0 ? 'pos' : 'neg') + '">' + fmtUsd(r.realized_pnl) + '</span>';
+      tertiary  = '<span class="lb-num muted">' + fmtPct(r.win_rate) + '</span>';
+    }
+
+    var profileHref = r.handle ? ('/@' + r.handle) : ('/m/' + r.user_id);
+    var displayName = r.display_name && r.display_name !== r.handle ? r.display_name : '';
+
+    return ''
+      + '<a class="lb-row' + (isMe ? ' viewer-self' : '') + '" href="' + escapeHtml(profileHref) + '">'
+      +   '<span class="' + rankClass + '">' + r.rank + '</span>'
+      +   '<div class="lb-user">'
+      +     '<div class="lb-avatar' + (r.is_whale ? ' whale' : '') + '">' + escapeHtml(initials) + '</div>'
+      +     '<div style="min-width:0">'
+      +       '<div class="lb-handle">' + escapeHtml(r.handle ? '@' + r.handle : (displayName || 'Anonymous'))
+      +         (r.is_whale ? '<span class="lb-tag">Whale</span>' : '') + '</div>'
+      +       (displayName ? '<div class="lb-display">' + escapeHtml(displayName) + '</div>' : '')
+      +     '</div>'
+      +   '</div>'
+      +   primary
+      +   secondary
+      +   tertiary
+      + '</a>';
+  }
+
+  function paint(data) {
+    var table = document.getElementById('lbTable');
+    var empty = document.getElementById('lbEmpty');
+
+    document.getElementById('lbContext').textContent = contextLabel();
+    document.getElementById('hdrPrimary').textContent =
+      state.sort === 'pnl' ? 'PnL' : state.sort === 'winrate' ? 'Win Rate' : 'Sharp';
+    document.getElementById('lbUpdated').textContent =
+      data.computed_at ? 'Updated ' + relTime(data.computed_at) : 'Live';
+
+    var rows = (data && Array.isArray(data.rows)) ? data.rows : [];
+
+    // < 5 ranked → empty state per spec
+    if (rows.length < 5) {
+      table.style.display = 'none';
+      empty.style.display = '';
+      return;
+    }
+
+    table.style.display = '';
+    empty.style.display = 'none';
+
+    var head = ''
+      + '<div class="lb-row head">'
+      +   '<span class="lb-rank">Rank</span>'
+      +   '<span>Trader</span>'
+      +   '<span class="lb-num">' + (state.sort === 'pnl' ? 'PnL' : state.sort === 'winrate' ? 'Win Rate' : 'Sharp') + '</span>'
+      +   '<span class="lb-num">' + (state.sort === 'pnl' ? 'Sharp' : state.sort === 'winrate' ? 'PnL' : 'PnL') + '</span>'
+      +   '<span class="lb-num">' + (state.sort === 'pnl' ? 'Win Rate' : state.sort === 'winrate' ? 'Settled' : 'Win Rate') + '</span>'
+      + '</div>';
+    table.innerHTML = head + rows.map(rowHtml).join('');
+
+    // Viewer pill: shown only when viewer has a rank but isn't in the visible
+    // top N (their row is gold-highlighted there instead).
+    var pill = document.getElementById('viewerPill');
+    var rankLabel = document.getElementById('viewerRank');
+    var inTable = meId && rows.some(function (r) { return r.user_id === meId; });
+    if (data.viewer_rank && !inTable) {
+      rankLabel.textContent = '#' + data.viewer_rank;
+      pill.classList.add('visible');
+    } else {
+      pill.classList.remove('visible');
+    }
+  }
+
+  function load() {
+    var url = '/api/leaderboard/users?period=' + encodeURIComponent(state.period)
+      + '&sort=' + encodeURIComponent(state.sort) + '&limit=100';
+    document.getElementById('lbUpdated').textContent = 'Loading…';
+    fetch(url, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) {
+          document.getElementById('lbUpdated').textContent = 'Failed to load';
+          return;
+        }
+        paint(data);
+      })
+      .catch(function () {
+        document.getElementById('lbUpdated').textContent = 'Failed to load';
+      });
+  }
+
+  // Tab handlers
+  document.querySelectorAll('.tabs:not(.secondary) .tab').forEach(function (el) {
+    el.addEventListener('click', function () {
+      state.period = el.dataset.period;
+      setActive('.tabs:not(.secondary) .tab', 'period', state.period);
+      load();
+    });
+  });
+  document.querySelectorAll('.tabs.secondary .tab').forEach(function (el) {
+    el.addEventListener('click', function () {
+      state.sort = el.dataset.sort;
+      setActive('.tabs.secondary .tab', 'sort', state.sort);
+      load();
+    });
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
