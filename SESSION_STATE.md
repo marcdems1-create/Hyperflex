@@ -49,6 +49,30 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-18 (World Cup: winner-classifier tighten + dedicated match fetch — branch `claude/nifty-galileo-4vvl5c`)
+
+**Shipped (with hashes, on branch — NOT yet merged to main/prod):**
+- `3b24b01`: STEP 1 — `_wcIsWinner` swept side-award props (Désiré Doué Young Player Award, Gavi Silver Ball, Netherlands Fair Play Award led `/api/worldcup` winners). New `_WC_PROP_RX` blocklist runs BEFORE the structural "win the [2026] [FIFA] World Cup" gate; checks question + `group_item` + de-hyphenated slug. Winners already sorted prob-DESC (verified intact). Offline harness 22/22.
+- `aa27c0b`: STEP 2 — `_wcFetchSchedule()` (5-min cached) pulls WC match events scoped to gamma so low-volume/future fixtures appear (alpha pool only carries fifwc- events in the global top-500). Discover tag/series from a known fifwc- event → enumerate (parallel) → keyword fallback → filter to fifwc- → flatten sub-markets under the event slug → merge matches-only into `getWorldCupData` (dedup by market_id). Winners NOT sourced here. `schedule_source` + `counts.schedule_match_events` in the response for one-curl diagnosis. Degrades to alpha-pool matches on any failure. Offline data-shaping harness 9/9.
+
+**Active blockers:**
+- (none in code) — STEP 2's gamma enumeration params (`tag_id`/`series_id`/`_q` on `/events/keyset`) are UNVERIFIED from sandbox (egress blocks gamma). Safe-degrades, so not a regression risk, but coverage is unconfirmed until a prod curl.
+
+**Queued (priority order):**
+1. **Merge branch → main** (Railway auto-deploys from main; these are branch-only right now).
+2. **Marc runs VERIFY (post-deploy):**
+   - STEP 1: `curl -s https://hyperflex.network/api/worldcup | jq '.winners[] | {country, prob}'` → leads with France/Spain/Argentina/England etc., ZERO award rows.
+   - STEP 2: `curl -s https://hyperflex.network/api/worldcup | jq '.schedule_source, .counts'` → `schedule_source` is `tag`/`series`/`keyword` (not `none`) and `schedule_match_events` > 0 during the tournament.
+3. If STEP 2 shows `schedule_source:"none"` while matches exist: gamma enumeration params need adjusting. Pivot path (proven endpoints only): deepen `buildAlphaList` markets/keyset cursor paging to capture WC from top ~2000 by volume.
+
+**Open questions / unverified:**
+- Exact gamma `/events/keyset` support for `tag_id`/`series_id`/`_q` — the `schedule_source` field answers it in one curl post-deploy.
+
+**Notes for next session:**
+- ⚠️ The 2026-06-15 note "hub is screener-cache-only by design" is STALE — superseded first by the `45e11e8` repoint to `_alphaRawCache`, then by this session's dedicated gamma match fetch (Marc explicitly chose the full-schedule fetch over count-honesty).
+- Winner classifier: blocklist MUST stay before the structural gate. New award type → extend `_WC_PROP_RX`, don't loosen the gate.
+- Frontend "Today's Matches" strip caps display at 12 (today-first); the full schedule is in the API. Bump the cap / add "view all" if a full schedule view is wanted.
+
 ## 2026-06-15 (World Cup Live Odds Hub — flagship consumer surface)
 
 **Shipped (with hashes, on `main`):**
