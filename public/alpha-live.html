@@ -475,6 +475,18 @@ function render(data){
     // Edge score color class
     const scoreClass=m.edge_score>=60?'high':m.edge_score>=35?'mid':'low';
 
+    // Edge grade badge — A/B/C from lib/edge-grade. Shown on every graded market
+    // (no hard gate — a visible "C" is honest signal). A/B picks are the ones
+    // recorded + published on /transparency. Ungraded markets show no chip.
+    const GRADE_STYLE={
+      A:'background:rgba(0,230,138,.13);border:1px solid rgba(0,230,138,.42);color:#00e68a',
+      B:'background:rgba(77,159,255,.13);border:1px solid rgba(77,159,255,.42);color:#4d9fff',
+      C:'background:rgba(106,106,122,.16);border:1px solid rgba(106,106,122,.42);color:#9a9aa8'
+    };
+    const gradeBadge=(m.edge_grade&&GRADE_STYLE[m.edge_grade])
+      ?'<span title="Edge grade — A/B picks are recorded on /transparency" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:6px;'+GRADE_STYLE[m.edge_grade]+'">'+m.edge_grade+'</span>'
+      :'';
+
     // Alpha score badge
     const alpha=m.alpha_score||0;
     const alphaClass=alpha>=7?'high':alpha>=4?'mid':'low';
@@ -536,6 +548,7 @@ function render(data){
           alphaBadge+
         '</div>'+
         '<div class="badges">'+
+          gradeBadge+
           bs.map(b=>'<span class="badge badge-'+b[0]+'">'+b[1]+'</span>').join('')+
           (ageStr ? '<span class="badge" style="opacity:.5">'+ageStr+'</span>' : '')+
         '</div>'+

@@ -735,6 +735,13 @@ app.get('/', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'home.html'));
 });
 
+// Legacy accuracy page → the one honest track-record surface. The old
+// public/accuracy.html carried a hardcoded "74%" with no denominator; collapse
+// it to /transparency so there's a single, self-documenting record. 301 so the
+// stale URL is de-indexed in favor of /transparency. Above the static handler
+// so it wins before express.static can serve accuracy.html.
+app.get('/accuracy', (req, res) => res.redirect(301, '/transparency'));
+
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
     // Prevent caching of HTML and JS files so users always get latest version

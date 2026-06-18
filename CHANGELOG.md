@@ -24,6 +24,11 @@
 - **Note:** legacy `public/accuracy.html` (unlinked, reads the looser `/api/accuracy/stats`, deprecated Syne/Space-Mono, hardcoded "74%") was left untouched this pass — `/transparency` is the new canonical honest surface. Candidate to redirect `/accuracy → /transparency` next (Marc's call).
 - **Don't break:** the edge_pick ledger starts EMPTY — picks must be logged then resolve over days. The page correctly shows the dry empty state until ≥10 decided. Do NOT lower the gates to make it look alive (empty-playfulness anti-pattern). Verify post-deploy: `/api/edge/track-record` returns `record` (likely all-zero at first) + `methodology`; after a screener refresh, Railway logs `[edge-pick] recorded N grade A/B picks to the ledger`; `record.pending` climbs; first CORRECT/WRONG rows land as markets resolve.
 
+### follow-through: 301 /accuracy + grade badge on the screener (Marc's two calls)
+- **`/accuracy` → 301 `/transparency`** (server.js, ABOVE the static handler so it wins before express.static can serve the stale file). The old accuracy.html carried a hardcoded "74%" with no denominator — a landmine that gets indexed/screenshotted out of context. One honest surface now. accuracy.html left on disk (unreferenced).
+- **Edge grade badge on every alpha-live screener card** (`public/alpha-live.html`): A (green) / B (blue) / C (grey) chip, first in the `.badges` row. Decision (Marc): NO hard gate — the screener shows everything; a visible "C" is honest signal, not noise. Ungraded markets (below floor / out of band) show no chip. Consumes `m.edge_grade` from `/api/alpha/top` (already tagged by buildAlphaList).
+- **Next (deferred):** make grade A/B the DEFAULT filter state on the screener (land new users on the quality view) while keeping an "all grades" toggle — a UI default decision, not a hard gate.
+
 ---
 
 ## 2026-06-15 — World Cup Live Odds Hub (Claude Code, on `main`)

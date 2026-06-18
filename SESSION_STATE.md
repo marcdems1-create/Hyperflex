@@ -55,13 +55,14 @@
 - `lib/edge-grade.js` (pure, 13 tests pass) — defines "true high-reward pick" + A/B/C grade + reward_ratio + published `methodology()`. Caught + fixed a real `Number(null)===0` price bug.
 - `server.js` — `buildAlphaList` tags every market `edge_grade`/`is_edge_pick`/`reward_ratio`; `logEdgePicks()` records top A/B picks to `signal_outcomes` (`signal_type='edge_pick'`, graded by the existing resolver); new public `GET /api/edge/track-record` (decided-only, deduped, wins+losses, methodology); `/transparency` + `/track-record` routes + RESERVED_SLUGS.
 - `public/transparency.html` — new charter-compliant flagship track-record page (gated, honest empty state). Nav link added; "Full track record →" link from alpha-live receipts.
+- **Follow-through (Marc's two calls):** (1) `app.get('/accuracy', 301 → /transparency)` ABOVE the static handler — kills the hardcoded-"74%" landmine, one honest surface. (2) Edge grade A/B/C badge now visible on every alpha-live screener card (NO hard gate — a visible "C" is honest signal); ungraded markets show no chip.
 
 **Active blockers:**
 - (none) — but the edge_pick ledger starts EMPTY; numbers populate only after picks log + their markets resolve (days). This is correct, not a bug.
 
 **Queued (priority order):**
-1. **Marc/next session verify post-deploy:** (a) `curl -s /api/edge/track-record` → `record` (likely zeros at first) + `methodology` non-null; (b) Railway log `[edge-pick] recorded N grade A/B picks to the ledger` after a screener refresh; (c) `record.pending` > 0 within ~10 min; (d) first CORRECT/WRONG rows as markets resolve; (e) `/transparency` renders, hero stays "—" until ≥10 decided.
-2. **Redirect `/accuracy → /transparency`?** — accuracy.html is unlinked, off-brand (Syne/Space-Mono, decorative emoji, hardcoded "74%"), reads the looser `/api/accuracy/stats`. Left untouched this pass. Marc's call whether to 301 it.
+1. **Marc/next session verify post-deploy:** (a) `curl -s /api/edge/track-record` → `record` (likely zeros at first) + `methodology` non-null; (b) Railway log `[edge-pick] recorded N grade A/B picks to the ledger` after a screener refresh; (c) `record.pending` > 0 within ~10 min; (d) first CORRECT/WRONG rows as markets resolve; (e) `/transparency` renders, hero stays "—" until ≥10 decided; (f) `/accuracy` 301s to `/transparency`; (g) A/B/C chips render on `/alpha-live` cards.
+2. **Grade A/B as the DEFAULT screener filter** (Marc, deferred "eventually"): land new users on the quality view, keep an "all grades" toggle. UI default + filter-state work on alpha-live (and /screener if applicable) — NOT a hard gate. The badge (done) is the prerequisite; this is the next step.
 3. **Surface 30d hit rate on landing once proven** (inherited, still gated until real numbers).
 
 **Open questions / unverified:**
