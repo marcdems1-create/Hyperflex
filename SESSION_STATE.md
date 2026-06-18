@@ -49,6 +49,48 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-18b (Ledger starvation fix — wire consensus detector → ledger)
+
+**Diagnosis (confirmed live by Marc):** `/api/signals` returned ZERO whale_cluster (only 2 momentum). The `[whale-consensus]` detector fires reliably but only wrote `whale_consensus_signals` + feed — never `logSignalOutcome`. Two parallel detectors, never connected. signal_outcomes starved ~30d (13 decided + 8 pending, all >30d old).
+
+**Shipped (branch `claude/keen-ride-do3ml2`, in PR #188):**
+- **HOLE 1 (fix):** `server.js:~35098` — consensus per-candidate loop now calls `logSignalOutcome({type:'whale_cluster', side, yes_price, whale_count, ...})` through the EXISTING band gate + dedup (no bypass). yes_price = live screener price if matched, else derived from whales' avg side price (`side==='YES'?avg:1-avg`) — so it does NOT depend on the brittle screener question-match.
+- **HOLE 2 (diagnosed, not patched):** the `/api/signals` whale_cluster source (`52786`) throws away each whale-index pick's own `yes_price` and re-demands an exact lowercased screener question-match (`52800`/`52810`) → silent zero on title drift. Redundant as a ledger writer now; still feeds the /api/signals UI list. Recommendation: leave it; optionally make robust later by using the pick's own yes_price.
+
+**Active blockers:** (none) — band gate/dedup/grading untouched per Marc.
+
+**Verify after deploy:**
+- `curl /api/signals` → whale_cluster entries appear (when consensus live + in-band)
+- Railway: `logSignalOutcome` inserts after `[whale-consensus] NEW` fires
+- `curl /api/edge/receipts` → `record.pending` climbs above 8
+- within a day: `last30d.graded` moves off 0 as fresh calls resolve
+
+**PR #188:** open, base main, subscribed (CI green: boot ✓ + 3 guards ✓). This fix pushes a new commit → CI re-runs.
+
+## 2026-06-18 (Edge track record — record + grade + publish every high-reward pick)
+
+**Shipped (branch `claude/keen-ride-do3ml2`, hash in `git log origin/claude/keen-ride-do3ml2 -1`):**
+- `lib/edge-grade.js` (pure, 13 tests pass) — defines "true high-reward pick" + A/B/C grade + reward_ratio + published `methodology()`. Caught + fixed a real `Number(null)===0` price bug.
+- `server.js` — `buildAlphaList` tags every market `edge_grade`/`is_edge_pick`/`reward_ratio`; `logEdgePicks()` records top A/B picks to `signal_outcomes` (`signal_type='edge_pick'`, graded by the existing resolver); new public `GET /api/edge/track-record` (decided-only, deduped, wins+losses, methodology); `/transparency` + `/track-record` routes + RESERVED_SLUGS.
+- `public/transparency.html` — new charter-compliant flagship track-record page (gated, honest empty state). Nav link added; "Full track record →" link from alpha-live receipts.
+- **Follow-through (Marc's two calls):** (1) `app.get('/accuracy', 301 → /transparency)` ABOVE the static handler — kills the hardcoded-"74%" landmine, one honest surface. (2) Edge grade A/B/C badge now visible on every alpha-live screener card (NO hard gate — a visible "C" is honest signal); ungraded markets show no chip.
+
+**Active blockers:**
+- (none) — but the edge_pick ledger starts EMPTY; numbers populate only after picks log + their markets resolve (days). This is correct, not a bug.
+
+**Queued (priority order):**
+1. **Marc/next session verify post-deploy:** (a) `curl -s /api/edge/track-record` → `record` (likely zeros at first) + `methodology` non-null; (b) Railway log `[edge-pick] recorded N grade A/B picks to the ledger` after a screener refresh; (c) `record.pending` > 0 within ~10 min; (d) first CORRECT/WRONG rows as markets resolve; (e) `/transparency` renders, hero stays "—" until ≥10 decided; (f) `/accuracy` 301s to `/transparency`; (g) A/B/C chips render on `/alpha-live` cards.
+2. **Grade A/B as the DEFAULT screener filter** (Marc, deferred "eventually"): land new users on the quality view, keep an "all grades" toggle. UI default + filter-state work on alpha-live (and /screener if applicable) — NOT a hard gate. The badge (done) is the prerequisite; this is the next step.
+3. **Surface 30d hit rate on landing once proven** (inherited, still gated until real numbers).
+
+**Open questions / unverified:**
+- Sandbox can't reach prod/DB — all 5 verify items above are prod-only (Marc or a deployed-curl).
+- Will grade A/B picks actually appear regularly? Score ≥67 needs real multi-signal confluence (e.g. whale 35 + velocity 25 + volume). If few qualify, that's the honest message ("few true high-reward markets right now"), not inflation — do NOT lower the floor to manufacture picks.
+
+**Notes for next session:**
+- ⛔ `updatePlatformMetrics` headline stays whale-cluster-only (`WHALE_EDGE_SQL`). edge_pick is a SEPARATE published population on `/api/edge/track-record`. Don't merge the two denominators.
+- Branch `claude/keen-ride-do3ml2` diverged from origin/main (June 4 merge-base; my branch is newer/June 18). Merge to main is Marc's call.
+
 ## 2026-06-15 (World Cup Live Odds Hub — flagship consumer surface)
 
 **Shipped (with hashes, on `main`):**
