@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-06-18 — Ledger starvation fix: wire the consensus detector to the ledger (Claude Code, branch `claude/keen-ride-do3ml2`)
+
+### fix(edge): the whale-consensus detector now writes gradeable calls (HOLE 1)
+- **Root cause (confirmed live):** `/api/signals` returned ZERO `whale_cluster` entries and the reliable `[whale-consensus]` detector (`server.js:~35042`) wrote only to `whale_consensus_signals` + the social feed — it **never called `logSignalOutcome`**. Two parallel whale detectors that shared a name, not a pipe. Net: nothing fed `signal_outcomes` for ~30 days; receipts stuck at 13 decided + 8 pending, all >30d old.
+- **Fix:** in the consensus per-candidate loop (after the `whale_consensus_signals` upsert), call `logSignalOutcome({ type:'whale_cluster', market, side, yes_price, confidence, whale_count, url })` for every active 3+ whale candidate each cycle. Routed through the **existing** guards — band gate (0.15-0.85) + open-row dedup — **no bypass**. The in-memory hash + open-row check make it idempotent across snapshot cycles (one row per market+side until it resolves).
+- **YES-price correctness:** `logSignalOutcome` requires `yes_price` to be YES-equivalent (the resolver's PnL math assumes it). The detector's `avg_price` is the **side-relative** price (whales' `current_price` on the side they hold). So: prefer the live screener YES price (captured as `sig.live_yes_price` during the existing enrichment match), else derive `side==='YES' ? avg_price : 1-avg_price`. This makes the ledger write **independent of the brittle screener question-match** — it works off the whales' own price data.
+- **Population:** `type='whale_cluster'` → `source='whale_cluster'`, so these land in the published WHALE_EDGE population (receipts + headline) — exactly the calls that should be graded. Band gate, dedup rule, grading, and the receipts/headline definitions were **not touched**.
+- **HOLE 2 (diagnosed, not patched):** the older ledger writer — the `/api/signals` `whale_cluster` source (`server.js:52786`) — reads `_whaleIndexCache.data.picks` then **throws away each pick's own `yes_price` and re-demands an exact lowercased screener question-match** (`52800`) for `livePrice`, skipping the signal if no match (`52810`). Polymarket position titles vs gamma `question` text drift by punctuation/whitespace → the join silently zeroes → no signals. With HOLE 1 wired (price derived from whale data, no match dependency), this path is **redundant as a ledger writer**; it still feeds the `/api/signals` UI list. Left in place. Robust follow-up if the UI list matters: use the pick's own `yes_price` instead of re-matching screener.
+- **Verify:** `curl /api/signals` (whale_cluster entries appear when consensus is live + in-band) · Railway logs show `logSignalOutcome` inserts after a `[whale-consensus] NEW` fire · `curl /api/edge/receipts` → `record.pending` climbs above 8 · within a day `last30d.graded` moves off zero as fresh calls resolve.
+
+---
+
 ## 2026-06-18 — Edge track record: record every high-reward pick, grade it in public (Claude Code, branch `claude/keen-ride-do3ml2`)
 
 ### feat(edge): lib/edge-grade.js — single source of truth for "true high-reward pick"

@@ -34986,6 +34986,7 @@ async function fetchWhalePositions() {
             if (match.slug) sig.slug = match.slug;
             if (match.market_id) sig.condition_id = match.market_id;
             if (match.clobTokenIds) sig.clob_token_ids = typeof match.clobTokenIds === 'string' ? match.clobTokenIds : JSON.stringify(match.clobTokenIds);
+            if (match.yes_price != null && match.yes_price > 0 && match.yes_price < 1) sig.live_yes_price = match.yes_price;
           }
         }
       }
@@ -35093,6 +35094,27 @@ async function fetchWhalePositions() {
               }
             } catch (takeErr) { console.warn('[takes] consensus synthesis error:', takeErr.message); }
           }
+
+          // ── HOLE 1: wire the consensus detector to the gradeable ledger ──
+          // The detector above reliably fires (3+ whales, same side) but only
+          // wrote to whale_consensus_signals + the feed. Log a gradeable call
+          // too, for EVERY active candidate each cycle. Routed through the SAME
+          // logSignalOutcome guards — band gate (0.15-0.85) + open-row dedup — so
+          // out-of-band and duplicate calls are dropped automatically; no bypass.
+          // yes_price MUST be YES-equivalent (the resolver assumes it): prefer the
+          // live screener YES price, else derive from the whales' avg side price.
+          let _wcYes = null;
+          if (sig.live_yes_price != null) _wcYes = sig.live_yes_price;
+          else if (sig.avg_price != null) _wcYes = sig.side === 'YES' ? sig.avg_price : parseFloat((1 - sig.avg_price).toFixed(4));
+          await logSignalOutcome({
+            type: 'whale_cluster',
+            market: sig.market,
+            side: sig.side,
+            yes_price: _wcYes,
+            confidence: sig.whale_count >= 10 ? 'HIGH' : sig.whale_count >= 7 ? 'MEDIUM' : 'LOW',
+            whale_count: sig.whale_count,
+            url: sig.market_url || (sig.slug ? 'https://hyperflex.network/market/' + sig.slug : ''),
+          });
         } catch (sigErr) { console.warn('[whale-consensus] per-sig error:', sigErr.message); }
       }
     } catch (wcErr) { console.warn('[whale-consensus] error:', wcErr.message); }

@@ -49,6 +49,24 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-18b (Ledger starvation fix — wire consensus detector → ledger)
+
+**Diagnosis (confirmed live by Marc):** `/api/signals` returned ZERO whale_cluster (only 2 momentum). The `[whale-consensus]` detector fires reliably but only wrote `whale_consensus_signals` + feed — never `logSignalOutcome`. Two parallel detectors, never connected. signal_outcomes starved ~30d (13 decided + 8 pending, all >30d old).
+
+**Shipped (branch `claude/keen-ride-do3ml2`, in PR #188):**
+- **HOLE 1 (fix):** `server.js:~35098` — consensus per-candidate loop now calls `logSignalOutcome({type:'whale_cluster', side, yes_price, whale_count, ...})` through the EXISTING band gate + dedup (no bypass). yes_price = live screener price if matched, else derived from whales' avg side price (`side==='YES'?avg:1-avg`) — so it does NOT depend on the brittle screener question-match.
+- **HOLE 2 (diagnosed, not patched):** the `/api/signals` whale_cluster source (`52786`) throws away each whale-index pick's own `yes_price` and re-demands an exact lowercased screener question-match (`52800`/`52810`) → silent zero on title drift. Redundant as a ledger writer now; still feeds the /api/signals UI list. Recommendation: leave it; optionally make robust later by using the pick's own yes_price.
+
+**Active blockers:** (none) — band gate/dedup/grading untouched per Marc.
+
+**Verify after deploy:**
+- `curl /api/signals` → whale_cluster entries appear (when consensus live + in-band)
+- Railway: `logSignalOutcome` inserts after `[whale-consensus] NEW` fires
+- `curl /api/edge/receipts` → `record.pending` climbs above 8
+- within a day: `last30d.graded` moves off 0 as fresh calls resolve
+
+**PR #188:** open, base main, subscribed (CI green: boot ✓ + 3 guards ✓). This fix pushes a new commit → CI re-runs.
+
 ## 2026-06-18 (Edge track record — record + grade + publish every high-reward pick)
 
 **Shipped (branch `claude/keen-ride-do3ml2`, hash in `git log origin/claude/keen-ride-do3ml2 -1`):**
