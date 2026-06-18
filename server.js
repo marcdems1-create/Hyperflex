@@ -141,6 +141,7 @@ const clvEngine = require('./lib/clv-engine');
 const inferenceEngine = require('./lib/inference-engine');
 const signalLedger = require('./lib/signal-ledger');
 const edgeEngine = require('./lib/edge-engine');
+const edgeGrade = require('./lib/edge-grade'); // pure: grades each market as a high-reward pick
 const biasCaller = require('./lib/bias-caller');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
@@ -10715,7 +10716,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino', 'live',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino', 'live', 'transparency', 'track-record',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -35759,6 +35760,9 @@ app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
+// Public track record — every high-reward pick the engine makes, graded in public.
+app.get('/transparency', (req, res) => res.sendFile(path.join(__dirname, 'public', 'transparency.html')));
+app.get('/track-record', (req, res) => res.redirect(301, '/transparency'));
 
 // ════════════════════════════════════════════════════════════════════
 // WORLD CUP LIVE ODDS HUB — composition of existing systems only.
@@ -40141,6 +40145,21 @@ async function _buildAlphaListInner(opts = {}) {
       }
       _edgePrev.set(m.market_id, { score: m.edge_score || 0, ts: _edgeNow, peak: m.edge_peak_score });
     }
+
+    // ── EDGE GRADE + PICK RECORDING ────────────────────────────────────────
+    // Tag every market with its high-reward grade (A/B/C or null), then record
+    // the top A/B picks to the public ledger so the engine is accountable for
+    // the markets it surfaces as "high reward". logEdgePicks is throttled +
+    // deduped internally and fire-and-forget — it never blocks the cache write.
+    try {
+      for (const m of markets) {
+        const v = edgeGrade.gradeEdgePick(m);
+        m.edge_grade = v.grade;
+        m.is_edge_pick = v.is_edge_pick;
+        m.reward_ratio = v.reward_ratio;
+      }
+      logEdgePicks(markets).catch(() => {});
+    } catch (e) { console.warn('[screener] edge grade tagging failed:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
@@ -58617,6 +58636,44 @@ async function logSignalOutcome(signal) {
   } catch(e) { /* silent — don't break signal delivery */ }
 }
 
+// 1b. LOG EDGE PICKS — the engine's OWN high-reward calls, recorded in public.
+// Every market we surface as a grade A/B pick is logged the moment it's detected
+// and graded by the same resolver as whale signals (matched on market+side).
+// This is the accountability loop behind /api/edge/track-record + /transparency:
+// "every market we flag as high-reward — here's how it actually resolved."
+//
+// signal_type='edge_pick' keeps these OUT of the whale-cluster headline
+// (updatePlatformMetrics is WHALE_EDGE_SQL only) while still surfacing in
+// source_accuracy + confidence calibration. Reuses logSignalOutcome's eligibility
+// gate (in-band only), cross-cycle dedup (one open row per market+side), and the
+// 60-day resolver. Throttled to ~10 min and bounded to the top 8 picks/cycle.
+let _lastEdgePickLogTs = 0;
+async function logEdgePicks(markets) {
+  if (!pool || !Array.isArray(markets)) return;
+  if (Date.now() - _lastEdgePickLogTs < 10 * 60 * 1000) return;
+  _lastEdgePickLogTs = Date.now();
+  try {
+    const picks = markets
+      .filter(m => m.is_edge_pick && (m.edge_grade === 'A' || m.edge_grade === 'B') && m.trade && m.trade.side)
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, 8);
+    for (const m of picks) {
+      // yes_price is ALWAYS the YES price (the resolver's PnL math assumes it);
+      // predicted_side carries the recommended direction.
+      await logSignalOutcome({
+        type: 'edge_pick',
+        market: m.question,
+        side: m.trade.side,
+        yes_price: m.yes_price,
+        confidence: m.edge_grade === 'A' ? 'HIGH' : 'MEDIUM',
+        whale_count: m.whale_count || 0,
+        url: m.url || (m.slug ? 'https://hyperflex.network/market/' + m.slug : ''),
+      });
+    }
+    if (picks.length) console.log('[edge-pick] recorded', picks.length, 'grade A/B picks to the ledger');
+  } catch (e) { console.warn('[edge-pick] log error:', e.message); }
+}
+
 // 2. RESOLVE OUTCOMES — every 30 min
 // Checks ALL sources: screener cache, whale index cache, AND fetches resolved markets
 async function resolveSignalOutcomes() {
@@ -59134,6 +59191,126 @@ app.get('/api/edge/receipts', async (req, res) => {
     console.warn('[edge-receipts]', e.message);
     if (_edgeReceiptsCache) return res.json(_edgeReceiptsCache.data);
     res.json({ record: null, receipts: [], updated_at: new Date().toISOString() });
+  }
+});
+
+// 7c. API: EDGE PICK TRACK RECORD — the engine's OWN high-reward calls, graded.
+// Distinct from /api/edge/receipts (whale clusters): this is "every market we
+// flagged as a grade A/B high-reward pick — here's how it actually resolved."
+// Same honesty discipline: decided-only denominator (correct + wrong), deduped
+// to one row per distinct (market, side), wins AND losses, methodology published
+// from lib/edge-grade so the rate is self-documenting. 5-min cache, computed live
+// from signal_outcomes so it can't drift from a stale aggregate row.
+let _edgeTrackRecordCache = null;
+app.get('/api/edge/track-record', async (req, res) => {
+  try {
+    if (_edgeTrackRecordCache && (Date.now() - _edgeTrackRecordCache.ts < 5 * 60 * 1000)) {
+      res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+      return res.json(_edgeTrackRecordCache.data);
+    }
+    const methodology = edgeGrade.methodology();
+    if (!pool) return res.json({ record: null, picks: [], methodology, updated_at: new Date().toISOString() });
+
+    // One row per distinct (market, side) edge pick, in-band. Keeps the earliest
+    // DECIDED re-log when resolved, else the earliest pending copy — identical
+    // dedup discipline to WHALE_EVENTS_CTE.
+    const PICK_EVENTS_CTE = `
+      SELECT DISTINCT ON (market_question, predicted_side) *
+      FROM signal_outcomes
+      WHERE signal_type = 'edge_pick' AND ${EDGE_BAND_SQL}
+      ORDER BY market_question, predicted_side, (outcome IN ('correct','wrong')) DESC, predicted_at ASC
+    `;
+    const gradeMap = { HIGH: 'A', MEDIUM: 'B', LOW: 'C' };
+    const [totals, byGrade, picks] = await Promise.all([
+      dbQuery(`
+        WITH ev AS (${PICK_EVENTS_CTE})
+        SELECT
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as graded,
+          COUNT(*) FILTER (WHERE outcome='correct') as correct,
+          COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
+          COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+          AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as graded_30d,
+          COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
+          AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as avg_pnl_30d,
+          MIN(predicted_at) as tracking_since
+        FROM ev
+      `),
+      dbQuery(`
+        WITH ev AS (${PICK_EVENTS_CTE})
+        SELECT confidence_level,
+          COUNT(*) FILTER (WHERE outcome IN ('correct','wrong')) as graded,
+          COUNT(*) FILTER (WHERE outcome='correct') as correct
+        FROM ev GROUP BY confidence_level
+      `).catch(() => []),
+      dbQuery(`
+        WITH ev AS (${PICK_EVENTS_CTE})
+        SELECT market_question, predicted_side, market_price_at_signal, whale_count,
+               confidence_level, outcome, pnl_if_followed, predicted_at, resolved_at
+        FROM ev
+        WHERE outcome IN ('correct','wrong')
+        ORDER BY resolved_at DESC LIMIT 30
+      `).catch(() => [])
+    ]);
+
+    const t = totals[0] || {};
+    const graded = parseInt(t.graded) || 0;
+    const graded30 = parseInt(t.graded_30d) || 0;
+    const pct = (c, n) => n > 0 ? Math.round(c / n * 1000) / 10 : null;
+
+    const record = {
+      last30d: {
+        graded: graded30,
+        correct: parseInt(t.correct_30d) || 0,
+        wrong: graded30 - (parseInt(t.correct_30d) || 0),
+        hit_rate_pct: pct(parseInt(t.correct_30d) || 0, graded30),
+        avg_pnl_per_dollar: t.avg_pnl_30d != null ? Math.round(parseFloat(t.avg_pnl_30d) * 100) / 100 : null
+      },
+      alltime: {
+        graded,
+        correct: parseInt(t.correct) || 0,
+        wrong: parseInt(t.wrong) || 0,
+        hit_rate_pct: pct(parseInt(t.correct) || 0, graded),
+        avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null
+      },
+      pending: parseInt(t.pending) || 0,
+      by_grade: (byGrade || [])
+        .map(r => ({
+          grade: gradeMap[r.confidence_level] || r.confidence_level,
+          graded: parseInt(r.graded) || 0,
+          correct: parseInt(r.correct) || 0,
+          hit_rate_pct: pct(parseInt(r.correct) || 0, parseInt(r.graded) || 0)
+        }))
+        .sort((a, b) => String(a.grade).localeCompare(String(b.grade))),
+      tracking_since: t.tracking_since || null,
+      population: 'edge_pick · grade A/B · price 0.15-0.85 at signal · decided · deduped to distinct (market,side) events'
+    };
+
+    const pickRows = (picks || []).map(r => {
+      const entry = parseFloat(r.market_price_at_signal);
+      const entryYes = (!isNaN(entry) && entry > 0 && entry < 1) ? Math.round(entry * 100) : null;
+      const side = (r.predicted_side || 'YES').toUpperCase();
+      return {
+        market_question: r.market_question,
+        predicted_side: side,
+        grade: gradeMap[r.confidence_level] || r.confidence_level,
+        entry_yes_cents: entryYes,
+        cost_cents: entryYes == null ? null : (side === 'NO' ? 100 - entryYes : entryYes),
+        outcome: r.outcome,
+        pnl_if_followed: r.pnl_if_followed != null ? Math.round(parseFloat(r.pnl_if_followed) * 100) / 100 : null,
+        predicted_at: r.predicted_at,
+        resolved_at: r.resolved_at
+      };
+    });
+
+    const data = { record, picks: pickRows, methodology, updated_at: new Date().toISOString() };
+    _edgeTrackRecordCache = { ts: Date.now(), data };
+    res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+    res.json(data);
+  } catch (e) {
+    console.warn('[edge/track-record]', e.message);
+    if (_edgeTrackRecordCache) return res.json(_edgeTrackRecordCache.data);
+    res.json({ record: null, picks: [], methodology: edgeGrade.methodology(), updated_at: new Date().toISOString() });
   }
 });
 

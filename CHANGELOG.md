@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-06-18 — Edge track record: record every high-reward pick, grade it in public (Claude Code, branch `claude/keen-ride-do3ml2`)
+
+### feat(edge): lib/edge-grade.js — single source of truth for "true high-reward pick"
+- **New file `lib/edge-grade.js`** (pure, zero-dep, fully tested in `test/edge-grade.test.js`, 13 cases). `gradeEdgePick(market)` answers one question: is this a TRUE potential high-reward market, and how strong? Gates: in-band price [0.15, 0.85] (real two-sided uncertainty), a directional trade, ≥$25k 24h volume (capturable reward), Edge Score ≥ 60. Grades A (≥75 + reward_ratio ≥0.45), B (≥67), C (≥60). `reward_ratio` = profit per $1 staked on the chosen side. `methodology()` returns the self-documenting spec (grades, band, volume floor, the 8 signals + maxes, denominator rule) rendered verbatim by the transparency page + endpoint.
+- **Bug the test caught (also a prod bug):** `Number(null)===0` made a market with no price read as a near-settled 0. `num()` now treats null/undefined/'' as null → "no price" gate fires correctly.
+- **Constants mirror server.js** EDGE_BAND_LO/HI (0.15/0.85) and the screener's volume floor on purpose — the definition is identical everywhere it's read.
+
+### feat(edge): record the engine's own picks + GET /api/edge/track-record (server.js)
+- **`buildAlphaList()` tagging:** after final scoring, before `_screenerCache=`, every market gets `edge_grade` / `is_edge_pick` / `reward_ratio` (additive fields). Defensive — grades the whale-forced push path too (missing fields → not a pick, no throw).
+- **`logEdgePicks(markets)`** (next to `logSignalOutcome`): records the top 8 grade A/B picks to `signal_outcomes` with `signal_type='edge_pick'`, graded by the EXISTING resolver (matched on market+side). Reuses logSignalOutcome's in-band eligibility gate + cross-cycle dedup (one open row per market+side → a pick that stays top for days = 1 row, not 8/cycle). Throttled 10 min, fire-and-forget.
+- **Safe by construction:** `updatePlatformMetrics` (the published whale-edge headline) is `WHALE_EDGE_SQL` only — edge_pick rows DO NOT touch it. They surface in `source_accuracy` + confidence calibration (additive). `getSourceWeight('edge_pick')` is computed but never consumed (edge_pick is never a `/api/signals` type) → no feedback loop.
+- **`GET /api/edge/track-record`** (after `/api/edge/receipts`): the edge_pick population, same honesty discipline as receipts — decided-only denominator (correct+wrong), deduped to distinct (market,side), 30d + all-time, by-grade breakdown, last 30 decided picks (wins AND losses), pending count, methodology. 5-min cache, computed live from `signal_outcomes`.
+
+### feat(transparency): public/transparency.html + /transparency route + nav
+- **New flagship page** at `/transparency` (route + `/track-record` 301 + RESERVED_SLUGS entries so the `/:slug` catch-all doesn't swallow it). Voice-charter compliant: Inter + JetBrains Mono, multi-accent palette, ZERO decorative emoji (functional `●`/`✓`/`→` only), mono tabular numbers, P&L signed 2dp with U+2212, hit rate 1dp, CORRECT/WRONG labels (not ✅❌), losses given the same row dignity as wins. Sections: gated headline stats, by-grade pills, methodology (grades + 8 signals from `methodology()`), the ledger (recent decided picks win+loss), open-picks count, smart-money-clusters strip (from `/api/edge/receipts`). Supply gates: section hidden <5 graded, headline rate hidden <10 graded — honest dry empty state otherwise ("N picks open, will appear as markets resolve").
+- **Links:** nav "More" dropdown + searchable nav items + "Full track record →" from the alpha-live RECEIPTS head.
+- **Note:** legacy `public/accuracy.html` (unlinked, reads the looser `/api/accuracy/stats`, deprecated Syne/Space-Mono, hardcoded "74%") was left untouched this pass — `/transparency` is the new canonical honest surface. Candidate to redirect `/accuracy → /transparency` next (Marc's call).
+- **Don't break:** the edge_pick ledger starts EMPTY — picks must be logged then resolve over days. The page correctly shows the dry empty state until ≥10 decided. Do NOT lower the gates to make it look alive (empty-playfulness anti-pattern). Verify post-deploy: `/api/edge/track-record` returns `record` (likely all-zero at first) + `methodology`; after a screener refresh, Railway logs `[edge-pick] recorded N grade A/B picks to the ledger`; `record.pending` climbs; first CORRECT/WRONG rows land as markets resolve.
+
+---
+
 ## 2026-06-15 — World Cup Live Odds Hub (Claude Code, on `main`)
 
 ### feat(worldcup): /worldcup hub + /worldcup/:match — composition only, zero new infra (commit `97a50e4`)
