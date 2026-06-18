@@ -35858,6 +35858,87 @@ function _wcIsOverUnder(m) {
   return /over|under|o\/u|total goals|total of/.test(t);
 }
 
+// ── Dedicated World Cup schedule fetch ───────────────────────────────────
+// The alpha pool only carries fifwc- match events that crack the GLOBAL
+// top-500-by-volume gamma page, so low-volume / future fixtures never reach
+// the hub. This pulls match events scoped to the World Cup directly from gamma
+// so the full schedule shows. Winners are NOT sourced here — they stay on the
+// alpha pool. Strategy chain (first non-empty wins, all deduped): discover the
+// WC tag/series from a known fifwc- event already in the pool, enumerate every
+// event under it, else fall back to keyword search. 5-min cached; on any
+// failure returns { markets: [] } so getWorldCupData falls back to the alpha
+// pool with zero regression. Diagnose in one curl via `.schedule_source`.
+let _wcSchedCache = null;
+const WC_SCHED_TTL = 5 * 60 * 1000;
+
+// Flatten a gamma EVENT's sub-markets into _wcNormalize-ready raw markets,
+// stamping the parent event slug/image so match grouping keys on the event
+// (not on each sub-market's own slug).
+function _wcEventToMarkets(ev) {
+  if (!ev || !Array.isArray(ev.markets)) return [];
+  const evStub = [{ slug: ev.slug, image: ev.image }];
+  return ev.markets.map(m => Object.assign({}, m, { events: evStub }));
+}
+
+async function _wcFetchSchedule() {
+  if (_wcSchedCache && Date.now() - _wcSchedCache.ts < WC_SCHED_TTL) return _wcSchedCache.data;
+  const events = [];
+  const seen = new Set();
+  let source = 'none';
+  const gather = async (url) => {
+    const arr = _gammaUnwrap(await _gammaFetchJson(url));
+    for (const ev of (Array.isArray(arr) ? arr : [])) {
+      if (ev && ev.id != null && !seen.has(ev.id)) { seen.add(ev.id); events.push(ev); }
+    }
+  };
+  try {
+    // Strategy 1 — discover the WC tag/series from a known fifwc- match event.
+    const known = _wcMarkets().find(_wcIsMatch);
+    const seedSlug = known && (known.slug || '');
+    let tagIds = [], seriesIds = [];
+    if (seedSlug) {
+      const seedArr = _gammaUnwrap(await _gammaFetchJson(`https://gamma-api.polymarket.com/events/keyset?slug=${encodeURIComponent(seedSlug)}`));
+      const ev0 = Array.isArray(seedArr) ? seedArr[0] : null;
+      if (ev0) {
+        const tagsArr = Array.isArray(ev0.tags) ? ev0.tags : [];
+        const seriesArr = Array.isArray(ev0.series) ? ev0.series : (ev0.series ? [ev0.series] : []);
+        const isWc = (x) => /world[\s-]?cup|fifa|fifwc/i.test(String(x || ''));
+        tagIds = tagsArr.filter(t => isWc(t.slug) || isWc(t.label)).map(t => t.id).filter(v => v != null);
+        // A fifwc- event's series IS the WC bracket even if unnamed — use it.
+        seriesIds = seriesArr.map(s => s.id).filter(v => v != null);
+        // If no WC-specific tag matched, fall back to the seed's tags (capped) —
+        // results are filtered to fifwc- slugs below, so a broad tag is harmless.
+        if (!tagIds.length) tagIds = tagsArr.map(t => t.id).filter(v => v != null).slice(0, 3);
+      }
+    }
+    // Independent enumerations run in parallel so one slow page can't stack
+    // 8s timeouts on the request path (whole fetch is 5-min cached regardless).
+    const enumUrls = []
+      .concat(tagIds.slice(0, 4).map(id => `https://gamma-api.polymarket.com/events/keyset?closed=false&limit=300&tag_id=${encodeURIComponent(id)}`))
+      .concat(seriesIds.slice(0, 2).map(id => `https://gamma-api.polymarket.com/events/keyset?closed=false&limit=300&series_id=${encodeURIComponent(id)}`));
+    await Promise.all(enumUrls.map(gather));
+    if (events.length) source = tagIds.length ? 'tag' : 'series';
+
+    // Strategy 2 — keyword fallback when discovery yields nothing.
+    if (!events.length) {
+      await Promise.all(['FIFA World Cup', 'World Cup 2026'].map(kw =>
+        gather(`https://gamma-api.polymarket.com/events/keyset?closed=false&active=true&limit=200&_q=${encodeURIComponent(kw)}`)));
+      if (events.length) source = 'keyword';
+    }
+  } catch (e) { console.warn('[worldcup] schedule fetch failed:', e.message); }
+
+  // Keep only fifwc- match events; flatten + normalize their sub-markets.
+  const matchEvents = events.filter(ev => (ev.slug || '').toLowerCase().startsWith('fifwc-'));
+  let raw = [];
+  for (const ev of matchEvents) raw = raw.concat(_wcEventToMarkets(ev));
+  const markets = raw.map(_wcNormalize).filter(Boolean).filter(_wcIsMatch);
+
+  const data = { markets, source, event_count: matchEvents.length };
+  _wcSchedCache = { ts: Date.now(), data };
+  if (markets.length) console.log(`[worldcup] schedule: ${matchEvents.length} match events, ${markets.length} markets via ${source}`);
+  return data;
+}
+
 async function getWorldCupData() {
   if (_wcCache && Date.now() - _wcCache.ts < WC_CACHE_TTL) return _wcCache.data;
   // Warm the in-scope pool if cold (buildAlphaList self-guards at 90s — no-op when warm)
@@ -35885,6 +35966,22 @@ async function getWorldCupData() {
       (groups[m.slug] = groups[m.slug] || { slug: m.slug, markets: [] }).markets.push(m);
     }
   }
+
+  // Merge the dedicated WC schedule fetch so low-volume / future fixtures that
+  // never crack the global top-500 alpha page still appear. Matches only —
+  // winners stay sourced from the alpha pool above. Deduped by market_id.
+  let schedSource = 'none', schedEvents = 0;
+  try {
+    const sched = await _wcFetchSchedule();
+    schedSource = sched.source; schedEvents = sched.event_count;
+    const have = new Set();
+    for (const g of Object.values(groups)) for (const mm of g.markets) have.add(mm.market_id);
+    for (const m of sched.markets) {
+      if (!m.market_id || have.has(m.market_id)) continue;
+      have.add(m.market_id);
+      (groups[m.slug] = groups[m.slug] || { slug: m.slug, markets: [] }).markets.push(m);
+    }
+  } catch (e) { /* schedule optional — alpha-pool matches already in groups */ }
 
   winners.sort((a, b) => (b.prob || 0) - (a.prob || 0));
 
@@ -35963,10 +36060,12 @@ async function getWorldCupData() {
       winner_markets: winners.length,
       match_markets: Object.values(groups).reduce((s, g) => s + g.markets.length, 0),
       match_events: Object.keys(groups).length,
-      today_matches: matches.filter(m => m.is_today).length
+      today_matches: matches.filter(m => m.is_today).length,
+      schedule_match_events: schedEvents
     },
     pool_size: all.length,
     pool_source: (_alphaRawCache && _alphaRawCache.data && _alphaRawCache.data.length) ? 'alpha_raw' : 'screener_fallback',
+    schedule_source: schedSource,
     updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
   };
   _wcCache = { ts: Date.now(), data };
@@ -35993,7 +36092,11 @@ app.get('/api/worldcup/match/:slug', async (req, res) => {
       try { await buildAlphaList(); } catch (e) {}
     }
     const all = _wcMarkets();
-    const markets = all.filter(m => (m.slug || '').toLowerCase() === slug);
+    let markets = all.filter(m => (m.slug || '').toLowerCase() === slug);
+    if (!markets.length) {
+      // Not in the alpha pool — try the dedicated schedule fetch (low-volume fixture).
+      try { const sched = await _wcFetchSchedule(); markets = sched.markets.filter(m => (m.slug || '').toLowerCase() === slug); } catch (e) {}
+    }
     if (!markets.length) return res.status(404).json({ error: 'match not found', slug });
 
     const moneyline = markets.filter(m => !_wcIsOverUnder(m));
@@ -36075,7 +36178,10 @@ app.get('/worldcup/:slug', async (req, res) => {
     if (!_wcMatchTpl) return res.sendFile(tplPath);
 
     const all = _wcMarkets();
-    const markets = all.filter(m => (m.slug || '').toLowerCase() === slug && !_wcIsOverUnder(m));
+    let markets = all.filter(m => (m.slug || '').toLowerCase() === slug && !_wcIsOverUnder(m));
+    if (!markets.length) {
+      try { const sched = await _wcFetchSchedule(); markets = sched.markets.filter(m => (m.slug || '').toLowerCase() === slug && !_wcIsOverUnder(m)); } catch (e) {}
+    }
     const sides = markets
       .map(m => ({ label: _wcSideLabel(m), prob: m.yes_price != null ? Math.round(m.yes_price * 100) : null }))
       .filter(s => s.prob != null)

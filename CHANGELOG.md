@@ -17,6 +17,16 @@
 - **Unverified from sandbox (egress blocks prod + gamma):** the live ordered list with real probabilities — curl `/api/worldcup` after deploy; expect France/Spain/Argentina/England/etc. leading, zero award rows.
 - **Don't break:** blocklist must stay BEFORE the structural gate. If a new WC award type appears (e.g. "Best Goalkeeper"), extend `_WC_PROP_RX`, don't loosen the gate.
 
+### feat(worldcup): dedicated gamma schedule fetch — full fixture list, not just high-volume games
+- **The gap:** the alpha pool only carries `fifwc-` match events that crack the GLOBAL top-500-by-volume gamma page (`buildAlphaList` + the `_wcExtra` capture). Low-volume / future fixtures never reach the hub — partial schedule.
+- **The fetch:** `_wcFetchSchedule()` (5-min cached) pulls match events scoped to the World Cup directly from gamma. Strategy chain, first non-empty wins, all deduped: (1) **discover** the WC `tag_id`/`series_id` from a known `fifwc-` event already in the pool via the proven `/events/keyset?slug=` call, then enumerate every event under that tag/series (`tag_id=` + `series_id=`, run in parallel so one slow page can't stack 8s timeouts); (2) **keyword** fallback (`_q=FIFA World Cup`) if discovery is empty. Results filtered to `fifwc-` event slugs, sub-markets flattened with the parent event slug stamped (`_wcEventToMarkets`) so grouping keys on the EVENT, normalized via `_wcNormalize`.
+- **Merge:** matches-only into `getWorldCupData`'s `groups`, deduped by `market_id` against the alpha pool. **Winners are NOT sourced here** — they stay on the alpha pool, so the STEP-1 classifier is untouched. `/api/worldcup/match/:slug` and the `/worldcup/:slug` OG route also fall back to the schedule cache so deep-links to low-volume fixtures resolve + unfurl with odds.
+- **Self-diagnosing:** response carries `schedule_source` (`tag`|`series`|`keyword`|`none`) + `counts.schedule_match_events`. One curl tells you if the gamma enumeration hit.
+- **Graceful degradation:** any fetch failure → `{ markets: [] }` → hub falls back to alpha-pool matches (current behavior). **Zero regression** is the floor.
+- **Files:** `server.js` — `_wcFetchSchedule` + `_wcEventToMarkets` + `_wcSchedCache` (new), merge block in `getWorldCupData`, schedule fallback in the two match routes.
+- **Verified (offline):** data-shaping harness 9/9 — match events flatten + group under the event slug, winner/award events never leak into matches, `yes_price` parses, classifier intact. `node --check` green.
+- **UNVERIFIED — needs one prod curl:** the gamma enumeration params (`tag_id`/`series_id`/`_q` on `/events/keyset`) couldn't be hit from the sandbox (egress blocks gamma). After deploy: `curl -s .../api/worldcup | jq '.schedule_source, .counts'`. If `schedule_source:"none"` or `schedule_match_events:0` while matches clearly exist, the enumeration params need adjusting (pivot: deepen `buildAlphaList`'s markets/keyset cursor paging to capture WC from the top ~2000 by volume — uses only proven endpoints). Frontend "Today's Matches" strip still caps display at 12 (today-first); the full schedule is in the API.
+
 ---
 
 ## 2026-06-15 — World Cup Live Odds Hub (Claude Code, on `main`)
