@@ -11398,6 +11398,11 @@ app.get('/@:handle', (req, res) => {
   // Early-exit with 404 if the handle shape is obviously wrong so Google
   // doesn't index /@null /@undefined /@admin etc.
   if (_validateHandleFormat(req.params.handle)) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  // Top-level profile HTML must revalidate so a deploy propagates immediately
+  // (matches the `/` homepage route + static .html policy above). Without it,
+  // sendFile's default max-age=0 still lets Cloudflare/browsers serve a stale
+  // member.html — that's what pinned the pre-fix isOwnProfile build after deploy.
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'member.html'));
 });
 
@@ -11543,6 +11548,7 @@ app.get('/m/:userId', async (req, res) => {
   // Fall through: if the user has no handle yet, serve the page so the
   // UI can render and either prompt for handle claim (if owner) or show
   // a wallet-stub identity.
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'member.html'));
 });
 
@@ -11682,7 +11688,10 @@ app.get('/api/verify/:userId', async (req, res) => {
 });
 
 // GET /p/:username — public verified trader profile page
-app.get('/p/:username', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile-trader.html')));
+app.get('/p/:username', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'profile-trader.html'));
+});
 
 // GET /api/trader-profile/:username — trader profile data (public)
 app.get('/api/trader-profile/:username', async (req, res) => {
