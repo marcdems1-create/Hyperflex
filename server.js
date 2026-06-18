@@ -52828,7 +52828,13 @@ app.get('/api/signals', async (req, res) => {
                 if (match.slug) pickSlug = match.slug;
               }
             }
-            // Skip if we can't find a live market price — the signal is stale/closed
+            // HOLE 2 fix: fall back to the pick's own YES price (the whale-index
+            // builder already computed it — screener-live or whale-derived) when
+            // the exact screener question-match misses. Punctuation/whitespace
+            // drift in the join no longer silently kills every whale_cluster
+            // signal. Same robustness principle as the consensus path (HOLE 1).
+            if (livePrice == null && m.yes_price != null && m.yes_price > 0 && m.yes_price < 1) livePrice = m.yes_price;
+            // Skip only if we still have no usable price — stale/closed market
             if (livePrice == null) continue;
             const yesPct = Math.round(livePrice * 100);
             // Skip resolved markets (price at 0% or 100%)
